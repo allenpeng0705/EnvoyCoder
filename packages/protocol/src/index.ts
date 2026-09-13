@@ -48,6 +48,14 @@ export function coderProductName(env: NodeJS.ProcessEnv = process.env): string {
  */
 export const CAPABILITY_CODING = "coding";
 
+/**
+ * Environment variable that overrides the daemon's port.
+ *
+ * `0` is a legal value and means "let the OS choose", which is how the tests and the smoke run: a
+ * fixed port in a test is a test that fails when something else on the machine happens to use it.
+ */
+export const ENVOYCODER_DAEMON_PORT_ENV = "ENVOYCODER_DAEMON_PORT";
+
 /** Default port for the EnvoyCoder daemon's WebSocket endpoint. */
 export const DEFAULT_DAEMON_PORT = 4770;
 

@@ -3,7 +3,7 @@
 
   source:      ../EnvoyMesh/docs/envoymesh-refactoring-plan.md
   source-repo: EnvoyMesh (github.com/allenpeng0705/EnvoyMesh)
-  source-head: d0f58872
+  source-head: 45b62d4f
   copied:      2026-09-13
   body-sha256: 42fd0ed73e7121da4601b6e9032f857f6e60ebbc01791702e890ac8ed1574473
 

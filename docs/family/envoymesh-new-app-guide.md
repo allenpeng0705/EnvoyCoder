@@ -3,9 +3,9 @@
 
   source:      ../EnvoyMesh/docs/envoymesh-new-app-guide.md
   source-repo: EnvoyMesh (github.com/allenpeng0705/EnvoyMesh)
-  source-head: d0f58872
+  source-head: 45b62d4f
   copied:      2026-09-13
-  body-sha256: 5c6b581d12125a4c8eac638404bc3afa4d4e361c2a73edf194e0cae2300639fd
+  body-sha256: c946109af7b6697307c4c3cb8cd7eb4e5501f6b5a64acaa71dd39a50874be33c
 
   Why it is here: The standard this repo is built to, and the checklist its CI implements (§4.1 wiring, §4.4 the shared home, §4.5 attach, §4.6 the dispatcher, §8 definition of done). Read this first: it is the only document here that is about *how to build EnvoyCoder*.
 
@@ -304,6 +304,12 @@ Both harness names exist, and they are different things:
 **What EnvoyMesh owes you is an honest failure, not a working import.** Sixteen static *value* imports across ten files sit on the node's **boot path** — measured with the TypeScript parser, walking static relative imports from `apps/node/src/index.ts` (429 files reachable): `node-service-impl.ts` (×3), `agent-runtime-envoy/persistent-acp-host.ts` (×2), `node-service-setup-sponsor-friend.ts`, `envoy-harness-workspace.ts`, `agent-runtime-envoy/factory.ts`, `agent-runtime-envoy/manifest.ts`, `agent-runtime-envoy/local-runtime-registry.ts` (×2), `agent-runtime-envoy/runtime.ts` (×2), `agent-runtime-envoy/bridge-to-envoy-harness-skill.ts`, `agent-runtime-envoy/acp-host.ts` (×2). Across the workspace there are 19 such imports in 13 files (8 more are type-only and erased). It is the boot path that decides whether the process starts at all — so a missing harness surfaces as `ERR_MODULE_NOT_FOUND` from four directories deep inside a `file:` path, before any of it runs. `node scripts/check-peer-deps.mjs` runs ahead of that — it resolves the four packages, prints the counts it measured (so a stale number in this guide is visible), and on failure prints exactly which package is missing, whether the link or only the build output is absent, and the clone + build commands above. It also **refuses to check a subset**: import a fifth `@envoymesh/envoy-harness-*` package and it fails rather than reporting OK for something nobody resolved. Wired into `npm run node:dev` and into `ci-node-hermetic.yml`, so the reason arrives before the four-second stack trace does.
 
 Making those imports lazy was the alternative, and it was rejected: it would turn `node-service-impl.ts`'s call sites async — a large, invasive change to product code for a condition that only affects a **dev checkout**. The packaged desktop app stages the harness bundle at build time and is never affected.
+
+### 7.6 Shared local engine lock — pass the **asset root**, not home
+
+`acquireEngineLock` / `releaseEngineLock` take the **engine asset directory** returned by `resolveEngineRoot(…).dir` / `engineRootFor(…).dir` (normally `<home>/runtime/envoy-local`). The claim file is `<that-dir>/engine-chat.lock` (and `engine-embed.lock` for embeddings).
+
+Do **not** pass the EnvoyMesh home. That would place the lock where no runtime looks, so two products on one machine would each believe they own the engine. Sticky `engine-root.json` already makes every process agree on the asset directory; the lock API must use that same path.
 
 ## 8. Definition of done
 

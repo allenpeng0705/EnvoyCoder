@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "peers:check": "node scripts/check-envoydeps.mjs",
-    "typecheck": "npm run peers:check && npm run wiring:check && tsc -b",
+    "typecheck": "npm run peers:check && npm run wiring:check && tsc -b && tsc -b tsconfig.unchecked.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "npm run build -w @envoycoder/desktop",
@@ -31,7 +31,7 @@
     "tauri:build:win": "npm run tauri:build:win -w @envoycoder/desktop",
     "tauri:build:linux": "npm run tauri:build:linux -w @envoycoder/desktop",
     "mobile:check": "node scripts/check-mobile.mjs",
-    "gates": "npm run peers:check && npm run wiring:check && npm run docs:check && node scripts/check-src-clean.mjs && node scripts/check-mobile.mjs && tsc -b && vitest run",
+    "gates": "npm run peers:check && npm run wiring:check && npm run docs:check && node scripts/check-src-clean.mjs && node scripts/check-mobile.mjs && tsc -b && tsc -b tsconfig.unchecked.json && vitest run",
     "wiring:check": "node scripts/check-wiring.mjs",
     "docs:check": "node scripts/check-family-docs.mjs",
     "docs:sync": "node scripts/sync-family-docs.mjs",
@@ -39,6 +39,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^4.1.5"

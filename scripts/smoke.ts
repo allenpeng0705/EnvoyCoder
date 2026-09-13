@@ -23,6 +23,7 @@ import {
   attachToMeshNode,
   checkPairingCode,
   coderPaths,
+  coderSessionIdentity,
   createCoderDaemonHost,
 } from "@envoycoder/host-bridge";
 
@@ -118,7 +119,7 @@ step("product state lives under the shared home", () => {
 step("a pairing code carries this app's name, and another app's is refused", () => {
   const host = createCoderDaemonHost({
     port: 0,
-    sessionIdentity: () => undefined,
+    sessionIdentity: coderSessionIdentity(),
     dispatch: async () => undefined,
   });
   try {
@@ -176,7 +177,7 @@ step("attaches to a running EnvoyMesh node, as a product, over loopback", async 
 step("the daemon host binds, serves and stops", async () => {
   const host = createCoderDaemonHost({
     port: 0,
-    sessionIdentity: () => undefined,
+    sessionIdentity: coderSessionIdentity(),
     dispatch: async () => undefined,
   });
   await host.serve();
@@ -201,9 +202,10 @@ step("refuses a tokenless call from the LAN, while loopback is trusted", async (
   const answered: string[] = [];
   const host = createCoderDaemonHost({
     port: 0,
-    sessionIdentity: () => undefined,
-    // Positional, like every host in the family: (method, params, session). Annotating it with the
-    // port's type is what turns a signature change into a compile error instead of a silent no-op.
+    sessionIdentity: coderSessionIdentity(),
+    // Positional, like every host in the family: (method, params, session). The annotation is not
+    // decoration: `tsconfig.unchecked.json` now typechecks this file, so a signature change is a
+    // compile error here instead of a silent no-op discovered by a socket that answers nothing.
     dispatch: async (method: string, _params: Record<string, unknown>) => {
       answered.push(method);
       return { ok: true };

@@ -327,6 +327,31 @@ a silence.
 the owner runs `updateNodeConfig({ productGrants: { EnvoyCoder: ["coding"] } })`, the node refuses it,
 the read fails closed, and "not granted" is a state to report rather than retry.
 
+### 7.6b The shared engine lock (§7.6), and the conventions the family added with it
+
+The guide gained §7.6 while this repo was being built: `acquireEngineLock` / `releaseEngineLock` take the
+**engine asset root** (`resolveEngineRoot(…).dir`, normally `<home>/runtime/envoy-local`), never the
+home, or the lock lands where no runtime looks and two products each believe they own the engine.
+
+**It does not apply to us yet, and that is a state worth stating rather than assuming**: EnvoyCoder never
+calls the engine lock, because it never starts the shared local engine — the *node* owns it, and a
+product that wants a local model asks the node. The rule becomes ours the day our built-in harness runs
+against the local engine, and `grep -rn "engineLock\|resolveEngineRoot" packages apps` returning nothing
+is the assertion (it returns nothing today).
+
+Two conventions came in the same update and *are* ours, because they govern any product process:
+
+* **Exit codes**: a damaged profile exits **4** with a readable message, and **2** stays reserved for the
+  family's `exitForNodeSupervisor` handshake (a supervisor may respawn on it, so a product that reuses it
+  makes the supervisor loop on a state no restart fixes). EnvoyCoder's daemon adopts both: `boot.ts`
+  returns 4 for damaged, never 2, and a test asserts that for every state.
+* **Attach, never compete**: when another family app owns the home, a product attaches as itself. Our
+  daemon reports the holder in the family's own words and requests a product session rather than starting
+  a second mesh — and when *our own* port is taken, that is a client that has not noticed yet, not a
+  failure (exit 0, "a window will attach to the one that is already there").
+
+The daemon's own boot story lives in `docs/envoycoder-networking.md` §2.
+
 ### 7.7 Pairing (§5.2, §5.3)
 
 The phone uses the family's **shared Dart contract** (`envoy_thin_client`) via a path dependency to
@@ -347,5 +372,6 @@ its `api`/`reuse-host`/`protocol` suites pass with the change.
 | §8 "your stores grouped, 0 ungated" | N/A yet: the daemon does not persist stores; the analogue here is `coderPaths()` returning paths under `<home>/EnvoyCoder/` |
 | §8 four EnvoyMesh-repo gates (classify/boundary/inventory/core-surface) | those check *EnvoyMesh's* tree; this repo's analogues are `wiring:check`, `check-src-clean`, `peers:check` |
 | §4.6 "your product scope is refused by default" | our daemon does not yet consult `productGrants` — it does not call the mesh at all beyond attaching |
+| remote clients of our own daemon | **refused, deliberately**: loopback windows are trusted (the family's model for a desktop UI), and a phone or another machine needs a token we cannot yet resolve (roadmap M1). Recorded rather than papered over with a token format of our own |
 | §8 "no new anonymous path … no shared key" | holds today (loopback-or-session is the transport's, and we add no path), but it is asserted by the smoke, not by a unit test |
 | §9 "biggest open question: what a product may call" | open by design; `docs/envoycoder-design.md` §7 lists it among the undecided |

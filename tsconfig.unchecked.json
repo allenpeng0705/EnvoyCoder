@@ -1,0 +1,24 @@
+{
+  "//": "The files `tsc -b` otherwise never sees: `scripts/` (the gates and the smoke test) and the desktop app's own tests (the app project's `rootDir` is `src`, so `test/` is outside it). Both are code we rely on — the smoke is what proves the real thing runs — and an unchecked argument there cannot be a compile error.",
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": ".",
+    "outDir": "dist-unchecked",
+    "tsBuildInfoFile": "./dist-unchecked/tsconfig.tsbuildinfo",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["node", "vite/client"]
+  },
+  "include": ["scripts/**/*.ts", "apps/desktop/test/**/*.ts", "apps/desktop/test/**/*.tsx"],
+  "references": [
+    { "path": "./apps/desktop" },
+    { "path": "./packages/protocol" },
+    { "path": "./packages/platform" },
+    { "path": "./packages/workspace-model" },
+    { "path": "./packages/agent-catalog" },
+    { "path": "./packages/host-bridge" }
+  ]
+}

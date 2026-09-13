@@ -44,6 +44,31 @@ Four rules, each with a reason:
 What the node grants is the node owner's decision (`NodeConfig.productGrants`, default none,
 fail-closed). EnvoyCoder asks for what it needs when it needs it and works without it.
 
+### The daemon's boot, and the two exit codes it must not invent
+
+`npm run daemon` starts it (`apps/desktop/src/daemon/main.ts`, port 4770 or `ENVOYCODER_DAEMON_PORT`,
+`0` for "let the OS choose"). The order is deliberate, and each step's failure mode is reported rather
+than thrown:
+
+| Step | What it does | If it fails |
+|---|---|---|
+| read the shared home | `coderPaths()` — the family's resolution, so `ENVOYMESH_HOME` means here what it means everywhere | — |
+| describe the home | the family's own `describeProfileSituation` wording, shown as-is | **damaged profile → exit 4**, saying so and changing nothing. Writing into a half-readable profile is how a user loses contacts and bonds without being told |
+| attach to the mesh | `attachToMeshNode` as `product:EnvoyCoder` | a refusal is reported and the daemon serves on: "not granted" is a state, not an error |
+| serve our surface | `createCoderDaemonHost` + `coderSessionIdentity()` | a **taken port is exit 0**, not an error: one daemon serves a machine, and a second one starting is a window that has not noticed yet |
+
+Two codes are reserved and `boot.ts` never returns them: **`2`** belongs to the family's supervisor
+handshake (a supervisor respawns on it, so reusing it makes the loop run forever on a state no restart
+fixes) and **`1`** means an unclassified failure. A test asserts the reserved pair across every profile
+state, which is cheaper than hoping.
+
+**Who may call it.** A loopback window is trusted and carries no token — the family's own model for a
+desktop UI. A remote caller must present one, and today the resolver answers `null` (no session store
+yet, roadmap M1), so the transport refuses; the daemon prints that at boot rather than implying a
+security property it does not have. The port still binds `0.0.0.0` (the transport's choice), and the
+smoke's LAN leg is what holds that honest: a tokenless call from the local network must come back
+`UNAUTHORIZED`, while loopback is answered.
+
 ## 3. Multi-window
 
 One daemon, many windows, **first window wins**. A second window attaches to the existing daemon

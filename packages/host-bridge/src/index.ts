@@ -29,10 +29,16 @@
 
 import { join } from "node:path";
 import {
+  type ProfileChoiceId,
+  type ProfileInUse,
+  type ProfileSituationState,
   type RunningNode,
   type VerifiedRunningNode,
+  describeProfileSituation,
+  inspectProfile,
   isProductScope,
   isValidProductName,
+  profileDirIn,
   productDirIn,
   productScopeKey,
   resolveHomeDir,
@@ -43,6 +49,7 @@ import {
 import {
   type HostRpcDispatcher,
   type ProductSessionGrant,
+  type SessionIdentityResolver,
   type ReuseHost,
   type ReuseHostOptions,
   buildPairingUri,
@@ -120,6 +127,102 @@ export function coderPaths(home: string = resolveHomeDir()): CoderPaths {
     transcriptsDir: join(stateDir, "transcripts"),
     logsDir: join(stateDir, "logs"),
     secretsDir: join(stateDir, "secrets"),
+  };
+}
+
+/* ────────────────────────────── what the shared home looks like ───────────────────────────── */
+
+/**
+ * What EnvoyMesh's own discovery says about the home this product shares, in the family's words.
+ *
+ * A headless daemon has no dialog to render, but it still owes the user the truth about the profile
+ * it is about to write into — and it must not invent its own vocabulary for it. So this returns the
+ * family's `ProfileSituation` (headline, detail, choices) rather than a product-private summary:
+ * `describeProfileSituation` is the module whose whole job is that wording, and a second
+ * implementation of it here would be the drift the family keeps paying for.
+ *
+ * **`damaged` is the state that matters.** A profile with unreadable markers is *reported, never
+ * replaced*: creating a fresh identity beside a partial one is how a user loses contacts and bonds
+ * without being told. The daemon's job is therefore to stop and say so (family convention: exit 4,
+ * with a readable message), not to "fix" anything.
+ */
+export interface CoderHomeFacts {
+  home: string;
+  profileDir: string;
+  /** `missing` | `found` | `damaged` | `in-use` — the family's five-state flow, minus the resolution. */
+  state: ProfileSituationState;
+  /** One sentence answering "what did you find?" — the family's wording, shown as-is. */
+  headline: string;
+  /** One or two sentences answering "which profile is it, and where?". */
+  detail: string;
+  /** Supporting lines (who, where, when). Safe to show a user. */
+  facts: string[];
+  /** What a user could do about it. Never empty in the family's model; a daemon ignores the buttons. */
+  choices: ProfileChoiceId[];
+  /** Present when the profile is intact: who owns it. */
+  ownerId?: string;
+  /** Present when another process holds the home right now. */
+  holder?: { app: string; pid: number; port?: number; startedAt?: string; verified?: boolean };
+  /** False when this product must not create what is missing (a daemon is not a first-run dialog). */
+  canCreate: boolean;
+}
+
+/**
+ * Inspect the shared home and describe it the way the family would.
+ *
+ * `canCreate: false` on purpose: EnvoyCoder's daemon starts because *something* asked it to — a
+ * window, or the user — and the family's design puts the create/choose decision in a dialog, not in
+ * a background process. What a daemon may do is refuse clearly, and that is what this enables.
+ */
+export async function inspectCoderHome(
+  home: string = resolveHomeDir(),
+  options: { product?: string; canAttach?: boolean } = {},
+): Promise<CoderHomeFacts> {
+  const product = options.product ?? coderProductName();
+  const profileDir = profileDirIn(home);
+  const inspection = await inspectProfile(profileDir);
+
+  // "in-use" is not something an inspection can report — the files may be perfectly healthy. Only the
+  // lock knows, which is why the family's fifth state needed its own mechanism (`node-registry`).
+  const running = await resolveRunningNode(home);
+  // The holder's *claim* carries no port — the port lives on the endpoint beside it, and only when the
+  // claim was verified (`status === "running"`). Reporting a port from an unverified claim would be
+  // advice a user cannot act on, so it is included only when it was proven.
+  const inUse: ProfileInUse | null = running.holder
+    ? {
+        app: running.holder.app,
+        pid: running.holder.pid,
+        ...(running.status === "running" && running.endpoint?.port !== undefined
+          ? { port: running.endpoint.port }
+          : {}),
+        startedAt: running.holder.startedAt,
+        verified: running.status === "running",
+      }
+    : null;
+
+  const situation = describeProfileSituation({
+    product,
+    home,
+    profileDir,
+    inspection,
+    ...(inspection.marker !== undefined ? { marker: inspection.marker } : {}),
+    inUse,
+    canAttach: options.canAttach ?? running.status === "running",
+    canCreate: false,
+    canChooseFolder: false,
+  });
+
+  return {
+    home,
+    profileDir,
+    state: situation.state,
+    headline: situation.headline,
+    detail: situation.detail,
+    facts: situation.facts.map((fact) => `${fact.label}: ${fact.value}`),
+    choices: situation.choices.map((choice) => choice.id),
+    ...(inspection.ownerId ? { ownerId: inspection.ownerId } : {}),
+    ...(inUse ? { holder: inUse } : {}),
+    canCreate: false,
   };
 }
 
@@ -406,6 +509,36 @@ export function checkPairingCode(
     token: parsed.token,
     ownerId: parsed.ownerId,
     ...(parsed.lanWsUrl ? { lanWsUrl: parsed.lanWsUrl } : {}),
+  };
+}
+
+/* ────────────────────────────── who may call this daemon ────────────────────────────── */
+
+/**
+ * This product's session identity — the answer to "who is calling?" for **our own** surface.
+ *
+ * Two halves, and the split is the family's model (guide §4.6) rather than ours:
+ *
+ *   * **A loopback client with no token is trusted**, and gets this product's scope key. That is not a
+ *     hole: it is how the family treats a desktop UI, which is the user's own window on their own
+ *     machine and carries no token. Our daemon keeps the same rule, and the transport still refuses a
+ *     tokenless call from anywhere but loopback (proven by the smoke's LAN leg).
+ *   * **A remote caller must present a token**, and today we can resolve none: there is no session
+ *     store yet (roadmap M1). So `resolveSession` answers `null` and the transport refuses — fail
+ *     closed, deliberately. A daemon that invented its own token format here would be the anonymous
+ *     path the guide's §8 forbids, and it would not interoperate with anything else in the family.
+ *
+ * It is one exported function so production and the smoke test cannot disagree about it. The smoke
+ * previously passed a bare `() => undefined` for this port, which typechecked nowhere because
+ * `scripts/` was in no tsconfig — and it served by accident, because with no tokens in play the
+ * resolver was never consulted.
+ */
+export function coderSessionIdentity(
+  options: { product?: string; resolveSession?: SessionIdentityResolver["resolveSession"] } = {},
+): SessionIdentityResolver<unknown> {
+  return {
+    localScopeKey: productScopeKey(options.product ?? coderProductName()),
+    resolveSession: options.resolveSession ?? (async () => null),
   };
 }
 

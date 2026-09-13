@@ -59,7 +59,9 @@ jobs:
         run: node scripts/check-src-clean.mjs
 
       - name: Typecheck
-        run: npx tsc -b
+        # `tsconfig.unchecked.json` covers what `tsc -b` cannot see: `scripts/` (the gates and the smoke
+        # test) and the desktop app's tests, which sit outside its `rootDir`.
+        run: npx tsc -b && npx tsc -b tsconfig.unchecked.json
 
       - name: Unit tests
         run: npm test
