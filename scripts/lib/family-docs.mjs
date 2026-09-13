@@ -26,6 +26,7 @@
  * "fixed" by editing a copy.
  */
 
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import * as path from "node:path";
@@ -150,6 +151,24 @@ export function readCopy(doc) {
 export function readSource(doc) {
   try {
     return readFileSync(path.join(meshSibling, "docs", doc.name), "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The sibling's current commit, or null when it is not a checkout we can ask.
+ *
+ * The check uses this to tell two situations apart that look identical in a hash: **a new commit
+ * upstream** (something landed; sync when convenient) and **uncommitted edits** (somebody is working in
+ * that repo right now; syncing would copy a half-written document into this one). The first is a
+ * maintenance note, the second is a reason to wait — and the difference is worth one `git` call.
+ */
+export function meshHead() {
+  try {
+    return execFileSync("git", ["-C", meshSibling, "rev-parse", "--short", "HEAD"], {
+      encoding: "utf8",
+    }).trim();
   } catch {
     return null;
   }

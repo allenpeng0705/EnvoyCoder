@@ -21,6 +21,7 @@ import {
   FAMILY_DOCS,
   familyDocsDir,
   hashBody,
+  meshHead,
   meshSibling,
   parseCopy,
   readCopy,
@@ -81,11 +82,19 @@ for (const doc of FAMILY_DOCS) {
 
   if (hashBody(source) !== recorded) {
     moved += 1;
+    const copiedFrom = parsed.fields.get("source-head") ?? "unknown";
+    const head = meshHead();
+    // Same commit but different content means the sibling's working tree is dirty. That is not the
+    // same thing as "upstream moved": nothing has landed, somebody is typing, and a sync right now
+    // would copy a half-written document into this repo and call it a copy of a commit.
     const message =
-      `the source of docs/family/${doc.name} has moved — EnvoyMesh's copy is newer than the copy\n` +
-      `    here (copied from ${parsed.fields.get("source-head") ?? "unknown"}, on ` +
-      `${parsed.fields.get("copied") ?? "an unrecorded date"}).\n` +
-      `    refresh: node scripts/sync-family-docs.mjs`;
+      head !== null && head === copiedFrom
+        ? `the source of docs/family/${doc.name} has **uncommitted edits** in EnvoyMesh right now\n` +
+          `    (its HEAD is still ${copiedFrom}, the commit this copy came from). Someone is working in that\n` +
+          `    repo — leave the copy alone and sync once their work lands.`
+        : `the source of docs/family/${doc.name} has moved — EnvoyMesh is now at ${head ?? "an unknown commit"},\n` +
+          `    and this copy was taken from ${copiedFrom} on ${parsed.fields.get("copied") ?? "an unrecorded date"}.\n` +
+          `    refresh: node scripts/sync-family-docs.mjs`;
     if (strict) problems.push(message);
     else notes.push(message);
   }

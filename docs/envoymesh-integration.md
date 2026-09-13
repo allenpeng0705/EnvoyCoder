@@ -2,6 +2,23 @@
 
 **Rule of thumb:** EnvoyCoder *links* the mesh and *clones* the harness. It vendors neither.
 
+Four kinds of code and prose come from the family, and they arrive in four different ways. The
+difference is deliberate: it follows ownership — whoever owns a thing decides when its upgrade lands.
+
+| What | How it arrives | Where "which version is this?" is answered | When an upgrade reaches us |
+|---|---|---|---|
+| **The mesh layer** — 8 `@envoymesh/*` packages | **linked**: `file:` → npm symlinks it into `node_modules` (§1) | the sibling's commit, printed by `peers:check`; `ENVOYMESH_VERSION` in the product session | the moment the sibling is pulled **and rebuilt** — we import their `dist/` (§5.2) |
+| **The Envoy Harness** — `envoy-harness*` | **our own clone**, pinned (§2) | the pin in *our* tree | when we choose, as a reviewable change (§5.2) |
+| **External agent CLIs** — `dsh`, `claude`, `codex`, `copilot`, `opencode`, `cursor-agent`, `pi` | **not acquired at all**: spawned and probed | `probeHarness` at runtime | whenever the user upgrades their own tool; we re-probe and report what it supports |
+| **The family documents** | **copied**, with provenance, and gated (§5.1) | the copy's `source-head` and body hash | `npm run docs:sync`; drift is reported by `docs:check` |
+
+Nothing here is copied that could be linked, and nothing is linked that we are supposed to own. The
+two mistakes this table exists to prevent are in opposite directions: **linking the harness** would
+make us depend on EnvoyMesh for someone else's package and inherit its release cadence for code it
+does not own (design D4); **copying the mesh** would give the family a second implementation of the
+pairing format, the identity rules and the relay roster — the exact drift the shared layer exists to
+prevent.
+
 ---
 
 ## 1. What is linked, and from where
@@ -27,6 +44,11 @@ Two consequences worth knowing:
   alias hid a *stale sibling copy* of `@envoymesh/protocol` for an entire refactor, so the suite was
   green while the real node could not start. Our tests resolve `@envoymesh/*` through `node_modules`
   exactly as production does, so a stale or missing sibling fails in CI rather than in a user's evening.
+* **A `file:` dependency is not a copy.** npm **symlinks** the directory (verified:
+  `node_modules/@envoymesh/protocol -> ../../../EnvoyMesh/packages/protocol`), so the sibling is live —
+  pulling EnvoyMesh changes what this repo resolves *without touching this repo*. The guide's warning
+  that "a `file:` dependency is a copy" describes pnpm and older npm; here the trap is the opposite, and
+  §5.2 is about why that is more dangerous rather than less.
 
 ## 2. What must be cloned, never linked through EnvoyMesh
 
@@ -114,11 +136,98 @@ deliberately **asymmetric**:
 own tree is dirty, so a copy never claims a commit it did not come from. This is the same rule as §2 —
 we clone what we need and we do not pretend to own it — applied to prose.
 
+### 5.2 Upgrading, in three different senses
+
+#### The mesh layer: it upgrades *itself*, and that is the problem
+
+Because the packages are symlinked (§1), a `git pull` in the sibling changes what this repo resolves
+immediately — while the code we actually import is EnvoyMesh's **built** `dist/`, which changes only
+when they rebuild. Between those two moments this repo runs yesterday's compiled family code against
+today's sources: nothing is missing, every gate is green, and the only thing wrong is that the family
+code being tested is not the family code on disk.
+
+```bash
+cd ../EnvoyMesh && git pull && npm install
+npx tsc -b packages/protocol packages/identity packages/vault packages/api \
+           packages/node-core packages/harness packages/host-connect packages/reuse-host
+cd ../EnvoyCoder && npm install && npm run gates && npm run smoke
+```
+
+`peers:check` now **warns** when a linked package's sources are newer than its build, names the exact
+rebuild command per package, and prints the sibling's commit and subject — so "which EnvoyMesh is
+this?" is answered in the gate output and in CI logs instead of living in someone's memory. It is a
+warning and not a failure on purpose: the comparison is mtime-based, and a fresh clone can legitimately
+have them in either order.
+
+What actually breaks, in the order it breaks:
+
+1. **Types** — `tsc -b` on a changed `@envoymesh/api/core` surface, the positional
+   `HostRpcDispatcher<TCaller>` signature, the pairing payload, `productDirIn` / `resolveHomeDir`.
+2. **Tests** — our own assertions about contract wording, which are supposed to fail when the family
+   changes a sentence on purpose.
+3. **Behaviour, only at runtime** — and `npm run smoke` is what catches this: its attach leg talks to a
+   **real node**, and its LAN leg asserts the transport's answer rather than the socket closing. Types
+   cannot tell you that a gate moved from per-connection to per-method.
+4. **The node's view** — `ENVOYMESH_VERSION` is recorded in the product session, so the node can see
+   that it is being asked by an older product.
+
+#### The policy: link while co-developing, pin when shipping
+
+`file:` is the right arrangement **now**, and the guide's own ordering (§7.2: subtree/submodule pin
+first, `file:` second, registry third) is what we move to **when we ship**. The reason is not
+convenience: pinning means holding a copy, and a copy goes stale *silently* — the family has already
+paid for exactly that, in the incident in §1 where a vendored `@envoymesh/protocol` four modules behind
+kept the suite green while the node could not start. While EnvoyCoder is pre-1.0 and still asking for
+contract changes upstream (we made one today: the `relayWsUrls` fix), a live link detects breakage
+instead of freezing it.
+
+So the trigger to switch is explicit, and it is the release (roadmap M6), not a date:
+
+* **At release**, record the EnvoyMesh commit and the harness commit the artifact was built against —
+  in the release notes and in the build. An artifact that cannot name its family commit is an artifact
+  nobody can debug six months later.
+* **If we ever need a reproducible offline build** (a machine with no sibling checkout, a clean-room
+  release), vendor the five core packages at that commit — the guide's first option — and accept
+  re-vendoring as the cost.
+* **Never** patch their code in `node_modules` or in a vendored copy. A change we need goes upstream
+  first (guide §7.4), which is how the pairing URI gained `relayWsUrls`; a local fork would be code
+  nobody tests and nobody upgrades.
+
+#### The harness: our clone, our pace
+
+The harness is the one dependency we *own the upgrade decision for* (D4): we clone it, we build it with
+its own build, and we pin it, so its version is a reviewable change in our history rather than a
+side-effect of someone else's `git pull` in a sibling directory.
+
+```bash
+git clone <envoy-harness> vendor/envoy-harness        # our copy, not EnvoyMesh's link
+# then, as its own workspace requires:
+cd vendor/envoy-harness && pnpm --filter @envoymesh/envoy-process run build \
+  && pnpm --filter @envoymesh/envoy-harness-peer run build \
+  && pnpm --filter @envoymesh/envoy-harness run build \
+  && pnpm --filter @envoymesh/envoy-harness-client run build
+```
+
+Upgrading it is then one deliberate act: bump the pin, rebuild, `npm run gates`, `npm run smoke`, and
+read what changed — because a harness upgrade can change what our agents *do*, which is a product
+decision and not a maintenance chore. `peers:check` treats the harness as required the moment a
+manifest declares it (today it is a note, because nothing does yet), and the packaged desktop app
+stages the harness bundle at build time so a user never depends on a checkout existing.
+
+#### The external agents: no upgrade story, by design
+
+`dsh`, `claude`, `codex`, `copilot`, `opencode`, `cursor-agent` and `pi` are the user's own
+installations. We neither ship nor update them; we **probe** them (`probeHarness`) and report what each
+one supports, so a version that gains or loses `cancel`, approvals or structured tools changes what our
+UI promises rather than producing a broken button. That is the family rule — never claim a capability
+the protocol does not provide — applied to somebody else's release schedule, and it is why an upgraded
+`dsh` needs no change here: the next probe sees it.
+
 ## 6. Gates in this repo
 
 | Command | What it protects |
 |---|---|
-| `npm run peers:check` | the mesh closure resolves *and is built*; the harness is present (or honestly absent) |
+| `npm run peers:check` | the mesh closure resolves *and is built*; the sibling's commit is named; sources newer than their build are reported; the harness is present (or honestly absent) |
 | `npm run wiring:check` | every package declared in every place that resolves it (guide §4.1) — the failure mode with no clear error |
 | `npm run docs:check` | the copies in `docs/family/` are still the documents they claim to be (§5.1) |
 | `node scripts/check-src-clean.mjs` | no build output inside a `src/` tree, and no build-info outside an output dir — a stale `src/index.js` shadows the real source in tests, and a misplaced `tsconfig.tsbuildinfo` makes `tsc -b` a silent no-op |

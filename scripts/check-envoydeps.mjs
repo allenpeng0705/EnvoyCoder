@@ -19,7 +19,8 @@
  * Usage: `node scripts/check-envoydeps.mjs` (exit 1 with instructions when something is missing).
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,7 +29,55 @@ const root = path.resolve(here, "..");
 const meshSibling = path.resolve(root, "..", "EnvoyMesh");
 const harnessSibling = path.resolve(root, "..", "envoy-harness");
 
-/** Where a package's runtime entry actually lives, read from its own manifest. */
+/**
+ * Which EnvoyMesh this checkout is linked against — asked because the answer changes what a green
+ * run means.
+ *
+ * The `file:` dependencies are **symlinks** (npm links a directory, it does not copy it), so the
+ * sibling is live: pulling EnvoyMesh changes this repo's dependency *without touching this repo*.
+ * That is the arrangement we want while co-developing, and it is why CI logs the commit it tested
+ * against rather than leaving "it passed" unattributed.
+ */
+function meshSiblingState() {
+  const git = (...args) =>
+    execFileSync("git", ["-C", meshSibling, ...args], { encoding: "utf8" }).trim();
+  try {
+    return {
+      commit: git("rev-parse", "--short", "HEAD"),
+      subject: git("log", "-1", "--pretty=%s"),
+      dirty: git("status", "--porcelain", "--", "packages").length > 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** The newest modification time under a directory, or 0 when it does not exist. */
+function newestMtime(dir) {
+  let newest = 0;
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return newest;
+  }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) newest = Math.max(newest, newestMtime(full));
+    else {
+      try {
+        newest = Math.max(newest, statSync(full).mtimeMs);
+      } catch {
+        /* a file that vanished between the listing and the stat */
+      }
+    }
+  }
+  return newest;
+}
+
+/**
+ * Where a package's runtime entry actually lives, read from its own manifest.
+ */
 function resolveEntryPoint(packageDir) {
   try {
     const manifest = JSON.parse(readFileSync(path.join(packageDir, "package.json"), "utf8"));
@@ -69,6 +118,7 @@ function declaredMeshDeps() {
 }
 
 const problems = [];
+const stale = [];
 
 // ── 1. the sibling checkout ────────────────────────────────────────────────────────────
 if (!existsSync(meshSibling)) {
@@ -99,6 +149,24 @@ if (!existsSync(meshSibling)) {
           `    looked for:   ${name} exports/main (dist/src/index.js, or dist/index.js)\n` +
           `    package:      ${packageDir}\n` +
           `    fix:          (cd ${meshSibling} && npx tsc -b packages/${name.replace("@envoymesh/", "")})`,
+      );
+      continue;
+    }
+    // **The trap this catches.** `node_modules/@envoymesh/*` are symlinks into the sibling, so a
+    // `git pull` there changes what this repo resolves *immediately* — while the code we actually
+    // import is their **built** `dist/`, which changes only when they rebuild. Between those two
+    // moments this repo runs yesterday's compiled family code against today's sources, and every
+    // gate here stays green because nothing is missing. It is the same shape as the incident the
+    // family guide records (§7.2): sources moved, build did not, and the suite never noticed.
+    //
+    // mtime is a heuristic and is treated as one — a warning that names the command, never a
+    // failure, because a fresh clone can legitimately have them in either order.
+    const sourceMtime = newestMtime(path.join(packageDir, "src"));
+    const builtMtime = statSync(entry).mtimeMs;
+    if (sourceMtime > builtMtime) {
+      stale.push(
+        `${name}: sources are newer than the build (${path.relative(meshSibling, entry)})\n` +
+          `    fix: (cd ${meshSibling} && npx tsc -b packages/${name.replace("@envoymesh/", "")})`,
       );
     }
   }
@@ -132,6 +200,15 @@ const harnessWarning =
       `dependency of anything). Clone it to ${harnessSibling} when the built-in agent lands.`
     : null;
 
+/** Which of the three acceptable locations the harness was found in — reported, so "which copy?" has an answer. */
+const harnessWhere = existsSync(harnessLinked)
+  ? "linked in node_modules"
+  : existsSync(harnessLocal)
+    ? `our own clone at ${path.relative(root, harnessLocal)}`
+    : existsSync(harnessSibling)
+      ? `a sibling checkout at ${harnessSibling}`
+      : null;
+
 // ── 3. reported, never silently tolerated ──────────────────────────────────────────────
 if (problems.length > 0) {
   console.error("\nEnvoyCoder cannot run: dependencies it does not vendor are missing.\n");
@@ -143,8 +220,32 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
+const sibling = meshSiblingState();
 const meshCount = declaredMeshDeps().size;
 console.log(
-  `mesh dependencies OK (${meshCount} @envoymesh package(s) resolvable from ${meshSibling}; built)`,
+  `mesh dependencies OK (${meshCount} @envoymesh package(s) from ${meshSibling} — ` +
+    `symlinked, so the sibling is live at ${sibling ? sibling.commit : "an unknown commit"}` +
+    `${sibling?.dirty ? " with uncommitted changes in packages/" : ""}; built)`,
 );
+if (sibling) console.log(`  linked against: ${sibling.commit} "${sibling.subject}"`);
+
+// A warning, not a failure: mtime cannot distinguish "they rebuilt and we are fine" from "we are
+// running code that predates their sources", so it says what it sees and names the command.
+if (stale.length > 0) {
+  console.log(
+    `\nwarning: ${stale.length} linked package(s) have sources newer than their build, so this repo is\n` +
+      "  running the *previous* compiled family code. Nothing is missing — which is why no other gate\n" +
+      "  would tell you. Rebuild the sibling before trusting a green run:\n",
+  );
+  for (const item of stale) console.log(`    ${item}`);
+}
 if (harnessWarning) console.log(`note: ${harnessWarning}`);
+if (harnessWhere) {
+  console.log(
+    `harness: found in ${harnessWhere}` +
+      (harnessRequired
+        ? " (required by a manifest)."
+        : " — nothing declares it yet (roadmap item: the built-in agent), and it is never taken\n" +
+          "  through EnvoyMesh's link (design D4)."),
+  );
+}
