@@ -99,3 +99,102 @@ that path, and each one left behind exactly that test.
 | `npm run build -w @envoycoder/desktop` | the UI *bundles* — a green suite has never proved that |
 | `npm run smoke` | a real host on a real port, a real pairing code, and a real probe of your installed agents |
 | `npm run mobile:check` | the Flutter app still has the files a build needs |
+
+---
+
+## 7. Audit against the family guide (`envoymesh-new-app-guide.md`)
+
+The guide is the standard for a new app in this group. This is the state of each of its requirements,
+with the honest gaps at the bottom.
+
+### 7.1 The seven wiring places (§4.1)
+
+| Guide rule | Applies? | State |
+|---|---|---|
+| 1. root `package.json` → `workspaces` | yes | ✓ all six packages covered |
+| 2. the package's own manifest | yes | ✓ `main`/`exports` on libraries; apps exempt (nothing imports them) |
+| 3. **each consumer's** `dependencies` | yes | ✓ |
+| 4. **each consumer's** `tsconfig` `references` | yes | ✓ — **this was missing** for `apps/desktop` until the gate below found it |
+| 5. root `tsconfig` `references` | yes | ✓ |
+| 5b. `tsconfig.base.json` → `paths` | **no, deliberately** | mapping a package name to another package's *source* cannot coexist with `composite`/`rootDir`: TypeScript answers `TS6059`/`TS6307`, the confusing failure the guide warns about. We resolve via npm workspace links + project references, and keep source resolution where it belongs — the vitest aliases |
+| 6. `vitest.config.ts` → alias | yes | ✓ all libraries |
+| 7. `pnpm-workspace.yaml` → `packages` | **not used** | no pnpm consumer in this repo; the gate prints that rather than skipping silently |
+
+`npm run wiring:check` implements the applicable rules (R1–R4, R6, R7) and is wired into
+`typecheck`, `gates` and CI. It was proven by seeding a violation (dropping a real
+`references` entry) and observing the failure — a gate that has never failed is a gate nobody has
+tested.
+
+### 7.2 Depend on the surface (§4.2, §4.3)
+
+* `@envoymesh/reuse-host` supplies the host and the attach client; `@envoymesh/node-core` the home and
+  discovery; `@envoymesh/protocol` the pairing contract.
+* **`@envoymesh/api/core`, never the bare barrel** — and the wiring gate fails on the bare import,
+  because the barrel reaches product-bound modules.
+
+### 7.3 The shared home (§4.4)
+
+`coderPaths()` resolves the home with the family's `resolveHomeDir()` and the product segment with
+`productDirIn()`. The first version called `os.homedir()`, which would have ignored `ENVOYMESH_HOME`
+and the per-OS default — giving a user who set the variable a second home and a second set of
+projects. A test asserts the variable is honoured.
+
+### 7.4 Attach instead of competing (§4.5)
+
+`resolveRunningNode` → verified node → `requestProductSession` with `product: "EnvoyCoder"` and
+`version: ENVOYMESH_VERSION`; the endpoint comes from the node's descriptor, with its URL as a
+fallback. An **owner-scoped** token is refused rather than used, and a refusal is a normal outcome.
+
+**Verified against a real node** (guide §8): with an EnvoyMesh node running on this machine, the
+smoke test attaches over loopback and reports `product:EnvoyCoder at ws://127.0.0.1:4180/ws?token=…`.
+
+### 7.5 The dispatcher (§4.6) and the family's security claim (§8)
+
+`createCoderDispatcher` answers its own methods and refuses everything else, including
+known-but-unimplemented ones. It never mints credentials: issuing a token is the node's act.
+
+The transport's gates are the family's, and they are per **method**, not per connection — a socket
+from the LAN opens by design, and the refusal is the answer to the call:
+
+```
+✓ refuses a tokenless call from the LAN, while loopback is trusted
+      LAN (192.168.3.85) → UNAUTHORIZED; loopback → answered
+```
+
+The smoke test asserts the *answer* rather than the socket closing, because "the connection closed"
+would pass for the wrong reason — that was the first finding, and it was about the test.
+
+Writing the leg then found a real bug here, invisible to `tsc` until the port type was annotated: our
+dispatcher took an object where the family's port is positional (`method, params, session`), so the
+host called it with a string and it silently answered nothing — a `tsc`-clean daemon that answers no
+call at all. The return type is annotated now, so the next divergence is a compile error rather than
+a silence.
+
+### 7.6 Capabilities are granted (§4.7)
+
+`CAPABILITY_CODING` names what this product exists to use, and the docs say what the guide says: until
+the owner runs `updateNodeConfig({ productGrants: { EnvoyCoder: ["coding"] } })`, the node refuses it,
+the read fails closed, and "not granted" is a state to report rather than retry.
+
+### 7.7 Pairing (§5.2, §5.3)
+
+The phone uses the family's **shared Dart contract** (`envoy_thin_client`) via a path dependency to
+the sibling checkout: one parser, one refusal sentence, one place where the format changes. It was
+re-implemented locally at first — the same duplication the guide's §5.2 exists to prevent.
+
+**This found a gap upstream.** `PairingPayload.relayWsUrls` existed in the contract
+(`protocol/src/pairing-contract.ts`) and in the compact token codec (`pairing-token.ts`), but the
+`envoy://pair` URI could neither build nor parse it — so no QR code could offer a relay fallback.
+Per guide §7.4 the fix went **upstream**, not into this repo: `api/src/envoy-pair-uri.ts` now carries
+the list (comma-joined, read back by a `list()` helper) with round-trip tests. EnvoyMesh's gates and
+its `api`/`reuse-host`/`protocol` suites pass with the change.
+
+### 7.8 What is not done
+
+| Guide item | State |
+|---|---|
+| §8 "your stores grouped, 0 ungated" | N/A yet: the daemon does not persist stores; the analogue here is `coderPaths()` returning paths under `<home>/EnvoyCoder/` |
+| §8 four EnvoyMesh-repo gates (classify/boundary/inventory/core-surface) | those check *EnvoyMesh's* tree; this repo's analogues are `wiring:check`, `check-src-clean`, `peers:check` |
+| §4.6 "your product scope is refused by default" | our daemon does not yet consult `productGrants` — it does not call the mesh at all beyond attaching |
+| §8 "no new anonymous path … no shared key" | holds today (loopback-or-session is the transport's, and we add no path), but it is asserted by the smoke, not by a unit test |
+| §9 "biggest open question: what a product may call" | open by design; `docs/envoycoder-design.md` §7 lists it among the undecided |

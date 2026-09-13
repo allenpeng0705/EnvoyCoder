@@ -9,6 +9,10 @@
 ///      in a deep link, and never rendered.
 library;
 
+// Prefixed: the shared contract exports `pairingAppMismatch` too, and this file keeps the same name
+// for its own callers while delegating the *wording* to the one implementation.
+import 'package:envoy_thin_client/envoy_thin_client.dart' as thin;
+
 import 'dart:convert';
 
 import '../models/host.dart';
@@ -28,63 +32,58 @@ class PairingResult {
 
 /// Refuse a code minted by another app, in the words the whole family uses.
 ///
-/// Kept byte-for-byte aligned with `pairingAppMismatch` in `@envoymesh/protocol` and with the Dart
-/// twin in EnvoyMesh's thin client: a user who tries the wrong code in three apps should read the
-/// same sentence three times, not three different explanations.
-String? pairingAppMismatch(String? codeApp, [String nodeApp = kAppName]) {
-  final claimed = codeApp?.trim() ?? '';
-  if (claimed.isEmpty) return null;
-  if (claimed == nodeApp.trim()) return null;
-  return 'That code was made by $claimed, and this is $nodeApp. '
-      'Open $claimed and show its pairing code, or install $claimed here.';
-}
+/// **Delegated, not re-implemented.** The sentence comes from `envoy_thin_client`, which is the
+/// Dart twin of `@envoymesh/protocol`'s `pairingAppMismatch`. A user who tries the wrong code in
+/// three apps reads the same sentence three times because there is one implementation, not three
+/// careful copies.
+String? pairingAppMismatch(String? codeApp, [String nodeApp = kAppName]) =>
+    thin.pairingAppMismatch(codeApp, nodeApp);
 
-/// Parse `envoy://pair?…` into a host, or explain why not.
+/// Parse a pairing code with the family's parser, and map it to this app's host model.
+///
+/// The parser accepts both the compact code a QR carries and the legacy query form, and both expose
+/// `app` — the field step 1 of the guide's flow (§5.2) turns on. Refusals are returned rather than
+/// thrown, because "that code is for another app" is a normal outcome a screen renders.
 PairingResult parsePairingCode(String input) {
   final trimmed = input.trim();
   if (trimmed.isEmpty) return const PairingResult.refused('That pairing code is empty.');
 
-  final Uri uri;
+  final thin.PairingData? data;
   try {
-    uri = Uri.parse(trimmed);
+    data = thin.parsePairingUri(trimmed);
   } on FormatException {
     return const PairingResult.refused('That does not look like a pairing code.');
   }
-
-  // Accept both a full `envoy://pair?...` URI and a bare query string, because some scanners hand
-  // back only the query and a user should not have to care which.
-  final params = uri.scheme.isEmpty
-      ? Uri.splitQueryString(trimmed.startsWith('?') ? trimmed.substring(1) : trimmed)
-      : (uri.scheme == 'envoy' ? uri.queryParameters : const <String, String>{});
-
-  final wsUrl = params['wsUrl'];
-  final token = params['token'];
-  final ownerId = params['ownerId'];
-  if (wsUrl == null || wsUrl.isEmpty) {
-    return const PairingResult.refused('That pairing code is missing the address of the host.');
-  }
-  if (token == null || token.isEmpty) {
-    return const PairingResult.refused('That pairing code is missing its access token.');
+  if (data == null) {
+    return const PairingResult.refused(
+      'That pairing code could not be read. Ask the desktop to show it again.',
+    );
   }
 
-  final mismatch = pairingAppMismatch(params['app']);
+  // Step 1 of the guide's flow, and the phone's job alone: the node cannot refuse a cross-app code,
+  // because the token inside it is opaque and app-local.
+  final mismatch = pairingAppMismatch(data.app, kAppName);
   if (mismatch != null) return PairingResult.refused(mismatch);
 
-  final parsed = Uri.tryParse(wsUrl);
+  final parsed = Uri.tryParse(data.wsUrl);
   if (parsed == null || parsed.host.isEmpty) {
     return const PairingResult.refused('That pairing code has an address this app cannot read.');
   }
-
   final endpoint = parsed.hasPort ? '${parsed.host}:${parsed.port}' : parsed.host;
+
   return PairingResult.accepted(
     CoderHost(
-      id: '${ownerId ?? endpoint}::$endpoint',
+      id: '${data.ownerId ?? endpoint}::$endpoint',
       label: parsed.host,
       endpoint: endpoint,
-      ownerId: ownerId ?? '',
-      app: params['app'] ?? kAppName,
-      token: token,
+      ownerId: data.ownerId ?? '',
+      app: data.app ?? kAppName,
+      token: data.token,
       secure: parsed.scheme == 'wss',
+      // Carried through from the shared contract: the family's relay roster is how a phone that is
+      // not on the LAN still reaches this machine, and a product does not invent its own.
+      relayPeerId: data.relayPeerId,
+      relayWsUrl: data.relayWsUrl,
     ),
   );
 }
@@ -95,7 +94,11 @@ String describeHost(CoderHost host) {
   return host.ssh == null ? base : '$base via ${host.ssh!.host}';
 }
 
-/// Encode a code, for tests and for the desktop's "show this as a QR" path.
+/// Encode a code, **for tests only**.
+///
+/// Minting is the desktop's job, and it uses the shared TypeScript builder so that the family has
+/// exactly one encoder. This helper exists so a test can produce a code to parse, and it deliberately
+/// mirrors the shared field names rather than inventing its own.
 String buildPairingCode({
   required String wsUrl,
   required String token,
@@ -122,6 +125,8 @@ String encodeHosts(List<CoderHost> hosts) => jsonEncode(
                 'app': host.app,
                 'token': host.token,
                 'secure': host.secure,
+                if (host.relayPeerId != null) 'relayPeerId': host.relayPeerId,
+                if (host.relayWsUrl != null) 'relayWsUrl': host.relayWsUrl,
                 if (host.ssh != null)
                   'ssh': {'host': host.ssh!.host, 'port': host.ssh!.port, if (host.ssh!.user != null) 'user': host.ssh!.user},
               })

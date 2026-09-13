@@ -23,8 +23,30 @@ import { z } from "zod";
 /** The product name this app states in every pairing code and product session. */
 export const ENVOYCODER_PRODUCT_NAME = "EnvoyCoder";
 
-/** Environment variable a launcher may set instead of hard-coding the name. */
+/**
+ * Environment variable a launcher may set instead of hard-coding the name.
+ *
+ * The guide's pre-flight for this product says `ENVOYMESH_APP_NAME=EnvoyCoder` (§9), so the launcher
+ * states it once and every surface — pairing codes, product sessions, logs — uses that value. The
+ * fallback is **our own** name rather than the family default: `resolveAppName()` would answer
+ * "EnvoyMesh" when the variable is unset, which is the one wrong answer for this app.
+ */
 export const ENVOYCODER_APP_NAME_ENV = "ENVOYMESH_APP_NAME";
+
+export function coderProductName(env: NodeJS.ProcessEnv = process.env): string {
+  const raw = env[ENVOYCODER_APP_NAME_ENV]?.trim();
+  return raw && raw.length > 0 ? raw : ENVOYCODER_PRODUCT_NAME;
+}
+
+/**
+ * The capability this product exists to use, owner-granted on the node that hosts it.
+ *
+ * The guide is blunt about the default (§4.7): until the owner runs
+ * `updateNodeConfig({ productGrants: { EnvoyCoder: ["coding"] } })`, the node refuses this product
+ * the coding surface it exists for. The read fails closed, so a product must treat "not granted" as
+ * a normal state to report — not as an error to retry.
+ */
+export const CAPABILITY_CODING = "coding";
 
 /** Default port for the EnvoyCoder daemon's WebSocket endpoint. */
 export const DEFAULT_DAEMON_PORT = 4770;

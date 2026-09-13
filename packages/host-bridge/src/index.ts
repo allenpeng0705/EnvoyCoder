@@ -27,35 +27,44 @@
  * could not start.
  */
 
-import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   type RunningNode,
   type VerifiedRunningNode,
   isProductScope,
   isValidProductName,
+  productDirIn,
   productScopeKey,
+  resolveHomeDir,
   resolveRunningNode,
 } from "@envoymesh/node-core";
+// `requestProductSession` comes from `reuse-host`, which is the product-facing surface the guide
+// points at (§4.5) — it re-exports the attach client so a product depends on one package.
 import {
+  type HostRpcDispatcher,
   type ProductSessionGrant,
-  requestProductSession,
-} from "@envoymesh/host-connect";
-import {
   type ReuseHost,
   type ReuseHostOptions,
   buildPairingUri,
   createReuseHost,
   createShellHostNodeService,
   parsePairingUri,
+  requestProductSession,
 } from "@envoymesh/reuse-host";
+// `@envoymesh/api/core` — the *reusable* half. The bare `@envoymesh/api` barrel reaches product-bound
+// modules, so importing it from a product is the mistake the guide calls out (§4.2) and the wiring
+// gate in this repo forbids.
+import { ENVOYMESH_VERSION } from "@envoymesh/api/core";
 import { pairingAppMismatch } from "@envoymesh/protocol";
 import {
+  type CoderHostDescriptor,
   DEFAULT_DAEMON_PATH,
   DEFAULT_DAEMON_PORT,
   ENVOYCODER_ERRORS,
   ENVOYCODER_PRODUCT_NAME,
-  type CoderHostDescriptor,
+  type RpcMethod,
+  coderProductName,
+  isRpcMethod,
 } from "@envoycoder/protocol";
 
 /* ────────────────────────────── product state on disk ───────────────────────────── */
@@ -94,8 +103,13 @@ export interface CoderPaths {
  * *session* (a token the node issued) rather than the file permission, and this comment is the
  * reminder not to build a security claim on a mode bit on a platform where it does nothing.
  */
-export function coderPaths(home: string = homedir()): CoderPaths {
-  const stateDir = join(home, ENVOYCODER_PRODUCT_NAME);
+export function coderPaths(home: string = resolveHomeDir()): CoderPaths {
+  // `resolveHomeDir()` and not `os.homedir()`: the family's resolution order is
+  // `ENVOYMESH_HOME` → per-OS default → legacy `~/.envoymesh` adoption, and a product that calls
+  // `homedir()` directly would ignore all three — inventing a second home and, with it, a second
+  // set of projects for a user who set `ENVOYMESH_HOME`. `productDirIn` keeps the segment rule in
+  // one place rather than re-implementing it here.
+  const stateDir = productDirIn(home, ENVOYCODER_PRODUCT_NAME);
   return {
     home,
     stateDir,
@@ -170,7 +184,7 @@ export async function attachToMeshNode(
   home: string,
   deps: MeshAttachDeps = {},
 ): Promise<MeshAttachOutcome> {
-  const product = deps.product ?? ENVOYCODER_PRODUCT_NAME;
+  const product = deps.product ?? coderProductName();
   if (!isValidProductName(product)) {
     return {
       kind: "refused",
@@ -194,7 +208,13 @@ export async function attachToMeshNode(
     };
   }
 
-  const endpoint = endpointFromWsUrl(node.wsUrl);
+  // The node publishes both an `endpoint` ({ port, path }) and a ready-to-dial `wsUrl`; the guide's
+  // flow uses the endpoint (§4.5), so that is preferred and the URL is only a fallback for a node
+  // whose descriptor is incomplete.
+  const endpoint =
+    node.endpoint && Number.isInteger(node.endpoint.port)
+      ? { port: node.endpoint.port, path: node.endpoint.path || DEFAULT_DAEMON_PATH }
+      : endpointFromWsUrl(node.wsUrl);
   if (!endpoint) {
     return {
       kind: "refused",
@@ -206,7 +226,12 @@ export async function attachToMeshNode(
   const requestSession =
     deps.requestSession ??
     (async (input: { port: number; path?: string }) =>
-      requestProductSession(input, { product, ...(deps.version ? { version: deps.version } : {}) }));
+      requestProductSession(input, {
+        product,
+        // The node records which version asked — worth having when a family-wide change lands and
+        // one product is behind.
+        version: deps.version ?? ENVOYMESH_VERSION,
+      }));
 
   try {
     const grant = await requestSession(endpoint);
@@ -258,7 +283,16 @@ export interface CoderDaemonHost {
     ownerId: string;
     /** Reachable `host:port` for the client; LAN IP, tailnet address, or a tunnel. */
     host: string;
+    /** A LAN address the phone may prefer over the wide-area one. */
     lanHost?: string;
+    /**
+     * Relay fallback, from the family's **shared roster** — the same one every product uses
+     * (`DEFAULT_ENVOY_COMMUNITY_RELAY_BOOTSTRAP_ADDR`), never a per-product relay. A phone that is
+     * not on the LAN reaches the desktop through it, which is the route this app would otherwise
+     * have to invent.
+     */
+    relayPeerId?: string;
+    relayWsUrls?: readonly string[];
     ssh?: CoderHostDescriptor["ssh"];
     secure?: boolean;
   }): string;
@@ -314,6 +348,12 @@ export function createCoderDaemonHost(
         // instead of silently connecting to the wrong daemon.
         app: product,
         ...(input.lanHost ? { lanWsUrl: `ws://${input.lanHost}:${host.port}${host.path}` } : {}),
+        // Passed through untouched: the roster is the family's, and a product that rewrote it would
+        // be a second network wearing the first one's name.
+        ...(input.relayPeerId ? { relayPeerId: input.relayPeerId } : {}),
+        ...(input.relayWsUrls && input.relayWsUrls.length > 0
+          ? { relayWsUrls: [...input.relayWsUrls] }
+          : {}),
       });
     },
     descriptor,
@@ -366,5 +406,61 @@ export function checkPairingCode(
     token: parsed.token,
     ownerId: parsed.ownerId,
     ...(parsed.lanWsUrl ? { lanWsUrl: parsed.lanWsUrl } : {}),
+  };
+}
+
+/* ────────────────────────────── dispatch ───────────────────────────── */
+
+/**
+ * The daemon's dispatcher: **answer your own methods, refuse everything else** (guide §4.6).
+ *
+ * Fail-closed in three ways, each of which is a bug the guide warns about in other products:
+ *
+ *   1. **An unknown method is refused**, not ignored — silence leaves a client waiting, and a
+ *      dispatcher that "tries anyway" is how a product gains an anonymous surface.
+ *   2. **A known-but-unimplemented method is refused by name**, so the UI can say "not yet" instead
+ *      of hanging.
+ *   3. **The dispatcher never mints credentials.** `coder.pairDevice` is not in the catalogue for
+ *      that reason: issuing a token is the node's act, behind its own loopback-only gate, and a
+ *      product that grew its own would have invented exactly the anonymous path §8 forbids.
+ *
+ * The identity is resolved by the transport (`@envoymesh/host-connect`): this function only decides
+ * *what* may be called, never *who* is calling.
+ */
+export interface CoderDispatcherDeps {
+  handlers?: Partial<Record<RpcMethod, (params: unknown) => Promise<unknown> | unknown>>;
+  /** What to say when a method exists but this build does not serve it yet. */
+  unimplementedHint?: string;
+}
+
+export type CoderDispatcher = HostRpcDispatcher<unknown>;
+
+export function createCoderDispatcher(deps: CoderDispatcherDeps = {}): CoderDispatcher {
+  const handlers = deps.handlers ?? {};
+  // **The signature is the family's port, and it is positional** (`method, params, session`). The
+  // first version of this function took an object and duck-typed its way past `tsc`, so the host
+  // called it with a *string* as the first argument and the dispatcher silently answered nothing —
+  // the smoke test caught it, which is why the return type is annotated here rather than inferred.
+  return async (
+    method: string,
+    params: Record<string, unknown>,
+    // The session is the transport's answer to "who is calling" (guide §4.6). Unused today, and
+    // deliberately taken rather than dropped: a product that grows per-session policy (refusing the
+    // terminal surface to a family-profile session, say) needs it, and the port hands it over.
+    // Derived from the port rather than imported separately: `reuse-host` re-exports the dispatcher
+    // type but not the session type, and deriving it here means one source of truth for the shape.
+    _session: Parameters<HostRpcDispatcher<unknown>>[2],
+  ): Promise<unknown> => {
+    if (!isRpcMethod(method)) {
+      throw new Error(`Method not found: ${method}`);
+    }
+    const handler = handlers[method];
+    if (!handler) {
+      throw new Error(
+        `${method} is not implemented in this build` +
+          (deps.unimplementedHint ? ` — ${deps.unimplementedHint}` : "."),
+      );
+    }
+    return await handler(params);
   };
 }

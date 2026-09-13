@@ -37,16 +37,25 @@ void main() {
       expect(result.refusal, contains('this is EnvoyCoder'));
     });
 
-    test('accepts a bare query string, because some scanners hand back only that', () {
-      final query = ours.split('?').last;
-      expect(parsePairingCode(query).ok, isTrue);
+    test('accepts the shared contract\'s paste-friendly forms', () {
+      // The family's parser accepts the canonical URI, a compact `?pairing=` code, and the Social
+      // paste-box form `invite?token=…`. What it does *not* accept is a bare `wsUrl=…` query, which
+      // this app used to allow before it delegated — asserted here so the difference is visible
+      // rather than discovered by a user.
+      expect(parsePairingCode(ours).ok, isTrue);
+      expect(parsePairingCode(ours.split('?').last).ok, isFalse);
     });
 
-    test('explains what is missing rather than failing silently', () {
+    test('refuses an unreadable code with something a user can act on', () {
+      // Wording belongs to the shared contract, so these assert that a refusal happens, is
+      // explained, and is never silent — the property this app is responsible for.
+      for (final bad in ['', 'envoy://pair?token=t', 'envoy://pair?wsUrl=ws://h:1/ws', 'nonsense']) {
+        final result = parsePairingCode(bad);
+        expect(result.ok, isFalse, reason: bad);
+        expect(result.refusal, isNotNull, reason: bad);
+        expect(result.refusal!.length, greaterThan(10), reason: bad);
+      }
       expect(parsePairingCode('').refusal, contains('empty'));
-      expect(parsePairingCode('envoy://pair?token=t').refusal, contains('address'));
-      expect(parsePairingCode('envoy://pair?wsUrl=ws://h:1/ws').refusal, contains('access token'));
-      expect(parsePairingCode('not a uri at all').refusal, isNotNull);
     });
 
     test('never puts the token in a label a user or a log can see', () {

@@ -44,6 +44,11 @@ jobs:
       - name: Dependencies this repo deliberately does not vendor
         run: npm run peers:check
 
+      # Guide §4.1/§8: a package declared in every place that resolves it. This repo's own gate —
+      # EnvoyMesh's script checks EnvoyMesh's tree, not this one.
+      - name: Wiring (a package declared everywhere it is used)
+        run: npm run wiring:check
+
       - name: No build output in src trees
         run: node scripts/check-src-clean.mjs
 

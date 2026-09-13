@@ -8,10 +8,27 @@
 
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { ENVOYCODER_ERRORS, ENVOYCODER_PRODUCT_NAME } from "@envoycoder/protocol";
-import { attachToMeshNode, coderPaths, checkPairingCode } from "../src/index.js";
+import {
+  CAPABILITY_CODING,
+  ENVOYCODER_ERRORS,
+  ENVOYCODER_PRODUCT_NAME,
+  coderProductName,
+} from "@envoycoder/protocol";
+import {
+  attachToMeshNode,
+  checkPairingCode,
+  coderPaths,
+  createCoderDaemonHost,
+  createCoderDispatcher,
+} from "../src/index.js";
 
 const NODE_WS = "ws://127.0.0.1:3030/ws";
+
+describe("the capability this product exists to use", () => {
+  it("is a name the owner grants, not something the product assumes", () => {
+    expect(CAPABILITY_CODING).toBe("coding");
+  });
+});
 
 describe("product state on disk", () => {
   it("keeps this product's state inside the shared home, under its own name", () => {
@@ -135,5 +152,101 @@ describe("attaching to the mesh", () => {
   it("rejects a product name the mesh would not accept", async () => {
     const outcome = await attachToMeshNode("/home/dev/.envoymesh", { product: "not a name!" });
     expect(outcome.kind).toBe("refused");
+  });
+});
+
+describe("guide alignment (§4.4, §4.5, §4.6, §9)", () => {
+  it("resolves the shared home the family's way, so ENVOYMESH_HOME is honoured", () => {
+    // The bug this prevents: `os.homedir()` would ignore ENVOYMESH_HOME and the per-OS default,
+    // giving a user who set the variable a second home — and a second set of projects.
+    const previous = process.env.ENVOYMESH_HOME;
+    process.env.ENVOYMESH_HOME = "/tmp/envoycoder-guide-check";
+    try {
+      const paths = coderPaths();
+      expect(paths.home).toBe("/tmp/envoycoder-guide-check");
+      expect(paths.stateDir).toBe("/tmp/envoycoder-guide-check/EnvoyCoder");
+    } finally {
+      if (previous === undefined) delete process.env.ENVOYMESH_HOME;
+      else process.env.ENVOYMESH_HOME = previous;
+    }
+  });
+
+  it("takes the endpoint from the node's descriptor, and the fallback from its URL", async () => {
+    // §4.5 uses `running.endpoint.{port,path}`; the URL parse exists only for a node whose
+    // descriptor is incomplete. Both must land on the same attach call.
+    const seen: { port: number; path?: string }[] = [];
+    const requestSession = async (input: { port: number; path?: string }) => {
+      seen.push(input);
+      return {
+        token: "t",
+        scopeKey: "product:EnvoyCoder",
+        ownerId: "o",
+        wsUrl: "ws://127.0.0.1:9/ws?token=t",
+      };
+    };
+    await attachToMeshNode("/home/dev/.envoymesh", {
+      resolveNode: async () => ({
+        status: "running",
+        wsUrl: "ws://127.0.0.1:3030/ws",
+        endpoint: { pid: 1, app: "EnvoyMesh", version: "0.5.0", startedAt: "", port: 4040, path: "/ws", token: "" },
+      }),
+      requestSession,
+    });
+    await attachToMeshNode("/home/dev/.envoymesh", {
+      resolveNode: async () => ({ status: "running", wsUrl: "ws://127.0.0.1:3030/ws" }),
+      requestSession,
+    });
+    expect(seen).toEqual([
+      { port: 4040, path: "/ws" },
+      { port: 3030, path: "/ws" },
+    ]);
+  });
+
+  it("names the product from the environment, falling back to our own name", () => {
+    // §9: `ENVOYMESH_APP_NAME=EnvoyCoder`. The fallback must be *our* name, because
+    // `resolveAppName()` answers "EnvoyMesh" when the variable is unset — the one wrong answer.
+    expect(coderProductName({})).toBe("EnvoyCoder");
+    expect(coderProductName({ ENVOYMESH_APP_NAME: "EnvoyCoder" })).toBe("EnvoyCoder");
+    expect(coderProductName({ ENVOYMESH_APP_NAME: "  " })).toBe("EnvoyCoder");
+  });
+
+  it("passes the shared relay roster through a pairing code unchanged (§9)", () => {
+    const host = createCoderDaemonHost({
+      port: 0,
+      sessionIdentity: () => undefined,
+      dispatch: async () => undefined,
+    });
+    try {
+      const uri = host.pairingUri({
+        token: "t",
+        ownerPublicKey: "KEY",
+        ownerId: "envoy:owner:abc",
+        host: "10.0.0.5",
+        lanHost: "192.168.1.20",
+        relayPeerId: "12D3KooWrelay",
+        relayWsUrls: ["wss://relay.example/ws"],
+      });
+      // The roster is the family's; a product that rewrote it would be a second network wearing
+      // the first one's name.
+      expect(uri).toContain("relayPeerId=12D3KooWrelay");
+      expect(uri).toContain(encodeURIComponent("wss://relay.example/ws"));
+      expect(uri).toContain("app=EnvoyCoder");
+    } finally {
+      host.stop();
+    }
+  });
+
+  it("refuses any method it does not serve, rather than growing an anonymous surface (§4.6)", async () => {
+    const dispatch = createCoderDispatcher({ handlers: {} });
+    // Positional: (method, params, session) — the family's port signature.
+    await expect(dispatch("coder.listProjects", {}, undefined)).rejects.toThrow(
+      /not implemented in this build/,
+    );
+    // An unknown method is refused too: silence would leave a client waiting, and "try anyway" is
+    // how a product gains a surface nobody reviewed.
+    await expect(dispatch("coder.doAnything", {}, undefined)).rejects.toThrow(/Method not found/);
+    // A served method is served, so the refusal above is a decision and not a blanket failure.
+    const served = createCoderDispatcher({ handlers: { "coder.hello": () => ({ ok: true }) } });
+    await expect(served("coder.hello", {}, undefined)).resolves.toEqual({ ok: true });
   });
 });

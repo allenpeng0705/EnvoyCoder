@@ -23,6 +23,8 @@ relay) and the pairing experience with the rest of the family, and keeps its own
 ```bash
 npm install
 npm run peers:check   # confirms the EnvoyMesh sibling + harness are where they should be
+npm run wiring:check  # every package declared everywhere that resolves it (guide §4.1)
+npm run gates         # peers + wiring + src-clean + mobile + typecheck + tests
 npm run dev           # the desktop UI in a browser (Vite)
 npm run tauri:dev     # the desktop app (Tauri shell)
 npm run smoke         # boots a real host, mints a real pairing code, probes your agents

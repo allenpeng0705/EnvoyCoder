@@ -15,6 +15,18 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.2.2
+  # The family's pairing contract, in Dart — the twin of `@envoymesh/protocol`.
+  #
+  # This is the guide's §5.2 rule made structural: the parser and the refusal sentence live in one
+  # place for every app in the group, and the Dart default (`kDefaultAppName`) is asserted against
+  # the TypeScript one in EnvoyMesh's own tests. Re-implementing either here would work today and
+  # drift silently the first time the format changes — which is exactly the class of bug the shared
+  # contract exists to prevent.
+  #
+  # A path dependency to the sibling checkout, like the desktop's `file:` links: the family is a set
+  # of repos that sit next to each other, and neither vendoring nor publishing is part of the plan.
+  envoy_thin_client:
+    path: ../../../EnvoyMesh/packages/envoy-thin-client-dart
 
 dev_dependencies:
   flutter_test:

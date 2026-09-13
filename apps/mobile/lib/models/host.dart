@@ -15,6 +15,8 @@ class CoderHost {
     required this.token,
     this.secure = false,
     this.ssh,
+    this.relayPeerId,
+    this.relayWsUrl,
     this.lastSeenAt,
   });
 
@@ -31,6 +33,11 @@ class CoderHost {
 
   /// Set when the machine is reachable only through a hop.
   final SshHop? ssh;
+
+  /// The family's shared relay, carried from the pairing code. Not a per-product relay: a phone
+  /// that is off-LAN reaches this machine the same way it reaches every other app in the group.
+  final String? relayPeerId;
+  final String? relayWsUrl;
   final DateTime? lastSeenAt;
 
   Uri get wsUri => Uri.parse(
@@ -46,6 +53,8 @@ class CoderHost {
         token: token,
         secure: secure,
         ssh: ssh,
+        relayPeerId: relayPeerId,
+        relayWsUrl: relayWsUrl,
         lastSeenAt: lastSeenAt ?? this.lastSeenAt,
       );
 }
