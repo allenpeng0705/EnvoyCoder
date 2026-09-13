@@ -49,6 +49,12 @@ jobs:
       - name: Wiring (a package declared everywhere it is used)
         run: npm run wiring:check
 
+      # The family documents this repo copies in must still be the documents they claim to be. Drift
+      # from EnvoyMesh is reported here, not failed: another repo's doc edit must not stop this build
+      # (--strict is the pre-release form).
+      - name: Family documents (the copies match what they were copied from)
+        run: npm run docs:check
+
       - name: No build output in src trees
         run: node scripts/check-src-clean.mjs
 

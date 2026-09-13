@@ -88,14 +88,42 @@ that path, and each one left behind exactly that test.
 * **Report the version you tested against.** When a change here depends on a family behaviour,
   `docs/` should name the commit or version — the same discipline the family applies to its own claims.
 
+### 5.1 The documents we copy in, and why that is not vendoring
+
+Code is *linked* from the sibling checkout; three **documents** are copied, because a developer here
+should not need a second checkout open to read the rules they are held to. They live in
+[`docs/family/`](family/), with an index in [`docs/family/README.md`](family/README.md):
+
+| Copy | Why it is here |
+|---|---|
+| `envoymesh-new-app-guide.md` | the standard this repo is built to, and the checklist its gates implement |
+| `envoymesh-multi-product-design.md` | the rules it must not break (D2 one node owner, D3 share the engine never the cloud, D4 the harness is a peer) |
+| `envoymesh-refactoring-plan.md` | background: the reusable / product-bound split *is* the interface we consume |
+
+A copy is only safe if it cannot quietly become wrong, so each one carries a provenance header — source,
+commit, date, and the SHA-256 of the body as copied — and `npm run docs:check` reads it. That check is
+deliberately **asymmetric**:
+
+* **Edited in place → fail.** The body no longer matches its own header. Somebody is editing a mirror,
+  and the next sync would destroy the change.
+* **Source moved → note, exit 0.** A document being edited in EnvoyMesh is no reason for this repo's
+  build to stop — cross-repo coupling is exactly what the family design refuses (D1). `--strict` is the
+  pre-release form, where a stale copy *is* an error.
+
+`npm run docs:sync` is the only way a copy changes. It records `+ uncommitted changes` when EnvoyMesh's
+own tree is dirty, so a copy never claims a commit it did not come from. This is the same rule as §2 —
+we clone what we need and we do not pretend to own it — applied to prose.
+
 ## 6. Gates in this repo
 
 | Command | What it protects |
 |---|---|
 | `npm run peers:check` | the mesh closure resolves *and is built*; the harness is present (or honestly absent) |
+| `npm run wiring:check` | every package declared in every place that resolves it (guide §4.1) — the failure mode with no clear error |
+| `npm run docs:check` | the copies in `docs/family/` are still the documents they claim to be (§5.1) |
 | `node scripts/check-src-clean.mjs` | no build output inside a `src/` tree, and no build-info outside an output dir — a stale `src/index.js` shadows the real source in tests, and a misplaced `tsconfig.tsbuildinfo` makes `tsc -b` a silent no-op |
 | `npx tsc -b` | project references, so a consumer that forgot its reference fails here |
-| `npm test` | 61 tests over the model, the platform layer, the catalogue, the bridge and the rail |
+| `npm test` | 67 tests over the model, the platform layer, the catalogue, the bridge and the rail |
 | `npm run build -w @envoycoder/desktop` | the UI *bundles* — a green suite has never proved that |
 | `npm run smoke` | a real host on a real port, a real pairing code, and a real probe of your installed agents |
 | `npm run mobile:check` | the Flutter app still has the files a build needs |
@@ -104,8 +132,10 @@ that path, and each one left behind exactly that test.
 
 ## 7. Audit against the family guide (`envoymesh-new-app-guide.md`)
 
-The guide is the standard for a new app in this group. This is the state of each of its requirements,
-with the honest gaps at the bottom.
+The guide is the standard for a new app in this group — read it at
+[`docs/family/envoymesh-new-app-guide.md`](family/envoymesh-new-app-guide.md), or in EnvoyMesh itself,
+which is authoritative (§5.1). This is the state of each of its requirements, with the honest gaps at
+the bottom.
 
 ### 7.1 The seven wiring places (§4.1)
 

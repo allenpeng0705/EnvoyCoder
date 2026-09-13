@@ -20,6 +20,9 @@ shares the mesh and pairing with the family and keeps its own state separate.
    The audit log and tooltips are where internal names belong.
 6. **Tests and the bundle are different proofs.** Run `npx vitest run` *and*
    `npm run build -w @envoycoder/desktop`; a green suite once shipped a broken import path.
+7. **A family document is copied, never edited.** `docs/family/` holds the EnvoyMesh documents that
+   govern this product, with their provenance in their header. Rewording one changes only the copy: the
+   fix belongs in EnvoyMesh, and comes back with `npm run docs:sync` (guide §7.4).
 
 ## Layout
 
@@ -27,20 +30,24 @@ shares the mesh and pairing with the family and keeps its own state separate.
 apps/desktop/     Tauri shell (Rust) + window UI (React) + the daemon (TS)
 apps/mobile/      Flutter app
 packages/{protocol,platform,workspace-model,agent-catalog,host-bridge}
-scripts/          the gates (peers, src-clean, mobile) and the smoke test
+scripts/          the gates (peers, wiring, family docs, src-clean, mobile) and the smoke test
 docs/             the design and its reasoning
+docs/family/      copies of the EnvoyMesh documents that govern us — read, never edited
 ```
 
 ## Commands
 
 ```bash
 npm run peers:check    # mesh closure + harness
+npm run wiring:check   # every package declared everywhere that resolves it
+npm run docs:check     # the family copies still match what they were copied from
+npm run docs:sync      # refresh docs/family/ from ../EnvoyMesh
 npx tsc -b             # typecheck every project
 npm test               # unit tests
 npm run smoke          # real host, real pairing, real agent probes
 npm run dev            # UI in a browser
 npm run tauri:dev      # the desktop app
-npm run gates          # peers + typecheck + tests
+npm run gates          # peers + wiring + family docs + src-clean + mobile + typecheck + tests
 ```
 
 ## Conventions

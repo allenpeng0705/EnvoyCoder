@@ -31,8 +31,10 @@
     "tauri:build:win": "npm run tauri:build:win -w @envoycoder/desktop",
     "tauri:build:linux": "npm run tauri:build:linux -w @envoycoder/desktop",
     "mobile:check": "node scripts/check-mobile.mjs",
-    "gates": "npm run peers:check && npm run wiring:check && node scripts/check-src-clean.mjs && node scripts/check-mobile.mjs && tsc -b && vitest run",
-    "wiring:check": "node scripts/check-wiring.mjs"
+    "gates": "npm run peers:check && npm run wiring:check && npm run docs:check && node scripts/check-src-clean.mjs && node scripts/check-mobile.mjs && tsc -b && vitest run",
+    "wiring:check": "node scripts/check-wiring.mjs",
+    "docs:check": "node scripts/check-family-docs.mjs",
+    "docs:sync": "node scripts/sync-family-docs.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

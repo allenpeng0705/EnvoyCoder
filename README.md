@@ -24,7 +24,7 @@ relay) and the pairing experience with the rest of the family, and keeps its own
 npm install
 npm run peers:check   # confirms the EnvoyMesh sibling + harness are where they should be
 npm run wiring:check  # every package declared everywhere that resolves it (guide §4.1)
-npm run gates         # peers + wiring + src-clean + mobile + typecheck + tests
+npm run gates         # peers + wiring + family docs + src-clean + mobile + typecheck + tests
 npm run dev           # the desktop UI in a browser (Vite)
 npm run tauri:dev     # the desktop app (Tauri shell)
 npm run smoke         # boots a real host, mints a real pairing code, probes your agents
@@ -47,14 +47,17 @@ packages/workspace-model/  the project → workspace model and the sidebar's que
 packages/agent-catalog/    which agents we drive, how, and what each one can actually do
 packages/host-bridge/      the EnvoyMesh attach + this product's own daemon host
 docs/                the design, and the reasoning behind it
+docs/family/         copies of the EnvoyMesh documents that govern this product
 ```
 
 ## Read this before changing anything
 
-1. `docs/envoycoder-design.md` — what the product is and the decisions already taken.
-2. `docs/envoycoder-networking.md` — how it joins the EnvoyMesh family (and what it may not do).
-3. `docs/envoycoder-platforms.md` — the three operating systems and their traps.
-4. `docs/envoymesh-integration.md` — how this repo relates to EnvoyMesh: what it links, what it
+1. `docs/family/envoymesh-new-app-guide.md` — the family's standard for an app, and the checklist this
+   repo's gates implement. **A copy**: read it here, fix it in EnvoyMesh, refresh with `docs:sync`.
+2. `docs/envoycoder-design.md` — what the product is and the decisions already taken.
+3. `docs/envoycoder-networking.md` — how it joins the EnvoyMesh family (and what it may not do).
+4. `docs/envoycoder-platforms.md` — the three operating systems and their traps.
+5. `docs/envoymesh-integration.md` — how this repo relates to EnvoyMesh: what it links, what it
    must clone, and how contract changes travel upstream.
 
 ## Status
