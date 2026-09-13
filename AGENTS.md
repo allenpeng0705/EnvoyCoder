@@ -42,6 +42,7 @@ npm run peers:check    # mesh closure + harness
 npm run wiring:check   # every package declared everywhere that resolves it
 npm run docs:check     # the family copies still match what they were copied from
 npm run docs:sync      # refresh docs/family/ from ../EnvoyMesh
+npm run upgrade:mesh   # upgrade the linked EnvoyMesh packages (see docs/upgrading.md)
 npx tsc -b             # typecheck every project
 npm test               # unit tests
 npm run smoke          # real host, real pairing, real agent probes
@@ -52,14 +53,16 @@ npm run gates          # peers + wiring + family docs + src-clean + mobile + typ
 
 ## Upgrading what we depend on
 
+Full procedure, with the failures and their fixes: **`docs/upgrading.md`**.
+
 | Dependency | Upgrade |
 |---|---|
-| the mesh layer (8 linked packages) | `cd ../EnvoyMesh && git pull && npm install` then `npx tsc -b packages/{protocol,identity,vault,api,node-core,harness,host-connect,reuse-host}` — **the rebuild is the upgrade**: `node_modules` is a symlink, so the sources change the moment you pull, while the code we import is their `dist/`. `peers:check` warns when sources are newer than the build. Then `npm install && npm run gates && npm run smoke`. |
-| the harness (our clone, D4) | bump our pin, rebuild it with its own `pnpm --filter … run build`, then `gates` + `smoke`. Never through EnvoyMesh's link. |
-| the external agent CLIs | nothing to do: they are the user's own installs, and we probe them at runtime. |
+| the mesh layer (8 linked packages) | `npm run upgrade:mesh -- --verify` — or by hand: pull the sibling, `npm install` there, `npx tsc -b` the 8 packages, then `npm install && npm run gates && npm run smoke` here. **The rebuild is the upgrade**: `node_modules` is a symlink, so sources change the moment you pull, while the code we import is their `dist/`. |
+| the harness (our clone, D4) | bump the pin (a commit — all ten of its packages are `0.0.0`), `pnpm install && pnpm -r run build` in `../envoy-harness`, then `gates` + `smoke`. Never through EnvoyMesh's link, and never vendored inside this repo: its own workspace overrides point at `../EnvoyMesh/packages/*`. |
+| the external agent CLIs | nothing to do — they are the user's installs, and we probe them at runtime. |
 
-`docs/envoymesh-integration.md` §5.2 has the reasoning, what breaks in which order, and the release
-rule (an artifact records the EnvoyMesh and harness commits it was built against).
+Before a release: `npm run upgrade:mesh -- --commit <sha> --verify`, `npm run docs:check -- --strict`, and
+record the EnvoyMesh and harness commits in the release notes.
 
 ## Conventions
 

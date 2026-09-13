@@ -20,7 +20,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -52,27 +52,48 @@ function meshSiblingState() {
   }
 }
 
-/** The newest modification time under a directory, or 0 when it does not exist. */
-function newestMtime(dir) {
-  let newest = 0;
-  let entries;
+/**
+ * Which linked projects are genuinely out of date — asked of TypeScript itself, not inferred.
+ *
+ * ## Why this replaced an mtime comparison
+ *
+ * The first version of this check compared `src/`'s newest mtime against the built entry's, and it was
+ * **wrong in the direction that matters**: `tsc -b` is *incremental*, so it does not rewrite an output
+ * whose project is already current. A `git pull` (or a `touch`) moves the sources' mtimes, the next
+ * build correctly does nothing, and the warning then hangs around forever — unfixable by following its
+ * own advice. A gate you cannot satisfy by obeying it is worse than no gate: it trains people to ignore
+ * the output.
+ *
+ * `tsc -b --dry` answers the real question in 0.3 s and distinguishes three states, which a timestamp
+ * cannot (verified against TS 6.0.3):
+ *
+ *   Project '…' is up to date                                              → current
+ *   A non-dry build would update timestamps for output of project '…'      → content is current; only
+ *                                                                           mtimes moved. NOT stale
+ *   A non-dry build would build project '…'                                → genuinely stale: we would
+ *                                                                           be running an older build
+ *
+ * Returns the stale projects' paths, or null when the question cannot be asked (no `tsc` to run).
+ */
+function staleProjects(projects) {
+  if (projects.length === 0) return null;
   try {
-    entries = readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return newest;
-  }
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) newest = Math.max(newest, newestMtime(full));
-    else {
-      try {
-        newest = Math.max(newest, statSync(full).mtimeMs);
-      } catch {
-        /* a file that vanished between the listing and the stat */
-      }
+    const output = execFileSync("npx", ["tsc", "-b", ...projects, "--dry"], {
+      cwd: meshSibling,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"], // npm's own config warnings are not our business
+      // `npx` is a shell shim on Windows; the paths handed to it are relative, so no quoting games.
+      shell: process.platform === "win32",
+    });
+    const stale = new Set();
+    for (const line of output.split("\n")) {
+      const wouldBuild = /A non-dry build would build project '(.+?)'/.exec(line);
+      if (wouldBuild) stale.add(path.resolve(wouldBuild[1]));
     }
+    return [...stale];
+  } catch {
+    return null;
   }
-  return newest;
 }
 
 /**
@@ -118,7 +139,8 @@ function declaredMeshDeps() {
 }
 
 const problems = [];
-const stale = [];
+/** The linked packages we found, kept for the one build-state question asked after the loop. */
+const packages = [];
 
 // ── 1. the sibling checkout ────────────────────────────────────────────────────────────
 if (!existsSync(meshSibling)) {
@@ -159,18 +181,14 @@ if (!existsSync(meshSibling)) {
     // gate here stays green because nothing is missing. It is the same shape as the incident the
     // family guide records (§7.2): sources moved, build did not, and the suite never noticed.
     //
-    // mtime is a heuristic and is treated as one — a warning that names the command, never a
-    // failure, because a fresh clone can legitimately have them in either order.
-    const sourceMtime = newestMtime(path.join(packageDir, "src"));
-    const builtMtime = statSync(entry).mtimeMs;
-    if (sourceMtime > builtMtime) {
-      stale.push(
-        `${name}: sources are newer than the build (${path.relative(meshSibling, entry)})\n` +
-          `    fix: (cd ${meshSibling} && npx tsc -b packages/${name.replace("@envoymesh/", "")})`,
-      );
-    }
+    // Asked once, after the loop, via `staleProjects()`: one `tsc -b --dry` covers all eight projects
+    // and gives TypeScript's own verdict rather than ours.
+    packages.push({ name, packageDir });
   }
 }
+
+// ── 1b. is their build current? (one question, asked once) ─────────────────────────────
+const stale = staleProjects(packages.map((entry) => `packages/${entry.name.replace("@envoymesh/", "")}`));
 
 // ── 2. our own copy of the harness (D4: never EnvoyMesh's link) ────────────────────────
 //
@@ -209,6 +227,28 @@ const harnessWhere = existsSync(harnessLinked)
       ? `a sibling checkout at ${harnessSibling}`
       : null;
 
+/**
+ * The harness's commit, when it is a checkout we can ask.
+ *
+ * Same reason as the sibling's commit above: all ten of its packages are version `0.0.0`, so a
+ * version number identifies nothing — the commit is the only answer to "which harness is this?".
+ * `docs/upgrading.md` §3.3 turns this into a pin once something declares the dependency.
+ */
+function gitState(dir) {
+  try {
+    return {
+      commit: execFileSync("git", ["-C", dir, "rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim(),
+      subject: execFileSync("git", ["-C", dir, "log", "-1", "--pretty=%s"], { encoding: "utf8" }).trim(),
+      dirty: execFileSync("git", ["-C", dir, "status", "--porcelain"], { encoding: "utf8" }).trim().length > 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+const harnessDir = existsSync(harnessLinked) || existsSync(harnessLocal) ? null : harnessSibling;
+const harnessState = harnessDir ? gitState(harnessDir) : null;
+
 // ── 3. reported, never silently tolerated ──────────────────────────────────────────────
 if (problems.length > 0) {
   console.error("\nEnvoyCoder cannot run: dependencies it does not vendor are missing.\n");
@@ -229,15 +269,28 @@ console.log(
 );
 if (sibling) console.log(`  linked against: ${sibling.commit} "${sibling.subject}"`);
 
-// A warning, not a failure: mtime cannot distinguish "they rebuilt and we are fine" from "we are
-// running code that predates their sources", so it says what it sees and names the command.
-if (stale.length > 0) {
+// A warning, not a failure — a stale build breaks nothing loudly, which is the whole problem — but it
+// is TypeScript's own verdict, so it clears the moment the sibling is actually rebuilt.
+if (stale && stale.length > 0) {
   console.log(
-    `\nwarning: ${stale.length} linked package(s) have sources newer than their build, so this repo is\n` +
+    `\nwarning: ${stale.length} linked package(s) are out of date in the sibling, so this repo is\n` +
       "  running the *previous* compiled family code. Nothing is missing — which is why no other gate\n" +
       "  would tell you. Rebuild the sibling before trusting a green run:\n",
   );
-  for (const item of stale) console.log(`    ${item}`);
+  for (const project of stale) {
+    // Matched by the project's folder name rather than by full path: TypeScript reports *resolved*
+    // paths, which differ from ours when the checkout sits behind a symlink (macOS `/tmp`, a linked
+    // workspace) — and a warning that cannot name the package is not worth printing.
+    const segment = path.basename(path.dirname(project));
+    const name = packages.find((entry) => entry.name === `@envoymesh/${segment}`)?.name ?? segment;
+    console.log(`    ${name}  (packages/${segment})`);
+  }
+  console.log(
+    `\n    fix: (cd ${meshSibling} && npx tsc -b ${packages
+      .map((entry) => `packages/${entry.name.replace("@envoymesh/", "")}`)
+      .join(" ")})\n` +
+      "    (docs/upgrading.md §2 — or run `npm run upgrade:mesh` to do the whole upgrade)\n",
+  );
 }
 if (harnessWarning) console.log(`note: ${harnessWarning}`);
 if (harnessWhere) {
@@ -248,4 +301,9 @@ if (harnessWhere) {
         : " — nothing declares it yet (roadmap item: the built-in agent), and it is never taken\n" +
           "  through EnvoyMesh's link (design D4)."),
   );
+  if (harnessState) {
+    console.log(
+      `  at ${harnessState.commit} "${harnessState.subject}"${harnessState.dirty ? " (with uncommitted changes)" : ""}`,
+    );
+  }
 }

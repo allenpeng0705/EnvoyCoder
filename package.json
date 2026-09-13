@@ -34,7 +34,8 @@
     "gates": "npm run peers:check && npm run wiring:check && npm run docs:check && node scripts/check-src-clean.mjs && node scripts/check-mobile.mjs && tsc -b && vitest run",
     "wiring:check": "node scripts/check-wiring.mjs",
     "docs:check": "node scripts/check-family-docs.mjs",
-    "docs:sync": "node scripts/sync-family-docs.mjs"
+    "docs:sync": "node scripts/sync-family-docs.mjs",
+    "upgrade:mesh": "node scripts/upgrade-mesh.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

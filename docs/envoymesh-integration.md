@@ -138,6 +138,9 @@ we clone what we need and we do not pretend to own it — applied to prose.
 
 ### 5.2 Upgrading, in three different senses
 
+The reasoning is here; the **step-by-step procedure, with every failure and its fix, is
+[`docs/upgrading.md`](upgrading.md)** — run it as `npm run upgrade:mesh -- --verify`.
+
 #### The mesh layer: it upgrades *itself*, and that is the problem
 
 Because the packages are symlinked (§1), a `git pull` in the sibling changes what this repo resolves
@@ -153,11 +156,20 @@ npx tsc -b packages/protocol packages/identity packages/vault packages/api \
 cd ../EnvoyCoder && npm install && npm run gates && npm run smoke
 ```
 
-`peers:check` now **warns** when a linked package's sources are newer than its build, names the exact
-rebuild command per package, and prints the sibling's commit and subject — so "which EnvoyMesh is
-this?" is answered in the gate output and in CI logs instead of living in someone's memory. It is a
-warning and not a failure on purpose: the comparison is mtime-based, and a fresh clone can legitimately
-have them in either order.
+`peers:check` now **warns** when a linked package is out of date, names it, and prints the exact rebuild
+command, and it prints the sibling's commit and subject — so "which EnvoyMesh is this?" is answered in
+the gate output and in CI logs instead of living in someone's memory. It is a warning rather than a
+failure because a stale build breaks nothing loudly, which is the entire problem.
+
+**It asks TypeScript, rather than comparing timestamps.** The first version compared `src/`'s newest
+mtime against the built entry's, and it was wrong in the direction that matters: `tsc -b` is
+*incremental*, so it does not rewrite an output whose project is already current — a pull moves the
+mtimes, the next build correctly does nothing, and the warning then hangs around forever, unfixable by
+obeying it. A gate you cannot satisfy by following it teaches people to ignore its output. One
+`tsc -b --dry` (0.3 s for all eight projects) gives the real answer, and distinguishes the three states
+a timestamp cannot: *up to date*, *content current but only mtimes moved* (not stale), and *would
+build* (stale). Both directions verified — a touch does not warn, a real edit does, and a rebuild clears
+it.
 
 What actually breaks, in the order it breaks:
 

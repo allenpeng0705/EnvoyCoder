@@ -59,6 +59,8 @@ docs/family/         copies of the EnvoyMesh documents that govern this product
 4. `docs/envoycoder-platforms.md` — the three operating systems and their traps.
 5. `docs/envoymesh-integration.md` — how this repo relates to EnvoyMesh: what it links, what it
    must clone, and how contract changes travel upstream.
+6. `docs/upgrading.md` — how to move the linked EnvoyMesh packages and the harness forward, and how to
+   tell whether it worked.
 
 ## Status
 
