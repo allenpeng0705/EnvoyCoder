@@ -1,0 +1,35 @@
+{
+  "name": "@envoycoder/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "tauri:build:mac": "tauri build --bundles dmg,app",
+    "tauri:build:win": "tauri build --bundles msi,nsis",
+    "tauri:build:linux": "tauri build --bundles appimage,deb,rpm"
+  },
+  "dependencies": {
+    "@envoycoder/agent-catalog": "0.1.0",
+    "@envoycoder/host-bridge": "0.1.0",
+    "@envoycoder/platform": "0.1.0",
+    "@envoycoder/protocol": "0.1.0",
+    "@envoycoder/workspace-model": "0.1.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0",
+    "@testing-library/react": "^16.1.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^25.0.1",
+    "vite": "^6.0.7",
+    "@testing-library/dom": "^10.4.0"
+  }
+}

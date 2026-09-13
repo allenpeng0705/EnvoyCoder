@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/protocol" },
+    { "path": "./packages/platform" },
+    { "path": "./packages/workspace-model" },
+    { "path": "./packages/agent-catalog" },
+    { "path": "./packages/host-bridge" }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "@envoycoder/host-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@envoycoder/platform": "0.1.0",
+    "@envoycoder/protocol": "0.1.0",
+    "@envoymesh/protocol": "file:../../../EnvoyMesh/packages/protocol",
+    "@envoymesh/identity": "file:../../../EnvoyMesh/packages/identity",
+    "@envoymesh/vault": "file:../../../EnvoyMesh/packages/vault",
+    "@envoymesh/api": "file:../../../EnvoyMesh/packages/api",
+    "@envoymesh/node-core": "file:../../../EnvoyMesh/packages/node-core",
+    "@envoymesh/harness": "file:../../../EnvoyMesh/packages/harness",
+    "@envoymesh/host-connect": "file:../../../EnvoyMesh/packages/host-connect",
+    "@envoymesh/reuse-host": "file:../../../EnvoyMesh/packages/reuse-host"
+  }
+}

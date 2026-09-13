@@ -1,0 +1,18 @@
+[package]
+name = "envoycoder"
+version = "0.1.0"
+description = "EnvoyCoder — the control plane for coding agents"
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The shell is where the daemon is started and reaped. `tauri-plugin-shell` is deliberately *not*
+# used: the daemon is our own child process with our own lifecycle, not a user-configured command,
+# and the family's Tauri shell already paid to learn that ownership has to be explicit — it kills
+# only the pid it recorded, and verifies the health body names the identity it expects.

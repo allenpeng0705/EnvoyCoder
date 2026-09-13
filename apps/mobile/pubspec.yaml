@@ -1,0 +1,25 @@
+name: envoycoder_mobile
+description: EnvoyCoder mobile — check on coding agents running on your machines.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+# Dependencies are kept to the Flutter SDK plus one WebSocket-free HTTP stack on purpose: the app
+# talks to a daemon the user already trusts (host:port, over the mesh, or through an SSH tunnel),
+# so it needs no SDK of ours and no plugin that would slow every checkout down. Camera/pairing
+# scanning and secure storage are the two additions the roadmap calls for; both are declared there
+# rather than pulled in before they are used.
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

@@ -1,0 +1,76 @@
+name: ci
+
+# Three operating systems, because EnvoyCoder claims all three and a claim is only as good as the
+# lane that checks it. The Windows and Linux legs are the point: this product spawns other people's
+# CLI programs, and the differences that break it (PATH resolution, `.cmd` shims, process-tree kill
+# semantics, file modes that do nothing) are exactly the ones a macOS-only CI would never see.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The mesh core and the harness are **not** vendored here (docs/envoymesh-integration.md):
+      # EnvoyCoder links them from sibling checkouts, by design. CI has to place them the same way a
+      # developer does, or the lanes would test a layout nobody uses.
+      - name: Clone the mesh sibling (EnvoyMesh)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/allenpeng0705/EnvoyMesh.git ../EnvoyMesh
+          cd ../EnvoyMesh
+          npm install
+          npx tsc -b packages/protocol packages/identity packages/vault packages/api \
+                     packages/node-core packages/harness packages/host-connect packages/reuse-host
+
+      - name: Install
+        run: npm install
+
+      - name: Dependencies this repo deliberately does not vendor
+        run: npm run peers:check
+
+      - name: No build output in src trees
+        run: node scripts/check-src-clean.mjs
+
+      - name: Typecheck
+        run: npx tsc -b
+
+      - name: Unit tests
+        run: npm test
+
+      # A green suite does not prove a bundle builds. This is the family's rule and it has earned
+      # its place: the web build once failed on an alias while every test passed.
+      - name: Desktop UI bundle
+        run: npm run build -w @envoycoder/desktop
+
+      - name: Smoke (real host, real pairing code, real ports)
+        run: npm run smoke
+
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Mobile pairing tests
+        working-directory: apps/mobile
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test

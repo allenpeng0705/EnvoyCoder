@@ -1,0 +1,42 @@
+{
+  "name": "envoycoder",
+  "private": true,
+  "version": "0.1.0",
+  "description": "EnvoyCoder — the control plane for coding agents, in the EnvoyMesh apps group",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/protocol",
+    "packages/platform",
+    "packages/workspace-model",
+    "packages/agent-catalog",
+    "packages/host-bridge",
+    "apps/desktop"
+  ],
+  "scripts": {
+    "peers:check": "node scripts/check-envoydeps.mjs",
+    "typecheck": "npm run peers:check && tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "npm run build -w @envoycoder/desktop",
+    "dev": "npm run dev -w @envoycoder/desktop",
+    "daemon": "tsx apps/desktop/src/daemon/main.ts",
+    "smoke": "npm run peers:check && tsx scripts/smoke.ts",
+    "tauri:dev": "npm run tauri:dev -w @envoycoder/desktop",
+    "tauri:build": "npm run tauri:build -w @envoycoder/desktop",
+    "tauri:build:mac": "npm run tauri:build:mac -w @envoycoder/desktop",
+    "tauri:build:win": "npm run tauri:build:win -w @envoycoder/desktop",
+    "tauri:build:linux": "npm run tauri:build:linux -w @envoycoder/desktop",
+    "mobile:check": "node scripts/check-mobile.mjs",
+    "gates": "node scripts/check-envoydeps.mjs && tsc -b && vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.5"
+  }
+}

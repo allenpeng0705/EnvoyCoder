@@ -1,0 +1,20 @@
+node_modules/
+dist/
+dist-types/
+dist-ssr/
+coverage/
+*.tsbuildinfo
+.DS_Store
+.env
+.env.local
+# Tauri
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+# Flutter
+apps/mobile/.dart_tool/
+apps/mobile/build/
+apps/mobile/.flutter-plugins*
+apps/mobile/ios/Pods/
+apps/mobile/macos/Pods/
+# local runtime state (never commit a home)
+.envoycoder-local/
