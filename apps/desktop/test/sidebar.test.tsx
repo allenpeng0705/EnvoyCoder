@@ -183,6 +183,21 @@ describe("CoderSidebar", () => {
     expect(screen.getByText(/does not know coder\.listTasks/)).toBeTruthy();
   });
 
+  it("does not claim a project has no tasks when the task list could not be read", () => {
+    // Same principle one level down: the group header is real (that project exists), but the empty
+    // line is a claim about a list nobody could fetch — the version-skew case, where projects answer
+    // and tasks do not. The positive control is the line below it: the string the rail would otherwise
+    // draw really is "No tasks here yet.", so its absence here is the assertion, not a typo.
+    renderSidebar({ tasksUnknown: true, projects: [SAMPLE_PROJECTS[2]!], tasks: [] });
+    expect(screen.getByTestId("project-site")).toBeTruthy();
+    expect(screen.queryByText("No tasks here yet.")).toBeNull();
+  });
+
+  it("still says a project has no tasks when the list was read, and there are none", () => {
+    renderSidebar({ projects: [SAMPLE_PROJECTS[2]!], tasks: [] });
+    expect(screen.getByText("No tasks here yet.")).toBeTruthy();
+  });
+
   it("reports a click on a task to the shell", async () => {
     const { onSelect } = renderSidebar();
     screen.getByTestId("task-w1").click();

@@ -90,6 +90,13 @@ export interface CoderSidebarProps {
    * was actually loaded, and an empty rail then really is empty.
    */
   unavailable?: string | undefined;
+  /**
+   * Whether the task rows came from the daemon — see `CoderState.tasksKnown`.
+   *
+   * When the list could not be read, a group renders its header and no "No tasks yet" line: an empty
+   * group plus a notice that names the reason is honest, and a per-project claim of emptiness is not.
+   */
+  tasksUnknown?: boolean | undefined;
 }
 
 /** The agent a project's new tasks will use — the group header's badge. */
@@ -288,7 +295,7 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                         onSelect={props.onSelect}
                       />
                     ))}
-                    {group.rows.length === 0 ? (
+                    {group.rows.length === 0 && props.tasksUnknown !== true ? (
                       <p className="project__empty">{t("sidebar.tasks.empty")}</p>
                     ) : null}
                   </>

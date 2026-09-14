@@ -63,6 +63,15 @@ export interface CoderState {
   hello: HelloResult | undefined;
   projects: readonly Project[];
   tasks: readonly Task[];
+  /**
+   * Whether the task list came from the daemon, or is unknown.
+   *
+   * `tasks: []` means two things — "there are none" and "I could not ask" — and the rail draws the
+   * first as "No tasks yet" under every project. So the difference has to survive into the render, or
+   * a daemon that is an older build (the case that produced it) makes the window claim a project has
+   * no work when it may have plenty. `false` until `coder.listTasks` answers.
+   */
+  tasksKnown: boolean;
   settings: CoderSettings;
   harnesses: readonly HarnessSummary[];
   mesh: MeshStatus;
@@ -98,6 +107,7 @@ const initialState: CoderState = {
   hello: undefined,
   projects: [],
   tasks: [],
+  tasksKnown: false,
   settings: DEFAULT_CODER_SETTINGS,
   harnesses: [],
   mesh: { kind: "no-node", reason: "" },
@@ -277,7 +287,12 @@ export class CoderStore {
 
     const patch: Partial<CoderState> = {};
     if (projects.ok) patch.projects = projects.value.projects;
-    if (tasks.ok) patch.tasks = tasks.value.tasks;
+    if (tasks.ok) {
+      patch.tasks = tasks.value.tasks;
+      patch.tasksKnown = true;
+    } else {
+      patch.tasksKnown = false;
+    }
     // One failure is enough to say so — and `noticeFromError` turns "the daemon does not know this
     // method" into the sentence that tells the user their daemon is an older build.
     const failure = projects.ok ? (tasks.ok ? undefined : tasks.error) : projects.error;

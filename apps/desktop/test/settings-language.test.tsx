@@ -51,6 +51,9 @@ function stateWith(over: Partial<CoderState> = {}): CoderState {
     },
     projects: [],
     tasks: [],
+    // A window that finished loading: the task list came from the daemon, so the rail may say a
+    // project has none. See `CoderState.tasksKnown`.
+    tasksKnown: true,
     settings,
     harnesses: [],
     mesh: { kind: "no-node", reason: "" },

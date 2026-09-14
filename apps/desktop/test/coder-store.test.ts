@@ -195,6 +195,9 @@ describe("the store's connection to the daemon", () => {
     const state = created.getSnapshot();
     expect(state.projects.map((project) => project.label)).toEqual(["added"]);
     expect(state.tasks).toEqual([]);
+    // …and the emptiness is marked as *unknown* rather than real: the rail draws "No tasks yet" under
+    // every project from an empty array, and it must not, since nobody could ask.
+    expect(state.tasksKnown).toBe(false);
     // …and the failure is said out loud, in the user's language, naming what the daemon does not have.
     expect(state.error?.key).toBe("error.daemonTooOld");
     expect(state.error?.values?.method).toBe("coder.listTasks");

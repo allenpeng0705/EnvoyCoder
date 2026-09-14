@@ -205,6 +205,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
             onOpenCommandCenter={() => setPaletteOpen(true)}
             onOpenSettings={() => setSettingsOpen(true)}
             unavailable={railUnavailable}
+            tasksUnknown={!state.tasksKnown}
           />
         ) : null}
 
