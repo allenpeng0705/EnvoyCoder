@@ -20,8 +20,9 @@ import type { JSX } from "react";
 
 import { useState } from "react";
 import type { HarnessId, Project, RunEvent, Task } from "@envoycoder/protocol";
-import { statusLabel } from "@envoycoder/task-model";
 
+import { useT } from "../i18n/context.js";
+import { localize, localizeText, statusKey } from "../i18n/notice.js";
 import { buildTranscript, type TranscriptEntry } from "../state/transcript.js";
 
 export interface TaskPaneProps {
@@ -40,6 +41,7 @@ export interface TaskPaneProps {
 }
 
 export function TaskPane(props: TaskPaneProps): JSX.Element {
+  const t = useT();
   const { task, project, events } = props;
   const running = props.runLive;
   const [text, setText] = useState("");
@@ -57,17 +59,17 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   };
 
   return (
-    <section className="pane" aria-label={`Task ${task.title}`}>
+    <section className="pane" aria-label={t("task.aria", { title: task.title })}>
       <header className="pane__header">
         <div className="pane__title-group">
           <h1 className="pane__title">{task.title}</h1>
           <div className="pane__meta">
-            <span className={`chip ${chipFor(task.status)}`}>{statusLabel(task.status)}</span>
-            <span className="chip chip--quiet" title="The agent running this task">
+            <span className={`chip ${chipFor(task.status)}`}>{t(statusKey(task.status))}</span>
+            <span className="chip chip--quiet" title={t("task.meta.agent")}>
               {labelForHarness(task.harness)}
             </span>
             {task.model ? <span className="chip chip--quiet">{task.model}</span> : null}
-            <span className="chip chip--quiet" title={`Working directory: ${task.cwd}`}>
+            <span className="chip chip--quiet" title={t("task.meta.cwd", { path: task.cwd })}>
               {project?.label ?? basename(task.cwd)}
             </span>
             {task.worktree ? (
@@ -76,8 +78,8 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               </span>
             ) : null}
             {/* Where it runs. "This machine" is a statement, not an omission. */}
-            <span className="chip chip--quiet" title="Machine running this task">
-              {task.hostId && task.hostId !== "local" ? task.hostId : "This machine"}
+            <span className="chip chip--quiet" title={t("task.meta.host")}>
+              {task.hostId && task.hostId !== "local" ? task.hostId : t("app.thisMachine")}
             </span>
           </div>
         </div>
@@ -86,10 +88,10 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
             <button
               type="button"
               className="button button--secondary"
-              title="Ask the agent to stop"
+              title={t("task.cancel.title")}
               onClick={() => void props.onCancel()}
             >
-              Stop
+              {t("task.cancel")}
             </button>
           ) : null}
         </div>
@@ -98,17 +100,15 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
       <div className="transcript" data-testid="transcript">
         {transcript.hasGap ? (
           <p className="transcript__gap" role="status">
-            Some of this task&rsquo;s history did not arrive. What is here is in order; reload to ask
-            again.
+            {t("task.transcript.gap")}
           </p>
         ) : null}
 
         {transcript.entries.length === 0 ? (
           <div className="transcript__empty">
-            <p className="transcript__empty-title">Nothing yet</p>
+            <p className="transcript__empty-title">{t("task.transcript.empty.title")}</p>
             <p className="transcript__empty-body">
-              Ask for something and the agent works in <code>{task.cwd}</code>. Tool calls,
-              approvals and diffs appear here as they happen.
+              {t("task.transcript.empty.body", { cwd: task.cwd })}
             </p>
           </div>
         ) : (
@@ -140,12 +140,12 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
           }}
           placeholder={
             approvalOpen
-              ? "Answer the request above before sending anything"
+              ? t("task.composer.placeholder.approval")
               : running
-                ? "Add a follow-up — Queue waits for this turn, Steer joins it"
-                : "Describe the task"
+                ? t("task.composer.placeholder.running")
+                : t("task.composer.placeholder.idle")
           }
-          aria-label="Message the agent"
+          aria-label={t("task.composer.aria")}
         />
         {props.notice ? <p className="composer__notice">{props.notice}</p> : null}
         <div className="composer__toolbar">
@@ -153,15 +153,15 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
           {/* The mode only exists while there is a turn to join: showing it on a finished task would
               offer a choice that does nothing. */}
           {running ? (
-            <label className="composer__mode" title="Queue waits for the current turn; Steer joins it">
+            <label className="composer__mode" title={t("task.composer.mode.title")}>
               <select
                 className="select"
                 value={mode}
                 onChange={(event) => setMode(event.target.value as "queue" | "steer")}
-                aria-label="How to deliver the message"
+                aria-label={t("task.composer.mode.aria")}
               >
-                <option value="queue">Queue</option>
-                <option value="steer">Steer</option>
+                <option value="queue">{t("task.composer.queue")}</option>
+                <option value="steer">{t("task.composer.steer")}</option>
               </select>
             </label>
           ) : null}
@@ -170,9 +170,15 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
             className="button button--primary"
             onClick={submit}
             disabled={text.trim() === "" || approvalOpen}
-            title={approvalOpen ? "Answer the request above first" : running ? "Send" : "Start"}
+            title={
+              approvalOpen
+                ? t("task.composer.submit.blocked")
+                : running
+                  ? t("task.composer.send")
+                  : t("task.composer.start")
+            }
           >
-            {running ? "Send" : "Start"}
+            {running ? t("task.composer.send") : t("task.composer.start")}
           </button>
         </div>
       </footer>
@@ -186,6 +192,7 @@ function TranscriptRow(props: {
   entry: TranscriptEntry;
   onAnswer: (requestId: string, optionId: string) => void | Promise<void>;
 }): JSX.Element | null {
+  const t = useT();
   const { entry } = props;
 
   switch (entry.kind) {
@@ -194,7 +201,8 @@ function TranscriptRow(props: {
         <li className="row row--user">
           <p className="row__text">{entry.text}</p>
           <p className="row__meta">
-            You · {entry.delivered === "steered" ? "joined the turn" : "waited for the turn"}
+            {t("task.you")} ·{" "}
+            {entry.delivered === "steered" ? t("task.delivered.steered") : t("task.delivered.queued")}
           </p>
         </li>
       );
@@ -212,7 +220,7 @@ function TranscriptRow(props: {
       return (
         <li className="row row--thought">
           <details>
-            <summary>How it thought about this</summary>
+            <summary>{t("task.thought.summary")}</summary>
             <p className="row__text">{entry.text}</p>
           </details>
         </li>
@@ -242,7 +250,7 @@ function TranscriptRow(props: {
     case "note":
       return (
         <li className={`row row--note row--note-${entry.tone}`}>
-          <p className="row__meta">{entry.text}</p>
+          <p className="row__meta">{localize(t, entry.notice)}</p>
         </li>
       );
   }
@@ -255,11 +263,18 @@ function TranscriptRow(props: {
  * fields last and small. The headline comes from the daemon, which is the only place that knows what
  * the agent is about to do — this component renders it and does not reword it, because two surfaces
  * describing one decision differently is how a user comes to distrust both.
+ *
+ * "In the user's language" is why the daemon's sentence is rendered through `localizeText`: it sends
+ * a key with it (`approval.question.tool`), so the headline is German for a German user and the
+ * English sentence is what an untranslated language reads. The option labels are *not* translated —
+ * they are the agent's own words for its own choices, and rewording them would be putting a second
+ * vocabulary on one decision.
  */
 function ApprovalCard(props: {
   entry: Extract<TranscriptEntry, { kind: "approval" }>;
   onAnswer: (requestId: string, optionId: string) => void | Promise<void>;
 }): JSX.Element {
+  const t = useT();
   const { entry } = props;
   const answered = entry.resolvedWith !== undefined;
 
@@ -267,16 +282,21 @@ function ApprovalCard(props: {
     <div
       className={`approval${answered ? " approval--answered" : ""}`}
       role={answered ? "status" : "alertdialog"}
-      aria-label={answered ? "Answered" : "The agent needs your answer"}
+      aria-label={answered ? t("task.approval.answered") : t("task.approval.aria")}
     >
       <div className="approval__body">
-        <p className="approval__question">{entry.question}</p>
-        {entry.detail ? <p className="approval__detail">{entry.detail}</p> : null}
+        <p className="approval__question">{localizeText(t, entry.question)}</p>
+        {entry.detail ? <p className="approval__detail">{localizeText(t, entry.detail)}</p> : null}
       </div>
       <div className="approval__actions">
         {answered ? (
           <span className="approval__resolved">
-            Answered: {entry.options.find((option) => option.id === entry.resolvedWith)?.label ?? entry.resolvedWith}
+            {t("task.approval.answeredWith", {
+              option:
+                entry.options.find((option) => option.id === entry.resolvedWith)?.label ??
+                entry.resolvedWith ??
+                "",
+            })}
           </span>
         ) : (
           entry.options.map((option) => (

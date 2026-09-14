@@ -27,9 +27,12 @@ import {
   coderError,
   coderErrorCode,
   coderErrorMessage,
+  coderErrorRef,
   missingRpcSpecs,
   orphanRpcSpecs,
+  parseMessageRef,
   parseRpcParams,
+  readRpcError,
 } from "@envoycoder/protocol";
 
 describe("the method table", () => {
@@ -95,6 +98,58 @@ describe("errors on the wire", () => {
     const message = "C:\\Users\\dev\\project is gone";
     expect(coderErrorCode(message)).toBeNull();
     expect(coderErrorMessage(message)).toBe(message);
+  });
+
+  it("carries a message key beside the English sentence, because there is no field for one", () => {
+    // The family's transport builds `{ code, message }` from a thrown Error's message alone, so a
+    // refusal that a German user must read in German has to fit its key in there too. The sentence
+    // stays a sentence: a log line and a client that never heard of the convention both still read
+    // exactly what they read before.
+    const error = coderError(ENVOYCODER_ERRORS.taskMissing, "/gone is not a directory", {
+      key: "error.addProject.notDirectory",
+      values: { path: "/gone" },
+    });
+    expect(error.message.startsWith(`${ENVOYCODER_ERRORS.taskMissing}: /gone is not a directory`)).toBe(true);
+    expect(coderErrorCode(error.message)).toBe(ENVOYCODER_ERRORS.taskMissing);
+    expect(coderErrorMessage(error.message)).toBe("/gone is not a directory");
+    expect(coderErrorRef(error.message)).toEqual({
+      key: "error.addProject.notDirectory",
+      values: { path: "/gone" },
+    });
+  });
+
+  it("reads a wire error into the object shape a client gets", () => {
+    // What a client actually receives: the transport's `{ code, message }`, with the key inside the
+    // message. `readRpcError` is the one place that unpacks it, so no client has to know the marker.
+    const wire = coderError(ENVOYCODER_ERRORS.harnessUnsupported, "x cannot be driven", {
+      key: "error.harnessUnsupported",
+      values: { harness: "Cursor" },
+    });
+    const read = readRpcError({ code: "ERROR", message: wire.message });
+    expect(read.code).toBe("ERROR"); // the transport's own catalogue is closed; ours rides in the text
+    expect(read.message).toBe("x cannot be driven");
+    expect(read.messageKey).toBe("error.harnessUnsupported");
+    expect(read.messageValues).toEqual({ harness: "Cursor" });
+  });
+
+  it("never shows a user the key's JSON, whatever arrives after the marker", () => {
+    // Two ways the tail can be unusable: truncated on the way, or a sentence that merely contains
+    // the marker. Both must yield the sentence, not the payload.
+    expect(parseMessageRef("a sentence [envoycoder.key] {not json").text).toBe("a sentence");
+    expect(parseMessageRef('a sentence [envoycoder.key] {"key":""}').ref).toBeUndefined();
+    expect(parseMessageRef('a sentence [envoycoder.key] {"key":"error.x","values":{"n":{}}}')).toEqual({
+      text: "a sentence",
+      // Only what a template can render: a nested object would print `[object Object]`.
+      ref: { key: "error.x" },
+    });
+  });
+
+  it("has no key at all when none was sent", () => {
+    expect(coderErrorRef(`${ENVOYCODER_ERRORS.badRequest}: something`)).toBeUndefined();
+    expect(readRpcError({ code: "ERROR", message: "Authentication required" })).toEqual({
+      code: "ERROR",
+      message: "Authentication required",
+    });
   });
 });
 

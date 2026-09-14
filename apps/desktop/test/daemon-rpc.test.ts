@@ -281,6 +281,54 @@ describe("the daemon over a socket", () => {
     expect(tasks.tasks).toHaveLength(1);
   });
 
+  it("remembers the language across a restart, because it is a user setting and not a window's", async () => {
+    // The language is the one setting whose *storage* is part of its behaviour: the daemon is what
+    // sends the refusals, so a window that kept the choice for itself would answer a German user in
+    // English the moment it reconnected to a daemon that had never been told. This asserts the two
+    // halves that make it a per-user setting rather than a per-window preference — accepted at the
+    // wire, and still there after the process it was written by is gone.
+    const home = await mkdtemp(join(tmpdir(), "envoycoder-m1-"));
+    const paths = coderPaths(home);
+    cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+
+    const first = await startCoderDaemon({ port: 0, home, paths, skipMeshAttach: true });
+    const client = await connect(first.port);
+    const initial = (await client.call("coder.getSettings", {})) as { settings: { language?: string } };
+    // Absent in a fresh install means `system`, which is the default the picker shows and applies.
+    expect(initial.settings.language ?? "system").toBe("system");
+
+    const patched = (await client.call("coder.updateSettings", { settings: { language: "ko" } })) as {
+      settings: { language?: string };
+    };
+    expect(patched.settings.language).toBe("ko");
+    client.close();
+    await first.stop();
+
+    const second = await startCoderDaemon({ port: 0, home, paths, skipMeshAttach: true });
+    cleanups.push(async () => second.stop());
+    const secondClient = await connect(second.port);
+    cleanups.push(async () => secondClient.close());
+    const after = (await secondClient.call("coder.getSettings", {})) as { settings: { language?: string } };
+    expect(after.settings.language).toBe("ko");
+  });
+
+  it("refuses a language nobody translated, rather than storing it", async () => {
+    // The picker cannot offer one — `LOCALE_PREFERENCES` is the same closed list — but a client on
+    // another build can ask, and a stored language that does not exist would render as the English
+    // fallback forever with nothing to point at.
+    const { daemon, home } = await bootDaemon();
+    cleanups.push(async () => {
+      await daemon.stop();
+      await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    });
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+
+    await expect(client.call("coder.updateSettings", { settings: { language: "nl" } })).rejects.toThrow();
+    const settings = (await client.call("coder.getSettings", {})) as { settings: { language?: string } };
+    expect(settings.settings.language ?? "system").toBe("system");
+  });
+
   it("quarantines an unreadable file instead of overwriting it, and says so at hello", async () => {
     const home = await mkdtemp(join(tmpdir(), "envoycoder-m1-"));
     const paths = coderPaths(home);

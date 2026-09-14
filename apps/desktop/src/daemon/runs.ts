@@ -67,6 +67,7 @@ import type { PlatformId } from "@envoycoder/platform";
 import type { CoderPaths } from "@envoycoder/host-bridge";
 
 import { AcpClient, type AcpLaunch, type AcpPermissionRequest, type AcpUpdate } from "./acp/client.js";
+import { keyed, ref } from "./messages.js";
 import type { CoderStore } from "./store.js";
 
 export interface RunManagerDeps {
@@ -191,12 +192,14 @@ export class RunManager {
       throw coderError(
         ENVOYCODER_ERRORS.taskMissing,
         `There is no task called "${input.taskId}", so there is nowhere to run an agent.`,
+        ref("error.taskForRunMissing", { taskId: input.taskId }),
       );
     }
     if (this.liveFor(input.taskId)) {
       throw coderError(
         ENVOYCODER_ERRORS.harnessFailed,
         `"${task.title}" is already running. Send it a message instead — starting a second agent in one directory is how two of them come to edit the same file.`,
+        ref("error.taskAlreadyRunning", { task: task.title }),
       );
     }
 
@@ -267,7 +270,15 @@ export class RunManager {
     // the harness cloned but not installed gets `spawn envoy-harness ENOENT`.
     const probe = probeHarness(harness, this.deps.platform ? { platform: this.deps.platform } : {});
     if (!probe.available) {
-      throw coderError(ENVOYCODER_ERRORS.harnessMissing, probe.reason ?? `${harness} is not available on this machine.`);
+      // The sentence carries the install link, which is what makes it actionable; the key carries
+      // only the fact, so a translated refusal names the agent without inventing a URL in German.
+      // The link is not lost — it is in the English sentence, in the log, and in the settings list
+      // that shows this agent's install hint.
+      throw coderError(
+        ENVOYCODER_ERRORS.harnessMissing,
+        probe.reason ?? `${harness} is not available on this machine.`,
+        ref("error.harnessMissing", { harness: harnessDefinition(harness).label }),
+      );
     }
     // **Installed is not drivable.** This method returns an `AcpLaunch`, and the ACP client then speaks
     // `initialize` / `session/new` to whatever it spawned. Six catalogue entries describe programs that
@@ -281,6 +292,7 @@ export class RunManager {
         ENVOYCODER_ERRORS.harnessUnsupported,
         `${label} speaks a protocol EnvoyCoder cannot drive yet (this adapter drives ACP agents only). ` +
           `Envoy Harness and DeepSeek Harness work today; ${label} needs its own adapter.`,
+        ref("error.harnessUnsupported", { harness: label }),
       );
     }
     const resolved = resolveHarnessCommand(
@@ -469,9 +481,13 @@ export class RunManager {
           // The family's wording rule: the headline is what is about to happen, in the user's words.
           // ACP gives us a tool id and the agent's own label for the call; "the agent is asking" is
           // the part that is always true, so it is what the card leads with when there is no label.
-          question: toolName ? `Allow the agent to run “${toolName}”?` : "Allow the agent to continue?",
-          detail:
+          question: toolName
+            ? keyed("approval.question.tool", `Allow the agent to run “${toolName}”?`, { tool: toolName })
+            : keyed("approval.question.generic", "Allow the agent to continue?"),
+          detail: keyed(
+            "approval.detail",
             "It has stopped before this step and will not continue until you answer. Answering this one request does not allow anything else.",
+          ),
           options,
         });
       })();
@@ -503,6 +519,7 @@ export class RunManager {
       throw coderError(
         ENVOYCODER_ERRORS.harnessFailed,
         "That run has already finished, so there is nothing to send to it. Start a new task instead.",
+        ref("error.runFinished"),
       );
     }
     if (live.approval) {
@@ -511,6 +528,7 @@ export class RunManager {
       throw coderError(
         ENVOYCODER_ERRORS.harnessFailed,
         "The agent is waiting for an answer before it can go on. Answer that first — a message sent now would sit behind it.",
+        ref("error.approvalPending"),
       );
     }
 

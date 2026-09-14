@@ -31,6 +31,8 @@
 
 import type { RunEvent, TaskStatus } from "@envoycoder/protocol";
 
+import { localNotice, type Notice } from "../i18n/notice.js";
+
 export type TranscriptEntry =
   | { kind: "user"; id: string; text: string; mode: "queue" | "steer"; delivered: "queued" | "steered" }
   | { kind: "assistant"; id: string; text: string }
@@ -54,7 +56,15 @@ export type TranscriptEntry =
       /** Set once somebody answered it, so an answered card stops looking like a question. */
       resolvedWith?: string;
     }
-  | { kind: "note"; id: string; text: string; tone: "quiet" | "warn" | "error" };
+  /**
+   * A line this module folds out of an event — "3 files changed.", "Context 45% full.".
+   *
+   * A **notice**, not a string: the sentence and the catalogue key that re-renders it. This module
+   * stays pure (it never sees a translator, and its tests assert structure rather than prose), while
+   * the pane renders the key in whatever language the *user* chose — including when that choice
+   * changes while the transcript is on screen.
+   */
+  | { kind: "note"; id: string; notice: Notice; tone: "quiet" | "warn" | "error" };
 
 export interface Transcript {
   entries: TranscriptEntry[];
@@ -209,7 +219,16 @@ export function buildTranscript(events: readonly RunEvent[]): Transcript {
 
       case "run.status": {
         breakAnonymousRun();
-        if (event.note) entries.push({ kind: "note", id: `s${event.seq}`, text: event.note, tone: "quiet" });
+        if (event.note) {
+          // The agent's own words (or the daemon's failure summary), carried as-is: nothing here can
+          // translate a sentence an agent wrote, and inventing one would be worse than showing it.
+          entries.push({
+            kind: "note",
+            id: `s${event.seq}`,
+            notice: { message: event.note },
+            tone: "quiet",
+          });
+        }
         if (event.status !== "needs-attention" && pendingApprovalId !== undefined) {
           // A status that is no longer "waiting on a human" means whatever was open is closed —
           // including the case where the run was cancelled while the card was on screen.
@@ -223,7 +242,7 @@ export function buildTranscript(events: readonly RunEvent[]): Transcript {
         entries.push({
           kind: "note",
           id: `e${event.seq}`,
-          text: endNote(event.status),
+          notice: endNote(event.status),
           tone: event.status === "failed" ? "error" : event.status === "cancelled" ? "warn" : "quiet",
         });
         pendingApprovalId = undefined;
@@ -238,7 +257,10 @@ export function buildTranscript(events: readonly RunEvent[]): Transcript {
           id: `d${event.seq}`,
           // A diff is a headline about files, not a list of paths: "3 files changed" is what a user
           // reads; the paths belong in the expanded view.
-          text: `${files} file${files === 1 ? "" : "s"} changed.`,
+          notice:
+            files === 1
+              ? localNotice("run.diff.one")
+              : localNotice("run.diff.many", { count: files }),
           tone: "quiet",
         });
         break;
@@ -251,7 +273,7 @@ export function buildTranscript(events: readonly RunEvent[]): Transcript {
           entries.push({
             kind: "note",
             id: `h${event.seq}`,
-            text: `Context ${percent}% full.`,
+            notice: localNotice("run.context", { percent }),
             tone: percent >= 90 ? "warn" : "quiet",
           });
         }
@@ -278,15 +300,15 @@ export function buildTranscript(events: readonly RunEvent[]): Transcript {
  * users to trust neither (`docs/envoycoder-ui.md` §4). What the transcript owns is the *card*, and
  * `pendingApprovalId` is what tells the pane to keep it on screen.
  */
-function endNote(status: TaskStatus): string {
+function endNote(status: TaskStatus): Notice {
   switch (status) {
     case "done":
-      return "Finished.";
+      return localNotice("run.end.done");
     case "cancelled":
-      return "Stopped.";
+      return localNotice("run.end.cancelled");
     case "failed":
-      return "Stopped before it finished.";
+      return localNotice("run.end.failed");
     default:
-      return "Ended.";
+      return localNotice("run.end.other");
   }
 }

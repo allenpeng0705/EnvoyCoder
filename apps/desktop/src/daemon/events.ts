@@ -160,6 +160,12 @@ export function createCoderSocketMethods(bus: CoderEventBus): SocketMethodPort {
       } else {
         // Fail closed and say why: an unknown event name is a client built against a different
         // protocol version, and silently subscribing it to nothing would look like a dead daemon.
+        //
+        // **English, and no message key, on purpose.** This refusal names an internal method and the
+        // list of event names this build publishes: it is addressed to whoever wrote the client, not
+        // to whoever is using it. A translated version would be a German sentence wrapping English
+        // identifiers, which is worse than the sentence an engineer can act on. The refusals a *user*
+        // can read all carry keys — see `messages.ts`.
         throw coderError(
           ENVOYCODER_ERRORS.badRequest,
           `${CODER_SUBSCRIBE_METHOD} was asked for an event this daemon does not publish. It publishes: ${CODER_EVENTS.join(", ")}.`,

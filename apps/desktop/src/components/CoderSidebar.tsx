@@ -49,8 +49,10 @@ import {
   attentionSummary,
   filterRows,
   groupByProject,
-  statusLabel,
 } from "@envoycoder/task-model";
+
+import { useT } from "../i18n/context.js";
+import { statusKey } from "../i18n/notice.js";
 
 export interface CoderSidebarProps {
   projects: readonly Project[];
@@ -102,6 +104,7 @@ function harnessBadge(harness: HarnessId): string {
 }
 
 export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
+  const t = useT();
   const [collapsed, setCollapsed] = useState<readonly string[]>([]);
   const [flat, setFlat] = useState(false);
   const [localQuery, setLocalQuery] = useState("");
@@ -123,21 +126,21 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
   const attention = useMemo(() => attentionSummary(props.tasks), [props.tasks]);
 
   return (
-    <aside className="sidebar" aria-label="Projects and tasks">
+    <aside className="sidebar" aria-label={t("sidebar.aria")}>
       <div className="sidebar__top">
         <button
           type="button"
           className="button button--ghost sidebar__add"
           onClick={props.onAddProject}
-          title="Register a directory as a project"
+          title={t("sidebar.add.title")}
         >
-          + Add project
+          {t("sidebar.add")}
         </button>
         <button
           type="button"
           className="button button--ghost sidebar__command"
           onClick={props.onOpenCommandCenter}
-          title="Open the Command Center"
+          title={t("sidebar.command.title")}
         >
           ⌘K
         </button>
@@ -147,18 +150,18 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
         <input
           className="input"
           value={query}
-          placeholder="Search tasks, repos, paths"
-          aria-label="Search tasks, repositories and paths"
+          placeholder={t("sidebar.search.placeholder")}
+          aria-label={t("sidebar.search.aria")}
           onChange={(event) => setQuery(event.target.value)}
         />
         <button
           type="button"
           className="button button--ghost sidebar__viewmode"
           aria-pressed={flat}
-          title={flat ? "Group by project" : "One flat list, newest first"}
+          title={flat ? t("sidebar.view.groupBy") : t("sidebar.view.flat")}
           onClick={() => setFlat((value) => !value)}
         >
-          {flat ? "Group" : "List"}
+          {flat ? t("sidebar.view.group") : t("sidebar.view.list")}
         </button>
       </div>
 
@@ -166,8 +169,8 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
         <div className="sidebar__attention" role="status">
           <span className="dot dot--warn" aria-hidden />
           {attention.badge === 1
-            ? "1 task needs you"
-            : `${attention.badge} tasks need you`}
+            ? t("sidebar.attention.one")
+            : t("sidebar.attention.many", { count: attention.badge })}
         </div>
       ) : null}
 
@@ -176,14 +179,11 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
           <div className="sidebar__empty">
             {props.projects.length === 0 ? (
               <>
-                <p className="sidebar__empty-title">No projects yet</p>
-                <p className="sidebar__empty-body">
-                  Add a directory you work in. Tasks you start in it appear here, and the project
-                  remembers which agent they should use.
-                </p>
+                <p className="sidebar__empty-title">{t("sidebar.empty.title")}</p>
+                <p className="sidebar__empty-body">{t("sidebar.empty.body")}</p>
               </>
             ) : (
-              <p className="sidebar__empty-body">Nothing matches “{query}”.</p>
+              <p className="sidebar__empty-body">{t("sidebar.empty.noMatch", { query })}</p>
             )}
           </div>
         ) : flat ? (
@@ -225,13 +225,13 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                     </span>
                     <span className="project__label">{group.project.label}</span>
                     {group.counts.needsAttention > 0 ? (
-                      <span className="badge badge--warn" title="Tasks waiting on you">
+                      <span className="badge badge--warn" title={t("sidebar.project.attention")}>
                         {group.counts.needsAttention}
                       </span>
                     ) : null}
                     <span
                       className="project__agent"
-                      title="The agent new tasks in this project start with"
+                      title={t("sidebar.project.agent")}
                     >
                       {harnessBadge(group.defaultHarness)}
                     </span>
@@ -239,8 +239,8 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                   <button
                     type="button"
                     className="button button--ghost button--icon"
-                    aria-label={`Project settings for ${group.project.label}`}
-                    title="Project settings"
+                    aria-label={t("sidebar.project.settings.aria", { project: group.project.label })}
+                    title={t("sidebar.project.settings")}
                     onClick={() => props.onOpenProjectSettings(group.project)}
                   >
                     ⋯
@@ -250,14 +250,14 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                 {isCollapsed ? null : (
                   <>
                     <div className="project__tasks-bar">
-                      <span className="project__tasks-title">Tasks</span>
+                      <span className="project__tasks-title">{t("sidebar.section.tasks")}</span>
                       <button
                         type="button"
                         className="button button--ghost button--small"
                         onClick={() => props.onNewTask(group.project.id)}
-                        title={`Start a task in ${group.project.label}`}
+                        title={t("sidebar.project.newTask.title", { project: group.project.label })}
                       >
-                        + New
+                        {t("sidebar.project.newTask")}
                       </button>
                     </div>
                     {group.rows.map((row) => (
@@ -269,7 +269,7 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                       />
                     ))}
                     {group.rows.length === 0 ? (
-                      <p className="project__empty">No tasks here yet.</p>
+                      <p className="project__empty">{t("sidebar.tasks.empty")}</p>
                     ) : null}
                   </>
                 )}
@@ -289,15 +289,15 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
           onClick={props.onAddProject}
         >
           <PlusIcon />
-          <span className="icon-button__label">Add project</span>
+          <span className="icon-button__label">{t("sidebar.footer.add")}</span>
         </button>
 
         <button
           type="button"
           className="icon-button"
           onClick={props.onOpenSettings}
-          title={`Host: ${props.hostLabel ?? "This machine"}`}
-          aria-label={`Host: ${props.hostLabel ?? "This machine"}`}
+          title={t("sidebar.footer.host", { host: props.hostLabel ?? t("app.thisMachine") })}
+          aria-label={t("sidebar.footer.host", { host: props.hostLabel ?? t("app.thisMachine") })}
         >
           <ServerIcon />
         </button>
@@ -309,8 +309,8 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
           type="button"
           className="icon-button"
           disabled
-          title="Importing a session from another agent's history is not built yet — it needs a reader per agent."
-          aria-label="Import a session (not built yet)"
+          title={t("sidebar.footer.import.title")}
+          aria-label={t("sidebar.footer.import")}
         >
           <ImportIcon />
         </button>
@@ -319,8 +319,8 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
           type="button"
           className="icon-button"
           disabled
-          title="No help surface yet: the shortcut registry exists, the help sheet does not."
-          aria-label="Help and support (not built yet)"
+          title={t("sidebar.footer.help.title")}
+          aria-label={t("sidebar.footer.help")}
         >
           <HelpIcon />
         </button>
@@ -329,8 +329,8 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
           type="button"
           className="icon-button"
           onClick={props.onOpenSettings}
-          title="Settings"
-          aria-label="Settings"
+          title={t("sidebar.footer.settings")}
+          aria-label={t("sidebar.footer.settings")}
         >
           <GearIcon />
         </button>
@@ -352,6 +352,7 @@ function TaskRow(input: {
   active: boolean;
   onSelect: (taskId: string) => void;
 }): JSX.Element {
+  const t = useT();
   const task = input.row.task;
   const needsHuman = statusNeedsHuman(task.status);
   return (
@@ -363,14 +364,14 @@ function TaskRow(input: {
     >
       <span
         className={`dot ${dotClassFor(task.status)}`}
-        aria-label={statusLabel(task.status)}
-        title={statusLabel(task.status)}
+        aria-label={t(statusKey(task.status))}
+        title={t(statusKey(task.status))}
       />
       <span className="task-row__body">
         <span className="task-row__title-line">
           <span className="task-row__title">{task.title}</span>
           {needsHuman ? (
-            <span className="chip chip--warn">{statusLabel(task.status)}</span>
+            <span className="chip chip--warn">{t(statusKey(task.status))}</span>
           ) : null}
         </span>
         <span className="task-row__sub">

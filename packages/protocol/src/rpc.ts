@@ -44,6 +44,7 @@ import {
   type AgentMode,
   AgentModeSchema,
   type CoderSettings,
+  CoderLanguageSchema,
   CoderSettingsSchema,
   ENVOYCODER_ERRORS,
   type EnvoyCoderErrorCode,
@@ -68,6 +69,21 @@ export interface CoderRpcRequest {
 export interface CoderRpcError {
   code: string;
   message: string;
+  /**
+   * The catalogue key for `message`, when the failure came from a build that has one.
+   *
+   * **Why this field exists.** The daemon's refusals are written in English because that is the
+   * language this repository is written in — and a German user looking at a German window must not
+   * be answered in English by the daemon behind it. A key is the one thing both ends can agree on
+   * without the daemon carrying six catalogues: the client looks it up in the language the *user*
+   * chose, and falls back to `message` when the key is not one this build knows.
+   *
+   * The English `message` is never replaced by it — it stays the fallback and the log line, so a
+   * client that ignores this field (an older build, a script) still reads a sentence.
+   */
+  messageKey?: string;
+  /** The values the key's template needs — `{path}`, `{project}`, `{count}`. Strings and numbers only. */
+  messageValues?: Record<string, string | number>;
 }
 
 /** A reply to one request. The transport sets exactly one of `result` / `error`. */
@@ -91,24 +107,144 @@ export const TRANSPORT_UNSUBSCRIBE_METHOD = "off";
  * The message *is* the wire format: `<code>: <message>`. Throwing anything else loses the code —
  * the transport would answer `"ERROR"` and the client could only pattern-match on prose.
  */
-export function coderError(code: EnvoyCoderErrorCode, message: string): Error {
-  return new Error(`${code}: ${message}`);
+export function coderError(code: EnvoyCoderErrorCode, message: string, ref?: CoderMessageRef): Error {
+  return new Error(withMessageRef(`${code}: ${message}`, ref));
+}
+
+/* ────────────────────────────── translatable daemon prose ───────────────────────────── */
+
+/**
+ * The key a sentence should be re-rendered with, and the values its template needs.
+ *
+ * Typed loosely (`key: string`) on purpose: this is wire vocabulary, and the *app* is what knows
+ * which keys exist. A key this build cannot find is not an error — it is the case the English
+ * `message` exists for.
+ */
+export interface CoderMessageRef {
+  key: string;
+  values?: Record<string, string | number>;
+}
+
+/**
+ * The separator between a human sentence and its key.
+ *
+ * ## Why the key rides *inside* the string
+ *
+ * There is no field to put it in. The family's transport builds the error object itself —
+ * `sendResponse(ws, id, undefined, { code: rpcErrorCode(message), message })`
+ * (`@envoymesh/host-connect/src/ws-server.ts:1157`) — from a thrown `Error`'s `message` alone, so
+ * anything else attached to the error is dropped before it reaches the socket. The message is the
+ * one channel a product controls end to end, which is why the code already rides there
+ * (`envoycoder.task-missing: …`) and why the key rides beside it.
+ *
+ * So the convention is: `<code>: <english sentence> <marker> <json>`. Everything before the marker
+ * is exactly the sentence a user reads today — a log line, a `toContain` assertion and a client
+ * that has never heard of this convention all keep working. Only a client that knows the marker
+ * ever looks past it.
+ */
+const MESSAGE_REF_MARKER = " [envoycoder.key] ";
+
+/** Attach a key to a sentence. Used by the daemon, and by the app for the prose it authors itself. */
+export function withMessageRef(text: string, ref?: CoderMessageRef): string {
+  if (!ref || ref.key === "") return text;
+  const payload = JSON.stringify(ref.values ? { key: ref.key, values: ref.values } : { key: ref.key });
+  return `${text}${MESSAGE_REF_MARKER}${payload}`;
+}
+
+/**
+ * Split a sentence from the key that came with it.
+ *
+ * Two failure modes are both handled in the direction that keeps a user out of the JSON: a marker
+ * with an unreadable payload, or with a payload that is not a key, yields the **sentence alone**.
+ */
+export function parseMessageRef(text: string): { text: string; ref?: CoderMessageRef } {
+  const at = text.lastIndexOf(MESSAGE_REF_MARKER);
+  if (at < 0) return { text };
+  const sentence = text.slice(0, at);
+  try {
+    const parsed = JSON.parse(text.slice(at + MESSAGE_REF_MARKER.length)) as {
+      key?: unknown;
+      values?: unknown;
+    };
+    if (typeof parsed.key !== "string" || parsed.key === "") return { text: sentence };
+    const raw = parsed.values;
+    if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+      const values: Record<string, string | number> = {};
+      for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
+        // Only what a template can interpolate: a nested object would render as `[object Object]`.
+        if (typeof value === "string" || typeof value === "number") values[name] = value;
+      }
+      return Object.keys(values).length > 0 ? { text: sentence, ref: { key: parsed.key, values } } : { text: sentence, ref: { key: parsed.key } };
+    }
+    return { text: sentence, ref: { key: parsed.key } };
+  } catch {
+    // A truncation, or a sentence that merely contains the marker. Showing the JSON would be worse
+    // than showing the sentence it followed, so the tail is dropped.
+    return { text: sentence };
+  }
+}
+
+/** Everything a client can read out of a failed call: the code, the sentence, and the key. */
+export interface ParsedCoderError {
+  code: EnvoyCoderErrorCode | null;
+  /** The English sentence, with the code prefix and any key marker removed. */
+  message: string;
+  ref?: CoderMessageRef;
+}
+
+/**
+ * Read a failure the way both ends agree on.
+ *
+ * One parser for the three things the message carries, so `coderErrorCode`, `coderErrorMessage` and
+ * `coderErrorRef` cannot drift apart about where the boundaries are.
+ */
+export function parseCoderError(message: string): ParsedCoderError {
+  const colon = message.indexOf(":");
+  const head = colon > 0 ? message.slice(0, colon).trim() : "";
+  const coded = colon > 0 && head.startsWith("envoycoder.");
+  const body = coded ? message.slice(colon + 1).trim() : message;
+  const { text, ref } = parseMessageRef(body);
+  return {
+    code: coded ? (head as EnvoyCoderErrorCode) : null,
+    message: text,
+    ...(ref ? { ref } : {}),
+  };
+}
+
+/**
+ * The error object as a *client* should read it — the shape `CoderRpcError` promises.
+ *
+ * A client receives `{ code, message }` from the transport (flattened, and with the key inside the
+ * message). This turns it into the object with `messageKey` / `messageValues` filled in, so a
+ * client never has to know the marker exists.
+ */
+export function readRpcError(error: { code?: string; message: string }): CoderRpcError {
+  const parsed = parseCoderError(error.message);
+  return {
+    code: error.code ?? "ERROR",
+    message: parsed.message,
+    ...(parsed.ref
+      ? {
+          messageKey: parsed.ref.key,
+          ...(parsed.ref.values ? { messageValues: parsed.ref.values } : {}),
+        }
+      : {}),
+  };
 }
 
 /** The code a failed call carried, or `null` when it did not carry one of ours. */
 export function coderErrorCode(message: string): EnvoyCoderErrorCode | null {
-  const colon = message.indexOf(":");
-  if (colon <= 0) return null;
-  const token = message.slice(0, colon).trim();
-  return token.startsWith("envoycoder.") ? (token as EnvoyCoderErrorCode) : null;
+  return parseCoderError(message).code;
 }
 
 /** The human half of a coded failure — what a UI shows once `coderErrorCode` has done its job. */
 export function coderErrorMessage(message: string): string {
-  const colon = message.indexOf(":");
-  if (colon <= 0) return message;
-  const token = message.slice(0, colon).trim();
-  return token.startsWith("envoycoder.") ? message.slice(colon + 1).trim() : message;
+  return parseCoderError(message).message;
+}
+
+/** The key the daemon sent with a failure, when it sent one. */
+export function coderErrorRef(message: string): CoderMessageRef | undefined {
+  return parseCoderError(message).ref;
 }
 
 /* ────────────────────────────── events ───────────────────────────── */
@@ -765,6 +901,12 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
             requireApprovalForDestructive: z.boolean().optional(),
             allowRemoteRuns: z.boolean().optional(),
             keepTranscripts: z.boolean().optional(),
+            /**
+             * The language the UI speaks. Validated here, against the same closed list the picker
+             * offers (`CODER_LANGUAGES`), so an unknown value is refused at the wire rather than
+             * stored and rendered as a language nobody has.
+             */
+            language: CoderLanguageSchema.optional(),
           })
           .strict(),
       })
@@ -782,6 +924,12 @@ export { CoderSettingsSchema };
  * The daemon parses **inside** the dispatcher rather than trusting its caller: a phone on an older
  * build is the normal case in this family, and a bad parameter should come back as a readable
  * refusal rather than as `undefined is not an object` from three frames deeper.
+ *
+ * **No `messageKey`, deliberately.** This refusal names an internal RPC method and a parameter path,
+ * and quotes a Zod message: it is addressed to whoever wrote the client. A translated version would
+ * be a German sentence wrapped around English identifiers — worse than the sentence an engineer can
+ * act on, and no more useful to a user. Every refusal a user *can* read carries a key; this one is a
+ * bug report.
  */
 export function parseRpcParams(method: RpcMethod, params: unknown): unknown {
   const parsed = RPC_SPECS[method].params.safeParse(params);

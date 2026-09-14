@@ -21,6 +21,10 @@
 import type { JSX } from "react";
 
 import type { CoderSettings, HarnessId } from "@envoycoder/protocol";
+
+import { useI18n, useT } from "../i18n/context.js";
+import { LOCALES, LOCALE_LABELS } from "../i18n/locales.js";
+import { localizeText } from "../i18n/notice.js";
 import type { CoderState } from "../state/coderStore.js";
 
 export interface SettingsPaneProps {
@@ -30,34 +34,78 @@ export interface SettingsPaneProps {
 }
 
 export function SettingsPane(props: SettingsPaneProps): JSX.Element {
+  const t = useT();
+  const { locale, preference } = useI18n();
   const { settings } = props.state;
   const available = props.state.harnesses.filter((harness) => harness.available !== false);
+  // A value the daemon has not stored yet reads as `system`, which is what the daemon will apply.
+  const language = settings.language ?? "system";
 
   return (
-    <section className="pane" aria-label="Settings">
+    <section className="pane" aria-label={t("settings.title")}>
       <header className="pane__header">
         <div className="pane__title-group">
-          <h1 className="pane__title">Settings</h1>
+          <h1 className="pane__title">{t("settings.title")}</h1>
           <div className="pane__meta">
-            <span className="chip chip--quiet" title={props.state.hello?.stateDir ?? "Not connected"}>
-              {props.state.hello ? `State in ${shortPath(props.state.hello.stateDir)}` : "Not connected"}
+            <span
+              className="chip chip--quiet"
+              title={props.state.hello?.stateDir ?? t("connection.none")}
+            >
+              {props.state.hello
+                ? t("settings.stateDir", { path: shortPath(props.state.hello.stateDir) })
+                : t("connection.none")}
             </span>
-            <span className="chip chip--quiet" title="The daemon this window is attached to">
-              {props.state.hello ? `Daemon ${props.state.hello.version}` : "No daemon"}
+            <span className="chip chip--quiet" title={t("settings.daemon.title")}>
+              {props.state.hello
+                ? t("settings.daemon", { version: props.state.hello.version })
+                : t("settings.noDaemon")}
             </span>
           </div>
         </div>
         <div className="pane__actions">
           <button type="button" className="button button--secondary" onClick={props.onClose}>
-            Close
+            {t("settings.close")}
           </button>
         </div>
       </header>
 
       <div className="settings">
+        {/* **The language, and why it is a daemon setting rather than `localStorage`.**
+            It is a per-user preference, and the daemon already owns this user's settings: a value in
+            the webview's own storage would be invisible to the phone, would not survive a webview
+            cache clear, and would have to be re-sent to whichever surface renders a refusal. Stored
+            with the rest, it follows the user to every window and every client — which is what
+            "the language must be unified" requires, since the daemon's refusals are rendered by
+            whoever is looking. */}
         <Setting
-          title="The agent new tasks start with"
-          detail="A project can override this; this is the answer when it does not."
+          title={t("settings.language.title")}
+          detail={t("settings.language.detail")}
+          developerNote="settings.language"
+        >
+          <select
+            className="select"
+            value={language}
+            aria-label={t("settings.language.aria")}
+            onChange={(event) =>
+              props.onUpdate({ language: event.target.value as CoderSettings["language"] })
+            }
+          >
+            <option value="system">{t("settings.language.system")}</option>
+            {LOCALES.map((option) => (
+              // Endonyms: a language is listed in its own language, so the one a user is looking for
+              // is the one they can read. The row is also the only place the *resolved* locale is
+              // visible, when the setting is "system".
+              <option key={option} value={option}>
+                {LOCALE_LABELS[option]}
+                {option === locale && preference === "system" ? ` — ${t("settings.language.system")}` : ""}
+              </option>
+            ))}
+          </select>
+        </Setting>
+
+        <Setting
+          title={t("settings.defaultHarness.title")}
+          detail={t("settings.defaultHarness.detail")}
           developerNote="settings.defaults.harness"
         >
           <select
@@ -77,56 +125,53 @@ export function SettingsPane(props: SettingsPaneProps): JSX.Element {
             {available.map((harness) => (
               <option key={harness.id} value={harness.id}>
                 {harness.label}
-                {harness.tier === "catalogued" ? " (needs installing)" : ""}
+                {harness.tier === "catalogued" ? ` ${t("settings.needsInstalling")}` : ""}
               </option>
             ))}
           </select>
         </Setting>
 
         <Setting
-          title="Ask before anything destructive"
-          detail="Agents stop and wait for you instead of overwriting files. Turning this off means a task can change your working tree without asking."
+          title={t("settings.approvals.title")}
+          detail={t("settings.approvals.detail")}
           developerNote="settings.requireApprovalForDestructive"
         >
           <input
             type="checkbox"
             checked={settings.requireApprovalForDestructive}
             onChange={(event) => props.onUpdate({ requireApprovalForDestructive: event.target.checked })}
-            aria-label="Ask before anything destructive"
+            aria-label={t("settings.approvals.title")}
           />
         </Setting>
 
         <Setting
-          title="Share this machine's agents with your other machines"
-          detail="Off by default. When it is on, a task from another of your machines can run here, in a directory of yours."
+          title={t("settings.remoteRuns.title")}
+          detail={t("settings.remoteRuns.detail")}
           developerNote="settings.allowRemoteRuns"
         >
           <input
             type="checkbox"
             checked={settings.allowRemoteRuns}
             onChange={(event) => props.onUpdate({ allowRemoteRuns: event.target.checked })}
-            aria-label="Share this machine's agents with your other machines"
+            aria-label={t("settings.remoteRuns.title")}
           />
         </Setting>
 
         <Setting
-          title="Keep transcripts after a task ends"
-          detail="The record of what an agent did, kept on this machine. Turning it off saves space and makes 'what did it change?' unanswerable later."
+          title={t("settings.transcripts.title")}
+          detail={t("settings.transcripts.detail")}
           developerNote="settings.keepTranscripts"
         >
           <input
             type="checkbox"
             checked={settings.keepTranscripts}
             onChange={(event) => props.onUpdate({ keepTranscripts: event.target.checked })}
-            aria-label="Keep transcripts after a task ends"
+            aria-label={t("settings.transcripts.title")}
           />
         </Setting>
 
-        <h2 className="settings__heading">Agents on this machine</h2>
-        <p className="settings__note">
-          What each agent can actually do decides what EnvoyCoder offers. An agent that cannot be
-          asked for permission is not given an approval dialog it would ignore.
-        </p>
+        <h2 className="settings__heading">{t("settings.agents.heading")}</h2>
+        <p className="settings__note">{t("settings.agents.note")}</p>
         <ul className="settings__agents">
           {props.state.harnesses.map((harness) => (
             <li key={harness.id} className="settings__agent">
@@ -136,33 +181,42 @@ export function SettingsPane(props: SettingsPaneProps): JSX.Element {
               </div>
               <div className="settings__agent-facts">
                 <span className={`chip ${harness.available === false ? "chip--danger" : harness.available === "unknown" ? "chip--quiet" : "chip--live"}`}>
-                  {harness.available === false ? "Not installed" : harness.available === "unknown" ? "Unknown" : "Ready"}
+                  {harness.available === false
+                    ? t("settings.agent.notInstalled")
+                    : harness.available === "unknown"
+                      ? t("settings.agent.unknown")
+                      : t("settings.agent.ready")}
                 </span>
                 {harness.capabilities.approvals ? null : (
-                  <span className="chip chip--warn" title="This agent never asks before acting">
-                    No approvals
+                  <span className="chip chip--warn" title={t("settings.agent.noApprovals.title")}>
+                    {t("settings.agent.noApprovals")}
                   </span>
                 )}
                 {harness.capabilities.cancel ? null : (
-                  <span className="chip chip--warn" title="The only way to stop this agent is to end its process">
-                    Cannot be cancelled
+                  <span className="chip chip--warn" title={t("settings.agent.noCancel.title")}>
+                    {t("settings.agent.noCancel")}
                   </span>
                 )}
+                {/* `installHint` is deliberately not translated: it is a command line
+                    (`npm install -g @anthropic-ai/claude-code`), and a translated command is a
+                    command that does not run. */}
                 {harness.installHint ? <span className="settings__hint">{harness.installHint}</span> : null}
               </div>
             </li>
           ))}
           {props.state.harnesses.length === 0 ? (
-            <li className="settings__agent">The agent list has not arrived yet.</li>
+            <li className="settings__agent">{t("settings.agents.empty")}</li>
           ) : null}
         </ul>
 
         {props.state.notes.length > 0 ? (
           <>
-            <h2 className="settings__heading">Things worth knowing</h2>
+            <h2 className="settings__heading">{t("settings.notes.heading")}</h2>
             <ul className="settings__notes">
               {props.state.notes.map((note) => (
-                <li key={note}>{note}</li>
+                // The daemon's own sentences, rendered through their key when it sent one — a
+                // quarantined file explained in German, with the parse error it cited left as it is.
+                <li key={note}>{localizeText(t, note)}</li>
               ))}
             </ul>
           </>

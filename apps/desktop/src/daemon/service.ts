@@ -24,6 +24,7 @@ import { stat } from "node:fs/promises";
 
 import {
   type AgentRun,
+  type CoderLanguage,
   type HarnessId,
   type HarnessSummary,
   type RpcMethod,
@@ -39,6 +40,7 @@ import { ALL_HARNESSES, harnessDefinition, probeHarness } from "@envoycoder/agen
 
 import type { CoderPaths } from "@envoycoder/host-bridge";
 
+import { keyed, ref } from "./messages.js";
 import type { RunManager } from "./runs.js";
 import type { CoderStore } from "./store.js";
 
@@ -129,6 +131,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         throw coderError(
           ENVOYCODER_ERRORS.taskMissing,
           `${path} is not a directory on this machine. Pick a folder that exists — EnvoyCoder runs agents in it, so the path has to be real.`,
+          ref("error.addProject.notDirectory", { path }),
         );
       }
       const { project } = await deps.store.addProject({ ...input, path });
@@ -182,6 +185,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         throw coderError(
           ENVOYCODER_ERRORS.taskMissing,
           `${cwd} is not a directory on this machine, so there is nowhere to run the agent. It was the working directory for "${input.title}".`,
+          ref("error.createTask.notDirectory", { path: cwd, title: input.title }),
         );
       }
       const task = await deps.store.createTask({ ...input, cwd });
@@ -331,6 +335,15 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
           requireApprovalForDestructive?: boolean;
           allowRemoteRuns?: boolean;
           keepTranscripts?: boolean;
+          /**
+           * The language the window speaks.
+           *
+           * Stored daemon-side rather than in the window's `localStorage`, and that is the point:
+           * the daemon is what sends the refusals, so the *user* has to have one language across
+           * every surface that renders them (a second window, the phone, a future tray). A value
+           * the webview kept for itself could not do that, and would be lost with the cache.
+           */
+          language?: CoderLanguage;
         };
       };
       const settings = await deps.store.updateSettings(input.settings);
@@ -349,6 +362,7 @@ function requireRuns(deps: CoderServiceDeps): RunManager {
     throw coderError(
       ENVOYCODER_ERRORS.harnessFailed,
       "This daemon was started without an agent runtime, so it cannot run tasks.",
+      ref("error.noRunRuntime"),
     );
   }
   return deps.runs;
@@ -372,6 +386,7 @@ function snapshot(runs: RunManager, runId: string, sinceSeq: number): {
     throw coderError(
       ENVOYCODER_ERRORS.taskMissing,
       `There is no run called "${runId}". It may have been started by a daemon that has since restarted.`,
+      ref("error.runNotFound", { runId }),
     );
   }
   const events = runs.events(runId, sinceSeq);
@@ -384,10 +399,22 @@ function snapshot(runs: RunManager, runId: string, sinceSeq: number): {
   };
 }
 
+/**
+ * "There is no such project / task."
+ *
+ * Two keys rather than one with a `{kind}` value, deliberately: German, French, Italian and the rest
+ * inflect the noun ("kein Projekt" / "keine Aufgabe"), so a template with the noun substituted into
+ * it would be wrong in exactly the languages this work exists for.
+ */
 function notFound(kind: "project" | "task", id: string): Error {
+  const sentence =
+    `There is no ${kind} called "${id}" on this machine. It may have been removed from another window.`;
   return coderError(
     ENVOYCODER_ERRORS.taskMissing,
-    `There is no ${kind} called "${id}" on this machine. It may have been removed from another window.`,
+    sentence,
+    kind === "project"
+      ? ref("error.projectNotFound", { id })
+      : ref("error.taskNotFound", { id }),
   );
 }
 
@@ -445,12 +472,25 @@ export function describeStoreNotes(notes: {
     const name = entry.file.split(/[\\/]/).pop() ?? entry.file;
     lines.push(
       entry.movedTo
-        ? `EnvoyCoder could not read ${name}, so it moved it aside to ${entry.movedTo} and started that list empty. (${entry.reason})`
-        : `EnvoyCoder could not read ${name} and could not move it aside, so it left it untouched and started that list empty. (${entry.reason})`,
+        ? keyed(
+            "note.quarantined.moved",
+            `EnvoyCoder could not read ${name}, so it moved it aside to ${entry.movedTo} and started that list empty. (${entry.reason})`,
+            { name, movedTo: entry.movedTo, reason: entry.reason },
+          )
+        : keyed(
+            "note.quarantined.left",
+            `EnvoyCoder could not read ${name} and could not move it aside, so it left it untouched and started that list empty. (${entry.reason})`,
+            { name, reason: entry.reason },
+          ),
     );
   }
   for (const entry of notes.skipped) {
-    lines.push(`${entry.file}: ${entry.reason}`);
+    // The file and the reason are named as they are on disk — this line is a diagnostic, and the
+    // reason is a schema-validator message no catalogue can translate.
+    lines.push(keyed("note.skipped", `${entry.file}: ${entry.reason}`, {
+      file: entry.file,
+      reason: entry.reason,
+    }));
   }
   return lines;
 }

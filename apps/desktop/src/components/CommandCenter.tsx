@@ -29,20 +29,27 @@
 import type { JSX } from "react";
 
 import {
-  NO_FOLDER_PICKER_REASON,
   hasShellPicker,
   pickFolder,
   type FolderPickResult,
 } from "../client/folder-picker.js";
 
 /** Why there is no picker here, in one short clause for the stage label. */
-async function pickFolderUnavailableReason(): Promise<string | undefined> {
-  const probe: FolderPickResult = await pickFolder();
-  return probe.kind === "unavailable" ? probe.reason : undefined;
+async function pickFolderUnavailableReason(
+  t: Translator["t"],
+): Promise<string | undefined> {
+  const probe: FolderPickResult = await pickFolder(t("palette.addProject.pickPrompt"));
+  if (probe.kind !== "unavailable") return undefined;
+  return probe.cause === "no-shell"
+    ? t("palette.noPicker")
+    : t("palette.pickerFailed", { detail: probe.reason });
 }
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Project } from "@envoycoder/protocol";
+
+import { useT } from "../i18n/context.js";
+import type { Translator } from "../i18n/translate.js";
 
 /** A row a user can run. `selected` only means anything for `choice`. */
 export interface CommandContribution {
@@ -76,6 +83,7 @@ export interface CommandCenterProps {
 }
 
 export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [stage, setStage] = useState<{ command: CommandContribution } | undefined>(undefined);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -137,7 +145,7 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
       className="palette-backdrop"
       role="dialog"
       aria-modal="true"
-      aria-label="Command Center"
+      aria-label={t("palette.title")}
       onClick={props.onClose}
     >
       <div className="palette" onClick={(event) => event.stopPropagation()}>
@@ -146,7 +154,7 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
           // and one thin line of text — so clicking "Add project…" looked like a click that did nothing.
           // A staged command now says what it wants, in the same words it would use for a button.
           <div className="palette__stage-row">
-            <span className="palette__stage-label">{stage.command.needs?.label ?? "Value"}</span>
+            <span className="palette__stage-label">{stage.command.needs?.label ?? t("palette.value")}</span>
             <button
               type="button"
               className="button button--primary"
@@ -161,9 +169,11 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
           ref={inputRef}
           className="input palette__input"
           placeholder={
-            stage ? (stage.command.needs?.placeholder ?? stage.command.needs?.label ?? "Value") : "Type a command"
+            stage
+              ? (stage.command.needs?.placeholder ?? stage.command.needs?.label ?? t("palette.value"))
+              : t("palette.placeholder")
           }
-          aria-label={stage ? (stage.command.needs?.label ?? "Value") : "Search commands"}
+          aria-label={stage ? (stage.command.needs?.label ?? t("palette.value")) : t("palette.search.aria")}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
@@ -197,7 +207,7 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
                               setStage({
                                 command: {
                                   ...row,
-                                  needs: { ...row.needs, label: `${row.needs.label} (${NO_FOLDER_PICKER_REASON})` },
+                                  needs: { ...row.needs, label: `${row.needs.label} (${t("palette.noPicker")})` },
                                 },
                               });
                               setQuery("");
@@ -216,7 +226,7 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
                               try {
                                 picked = await row.pick!();
                                 if (picked === null) {
-                                  const probed = await pickFolderUnavailableReason();
+                                  const probed = await pickFolderUnavailableReason(t);
                                   why = probed;
                                 }
                               } catch (error) {
@@ -248,7 +258,7 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
                         }}
                       >
                         <strong>{row.title}</strong>
-                        {row.selected ? <span className="palette__check" aria-label="Selected" /> : null}
+                        {row.selected ? <span className="palette__check" aria-label={t("palette.selected")} /> : null}
                         {row.subtitle ? <span className="palette__hint">{row.subtitle}</span> : null}
                       </button>
                     </li>
@@ -256,7 +266,7 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
                 </ul>
               </li>
             ))}
-            {rows.length === 0 ? <li className="palette__empty">Nothing matches that.</li> : null}
+            {rows.length === 0 ? <li className="palette__empty">{t("palette.empty")}</li> : null}
           </ul>
         )}
         {props.status ? <p className="palette__status">{props.status}</p> : null}
@@ -282,20 +292,33 @@ export function buildCommandContributions(input: {
   onToggleRail: () => void;
   onRevealTask: (taskId: string) => void;
   tasks: readonly { id: string; title: string; projectId: string }[];
+  /**
+   * The window's translator.
+   *
+   * Taken as an argument rather than read from context inside this function, because this is not a
+   * component: it is called from the shell's `useMemo`, which is where the language is already known.
+   * A hook here would work by accident and break the moment the rows are built anywhere else.
+   */
+  t: Translator["t"];
 }): CommandContribution[] {
+  const { t } = input;
   const rows: CommandContribution[] = [
     {
       id: "project.add",
-      title: "Add project…",
-      subtitle: "Register a directory you work in",
-      group: "Projects",
+      title: t("palette.addProject.title"),
+      subtitle: t("palette.addProject.subtitle"),
+      group: t("palette.group.projects"),
       kind: "action",
+      // Search keywords stay in English on purpose: they are typed synonyms for what the row does
+      // ("folder", "repo"), they are never shown, and translating them would make the palette's
+      // search behave differently per language for no user-visible gain.
       keywords: ["folder", "repository", "repo", "open"],
       // The native folder chooser, so adding a project is a pick rather than a paste. A cancelled
       // dialog returns null and *nothing happens* — changing your mind is not an error — while a machine
       // with no picker falls through to the text stage below.
       pick: async () => {
-        const picked = await pickFolder("Choose a project folder");
+        // The dialog's own title is platform UI a user reads, so it is translated too.
+        const picked = await pickFolder(t("palette.addProject.pickPrompt"));
         return picked.kind === "picked" ? picked.path : null;
       },
       run: (value) => input.onAddProject(value.trim()),
@@ -305,12 +328,12 @@ export function buildCommandContributions(input: {
   for (const project of input.projects) {
     rows.push({
       id: `task.new.${project.id}`,
-      title: `New task in ${project.label}`,
+      title: t("palette.newTask.title", { project: project.label }),
       subtitle: project.path,
-      group: "Tasks",
+      group: t("palette.group.tasks"),
       kind: "action",
       keywords: ["start", "agent", "task"],
-      needs: { label: "What should the agent do?", placeholder: "Describe the task" },
+      needs: { label: t("palette.newTask.label"), placeholder: t("palette.newTask.placeholder") },
       run: (value) => input.onNewTask(project.id, value.trim()),
     });
   }
@@ -319,8 +342,8 @@ export function buildCommandContributions(input: {
     rows.push({
       id: `task.open.${task.id}`,
       title: task.title,
-      subtitle: "Open this task",
-      group: "Tasks",
+      subtitle: t("palette.openTask.subtitle"),
+      group: t("palette.group.tasks"),
       kind: "action",
       keywords: ["jump", "go"],
       run: () => input.onRevealTask(task.id),
@@ -330,26 +353,26 @@ export function buildCommandContributions(input: {
   rows.push(
     {
       id: "phone.pair",
-      title: "Pair a phone",
-      subtitle: "Show a code the mobile app can scan",
-      group: "This machine",
+      title: t("palette.pairPhone.title"),
+      subtitle: t("palette.pairPhone.subtitle"),
+      group: t("palette.group.machine"),
       kind: "action",
       keywords: ["qr", "mobile", "device"],
       run: () => input.onPairPhone(),
     },
     {
       id: "view.rail",
-      title: "Toggle the project rail",
-      group: "This machine",
+      title: t("palette.toggleRail.title"),
+      group: t("palette.group.machine"),
       kind: "action",
       keywords: ["sidebar", "hide", "show"],
       run: () => input.onToggleRail(),
     },
     {
       id: "settings.open",
-      title: "Open settings",
-      subtitle: "Defaults for new tasks, and what needs approval",
-      group: "This machine",
+      title: t("palette.settings.title"),
+      subtitle: t("palette.settings.subtitle"),
+      group: t("palette.group.machine"),
       kind: "action",
       keywords: ["preferences", "config"],
       run: () => input.onOpenSettings(),

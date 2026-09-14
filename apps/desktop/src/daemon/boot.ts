@@ -48,6 +48,20 @@ export type BootDecision =
  * without being told, so the family's rule is to report and never replace. The headline and detail
  * are the family's own wording (`describeProfileSituation`), shown as-is — a second vocabulary for the
  * same situation is how two products start describing one profile differently.
+ *
+ * ## Why every sentence in this file is English, and stays that way
+ *
+ * These headlines and details are **the boot report a headless process prints**. They go to
+ * stdout/stderr before any client exists, and no window ever sees them — the shell routes this
+ * output to a log. There is also nobody to ask which language to use: the language setting lives in
+ * the store whose files may be exactly what is damaged, and a process that has printed its last line
+ * and exited cannot render a key a client would resolve.
+ *
+ * The *situations* are translated where a user actually meets them, in the window: "EnvoyCoder
+ * cannot reach its daemon" plus the connection chip (`work.offline.*`, `connection.*`), which is what
+ * a user sees when the shell's spawn failed or the daemon is not answering. So this is a
+ * classification, not an omission — a log line is developer-facing output, and the developer is
+ * reading a repository written in English.
  */
 export function decideBoot(facts: CoderHomeFacts): BootDecision {
   if (facts.state === "damaged") {

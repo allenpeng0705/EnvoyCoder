@@ -25,7 +25,14 @@ function tauri(): TauriGlobal | undefined {
   return candidate?.core?.invoke ? candidate : undefined;
 }
 
-/** Why a window cannot offer a folder chooser, in words a user can act on. One string, two callers. */
+/**
+ * Why a window cannot offer a folder chooser, in words a user can act on.
+ *
+ * The English text of the `no-shell` cause, kept here rather than in the catalogue because this
+ * module is also called by code with no translator (the smoke script, a future CLI). A window
+ * renders `palette.noPicker` instead — the same sentence, in the user's language — and picks it by
+ * `cause`, not by string comparison.
+ */
 export const NO_FOLDER_PICKER_REASON =
   "This window has no shell to ask, so paste the folder path instead.";
 
@@ -44,13 +51,30 @@ export function hasShellPicker(): boolean {
 export type FolderPickResult =
   | { kind: "picked"; path: string }
   | { kind: "cancelled" }
-  | { kind: "unavailable"; reason: string };
+  /**
+   * No chooser here, and **two different reasons a caller tells apart by `cause`** — not by reading
+   * `reason`, which is English text for callers that have no translator (a script, a CLI):
+   *
+   *   * `no-shell` — this window is not inside the desktop shell at all (the browser dev server), so
+   *     there is nothing to ask. `reason` is the whole sentence; a window renders `palette.noPicker`
+   *     instead, in the user's language.
+   *   * `failed` — the shell is there and the dialog would not open. `reason` is the underlying
+   *     message only, because a window supplies its own sentence around it
+   *     (`palette.pickerFailed`, "…could not open: {detail}") and a prefix baked in here would be
+   *     printed twice.
+   */
+  | { kind: "unavailable"; cause: "no-shell" | "failed"; reason: string };
 
+/**
+ * @param prompt The dialog's own title, which the platform shows. Callers that have a translator
+ *   pass a translated one; the default is English for programmatic callers.
+ */
 export async function pickFolder(prompt = "Choose a project folder"): Promise<FolderPickResult> {
   const bridge = tauri();
   if (!bridge?.core?.invoke) {
     return {
       kind: "unavailable",
+      cause: "no-shell",
       reason: NO_FOLDER_PICKER_REASON,
     };
   }
@@ -66,7 +90,8 @@ export async function pickFolder(prompt = "Choose a project folder"): Promise<Fo
   } catch (error) {
     return {
       kind: "unavailable",
-      reason: `The folder picker could not open: ${error instanceof Error ? error.message : String(error)}`,
+      cause: "failed",
+      reason: error instanceof Error ? error.message : String(error),
     };
   }
 }

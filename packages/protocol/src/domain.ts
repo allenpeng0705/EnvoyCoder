@@ -593,6 +593,30 @@ export function isRpcMethod(value: string): value is RpcMethod {
   return (RPC_METHODS as readonly string[]).includes(value);
 }
 
+/* ────────────────────────────── language ───────────────────────────── */
+
+/**
+ * The languages this product speaks — **the family's seven**, defined here because the setting that
+ * chooses one is part of the wire.
+ *
+ * The list is `apps/desktop/src/i18n/locales.ts`'s, not a second one: that file derives `LOCALES`
+ * from this tuple, so the picker, the resolver and the settings schema cannot disagree about which
+ * languages exist. `"system"` is a *preference*, not a locale — it resolves to one of the others
+ * from what the platform reports, at render time.
+ *
+ * It lives in the protocol rather than in the app because a client stores it: the phone will read
+ * and write the same field over the same RPC, and a client that invented its own list would be able
+ * to save a value the daemon then refuses.
+ */
+export const CODER_LANGUAGES = ["system", "en", "zh", "de", "fr", "it", "ja", "ko"] as const;
+
+export type CoderLanguage = (typeof CODER_LANGUAGES)[number];
+
+/** The preference a user has not expressed yet. */
+export const DEFAULT_CODER_LANGUAGE: CoderLanguage = "system";
+
+export const CoderLanguageSchema = z.enum(CODER_LANGUAGES);
+
 /* ────────────────────────────── settings ───────────────────────────── */
 
 export interface CoderSettings {
@@ -606,6 +630,15 @@ export interface CoderSettings {
   allowRemoteRuns: boolean;
   /** Keep a run's transcript on disk after it ends. */
   keepTranscripts: boolean;
+  /**
+   * The language the UI speaks, **including what the daemon says**.
+   *
+   * Optional so a settings file written by an older build still parses; absent means `"system"`.
+   * Stored here rather than in the window's `localStorage` on purpose: it is a per-user preference,
+   * the daemon already owns settings, and a value in the webview's storage would be one the phone
+   * and a second window could not see (and which a cleared webview cache would silently lose).
+   */
+  language?: CoderLanguage;
 }
 
 export const DEFAULT_CODER_SETTINGS: CoderSettings = {
@@ -613,6 +646,7 @@ export const DEFAULT_CODER_SETTINGS: CoderSettings = {
   requireApprovalForDestructive: true,
   allowRemoteRuns: false,
   keepTranscripts: true,
+  language: DEFAULT_CODER_LANGUAGE,
 };
 
 const ProjectDefaultsSchema = z
@@ -630,6 +664,9 @@ export const CoderSettingsSchema = z
     requireApprovalForDestructive: z.boolean(),
     allowRemoteRuns: z.boolean(),
     keepTranscripts: z.boolean(),
+    // Optional, and validated against the same closed list the app's picker offers: a client that
+    // asked for a language nobody translated is a client bug the daemon should refuse, not store.
+    language: CoderLanguageSchema.optional(),
   })
   .strict();
 

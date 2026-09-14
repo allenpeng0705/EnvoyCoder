@@ -2,6 +2,7 @@ import type { JSX } from "react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { CoderApp } from "./components/CoderApp.js";
+import { I18nProvider } from "./i18n/context.js";
 import { useCoderActions, useCoderState } from "./state/useCoderState.js";
 // Design tokens before the app sheet: `styles.css` consumes these variables, and one import order
 // that works by accident is one refactor away from a screen with no colours.
@@ -13,13 +14,23 @@ import "./styles.css";
  *
  * Two hooks and no data of its own: the state comes from the daemon through one store, and the
  * actions go back through the same store, so a component cannot be handed a list that is a copy of
- * another component's list. There is no provider in between because there is exactly one store per
- * window — the moment there are two (a second daemon, a remote host), this becomes a context.
+ * another component's list.
+ *
+ * **The one provider in between is the translator**, mounted here rather than inside `CoderApp`
+ * because the language is a *setting* — it arrives from the daemon with the rest of the state — and
+ * a component that owned it could not be rendered without one. `preference` is what the user chose
+ * (`system` included); the provider resolves it against what the platform reports, and re-renders
+ * every `t()` in the window when the setting changes. No reload, and no second source of truth about
+ * which language is in use.
  */
 function Root(): JSX.Element {
   const state = useCoderState();
   const actions = useCoderActions();
-  return <CoderApp state={state} actions={actions} />;
+  return (
+    <I18nProvider preference={state.settings.language ?? "system"}>
+      <CoderApp state={state} actions={actions} />
+    </I18nProvider>
+  );
 }
 
 const container = document.getElementById("root");

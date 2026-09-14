@@ -28,6 +28,18 @@
  * (roadmap M4). The resolver answers `null` and the transport refuses, which is the fail-closed
  * behaviour the family's guide §8 asks for. It is printed at boot rather than papered over with a
  * token format of our own invention.
+ *
+ * ## Language, and why this file has none
+ *
+ * Everything `say(…)` prints here is a **log line for a headless process**: it is read on a
+ * terminal, by whoever started the daemon, before any window exists — and no window ever sees it,
+ * because the shell routes this output to a log file. There is no user to ask (the language setting
+ * lives in the store this process may be failing to open) and no client to render a key on. `boot.ts`
+ * carries the same note for the same reasons. The user-facing half of every one of these situations
+ * is in the window's own catalogue — "EnvoyCoder cannot reach its daemon", the connection chip, the
+ * mesh status line — which is where the language setting can actually apply.
+ *
+ * The daemon's *refusals* are a different matter and are all translated: see `messages.ts`.
  */
 
 import process from "node:process";

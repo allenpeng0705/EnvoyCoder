@@ -34,9 +34,13 @@ import {
   type CoderEventMessage,
   type CoderRpcResponse,
   ENVOYCODER_ERRORS,
+  coderError,
   coderErrorCode,
   coderErrorMessage,
+  withMessageRef,
 } from "@envoycoder/protocol";
+
+import { messageRef } from "../i18n/notice.js";
 
 /** Where the daemon is, as the shell resolved it. The window never invents one. */
 export interface DaemonEndpoint {
@@ -172,7 +176,9 @@ export class CoderConnection {
     this.timer = undefined;
     this.socket?.close();
     this.socket = undefined;
-    this.rejectAll(new Error("The connection was closed."));
+    this.rejectAll(
+      new Error(withMessageRef("The connection was closed.", messageRef("error.connectionClosed"))),
+    );
     this.setStatus({ state: "idle" });
   }
 
@@ -186,8 +192,13 @@ export class CoderConnection {
   async call(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
     const socket = this.socket;
     if (!socket || socket.readyState !== OPEN) {
-      throw new Error(
-        `${ENVOYCODER_ERRORS.daemonUnreachable}: EnvoyCoder is not connected to its daemon yet.`,
+      // Coded *and* keyed: the code is what a caller branches on, the key is what a German user
+      // reads. Both ride in the message, which is the only channel that survives the family's
+      // transport (`coderError` in `@envoycoder/protocol` explains why).
+      throw coderError(
+        ENVOYCODER_ERRORS.daemonUnreachable,
+        "EnvoyCoder is not connected to its daemon yet.",
+        messageRef("error.notConnected"),
       );
     }
     const id = `w${(this.counter += 1)}`;
@@ -230,7 +241,9 @@ export class CoderConnection {
       this.onMessage((event as { data?: unknown } | undefined)?.data);
     });
     socket.addEventListener("close", () => {
-      this.onClose("The daemon closed the connection.");
+      this.onClose(
+        withMessageRef("The daemon closed the connection.", messageRef("error.daemonClosedConnection")),
+      );
     });
     socket.addEventListener("error", () => {
       // An `error` is always followed by `close` on a WebSocket, so the reconnect is scheduled
@@ -266,14 +279,18 @@ export class CoderConnection {
    */
   private verifyIdentity(hello: HelloResult): void {
     if (hello.product !== "EnvoyCoder") {
-      throw new Error(
-        `${ENVOYCODER_ERRORS.notOurDaemon}: Something is answering on the daemon's port, but it says it is "${hello.product}". EnvoyCoder did not connect to it.`,
+      throw coderError(
+        ENVOYCODER_ERRORS.notOurDaemon,
+        `Something is answering on the daemon's port, but it says it is "${hello.product}". EnvoyCoder did not connect to it.`,
+        messageRef("error.notOurDaemon.product", { product: hello.product }),
       );
     }
     const expected = this.options.endpoint.instanceId;
     if (expected && hello.instanceId !== expected) {
-      throw new Error(
-        `${ENVOYCODER_ERRORS.notOurDaemon}: The daemon on port ${this.options.endpoint.port} is not the one this window was started for. Another EnvoyCoder daemon may have replaced it — reopen the window.`,
+      throw coderError(
+        ENVOYCODER_ERRORS.notOurDaemon,
+        `The daemon on port ${this.options.endpoint.port} is not the one this window was started for. Another EnvoyCoder daemon may have replaced it — reopen the window.`,
+        messageRef("error.notOurDaemon.instance", { port: this.options.endpoint.port }),
       );
     }
   }
@@ -381,7 +398,14 @@ export function rpcErrorCode(error: unknown): string | null {
   return coderErrorCode(message);
 }
 
-/** The human half of a failed call — what to show a user. */
+/**
+ * The English half of a failed call, with the code prefix stripped.
+ *
+ * **Not what a window shows.** A refusal also carries a catalogue key, and this drops it — which is
+ * fine for a log line, a test assertion and a tooltip's fallback, and wrong for anything a user
+ * reads in their own language. Rendering goes through `noticeFromError` + `localize`
+ * (`i18n/notice.ts`), which keeps the sentence *and* the key.
+ */
 export function rpcErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return coderErrorMessage(message);

@@ -44,14 +44,10 @@ import type {
 } from "@envoycoder/protocol";
 import { DEFAULT_CODER_SETTINGS } from "@envoycoder/protocol";
 
+import { localNotice, noticeFromError, type Notice, type Refusal } from "../i18n/notice.js";
 import { buildTranscript, type Transcript } from "./transcript.js";
 
-import {
-  CoderConnection,
-  type ConnectionStatus,
-  type HelloResult,
-  rpcErrorMessage,
-} from "../client/connection.js";
+import { CoderConnection, type ConnectionStatus, type HelloResult } from "../client/connection.js";
 import { resolveDaemonEndpoint, type ResolvedEndpoint } from "../client/endpoint.js";
 
 /** The mesh, as the daemon last reported it. Mirrors `CoderMeshStatus` in the protocol. */
@@ -85,8 +81,13 @@ export interface CoderState {
    *
    * A single slot, not a queue: this app is not a log viewer, and the newest failure is the one the
    * user can act on. Anything worth keeping goes to the audit log instead.
+   *
+   * A **`Notice`** rather than a string: a daemon refusal arrives as an English sentence *and* the
+   * catalogue key for it, and the key has to survive into the render so that "the language must be
+   * unified" holds for a refusal that arrived before the user switched language. The English
+   * sentence stays beside it, for the case where this build has no such key.
    */
-  error: string | undefined;
+  error: Notice | undefined;
   /** Things the daemon wanted the user to know at startup. Empty in a healthy install. */
   notes: readonly string[];
 }
@@ -152,10 +153,15 @@ export class CoderStore {
     } catch (error) {
       // Connection setup failures belong in the chip / empty work area — not the attention
       // banner. The banner is for actions the user just took (add project, start run, …).
+      //
+      // The reason is kept **whole** — code and key included — because it is both branched on
+      // (`coderErrorCode`) and rendered (`localizeText`, which resolves the key the endpoint failure
+      // carried). Everything else in `ConnectionStatus.reason` is the raw message for the same
+      // reason; the chip is where a localisation would otherwise be silently lost.
       this.set({
         connection: {
           state: "disconnected",
-          reason: rpcErrorMessage(error),
+          reason: error instanceof Error ? error.message : String(error),
         },
       });
     }
@@ -334,7 +340,7 @@ export class CoderStore {
     taskId: string,
     prompt: string,
     options: { resume?: boolean } = {},
-  ): Promise<{ ok: true; run: AgentRun } | { ok: false; message: string }> {
+  ): Promise<{ ok: true; run: AgentRun } | Refusal> {
     const result = await this.mutate(
       "coder.startRun",
       { taskId, prompt, ...(options.resume !== undefined ? { resume: options.resume } : {}) },
@@ -352,14 +358,14 @@ export class CoderStore {
     runId: string,
     text: string,
     mode: RunMode,
-  ): Promise<{ ok: true; delivered: "queued" | "steered" } | { ok: false; message: string }> {
+  ): Promise<{ ok: true; delivered: "queued" | "steered" } | Refusal> {
     return this.mutate("coder.sendToRun", { runId, text, mode }, (answer) => ({
       ok: true as const,
       delivered: (answer as { delivered: "queued" | "steered" }).delivered,
     }));
   }
 
-  async cancelRun(runId: string): Promise<{ ok: true } | { ok: false; message: string }> {
+  async cancelRun(runId: string): Promise<{ ok: true } | Refusal> {
     return this.mutate("coder.cancelRun", { runId }, () => ({ ok: true as const }));
   }
 
@@ -367,7 +373,7 @@ export class CoderStore {
     runId: string,
     requestId: string,
     optionId: string,
-  ): Promise<{ ok: true } | { ok: false; message: string }> {
+  ): Promise<{ ok: true } | Refusal> {
     return this.mutate("coder.answerApproval", { runId, requestId, optionId }, () => ({ ok: true as const }));
   }
 
@@ -380,7 +386,7 @@ export class CoderStore {
    * refusal is a sentence the caller can put in front of the user, which is what a control plane
    * owes when it cannot do what was asked.
    */
-  async addProject(path: string): Promise<{ ok: true; project: Project } | { ok: false; message: string }> {
+  async addProject(path: string): Promise<{ ok: true; project: Project } | Refusal> {
     return this.mutate("coder.addProject", { path }, (result) => {
       const project = (result as { project: Project }).project;
       return { ok: true, project };
@@ -392,7 +398,7 @@ export class CoderStore {
     title: string;
     harness?: HarnessId;
     model?: string;
-  }): Promise<{ ok: true; task: Task } | { ok: false; message: string }> {
+  }): Promise<{ ok: true; task: Task } | Refusal> {
     return this.mutate("coder.createTask", input, (result) => ({
       ok: true,
       task: (result as { task: Task }).task,
@@ -401,7 +407,7 @@ export class CoderStore {
 
   async updateTask(
     input: { id: string; title?: string; pinned?: boolean },
-  ): Promise<{ ok: true; task: Task } | { ok: false; message: string }> {
+  ): Promise<{ ok: true; task: Task } | Refusal> {
     return this.mutate("coder.updateTask", input, (result) => ({
       ok: true,
       task: (result as { task: Task }).task,
@@ -411,18 +417,18 @@ export class CoderStore {
   async archiveTask(
     id: string,
     archived = true,
-  ): Promise<{ ok: true; task: Task } | { ok: false; message: string }> {
+  ): Promise<{ ok: true; task: Task } | Refusal> {
     return this.mutate("coder.archiveTask", { id, archived }, (result) => ({
       ok: true,
       task: (result as { task: Task }).task,
     }));
   }
 
-  async removeProject(id: string): Promise<{ ok: true } | { ok: false; message: string }> {
+  async removeProject(id: string): Promise<{ ok: true } | Refusal> {
     return this.mutate("coder.removeProject", { id }, () => ({ ok: true }));
   }
 
-  async updateSettings(patch: Partial<CoderSettings>): Promise<{ ok: true } | { ok: false; message: string }> {
+  async updateSettings(patch: Partial<CoderSettings>): Promise<{ ok: true } | Refusal> {
     return this.mutate("coder.updateSettings", { settings: patch }, (result) => {
       this.set({ settings: (result as { settings: CoderSettings }).settings });
       return { ok: true };
@@ -432,33 +438,38 @@ export class CoderStore {
   /**
    * The shared body of every write: refuse early when disconnected, report failures in the user's
    * words, and let the daemon's broadcast drive the refetch rather than guessing at local state.
+   *
+   * A refusal is a `Notice` — the sentence the daemon sent plus the key to re-render it — which is
+   * what makes a German window answer a German user even though the daemon wrote English. Nothing
+   * here resolves the language: the strip does that at render time, so switching language re-renders
+   * the refusal that is already on screen.
    */
   private async mutate<T>(
     method: string,
     params: Record<string, unknown>,
     onSuccess: (result: unknown) => T,
-  ): Promise<T | { ok: false; message: string }> {
+  ): Promise<T | Refusal> {
     const connection = this.connection;
     if (!connection || connection.status.state !== "connected") {
-      const message = "EnvoyCoder is not connected to its daemon, so that change was not saved.";
-      this.set({ error: message });
-      return { ok: false, message };
+      const failure = localNotice("error.notConnectedChange");
+      this.set({ error: failure });
+      return { ok: false, ...failure };
     }
     try {
       const result = await connection.call(method, params);
       this.set({ error: undefined });
       return onSuccess(result);
     } catch (error) {
-      const message = rpcErrorMessage(error);
-      this.set({ error: message });
-      return { ok: false, message };
+      const failure = noticeFromError(error);
+      this.set({ error: failure });
+      return { ok: false, ...failure };
     }
   }
 
   /* ────────────────────────────── bookkeeping ────────────────────────────── */
 
   private fail(error: unknown): void {
-    this.set({ error: rpcErrorMessage(error) });
+    this.set({ error: noticeFromError(error) });
   }
 
   private set(patch: Partial<CoderState>): void {

@@ -21,6 +21,10 @@
  *     can mistake it for the real thing.
  */
 
+import { withMessageRef } from "@envoycoder/protocol";
+
+import { messageRef } from "../i18n/notice.js";
+
 import type { DaemonEndpoint } from "./connection.js";
 
 export interface ResolvedEndpoint {
@@ -64,14 +68,20 @@ export async function resolveDaemonEndpoint(): Promise<ResolvedEndpoint> {
       // Tauri v2 ACL: registered in invoke_handler but missing from capabilities → this wording.
       if (/not allowed|command not found/i.test(raw)) {
         throw new Error(
-          "EnvoyCoder's window could not ask the shell where the daemon is. Rebuild the desktop app (the shell permission list is out of date).",
+          withMessageRef(
+            "EnvoyCoder's window could not ask the shell where the daemon is. Rebuild the desktop app (the shell permission list is out of date).",
+            messageRef("error.shellEndpointFailed"),
+          ),
         );
       }
       throw error instanceof Error ? error : new Error(raw);
     }
     if (typeof answer?.port !== "number") {
       throw new Error(
-        "The EnvoyCoder shell did not say where its daemon is. This window cannot connect without it.",
+        withMessageRef(
+          "The EnvoyCoder shell did not say where its daemon is. This window cannot connect without it.",
+          messageRef("error.shellEndpointMissing"),
+        ),
       );
     }
     return {
