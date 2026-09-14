@@ -377,7 +377,11 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
 
   return (
     <div className={`shell${railOpen ? "" : " shell--rail-hidden"}`}>
-      <header className="titlebar">
+      {/* **Tauri drags a window by an attribute, not by CSS.** `-webkit-app-region: drag` is the Electron
+          mechanism and Tauri ignores it, which is why this bar could not move the window at all — and why
+          the same rule swallowed clicks on the controls inside it. The attribute applies to the element it
+          is set on, so the buttons in this row stay clickable. */}
+      <header className="titlebar" data-tauri-drag-region>
         <button
           type="button"
           className="button button--ghost button--icon"

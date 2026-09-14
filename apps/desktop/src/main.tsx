@@ -9,6 +9,21 @@ import { useCoderActions, useCoderState } from "./state/useCoderState.js";
 // Dark is this product's default palette (`docs/design-tokens.md`); the sheet also follows the OS, but
 // "default" has to mean default — a light desktop must not change what the app looks like.
 document.documentElement.dataset.theme = "dark";
+
+/**
+ * The platform, for the handful of CSS rules that are genuinely OS-specific.
+ *
+ * Only one today: macOS draws its window controls **over** the webview when the shell asks for an overlay
+ * title bar, so the app's own top bar has to leave room for them (see `styles.css`). A UA check is the
+ * honest mechanism here — WKWebView, WebView2 and WebKitGTK do not expose the OS to CSS any other way —
+ * and guessing wrong costs a padding on Windows and Linux, not a broken control.
+ */
+const ua = navigator.userAgent;
+document.documentElement.dataset.os = /Mac|iPhone|iPad/.test(ua)
+  ? "macos"
+  : /Windows/.test(ua)
+    ? "windows"
+    : "linux";
 import "./design/tokens.css";
 import "./styles.css";
 

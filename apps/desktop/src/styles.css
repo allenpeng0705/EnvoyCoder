@@ -99,17 +99,25 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  height: 38px;
   padding: 0 8px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-raised);
-  /* The title bar is a drag region in the Tauri shell; inputs opt out below. */
-  -webkit-app-region: drag;
+  /* **The drag region is `data-tauri-drag-region` on the element, set in `CoderApp`.** The
+     `-webkit-app-region` pair that used to live here is Electron's mechanism: Tauri ignores it, so the
+     window could not be moved by this bar, and on the engines that *do* honour it a drag region swallows
+     the mouse events of everything inside — which is why the controls here could not be tapped either.
+     Interactive children need no opt-out now: the attribute binds to the element that carries it. */
 }
 
-.titlebar button,
-.titlebar input {
-  -webkit-app-region: no-drag;
+/* **The macOS traffic lights float over the webview** (`titleBarStyle: "Overlay"`), so a bar that starts
+   at x=0 draws its own logo and name *under* the close/minimise/zoom buttons — and its first control sits
+   where they are. The inset is the traffic lights' own width plus their margin; the platform signal is set
+   on <html> in `main.tsx`, so this rule cannot apply on Windows or Linux, where there is no such strip. */
+:root[data-os="macos"] .titlebar {
+  padding-left: 78px;
 }
+
 
 .titlebar__title {
   font-weight: 600;
