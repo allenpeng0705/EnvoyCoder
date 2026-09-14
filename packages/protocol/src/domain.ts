@@ -508,8 +508,22 @@ export const ENVOYCODER_ERRORS = {
   harnessUnsupported: "envoycoder.harness-unsupported",
   /** The harness refused to start (bad config, unsupported arg). */
   harnessFailed: "envoycoder.harness-failed",
-  /** The task's cwd is gone or not a directory. */
+  /**
+   * A directory the call named is gone, or is not a directory.
+   *
+   * Four different refusals used to ride on `taskMissing` — this, plus a missing task, a missing
+   * project and a missing run — which made the code useless to the caller it exists for: the family's
+   * transport flattens `error.code` to `"ERROR"`, so a client branches on the leading `envoycoder.*`
+   * token, and `task-missing` coming back from `coder.addProject` says the wrong thing about what to do
+   * next ("pick another folder" is not "reload the list").
+   */
+  pathMissing: "envoycoder.path-missing",
+  /** No task with that id. */
   taskMissing: "envoycoder.task-missing",
+  /** No project with that id. */
+  projectMissing: "envoycoder.project-missing",
+  /** No run with that id — typically a daemon that restarted under a window that was still open. */
+  runMissing: "envoycoder.run-missing",
   /** The mesh node refused the product session, or granted it fewer methods. */
   meshRefused: "envoycoder.mesh-refused",
   /** We asked a peer to run something and the peer declined. */

@@ -129,7 +129,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
       // project row pointing at a directory that does not exist is a row whose every task fails.
       if (!(await isDirectory(path))) {
         throw coderError(
-          ENVOYCODER_ERRORS.taskMissing,
+          ENVOYCODER_ERRORS.pathMissing,
           `${path} is not a directory on this machine. Pick a folder that exists — EnvoyCoder runs agents in it, so the path has to be real.`,
           ref("error.addProject.notDirectory", { path }),
         );
@@ -183,7 +183,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
       const cwd = input.cwd ?? project.path;
       if (!(await isDirectory(cwd))) {
         throw coderError(
-          ENVOYCODER_ERRORS.taskMissing,
+          ENVOYCODER_ERRORS.pathMissing,
           `${cwd} is not a directory on this machine, so there is nowhere to run the agent. It was the working directory for "${input.title}".`,
           ref("error.createTask.notDirectory", { path: cwd, title: input.title }),
         );
@@ -384,7 +384,7 @@ function snapshot(runs: RunManager, runId: string, sinceSeq: number): {
   const run = runs.get(runId);
   if (!run) {
     throw coderError(
-      ENVOYCODER_ERRORS.taskMissing,
+      ENVOYCODER_ERRORS.runMissing,
       `There is no run called "${runId}". It may have been started by a daemon that has since restarted.`,
       ref("error.runNotFound", { runId }),
     );
@@ -409,8 +409,10 @@ function snapshot(runs: RunManager, runId: string, sinceSeq: number): {
 function notFound(kind: "project" | "task", id: string): Error {
   const sentence =
     `There is no ${kind} called "${id}" on this machine. It may have been removed from another window.`;
+  // The code follows the noun too, for the same reason the key does: a caller that has just been told
+  // its project is gone and one that has been told its task is gone do different things next.
   return coderError(
-    ENVOYCODER_ERRORS.taskMissing,
+    kind === "project" ? ENVOYCODER_ERRORS.projectMissing : ENVOYCODER_ERRORS.taskMissing,
     sentence,
     kind === "project"
       ? ref("error.projectNotFound", { id })

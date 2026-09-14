@@ -32,7 +32,7 @@
  * The family's transport derives `error.code` from a *closed catalogue* of its own tokens
  * (`@envoymesh/host-connect/src/rpc-error-code.ts:14-36`) and answers `"ERROR"` for anything else,
  * so an `envoycoder.*` code cannot ride in `error.code`. It rides in the message as a leading
- * token — `"envoycoder.task-missing: /x/y is gone"` — which is exactly the convention that
+ * token — `"envoycoder.path-missing: /x/y is gone"` — which is exactly the convention that
  * helper implements for EnvoyMesh's own catalogue. `coderError()` produces that string and
  * `coderErrorCode()` reads it back, so both ends agree by construction rather than by everyone
  * remembering the format.
@@ -135,7 +135,7 @@ export interface CoderMessageRef {
  * (`@envoymesh/host-connect/src/ws-server.ts:1157`) — from a thrown `Error`'s `message` alone, so
  * anything else attached to the error is dropped before it reaches the socket. The message is the
  * one channel a product controls end to end, which is why the code already rides there
- * (`envoycoder.task-missing: …`) and why the key rides beside it.
+ * (`envoycoder.path-missing: …`) and why the key rides beside it.
  *
  * So the convention is: `<code>: <english sentence> <marker> <json>`. Everything before the marker
  * is exactly the sentence a user reads today — a log line, a `toContain` assertion and a client

@@ -53,9 +53,12 @@ The hard part is not the labels — it is the sentences the *daemon* writes. A d
 wire is English text with a code in front of it, and the naive fix (have the daemon return keys) makes
 the window the only thing that can read its own log line, and gives the terminal user `error.foo`.
 
-So the daemon's message carries both:
+So the daemon's message carries both. The line below is real output from `npm run verify:language`,
+wrapped to fit — the code, the English sentence and the marker, in the order they travel:
 
-    envoycoder.path-missing: /nope is not a directory on this computer. … [envoycoder.key] {"key":"error.pathMissing","values":{"path":"/nope"}}
+    envoycoder.path-missing: /tmp/envoycoder-this-folder-does-not-exist is not a directory on this
+    machine. Pick a folder that exists — EnvoyCoder runs agents in it, so the path has to be real.
+    [envoycoder.key] {"key":"error.addProject.notDirectory","values":{"path":"/tmp/…"}}
 
 - the **English sentence** is what the log, the CLI and `npm run smoke` show — legible with no
   translation available;

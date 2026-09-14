@@ -66,7 +66,7 @@ export function messageRef(key: MessageKey, values?: Record<string, string | num
 /**
  * A notice for a string that came over the wire — a refusal, a note, a connection reason.
  *
- * The code prefix is stripped (`envoycoder.task-missing: …` never reaches a user), and the key is
+ * The code prefix is stripped (`envoycoder.path-missing: …` never reaches a user), and the key is
  * kept only when this build actually has it.
  */
 export function noticeOf(text: string | undefined): Notice | undefined {

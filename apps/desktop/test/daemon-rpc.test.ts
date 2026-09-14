@@ -398,7 +398,7 @@ describe("the daemon over a socket", () => {
     cleanups.push(async () => client.close());
 
     await expect(client.call("coder.addProject", { path: "/definitely/not/here" })).rejects.toThrow(
-      /envoycoder\.task-missing/,
+      /envoycoder\.path-missing/,
     );
   });
 
@@ -430,8 +430,11 @@ describe("the daemon over a socket", () => {
     const client = await connect(daemon.port);
     cleanups.push(async () => client.close());
 
+    // `project-missing`, not `task-missing` and not the `path-missing` above: three different
+    // conditions, three different next steps for a caller ("reload the list", "pick another folder").
+    // The codes used to be one, which is why these two tests name them separately.
     await expect(client.call("coder.createTask", { projectId: "nope", title: "x" })).rejects.toThrow(
-      /envoycoder\.task-missing/,
+      /envoycoder\.project-missing/,
     );
     await expect(client.call("coder.addProject", {})).rejects.toThrow(/envoycoder\.bad-request/);
   });

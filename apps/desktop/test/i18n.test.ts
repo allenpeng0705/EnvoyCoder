@@ -200,7 +200,7 @@ describe("daemon prose, as the window reads it", () => {
     // The shape `coderError(code, message, ref)` produces: code, sentence and key in one string,
     // because the family's transport preserves nothing else of a rejected call.
     const wire =
-      'envoycoder.task-missing: /tmp/gone is not a directory on this machine. Pick a folder that exists — EnvoyCoder runs agents in it, so the path has to be real. [envoycoder.key] {"key":"error.addProject.notDirectory","values":{"path":"/tmp/gone"}}';
+      'envoycoder.path-missing: /tmp/gone is not a directory on this machine. Pick a folder that exists — EnvoyCoder runs agents in it, so the path has to be real. [envoycoder.key] {"key":"error.addProject.notDirectory","values":{"path":"/tmp/gone"}}';
     const notice = noticeOf(wire);
     expect(notice?.message).toBe(
       "/tmp/gone is not a directory on this machine. " +
