@@ -3,8 +3,8 @@
 
   source:      ../EnvoyMesh/docs/envoymesh-refactoring-plan.md
   source-repo: EnvoyMesh (github.com/allenpeng0705/EnvoyMesh)
-  source-head: 64de5b0d
-  copied:      2026-09-13
+  source-head: caf90492
+  copied:      2026-09-14
   body-sha256: 42fd0ed73e7121da4601b6e9032f857f6e60ebbc01791702e890ac8ed1574473
 
   Why it is here: Background, not product design: EnvoyMesh's plan for splitting its modules into reusable and product-bound halves. It is here because the split *is* the interface EnvoyCoder consumes — which packages are safe to link, and why `@envoymesh/api/core` exists. EnvoyCoder appears in it only as motivation (§1, §11), never as a plan.
