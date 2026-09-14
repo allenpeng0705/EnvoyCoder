@@ -881,6 +881,52 @@ body {
   font-size: var(--font-size-sm);
 }
 
+/* ── separators between settings rows ─────────────────────────────────────
+   A settings page is many near-identical rows, and with only a gap between them it reads as one wall of
+   text — the owner's word for it was "crowded". A hairline between items gives each row a top and a
+   bottom at a glance, and it costs nothing in the data model: the lists already stack, so the divider is
+   `li + li` and the breathing room is padding that replaces the gap (a gap *plus* a line would space
+   them twice). First and last items drop their padding so the list does not gain phantom edges.
+
+   Applied to the three sibling lists of the same shape. The left bar is deliberately not included: it is
+   navigation, and a divider between eight nav items reads as eight separate things. */
+.settings__projects,
+.settings__sections,
+.settings__agents {
+  gap: 0;
+}
+
+.settings__projects > li,
+.settings__sections > li,
+.settings__agents > li {
+  padding-block: var(--space-3);
+}
+
+.settings__projects > li + li,
+.settings__sections > li + li,
+.settings__agents > li + li {
+  border-top: 1px solid var(--border);
+}
+
+.settings__projects > li:first-child,
+.settings__sections > li:first-child,
+.settings__agents > li:first-child {
+  padding-top: 0;
+}
+
+.settings__projects > li:last-child,
+.settings__sections > li:last-child,
+.settings__agents > li:last-child {
+  padding-bottom: 0;
+}
+
+/* A nav row's own hover fill must not sit flush against the divider, or the line looks like part of the
+   button. The row keeps its rounded fill; the padding above belongs to the item, not the fill. */
+.settings__projects > li > .setting--nav,
+.settings__sections > li > .setting--nav {
+  border-radius: var(--radius-md);
+}
+
 /* A destructive question, inline. It reads as part of the pane rather than as a dialog on top of it —
    the family rule is that a decision shows its context, and a modal hides the thing being decided. */
 .confirm {
