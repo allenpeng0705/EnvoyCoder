@@ -18,7 +18,7 @@
 
 import type { JSX } from "react";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { HarnessId, Project, RunEvent, Task } from "@envoycoder/protocol";
 
 import { useT } from "../i18n/context.js";
@@ -40,15 +40,47 @@ export interface TaskPaneProps {
   notice?: string | undefined;
 }
 
+/**
+ * What a brand-new chat offers to start with.
+ *
+ * Design law 6 is "empty states teach" — this one teaches *and* removes the blank-page problem, which
+ * is the other half of "hard to use": an empty composer with no idea what to type. A chip fills the
+ * composer and puts the cursor at the end; it deliberately does **not** send, because sending a
+ * sentence the user has not read is not help, it is a surprise.
+ */
+const SUGGESTIONS = [
+  "task.empty.suggestion.one",
+  "task.empty.suggestion.two",
+  "task.empty.suggestion.three",
+] as const;
+
 export function TaskPane(props: TaskPaneProps): JSX.Element {
   const t = useT();
   const { task, project, events } = props;
   const running = props.runLive;
   const [text, setText] = useState("");
   const [mode, setMode] = useState<"queue" | "steer">("queue");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  /** The task the transcript was last scrolled for — a new task always starts at its end. */
+  const scrolledFor = useRef<string | undefined>(undefined);
 
   const transcript = buildTranscript(events);
   const approvalOpen = transcript.pendingApprovalId !== undefined;
+
+  // **Follow the newest row, but do not steal the scrollbar.** An agent writes while the user reads:
+  // jumping to the bottom on every event makes the history unreachable, and never moving means the
+  // answer to what you just sent arrives off screen. So it follows only when the reader is already at
+  // the end — and a task opened for the first time jumps there once, because that is where the
+  // conversation is.
+  useEffect(() => {
+    const node = transcriptRef.current;
+    if (!node) return;
+    const first = scrolledFor.current !== task.id;
+    scrolledFor.current = task.id;
+    const atEnd = node.scrollHeight - node.scrollTop - node.clientHeight < 120;
+    if (first || atEnd) node.scrollTop = node.scrollHeight;
+  }, [task.id, transcript.entries.length]);
 
   const submit = (): void => {
     const value = text.trim();
@@ -97,7 +129,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
         </div>
       </header>
 
-      <div className="transcript" data-testid="transcript">
+      <div className="transcript" data-testid="transcript" ref={transcriptRef}>
         {transcript.hasGap ? (
           <p className="transcript__gap" role="status">
             {t("task.transcript.gap")}
@@ -110,6 +142,22 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
             <p className="transcript__empty-body">
               {t("task.transcript.empty.body", { cwd: task.cwd })}
             </p>
+            <ul className="suggestions">
+              {SUGGESTIONS.map((key) => (
+                <li key={key}>
+                  <button
+                    type="button"
+                    className="suggestion"
+                    onClick={() => {
+                      setText(t(key));
+                      inputRef.current?.focus();
+                    }}
+                  >
+                    {t(key)}
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
         ) : (
           <ol className="transcript__list">
@@ -125,61 +173,79 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
       </div>
 
       <footer className="composer">
-        <textarea
-          className="composer__input"
-          rows={3}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            // Enter sends, Shift+Enter is a newline. Not Cmd+Enter: a prompt is one thought, and a
-            // modifier for "send" is what makes people paste half a message.
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              submit();
-            }
-          }}
-          placeholder={
-            approvalOpen
-              ? t("task.composer.placeholder.approval")
-              : running
-                ? t("task.composer.placeholder.running")
-                : t("task.composer.placeholder.idle")
-          }
-          aria-label={t("task.composer.aria")}
-        />
-        {props.notice ? <p className="composer__notice">{props.notice}</p> : null}
-        <div className="composer__toolbar">
-          <span className="composer__spacer" />
-          {/* The mode only exists while there is a turn to join: showing it on a finished task would
-              offer a choice that does nothing. */}
-          {running ? (
-            <label className="composer__mode" title={t("task.composer.mode.title")}>
-              <select
-                className="select"
-                value={mode}
-                onChange={(event) => setMode(event.target.value as "queue" | "steer")}
-                aria-label={t("task.composer.mode.aria")}
-              >
-                <option value="queue">{t("task.composer.queue")}</option>
-                <option value="steer">{t("task.composer.steer")}</option>
-              </select>
-            </label>
-          ) : null}
-          <button
-            type="button"
-            className="button button--primary"
-            onClick={submit}
-            disabled={text.trim() === "" || approvalOpen}
-            title={
+        <div className="composer__card">
+          <textarea
+            ref={inputRef}
+            className="composer__input"
+            rows={2}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => {
+              // Enter sends, Shift+Enter is a newline. Not Cmd+Enter: a prompt is one thought, and a
+              // modifier for "send" is what makes people paste half a message.
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                submit();
+              }
+            }}
+            placeholder={
               approvalOpen
-                ? t("task.composer.submit.blocked")
+                ? t("task.composer.placeholder.approval")
                 : running
-                  ? t("task.composer.send")
-                  : t("task.composer.start")
+                  ? t("task.composer.placeholder.running")
+                  : t("task.composer.placeholder.idle")
             }
-          >
-            {running ? t("task.composer.send") : t("task.composer.start")}
-          </button>
+            aria-label={t("task.composer.aria")}
+          />
+          {props.notice ? <p className="composer__notice">{props.notice}</p> : null}
+          <div className="composer__toolbar">
+            {/* The mode only exists while there is a turn to join: showing it on a finished task would
+                offer a choice that does nothing. */}
+            {running ? (
+              <label className="composer__mode" title={t("task.composer.mode.title")}>
+                <select
+                  className="select"
+                  value={mode}
+                  onChange={(event) => setMode(event.target.value as "queue" | "steer")}
+                  aria-label={t("task.composer.mode.aria")}
+                >
+                  <option value="queue">{t("task.composer.queue")}</option>
+                  <option value="steer">{t("task.composer.steer")}</option>
+                </select>
+              </label>
+            ) : null}
+            {/* The keyboard contract, on screen. It was only in a comment. */}
+            <span className="composer__hint">{t("task.composer.hint")}</span>
+            <button
+              type="button"
+              className="button button--primary"
+              onClick={submit}
+              disabled={text.trim() === "" || approvalOpen}
+              title={
+                approvalOpen
+                  ? t("task.composer.submit.blocked")
+                  : running
+                    ? t("task.composer.send")
+                    : t("task.composer.start")
+              }
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M5 12h13" />
+                <path d="m12 5 7 7-7 7" />
+              </svg>
+              {running ? t("task.composer.send") : t("task.composer.start")}
+            </button>
+          </div>
         </div>
       </footer>
     </section>

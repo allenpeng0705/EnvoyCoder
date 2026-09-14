@@ -6,6 +6,9 @@ import { I18nProvider } from "./i18n/context.js";
 import { useCoderActions, useCoderState } from "./state/useCoderState.js";
 // Design tokens before the app sheet: `styles.css` consumes these variables, and one import order
 // that works by accident is one refactor away from a screen with no colours.
+// Dark is this product's default palette (`docs/design-tokens.md`); the sheet also follows the OS, but
+// "default" has to mean default — a light desktop must not change what the app looks like.
+document.documentElement.dataset.theme = "dark";
 import "./design/tokens.css";
 import "./styles.css";
 

@@ -42,7 +42,9 @@
     "daemon:build": "npm run daemon:build -w @envoycoder/desktop",
     "rust:test": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml",
     "run": "tsx scripts/run-once.ts",
-    "verify:language": "tsx scripts/verify-language.ts"
+    "verify:language": "tsx scripts/verify-language.ts",
+    "ui:audit": "node scripts/audit-ui.mjs",
+    "ui:preview": "node scripts/preview-ui.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

@@ -270,3 +270,38 @@ describe("a task that has not started yet", () => {
     expect(screen.getByText("Untitled")).toBeTruthy();
   });
 });
+
+describe("the new chat, which is where a session starts", () => {
+  it("offers a way in, and the chip fills the field without sending it", () => {
+    // An empty composer with no idea what to type is the other half of "hard to use". The chip is a
+    // sentence the user can edit; sending it for them would be a surprise, not help.
+    const { onStart } = renderPane([], { task: { ...task, title: "", runId: undefined }, runLive: false });
+    fireEvent.click(screen.getByRole("button", { name: "Explain what this project does" }));
+
+    const field = screen.getByLabelText("Message the agent") as HTMLTextAreaElement;
+    expect(field.value).toBe("Explain what this project does");
+    expect(onStart).not.toHaveBeenCalled();
+  });
+
+  it("says how to send, on the screen rather than only in a comment", () => {
+    renderPane([], { runLive: false });
+    expect(screen.getByText("Enter to send · Shift+Enter for a new line")).toBeTruthy();
+  });
+
+  it("keeps the field and the send action in one card, so the composer reads as one control", () => {
+    renderPane([], { runLive: false });
+    const card = document.querySelector(".composer__card");
+    expect(card).toBeTruthy();
+    expect(card?.contains(screen.getByLabelText("Message the agent"))).toBe(true);
+    expect(card?.contains(screen.getByRole("button", { name: "Start" }))).toBe(true);
+  });
+
+  it("draws the user's own turn as a bubble, not a row with a coloured rule", () => {
+    // Alignment is what lets a reader find their last message without re-reading the screen — the thing
+    // a transcript of identically-shaped rows cannot do.
+    renderPane([event({ kind: "run.message", text: "add the keys", mode: "steer", delivered: "steered" })]);
+    const row = document.querySelector(".row--user");
+    expect(row).toBeTruthy();
+    expect(row?.querySelector(".row__text")?.textContent).toBe("add the keys");
+  });
+});

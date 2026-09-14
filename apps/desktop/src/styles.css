@@ -494,15 +494,19 @@ body {
 
 .chip {
   flex: none;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 11px;
+  padding: 1px var(--space-1-5);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  /* Small text on a raised surface: measured in the browser at 3.83:1 with the muted tone, so the
+     chips read `--foreground` and let the *background* carry the quietness. */
+  color: var(--foreground);
   white-space: nowrap;
+  transition: background var(--motion-fade) var(--motion-ease);
 }
 
 .chip--quiet {
   background: var(--bg-active);
-  color: var(--text-muted);
+  color: var(--foreground);
 }
 
 .chip--warn {
@@ -556,19 +560,32 @@ body {
   font-size: 15px;
 }
 
+/* ── the pane: header, transcript, composer ────────────────────────────────
+   Built on the token sheet (`design/tokens.css`), which this window has been importing since the
+   scaffold landed and which this file had never read. What was here instead was an ad-hoc palette
+   with the same intent and none of the scales: every row the same 2px left rule, 11px meta text, 6px
+   gaps, no surfaces, and not one transition in a thousand lines. That is what a user means by flat,
+   and flat is what they call boring — the chat is where a session is actually spent, so it is the
+   surface that has to carry the document's numbers: content 15/1.6, the 820px measure, the 2/4/6/8/
+   12/16 rhythm, three control heights, and 150ms motion. All inherited; nothing invented here. */
+
 .pane {
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto 1fr auto;
   min-height: 0;
   height: 100%;
 }
 
 .pane__header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 10px 14px;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
 }
 
 .pane__title-group {
@@ -576,15 +593,17 @@ body {
 }
 
 .pane__title {
-  margin: 0 0 4px;
-  font-size: 14px;
-  font-weight: 600;
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.3;
+  letter-spacing: -0.01em;
 }
 
 .pane__meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-1-5);
 }
 
 .pane__actions {
@@ -593,86 +612,175 @@ body {
 
 .transcript {
   overflow-y: auto;
-  padding: 14px;
   min-height: 0;
+  padding: var(--space-6) var(--space-4) var(--space-4);
+  scroll-behavior: smooth;
+}
+
+/* The measure, on both states: a transcript that runs the full width of a 27-inch display is the
+   other half of "hard to read". */
+.transcript__list,
+.transcript__empty,
+.approval {
+  max-width: var(--content-max-width);
+  margin-inline: auto;
 }
 
 .transcript__empty {
-  max-width: 460px;
-  color: var(--text-muted);
+  padding-top: 8vh;
+  color: var(--foreground-muted);
 }
 
 .transcript__empty-title {
-  margin: 0 0 4px;
-  color: var(--text);
-  font-weight: 600;
+  margin: 0 0 var(--space-1);
+  color: var(--foreground);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
 }
 
 .transcript__empty-body {
   margin: 0;
+  font-size: var(--font-size-content);
+  line-height: 1.6;
+}
+
+/* Design law 6, made clickable: an empty state that teaches is good, one that starts the work is
+   better. A chip fills the composer — it does not send, because sending someone else's sentence
+   without them reading it is the opposite of helpful. */
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.suggestion {
+  padding: var(--space-1-5) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface-1);
+  color: var(--foreground-muted);
+  font: inherit;
+  font-size: var(--font-size-base);
+  cursor: pointer;
+  transition:
+    background var(--motion-fade) var(--motion-ease),
+    border-color var(--motion-fade) var(--motion-ease),
+    color var(--motion-fade) var(--motion-ease);
+}
+
+.suggestion:hover {
+  background: var(--surface-2);
+  border-color: var(--border-accent);
+  color: var(--foreground);
 }
 
 .transcript code {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-code);
+  color: var(--foreground);
 }
 
 /* ── approval (inline, never a modal) ──────────────────────────────────── */
 
 .approval {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: var(--space-3);
   align-items: center;
-  margin: 0 14px 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--warn);
-  border-left-width: 3px;
-  border-radius: var(--radius);
-  background: rgba(210, 153, 34, 0.08);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--status-warning);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
 }
 
 .approval__question {
-  margin: 0 0 2px;
-  font-weight: 600;
+  margin: 0 0 var(--space-0-5);
+  font-size: var(--font-size-content);
+  font-weight: var(--font-weight-semibold);
 }
 
 .approval__detail {
   margin: 0;
-  color: var(--text-muted);
-  font-size: 12px;
+  color: var(--foreground-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
 }
 
 .approval__actions {
   display: flex;
-  gap: 6px;
+  gap: var(--space-2);
   margin-left: auto;
 }
 
-/* ── composer ──────────────────────────────────────────────────────────── */
+/* ── composer: a card, not a textarea and a button ─────────────────────── */
 
 .composer {
+  padding: var(--space-3) var(--space-4) var(--space-4);
   border-top: 1px solid var(--border);
-  padding: 10px 14px 12px;
-  background: var(--bg-raised);
+  background: var(--surface-0);
+}
+
+.composer__card {
+  display: flex;
+  flex-direction: column;
+  max-width: var(--content-max-width);
+  margin-inline: auto;
+  padding: var(--space-2) var(--space-2) var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--surface-1);
+  transition:
+    border-color var(--motion-pop) var(--motion-ease),
+    box-shadow var(--motion-pop) var(--motion-ease);
+}
+
+/* The card is the field: a second ring inside a bordered card is two focus indicators for one
+   control, which is one of the Paseo defects this project deliberately did not copy. */
+.composer__card:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .composer__input {
   width: 100%;
-  resize: vertical;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  color: var(--text);
+  min-height: var(--control-field);
+  max-height: 200px;
+  padding: var(--space-2) var(--space-2) 0;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
   font: inherit;
+  font-size: var(--font-size-content);
+  line-height: 1.5;
+  resize: none;
+}
+
+.composer__input:focus-visible {
+  outline: none;
+}
+
+.composer__notice {
+  margin: 0;
+  padding: 0 var(--space-2) var(--space-1);
+  color: var(--status-danger);
+  font-size: var(--font-size-sm);
 }
 
 .composer__toolbar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 8px;
+  gap: var(--space-2);
+  padding: 0 var(--space-1) var(--space-1);
+}
+
+.composer__hint {
+  margin-left: auto;
+  color: var(--foreground-muted);
+  font-size: var(--font-size-sm);
 }
 
 /* ── command center ────────────────────────────────────────────────────── */
@@ -932,122 +1040,121 @@ body {
 
 /* ────────────────────────────── the transcript ────────────────────────────── */
 
-/* A list, not a log: rows are ordered, and the numbered list is what makes "the third thing it did"
-   a sentence a user can say. The numbers themselves are not shown — see `.transcript__list`. */
+/* A list, not a log: rows are ordered, and the numbered list is what makes "the third thing it did" a
+   sentence a user can say. The numbers themselves are not shown. */
 .transcript__list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-4);
 }
 
 .row {
-  border-left: 2px solid transparent;
-  padding-left: 10px;
-}
-
-/* The user's own words are set apart by weight and a rule, not by a bubble colour: at ten rows the
-   colour stops meaning anything and the alignment still does. */
-.row--user {
-  border-left-color: var(--accent, #4c8dff);
-}
-
-.row--user .row__text {
-  font-weight: 600;
-}
-
-.row--assistant {
-  border-left-color: var(--border, #2a2d34);
-}
-
-.row--thought {
-  border-left-color: transparent;
-  color: var(--text-dim, #8b8f98);
+  min-width: 0;
 }
 
 .row__text {
   margin: 0;
+  font-size: var(--font-size-content);
+  line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .row__meta {
-  margin: 4px 0 0;
-  font-size: 11px;
-  color: var(--text-dim, #8b8f98);
+  margin: var(--space-1) 0 0;
+  /* `--foreground-muted`, not the extra-muted tone: this is 12px text, and the extra-muted value
+     measures 3.5:1 on these surfaces — under the 4.5:1 floor. Extra-muted stays for icons. */
+  color: var(--foreground-muted);
+  font-size: var(--font-size-sm);
 }
 
+/* The user's own words are a bubble, set to the right. The rule-and-weight treatment this replaces
+   made every row the same shape, which is why a long transcript read as a wall: alignment is what
+   lets a reader find their last message without reading the screen. */
+.row--user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.row--user .row__text {
+  max-width: 80%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl) var(--radius-xl) var(--radius-sm) var(--radius-xl);
+  background: var(--surface-2);
+}
+
+.row--user .row__meta {
+  text-align: right;
+}
+
+.row--assistant .row__text {
+  color: var(--foreground);
+}
+
+.row--thought {
+  color: var(--foreground-muted);
+}
+
+.row--thought summary {
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+}
+
+.row--thought .row__text {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-base);
+}
+
+/* A tool call is a card: it is a distinct *kind* of thing in the conversation, and the status has to
+   be readable while scrolling, so the running/failed colour sits on the border of a surface. */
 .row--tool {
-  border-left-color: var(--border, #2a2d34);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  transition: border-color var(--motion-fade) var(--motion-ease);
 }
 
 .row--tool-running {
-  border-left-color: var(--accent, #4c8dff);
+  border-color: var(--accent);
 }
 
 .row--tool-failed {
-  border-left-color: var(--danger, #e05c5c);
+  border-color: var(--status-danger);
 }
 
 .row__tool-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1-5);
   margin: 0;
-  font-size: 12px;
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-code);
+  font-weight: var(--font-weight-semibold);
 }
 
 /* Tool input and output, bounded and scrollable: an agent that cats a large file must not push the
    rest of the transcript off screen. */
 .row__code {
-  margin: 4px 0 0;
-  padding: 6px 8px;
-  max-height: 180px;
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  max-height: 220px;
   overflow: auto;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 4px;
-  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-code);
+  line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .row--note-quiet .row__meta {
   opacity: 0.75;
-}
-
-.row--note-warn .row__meta {
-  color: var(--warn, #e0a03c);
-}
-
-.row--note-error .row__meta {
-  color: var(--danger, #e05c5c);
-}
-
-/* A gap is a statement about the transcript's completeness, given room so it is not mistaken for a
-   line the agent wrote. */
-.transcript__gap {
-  margin: 0 0 12px;
-  padding: 8px 10px;
-  border-radius: 4px;
-  background: rgba(224, 160, 60, 0.12);
-  font-size: 12px;
-}
-
-/* An answered approval stays where it was, and stops looking like a question. */
-.approval--answered {
-  opacity: 0.7;
-}
-
-.approval__resolved {
-  font-size: 12px;
-  color: var(--text-dim, #8b8f98);
-}
-
-.composer__notice {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--warn, #e0a03c);
 }
