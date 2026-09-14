@@ -35,8 +35,9 @@
 import type { JSX } from "react";
 
 import { GearIcon, HelpIcon, ImportIcon, PlusIcon, ServerIcon } from "./icons.js";
+import { RowMenu } from "./RowMenu.js";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   type HarnessId,
   type Project,
@@ -64,6 +65,25 @@ export interface CoderSidebarProps {
   onNewTask: (projectId: string) => void;
   onAddProject: () => void;
   onOpenProjectSettings: (project: Project) => void;
+  /**
+   * Take a project out of the rail.
+   *
+   * "Remove", not "Delete", for the same reason the task menu says Remove: the daemon drops the row and
+   * archives that project's tasks (`coder.removeProject`), and nothing on disk — no folder, no file, no
+   * transcript — is touched. Shell-level rather than local because the scope the settings pane is
+   * showing has to fall back when the project it was showing stops existing.
+   */
+  onRemoveProject: (projectId: string) => void;
+  /** Rename a task. The daemon stores the title (`coder.updateTask`); the row edits it in place. */
+  onRenameTask: (taskId: string, title: string) => void;
+  /**
+   * Take a task out of the rail.
+   *
+   * Here and not in the pane: see `TaskRow`, and `TaskPane`'s header comment. The daemon archives it
+   * (`coder.archiveTask`) — the folder, the files and the transcript on disk are untouched, which is what
+   * the confirmation says.
+   */
+  onRemoveTask: (taskId: string) => void;
   onOpenCommandCenter: () => void;
   onOpenSettings: () => void;
   /**
@@ -222,6 +242,8 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                 row={row}
                 active={row.task.id === props.activeTaskId}
                 onSelect={props.onSelect}
+                onRenameTask={props.onRenameTask}
+                onRemoveTask={props.onRemoveTask}
               />
             ))
         ) : (
@@ -263,15 +285,34 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                       {harnessBadge(group.defaultHarness)}
                     </span>
                   </button>
-                  <button
-                    type="button"
-                    className="button button--ghost button--icon"
-                    aria-label={t("sidebar.project.settings.aria", { project: group.project.label })}
-                    title={t("sidebar.project.settings")}
-                    onClick={() => props.onOpenProjectSettings(group.project)}
-                  >
-                    ⋯
-                  </button>
+                  {/* The row's `…`, which used to be a bare `⋯` that opened project settings and nothing
+                      else — a button whose only item had to be its whole accessible name. It is a menu
+                      now, and project settings is one item in it rather than the button's identity.
+                      "Project settings" keeps the key it always had (`sidebar.project.settings`), so the
+                      action is still named in the same words as the pane it opens. */}
+                  <RowMenu
+                    label={t("sidebar.project.menu.aria", { project: group.project.label })}
+                    title={t("sidebar.project.menu.title")}
+                    actions={[
+                      {
+                        id: "settings",
+                        label: t("sidebar.project.settings"),
+                        onSelect: () => props.onOpenProjectSettings(group.project),
+                      },
+                      {
+                        id: "new-task",
+                        label: t("sidebar.project.menu.newTask"),
+                        onSelect: () => props.onNewTask(group.project.id),
+                      },
+                    ]}
+                    confirm={{
+                      label: t("sidebar.project.remove"),
+                      ariaLabel: t("sidebar.project.remove.aria"),
+                      question: t("sidebar.project.remove.confirm", { project: group.project.label }),
+                      cta: t("sidebar.project.remove.cta"),
+                      onConfirm: () => props.onRemoveProject(group.project.id),
+                    }}
+                  />
                 </div>
 
                 {isCollapsed ? null : (
@@ -293,6 +334,8 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                         row={row}
                         active={row.task.id === props.activeTaskId}
                         onSelect={props.onSelect}
+                        onRenameTask={props.onRenameTask}
+                        onRemoveTask={props.onRemoveTask}
                       />
                     ))}
                     {group.rows.length === 0 && props.tasksUnknown !== true ? (
@@ -373,49 +416,160 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
  * The dot answers "does this need me?" at a glance down a column of rows; the chip spells it out
  * for the row you have actually stopped on. Words on every row would make the column unreadable
  * exactly when it matters most — when ten agents are running.
+ *
+ * ## Why the row is a `div` with a button inside it, now
+ *
+ * It was a `<button>` with a `data-testid` on it, and it could not gain a menu without becoming a
+ * button inside a button — invalid HTML, which browsers resolve by dropping one of the two nested
+ * interactive elements and taking its click behaviour with it. So the row is the layout, `.task-row`,
+ * and **selecting the task is a button inside it** (`task-row__select`) which keeps the
+ * `data-testid={`task-${task.id}`}`. That placement is the point: the testid still sits on the element
+ * a click has to land on to open the task, so the assertion in `sidebar.test.tsx` — click the row,
+ * `onSelect` is called with this id — means exactly what it always meant.
+ *
+ * ## Removing a task happens here, and no longer in the pane
+ *
+ * `TaskPane`'s header used to carry a "Remove task" button with its own inline confirmation. It does not
+ * any more: this row is where a task *is*, it is the surface the action changes (the row leaves the
+ * rail), and one action with one home is better than two controls that have to be kept honest
+ * separately. The wording did not move with it — the menu reuses `task.remove.*`, the very keys the pane
+ * used, so the confirmation still says the same true sentence: it leaves the rail and is archived, and
+ * the folder and its files are not touched.
  */
 function TaskRow(input: {
   row: ProjectGroup["rows"][number];
   active: boolean;
   onSelect: (taskId: string) => void;
+  onRenameTask: (taskId: string, title: string) => void;
+  onRemoveTask: (taskId: string) => void;
 }): JSX.Element {
   const t = useT();
   const task = input.row.task;
   const needsHuman = statusNeedsHuman(task.status);
+  const name = task.title || t("task.untitled");
+
+  /** The row is being renamed, so the title slot is a field instead of a button. */
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState(task.title);
+  /**
+   * Escape means "keep the name it had", and blur — this field's commit path — must not then save the text
+   * the user just cancelled. A ref rather than state because it has to be read *during* the blur handler
+   * that runs in the same tick, before React has re-rendered anything.
+   */
+  const cancelled = useRef(false);
+  const renameField = useRef<HTMLInputElement>(null);
+
+  const commitRename = (): void => {
+    setRenaming(false);
+    if (cancelled.current) {
+      cancelled.current = false;
+      return;
+    }
+    const value = draft.trim();
+    // An emptied field is not a new name — it is a field somebody cleared. The app's own word for a task
+    // with no title is "Untitled", but that is the state a *new* task is in and a rename is not a way to
+    // get back to it, so a blank field leaves the name alone rather than storing one.
+    if (value !== "" && value !== task.title) input.onRenameTask(task.id, value);
+  };
+
   return (
-    <button
-      type="button"
-      className={`task-row${input.active ? " task-row--active" : ""}`}
-      onClick={() => input.onSelect(task.id)}
-      data-testid={`task-${task.id}`}
-    >
-      <span
-        className={`dot ${dotClassFor(task.status)}`}
-        aria-label={t(statusKey(task.status))}
-        title={t(statusKey(task.status))}
-      />
-      <span className="task-row__body">
-        <span className="task-row__title-line">
-          {/* A task created from "+ New" has no name yet — the first message becomes one. An empty
-              span here is a row a user cannot click on purpose, so the gap says what it is. */}
-          <span className="task-row__title">{task.title || t("task.untitled")}</span>
-          {needsHuman ? (
-            <span className="chip chip--warn">{t(statusKey(task.status))}</span>
-          ) : null}
-        </span>
-        <span className="task-row__sub">
-          <span className="task-row__harness">{harnessBadge(task.harness)}</span>
-          {task.worktree ? (
-            <span className="task-row__branch" title={task.worktree.path}>
-              {task.worktree.branch}
+    <div className={`task-row${input.active ? " task-row--active" : ""}`}>
+      {renaming ? (
+        <input
+          ref={renameField}
+          className="input task-row__rename"
+          // The current title, so the user edits what the row says rather than retyping it.
+          value={draft}
+          autoFocus
+          aria-label={t("sidebar.task.rename.aria")}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commitRename();
+              return;
+            }
+            if (event.key === "Escape") {
+              // Before the shell's global Escape ("stop the agent"); a user cancelling a rename must not
+              // also kill a run they were not looking at.
+              event.stopPropagation();
+              // **The flag first, then the blur, and both on purpose.** Blur is where this field commits,
+              // so cancelling has to go *through* it rather than around it: unmounting the field would
+              // leave the commit path untested and would depend on whether the platform fires a blur for a
+              // removed element (it does not). Handing the blur its own cancellation is the version that is
+              // true on every platform — and the one a test can hold.
+              cancelled.current = true;
+              renameField.current?.blur();
+            }
+          }}
+          // Committed on blur as well as Enter, on `ModelChoice`'s rule: a name typed and then clicked
+          // away from is still a name the user meant.
+          onBlur={commitRename}
+        />
+      ) : (
+        <button
+          type="button"
+          className="task-row__select"
+          onClick={() => input.onSelect(task.id)}
+          data-testid={`task-${task.id}`}
+        >
+          <span
+            className={`dot ${dotClassFor(task.status)}`}
+            aria-label={t(statusKey(task.status))}
+            title={t(statusKey(task.status))}
+          />
+          <span className="task-row__body">
+            <span className="task-row__title-line">
+              {/* A task created from "+ New" has no name yet — the first message becomes one. An empty
+                  span here is a row a user cannot click on purpose, so the gap says what it is. */}
+              <span className="task-row__title">{name}</span>
+              {needsHuman ? (
+                <span className="chip chip--warn">{t(statusKey(task.status))}</span>
+              ) : null}
             </span>
-          ) : null}
-          {task.hostId && task.hostId !== "local" ? (
-            <span className="chip chip--quiet">{task.hostId}</span>
-          ) : null}
-        </span>
-      </span>
-    </button>
+            <span className="task-row__sub">
+              <span className="task-row__harness">{harnessBadge(task.harness)}</span>
+              {task.worktree ? (
+                <span className="task-row__branch" title={task.worktree.path}>
+                  {task.worktree.branch}
+                </span>
+              ) : null}
+              {task.hostId && task.hostId !== "local" ? (
+                <span className="chip chip--quiet">{task.hostId}</span>
+              ) : null}
+            </span>
+          </span>
+        </button>
+      )}
+
+      <RowMenu
+        // The trigger names the row it acts on: "Actions for Review the migration diff", so a screen
+        // reader announcing eleven of these can tell which row each one belongs to.
+        label={t("sidebar.task.menu.aria", { task: name })}
+        title={t("sidebar.task.menu.title")}
+        actions={[
+          {
+            id: "rename",
+            label: t("sidebar.task.rename"),
+            onSelect: () => {
+              // Cleared as the edit *starts*, not only where the commit consumes it: the guard is spent by
+              // the commit it cancels, and an edit that ended without one — a field that was never focused,
+              // a row unmounted mid-edit — must not leave a flag that swallows the next rename's commit.
+              cancelled.current = false;
+              setDraft(task.title);
+              setRenaming(true);
+            },
+          },
+        ]}
+        confirm={{
+          label: t("task.remove"),
+          ariaLabel: t("task.remove.aria"),
+          question: t("task.remove.confirm", { title: name }),
+          cta: t("task.remove.cta"),
+          onConfirm: () => input.onRemoveTask(task.id),
+        }}
+      />
+    </div>
   );
 }
 

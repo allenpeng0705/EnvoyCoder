@@ -128,12 +128,10 @@ function renderPane(
   onAnswer: ReturnType<typeof vi.fn>;
   onStart: ReturnType<typeof vi.fn>;
   onCancel: ReturnType<typeof vi.fn>;
-  onRemove: ReturnType<typeof vi.fn>;
 } {
   const onSend = vi.fn();
   const onAnswer = vi.fn();
   const onStart = vi.fn();
-  const onRemove = vi.fn();
   const onCancel = vi.fn();
   const result = render(
     <TaskPane
@@ -144,12 +142,11 @@ function renderPane(
       onSend={onSend}
       onAnswer={onAnswer}
       onStart={onStart}
-      onRemove={onRemove}
       onCancel={onCancel}
       {...overrides}
     />,
   );
-  return Object.assign(result, { onSend, onAnswer, onStart, onCancel, onRemove });
+  return Object.assign(result, { onSend, onAnswer, onStart, onCancel });
 }
 
 describe("the pane's header", () => {
@@ -924,26 +921,9 @@ describe("the model control when the list came from a session", () => {
   });
 });
 
-describe("removing a task", () => {
-  it("asks before it removes, and the destructive button exists only inside the question", () => {
-    // Design law 3: the red appears inside a confirmation, never on a row. So the resting control is a
-    // quiet word, and the danger button does not exist until the user has said what they mean.
-    const { onRemove } = renderPane([], { runLive: false });
-    expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Remove task" }));
-    const card = screen.getByRole("alertdialog", { name: "Remove this task" });
-    expect(within(card).getByText(/leaves the rail and is archived/)).toBeTruthy();
-
-    fireEvent.click(within(card).getByRole("button", { name: "Remove" }));
-    expect(onRemove).toHaveBeenCalledWith("w1");
-  });
-
-  it("lets the user change their mind without removing anything", () => {
-    const { onRemove } = renderPane([], { runLive: false });
-    fireEvent.click(screen.getByRole("button", { name: "Remove task" }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(onRemove).not.toHaveBeenCalled();
-    expect(screen.queryByRole("alertdialog", { name: "Remove this task" })).toBeNull();
-  });
-});
+// **The pane no longer removes a task, and the two tests that used to live here moved rather than
+// died.** The control is the task's own row in the rail (`sidebar.test.tsx`, "a task's row menu"), which
+// is the surface the action changes: the row is what leaves. What those two tests encoded — *ask before
+// removing, and Cancel removes nothing* — is asserted there, against the same `task.remove.*` copy this
+// header used to render. There is deliberately nothing to assert here: a pane that removed a task would
+// be a second control for one destructive action, which is the thing the move was made to avoid.

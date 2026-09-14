@@ -69,9 +69,26 @@ export const en = {
   "sidebar.project.attention": "Tasks waiting on you",
   "sidebar.project.agent": "The agent new tasks in this project start with",
   "sidebar.project.settings": "Project settings",
-  "sidebar.project.settings.aria": "Project settings for {project}",
   "sidebar.project.newTask": "+ New",
   "sidebar.project.newTask.title": "Start a task in {project}",
+  /* ── the row menus ──
+     One trigger per row, and its accessible name **names the row it acts on**. "Actions" alone is a
+     button a screen reader announces once per task with no way to tell which task it belongs to —
+     which is the one thing a menu on a row must not be. The items themselves reuse the labels the rest
+     of the app already uses for the same actions (`sidebar.project.settings`, `task.remove`, and the
+     `task.remove.*` confirmation), so one action is worded once. */
+  "sidebar.project.menu.aria": "Actions for {project}",
+  "sidebar.project.menu.title": "Project actions",
+  "sidebar.project.menu.newTask": "New task",
+  "sidebar.project.remove": "Remove project",
+  "sidebar.project.remove.aria": "Remove this project",
+  "sidebar.project.remove.confirm":
+    "Remove “{project}” from EnvoyCoder? Its tasks leave the rail and are archived — nothing on disk is deleted.",
+  "sidebar.project.remove.cta": "Remove project",
+  "sidebar.task.menu.aria": "Actions for {task}",
+  "sidebar.task.menu.title": "Task actions",
+  "sidebar.task.rename": "Rename",
+  "sidebar.task.rename.aria": "New name for this task",
   "sidebar.tasks.empty": "No tasks here yet.",
   "sidebar.footer.add": "Add project",
   "sidebar.footer.host": "Host: {host}",

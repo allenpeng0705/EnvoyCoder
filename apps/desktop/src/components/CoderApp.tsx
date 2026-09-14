@@ -128,11 +128,11 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
   /**
    * Which settings the pane is showing: this machine's, or one project's.
    *
-   * The sidebar's per-project `⋯` button has always been labelled *"Project settings for {project}"*
-   * (`sidebar.project.settings.aria`) and always opened the **app** pane with the project discarded — a
-   * control that does something other than what it says, which is the same defect as a setting that
-   * does nothing. It now carries the project through, and the pane renders that project's defaults
-   * (`docs/settings-parity.md` §7.3, §8.1).
+   * The project row's menu item says "Project settings" (`sidebar.project.settings`) and carries the
+   * project through, so the pane renders that project's defaults (`docs/settings-parity.md` §7.3, §8.1).
+   * The item used to *be* the whole button, labelled *"Project settings for {project}"*, and it opened
+   * the **app** pane with the project discarded — a control that does something other than what it says,
+   * which is the same defect as a setting that does nothing.
    *
    * **An id, not the project object, and that is not a detail.** The first version stored the object it
    * was handed at click time — a snapshot — while the pane's rows read their current value from it and
@@ -144,7 +144,9 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    *
    * A project that disappears while the pane is open — removed in another window — falls back to the
    * app scope. That is the honest answer: the pane is titled "Settings", the rows are this machine's,
-   * and nothing claims to be editing a project that no longer exists.
+   * and nothing claims to be editing a project that no longer exists. Removing one *here* is the same
+   * case reached deliberately, and `removeProjectRow` clears the id so the fallback does not have to
+   * wait for the refetch the daemon's change event triggers.
    */
   const [settingsProjectId, setSettingsProjectId] = useState<string | undefined>(undefined);
   const settingsProject = useMemo(
@@ -172,6 +174,50 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    * A string translated once at arrival could not do that.
    */
   const [notice, setNotice] = useState<Notice | undefined>(undefined);
+
+  /**
+   * Take one project off the rail — the row menu's Remove, after its own inline confirmation.
+   *
+   * The daemon does the honest half of this: `coder.removeProject` drops the project row and **archives
+   * that project's tasks**, so they leave the rail without a folder, a file or a transcript on disk being
+   * touched. What the window has to add is the consequence the daemon cannot see — *which pane is open*.
+   *
+   * The id is cleared, and that is not belt-and-braces: `settingsProject` resolves the id against the
+   * live list on every render, so the pane falls back to the app scope either way, but clearing it here
+   * means the fallback happens in the same paint as the removal rather than after the refetch the
+   * daemon's `coder:state-changed` event triggers. A pane that spent a frame titled "Project settings for
+   * api" for a project that no longer exists is the exact thing requirement 5 of the removal work asks
+   * not to render.
+   *
+   * The open task needs nothing: `active` is derived from `state.tasks`, and the removal archives every
+   * task of this project, so the pane empties itself the moment the list arrives.
+   */
+  const removeProjectRow = async (projectId: string): Promise<void> => {
+    const removed = await props.actions.removeProject(projectId);
+    if (!removed.ok) {
+      setNotice(removed);
+      return;
+    }
+    setSettingsProjectId((current) => (current === projectId ? undefined : current));
+  };
+
+  /** Take one task off the rail — the row menu's Remove, after its own inline confirmation. */
+  const removeTaskRow = async (taskId: string): Promise<void> => {
+    // The daemon archives rather than deletes (`coder.archiveTask`), which is why the menu item says
+    // "Remove" and the question says the folder and its files are not touched.
+    const removed = await props.actions.archiveTask(taskId, true);
+    if (!removed.ok) {
+      setNotice(removed);
+      return;
+    }
+    if (activeId === taskId) setActiveId(undefined);
+  };
+
+  /** Rename a task from its own row. The refusal is shown, on the same rule as every other action. */
+  const renameTaskRow = async (taskId: string, title: string): Promise<void> => {
+    const renamed = await props.actions.updateTask({ id: taskId, title });
+    if (!renamed.ok) setNotice(renamed);
+  };
 
   /**
    * Why the rail would be empty for a reason other than "there is nothing in it".
@@ -338,6 +384,9 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
             }}
             onAddProject={() => openPalette({ commandId: "project.add" })}
             onOpenProjectSettings={openProjectSettings}
+            onRemoveProject={(projectId) => void removeProjectRow(projectId)}
+            onRenameTask={(taskId, title) => void renameTaskRow(taskId, title)}
+            onRemoveTask={(taskId) => void removeTaskRow(taskId)}
             onOpenCommandCenter={() => openPalette()}
             onOpenSettings={openAppSettings}
             unavailable={railUnavailable}
@@ -368,16 +417,6 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
           ) : active ? (
             <TaskPane
               task={active}
-              onRemove={async (taskId) => {
-                // The daemon archives rather than deletes (`coder.archiveTask`), which is why the control
-                // says "Remove": the rail forgets the task, the disk does not.
-                const removed = await props.actions.archiveTask(taskId, true);
-                if (!removed.ok) {
-                  setNotice(removed);
-                  return;
-                }
-                if (active.id === taskId) setActiveId(undefined);
-              }}
               project={projectFor(state.projects, active)}
               events={active.runId ? (state.runs[active.runId]?.events ?? []) : []}
               runLive={active.runId ? state.runs[active.runId]?.run.endedAt === undefined : false}

@@ -196,6 +196,8 @@ body {
 .select:focus-visible,
 .button:focus-visible,
 .task-row:focus-visible,
+.task-row__select:focus-visible,
+.row-menu__item:focus-visible,
 .project__header:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
@@ -400,19 +402,14 @@ body {
 
 /* ── task row ─────────────────────────────────────────────────────── */
 
+/* The row is the layout and the *hover/active surface*; selecting the task is the button inside it
+   (`.task-row__select`). That split is what made room for the row's `…` menu without nesting a button
+   inside a button — see the anatomy note on `TaskRow`. */
 .task-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: var(--row-height);
-  padding: 4px 8px 4px 22px;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
+  gap: 2px;
+  padding-right: 6px;
 }
 
 .task-row:hover {
@@ -421,6 +418,32 @@ body {
 
 .task-row--active {
   background: var(--bg-active);
+}
+
+.task-row__select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  min-height: var(--row-height);
+  padding: 4px 0 4px 22px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* The rename field takes the selector's place, so it inherits its box: same indent, same height, no
+   layout shift when a row starts being renamed. */
+.task-row__rename {
+  flex: 1;
+  min-width: 0;
+  height: var(--row-height);
+  margin-left: 22px;
+  font-size: inherit;
 }
 
 .task-row__body {
@@ -882,6 +905,80 @@ body {
   display: flex;
   gap: var(--space-2);
   margin-left: auto;
+}
+
+/* ── a row's "…" menu ──────────────────────────────────────────────────── */
+
+/* Anchored to the button that opened it and laid out right-aligned, so a popover on the last row of a
+   260px rail stays inside the rail instead of running off the window. */
+.row-menu {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+/* The trigger is a `.button--ghost.button--icon`, so it inherits the 28px control height and the quiet
+   resting colour. It stays visible rather than appearing on row hover: a control that only exists when
+   the pointer is over the row is invisible to touch and to a keyboard, and this one is the only route
+   to renaming or removing a task. */
+.row-menu__trigger {
+  color: var(--text-faint);
+}
+
+.row-menu__trigger[aria-expanded="true"] {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.row-menu__list {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: var(--space-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  box-shadow: 0 8px 24px var(--interaction-highlight);
+}
+
+.row-menu__item {
+  display: block;
+  width: 100%;
+  padding: var(--space-1-5) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.row-menu__item:hover {
+  background: var(--bg-hover);
+}
+
+/* The question, inside the same popover and over the same row. `.confirm` was written for the pane's
+   header (margins and all), so the panel's own spacing is reset here rather than the shared block
+   being bent into two shapes. */
+.row-menu .confirm {
+  margin: 0;
+  width: 260px;
+}
+
+/* The question is a popover's content, so it does not need the pane's content type size. */
+.row-menu .confirm__question {
+  font-size: var(--font-size-base);
+}
+
+.row-menu__confirm:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ── command center ────────────────────────────────────────────────────── */

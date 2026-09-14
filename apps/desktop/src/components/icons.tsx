@@ -106,3 +106,23 @@ export function SearchIcon({ size = 16 }: IconProps): JSX.Element {
     </svg>
   );
 }
+
+/**
+ * More — the row menu's "…".
+ *
+ * Drawn rather than typed, for the reason the header comment gives: the `⋯` this replaces was a text
+ * character, so its weight, baseline and optical size came from whatever font the platform picked and it
+ * sat differently in the rail than in any other surface. Three dots, `fill="currentColor"` and no stroke,
+ * because a stroked dot at this size is a ring.
+ */
+export function EllipsisIcon({ size = 16 }: IconProps): JSX.Element {
+  // `fill`/`stroke` after the spread: the shared frame is built for stroked outlines, and the dots win
+  // the override rather than a second frame function existing for one icon.
+  return (
+    <svg {...frame(size)} fill="currentColor" stroke="none">
+      <circle cx="5" cy="12" r="1.6" />
+      <circle cx="12" cy="12" r="1.6" />
+      <circle cx="19" cy="12" r="1.6" />
+    </svg>
+  );
+}

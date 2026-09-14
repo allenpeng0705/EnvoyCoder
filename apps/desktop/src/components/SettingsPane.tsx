@@ -80,9 +80,10 @@ export interface SettingsPaneProps {
   /**
    * The project this pane was opened for, if any.
    *
-   * Set by the sidebar's per-project `⋯` button, whose accessible name already promised this scope
-   * (`sidebar.project.settings.aria`). Absent means the app scope — the footer's Settings button and
-   * ⌘,.
+   * Set by "Project settings" in a project row's `…` menu (`CoderSidebar`), which is what the bare `⋯`
+   * used to be. The menu's trigger is named *"Actions for {project}"* rather than after this one action,
+   * so the scope is promised by the item the user picks and by the project the row belongs to. Absent
+   * means the app scope — the footer's Settings button and ⌘,.
    */
   project?: Project | undefined;
   /**

@@ -147,6 +147,9 @@ describe("the rest of the pane, in the same language", () => {
           onNewTask={vi.fn()}
           onAddProject={vi.fn()}
           onOpenProjectSettings={vi.fn()}
+          onRemoveProject={vi.fn()}
+          onRenameTask={vi.fn()}
+          onRemoveTask={vi.fn()}
           onOpenCommandCenter={vi.fn()}
           onOpenSettings={vi.fn()}
         />

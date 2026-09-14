@@ -22,6 +22,12 @@ source, extracts the sections it registers and the settings they read and write,
 them has no verdict here. What it can and cannot see is §10, and it is worth reading before trusting a
 green run.
 
+**The `file:line` citations are the snapshot taken when each entry was written, and they are re-derived
+rather than trusted.** Code moves for reasons that have nothing to do with settings: the row-menu work
+(§8.1 item 2's control became a menu — `components/RowMenu.tsx`) moved lines in `CoderApp.tsx`,
+`CoderSidebar.tsx` and `TaskPane.tsx`, and earlier slices moved others. A citation that no longer lands
+on the call it names is stale, not evidence against the entry; read the line around it.
+
 ---
 
 ## 1. How to read a verdict
@@ -459,11 +465,12 @@ own pass before we build our per-project defaults screen.
 **Section verdict: `honour-able with work`.** This is our own `docs/paseo-feature-parity.md` #17, and
 the model already exists: `resolveTaskDefaults` (`packages/task-model/src/index.ts:88-105`) already
 resolves explicit → project → app → fallback, and `store.ts:330-332` already feeds it app defaults.
-What is missing is the screen. **Note the live bug in this area today:** the sidebar renders a project
-row button labelled *"Project settings for {project}"* (`CoderSidebar.tsx:266-272`) whose handler is
-`onOpenProjectSettings={() => setSettingsOpen(true)}` (`CoderApp.tsx:294`) — it opens **app** settings
-and discards the project argument. That control currently does something other than what it says,
-which is the same defect class as a setting that does nothing.
+What is missing is the screen. **The bug this area had is fixed, and it is worth remembering what it
+was:** the sidebar rendered a project row button labelled *"Project settings for {project}"* whose
+handler is `onOpenProjectSettings={() => setSettingsOpen(true)}` — it opened **app** settings and
+discarded the project argument, the same defect class as a setting that does nothing. §8.1 item 2 is
+the fix, and the control is a row menu now (`components/RowMenu.tsx`): its trigger is named *"Actions
+for {project}"*, and *"Project settings"* is an item inside it that carries the project through.
 
 ### 5.3 `connections`
 
@@ -810,18 +817,20 @@ against the rest of the app, each with its present state:
    **Now:** three headings — *General*, *New tasks start with*, *Safety* — one column, in the shape
    §8.1 asked for. Still not a copied sidebar, and it should not become one until the pane is four
    times this size.
-2. **"Project settings" opens app settings.** `CoderSidebar.tsx:266-272` renders a per-project `⋯`
-   button whose accessible name is *"Project settings for {project}"*
-   (`sidebar.project.settings.aria`, interpolated with the project label) and whose handler was
+2. **"Project settings" opens app settings.** `CoderSidebar.tsx` rendered a per-project `⋯` button
+   whose accessible name was *"Project settings for {project}"* (`sidebar.project.settings.aria`,
+   interpolated with the project label) and whose handler was
    `onOpenProjectSettings={() => setSettingsOpen(true)}` (`CoderApp.tsx:294`) — the project argument
    dropped on the floor. This is the §7.2 defect class in the UI layer: a control labelled with a
-   scope it does not have.
-   **Now:** the button carries the project through (`openProjectSettings`, `CoderApp.tsx:146-150`) and
+   scope it does not have. (That key is gone: the control is a row menu now, so its trigger is named
+   *"Actions for {project}"* and *"Project settings"* is the item inside it —
+   `components/RowMenu.tsx`, `CoderSidebar.tsx`.)
+   **Now:** the action carries the project through (`openProjectSettings`, `CoderApp.tsx:163-166`) and
    the pane renders that project's defaults (`SettingsPane.tsx:307-393`), which is the third scope
    §7.4 said had no screen. `coder.updateProject` gained the defaults patch it needed for it
    (`packages/protocol/src/rpc.ts:1093-1107`, `store.ts:293-308`). The shell holds the project's **id**
    and resolves it against `state.projects` on every render, rather than keeping the object it was
-   handed — `CoderApp.tsx:128-155` says why that is load-bearing, and `test/settings-scope.test.tsx`
+   handed — `CoderApp.tsx:128-172` says why that is load-bearing, and `test/settings-scope.test.tsx`
    fails on a snapshot: because a project's defaults *replace*, a snapshot meant the second edit in a
    session wrote the first one away.
 3. **The daemon's notes are the best thing in the pane, and they are not a setting.** The quarantined

@@ -27,7 +27,7 @@
 /** @vitest-environment jsdom */
 import type { JSX } from "react";
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CoderSettings, Project } from "@envoycoder/protocol";
@@ -107,16 +107,19 @@ function stateWith(over: Partial<CoderState> = {}): CoderState {
 function show(over: Partial<CoderState> = {}): {
   updateProject: ReturnType<typeof vi.fn>;
   updateSettings: ReturnType<typeof vi.fn>;
+  removeProject: ReturnType<typeof vi.fn>;
   rerender: (next: Partial<CoderState>) => void;
 } {
   const updateProject = vi.fn(async () => ({ ok: true as const, project }));
   const updateSettings = vi.fn(async () => ({ ok: true as const }));
+  const removeProject = vi.fn(async (): Promise<unknown> => ({ ok: true }));
   const actions = {
     createTask: vi.fn(),
     startRun: vi.fn(),
     updateTask: vi.fn(async () => ({ ok: true as const })),
     addProject: vi.fn(),
-    removeProject: vi.fn(),
+    removeProject,
+    archiveTask: vi.fn(),
     updateProject,
     openTask: vi.fn(),
     sendToRun: vi.fn(),
@@ -135,13 +138,23 @@ function show(over: Partial<CoderState> = {}): {
   return {
     updateProject,
     updateSettings,
+    removeProject,
     rerender: (next) => rerenderRaw(view({ ...over, ...next })),
   };
 }
 
-/** The button the sidebar draws for one project, by the name it announces. */
+/**
+ * Reach one project's defaults the way a user does now: the row's `…`, then "Project settings".
+ *
+ * It used to be one click — the `⋯` **was** project settings, which is why its accessible name said so.
+ * The row's button is a menu these days and the item is inside it, so the assertions below are about the
+ * same journey, one leg longer. What they still prove is unchanged: the scope is reachable from the
+ * project's own row, and the pane it opens is looking at the *live* project rather than a snapshot.
+ */
 const openProject = (label: string): void => {
-  fireEvent.click(screen.getByLabelText(`Project settings for ${label}`));
+  fireEvent.click(screen.getByLabelText(`Actions for ${label}`));
+  const menu = screen.getByRole("menu", { name: `Actions for ${label}` });
+  fireEvent.click(within(menu).getByRole("menuitem", { name: "Project settings" }));
 };
 
 describe("a project's settings on the project's own row", () => {
@@ -223,6 +236,41 @@ describe("a project's settings on the project's own row", () => {
       id: project.id,
       defaults: { model: "deepseek/deepseek-chat", harness: "deepseek-harness" },
     });
+  });
+
+  it("falls back to this machine when the project is removed from its own row", async () => {
+    // The same fallback, reached deliberately instead of from another window — and the half the daemon
+    // cannot do for us. `coder.removeProject` drops the row and archives that project's tasks; which pane
+    // is open is the window's own business, and a pane still titled "Project settings for api" for a
+    // project that no longer exists is exactly what this asserts is not rendered.
+    const { removeProject, rerender } = show();
+    openProject("api");
+    expect(screen.getByRole("heading", { name: "Project settings for api" })).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("Actions for api"));
+    fireEvent.click(
+      within(screen.getByRole("menu", { name: "Actions for api" })).getByRole("menuitem", {
+        name: "Remove project",
+      }),
+    );
+    fireEvent.click(
+      within(screen.getByRole("alertdialog", { name: "Remove this project" })).getByRole("button", {
+        name: "Remove project",
+      }),
+    );
+
+    await vi.waitFor(() => expect(removeProject).toHaveBeenCalledWith(project.id));
+    // The fallback happens on the *answer*, not on the refetch: `state.projects` still holds this project
+    // at this point, and the pane is already this machine's — which is what keeps the window from
+    // spending a frame on a project that no longer exists.
+    await vi.waitFor(() =>
+      expect(screen.queryByRole("heading", { name: "Project settings for api" })).toBeNull(),
+    );
+    expect(screen.getByRole("heading", { name: "Settings" })).toBeTruthy();
+
+    rerender({ projects: [] });
+    expect(screen.queryByRole("heading", { name: "Project settings for api" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Settings" })).toBeTruthy();
   });
 
   it("falls back to this machine's settings when the project is gone", () => {
