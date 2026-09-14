@@ -115,6 +115,28 @@ describe("starting a task from the rail", () => {
     expect(document.querySelector(".palette")).toBeNull();
   });
 
+  it("reuses the empty chat it already opened, instead of leaving a second unnamed row", () => {
+    // Pressing "+ New" twice is what a user does when the first press looks like nothing happened; the
+    // draft is the answer to that, and the task they have already talked to is work, not a draft.
+    const { createTask } = show({
+      tasks: [
+        {
+          id: "draft-1",
+          projectId: project.id,
+          title: "",
+          cwd: project.path,
+          harness: "envoy-harness",
+          status: "idle",
+          createdAt: "2026-09-14T12:00:00.000Z",
+          updatedAt: "2026-09-14T12:00:00.000Z",
+          hostId: "local",
+        },
+      ],
+    });
+    fireEvent.click(screen.getByText("+ New"));
+    expect(createTask).not.toHaveBeenCalled();
+  });
+
   it("shows the untitled task as this app's word for it, not an empty row", () => {
     show({
       tasks: [

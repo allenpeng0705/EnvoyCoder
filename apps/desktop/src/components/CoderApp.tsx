@@ -99,6 +99,19 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    */
   const startNewTask = async (projectId: string, title = ""): Promise<void> => {
     setNotice(undefined);
+    // **The empty chat is a draft, and a draft is reused.** Paseo's helper is called `ensureWorkspace`
+    // for the same reason: pressing "+ New" twice because the first press looked like nothing happened
+    // should not leave two unnamed rows behind. Only an unnamed task with nothing running counts — a task
+    // that has been talked to is work, and the next press is asking for more work.
+    if (title === "") {
+      const draft = state.tasks.find(
+        (task) => task.projectId === projectId && task.title === "" && task.runId === undefined,
+      );
+      if (draft) {
+        setActiveId(draft.id);
+        return;
+      }
+    }
     const created = await props.actions.createTask({ projectId, title });
     if (!created.ok) {
       setNotice(created);
