@@ -97,8 +97,6 @@ export const fr: Catalogue = {
   "palette.addProject.needs": "Quel dossier ? Collez son chemin complet.",
   "palette.addProject.needsPlaceholder": "/Users/you/work/repo",
   "palette.newTask.title": "Nouvelle tâche dans {project}",
-  "palette.newTask.label": "Que doit faire l'agent ?",
-  "palette.newTask.placeholder": "Décrivez la tâche",
   "palette.openTask.subtitle": "Ouvrir cette tâche",
   "palette.pairPhone.title": "Associer un téléphone",
   "palette.pairPhone.subtitle": "Afficher un code que l'appli mobile peut scanner",
@@ -122,6 +120,7 @@ export const fr: Catalogue = {
 
   /* ── the task pane, its transcript and its composer ── */
   "task.aria": "Tâche {title}",
+  "task.untitled": "Sans titre",
   "task.meta.agent": "L'agent qui exécute cette tâche",
   "task.meta.cwd": "Dossier de travail : {path}",
   "task.meta.host": "Ordinateur qui exécute cette tâche",

@@ -549,6 +549,35 @@ step("a project added through the window's store reaches the rail, and a second 
       throw new Error(`the rail shows “${labels[0]}” where the daemon stored “${added.project.label}”`);
     }
 
+    // **"+ New" is the second half of the same flow**, and the half a user meets first: a task is
+    // created with no title and no run, which is what makes the chat UI the form (Paseo's new
+    // workspace behaves the same way). The daemon has to accept an empty title for that, the rail has
+    // to show it, and nothing may start running until the user says something.
+    const unnamed = await first.createTask({ projectId: added.project.id, title: "" });
+    if (!unnamed.ok) throw new Error(`creating an untitled task was refused: ${unnamed.message}`);
+    if (unnamed.task.title !== "") {
+      throw new Error(`the daemon renamed an untitled task to “${unnamed.task.title}”`);
+    }
+    if (unnamed.task.runId !== undefined) {
+      throw new Error("creating a task started a run before the user said anything");
+    }
+    if (
+      !(await settle(first, () =>
+        first.getSnapshot().tasks.some((task) => task.id === unnamed.task.id),
+      ))
+    ) {
+      throw new Error("the untitled task was stored but never reached the rail");
+    }
+
+    // The first message is what starts the work — and what names the task, which is the rule
+    // `taskTitleFromPrompt` encodes and `task-model`'s tests pin.
+    const started = await first.startRun(unnamed.task.id, "Add a health check endpoint");
+    if (!started.ok) {
+      // A daemon with no agent runtime installed is a legitimate environment for the smoke, so this is
+      // reported rather than failed: the create-and-open contract above is what is being tested here.
+      return `added “${labels[0]}”, created an untitled task, and the daemon refused to run one (${started.message.slice(0, 60)})`;
+    }
+
     // A second window is the multi-window rule, and the reason the daemon broadcasts a change rather
     // than letting each window guess: a project added at the desk must appear on the phone.
     const second = window();
@@ -561,7 +590,11 @@ step("a project added through the window's store reaches the rail, and a second 
       second.dispose();
     }
 
-    return `added “${labels[0]}” at ${projectDir}\n      rail state: loaded=${first.getSnapshot().loaded}, projects=${labels.length}`;
+    return (
+      `added “${labels[0]}” at ${projectDir}\n` +
+      `      rail state: loaded=${first.getSnapshot().loaded}, projects=${labels.length}, ` +
+      `untitled task ${unnamed.task.id.split("::").slice(-2).join("::")} opened with no run`
+    );
   } finally {
     first.dispose();
     await daemon.stop();

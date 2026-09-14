@@ -231,3 +231,38 @@ describe("the project row as the product registers it", () => {
     expect(onAddProject).toHaveBeenCalledWith("/Users/you/work/repo");
   });
 });
+
+describe("the task row as the product registers it", () => {
+  it("creates the task and opens its chat, instead of asking for a prompt first", () => {
+    // The reported friction, and Paseo's model: *"new workspace is to start a new chat session and it
+    // gave the chatting UI directly"*. Choosing the row is the decision; the task's own composer is
+    // where the prompt goes, and the first message names the task.
+    const t = createTranslator("en", CATALOGUES.en).t;
+    const onNewTask = vi.fn();
+    const project = {
+      id: "local::/work/api",
+      path: "/work/api",
+      label: "api",
+      hostId: "local",
+      addedAt: "2026-09-01T09:00:00.000Z",
+    };
+    const contributions = buildCommandContributions({
+      t,
+      projects: [project],
+      tasks: [],
+      onAddProject: vi.fn(),
+      onNewTask,
+      onOpenSettings: vi.fn(),
+      onPairPhone: vi.fn(),
+      onToggleRail: vi.fn(),
+      onRevealTask: vi.fn(),
+    });
+
+    render(<CommandCenter open onClose={vi.fn()} contributions={contributions} />);
+    fireEvent.click(screen.getByText("New task in api"));
+
+    // No stage, no label, nothing typed: the task exists now and its chat is the form.
+    expect(document.querySelector(".palette__stage-label")).toBeNull();
+    expect(onNewTask).toHaveBeenCalledWith(project.id, "");
+  });
+});

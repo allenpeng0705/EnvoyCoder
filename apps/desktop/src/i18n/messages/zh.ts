@@ -97,8 +97,6 @@ export const zh: Catalogue = {
   "palette.addProject.needs": "哪个文件夹？请粘贴完整路径。",
   "palette.addProject.needsPlaceholder": "/Users/you/work/repo",
   "palette.newTask.title": "{project} 中的新任务",
-  "palette.newTask.label": "智能体该做什么？",
-  "palette.newTask.placeholder": "描述这个任务",
   "palette.openTask.subtitle": "打开此任务",
   "palette.pairPhone.title": "配对手机",
   "palette.pairPhone.subtitle": "显示移动应用可扫描的配对码",
@@ -122,6 +120,7 @@ export const zh: Catalogue = {
 
   /* ── the task pane, its transcript and its composer ── */
   "task.aria": "任务 {title}",
+  "task.untitled": "未命名",
   "task.meta.agent": "运行此任务的智能体",
   "task.meta.cwd": "工作目录：{path}",
   "task.meta.host": "运行此任务的机器",

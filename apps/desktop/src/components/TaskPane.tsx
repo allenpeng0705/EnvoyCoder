@@ -59,10 +59,10 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   };
 
   return (
-    <section className="pane" aria-label={t("task.aria", { title: task.title })}>
+    <section className="pane" aria-label={t("task.aria", { title: task.title || t("task.untitled") })}>
       <header className="pane__header">
         <div className="pane__title-group">
-          <h1 className="pane__title">{task.title}</h1>
+          <h1 className="pane__title">{task.title || t("task.untitled")}</h1>
           <div className="pane__meta">
             <span className={`chip ${chipFor(task.status)}`}>{t(statusKey(task.status))}</span>
             <span className="chip chip--quiet" title={t("task.meta.agent")}>

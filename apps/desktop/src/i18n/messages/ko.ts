@@ -97,8 +97,6 @@ export const ko: Catalogue = {
   "palette.addProject.needs": "어느 폴더입니까? 전체 경로를 붙여넣으세요.",
   "palette.addProject.needsPlaceholder": "/Users/you/work/repo",
   "palette.newTask.title": "{project}의 새 작업",
-  "palette.newTask.label": "에이전트가 무엇을 해야 하나요?",
-  "palette.newTask.placeholder": "작업을 설명하세요",
   "palette.openTask.subtitle": "이 작업 열기",
   "palette.pairPhone.title": "휴대폰 페어링",
   "palette.pairPhone.subtitle": "모바일 앱이 스캔할 코드를 표시",
@@ -122,6 +120,7 @@ export const ko: Catalogue = {
 
   /* ── the task pane, its transcript and its composer ── */
   "task.aria": "작업 {title}",
+  "task.untitled": "제목 없음",
   "task.meta.agent": "이 작업을 실행하는 에이전트",
   "task.meta.cwd": "작업 디렉터리: {path}",
   "task.meta.host": "이 작업을 실행하는 컴퓨터",

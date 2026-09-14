@@ -97,8 +97,6 @@ export const ja: Catalogue = {
   "palette.addProject.needs": "どのフォルダーですか？フルパスを貼り付けてください。",
   "palette.addProject.needsPlaceholder": "/Users/you/work/repo",
   "palette.newTask.title": "{project} の新しいタスク",
-  "palette.newTask.label": "エージェントに何をさせますか？",
-  "palette.newTask.placeholder": "タスクを説明してください",
   "palette.openTask.subtitle": "このタスクを開く",
   "palette.pairPhone.title": "スマートフォンをペアリング",
   "palette.pairPhone.subtitle": "モバイルアプリが読み取れるコードを表示",
@@ -122,6 +120,7 @@ export const ja: Catalogue = {
 
   /* ── the task pane, its transcript and its composer ── */
   "task.aria": "タスク {title}",
+  "task.untitled": "無題",
   "task.meta.agent": "このタスクを実行しているエージェント",
   "task.meta.cwd": "作業ディレクトリ: {path}",
   "task.meta.host": "このタスクを実行するコンピューター",

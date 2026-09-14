@@ -409,8 +409,10 @@ export function buildCommandContributions(input: {
       group: t("palette.group.tasks"),
       kind: "action",
       keywords: ["start", "agent", "task"],
-      needs: { label: t("palette.newTask.label"), placeholder: t("palette.newTask.placeholder") },
-      run: (value) => input.onNewTask(project.id, value.trim()),
+      // No value stage: choosing this row *is* the decision, and the task's own composer is where the
+      // prompt goes — the same shape as Paseo's new workspace, which opens the chat rather than asking
+      // for a name first. The first message names the task (see `startNewTask` in `CoderApp`).
+      run: () => input.onNewTask(project.id, ""),
     });
   }
 

@@ -26,6 +26,8 @@ import { useMemo, useState } from "react";
 
 import { useShortcuts } from "../input/useShortcuts.js";
 import type { Project, Task } from "@envoycoder/protocol";
+import { taskTitleFromPrompt } from "@envoycoder/task-model";
+
 import { useT } from "../i18n/context.js";
 import { localNotice, localize, localizeText, type Notice } from "../i18n/notice.js";
 import { CoderSidebar } from "./CoderSidebar.js";
@@ -58,6 +60,7 @@ function newTaskIntent(projects: readonly Project[]): { commandId?: string; idPr
 }
 
 export function CoderApp(props: CoderAppProps): JSX.Element {
+  // (the new-task flow is defined inside the component so it can drive the selection)
   const t = useT();
   const { state } = props;
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
@@ -79,6 +82,34 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
   const openPalette = (intent?: { commandId?: string; idPrefix?: string }): void => {
     setPaletteIntent(intent);
     setPaletteOpen(true);
+  };
+
+  /**
+   * Start a task: create it, open it, and let the chat be the form.
+   *
+   * Paseo's "New workspace" is the model, and the user asked for it in as many words: *"new workspace is
+   * to start a new chat session and it gave the chatting UI directly"*. So "+ New" does not ask for a
+   * title first — it registers the task, selects it, and puts the cursor in the composer. Sending the
+   * first message starts the run **and names the task** from that message (`taskTitleFromPrompt`),
+   * which is how a workspace gets its name in Paseo too.
+   *
+   * A title passed in still starts the run immediately, because the palette's rows and the smoke test
+   * both take that path — the difference is only whether the user typed the prompt before the task
+   * existed or after.
+   */
+  const startNewTask = async (projectId: string, title = ""): Promise<void> => {
+    setNotice(undefined);
+    const created = await props.actions.createTask({ projectId, title });
+    if (!created.ok) {
+      setNotice(created);
+      return;
+    }
+    // Selected first: the rail shows the new row and the pane shows its chat, in one paint. A task
+    // created but not opened would look like the button had done nothing.
+    setActiveId(created.task.id);
+    if (title === "") return;
+    const started = await props.actions.startRun(created.task.id, title);
+    if (!started.ok) setNotice(started);
   };
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [railOpen, setRailOpen] = useState(true);
@@ -126,7 +157,16 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
     "search.find": () => openPalette(),
     // ⌘N asks for one thing, so it starts that workflow: the task's project is chosen by picking a row
     // (or skipped entirely when there is only one project to choose from).
-    "newTask": () => openPalette(newTaskIntent(state.projects)),
+    "newTask": () => {
+      // With one project there is nothing to ask: create the task and open its chat. With several, the
+      // chooser *is* the list (see `newTaskIntent`).
+      const intent = newTaskIntent(state.projects);
+      if (intent.commandId?.startsWith("task.new.")) {
+        void startNewTask(intent.commandId.slice("task.new.".length));
+        return;
+      }
+      openPalette(intent);
+    },
     "settings.open": () => setSettingsOpen(true),
     "sidebar.toggle": () => setRailOpen((open) => !open),
   });
@@ -233,12 +273,9 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
             activeTaskId={activeId}
             onSelect={setActiveId}
             onNewTask={(projectId) => {
-              const project = state.projects.find((candidate) => candidate.id === projectId);
-              // Opening the palette is the visible response; a sentence explaining it is noise.
-              if (project) setNotice(undefined);
-              // "+ New" on a project header already named the workflow *and* the project, so the palette
-              // opens on that project's task field — not on the catalogue with this row to be found.
-              openPalette({ commandId: `task.new.${projectId}` });
+              // "+ New" on a project header names the project, so there is nothing left to ask: the task
+              // is created and opened, and the composer is the form.
+              void startNewTask(projectId);
             }}
             onAddProject={() => openPalette({ commandId: "project.add" })}
             onOpenProjectSettings={() => setSettingsOpen(true)}
@@ -264,7 +301,17 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               runLive={active.runId ? state.runs[active.runId]?.run.endedAt === undefined : false}
               onStart={async (prompt) => {
                 const result = await props.actions.startRun(active.id, prompt);
-                if (!result.ok) setNotice(result);
+                if (!result.ok) {
+                  setNotice(result);
+                  return;
+                }
+                // The first message names the task, when it has no name yet. Done after the run starts,
+                // so a refusal to rename can never take the prompt down with it — the agent is already
+                // working, and a title is a label.
+                if (active.title === "") {
+                  const named = taskTitleFromPrompt(prompt);
+                  if (named !== "") await props.actions.updateTask({ id: active.id, title: named });
+                }
               }}
               onSend={async (text, mode) => {
                 if (!active.runId) return;

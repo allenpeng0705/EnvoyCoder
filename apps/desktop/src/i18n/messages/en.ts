@@ -99,8 +99,6 @@ export const en = {
   "palette.addProject.needs": "Which folder? Paste its full path.",
   "palette.addProject.needsPlaceholder": "/Users/you/work/repo",
   "palette.newTask.title": "New task in {project}",
-  "palette.newTask.label": "What should the agent do?",
-  "palette.newTask.placeholder": "Describe the task",
   "palette.openTask.subtitle": "Open this task",
   "palette.pairPhone.title": "Pair a phone",
   "palette.pairPhone.subtitle": "Show a code the mobile app can scan",
@@ -127,6 +125,7 @@ export const en = {
 
   /* ── the task pane ── */
   "task.aria": "Task {title}",
+  "task.untitled": "Untitled",
   "task.meta.agent": "The agent running this task",
   "task.meta.cwd": "Working directory: {path}",
   "task.meta.host": "Machine running this task",

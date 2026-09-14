@@ -18,6 +18,7 @@ import {
   resolveTaskDefaults,
   statusLabel,
   taskIdFor,
+  taskTitleFromPrompt,
 } from "../src/index.js";
 
 function project(over: Partial<Project> = {}): Project {
@@ -191,5 +192,34 @@ describe("attention", () => {
     expect(statusLabel("needs-attention")).toBe("Needs your answer");
     expect(statusLabel("failed")).toBe("Stopped with an error");
     expect(statusLabel("running")).toBe("Working");
+  });
+});
+
+describe("naming a task from its first prompt", () => {
+  it("takes the first line, because that is the request", () => {
+    expect(taskTitleFromPrompt("Fix the failing test\n\nIt broke when I rebased.")).toBe(
+      "Fix the failing test",
+    );
+  });
+
+  it("collapses whitespace rather than keeping a ragged row", () => {
+    expect(taskTitleFromPrompt("  add   a   health check \n")).toBe("add a health check");
+  });
+
+  it("cuts long prompts on a word boundary, and hard when there is none", () => {
+    const long =
+      "Refactor the authentication middleware so that every provider shares one session store";
+    const title = taskTitleFromPrompt(long, 60);
+    expect(title.length).toBeLessThanOrEqual(60);
+    expect(long.startsWith(title)).toBe(true);
+    expect(title.endsWith(" ")).toBe(false);
+    // A single unbroken token cannot be cut on a space, so it is cut rather than left at full length.
+    expect(taskTitleFromPrompt("x".repeat(100), 60)).toHaveLength(60);
+  });
+
+  it("returns nothing for a prompt that is nothing", () => {
+    // The caller leaves the task untitled, which the rail renders as this app's word for "unnamed"
+    // rather than an empty row.
+    expect(taskTitleFromPrompt("   \n  ")).toBe("");
   });
 });

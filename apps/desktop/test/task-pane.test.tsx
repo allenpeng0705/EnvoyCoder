@@ -246,3 +246,27 @@ describe("the composer", () => {
     expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
   });
 });
+
+describe("a task that has not started yet", () => {
+  it("starts the run from the first message, with no mode to choose", () => {
+    // This is the state "+ New" leaves a task in: created, selected, nothing running. The composer is
+    // the form — so the first thing typed starts the work rather than queueing behind a run that does
+    // not exist, and the queue/steer picker is absent because there is no turn to join.
+    const { onStart, onSend } = renderPane([], {
+      task: { ...task, title: "", runId: undefined },
+      runLive: false,
+    });
+    const field = screen.getByLabelText("Message the agent");
+    fireEvent.change(field, { target: { value: "Add a health check endpoint" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+
+    expect(onStart).toHaveBeenCalledWith("Add a health check endpoint");
+    expect(onSend).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("How to deliver the message")).toBeNull();
+  });
+
+  it("calls an unnamed task by this app's word for it", () => {
+    renderPane([], { task: { ...task, title: "", runId: undefined }, runLive: false });
+    expect(screen.getByText("Untitled")).toBeTruthy();
+  });
+});

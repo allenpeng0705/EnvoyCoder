@@ -396,7 +396,9 @@ function TaskRow(input: {
       />
       <span className="task-row__body">
         <span className="task-row__title-line">
-          <span className="task-row__title">{task.title}</span>
+          {/* A task created from "+ New" has no name yet — the first message becomes one. An empty
+              span here is a row a user cannot click on purpose, so the gap says what it is. */}
+          <span className="task-row__title">{task.title || t("task.untitled")}</span>
           {needsHuman ? (
             <span className="chip chip--warn">{t(statusKey(task.status))}</span>
           ) : null}

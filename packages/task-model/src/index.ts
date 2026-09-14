@@ -53,6 +53,28 @@ export function taskIdFor(projectId: string, title: string, at = new Date()): st
   return `${projectId}::${slug || "task"}::${stamp}`;
 }
 
+/**
+ * The name a task takes from the first thing the user asked it to do.
+ *
+ * This is how a task gets named at all now: "+ New" opens an empty chat, and a row called "Untitled"
+ * that stays "Untitled" is a list the user has to rename by hand. Paseo does the same thing with its
+ * workspaces — the first message names the workspace — and it is the only naming scheme that costs the
+ * user nothing, because they were going to type the prompt anyway.
+ *
+ * Deliberately crude, in this order: the **first line** (a prompt with a body is named after its
+ * request, not its exposition), trimmed, collapsed whitespace, and cut to `max` on a word boundary
+ * when there is one nearby. Anything cleverer — an LLM summary — would be a second model call to name
+ * a row, and a name the user cannot predict.
+ */
+export function taskTitleFromPrompt(prompt: string, max = 60): string {
+  const firstLine = prompt.trim().split("\n")[0] ?? "";
+  const collapsed = firstLine.replace(/\s+/g, " ").trim();
+  if (collapsed.length <= max) return collapsed;
+  const cut = collapsed.slice(0, max);
+  const lastSpace = cut.lastIndexOf(" ");
+  return (lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).trim();
+}
+
 /* ────────────────────────────── defaults ───────────────────────────── */
 
 /**
