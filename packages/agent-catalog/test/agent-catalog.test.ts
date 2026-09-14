@@ -100,25 +100,38 @@ describe("invocation", () => {
     const invocation = buildHarnessInvocation(
       "claudecode",
       { prompt: "add tests", model: "anthropic/claude-sonnet-4.5", cwd: "/repo" },
-      { platform: "linux", binaryPath: "/usr/local/bin/claude" },
+      { platform: "linux", binaryPath: "/usr/local/bin/claude-agent-acp" },
     );
-    expect(invocation.command).toBe("/usr/local/bin/claude");
-    expect(invocation.args).toEqual([
-      "-p",
-      "add tests",
-      "--output-format",
-      "stream-json",
-      "--verbose",
-      "--model",
-      // **The bare id, not the provider-qualified value the task stores.** `claude --model` takes a
-      // model name, not a route, so the provider half is ours to hold and not this CLI's to receive —
-      // and this entry's flag surface is `unverified`, so the user's own name is passed through rather
-      // than reshaped into something we have not checked it accepts.
-      "claude-sonnet-4.5",
-    ]);
+    expect(invocation.command).toBe("/usr/local/bin/claude-agent-acp");
+    // **Empty, and that is the assertion.** This entry used to build
+    // `-p <prompt> --output-format stream-json --verbose --model <id>` for the plain `claude` CLI, which
+    // answers no ACP `initialize` at all. The program it launches now *is* the ACP server, so a prompt,
+    // a model id or a resume id in argv would be handed to something that reads none of them: the
+    // prompt travels over the protocol, the model as a session config option (`../src/models.ts`), and a
+    // resume as `session/resume`.
+    expect(invocation.args).toEqual([]);
     // Children (build tools, language servers) must die with the agent.
     expect(invocation.spawn.detached).toBe(true);
     expect(invocation.args).not.toContain("--resume");
+    // And the prompt is nowhere in argv — true for every ACP agent, asserted for the three this slice
+    // moved onto ACP, because an argv prompt is a regression that no surface would otherwise notice.
+    for (const id of ["claudecode", "codex", "cursor"] as const) {
+      const built = buildHarnessInvocation(
+        id,
+        { prompt: "SECRET-PROMPT", cwd: "/repo" },
+        { platform: "linux", binaryPath: "/usr/local/bin/agent" },
+      );
+      expect(built.args.join(" "), id).not.toContain("SECRET-PROMPT");
+    }
+  });
+
+  it("passes the user's own extra arguments through, and nothing else", () => {
+    const invocation = buildHarnessInvocation(
+      "claudecode",
+      { prompt: "ignored", cwd: "/repo", extraArgs: '--debug "two words"' },
+      { platform: "linux", binaryPath: "/usr/local/bin/claude-agent-acp" },
+    );
+    expect(invocation.args).toEqual(["--debug", "two words"]);
   });
 
   it("drives the built-in harness over ACP, like the other native one", () => {
@@ -219,8 +232,33 @@ describe("probing", () => {
   });
 
   it("reports the resolved path when the agent is present", () => {
-    const probe = probeHarness("codex", { platform: "linux", find: () => "/usr/bin/codex" });
-    expect(probe).toMatchObject({ available: true, binaryPath: "/usr/bin/codex" });
+    const probe = probeHarness("codex", { platform: "linux", find: () => "/usr/bin/codex-acp" });
+    expect(probe).toMatchObject({ available: true, binaryPath: "/usr/bin/codex-acp" });
+  });
+
+  it("looks for the ACP program each entry actually launches, not the vendor's own CLI", () => {
+    // **The point of this slice, as an assertion.** `claude` and `codex` are the CLIs a user installs,
+    // and neither speaks ACP; the programs we spawn are the bridges. A probe that looked for the vendor
+    // CLI would report "available" on a machine where the agent cannot be driven at all — which is the
+    // defect this catalogue was fixed for.
+    const looked: string[] = [];
+    for (const id of ["claudecode", "codex", "cursor"] as const) {
+      looked.length = 0;
+      probeHarness(id, {
+        platform: "linux",
+        find: (name: string) => {
+          looked.push(name);
+          return null;
+        },
+        fileExists: () => false,
+      });
+      const launch = HARNESS_CATALOG[id].launch;
+      const binaries = launch.kind === "child-process" ? [...launch.binaries] : [];
+      expect(looked, id).toEqual(binaries);
+    }
+    expect(HARNESS_CATALOG.claudecode.launch).toMatchObject({ binaries: ["claude-agent-acp"] });
+    expect(HARNESS_CATALOG.codex.launch).toMatchObject({ binaries: ["codex-acp"] });
+    expect(HARNESS_CATALOG.cursor.launch).toMatchObject({ binaries: ["cursor-agent"] });
   });
 
   it("finds the built-in harness in the peer checkout when it is not installed", () => {

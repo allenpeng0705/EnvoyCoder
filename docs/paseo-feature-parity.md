@@ -18,8 +18,8 @@ do.** If Paseo's UI offers a control our daemon cannot honour, ours shows it *di
 rather than pretending. Three live examples, all found this week:
 
 * the mode picker is off until `coder.startRun` can accept an agent mode (otherwise it is a silent no-op);
-* the six non-ACP agents are listed but refuse to launch by name (`harnessUnsupported`) instead of hanging
-  on a handshake their program cannot answer;
+* the four agents with no ACP surface are listed but refuse to launch by name (`harnessUnsupported`)
+  instead of hanging on a handshake their program cannot answer;
 * `resume` was accepted by the daemon and the window and rejected by the wire — now fixed.
 
 Everything else is copy-first. Where we already know a Paseo detail is a defect rather than a design
@@ -31,10 +31,10 @@ bottom of `paseo-design-decisions.md` as refinements, not as divergences.
 
 | # | Feature | Paseo | Ours | Work |
 |---|---|---|---|---|
-| 1 | **Every listed agent actually runs** | 5 transports (SDK, app-server, ACP, HTTP, JSONL-RPC) | ACP only; 6 entries refused by name | one adapter per dialect (app-server for Codex, HTTP for OpenCode, JSONL-RPC for Pi/OMP, vendor ACP subcommand for Copilot/Cursor) |
+| 1 | **Every listed agent actually runs** | 5 transports (SDK, app-server, ACP, HTTP, JSONL-RPC) | ACP only, but **five entries now actually run over it**: the two first-party harnesses plus Claude Code, Codex and Cursor — whose recipes were replaced with commands driven against the real binaries (`docs/settings-parity.md` §7.8). The other four are refused by name ✅ | smaller than it looked: Codex's and Cursor's dialects turned out to be ACP after all (an npm bridge and a vendor `acp` subcommand), so what remains is Copilot, OpenCode, Pi and OMP — and Pi/OMP share one JSONL-RPC transport |
 | 2 | **Resume a run** | resume from the UI, per agent | wire now accepts it ✅; needs the picker + a test at the RPC layer | done on the wire; UI affordance left |
 | 3 | **The phone pairs and connects** | QR scan → host list → run list → answer approvals | hello shape fixed ✅; nothing persists; no session store | pairing persistence, token store, run list, approval answering (M4) |
-| 4 | **Modes per agent** | `plan`/`acceptEdits`/`bypassPermissions`… chosen per run | modes now on the wire ✅; picker disabled pending `agentModeId` | `agentModeId` on `startRun` + pass-through per transport |
+| 4 | **Modes per agent** | `plan`/`acceptEdits`/`bypassPermissions`… chosen per run | modes on the wire ✅ and the picker renders, enabled per agent on `capabilities.agentMode`; since §7.8 it is enabled for **four** of them — Envoy Harness, Claude Code, Codex and Cursor — and disabled with a reason naming the agent for the rest (`composer/controls.ts:592-594`) | the entries whose mode lists came from Paseo were replaced with the ids the live agents publish, and the field name their `session/set_mode` reads is now a catalogue fact (§7.8) |
 | 5 | **User-defined ACP providers** | `extends:"acp"` + `command`/`env`/`params` in config | absent; 38-entry catalogue unreachable | open provider id, provider config file, list/add/remove RPCs |
 | 6 | **One composer that adapts to the agent** | agent/model pills, thinking, mode, features, context ring | decision layer written ✅ (`composer/controls.ts`); the pills render, and since the pre-flight probe the **agent is asked what it offers before its first run** ✅ (`docs/settings-parity.md` §7.7 — `deepseek-harness`'s published list replaces the hand-typed one; `envoy-harness` has nothing to ask, and says so) | features + context ring |
 

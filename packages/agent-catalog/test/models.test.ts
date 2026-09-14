@@ -122,16 +122,40 @@ describe("what each agent publishes about its models", () => {
 });
 
 describe("how a chosen model reaches an agent", () => {
-  it("wires the two runnable agents, and leaves the rest unwired on purpose", () => {
-    // The adapter is ACP-only (`isDrivableByAcpAdapter`), so a model could not reach the third-party
+  it("wires every runnable agent, and leaves the unlaunchable ones unwired on purpose", () => {
+    // The adapter is ACP-only (`isDrivableByAcpAdapter`), so a model could not reach the remaining
     // entries even if one were chosen — the same distinction `capabilities.agentMode` draws for modes.
     expect(canApplyModel("envoy-harness")).toBe(true);
     expect(canApplyModel("deepseek-harness")).toBe(true);
-    for (const id of ["claudecode", "codex", "copilot", "opencode", "cursor", "omp", "pi"] as const) {
+    for (const id of ["claudecode", "codex", "cursor"] as const) {
+      expect(canApplyModel(id), id).toBe(true);
+    }
+    for (const id of ["copilot", "opencode", "omp", "pi"] as const) {
       expect(canApplyModel(id), id).toBe(false);
     }
     // The flag the composer enables its control on is derived from this, never stored twice.
     expect(canApplyModel("envoy-harness")).toBe(harnessModelDelivery("envoy-harness") !== undefined);
+  });
+
+  it("sends the three ACP agents' model as the bare id their `model` option lists", () => {
+    // **Why this is asserted rather than assumed.** All three publish their models in the `session/new`
+    // response as bare ids (`gpt-5.5`, `haiku`, `composer-2.5[fast=true]`) — no groups, no JSON pair —
+    // and the value that travels has to be one of those, because at least one of the three refuses a
+    // value outside its own published list. The provider half of our `provider/model` convention is
+    // therefore dropped on the way out, and this test is where that is recorded rather than discovered.
+    for (const id of ["claudecode", "codex", "cursor"] as const) {
+      const delivery = harnessModelDelivery(id);
+      expect(delivery?.kind, id).toBe("session-config");
+      if (delivery?.kind !== "session-config") throw new Error("unreachable");
+      expect(delivery.configId, id).toBe("model");
+      expect(delivery.encode({ provider: "anthropic", model: "haiku" }), id).toBe("haiku");
+      // The provider half really is ignored, so nobody later reads its absence as a bug.
+      expect(delivery.encode({ provider: "whoever", model: "haiku" }), id).toBe("haiku");
+    }
+
+    // Not `session/set_model`, which both bridges answer `-32601 "Method not found"` — the
+    // plausible-looking mistake, pinned so it is not made twice.
+    expect(harnessModelDelivery("codex")?.source).toContain("session/set_config_option");
   });
 
   it("sends envoy-harness's model as the pair of flags its own dispatch reads", () => {

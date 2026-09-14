@@ -294,11 +294,17 @@ const NOT_LAUNCHABLE =
  *     `session/set_config_option` came back `-32601 method not found: session/set_config_option`. So
  *     the pill is disabled with that reason, which is the outcome the design asks for: not a guess.
  *
- * The third-party CLIs get `"session"` rather than `"none"`, and that is a deliberate refusal to make a
- * claim about somebody else's product: their thought-level surface has not been read, and
- * `isDrivableByAcpAdapter` refuses to launch them, so no session can ever be observed. Their
- * `capabilities.thinking` is false, so the reason on screen is ours ("not wired up yet") rather than a
- * statement about the agent.
+ * The third-party CLIs that this build **cannot launch** get `"session"` rather than `"none"`, and that
+ * is a deliberate refusal to make a claim about somebody else's product: their thought-level surface has
+ * not been read, and `isDrivableByAcpAdapter` refuses to launch them, so no session can ever be observed.
+ * Their `capabilities.thinking` is false, so the reason on screen is ours ("not wired up yet") rather than
+ * a statement about the agent.
+ *
+ * The three agents reached over ACP — `claudecode`, `codex`, `cursor` — also get `"session"`, and there
+ * it means something stronger: a session **is** observable, so the record will fill in, and what each
+ * entry's `source` carries is what was seen on the wire. None of the three has a delivery yet, which is
+ * a fact about our build: the pill is disabled with our reason even while the values behind it are the
+ * agent's own.
  */
 export const HARNESS_THINKING: Readonly<Record<HarnessId, AgentThinking>> = {
   "envoy-harness": {
@@ -325,14 +331,47 @@ export const HARNESS_THINKING: Readonly<Record<HarnessId, AgentThinking>> = {
       "current route — which is why the window says when it saw these rather than promising them.",
   },
 
+  // The three agents this build now drives over ACP. Their thought-level surface was **observed**, and
+  // none of the three has a delivery wired, which is a different fact from "it offers none" — so each
+  // says what was actually seen and the window's disabled pill is honest for a reason about *our* build.
+  claudecode: {
+    kind: "session",
+    options: [],
+    source:
+      "Published per session, and NOT yet wired as a delivery: `session/new` answers with an option " +
+      "whose category is `thought_level` — {id: 'effort', name: 'Effort'} with default | low | medium | " +
+      "high | xhigh | max — observed 2026-09-14 through @agentclientprotocol/claude-agent-acp 0.77.0. " +
+      "`effort` was read, not exercised: whether `session/set_config_option {configId: 'effort'}` " +
+      "accepts one of those values is the next thing to check, and until it is checked the pill stays " +
+      "disabled rather than sending a level whose effect nobody measured.",
+  },
+  codex: {
+    kind: "session",
+    options: [],
+    source:
+      "Published per session, and only **after a model is set** — which is why no static answer can be " +
+      "given: on a fresh session through @agentclientprotocol/codex-acp 1.11.0 the option list held " +
+      "`mode`, `collaboration_mode` and `model`, and the `reasoning_effort` select (category " +
+      "`thought_level`, values low | medium | high | xhigh) appeared in the state returned by " +
+      "`session/set_config_option {configId: 'model'}`. Same shape as `deepseek-harness`'s: the levels " +
+      "belong to the model that was resolved. No delivery is wired, so the pill is disabled with a " +
+      "reason about our build rather than about the agent.",
+  },
+  cursor: {
+    kind: "session",
+    options: [],
+    source:
+      "Observed: a session opened through `cursor-agent acp` (2026.06.24) published `mode` and `model` " +
+      "and **no** option in the `thought_level` category; its reasoning depth travels inside the model " +
+      "ids instead (`grok-4.6[effort=high,fast=true]`). Recorded as \"session\" rather than \"none\" " +
+      "because this is one observation of one build, and the honest claim is what we saw.",
+  },
+
   // The catalogued CLIs: not "none", because we have not read their thought-level surface — and they
   // cannot be launched, so nothing will ever be observed for them. `capabilities.thinking` is false,
   // so the window's reason is about our build rather than about the agent.
-  claudecode: { kind: "session", options: [], source: NOT_LAUNCHABLE },
-  codex: { kind: "session", options: [], source: NOT_LAUNCHABLE },
   copilot: { kind: "session", options: [], source: NOT_LAUNCHABLE },
   opencode: { kind: "session", options: [], source: NOT_LAUNCHABLE },
-  cursor: { kind: "session", options: [], source: NOT_LAUNCHABLE },
   omp: { kind: "session", options: [], source: NOT_LAUNCHABLE },
   pi: { kind: "session", options: [], source: NOT_LAUNCHABLE },
 };

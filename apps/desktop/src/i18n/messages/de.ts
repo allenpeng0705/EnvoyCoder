@@ -390,7 +390,7 @@ export const de: Catalogue = {
   "error.approvalPending": "Der Agent wartet auf eine Antwort, bevor er weitermachen kann. Beantworte die zuerst — eine jetzt gesendete Nachricht würde dahinter warten.",
   "error.noRunRuntime": "Dieser Dienst wurde ohne Agenten-Laufzeit gestartet, deshalb kann er keine Aufgaben ausführen.",
   "error.harnessMissing": "{harness} ist auf diesem Computer nicht installiert. Installiere ihn und starte die Aufgabe dann erneut.",
-  "error.harnessUnsupported": "{harness} spricht ein Protokoll, das EnvoyCoder noch nicht steuern kann (dieser Adapter steuert nur ACP-Agenten). Envoy Harness und DeepSeek Harness funktionieren heute; {harness} braucht einen eigenen Adapter.",
+  "error.harnessUnsupported": "{harness} spricht ein Protokoll, das EnvoyCoder noch nicht steuern kann, deshalb wurde die Aufgabe nicht gestartet. EnvoyCoder steuert Agenten über ACP — wähle stattdessen einen davon.",
   "error.notConnected": "EnvoyCoder ist noch nicht mit seinem Dienst verbunden.",
   "error.notConnectedChange": "EnvoyCoder ist nicht mit seinem Dienst verbunden, deshalb wurde diese Änderung nicht gespeichert.",
   "error.connectionClosed": "Die Verbindung wurde geschlossen.",

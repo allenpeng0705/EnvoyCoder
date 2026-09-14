@@ -390,7 +390,7 @@ export const ja: Catalogue = {
   "error.approvalPending": "エージェントは続ける前に回答を待っています。先にそれに答えてください — 今送ったメッセージはその後ろで待つことになります。",
   "error.noRunRuntime": "このサービスはエージェントランタイムなしで起動されたため、タスクを実行できません。",
   "error.harnessMissing": "{harness} はこのコンピューターにインストールされていません。インストールしてから、タスクをもう一度開始してください。",
-  "error.harnessUnsupported": "{harness} は EnvoyCoder がまだ扱えないプロトコルで話します（このアダプターは ACP エージェントのみを扱います）。現在は Envoy Harness と DeepSeek Harness が動作します。{harness} には専用のアダプターが必要です。",
+  "error.harnessUnsupported": "{harness} は EnvoyCoder がまだ扱えないプロトコルで話すため、タスクを開始しませんでした。EnvoyCoder は ACP でエージェントを扱います。代わりにそちらを選んでください。",
   "error.notConnected": "EnvoyCoder はまだサービスに接続していません。",
   "error.notConnectedChange": "EnvoyCoder がサービスに接続していないため、その変更は保存されませんでした。",
   "error.connectionClosed": "接続が閉じられました。",

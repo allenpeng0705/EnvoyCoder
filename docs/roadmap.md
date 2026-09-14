@@ -65,6 +65,12 @@ and resumed. *Acceptance:* the same run driven twice — once through the UI, on
 > pins the split. Fixing the picker's promise cost one field and one guard; leaving it would have cost a
 > user a launch that hangs on a handshake no program can answer.
 >
+> *Amended again, later:* the "two ACP, seven command lines" split was the state when that slice landed,
+> and it turned out to under-count the dialect rather than the agents. **Five** entries speak ACP today —
+> the two harnesses, plus Claude Code, Codex and Cursor, whose recipes were replaced with commands driven
+> against the real binaries (an npm bridge for the first two, Cursor's own `acp` subcommand for the
+> third; `docs/settings-parity.md` §7.8). The four that remain are the ones with no ACP surface at all.
+>
 > The two harnesses also turned out to disagree about the **shape of a prompt** — `dsh` takes the
 > standard block list, the built-in one wants a flat string — so one client driving both needed a
 > one-step fallback on `invalid params`, which is safe precisely because the parser refuses before the

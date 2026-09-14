@@ -390,7 +390,7 @@ export const ko: Catalogue = {
   "error.approvalPending": "에이전트가 계속하려면 답변을 기다리고 있습니다. 먼저 그것에 답하세요 — 지금 보낸 메시지는 그 뒤에서 기다리게 됩니다.",
   "error.noRunRuntime": "이 서비스는 에이전트 런타임 없이 시작되어 작업을 실행할 수 없습니다.",
   "error.harnessMissing": "{harness}이(가) 이 컴퓨터에 설치되어 있지 않습니다. 설치한 뒤 작업을 다시 시작하세요.",
-  "error.harnessUnsupported": "{harness}은(는) EnvoyCoder가 아직 다룰 수 없는 프로토콜을 사용합니다(이 어댑터는 ACP 에이전트만 다룹니다). 현재는 Envoy Harness와 DeepSeek Harness가 동작합니다. {harness}에는 자체 어댑터가 필요합니다.",
+  "error.harnessUnsupported": "{harness}은(는) EnvoyCoder가 아직 다룰 수 없는 프로토콜을 사용하므로 작업을 시작하지 않았습니다. EnvoyCoder는 ACP로 에이전트를 다룹니다. 대신 그중 하나를 선택하세요.",
   "error.notConnected": "EnvoyCoder가 아직 서비스에 연결되지 않았습니다.",
   "error.notConnectedChange": "EnvoyCoder가 서비스에 연결되어 있지 않아 그 변경은 저장되지 않았습니다.",
   "error.connectionClosed": "연결이 닫혔습니다.",

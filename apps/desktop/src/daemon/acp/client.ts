@@ -42,27 +42,25 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import process from "node:process";
 
-/** How to start the agent. Built by the catalogue; never guessed here. */
-export interface AcpLaunch {
-  command: string;
-  args: readonly string[];
-  /** The task's working directory, which the agent treats as its workspace root. */
-  cwd: string;
-  env?: Record<string, string>;
-}
+import {
+  AcpRequestError,
+  type AcpAgentInfo,
+  type AcpAutoRunPolicy,
+  type AcpLaunch,
+  type AcpPermissionRequest,
+  type AcpUpdate,
+} from "./protocol.js";
 
-/** One `session/update` payload, as this client understands it. */
-export interface AcpUpdate {
-  sessionUpdate: string;
-  [key: string]: unknown;
-}
-
-/** One `session/request_permission` payload. */
-export interface AcpPermissionRequest {
-  sessionId: string;
-  toolCall?: { toolCallId?: string; title?: string; kind?: string };
-  options?: readonly { optionId?: string; name?: string; kind?: string }[];
-}
+// The shapes themselves live in `./protocol.ts` — see its header for why the seam is there — and are
+// re-exported so that the module a caller has always reached for stays this one.
+export type {
+  AcpAgentInfo,
+  AcpAutoRunPolicy,
+  AcpLaunch,
+  AcpPermissionRequest,
+  AcpUpdate,
+} from "./protocol.js";
+export { AcpRequestError } from "./protocol.js";
 
 export interface AcpClientOptions {
   launch: AcpLaunch;
@@ -138,47 +136,11 @@ export interface AcpClientOptions {
   sessionPolicy?: { autoRun: AcpAutoRunPolicy };
 }
 
-/** What the agent said it can do. Recorded so the run's capabilities are the agent's, not ours. */
-export interface AcpAgentInfo {
-  name: string;
-  version: string;
-  protocolVersion: number;
-  /** Capability names the agent advertised, flattened for reporting. */
-  capabilities: readonly string[];
-}
-
 type Pending = {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout> | undefined;
 };
-
-/**
- * The `autoRun` values `session/set_policy` accepts — **the peer's own vocabulary, verbatim**.
- *
- * Taken from `envoy-harness`'s parameter check, which is the contract rather than a suggestion:
- * `always-confirm` (ask before every tool), `safe-only` (auto-allow read-only tools and single safe
- * shell commands, ask for everything else) and `off` (never ask)
- * (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:237-295`,
- * `.../src/permissions/auto-run.ts:1-70`). Verified against the built peer: a fresh session answers
- * `session/get_policy` with no `autoRun` at all, each of the three values is accepted and echoed back,
- * and anything else is refused `-32602 preset, sandbox, approval, or autoRun required`.
- *
- * A translated or prettified value would be refused by the agent, so this union exists to make that
- * impossible in our own types: only the catalogue's resolver builds one (`resolveApprovalPolicy`), and
- * this client passes it through untouched — the same division `agentModeId` and `sessionConfigs` follow.
- */
-export type AcpAutoRunPolicy = "always-confirm" | "safe-only" | "off";
-
-/** A JSON-RPC failure, with the protocol's own code preserved. */
-export class AcpRequestError extends Error {
-  readonly code: number | undefined;
-  constructor(message: string, code: number | undefined) {
-    super(message);
-    this.name = "AcpRequestError";
-    this.code = code;
-  }
-}
 
 /** JSON-RPC `invalid params`. The only failure this client retries, and only for one reason. */
 const INVALID_PARAMS = -32602;
@@ -286,6 +248,11 @@ export class AcpClient {
     try {
       const info = await client.initialize();
       client.agentInfoValue = info;
+      // **After `initialize`, before anything that touches a session** — the only order that works: the
+      // agent advertises its methods in the first call and refuses `session/new` until one has been used.
+      if (options.launch.authMethodId !== undefined) {
+        await client.authenticate(options.launch.authMethodId);
+      }
       if (options.resumeSessionId) await client.resume(options.resumeSessionId);
       else await client.newSession();
       // **Order matters, and it is the agent's.** The model goes first because it is the more
@@ -361,6 +328,7 @@ export class AcpClient {
       protocolVersion?: number;
       agentInfo?: { name?: string; version?: string };
       agentCapabilities?: Record<string, unknown>;
+      authMethods?: unknown;
     };
 
     return {
@@ -368,7 +336,35 @@ export class AcpClient {
       version: result.agentInfo?.version ?? "unknown",
       protocolVersion: result.protocolVersion ?? 0,
       capabilities: result.agentCapabilities ? Object.keys(result.agentCapabilities) : [],
+      // Ids only, and only the strings: an entry without an id is one we could not ask for even if the
+      // catalogue named it, so keeping it would be a list of things that look offerable and are not.
+      authMethods: Array.isArray(result.authMethods)
+        ? result.authMethods
+            .map((method) =>
+              typeof (method as { id?: unknown } | null)?.id === "string"
+                ? ((method as { id: string }).id)
+                : undefined,
+            )
+            .filter((id): id is string => id !== undefined)
+        : [],
     };
+  }
+
+  /**
+   * Authenticate with one of the methods the agent advertised.
+   *
+   * `{methodId}` is ACP's shape (`agentclientprotocol.com/protocol/initialization`), and the id is the
+   * agent's own — passed through verbatim, like a mode id or a session-config value, because a
+   * prettified one is one the agent refuses.
+   *
+   * **Awaited, and not best-effort**, for the same reason `setMode` is: an agent that needed
+   * authentication and did not get it answers `session/new` with a refusal whose sentence names the
+   * method to call, and letting that be the failure means the user reads the agent's own words instead
+   * of ours. A failure here also cannot be "mostly fine": every session on this process is opened after
+   * it, so there is nothing to fall back to.
+   */
+  private async authenticate(methodId: string): Promise<void> {
+    await this.request("authenticate", { methodId }, this.options.handshakeTimeoutMs ?? 30_000);
   }
 
   private async newSession(): Promise<string> {
@@ -399,11 +395,10 @@ export class AcpClient {
   /**
    * Put the open session into one of the agent's own modes.
    *
-   * The parameter names are the agent's, not ours: `{sessionId, mode}`, with the value passed through
-   * verbatim — `envoy-harness` validates it against exactly `default | plan | review`
-   * (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:352-375`, answering
-   * `-32602 mode must be default|plan|review` for anything else), so a mode id we translated or
-   * prettified would be a mode the agent refuses.
+   * The parameter **name** is the agent's, not ours (see `AcpLaunch.modeParam`: the peer harness reads
+   * `{sessionId, mode}`, everything else reads the specification's `modeId`, and the peer *silently
+   * ignores* a `modeId` rather than refusing it). The mode id is passed through verbatim, because a mode
+   * id we prettified would be one the agent refuses.
    *
    * Awaited, and **not** best-effort. A mode that failed to apply is the one failure a user cannot
    * detect by reading the transcript: the agent still answers, it just does the thing plan mode
@@ -412,9 +407,20 @@ export class AcpClient {
    */
   private async setMode(mode: string): Promise<void> {
     const sessionId = this.requireSession();
+    const param = this.options.launch.modeParam;
+    if (param === undefined) {
+      // Unreachable from a run — `resolveAgentMode` refuses a mode for any entry whose
+      // `capabilities.agentMode` is false, and `drivable.test.ts` asserts that every entry claiming one
+      // declares this field. It is here so that the day those two drift, the failure is a sentence
+      // rather than a mode silently applied to a field the agent ignores.
+      throw new Error(
+        "EnvoyCoder does not know which parameter this agent's session/set_mode reads, so it did " +
+          "not ask for a mode. The agent's catalogue entry has to record it before one can be set.",
+      );
+    }
     await this.request(
       "session/set_mode",
-      { sessionId, mode },
+      { sessionId, [param]: mode },
       this.options.handshakeTimeoutMs ?? 30_000,
     );
   }

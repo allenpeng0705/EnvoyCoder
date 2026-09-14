@@ -93,6 +93,47 @@ export type AgentLaunch =
        * an ACP handshake they could not answer.
        */
       transport: "acp" | "cli";
+      /**
+       * The ACP `authenticate` method this agent needs before it will open a session, when it needs one.
+       *
+       * `initialize` answers with the methods an agent offers, and an agent may then refuse
+       * `session/new` until one has been used. **`cursor-agent acp` is the one entry here that does**:
+       * it advertises one method, `cursor_login`, and on its first run in this state answered
+       * `session/new` with `Authentication required … then call authenticate() with methodId
+       * 'cursor_login'`. That refusal turned out to be **state-dependent rather than permanent** — see the
+       * `cursor` entry's `evidence` for the second observation — and sending the step is idempotent, which
+       * is why the client sends one whenever an entry names it rather than trying to detect whether it is
+       * still needed.
+       *
+       * The **catalogue** names it rather than the client choosing, because choosing is not safe:
+       * `@agentclientprotocol/codex-acp` offers two `type: "env_var"` methods that fail with the
+       * agent's own sentence when the variable is unset, and a browser-login method would open a window
+       * on the user's desktop. Which method suits an installation is a fact about that installation, and
+       * facts live here. Absent — for every other entry — means "this agent opens sessions with no
+       * authentication at all", which was observed rather than assumed: both bridges and the built-in
+       * harness answer `session/new` on a fresh process.
+       */
+      authMethodId?: string;
+      /**
+       * Which field name this agent's `session/set_mode` reads: the peer's `mode`, or the
+       * specification's `modeId`.
+       *
+       * **Two contracts, and both were observed rather than inferred.** `envoy-harness` parses
+       * `obj.mode` (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:352-375`);
+       * `cursor-agent acp`, `@agentclientprotocol/claude-agent-acp` and `@agentclientprotocol/codex-acp`
+       * all require `modeId`, and refuse `mode` with `-32603 … path: ["modeId"]` / `-32602 … modeId:
+       * expected string, received undefined`.
+       *
+       * Declared per entry rather than retried at run time, and that is the whole point of the field:
+       * the peer **accepts** a `modeId` and ignores it — `parseSessionSetModeParams` returns
+       * `{sessionId}` with no mode, and the backend answers `{mode: <unchanged>}` — so a client that
+       * tried one and fell back on refusal would be told the mode had been applied while the agent
+       * stayed in its default. A refusal can be retried; a success that changed nothing cannot.
+       *
+       * Only meaningful for an entry whose `capabilities.agentMode` is true, and asserted as such in
+       * `test/drivable.test.ts`.
+       */
+      modeParam?: "mode" | "modeId";
       /** Extra argv for resuming a session, when the CLI supports it. */
       resumeArgs?: (sessionId: string) => string[];
       /**
@@ -315,6 +356,12 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       ],
       stream: "jsonl",
       transport: "acp",
+      // The peer's own field name, read out of its parser rather than guessed from the specification:
+      // `parseSessionSetModeParams` looks at `obj.mode` and nothing else
+      // (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:352-375`). It is the
+      // *older* of the two names this catalogue records, and the one every other ACP agent here does
+      // **not** use — see `AgentLaunch.modeParam` for why the difference has to be written down.
+      modeParam: "mode",
       resumeArgs: () => [],
       // The peer checkout: `agent-catalog` lives at `<repo>/packages/agent-catalog`, and the harness
       // is cloned beside the repo (`../envoy-harness`). Resolved at probe time against the repository
@@ -424,96 +471,166 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
     id: "claudecode",
     label: "Claude Code",
     tier: "catalogued",
+    // The live session's own list, in its own order, with its own words as the labels
+    // (`session/new` → `modes.availableModes`, observed 2026-09-14). The previous version of this
+    // array came from Paseo's provider manifest and was very nearly right — it had the same five
+    // concepts, and `dontAsk` rather than `auto` is what this build calls the fourth — which is why
+    // the ids are now taken from the agent instead of from a manifest that describes a different
+    // version of it.
     modes: [
-      { id: "plan", label: "Plan", description: "Read-only: propose a plan, change nothing.", unattended: false },
-      { id: "default", label: "Always ask" },
-      { id: "acceptEdits", label: "Accept edits", description: "Apply file edits without asking." },
-      { id: "auto", label: "Auto" },
-      { id: "bypassPermissions", label: "Bypass", description: "No prompts at all.", unattended: true },
+      { id: "default", label: "Manual", description: "Always ask before making changes." },
+      { id: "acceptEdits", label: "Accept edits", description: "Automatically accept all file edits." },
+      { id: "plan", label: "Plan", description: "Create a plan before making changes.", unattended: false },
+      { id: "auto", label: "Auto", description: "Claude handles permission decisions." },
+      { id: "bypassPermissions", label: "Bypass permissions", description: "Accepts all permissions.", unattended: true },
     ],
-    summary: "Anthropic's Claude Code CLI.",
+    summary: "Anthropic's Claude Code CLI, driven over ACP by the Agent Client Protocol bridge.",
     launch: {
       kind: "child-process",
-      binaries: ["claude"],
-      buildArgs: ({ prompt, model, extraArgs, resumeSessionId }) => [
-        ...(resumeSessionId ? ["--resume", resumeSessionId] : []),
-        "-p",
-        prompt,
-        "--output-format",
-        "stream-json",
-        "--verbose",
-        // The bare id, not the provider-qualified value the task stores: this CLI's flag is unverified
-        // and it is not an agent we can launch, so the user's own model name travels unchanged rather
-        // than being reshaped into something we have not checked it accepts (`./models.ts`, `modelIdOf`).
-        ...(model ? ["--model", modelIdOf(model)] : []),
-        ...splitArgs(extraArgs),
-      ],
+      // **The ACP bridge, not `claude`.** Claude Code itself has no ACP mode — `claude --help` on
+      // 2.1.159 lists no `acp` subcommand, and driving the documented one-shot argv
+      // (`claude -p <prompt> --output-format stream-json --verbose`, which is what this entry used to
+      // describe) was measured against the real binary: it does not answer an ACP `initialize` at all
+      // (no reply in 20 s; the process is a one-shot CLI). The bridge is the integration, and it is
+      // Zed's/Agent Client Protocol's own, which is why it is a dependency rather than a bespoke
+      // adapter of ours.
+      binaries: ["claude-agent-acp"],
+      // Nothing but the user's own extra arguments: this program *is* the ACP server, so a prompt, a
+      // model or a resume id in argv would be handed to something that reads none of them. The model
+      // travels as a session config option instead (`./models.ts`), and a resume as `session/resume`.
+      buildArgs: ({ extraArgs }) => [...splitArgs(extraArgs)],
       stream: "jsonl",
-      transport: "cli",
-      resumeArgs: (sessionId) => ["--resume", sessionId],
+      transport: "acp",
+      // Verified: the bridge requires `modeId`, and accepts a change
+      // (`session/set_mode {modeId:"plan"}` → `{}`, and the next `session/set_config_option` echoed the
+      // mode as `plan`).
+      modeParam: "modeId",
+      resumeArgs: () => [],
     },
     capabilities: {
+      // Advertised by the bridge as `sessionCapabilities: {fork, list, resume}` and `loadSession: true`,
+      // and then exercised rather than believed: a session opened in one process was accepted by
+      // `session/resume` in the next one, with the same working directory.
       resume: true,
       cancel: true,
-      approvals: true,
+      // **Not observed, and therefore not claimed any more.** This entry used to say `true` on the
+      // strength of the one-shot CLI's flags. A live turn through the bridge in the agent's own asking
+      // mode — `modeId: "default"`, "Always ask before making changes" — ran a shell tool call without
+      // raising `session/request_permission`, so the one thing the flag asserts was not seen. Only a
+      // destructive path would settle it, and this slice did not run one on the owner's machine.
+      approvals: false,
       structuredTools: true,
       streaming: true,
       images: true,
-      // Not an ACP agent at all, so `isDrivableByAcpAdapter` refuses to launch it — a mode could not
-      // be applied even if this picker offered one. Same for every other `catalogued` entry below.
-      agentMode: false,
-      // Same claim, same reason: no ACP policy method for this entry to be handed one through.
+      agentMode: true,
+      // No `session/set_policy` in the bridge's surface — its approval posture is one of the five modes
+      // above (that is what "Auto" and "Bypass permissions" are), which is a mode and not a policy, so
+      // the app's "ask before anything destructive" setting has nothing to travel through.
       approvalPolicy: false,
       worktrees: "external",
     },
-    install: { hint: "npm install -g @anthropic-ai/claude-code", url: "https://docs.anthropic.com/en/docs/claude-code" },
+    install: {
+      hint: "npm install -g @agentclientprotocol/claude-agent-acp (and make sure `claude` is logged in: run `claude` once)",
+      url: "https://www.npmjs.com/package/@agentclientprotocol/claude-agent-acp",
+    },
     evidence:
-      "unverified against the installed binary — `-p`, `--output-format stream-json`, `--model` and " +
-      "`--resume` are the flags this adapter assumes. Confirm with `claude --help` on each platform " +
-      "we ship; the CLI has changed flag names before.",
+      "VERIFIED against the real binaries on 2026-09-14, macOS. `claude --version` → 2.1.159; " +
+      "`claude --help` has no `acp` subcommand, and `claude -p '' --output-format stream-json --verbose` " +
+      "never answers an ACP initialize (no reply in 20 s) — so the CLI this entry used to describe is " +
+      "not an ACP agent. The bridge: `@agentclientprotocol/claude-agent-acp` 0.77.0 (formerly, and " +
+      "still resolvable as, `@zed-industries/claude-code-acp` 0.16.2, which this was first measured " +
+      "against; the old name prints a deprecation notice pointing at the new one). Through it, " +
+      "`initialize` → `{protocolVersion: 1, agentInfo: {name: '@agentclientprotocol/claude-agent-acp'}, " +
+      "agentCapabilities: {loadSession: true, sessionCapabilities: {fork, list, resume}, " +
+      "promptCapabilities: {image: true}}}`; `session/new` → `{sessionId, modes, configOptions}` where " +
+      "configOptions are `mode`, `model` and `effort` (category `thought_level`); a whole turn " +
+      "completed (`stopReason: 'end_turn'`, with usage), streaming `agent_thought_chunk`, `tool_call` " +
+      "(title 'Terminal', kind 'execute'), `tool_call_update` and `agent_message_chunk`. `images` is the " +
+      "advertised `promptCapabilities.image: true`. UNVERIFIED: `capabilities.cancel` (ACP's " +
+      "`session/cancel` was not exercised on this agent) and `approvals` — see the `capabilities` note; " +
+      "`effort` was read but is not wired as a thinking level yet (`./session-options.ts`).",
   },
 
   codex: {
     id: "codex",
     label: "Codex",
     tier: "catalogued",
+    // The live session's own list again, and this one **replaces ids that were simply wrong**: the
+    // previous array (`auto`, `auto-review`, `full-access`) came from Paseo's provider manifest, and
+    // `auto-review` is not a mode this build publishes at all. The three below are what
+    // `session/new` → `modes.availableModes` actually answered, with the agent's own names.
     modes: [
-      { id: "auto", label: "Default permissions" },
-      { id: "auto-review", label: "Auto-review" },
-      { id: "full-access", label: "Full access", description: "No prompts at all.", unattended: true },
+      { id: "read-only", label: "Read Only", description: "Read files in the workspace; approval required to edit or reach the internet.", unattended: false },
+      { id: "agent", label: "Default", description: "Read and edit in the workspace and run commands; approval required to reach further." },
+      { id: "agent-full-access", label: "Full Access", description: "Edit outside the workspace and reach the internet without approval.", unattended: true },
     ],
-    summary: "OpenAI's Codex CLI.",
+    summary: "OpenAI's Codex CLI, driven over ACP by the Agent Client Protocol bridge.",
     launch: {
       kind: "child-process",
-      binaries: ["codex"],
-      buildArgs: ({ prompt, model, cwd, extraArgs }) => [
-        "exec",
-        "--cd",
-        cwd,
-        ...(model ? ["--model", modelIdOf(model)] : []),
-        "--json",
-        prompt,
-        ...splitArgs(extraArgs),
-      ],
+      // The bridge, not `codex`. Codex has servers of its own — `codex app-server` and
+      // `codex mcp-server` — and neither speaks ACP: `codex --help` on 0.147.0 lists no `acp`
+      // subcommand, and `codex acp` exits immediately. `codex exec --json` (what this entry used to
+      // describe) is a one-shot CLI and never answers an ACP `initialize` — measured, 20 s, no reply.
+      binaries: ["codex-acp"],
+      buildArgs: ({ extraArgs }) => [...splitArgs(extraArgs)],
       stream: "jsonl",
-      transport: "cli",
+      transport: "acp",
+      // Verified. This bridge *silently ignores* the peer's `mode` field, which is exactly why the
+      // name is declared: `session/set_mode {modeId: "agent-full-access"}` → `{}`, and the option state
+      // came back with that preset selected.
+      modeParam: "modeId",
+      resumeArgs: () => [],
+      // **No `authMethodId`, and that is a decision.** This bridge offers three methods — `api-key` and
+      // `openai-api-key`, both `type: "env_var"`, and `chat-gpt` — and a fresh process opens a session
+      // without any of them (`session/new` answered with a session id and a full option state, while
+      // `authenticate {methodId: "api-key"}` answered `CODEX_API_KEY or OPENAI_API_KEY is not set`).
+      // Naming a method here would make EnvoyCoder fail a run that the agent itself is willing to start,
+      // so the credential is left to the user's own `codex login` / environment, which is where the
+      // agent reads it.
     },
     capabilities: {
-      resume: false,
+      // `sessionCapabilities: {resume, close, list, fork, delete}` advertised, and then exercised: a
+      // session created by one process was accepted by `session/resume` in the next, same directory.
+      resume: true,
       cancel: true,
-      approvals: true,
+      // **Not observed here, so no longer a guess in either direction.** The previous entry claimed
+      // `true` from the one-shot CLI's flags. The bridge's `mode` option *is* the approval preset
+      // ("Read Only … approval is required to edit files"), and `session/set_config_option
+      // {configId: "mode"}` moved it — which is a mode, not a policy — so nothing asserts that a
+      // `session/request_permission` arrives. Left false until a turn can be run here at all.
+      approvals: false,
       structuredTools: true,
       streaming: true,
       images: true,
-      agentMode: false,
-      // Same claim, same reason: no ACP policy method for this entry to be handed one through.
+      agentMode: true,
       approvalPolicy: false,
       worktrees: "external",
     },
-    install: { hint: "npm install -g @openai/codex", url: "https://github.com/openai/codex" },
+    install: {
+      hint: "npm install -g @agentclientprotocol/codex-acp (and sign in once, either `codex login` or an OPENAI_API_KEY in the environment)",
+      url: "https://www.npmjs.com/package/@agentclientprotocol/codex-acp",
+    },
     evidence:
-      "unverified — `codex exec --cd <dir> --json` is assumed. Session resume is recorded as false " +
-      "rather than guessed; if the CLI gains it, this entry and its capability flags change together.",
+      "VERIFIED against the real binaries on 2026-09-14, macOS. `codex --version` → codex-cli 0.147.0; " +
+      "`codex --help` lists exec/review/mcp/mcp-server/app-server/remote-control and **no** `acp` " +
+      "subcommand, and `codex acp` exits immediately; `codex exec --json` never answers an ACP " +
+      "`initialize` (no reply in 20 s). Two bridge generations were measured: " +
+      "`@zed-industries/codex-acp` 0.16.0 (deprecated, pointing at the new name) and " +
+      "`@agentclientprotocol/codex-acp` 1.11.0, which is what the entry now names. Through 1.11.0: " +
+      "`initialize` → `{protocolVersion: 1, agentInfo: {name: '@agentclientprotocol/codex-acp'}, " +
+      "sessionCapabilities: {resume, list, close, fork, delete}, authMethods: [api-key, chat-gpt]}`; " +
+      "`session/new` → `{sessionId, models, modes, configOptions}` with configOptions `mode` " +
+      "(read-only | agent | agent-full-access, current `agent`), `collaboration_mode` (default | plan) " +
+      "and `model` (31 models through `models.availableModels`); " +
+      "`session/set_mode {modeId: 'agent-full-access'}` → `{}`; " +
+      "`session/set_config_option {configId: 'model', value: 'gpt-5.5'}` → accepted, with the returned " +
+      "option state naming gpt-5.5 as current. **A TURN COULD NOT BE COMPLETED ON THIS MACHINE**: " +
+      "`session/prompt` produced no answer in 120 s, and the bridge's own stderr said why — " +
+      "`wss://chatgpt.com/backend-api/codex/responses` → `Connection refused` and " +
+      "`failed to refresh available models`. That is this machine's network path to the provider and " +
+      "not a fault in the command, but it is the honest limit of what was proven here: handshake, " +
+      "session, options, mode change and resume are verified; a finished turn is not. " +
+      "UNVERIFIED: `capabilities.cancel`, and `approvals` (see the `capabilities` note).",
   },
 
   copilot: {
@@ -550,7 +667,13 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       "unverified, and the least certain entry in the catalogue: Paseo lists Copilot as a supported " +
       "agent (paseo README, 'Prerequisites'), but its non-interactive flag surface has not been read. " +
       "Treat as `stream: text` until proven otherwise — a text-only agent must not be offered the " +
-      "structured diff panel.",
+      "structured diff panel. **A LEAD, not this entry's command, and not a claim:** GitHub announced " +
+      "ACP support in Copilot CLI (github.blog changelog, 2026-01-28, 'public preview') and documents an " +
+      "ACP server page for it, so this entry is likely wirable over the same adapter as the five that " +
+      "work instead of needing a transport of its own. The exact command was NOT verified here — " +
+      "`copilot` is not installed on the machine this was written on — and this entry is still " +
+      "`transport: \"cli\"`, still refused by `isDrivableByAcpAdapter`, and must stay that way until " +
+      "somebody drives the real binary and records what it said.",
   },
 
   opencode: {
@@ -590,43 +713,97 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
     evidence:
       "unverified — `opencode run` with an optional `--model` is assumed; Paseo's CLI reference shows " +
       "provider-qualified models (`paseo run --provider claude/opus-4.6`), which is where our " +
-      "`provider/model` string convention comes from (paseo README, CLI section).",
+      "`provider/model` string convention comes from (paseo README, CLI section). **A LEAD, not this " +
+      "entry's command, and not a claim:** OpenCode's own documentation has an 'ACP Support' page whose " +
+      "entire configuration is `command: \"opencode\", args: [\"acp\"]` — 'starts OpenCode as an " +
+      "ACP-compatible subprocess that communicates with your editor over JSON-RPC via stdio' — so the " +
+      "command above is very probably not the one to use and this entry is very probably an ACP agent. " +
+      "NOT verified here: `opencode` is not installed on the machine this was written on, so nothing " +
+      "was driven and nothing changed. The entry is still `transport: \"cli\"` and still refused by " +
+      "`isDrivableByAcpAdapter`, which is what a user meets.",
   },
 
   cursor: {
     id: "cursor",
     label: "Cursor Agent",
     tier: "catalogued",
-    modes: [],
-    summary: "Cursor's headless agent CLI.",
+    // Empty before this slice — "carried over from EnvoyMesh's harness list" with no evidence — and
+    // taken from the live session now.
+    modes: [
+      { id: "agent", label: "Agent", description: "Full agent capabilities with tool access." },
+      { id: "plan", label: "Plan", description: "Read-only mode for planning and designing before implementation.", unattended: false },
+      { id: "ask", label: "Ask", description: "Questions and answers — no edits, no command execution.", unattended: false },
+    ],
+    summary: "Cursor's headless agent CLI, which speaks ACP itself.",
     launch: {
       kind: "child-process",
-      binaries: ["cursor-agent", "cursor"],
-      buildArgs: ({ prompt, model, extraArgs }) => [
-        "-p",
-        prompt,
-        ...(model ? ["--model", modelIdOf(model)] : []),
-        ...splitArgs(extraArgs),
-      ],
+      // `cursor-agent`, not the `cursor` editor launcher that sits beside it on PATH: only the agent
+      // binary has the `acp` subcommand. (`cursor-agent --help` lists it under a `agent [prompt...]`
+      // usage; `cursor-agent acp` is what was driven here.)
+      binaries: ["cursor-agent"],
+      // The subcommand, and nothing else. The prompt goes over the protocol, the model is a session
+      // config option (`./models.ts`), and a resume is `session/resume`.
+      buildArgs: ({ extraArgs }) => ["acp", ...splitArgs(extraArgs)],
       stream: "jsonl",
-      transport: "cli",
+      transport: "acp",
+      // **Needed on a fresh installation, and declared because the client may not guess one.** On its
+      // first run here, `session/new` without it answered `-32000 Authentication required … call
+      // authenticate() with methodId 'cursor_login'`; with it, the session opened. See the entry's
+      // `evidence` for the second, later observation — the requirement is stateful, so this is declared
+      // and sent idempotently rather than inferred from a refusal.
+      authMethodId: "cursor_login",
+      // Verified: `session/set_mode {modeId: "plan"}` → `{}`, and the `mode` config option came back
+      // with `plan` as its current value.
+      modeParam: "modeId",
+      resumeArgs: () => [],
     },
     capabilities: {
+      // The one falseflag here that is the *agent's* own answer rather than our ignorance: its
+      // `initialize` advertises `sessionCapabilities: {list}` — no `resume`, unlike the two bridges.
       resume: false,
       cancel: true,
       approvals: false,
+      // Unverified in this direction: the tool calls a Cursor turn produces were not observed here, so
+      // this stays at the conservative `false` it had.
       structuredTools: false,
       streaming: true,
-      images: false,
-      agentMode: false,
-      // Same claim, same reason: no ACP policy method for this entry to be handed one through.
+      // `promptCapabilities.image: true`, read from its own `initialize` answer. It said `false` before,
+      // which was an assumption about a command we could not launch.
+      images: true,
+      agentMode: true,
       approvalPolicy: false,
       worktrees: "external",
     },
+    install: {
+      hint: "install the Cursor agent CLI (`cursor-agent`) and sign in once with `cursor-agent login` — the CLI handles its own updates",
+      url: "https://docs.cursor.com/en/cli/overview",
+    },
     evidence:
-      "unverified — carried over from EnvoyMesh's harness list (`packages/api/src/coding-harness.ts`, " +
-      "Tier B: claudecode, codex, opencode, cursor, codewhale). EnvoyMesh drives it through its own " +
-      "agent-adapter layer; EnvoyCoder needs its own adapter, and this entry is a placeholder for it.",
+      "VERIFIED against the real binary on 2026-09-14, macOS: `cursor-agent --version` → " +
+      "2026.06.24-00-45-58-9f61de7, and `cursor-agent status` → logged in. This entry used to describe " +
+      "`cursor-agent -p <prompt>` and a note saying it needed a bespoke adapter; neither is true. " +
+      "`cursor-agent acp` speaks ACP over stdio — the Cursor CLI documents the subcommand itself — and " +
+      "the raw frames are: `initialize` → `{protocolVersion: 1, agentCapabilities: {loadSession: true, " +
+      "promptCapabilities: {image: true}, sessionCapabilities: {list}}, authMethods: [{id: " +
+      "'cursor_login'}]}`; without authentication `session/new` → `-32000 Authentication required. " +
+      "Please run 'agent login' first, then call authenticate() with methodId 'cursor_login'.`; with " +
+      "`authenticate {methodId: 'cursor_login'}` (which took ~13 s and answered `{}`) `session/new` → " +
+      "`{sessionId, modes, models, configOptions}` — three modes (agent | plan | ask), seven models " +
+      "(`default[]`, `composer-2.5[fast=true]`, `grok-4.6[effort=high,fast=true]`, …) and two options " +
+      "(`mode`, `model`). `session/set_mode {modeId: 'plan'}` → `{}`, and " +
+      "`session/set_config_option {configId: 'model', value: 'composer-2.5[fast=true]'}` → accepted with " +
+      "the mode echoed as `plan`. Also observed and rejected: the peer's field name — " +
+      "`session/set_mode {mode: 'plan'}` → `-32603 Internal error, path: ['modeId'], expected string`. " +
+      "**The `authenticate` requirement is STATEFUL, and both observations are recorded because the " +
+      "difference matters.** The refusal above was the first run in this state. After the step had been " +
+      "sent once — and after the model change above wrote `~/.cursor/acp-config.json` — the same binary " +
+      "opened sessions reproducibly with the `authenticate` call *removed*, so on a machine that has " +
+      "already been through it the step is invisible either way. It is therefore declared and sent " +
+      "idempotently (a fresh installation is the case that needs it) rather than driven by a refusal, and " +
+      "the deterministic proof that the client sends it lives in the scripted-agent case in " +
+      "`apps/desktop/test/acp-agent-support.test.ts`. **A TURN WAS NOT COMPLETED HERE**: a session, its " +
+      "options and a mode change were, and the session was then closed deliberately. UNVERIFIED: " +
+      "`capabilities.cancel`, `structuredTools` and `approvals`.",
   },
 
   /**
@@ -851,6 +1028,32 @@ export function probeHarness(
       (peerEntry ? `, and at ${peerEntry}` : "") +
       ")" +
       (definition.install ? `. ${definition.install.hint}` : ""),
+  };
+}
+
+/**
+ * The two **protocol** facts an entry declares: what to authenticate with, and what its mode method
+ * reads.
+ *
+ * A function rather than two field reads at the call site for a reason that is not cosmetic: `launch`
+ * is a union, so a caller that reached into it would have to narrow the variant itself — and the one
+ * caller (`launchForHarness`) is in another package, where a `kind === "child-process"` check would be
+ * a branch it can never take rather than a fact it can use. Here the narrowing happens once, next to
+ * the type that needs it, and every caller gets `{}` for the entries that declare neither.
+ *
+ * Deliberately not merged into `AcpLaunch`'s `env` or `args`: these describe how to *speak* to the
+ * agent once it is running, not how to start it, and keeping them separate is what lets the client
+ * refuse a mode for an agent whose method nobody has read.
+ */
+export function harnessAcpFacts(id: HarnessId): {
+  authMethodId?: string;
+  modeParam?: "mode" | "modeId";
+} {
+  const launch = harnessDefinition(id).launch;
+  if (launch.kind !== "child-process") return {};
+  return {
+    ...(launch.authMethodId !== undefined ? { authMethodId: launch.authMethodId } : {}),
+    ...(launch.modeParam !== undefined ? { modeParam: launch.modeParam } : {}),
   };
 }
 

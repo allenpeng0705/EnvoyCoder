@@ -35,6 +35,7 @@ import {
   coderError,
 } from "@envoycoder/protocol";
 import {
+  harnessAcpFacts,
   harnessDefinition,
   isDrivableByAcpAdapter,
   probeHarness,
@@ -103,6 +104,13 @@ export function launchForHarness(input: LaunchInput): AcpLaunch {
     command: resolved.command,
     args: resolved.args,
     cwd,
+    // Both of these are **protocol** facts about the agent rather than ways to start it, and they travel
+    // on this one channel because this is the only one the daemon and the catalogue share: the client
+    // sends `authenticate` with `authMethodId` right after `initialize`, and puts a mode into
+    // `session/set_mode` under whichever field name the agent reads. Neither is defaulted — an agent
+    // that needs neither gets neither, and `AcpClient.setMode` refuses rather than guess when a mode is
+    // requested for an entry that never recorded a name.
+    ...harnessAcpFacts(harness),
     ...(definition.id === "deepseek-harness"
       ? {
           // A home of our own per agent, so EnvoyCoder never writes into the state a user's own `dsh`

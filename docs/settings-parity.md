@@ -1244,6 +1244,63 @@ exercises in exactly the shape that finds them:
   mechanism directly (`client.stop()` twice in the same turn returns the *same* promise), which fails when
   the method goes back to being `async`.
 
+### 7.8 Which agents run, and what each claim was verified against
+
+The agent list is a settings-adjacent surface rather than a settings row (it is the `providers` section's
+subject, §5.8, and it decides which of the composer's three pills are enabled), but "which agents can a
+user actually pick and run" belongs in the record of what this product does today. It used to be **two**,
+and the picker offered seven others as recipes nobody had run.
+
+**Five run today, and each one was driven against its real binary rather than read out of a manifest.**
+The three that joined were already *listed* — what changed is that their commands were replaced with ones
+that were measured to answer `initialize`, open a session and publish options, and that the catalogue now
+records exactly what was seen. The provenance lives on each entry's `evidence`; the commands and their
+sources:
+
+| agent | command | where it came from | verified |
+|---|---|---|---|
+| `envoy-harness` | `envoy-harness run --acp`, or the peer checkout's `dist/cli/acp-stdio.js` | the peer's own CLI (`../envoy-harness/packages/envoy-harness/src/cli/argv-help.ts:45`) | handshake, session, a **completed turn** (`stopReason: "end_turn"`), published nothing |
+| `deepseek-harness` | `dsh --profile acp` | the peer's own README's profile list | handshake, session, model list and `reasoning_effort` published |
+| `claudecode` | `claude-agent-acp` (npm: `@agentclientprotocol/claude-agent-acp`) | Claude Code itself has no ACP mode — `claude --help` on 2.1.159 lists no `acp`, and `claude -p … --output-format stream-json` never answers an ACP `initialize` | handshake, session, `mode`/`model`/`effort` published, a **completed turn**, `modeId` accepted |
+| `codex` | `codex-acp` (npm: `@agentclientprotocol/codex-acp`) | Codex's own servers are `app-server` and `mcp-server`, neither ACP; `codex acp` exits immediately | handshake, session, `mode`/`collaboration_mode`/`model` published, `modeId` and a model change accepted. **A turn did not complete on the machine this was written on** — the bridge's own stderr shows `chatgpt.com` refusing the connection |
+| `cursor` | `cursor-agent acp` | the Cursor CLI's own `acp` subcommand | handshake, session, `mode`/`model` published, `modeId` accepted, and `authenticate {methodId: "cursor_login"}` required on a fresh install |
+
+**Four are listed with a reason, and that is the honest outcome**: `copilot`, `opencode`, `pi` and `omp`
+have no ACP surface we could find, so `isDrivableByAcpAdapter()` refuses them by name and the window shows
+the existing capability warning. They are not hidden — a row is information — and none of them claims to
+be supported.
+
+**Two protocol facts this slice had to write down per agent, because guessing either one lies:**
+
+* **`session/set_mode` reads two different field names.** `envoy-harness` reads `{mode}`; every agent
+  reached over a bridge or a vendor subcommand reads the specification's `{modeId}`. The built-in harness
+  **silently ignores an unknown `modeId`** and answers `{mode: <unchanged>}` — a success — so a client that
+  "tried one and fell back on a refusal" would report a mode it never applied. Every entry that claims a
+  settable mode therefore declares the field (`AgentLaunch.modeParam`), and `AcpClient.setMode` refuses to
+  send one that was never recorded.
+* **One agent needs `authenticate` before it will open a session.** `cursor-agent acp` answers
+  `session/new` with `-32000 Authentication required … methodId 'cursor_login'` on a fresh install, and the
+  requirement is **stateful** — after the step has run once it opens sessions without it (measured both
+  ways; the entry's `evidence` records the difference). The method is declared in the catalogue and sent
+  idempotently, because choosing one is not something the client may do on the user's behalf: the other
+  ACP agents offer `type: "env_var"` methods that fail when a variable is unset and a browser-login method
+  a user did not ask for.
+
+**The gates, and which half of each claim they hold.** `packages/agent-catalog/test/drivable.test.ts`
+pins the split (five drivable, four not, every mode-claiming entry declaring its field, exactly one entry
+needing `authMethodId`); `apps/desktop/test/acp-agent-support.test.ts` drives the real binaries through
+`launchForHarness` — the same function a run uses — and **skips loudly, naming the install command**, when
+one is absent, with the scripted-agent half of the same file proving the two declared steps on every
+machine; `agent-catalog.test.ts` and `models.test.ts` pin the argv, the model encodings and the sources.
+
+**What is *not* claimed, deliberately:** `capabilities.approvals` was left `false` for all three new
+agents. The old entries had inherited `true` from flags belonging to a command this build never ran, and a
+live turn through the Claude bridge in its own asking mode ran a shell tool call without raising
+`session/request_permission` — so the one thing the flag asserts was not observed. Thinking levels for the
+three were **read but not wired** (the bridge's `effort` option, Codex's `reasoning_effort`, and Cursor's
+reasoning-in-the-model-id); the pill stays disabled with our reason rather than sending a level whose
+effect nobody measured.
+
 ---
 
 ---

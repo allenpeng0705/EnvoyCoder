@@ -684,9 +684,10 @@ function summarize(
       // way to be *set* into, and a picker that offered one would be a control that does nothing.
       agentMode: definition.capabilities.agentMode,
       // The same distinction for the model, and a different wire: whether this daemon can make a chosen
-      // model the one the agent runs on. `envoy-harness` reads it from argv, `deepseek-harness` from the
-      // session it just opened, and the third-party entries from nowhere — so the control is enabled on
-      // this flag and off, with a reason, everywhere it is false.
+      // model the one the agent runs on. `envoy-harness` reads it from argv; `deepseek-harness` and the
+      // three agents reached over ACP read it from the session the agent just opened. The four entries
+      // this build cannot launch get it from nowhere — so the control is enabled on this flag, and off
+      // with a reason, everywhere it is false.
       model: canApplyModel(id),
       // And the third, which turns on a *different* method (`session/set_config_option`) for an agent
       // that takes one: `deepseek-harness` yes, `envoy-harness` no — its ACP dispatch has no

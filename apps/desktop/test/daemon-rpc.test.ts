@@ -564,8 +564,16 @@ describe("a run, driven over the socket", () => {
       paths: coderPaths(home),
       skipMeshAttach: true,
       isDirectory: async () => true,
-      // The scripted agent, whose mode ids and refusal sentence are the peer harness's own.
-      resolveLaunch: () => ({ command: process.execPath, args: [FAKE_AGENT], cwd: home }),
+      // The scripted agent, whose mode ids and refusal sentence are the peer harness's own — and which
+      // therefore reads a mode from the peer's field. Declared here for the same reason the catalogue
+      // declares it: `AcpClient.setMode` refuses to guess, because the built-in harness silently ignores
+      // the specification's `modeId` and would answer "done" having changed nothing.
+      resolveLaunch: () => ({
+        command: process.execPath,
+        args: [FAKE_AGENT],
+        cwd: home,
+        modeParam: "mode",
+      }),
     });
     cleanups.push(async () => daemon.stop());
 
@@ -934,10 +942,20 @@ describe("the model a task runs on", () => {
     expect(deepseek?.models.options).toEqual([]);
     expect(deepseek?.capabilities.model).toBe(true);
 
-    // A catalogued CLI keeps its declared models visible with the flag off, so the window can say "not
-    // wired up yet" rather than something false about the agent.
-    const claude = byId.get("claudecode");
-    expect(claude?.capabilities.model).toBe(false);
+    // A runnable agent with no model wired keeps its declared models visible with the flag off, so the
+    // window can say "not wired up yet" rather than something false about the agent. `claudecode` used
+    // to be that example and no longer is — it has a delivery now — so the example is one of the four
+    // entries this build cannot launch at all.
+    const copilot = byId.get("copilot");
+    expect(copilot?.capabilities.model).toBe(false);
+    // And the three agents this slice made drivable report the control as usable, with the same
+    // free-text shape `deepseek-harness` has, because their lists are per session too.
+    for (const id of ["claudecode", "codex", "cursor"]) {
+      const entry = byId.get(id);
+      expect(entry?.capabilities.model, id).toBe(true);
+      expect(entry?.models.kind, id).toBe("free-text");
+      expect(entry?.models.options, id).toEqual([]);
+    }
   });
 
   it("keeps the chosen model on the task, and clears it when the choice is the agent's own", async () => {

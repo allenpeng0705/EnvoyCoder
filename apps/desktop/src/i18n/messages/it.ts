@@ -390,7 +390,7 @@ export const it: Catalogue = {
   "error.approvalPending": "L'agente attende una risposta prima di poter proseguire. Rispondi prima a quella — un messaggio inviato ora resterebbe in attesa dietro.",
   "error.noRunRuntime": "Questo servizio è stato avviato senza un runtime per agenti, quindi non può eseguire attività.",
   "error.harnessMissing": "{harness} non è installato su questo computer. Installalo, poi avvia di nuovo l'attività.",
-  "error.harnessUnsupported": "{harness} parla un protocollo che EnvoyCoder non sa ancora pilotare (questo adattatore pilota solo agenti ACP). Oggi funzionano Envoy Harness e DeepSeek Harness; {harness} ha bisogno di un proprio adattatore.",
+  "error.harnessUnsupported": "{harness} parla un protocollo che EnvoyCoder non sa ancora pilotare, quindi l'attività non è stata avviata. EnvoyCoder pilota gli agenti tramite ACP: scegline uno.",
   "error.notConnected": "EnvoyCoder non è ancora connesso al suo servizio.",
   "error.notConnectedChange": "EnvoyCoder non è connesso al suo servizio, quindi quella modifica non è stata salvata.",
   "error.connectionClosed": "La connessione è stata chiusa.",

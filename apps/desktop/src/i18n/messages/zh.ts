@@ -390,7 +390,7 @@ export const zh: Catalogue = {
   "error.approvalPending": "智能体正在等待答复才能继续。请先回答它——现在发送的消息只会排在它后面。",
   "error.noRunRuntime": "该服务启动时没有智能体运行时，因此无法运行任务。",
   "error.harnessMissing": "这台机器上没有安装 {harness}。安装它，然后重新启动任务。",
-  "error.harnessUnsupported": "{harness} 使用的协议 EnvoyCoder 还无法驱动（该适配器只驱动 ACP 智能体）。Envoy Harness 和 DeepSeek Harness 目前可用；{harness} 需要自己的适配器。",
+  "error.harnessUnsupported": "{harness} 使用的协议 EnvoyCoder 还无法驱动，因此任务没有启动。EnvoyCoder 通过 ACP 驱动智能体——请改用其中之一。",
   "error.notConnected": "EnvoyCoder 还没有连接到它的服务。",
   "error.notConnectedChange": "EnvoyCoder 未连接到它的服务，因此该更改没有被保存。",
   "error.connectionClosed": "连接已关闭。",

@@ -610,7 +610,7 @@ export const en = {
   "error.noRunRuntime": "This daemon was started without an agent runtime, so it cannot run tasks.",
   "error.harnessMissing": "{harness} is not installed on this machine. Install it, then start the task again.",
   "error.harnessUnsupported":
-    "{harness} speaks a protocol EnvoyCoder cannot drive yet (this adapter drives ACP agents only). Envoy Harness and DeepSeek Harness work today; {harness} needs its own adapter.",
+    "{harness} speaks a protocol EnvoyCoder cannot drive yet, so the task was not started. EnvoyCoder drives agents over ACP — choose one of those instead.",
   "error.notConnected": "EnvoyCoder is not connected to its daemon yet.",
   "error.notConnectedChange": "EnvoyCoder is not connected to its daemon, so that change was not saved.",
   "error.connectionClosed": "The connection was closed.",

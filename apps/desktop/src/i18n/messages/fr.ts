@@ -390,7 +390,7 @@ export const fr: Catalogue = {
   "error.approvalPending": "L'agent attend une réponse avant de pouvoir continuer. Répondez d'abord — un message envoyé maintenant attendrait derrière.",
   "error.noRunRuntime": "Ce service a été démarré sans moteur d'agent, il ne peut donc pas exécuter de tâches.",
   "error.harnessMissing": "{harness} n'est pas installé sur cet ordinateur. Installez-le, puis relancez la tâche.",
-  "error.harnessUnsupported": "{harness} parle un protocole qu'EnvoyCoder ne sait pas encore piloter (cet adaptateur ne pilote que des agents ACP). Envoy Harness et DeepSeek Harness fonctionnent aujourd'hui ; {harness} a besoin de son propre adaptateur.",
+  "error.harnessUnsupported": "{harness} parle un protocole qu'EnvoyCoder ne sait pas encore piloter, la tâche n'a donc pas été lancée. EnvoyCoder pilote les agents via ACP — choisissez-en un à la place.",
   "error.notConnected": "EnvoyCoder n'est pas encore connecté à son service.",
   "error.notConnectedChange": "EnvoyCoder n'est pas connecté à son service, cette modification n'a donc pas été enregistrée.",
   "error.connectionClosed": "La connexion a été fermée.",

@@ -32,6 +32,26 @@
  * `deepseek-harness` does. That is how a test proves the honest failure mode: an agent that cannot be
  * put into the requested mode **fails the run** rather than quietly working in the wrong one.
  *
+ * `FAKE_ACP_MODE_PARAM=modeId` makes it read the **specification's** field name instead of the peer's —
+ * what `cursor-agent acp`, `@agentclientprotocol/claude-agent-acp` and `@agentclientprotocol/codex-acp`
+ * all do (their own refusals are quoted in the catalogue entries). The default, `mode`, is
+ * `envoy-harness`'s (`acp-params.ts:352-375`).
+ *
+ * The two branches are modelled **asymmetrically on purpose, because the real agents are**: an agent
+ * reading `mode` that is sent a `modeId` does **not** refuse it. `parseSessionSetModeParams` ignores the
+ * unknown field, returns `{sessionId}` with no mode, and the backend answers `{mode: <the current one>}`
+ * — a success that changed nothing (`.../src/protocol/agent-backend.ts:625-635`). An agent reading
+ * `modeId` that is sent `mode` refuses with `-32602`. A fixture that refused both would let a client
+ * which "tries one and falls back on the refusal" pass here while silently applying no mode on a real
+ * machine, which is the defect this whole field exists to prevent — so the tests assert the **effect**
+ * (what mode the session reports afterwards), not that the call resolved.
+ *
+ * `FAKE_ACP_REQUIRE_AUTH=<methodId>` makes this agent the one real agent that needs authenticating:
+ * `session/new` answers `-32000 Authentication required … call authenticate() with methodId '<id>'`
+ * until `authenticate {methodId}` arrives, exactly as `cursor-agent acp` does. It is off by default
+ * because the two bridges and the built-in harness all open sessions unauthenticated — a fixture that
+ * always demanded it would hide a client that never sends it.
+ *
  * `FAKE_ACP_NO_SET_POLICY=1` does the same for `session/set_policy`. It models an agent that has no
  * policy method while *our* catalogue still claims one, which is the drift that matters: the daemon must
  * fail the run with the agent's own words rather than proceed in an approval posture it did not set.
@@ -71,6 +91,18 @@ let sessionCounter = 0;
 /** The three `ModeKind`s `envoy-harness` accepts, and the one this session is currently in. */
 const MODES = ["default", "plan", "review"];
 let collaborationMode = "default";
+/**
+ * Which field name this agent's `session/set_mode` reads. See the module doc for the two contracts and
+ * why the branches below are deliberately not symmetric.
+ */
+const MODE_PARAM = process.env.FAKE_ACP_MODE_PARAM === "modeId" ? "modeId" : "mode";
+/**
+ * The one auth method this agent demands before `session/new`, or `undefined` for an agent that opens
+ * sessions unauthenticated — which is what every real agent in the catalogue but `cursor-agent acp` does.
+ */
+const REQUIRED_AUTH = process.env.FAKE_ACP_REQUIRE_AUTH;
+/** Whether this process has been authenticated. Only meaningful when `REQUIRED_AUTH` is set. */
+let authenticated = false;
 /**
  * The session's own configuration, keyed by the agent's `configId`.
  *
@@ -351,10 +383,44 @@ function handle(message) {
         protocolVersion: 1,
         agentInfo: { name: "fake-acp-agent", version: "0.0.1" },
         agentCapabilities: { sessionCapabilities: { close: {}, resume: {} } },
-        authMethods: [],
+        // **A sibling of `agentCapabilities`, not a child of it** — the real agents put it here, and the
+        // difference is exactly what a test would fail to notice: a client reading it one level too deep
+        // would see no methods on every agent. What the real agents answer: an empty list for every agent
+        // that needs nothing (both bridges and the built-in harness), and the one method this agent is
+        // waiting for when a test asked for that. It is how a client is *supposed* to learn what to
+        // authenticate with; ours is told by the catalogue instead (`AcpLaunch.authMethodId`), and this
+        // is what makes that difference visible.
+        authMethods: REQUIRED_AUTH === undefined ? [] : [{ id: REQUIRED_AUTH, name: "Fake login" }],
       });
       return;
+    case "authenticate": {
+      if (REQUIRED_AUTH === undefined) {
+        // The bridges advertise methods they refuse to implement — `@zed-industries/claude-code-acp`
+        // answered `-32603 … Method not implemented` for `claude-login` — so a client that called one
+        // unconditionally would break on an agent that never needed it.
+        fail(id, -32601, "fake agent has nothing to authenticate with");
+        return;
+      }
+      if (params?.methodId !== REQUIRED_AUTH) {
+        fail(id, -32602, `unknown auth method: ${String(params?.methodId)}`);
+        return;
+      }
+      authenticated = true;
+      ok(id, {});
+      return;
+    }
     case "session/new":
+      // `cursor-agent acp`'s own refusal, verbatim in shape and code: `-32000 Authentication required`
+      // with the sentence naming the method. A client that never authenticates meets this instead of a
+      // session, which is the whole reason the step exists.
+      if (REQUIRED_AUTH !== undefined && !authenticated) {
+        fail(
+          id,
+          -32000,
+          `Authentication required. Please run 'agent login' first, then call authenticate() with methodId '${REQUIRED_AUTH}'.`,
+        );
+        return;
+      }
       sessionCounter += 1;
       sessionId = `fake-session-${sessionCounter}`;
       // The real answer is `{sessionId, configOptions}`; `FAKE_ACP_PUBLISH_OPTIONS` decides whether this
@@ -371,19 +437,40 @@ function handle(message) {
       return;
     case "session/set_mode": {
       // **The peer's own contract, copied rather than approximated.** `envoy-harness` accepts
-      // `{sessionId, mode}` and answers `-32602 mode must be default|plan|review` for anything else,
-      // so a client that prettified or translated a mode id fails here — which is exactly the drift a
-      // fixture should catch. `FAKE_ACP_NO_SET_MODE` models the other harness, which has no such
-      // method at all.
+      // `{sessionId, mode}` and answers `-32602 mode must be default|plan|review` for a *bad mode*, so a
+      // client that prettified or translated a mode id fails here — which is exactly the drift a fixture
+      // should catch. `FAKE_ACP_NO_SET_MODE` models the other harness, which has no such method at all.
+      //
+      // **And the branch the peer takes for a field it does not know is a success, not a refusal.**
+      // `parseSessionSetModeParams` looks only at `obj.mode`; a payload carrying `modeId` therefore
+      // parses as "no mode requested", and the backend answers `{mode: <the current one>}`
+      // (`.../src/protocol/agent-backend.ts:625-635`). Modelled here because it is the reason the
+      // parameter name is a catalogue *fact*: a client that guessed would be told it had applied a mode
+      // it never applied, and only an assertion about the **resulting mode** catches that.
       if (process.env.FAKE_ACP_NO_SET_MODE) {
         fail(id, -32601, "session/set_mode not supported");
         return;
       }
-      if (!MODES.includes(params?.mode)) {
-        fail(id, -32602, "mode must be default|plan|review");
+      const requested = params?.[MODE_PARAM];
+      if (requested === undefined && MODE_PARAM === "mode") {
+        // The peer: not an error. An absent mode is a request for the current one.
+        ok(id, { mode: collaborationMode });
         return;
       }
-      collaborationMode = params.mode;
+      if (!MODES.includes(requested)) {
+        // The two shapes of the real refusal: the peer names the values it accepts, and the
+        // specification's agents name the field they wanted and did not get
+        // (`-32602 … modeId: expected string, received undefined`).
+        fail(
+          id,
+          -32602,
+          MODE_PARAM === "modeId"
+            ? "Invalid params: modeId expected string, received undefined"
+            : "mode must be default|plan|review",
+        );
+        return;
+      }
+      collaborationMode = requested;
       ok(id, {});
       return;
     }

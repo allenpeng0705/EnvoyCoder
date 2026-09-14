@@ -164,6 +164,59 @@ export interface SessionModelConfig {
 }
 
 /**
+ * The model wiring for the three agents driven over ACP, which is **one fact** and not three.
+ *
+ * Declared before the table that spreads it because a `const` is in its temporal dead zone until its
+ * own statement runs — the same trap `session-options.ts`' `NOT_LAUNCHABLE` documents.
+ *
+ * Verified against the real agents on 2026-09-14, one call each, with the value the agent's own option
+ * listed (a value outside the published list is refused by at least one of them, which is how the
+ * first attempt at this went wrong and why the values below are named):
+ *
+ *   * `@agentclientprotocol/claude-agent-acp` 0.77.0 — `{configId: "model", value: "haiku"}` accepted;
+ *     the option state echoed `currentValue: "haiku"`.
+ *   * `@agentclientprotocol/codex-acp` 1.11.0 — `{configId: "model", value: "gpt-5.5"}` accepted; the
+ *     option state echoed `currentValue: "gpt-5.5"`.
+ *   * `cursor-agent` 2026.06.24 — `{configId: "model", value: "composer-2.5[fast=true]"}` accepted.
+ *
+ * `session/set_model` is NOT the method, and trying it would have been the plausible-looking mistake:
+ * both bridges answer `-32601 "Method not found": session/set_model`. It is one config option among
+ * several, which is exactly what `session/set_config_option` is for.
+ */
+const ACP_SESSION_MODEL_DELIVERY: Readonly<
+  Record<"claudecode" | "codex" | "cursor", ModelDelivery>
+> = {
+  claudecode: {
+    kind: "session-config",
+    configId: "model",
+    encode: ({ model }) => model,
+    source:
+      "session/new → configOptions includes {id: 'model', category: 'model', type: 'select'}; " +
+      "session/set_config_option {configId: 'model', value: 'haiku'} → accepted, echoed as current. " +
+      "@agentclientprotocol/claude-agent-acp 0.77.0.",
+  },
+  codex: {
+    kind: "session-config",
+    configId: "model",
+    encode: ({ model }) => model,
+    source:
+      "session/new → configOptions includes {id: 'model', category: 'model', type: 'select'} with six " +
+      "values; session/set_config_option {configId: 'model', value: 'gpt-5.5'} → accepted, echoed as " +
+      "current, and the returned state also gained a `reasoning_effort` option. " +
+      "@agentclientprotocol/codex-acp 1.11.0.",
+  },
+  cursor: {
+    kind: "session-config",
+    configId: "model",
+    encode: ({ model }) => model,
+    source:
+      "session/new → configOptions includes {id: 'model', category: 'model', type: 'select'} with seven " +
+      "values; session/set_config_option {configId: 'model', value: 'composer-2.5[fast=true]'} → " +
+      "accepted. cursor-agent 2026.06.24, over `cursor-agent acp`.",
+  },
+};
+
+/**
  * How this daemon hands a model to a given agent — or that it cannot.
  *
  * `argv` means the flags are built in the catalogue entry's `buildArgs` (`index.ts`), where every other
@@ -179,10 +232,11 @@ export type ModelDelivery =
  * The model wiring, per agent. Absent means **this daemon cannot apply one**, and the composer says so
  * on screen instead of offering a control that would be dropped.
  *
- * The third-party CLI entries are absent deliberately, and not because they lack a model flag — several
- * of them take one in argv, and their `buildArgs` record it. It is because `isDrivableByAcpAdapter`
- * refuses to launch any of them at all, so no model could reach them even if one were chosen. That is
- * the same distinction, and the same honest answer, as `capabilities.agentMode` for those entries.
+ * The entries that are absent are the ones this build cannot launch at all: `copilot`, `opencode`,
+ * `omp` and `pi` do not speak ACP, so `isDrivableByAcpAdapter` refuses them and no model could reach
+ * them even if one were chosen — the same distinction, and the same honest answer, as
+ * `capabilities.agentMode` for those entries. Their own `buildArgs` may well record a model flag; what
+ * is missing is a process to hand it to.
  */
 export const HARNESS_MODEL_DELIVERY: Readonly<Partial<Record<HarnessId, ModelDelivery>>> = {
   "envoy-harness": {
@@ -208,6 +262,28 @@ export const HARNESS_MODEL_DELIVERY: Readonly<Partial<Record<HarnessId, ModelDel
       "packages/acp/acp/src/model-control.ts:188-195 (the `model` select) and :235-237 (the value " +
       "encoding, JSON.stringify([provider, model])).",
   },
+
+  /**
+   * The three agents reached over a bridge or a vendor ACP subcommand — **one delivery, verified three
+   * times over**, and it is the same shape as `deepseek-harness` with a different encoding.
+   *
+   * All three publish a `model` option in the `session/new` response with `category: "model"`, and all
+   * three accept a change through `session/set_config_option {sessionId, configId: "model", value}`:
+   * the returned option state came back naming the value that was sent, which is what makes this a
+   * delivery rather than a hope. The values are the agents' own — `gpt-5.5`, `haiku`,
+   * `composer-2.5[fast=true]` — with no groups and no JSON encoding, which is the **one** difference
+   * from `deepseek-harness` and the reason `encode` differs.
+   *
+   * ## Why the encoding drops the provider half, and why that is stated rather than hidden
+   *
+   * `ModelChoice` is `provider/model` because that is the single vocabulary our tasks store
+   * (`packages/protocol/src/domain.ts:187-188`), and the picker needs one. These agents have no
+   * provider field at all: their option's values *are* model ids, so the provider half is the part of
+   * our own convention that does not travel. `anthropic/haiku` and `acme/haiku` therefore reach the
+   * agent as the same value, `haiku`. That is worth knowing rather than guessing at, and it is why this
+   * is a `session-config` delivery with a bare-id `encode` rather than a second token vocabulary.
+   */
+  ...ACP_SESSION_MODEL_DELIVERY,
 };
 
 /* ────────────────────────────── the catalogue ───────────────────────────── */
@@ -279,25 +355,42 @@ export const HARNESS_MODELS: Readonly<Record<HarnessId, HarnessModels>> = {
       "renders before a run exists.",
   },
 
-  // The third-party CLIs below take a model, but `isDrivableByAcpAdapter` refuses to launch any of
-  // them, so `capabilities.model` is false for every one of them and the composer disables the control
-  // with a reason. Their `kind` stays what the *agent* offers, which is the same split `modes` and
-  // `capabilities.agentMode` already use: one says what the agent has, the other what we can deliver.
+  // The three agents now driven over ACP. Their models are published **per session**, in the same
+  // place `deepseek-harness` publishes its own, so the catalogue's answer before a run exists is
+  // free text with the shape named — and their value encodings are bare ids, which is why the delivery
+  // above takes the model half (`ACP_SESSION_MODEL_DELIVERY`). Their lists are deliberately **not**
+  // enumerated here: they are a function of the user's account and of the agent's own catalog, exactly
+  // as `deepseek-harness`'s are, and a list copied out of one machine's session would be a promise
+  // about somebody else's.
   claudecode: {
     kind: "free-text",
     options: [],
     source:
-      "unverified against the installed binary. `claude --model <id>` is the flag this catalogue " +
-      "assumes (packages/agent-catalog/src/index.ts, claudecode.buildArgs), recorded as unverified " +
-      "there — and unreachable in any case while `isDrivableByAcpAdapter` refuses the entry.",
+      "Published per session, not catalogued: `session/new` answers with a `model` option in the " +
+      "`model` category. Observed on 2026-09-14 through @agentclientprotocol/claude-agent-acp 0.77.0: " +
+      "`default`, `opus`, `sonnet`, `haiku`, `MiniMax-M2.7-highspeed` — the last two as this machine's " +
+      "Claude Code is pointed at a custom provider, which is the point: the list belongs to the " +
+      "installation. The values are bare ids, so what travels is `ModelChoice.model`.",
   },
 
   codex: {
     kind: "free-text",
     options: [],
     source:
-      "unverified — `codex exec --model <id>` is assumed (codex.buildArgs in this catalogue), and the " +
-      "entry cannot be launched at all until it has an adapter.",
+      "Published per session, not catalogued: `session/new` answers with a `model` option in the " +
+      "`model` category. Observed on 2026-09-14 through @agentclientprotocol/codex-acp 1.11.0: 31 " +
+      "entries, `gpt-6-astra[low]` … `gpt-5.2`, and the bridge composes them from the reasoning " +
+      "suffixes it supports. Bare ids again, so what travels is `ModelChoice.model`.",
+  },
+
+  cursor: {
+    kind: "free-text",
+    options: [],
+    source:
+      "Published per session, not catalogued: `session/new` answers with a `model` option in the " +
+      "`model` category. Observed on 2026-09-14 through `cursor-agent acp` (2026.06.24): seven entries, " +
+      "`default[]`, `composer-2.5[fast=true]`, `grok-4.6[effort=high,fast=true]`, … with the account's " +
+      "own model names. Bare ids, so what travels is `ModelChoice.model`.",
   },
 
   copilot: {
@@ -315,15 +408,8 @@ export const HARNESS_MODELS: Readonly<Record<HarnessId, HarnessModels>> = {
     source:
       "unverified — `opencode run --model <id>` is assumed (opencode.buildArgs). Paseo's CLI reference " +
       "shows provider-qualified values there (`paseo run --provider claude/opus-4.6`), which is where " +
-      "the provider-qualified convention came from.",
-  },
-
-  cursor: {
-    kind: "free-text",
-    options: [],
-    source:
-      "unverified — `cursor-agent -p --model <id>` is assumed (cursor.buildArgs). The entry is a " +
-      "placeholder carried over from EnvoyMesh's harness list and has no adapter yet.",
+      "the provider-qualified convention came from. The entry has no adapter of ours, so the flag is " +
+      "recorded rather than usable.",
   },
 
   omp: {

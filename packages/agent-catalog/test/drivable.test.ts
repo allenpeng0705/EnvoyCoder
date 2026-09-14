@@ -8,11 +8,15 @@
  * list and `coder.listHarnesses` all offered it as ready, because the only question anyone asked was
  * whether the binary was on PATH.
  *
- * Two facts are asserted here, and both are the kind that rot silently:
+ * Three facts are asserted here, and all three are the kind that rot silently:
  *
- *   1. **exactly two** entries are drivable — the two whose argv *is* ACP;
+ *   1. **exactly five** entries are drivable — the two first-party harnesses plus the three agents
+ *      whose ACP commands were verified against their real binaries (`claudecode`, `codex`, `cursor`);
  *   2. every other entry says what it speaks instead, so a refusal can name the gap rather than
- *      telling a user to install something they already have.
+ *      telling a user to install something they already have;
+ *   3. every entry that claims it can be put into a mode **says which field its `session/set_mode`
+ *      reads**, because `AcpClient.setMode` refuses to guess — the built-in harness silently ignores a
+ *      `modeId`, so a wrong guess is a mode that looks applied and is not.
  */
 
 import { describe, expect, it } from "vitest";
@@ -20,19 +24,26 @@ import { describe, expect, it } from "vitest";
 import {
   ALL_HARNESSES,
   HARNESS_CATALOG,
+  harnessAcpFacts,
   harnessTransport,
   isDrivableByAcpAdapter,
 } from "../src/index.js";
 
 describe("which agents this product can actually run", () => {
-  it("drives the two whose protocol our adapter speaks — and no others", () => {
+  it("drives the five whose protocol our adapter speaks — and no others", () => {
     const drivable = ALL_HARNESSES.filter((id) => isDrivableByAcpAdapter(id));
-    expect(drivable.sort()).toEqual(["deepseek-harness", "envoy-harness"]);
+    expect(drivable.sort()).toEqual([
+      "claudecode",
+      "codex",
+      "cursor",
+      "deepseek-harness",
+      "envoy-harness",
+    ]);
 
     for (const id of drivable) {
       expect(harnessTransport(id)).toBe("acp");
-      // The rule is about the argv we actually spawn, not about the vendor: both of these launch
-      // programs that implement ACP over stdio.
+      // The rule is about the argv we actually spawn, not about the vendor: all five launch programs
+      // that implement ACP over stdio.
       const launch = HARNESS_CATALOG[id].launch;
       expect(launch.kind).toBe("child-process");
     }
@@ -46,15 +57,58 @@ describe("which agents this product can actually run", () => {
     }
   });
 
-  it("keeps the six non-ACP agents listed but not drivable — an honest gap, not a hidden one", () => {
-    // These stay in the catalogue because the recipes (argv, env, install link) are real work and will
-    // be needed by the adapters that make them runnable: an app-server client for codex, an HTTP
-    // bridge for opencode, a JSONL-RPC reader for pi/omp, a vendor ACP subcommand for copilot/cursor.
-    // What they must not be is *offered* as ready, which is what `isDrivableByAcpAdapter` now prevents.
-    for (const id of ["claudecode", "codex", "copilot", "opencode", "cursor", "pi", "omp"] as const) {
+  it("keeps the four agents with no ACP surface listed but not drivable — an honest gap, not a hidden one", () => {
+    // These stay in the catalogue because the recipes (argv, env, install link) are real work and will be
+    // needed by the adapters that make them runnable: a JSONL-RPC reader for pi/omp, and whatever
+    // copilot and opencode grow. What they must not be is *offered* as ready, which is what
+    // `isDrivableByAcpAdapter` prevents.
+    //
+    // `claudecode`, `codex` and `cursor` used to be in this list. They left it when their commands were
+    // replaced with ones that were driven against the real binaries — the Cursor CLI's own `acp`
+    // subcommand, and the Agent Client Protocol project's bridges for the other two — and the test above
+    // is what makes that change visible rather than a comment somebody has to trust.
+    for (const id of ["copilot", "opencode", "omp", "pi"] as const) {
       expect(isDrivableByAcpAdapter(id), id).toBe(false);
       expect(harnessTransport(id), id).toBe("cli");
     }
+  });
+
+  it("makes every agent that claims a settable mode say which field carries it", () => {
+    // **The invariant behind `AcpClient.setMode`'s refusal.** The two contracts are `mode`
+    // (`envoy-harness` reads `obj.mode`) and `modeId` (the specification; `cursor-agent acp` and both
+    // bridges refuse `mode` with `-32602`). Neither can be defaulted: the built-in harness *accepts* an
+    // unknown `modeId` by ignoring it and answering success, so a wrong guess is a silent no-op rather
+    // than an error. This assertion is what keeps the client's refusal unreachable from a run — if an
+    // entry ever claims `agentMode` without recording the field, this fails instead of a user's mode
+    // being applied to nothing.
+    const claiming = ALL_HARNESSES.filter((id) => HARNESS_CATALOG[id].capabilities.agentMode);
+    expect(claiming.sort()).toEqual([
+      "claudecode",
+      "codex",
+      "cursor",
+      "envoy-harness",
+    ]);
+    for (const id of claiming) {
+      expect(harnessAcpFacts(id).modeParam, id).toMatch(/^(mode|modeId)$/);
+      expect(HARNESS_CATALOG[id].modes.length, id).toBeGreaterThan(0);
+    }
+
+    // And the entry whose mode the daemon genuinely cannot set declares nothing, so the accessor is
+    // exercised in both directions rather than only where it answers.
+    expect(harnessAcpFacts("deepseek-harness").modeParam).toBeUndefined();
+    expect(harnessAcpFacts("deepseek-harness").authMethodId).toBeUndefined();
+  });
+
+  it("names the one agent that cannot open a session without authenticating", () => {
+    // `cursor-agent acp` answers `session/new` with `-32000 Authentication required` until
+    // `authenticate {methodId: 'cursor_login'}` has been sent, so this is not decoration: without it
+    // the entry is drivable in principle and unusable in practice. Asserted as an exact set because
+    // the failure mode of adding one wrongly is worse than adding none — a browser-login method
+    // would open a window on the user's desktop, and an `env_var` method fails with the agent's own
+    // sentence when the variable is unset.
+    const needingAuth = ALL_HARNESSES.filter((id) => harnessAcpFacts(id).authMethodId !== undefined);
+    expect(needingAuth).toEqual(["cursor"]);
+    expect(harnessAcpFacts("cursor").authMethodId).toBe("cursor_login");
   });
 });
 

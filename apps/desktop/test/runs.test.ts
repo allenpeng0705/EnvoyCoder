@@ -80,6 +80,11 @@ async function bench(
     command: process.execPath,
     args: [FAKE_AGENT],
     cwd: home,
+    // The fixture's `session/set_mode` reads the peer's `{mode}`, so this bench declares that — the same
+    // field name the catalogue records for `envoy-harness`. It is neither optional nor defaulted:
+    // `AcpClient.setMode` refuses to send a mode for an agent whose field name nobody wrote down, which
+    // is what keeps a mode from being applied to a field the agent ignores (see `AcpLaunch.modeParam`).
+    modeParam: "mode",
     ...(options.agentEnv ? { env: options.agentEnv } : {}),
   };
 
