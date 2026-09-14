@@ -319,6 +319,11 @@ export const en = {
      without me". The headings are sentence case and are not labels — nothing on this pane needs one. */
   "settings.title": "Settings",
   "settings.close": "Close",
+  // The way out of a project's settings, back to the settings for this machine. It names where it goes
+  // rather than saying "Back", because a control labelled after the direction you are moving is a
+  // control a user has to press to find out what it does.
+  "settings.back": "All settings",
+  "settings.back.title": "Back to this machine's settings, and the list of projects",
   "settings.stateDir": "State in {path}",
   "settings.noDaemon": "No daemon",
   "settings.daemon": "Daemon {version}",
@@ -369,6 +374,17 @@ export const en = {
   "settings.project.model.detail": "Overrides this machine's model. Empty means the agent decides.",
   "settings.project.extraArgs.detail":
     "Passed to the agent's command line for every task in this project, after the ones EnvoyCoder builds itself.",
+  /* ── the app scope's list of projects: the way *into* a project's settings, and out again ──
+     The section is navigation, not settings: it lists what is registered and opens the scope that owns
+     the per-project rows. Its two sentences are the two states — what selecting a row does, and how a
+     project gets here in the first place. `{add}` is the rail's own Add-project label (`sidebar.footer.add`)
+     rather than the word "Add" repeated here, so the sentence keeps naming the control it means when the
+     control is renamed or translated. */
+  "settings.group.projects": "Projects",
+  "settings.projects.note":
+    "A project can override the settings on this page. Selecting one opens its own.",
+  "settings.projects.empty":
+    "No projects yet. A project is a folder on this machine that agents work in — add one with {add} at the bottom of the rail, or from the Command Center.",
   "settings.agents.heading": "Agents on this machine",
   "settings.agents.note":
     "What each agent can actually do decides what EnvoyCoder offers. An agent that cannot be asked for permission is not given an approval dialog it would ignore.",

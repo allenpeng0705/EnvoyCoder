@@ -1179,6 +1179,80 @@ body {
   flex: 0 0 auto;
 }
 
+/* **A row that goes somewhere.** The same two bands as `.setting` above — a label and a quieter second
+   line — inside a `<button>`, because selecting the row *is* the action and a `<p>` is not allowed
+   inside a button. The bands are `<span>`s, so they need the block layout the `<p>`s get for free, and
+   the button has to be stripped back to nothing: a control with a UA border and a centred label reads
+   as a form field, not as a row of a list. */
+.setting--nav {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  width: 100%;
+  margin: 0;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--motion-fade) var(--motion-ease);
+}
+
+.setting--nav .setting__text,
+.setting--nav .setting__title,
+.setting--nav .setting__detail {
+  display: block;
+}
+
+/* Paths are the one value in this pane that can be arbitrarily long and has no spaces to break at, so
+   the second band is the one place a row can push the pane wider than its column. `min-width: 0` lets
+   the flex item shrink and `overflow-wrap: anywhere` breaks the path rather than the layout. */
+.setting--nav .setting__text {
+  min-width: 0;
+}
+
+.setting--nav .setting__detail {
+  overflow-wrap: anywhere;
+}
+
+/* The right end of a row that navigates. Muted, and smaller than the label: it says "this one goes
+   somewhere", which is all a chevron is entitled to say — the destination is named by the row's own
+   accessible name and by the section it sits in. */
+.setting__chevron {
+  flex: 0 0 auto;
+  color: var(--foreground-extra-muted);
+}
+
+.setting--nav:hover {
+  background: var(--surface-2);
+}
+
+.setting--nav:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* The app scope's list of projects: the way into each project's own settings. One column, no bullet —
+   the label of each row is the bullet — and tighter than the 18px between sections, because these rows
+   are a list of each other rather than separate settings. */
+.settings__projects {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* The way back out of a project's scope, above the pane's title where a breadcrumb belongs. It is a
+   text button rather than an icon on purpose: "back" says the direction, not the destination. */
+.settings__back {
+  margin: 0 0 var(--space-2);
+}
+
 /* **What is true *now*, and it has to look different from what is always true.** `setting__detail` is
    the sentence a setting carries in every state; this is the reason a control is disabled, the folder a
    chooser would not open in, or what the stored choice actually reaches. The pane's rule is that a

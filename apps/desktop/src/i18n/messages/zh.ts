@@ -238,6 +238,8 @@ export const zh: Catalogue = {
   /* ── settings ── */
   "settings.title": "设置",
   "settings.close": "关闭",
+  "settings.back": "全部设置",
+  "settings.back.title": "返回本机的设置和项目列表",
   "settings.stateDir": "数据位于 {path}",
   "settings.noDaemon": "无服务",
   "settings.daemon": "服务 {version}",
@@ -277,6 +279,9 @@ export const zh: Catalogue = {
   "settings.project.model.title": "此处新任务默认使用的模型",
   "settings.project.model.detail": "覆盖本机的模型。留空表示由智能体决定。",
   "settings.project.extraArgs.detail": "该项目中每个任务都会把这段参数传给智能体的命令行，排在 EnvoyCoder 自己生成的参数之后。",
+  "settings.group.projects": "项目",
+  "settings.projects.note": "项目可以覆盖此页面上的设置。选择其中一个会打开它自己的设置。",
+  "settings.projects.empty": "还没有项目。项目是这台电脑上智能体工作的文件夹——用项目栏底部的{add}添加一个，或者从命令中心添加。",
   "settings.agents.heading": "本机上的智能体",
   "settings.agents.note": "每个智能体实际能做什么，决定了 EnvoyCoder 提供什么。无法被请求许可的智能体，不会被塞给它一个会被忽略的批准对话框。",
   "settings.agents.empty": "智能体列表还没有到达。",

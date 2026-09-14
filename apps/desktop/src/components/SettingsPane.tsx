@@ -37,6 +37,20 @@
  * used to open *app* settings and drop the project on the floor, which is the same defect in the UI
  * layer: a control labelled with a scope it did not have.
  *
+ * ## How the two scopes are wired together, which is one model and not two
+ *
+ * The app scope is the root: it carries the machine's defaults **and a Projects section listing what is
+ * registered**, whose rows open that project's scope in this same pane. A project's scope carries its
+ * own rows, and a back control — "All settings", naming where it goes — returns to the root. So the two
+ * routes into a project's settings are the rail's project `…` menu (*"Project settings"*) and this
+ * list, and both are the **same** function (`CoderApp`'s `openProjectSettings`), which is the only
+ * arrangement in which they cannot come to mean different things. Leaving is symmetric: the back control
+ * and the Close button both work, and removal of the project falls back to the root (see below).
+ *
+ * The two callbacks are **required** props (`onOpenProjectSettings`, `onOpenAppSettings`). Optional
+ * ones would allow a caller to render a list of rows that press into nothing, and this pane's entire
+ * history is a list of controls that did not do what they said.
+ *
  * The resolution order (`explicit → project → app → fallback`) is `resolveTaskDefaults`'s, and it is why
  * a project's rows say "override": a project that names an agent decides for its tasks, and a project
  * that names nothing inherits this pane's answer.
@@ -70,7 +84,7 @@ import { localizeText } from "../i18n/notice.js";
 import { formatWhen } from "../i18n/when.js";
 import type { CoderState } from "../state/coderStore.js";
 import { ModelChoice } from "./ModelChoice.js";
-import { FolderSetting, SettingRow, TextSetting } from "./SettingsRows.js";
+import { FolderSetting, SettingNavRow, SettingRow, TextSetting } from "./SettingsRows.js";
 
 export interface SettingsPaneProps {
   state: CoderState;
@@ -91,6 +105,23 @@ export interface SettingsPaneProps {
    * replace: a patch carrying only a model would leave the agent for that project undefined.
    */
   onUpdateProject?: ((defaults: TaskDefaults) => void) | undefined;
+  /**
+   * Open one project's settings in this pane — the Projects section at the app scope.
+   *
+   * **Required, and not merely present.** An optional callback would let a caller render the app scope
+   * with a list of project rows that press into nothing, which is the defect this pane was rebuilt to
+   * remove: a control that does not do what it says. The shell always knows where a project's settings
+   * go (`openProjectSettings`), so there is no honest caller without one.
+   */
+  onOpenProjectSettings: (project: Project) => void;
+  /**
+   * Leave a project's scope for this machine's — the pane's own back control.
+   *
+   * The second half of the same requirement: a scope you can enter and not leave is reachable exactly
+   * once per pane, which is why the back control is a prop of the pane rather than a link the project
+   * scope draws for itself.
+   */
+  onOpenAppSettings: () => void;
 }
 
 export function SettingsPane(props: SettingsPaneProps): JSX.Element {
@@ -263,6 +294,45 @@ function AppSettings(props: SettingsPaneProps): JSX.Element {
         />
       </SettingRow>
 
+      <h2 className="settings__heading">{t("settings.group.projects")}</h2>
+      {/* **The section that makes the third scope reachable from inside the pane.** The reference
+          product's app settings carry a `projects` list whose rows open that project's own settings, and
+          this is the same model rather than a second one: the rail's project menu and this list both
+          land on the scope below, entered through `openProjectSettings`, and both are one press from
+          where the user already is.
+          It lists and navigates, and nothing else: a project's own controls (folder, agent, model,
+          arguments) live in the project scope, because a control that edits a project while the pane is
+          titled "Settings" is a control labelled with a scope it does not have — the exact defect §7.5
+          of `docs/settings-parity.md` records. */}
+      <p className="settings__note">{t("settings.projects.note")}</p>
+      {props.state.projects.length === 0 ? (
+        // Design law 6, at the one place in this pane a user can arrive at nothing: the section says how
+        // a project gets here instead of rendering an empty box. It names the rail's own control through
+        // that control's label (`sidebar.footer.add`), so renaming or translating the button cannot leave
+        // this sentence pointing at a word that is not on screen.
+        <p className="settings__note">{t("settings.projects.empty", { add: t("sidebar.footer.add") })}</p>
+      ) : (
+        <ul className="settings__projects">
+          {props.state.projects.map((project) => (
+            <li key={project.id}>
+              <SettingNavRow
+                title={project.label}
+                // The second line is the path, abbreviated the way the project scope abbreviates it
+                // (`shortPath`), with the whole path on hover: two projects called `api` are told apart
+                // by where they live, and the tail is the part that differs.
+                detail={shortPath(project.path)}
+                detailTitle={project.path}
+                developerNote={project.id}
+                // The destination's own title, so the row announces where it goes rather than only what
+                // it shows. Same key as the pane heading, which is the point: one name for one place.
+                actionLabel={t("settings.project.title", { project: project.label })}
+                onSelect={() => props.onOpenProjectSettings(project)}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+
       <h2 className="settings__heading">{t("settings.agents.heading")}</h2>
       <p className="settings__note">{t("settings.agents.note")}</p>
       <ul className="settings__agents">
@@ -333,6 +403,16 @@ function ProjectSettings(props: SettingsPaneProps & { project: Project }): JSX.E
       title={t("settings.project.title", { project: project.label })}
       ariaLabel={t("settings.project.title", { project: project.label })}
       state={state}
+      // The way back, and the reason it is in the header rather than at the end of the rows: the scope
+      // was entered *from* this machine's settings (the rail's project menu, or the Projects list in that
+      // scope), so leaving it belongs where the pane says where you are. It names its destination — "All
+      // settings", not "Back" and not a bare chevron — because a control named after the direction you are
+      // moving is one a user has to press to find out what it does.
+      back={{
+        label: t("settings.back"),
+        title: t("settings.back.title"),
+        onClick: props.onOpenAppSettings,
+      }}
       onClose={props.onClose}
     >
       <p className="settings__note">{t("settings.project.detail")}</p>
@@ -521,6 +601,14 @@ function SettingsShell(props: {
   ariaLabel: string;
   state: CoderState;
   onClose: () => void;
+  /**
+   * Where this pane came from, when it was opened inside another scope: the label names the
+   * destination, so the control reads as the place it goes rather than as a direction.
+   *
+   * Absent at the app scope, which is the root of this navigation and has nothing above it — a back
+   * control that went nowhere would be worse than none.
+   */
+  back?: { label: string; title: string; onClick: () => void } | undefined;
   children: ReactNode;
 }): JSX.Element {
   const { t } = useI18n();
@@ -528,6 +616,19 @@ function SettingsShell(props: {
     <section className="pane" aria-label={props.ariaLabel}>
       <header className="pane__header">
         <div className="pane__title-group">
+          {props.back !== undefined ? (
+            <button
+              type="button"
+              className="button button--ghost button--small settings__back"
+              title={props.back.title}
+              onClick={props.back.onClick}
+            >
+              {/* The arrow is decoration and says nothing a screen reader needs: the name is the
+                  sentence after it. Keyboard reachable like every other control in the header — it is a
+                  `<button>`, so Enter and Space work, and it is first in the header's tab order. */}
+              <span aria-hidden>←</span> {props.back.label}
+            </button>
+          ) : null}
           <h1 className="pane__title">{props.title}</h1>
           <div className="pane__meta">
             <span

@@ -1,5 +1,5 @@
 /**
- * The third settings scope, from the sidebar row to the daemon.
+ * The third settings scope, from the sidebar row to the daemon — and the navigation that reaches it.
  *
  * ## What this proves that the pane's own tests cannot
  *
@@ -15,6 +15,15 @@
  * values came from a snapshot: change the model, then the agent, and the model was written away by the
  * second edit — with the pane still showing the first as if it had stuck. The id is what fixes it, and
  * the "carries the values it does not touch" test below is the one that fails on the snapshot.
+ *
+ * ## The two routes in, and the way out
+ *
+ * A project's settings are reached two ways, and the second one is the part that lives *inside* the
+ * pane: the rail row's `…` → *"Project settings"*, and the app scope's own **Projects** section, whose
+ * rows open that project's scope. Both call `openProjectSettings`, so the tests below assert the two
+ * agree on the destination (the pane's title, and the **id** a write carries) rather than asserting each
+ * separately and hoping. Leaving is the back control — *"All settings"*, named after the destination —
+ * and the tests assert the round trip, because a scope you can enter and not leave is reachable once.
  *
  * ## Why the fixture re-renders instead of mocking
  *
@@ -51,6 +60,19 @@ const project: Project = {
   label: "api",
   hostId: "local",
   addedAt: "2026-09-01T09:00:00.000Z",
+};
+
+/**
+ * A second project, and it is here for one reason: with two, "the row opened a project's settings" and
+ * "the row opened *that* project's settings" are different claims, and the second is the one a list of
+ * rows can get wrong while passing a test written against a single-project fixture.
+ */
+const otherProject: Project = {
+  id: "local::/work/web",
+  path: "/work/web",
+  label: "web",
+  hostId: "local",
+  addedAt: "2026-09-02T09:00:00.000Z",
 };
 
 /** Two agents, so the scope's agent picker has something to switch between. */
@@ -285,5 +307,143 @@ describe("a project's settings on the project's own row", () => {
 
     expect(screen.queryByRole("heading", { name: "Project settings for api" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Settings" })).toBeTruthy();
+  });
+});
+
+/**
+ * The app scope's **Projects** section, and the way back out of a project's scope.
+ *
+ * This is the half of the navigation model the rail's row menu cannot provide: a user reading this pane
+ * has no reason to go looking at the rail for the project they are thinking about, and the pane's own
+ * history is a list of controls that promised a scope they did not have. So each claim is asserted where
+ * it can fail — the list renders what it was given, a row opens **that** project's scope (the id, not
+ * "some project"), the back control lands on this machine's settings, and an empty list teaches instead
+ * of rendering an empty box.
+ */
+describe("the Projects section in the app scope", () => {
+  /**
+   * Reach this machine's settings the way the owner's brief describes them: the entry at the **bottom of
+   * the rail** (the footer's Settings button — ⌘, is bound to the same function). Every test below starts
+   * here, which is the point: the Projects list is inside the app scope, so the app scope is the first
+   * step of the journey rather than something a test can assume.
+   */
+  const openAppSettings = (): void => {
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+  };
+
+  /** The list's row for one project, named with the words of the pane it opens. */
+  const rowFor = (label: string): HTMLElement =>
+    screen.getByRole("button", { name: `Project settings for ${label}` });
+
+  /** Pick an agent in whichever project scope is open, and wait for the write to the daemon. */
+  const writeAgent = async (updateProject: ReturnType<typeof vi.fn>): Promise<void> => {
+    fireEvent.change(screen.getByLabelText("The agent new tasks here start with"), {
+      target: { value: "deepseek-harness" },
+    });
+    await vi.waitFor(() => expect(updateProject).toHaveBeenCalled());
+  };
+
+  it("lists every project it was given, each with its own path", () => {
+    // Two projects, and each row is asserted to carry *its own* path: a single-project fixture passes on
+    // a list that draws the same row twice, which is what this catches.
+    show({ projects: [project, otherProject] });
+    openAppSettings();
+
+    const api = rowFor("api");
+    const web = rowFor("web");
+    expect(within(api).getByText("/work/api")).toBeTruthy();
+    expect(within(api).queryByText("/work/web")).toBeNull();
+    expect(within(web).getByText("/work/web")).toBeTruthy();
+    expect(within(web).queryByText("/work/api")).toBeNull();
+    // The row *is* the control, so it is keyboard reachable by being a button rather than by a tabindex.
+    expect(api.tagName).toBe("BUTTON");
+    expect(web.tagName).toBe("BUTTON");
+  });
+
+  it("opens the settings of the row that was pressed, by id", async () => {
+    const { updateProject } = show({ projects: [project, otherProject] });
+    openAppSettings();
+
+    fireEvent.click(rowFor("web"));
+
+    // The pane names the project the row named, not the first in the list.
+    expect(screen.getByRole("heading", { name: "Project settings for web" })).toBeTruthy();
+    // And the id is the assertion that cannot be satisfied by accident: the write from this pane carries
+    // `local::/work/web`, because the pane resolved the row's project against `state.projects`.
+    await writeAgent(updateProject);
+    expect(updateProject).toHaveBeenCalledWith({
+      id: otherProject.id,
+      defaults: { harness: "deepseek-harness" },
+    });
+  });
+
+  it("goes back to this machine's settings, with the list ready to be used again", () => {
+    show({ projects: [project, otherProject] });
+    openAppSettings();
+    fireEvent.click(rowFor("web"));
+    expect(screen.getByRole("heading", { name: "Project settings for web" })).toBeTruthy();
+
+    // Named after where it goes — "All settings", not "Back" and not a bare chevron — and a button, so
+    // Enter and Space reach it exactly as they reach Close beside it.
+    const back = screen.getByRole("button", { name: "All settings" });
+    expect(back.tagName).toBe("BUTTON");
+    fireEvent.click(back);
+
+    expect(screen.queryByRole("heading", { name: "Project settings for web" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Settings" })).toBeTruthy();
+    // The round trip is complete: the row that was pressed is on screen and pressable again.
+    expect(rowFor("web")).toBeTruthy();
+  });
+
+  it("opens the same scope from the rail's menu and from this list", async () => {
+    // **The two routes, asserted against each other** rather than each on its own. Two entry points that
+    // are only ever tested separately can come to mean two things — and this repo has the receipts: the
+    // rail's button once opened *app* settings with the project dropped on the floor. So the same journey
+    // is walked twice, once per route, and the destinations compared: the pane's title, and the id the
+    // write from that pane carries.
+    const viaMenu = show({ projects: [project, otherProject] });
+    openProject("web");
+    await writeAgent(viaMenu.updateProject);
+    const fromTheMenu = viaMenu.updateProject.mock.calls[0]?.[0];
+
+    cleanup();
+    const viaList = show({ projects: [project, otherProject] });
+    openAppSettings();
+    fireEvent.click(rowFor("web"));
+    await writeAgent(viaList.updateProject);
+    const fromTheList = viaList.updateProject.mock.calls[0]?.[0];
+
+    expect(fromTheList).toEqual(fromTheMenu);
+    expect(fromTheList).toEqual({
+      id: otherProject.id,
+      defaults: { harness: "deepseek-harness" },
+    });
+  });
+
+  it("teaches how a project gets added when there are none", () => {
+    show({ projects: [] });
+    openAppSettings();
+
+    expect(screen.getByRole("heading", { name: "Projects" })).toBeTruthy();
+    // Design law 6: the section says how a project gets here rather than rendering an empty box. The
+    // sentence interpolates the rail's own Add-project label, so it cannot end up pointing at a word that
+    // is not on screen — which is what the second assertion pins.
+    expect(screen.getByText(/No projects yet\. A project is a folder on this machine/)).toBeTruthy();
+    expect(screen.getByText(/add one with Add project at the bottom of the rail/)).toBeTruthy();
+    // And nothing to list means no list: not an empty box, and no rows.
+    expect(screen.queryByRole("button", { name: /^Project settings for / })).toBeNull();
+  });
+
+  it("lists and navigates without putting a project's own controls in the app scope", () => {
+    // The section is navigation. A project's own rows — the ones this pane draws when a project is
+    // selected — must not be here beside this machine's, or a control would be labelled with a scope it
+    // does not have. Asserted on the project-only *wording* ("here"), which is what tells them apart.
+    show({ projects: [project, otherProject] });
+    openAppSettings();
+
+    expect(screen.queryByLabelText("The agent new tasks here start with")).toBeNull();
+    expect(screen.queryByLabelText("The model new tasks here start on")).toBeNull();
+    expect(screen.queryByText("Folder")).toBeNull();
+    expect(screen.getByLabelText("The agent new tasks start with")).toBeTruthy();
   });
 });

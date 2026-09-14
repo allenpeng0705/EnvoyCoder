@@ -160,6 +160,14 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
     setSettingsProjectId(undefined);
     setSettingsOpen(true);
   };
+  /**
+   * The one way into a project's settings, whoever asks.
+   *
+   * Two callers pass the project through: the rail's project `…` menu (*"Project settings"*) and the
+   * Projects section inside the app-scope pane, whose rows are that project's own scope. One function
+   * rather than two is the whole reason the two routes can be described as one model — a project's
+   * scope reached one way cannot behave differently from the same scope reached the other.
+   */
   const openProjectSettings = (project: Project): void => {
     setSettingsProjectId(project.id);
     setSettingsOpen(true);
@@ -404,6 +412,12 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               {...(settingsProject !== undefined ? { project: settingsProject } : {})}
               onClose={() => setSettingsOpen(false)}
               onUpdate={(patch) => void props.actions.updateSettings(patch)}
+              // The pane's own navigation, and it is these two functions or none: the same
+              // `openProjectSettings` the rail's project menu calls (so the two routes into a project
+              // cannot come to mean different things) and the same `openAppSettings` ⌘, and the footer's
+              // Settings button call (so the scope's back control lands exactly where they do).
+              onOpenProjectSettings={openProjectSettings}
+              onOpenAppSettings={openAppSettings}
               // A project's defaults, written whole because they replace: see `coderStore.updateProject`.
               // The refusal goes to the strip rather than vanishing — a project whose defaults could not
               // be saved must not keep showing the value the user picked.

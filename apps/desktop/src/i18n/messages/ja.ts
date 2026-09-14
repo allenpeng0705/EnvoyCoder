@@ -238,6 +238,8 @@ export const ja: Catalogue = {
   /* ── settings ── */
   "settings.title": "設定",
   "settings.close": "閉じる",
+  "settings.back": "すべての設定",
+  "settings.back.title": "このコンピューターの設定とプロジェクト一覧に戻る",
   "settings.stateDir": "データ: {path}",
   "settings.noDaemon": "サービスなし",
   "settings.daemon": "サービス {version}",
@@ -277,6 +279,9 @@ export const ja: Catalogue = {
   "settings.project.model.title": "ここで新しいタスクが使うモデル",
   "settings.project.model.detail": "このコンピューターのモデルを上書きします。空ならエージェントが決めます。",
   "settings.project.extraArgs.detail": "このプロジェクトのタスクごとに、EnvoyCoder が組み立てる引数の後ろに付けてエージェントのコマンドラインへ渡します。",
+  "settings.group.projects": "プロジェクト",
+  "settings.projects.note": "プロジェクトはこのページの設定を上書きできます。選択すると、そのプロジェクト自身の設定が開きます。",
+  "settings.projects.empty": "プロジェクトはまだありません。プロジェクトとは、エージェントが作業するこのコンピューター上のフォルダーです。プロジェクトバーの下部にある{add}で追加するか、コマンドパレットから追加してください。",
   "settings.agents.heading": "このコンピューターのエージェント",
   "settings.agents.note": "各エージェントに実際にできることが、EnvoyCoder の提供内容を決めます。許可を求められないエージェントには、無視される承認ダイアログを出しません。",
   "settings.agents.empty": "エージェント一覧はまだ届いていません。",

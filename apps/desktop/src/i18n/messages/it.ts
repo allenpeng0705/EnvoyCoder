@@ -238,6 +238,8 @@ export const it: Catalogue = {
   /* ── settings ── */
   "settings.title": "Impostazioni",
   "settings.close": "Chiudi",
+  "settings.back": "Tutte le impostazioni",
+  "settings.back.title": "Torna alle impostazioni di questo computer e all'elenco dei progetti",
   "settings.stateDir": "Dati in {path}",
   "settings.noDaemon": "Nessun servizio",
   "settings.daemon": "Servizio {version}",
@@ -277,6 +279,9 @@ export const it: Catalogue = {
   "settings.project.model.title": "Il modello con cui partono qui le nuove attività",
   "settings.project.model.detail": "Sostituisce il modello di questo computer. Vuoto significa che decide l'agente.",
   "settings.project.extraArgs.detail": "Viene passato alla riga di comando dell'agente per ogni attività di questo progetto, dopo quelli che EnvoyCoder costruisce da sé.",
+  "settings.group.projects": "Progetti",
+  "settings.projects.note": "Un progetto può sostituire le impostazioni di questa pagina. Selezionandone uno si aprono le sue.",
+  "settings.projects.empty": "Nessun progetto. Un progetto è una cartella di questo computer in cui lavorano gli agenti — aggiungine uno con {add} in fondo alla barra dei progetti, oppure dalla palette dei comandi.",
   "settings.agents.heading": "Agenti su questo computer",
   "settings.agents.note": "Ciò che ogni agente sa fare davvero decide cosa offre EnvoyCoder. A un agente a cui non si può chiedere il permesso non viene mostrato un dialogo di approvazione che ignorerebbe.",
   "settings.agents.empty": "L'elenco degli agenti non è ancora arrivato.",

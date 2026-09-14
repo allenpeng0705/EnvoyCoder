@@ -1,5 +1,6 @@
 /**
- * The two shapes every settings row is built from: **a row**, and **a field that commits**.
+ * The three shapes every settings row is built from: **a row**, **a row that goes somewhere**, and
+ * **a field that commits**.
  *
  * ## Why a row is a component and not four `<p>`s per setting
  *
@@ -67,6 +68,69 @@ export function SettingRow(props: SettingRowProps): JSX.Element {
       </div>
       <div className="setting__control">{props.children}</div>
     </div>
+  );
+}
+
+/**
+ * A row that **goes** somewhere, in the same two bands as a setting's.
+ *
+ * The reference product's app settings carry a list of projects whose rows are the way into each
+ * project's own settings, and the shape is worth keeping for a reason beyond parity: the bands are the
+ * pane's (`setting__title` over `setting__detail`) so a project reads exactly like the settings above
+ * it, and the *whole row* is the control, so "select the project" is one click anywhere in the row
+ * rather than a hunt for a button at the end of it.
+ *
+ * Three things are deliberately different from `SettingRow`, and each is a decision:
+ *
+ *   * **The control is the row.** A setting pairs a description with a control on the right; nothing on
+ *     the right of a project row would be honest — selecting the row *is* the action — and a `<p>`
+ *     inside a `<button>` is invalid HTML, so the bands are `<span>`s and CSS gives them the layout the
+ *     `<p>`s get above (`display: block`, in `styles.css`).
+ *   * **`actionLabel` names where the row goes**, and it is the *destination's own title* at the call
+ *     site ("Project settings for api"). A row whose accessible name is only its label ("api") leaves a
+ *     screen-reader user to guess what pressing it does; this one reads as the pane they land on. The
+ *     visible label is a prefix of it, so the visible words are still announced.
+ *   * **A muted `›` on the right**, `aria-hidden`. A row with nothing at its end reads as text; the
+ *     chevron is the smallest honest way to say "this one navigates" — and it is *not* the sidebar's
+ *     `▶`/`▼`, which means disclosure rather than movement.
+ *
+ * `developerNote` is the developer fact in the title attribute, on the same rule as `SettingRow`. Here
+ * that fact is the row's **id** rather than a field path: a list of registrations is exactly where
+ * "which one is this?" stops being answerable from the label.
+ */
+export interface SettingNavRowProps {
+  title: string;
+  detail: string;
+  /** The whole of what `detail` abbreviates — a path, usually — shown on hover. */
+  detailTitle?: string;
+  developerNote: string;
+  /** The row's accessible name. It must name where the row *goes*, not only what it shows. */
+  actionLabel: string;
+  onSelect: () => void;
+}
+
+export function SettingNavRow(props: SettingNavRowProps): JSX.Element {
+  return (
+    <button
+      type="button"
+      className="setting setting--nav"
+      title={props.developerNote}
+      aria-label={props.actionLabel}
+      onClick={props.onSelect}
+    >
+      <span className="setting__text">
+        <span className="setting__title">{props.title}</span>
+        <span
+          className="setting__detail"
+          {...(props.detailTitle !== undefined ? { title: props.detailTitle } : {})}
+        >
+          {props.detail}
+        </span>
+      </span>
+      <span className="setting__chevron" aria-hidden>
+        ›
+      </span>
+    </button>
   );
 }
 

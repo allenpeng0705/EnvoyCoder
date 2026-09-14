@@ -121,7 +121,8 @@ attention count), `RowMenu` (the `…` on a project row and on a task row: its i
 contract, and the inline question a destructive item asks), `TaskPane` (header facts, transcript,
 inline approval, composer with Queue/Steer), `CommandCenter` (typed `action`/`choice`
 contributions, arguments collected in the same box), `SettingsPane` (app-wide defaults, per-agent
-capability honesty), `MeshStatusBar` (mesh state in end-user words), and the store behind them:
+capability honesty, and the projects list that opens one project's own defaults), `MeshStatusBar` (mesh
+state in end-user words), and the store behind them:
 
 ```
 daemon ──ws──▶ CoderConnection ──▶ CoderStore ──useSyncExternalStore──▶ components
@@ -151,8 +152,10 @@ One more, added with the row menus and worth stating because it is a decision ra
   that changes, so the row is where the question can show what is being decided — and one action with
   one home is one sentence to keep true. The sentence is `task.remove.*`, unchanged, and the
   destructive colour exists only inside the confirmation (law 3), never on the row and never in the
-  menu. `docs/settings-parity.md` §7.3's project scope (built as §8.1 item 2) is reached the same way:
-  the row's menu, one item in it.
+  menu. `docs/settings-parity.md` §7.3's project scope (built as §8.1 item 2) is reached from the row's
+  menu — one item in it — **and** from the app scope's own projects list, which is the same function
+  behind both (§7.5); the scope names the project in its title and carries a back control labelled with
+  the destination it returns to.
 
 The transcript is real as of M2, and its **folding rules are not in the component**:
 

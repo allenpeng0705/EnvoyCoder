@@ -68,7 +68,17 @@ function renderPane(over: Partial<CoderState> = {}, preference: "system" | "de" 
   const onUpdate = vi.fn();
   render(
     <I18nProvider preference={preference} reported={["en-US"]}>
-      <SettingsPane state={stateWith(over)} onClose={vi.fn()} onUpdate={onUpdate} />
+      <SettingsPane
+        state={stateWith(over)}
+        onClose={vi.fn()}
+        onUpdate={onUpdate}
+        // The pane's own navigation, which is required rather than optional: a caller that renders the
+        // Projects section without a destination is a list of rows that press into nothing. This test is
+        // about the language, so the destinations are stubs — `settings-scope.test.tsx` is where they are
+        // asserted through the shell that owns them.
+        onOpenProjectSettings={vi.fn()}
+        onOpenAppSettings={vi.fn()}
+      />
     </I18nProvider>,
   );
   return { onUpdate };
@@ -111,6 +121,10 @@ describe("the rest of the pane, in the same language", () => {
     expect(screen.getByRole("button", { name: "Schließen" })).toBeTruthy();
     // The harness list is empty in this fixture, and even that sentence is translated.
     expect(screen.getByText("Die Agentenliste ist noch nicht angekommen.")).toBeTruthy();
+    // …including the Projects section and its empty state, which is the one piece of this pane that is
+    // a sentence rather than a row: a German user must not read "No projects yet" in German chrome.
+    expect(screen.getByRole("heading", { name: "Projekte" })).toBeTruthy();
+    expect(screen.getByText(/Noch keine Projekte\./)).toBeTruthy();
   });
 
   it("leaves no English in the rail or the pane either", () => {

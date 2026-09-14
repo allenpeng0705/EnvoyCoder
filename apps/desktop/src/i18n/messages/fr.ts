@@ -238,6 +238,8 @@ export const fr: Catalogue = {
   /* ── settings ── */
   "settings.title": "Réglages",
   "settings.close": "Fermer",
+  "settings.back": "Tous les réglages",
+  "settings.back.title": "Revenir aux réglages de cet ordinateur et à la liste des projets",
   "settings.stateDir": "Données dans {path}",
   "settings.noDaemon": "Aucun service",
   "settings.daemon": "Service {version}",
@@ -277,6 +279,9 @@ export const fr: Catalogue = {
   "settings.project.model.title": "Le modèle avec lequel démarrent les nouvelles tâches ici",
   "settings.project.model.detail": "Remplace le modèle de cet ordinateur. Vide signifie que l'agent décide.",
   "settings.project.extraArgs.detail": "Transmis à la ligne de commande de l'agent pour chaque tâche de ce projet, après ceux qu'EnvoyCoder construit lui-même.",
+  "settings.group.projects": "Projets",
+  "settings.projects.note": "Un projet peut remplacer les réglages de cette page. En sélectionner un ouvre les siens.",
+  "settings.projects.empty": "Aucun projet pour l'instant. Un projet est un dossier de cet ordinateur dans lequel les agents travaillent — ajoutez-en un avec {add} en bas du volet des projets, ou depuis la palette de commandes.",
   "settings.agents.heading": "Agents sur cet ordinateur",
   "settings.agents.note": "Ce que chaque agent sait réellement faire détermine ce qu'EnvoyCoder propose. Un agent qu'on ne peut pas interroger pour une permission ne reçoit pas de dialogue d'approbation qu'il ignorerait.",
   "settings.agents.empty": "La liste des agents n'est pas encore arrivée.",
