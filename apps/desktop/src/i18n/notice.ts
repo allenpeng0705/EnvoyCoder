@@ -80,9 +80,31 @@ export function noticeOf(text: string | undefined): Notice | undefined {
   };
 }
 
+/**
+ * A call for a method the daemon does not have.
+ *
+ * This is not a bug in the method name — it is **two builds of one product talking to each other**.
+ * The shell spawns a daemon bundle, a dev server can keep an older one alive, and an upgrade leaves
+ * whichever got the port first still answering. The family's transport says
+ * `Method not found: coder.listTasks`, which is accurate and useless to the person reading it: the
+ * window cannot render a fix from it, and the rail looks empty rather than broken.
+ *
+ * So it becomes a notice with a key and the method in it — translated, and telling the user to
+ * restart so the two halves are the same build.
+ */
+const UNKNOWN_METHOD = /Method not found:\s*([A-Za-z0-9_.:-]+)/;
+
 /** A notice for a thrown or rejected value. Never returns undefined: an error always has *some* text. */
 export function noticeFromError(error: unknown): Notice {
   const text = error instanceof Error ? error.message : String(error);
+  const unknown = UNKNOWN_METHOD.exec(text);
+  if (unknown) {
+    return {
+      message: text,
+      key: "error.daemonTooOld",
+      values: { method: unknown[1] ?? "" },
+    };
+  }
   return noticeOf(text) ?? { message: text };
 }
 

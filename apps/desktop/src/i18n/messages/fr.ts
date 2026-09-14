@@ -62,6 +62,8 @@ export const fr: Catalogue = {
   "sidebar.empty.title": "Aucun projet pour l'instant",
   "sidebar.empty.body": "Ajoutez un dossier dans lequel vous travaillez. Les tâches que vous y lancez apparaissent ici, et le projet retient l'agent qu'elles doivent utiliser.",
   "sidebar.empty.noMatch": "Rien ne correspond à « {query} ».",
+  "sidebar.empty.cannotLoadTitle": "Impossible de lire vos projets",
+  "sidebar.empty.cannotLoadBody": "Cette liste est inconnue, pas vide — EnvoyCoder n'a pas pu interroger son démon.",
   "sidebar.section.tasks": "Tâches",
   "sidebar.project.attention": "Tâches qui vous attendent",
   "sidebar.project.agent": "L'agent avec lequel démarrent les nouvelles tâches de ce projet",
@@ -221,6 +223,8 @@ export const fr: Catalogue = {
   "error.notConnectedChange": "EnvoyCoder n'est pas connecté à son service, cette modification n'a donc pas été enregistrée.",
   "error.connectionClosed": "La connexion a été fermée.",
   "error.daemonClosedConnection": "Le service a fermé la connexion.",
+  "error.daemonTooOld":
+    "Le démon auquel cette fenêtre parle est une version plus ancienne : il ne connaît pas {method}. Redémarrez EnvoyCoder pour que la fenêtre et son démon soient de la même version, puis réessayez.",
   "error.notOurDaemon.product": "Quelque chose répond sur le port du service, mais il se présente comme « {product} ». EnvoyCoder ne s'y est pas connecté.",
   "error.notOurDaemon.instance": "Le service sur le port {port} n'est pas celui pour lequel cette fenêtre a été lancée. Un autre service EnvoyCoder l'a peut-être remplacé — rouvrez la fenêtre.",
   "error.shellEndpointFailed": "La fenêtre d'EnvoyCoder n'a pas pu demander au shell où se trouve le service. Reconstruisez l'application de bureau (la liste des permissions du shell est périmée).",

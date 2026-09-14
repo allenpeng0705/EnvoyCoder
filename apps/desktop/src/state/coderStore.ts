@@ -261,16 +261,47 @@ export class CoderStore {
   async loadLists(): Promise<void> {
     const connection = this.connection;
     if (!connection || connection.status.state !== "connected") return;
+
+    // **Asked separately, applied together.** The rail draws a project and its tasks in one frame,
+    // which is why these two arrive as a pair — but they are two calls, and a daemon that answers one
+    // and refuses the other is not a daemon that answered nothing. This used to be a single
+    // `Promise.all`, so one failing method dropped both lists and the rail rendered "No projects yet"
+    // for a project that was on disk the whole time. The real case that produced it: a window whose
+    // daemon is a *different build* — the shell spawns a bundle, a dev server keeps running, an
+    // upgrade leaves the old one holding the port — answering `coder.listProjects` and refusing
+    // `coder.listTasks` with "Method not found".
+    const [projects, tasks] = await Promise.all([
+      this.read<{ projects: Project[] }>("coder.listProjects"),
+      this.read<{ tasks: Task[] }>("coder.listTasks", {}),
+    ]);
+
+    const patch: Partial<CoderState> = {};
+    if (projects.ok) patch.projects = projects.value.projects;
+    if (tasks.ok) patch.tasks = tasks.value.tasks;
+    // One failure is enough to say so — and `noticeFromError` turns "the daemon does not know this
+    // method" into the sentence that tells the user their daemon is an older build.
+    const failure = projects.ok ? (tasks.ok ? undefined : tasks.error) : projects.error;
+    patch.error = failure === undefined ? undefined : noticeFromError(failure);
+    this.set(patch);
+  }
+
+  /**
+   * One read that reports its failure instead of throwing, so its sibling still lands.
+   *
+   * Deliberately not a `Promise.all` of the calls themselves: the point is that the two lists fail
+   * independently. `loadAll` keeps the strict shape for the settings/harness/mesh loads, where a
+   * failure genuinely means the window has nothing to show.
+   */
+  private async read<T>(
+    method: string,
+    params?: Record<string, unknown>,
+  ): Promise<{ ok: true; value: T } | { ok: false; error: unknown }> {
+    const connection = this.connection;
+    if (!connection) return { ok: false, error: new Error(`There is no connection to call ${method}.`) };
     try {
-      // Both in one round: a rail that draws a project before its tasks arrive renders an empty
-      // group for a frame, which reads as "my task disappeared".
-      const [projects, tasks] = await Promise.all([
-        connection.callTyped<{ projects: Project[] }>("coder.listProjects"),
-        connection.callTyped<{ tasks: Task[] }>("coder.listTasks", {}),
-      ]);
-      this.set({ projects: projects.projects, tasks: tasks.tasks, error: undefined });
+      return { ok: true, value: await connection.callTyped<T>(method, params) };
     } catch (error) {
-      this.fail(error);
+      return { ok: false, error };
     }
   }
 

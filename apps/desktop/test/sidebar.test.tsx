@@ -167,6 +167,22 @@ describe("CoderSidebar", () => {
     expect(screen.getByText(/Add a directory you work in/)).toBeTruthy();
   });
 
+  it("does not claim there are no projects when it could not ask", () => {
+    // The failure the user actually hit: the project was registered and on disk, the window could not
+    // read the list, and the rail said "No projects yet" — which reads as "the app lost my work".
+    // An unknown list and an empty list are different sentences, and the reason belongs on screen.
+    renderSidebar({
+      projects: [],
+      tasks: [],
+      unavailable:
+        "The daemon this window is talking to is an older build: it does not know coder.listTasks.",
+    });
+    expect(screen.queryByText("No projects yet")).toBeNull();
+    expect(screen.getByText("Could not read your projects")).toBeTruthy();
+    expect(screen.getByText(/unknown, not empty/)).toBeTruthy();
+    expect(screen.getByText(/does not know coder\.listTasks/)).toBeTruthy();
+  });
+
   it("reports a click on a task to the shell", async () => {
     const { onSelect } = renderSidebar();
     screen.getByTestId("task-w1").click();

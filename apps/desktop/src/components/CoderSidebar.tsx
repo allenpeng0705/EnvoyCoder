@@ -77,6 +77,19 @@ export interface CoderSidebarProps {
   /** Search box contents, owned by the shell so the Command Center can drive it too. */
   query?: string | undefined;
   onQueryChange?: ((query: string) => void) | undefined;
+  /**
+   * Why the rail has nothing to show, when that is *not* the same as having no projects.
+   *
+   * The empty state below used to be the only thing this rail could say, so every failure to load
+   * looked like "No projects yet" — a project registered a second earlier, a daemon that answered
+   * `coder.listProjects` and refused `coder.listTasks` because it was an older build, a window that
+   * never reached its daemon at all. The user's conclusion in each case is the same and always wrong:
+   * the app lost my work.
+   *
+   * Set to an already-localized sentence when the list could not be read; `undefined` means the rail
+   * was actually loaded, and an empty rail then really is empty.
+   */
+  unavailable?: string | undefined;
 }
 
 /** The agent a project's new tasks will use — the group header's badge. */
@@ -177,7 +190,14 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
       <div className="sidebar__list" data-testid="task-list">
         {groups.length === 0 ? (
           <div className="sidebar__empty">
-            {props.projects.length === 0 ? (
+            {props.unavailable !== undefined ? (
+              // "I could not ask" and "there is nothing" are different sentences. This is the first.
+              <>
+                <p className="sidebar__empty-title">{t("sidebar.empty.cannotLoadTitle")}</p>
+                <p className="sidebar__empty-body">{t("sidebar.empty.cannotLoadBody")}</p>
+                <p className="sidebar__empty-reason">{props.unavailable}</p>
+              </>
+            ) : props.projects.length === 0 ? (
               <>
                 <p className="sidebar__empty-title">{t("sidebar.empty.title")}</p>
                 <p className="sidebar__empty-body">{t("sidebar.empty.body")}</p>

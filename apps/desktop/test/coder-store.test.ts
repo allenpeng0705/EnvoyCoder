@@ -33,6 +33,15 @@ class FakeConnection {
   /** Answers, by method. A method with no answer rejects, which is how a refusal is staged. */
   answers = new Map<string, unknown>();
 
+  /**
+   * A method that rejects with a specific message — the family's transport's own words.
+   *
+   * Used for the version-skew case: a daemon that answers one list and does not have the other
+   * answers `Method not found: <method>`, and that string is what the store has to turn into
+   * something a user can act on.
+   */
+  refusals = new Map<string, string>();
+
   status: ConnectionStatus = { state: "idle" };
   hello: HelloResult | undefined;
 
@@ -63,6 +72,8 @@ class FakeConnection {
 
   call(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
     this.calls.push({ method, params });
+    const refusal = this.refusals.get(method);
+    if (refusal !== undefined) return Promise.reject(new Error(refusal));
     if (!this.answers.has(method)) {
       return Promise.reject(new Error(`envoycoder.harness-failed: ${method} was refused in this test`));
     }
@@ -140,8 +151,54 @@ describe("the store's connection to the daemon", () => {
     await created.start();
     // "No projects yet" and "I could not ask" are different sentences, and showing the first for the
     // second is how a user concludes the app lost their work.
-    expect(created.getSnapshot().error).toContain("did not say where its daemon is");
+    //
+    // The sentence belongs to the **connection**, not the attention banner: a banner is for something
+    // the user just did, and this is the state the window is in (`CoderApp`'s own note says so, and
+    // `start()` documents the decision). So what a store test can pin is that the window kept the
+    // reason and did *not* claim to be loaded — and the rail, which is where the lie would be
+    // rendered, is pinned in `sidebar.test.tsx` ("does not claim there are no projects when it could
+    // not ask").
     expect(created.getSnapshot().loaded).toBe(false);
+    expect(created.getSnapshot().connection.state).toBe("disconnected");
+    const connection0 = created.getSnapshot().connection;
+    expect(connection0.state === "disconnected" ? connection0.reason : "").toContain(
+      "did not say where its daemon is",
+    );
+  });
+
+  it("keeps the projects when the other list is refused — a daemon older than the window", async () => {
+    // The real report: "I added a project and it never appeared in the sidebar." The daemon had stored
+    // it (the file was on disk), but it was an older build that answered `coder.listProjects` and
+    // refused `coder.listTasks`. One `Promise.all` dropped *both*, so the rail rendered "No projects
+    // yet" for a project that existed — the add looked like it had done nothing.
+    const connection = new FakeConnection();
+    connection.answers.set("coder.listProjects", {
+      projects: [
+        {
+          id: "local::/tmp/added",
+          path: "/tmp/added",
+          label: "added",
+          hostId: "local",
+          addedAt: "2026-09-14T01:35:16.077Z",
+        },
+      ],
+    });
+    connection.refusals.set("coder.listTasks", "Method not found: coder.listTasks");
+
+    const created = createCoderStore({
+      resolveEndpoint: async () => endpoint,
+      connect: () => connection as unknown as CoderConnection,
+    });
+    await created.start();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const state = created.getSnapshot();
+    expect(state.projects.map((project) => project.label)).toEqual(["added"]);
+    expect(state.tasks).toEqual([]);
+    // …and the failure is said out loud, in the user's language, naming what the daemon does not have.
+    expect(state.error?.key).toBe("error.daemonTooOld");
+    expect(state.error?.values?.method).toBe("coder.listTasks");
+    expect(state.error?.message).toContain("Method not found");
   });
 });
 

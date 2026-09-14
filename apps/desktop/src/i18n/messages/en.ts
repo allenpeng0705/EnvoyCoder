@@ -63,6 +63,8 @@ export const en = {
   "sidebar.empty.body":
     "Add a directory you work in. Tasks you start in it appear here, and the project remembers which agent they should use.",
   "sidebar.empty.noMatch": "Nothing matches “{query}”.",
+  "sidebar.empty.cannotLoadTitle": "Could not read your projects",
+  "sidebar.empty.cannotLoadBody": "This list is unknown, not empty — EnvoyCoder could not ask its daemon for it.",
   "sidebar.section.tasks": "Tasks",
   "sidebar.project.attention": "Tasks waiting on you",
   "sidebar.project.agent": "The agent new tasks in this project start with",
@@ -247,6 +249,8 @@ export const en = {
   "error.notConnectedChange": "EnvoyCoder is not connected to its daemon, so that change was not saved.",
   "error.connectionClosed": "The connection was closed.",
   "error.daemonClosedConnection": "The daemon closed the connection.",
+  "error.daemonTooOld":
+    "The daemon this window is talking to is an older build: it does not know {method}. Restart EnvoyCoder so the window and its daemon are the same build, then try again.",
   "error.notOurDaemon.product":
     "Something is answering on the daemon's port, but it says it is “{product}”. EnvoyCoder did not connect to it.",
   "error.notOurDaemon.instance":

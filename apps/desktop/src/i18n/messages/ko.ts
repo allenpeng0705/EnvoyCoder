@@ -62,6 +62,8 @@ export const ko: Catalogue = {
   "sidebar.empty.title": "아직 프로젝트가 없습니다",
   "sidebar.empty.body": "작업하는 디렉터리를 추가하세요. 그 안에서 시작한 작업이 여기에 나타나고, 프로젝트는 어떤 에이전트를 써야 하는지 기억합니다.",
   "sidebar.empty.noMatch": "“{query}”와 일치하는 것이 없습니다.",
+  "sidebar.empty.cannotLoadTitle": "프로젝트를 읽을 수 없습니다",
+  "sidebar.empty.cannotLoadBody": "이 목록은 비어 있는 것이 아니라 알 수 없는 상태입니다 — EnvoyCoder가 데몬에 물어볼 수 없었습니다.",
   "sidebar.section.tasks": "작업",
   "sidebar.project.attention": "당신을 기다리는 작업",
   "sidebar.project.agent": "이 프로젝트의 새 작업이 시작하는 에이전트",
@@ -221,6 +223,8 @@ export const ko: Catalogue = {
   "error.notConnectedChange": "EnvoyCoder가 서비스에 연결되어 있지 않아 그 변경은 저장되지 않았습니다.",
   "error.connectionClosed": "연결이 닫혔습니다.",
   "error.daemonClosedConnection": "서비스가 연결을 닫았습니다.",
+  "error.daemonTooOld":
+    "이 창이 연결된 데몬은 오래된 빌드입니다. {method}을(를) 알지 못합니다. EnvoyCoder를 다시 시작해 창과 데몬을 같은 빌드로 맞춘 뒤 다시 시도하세요.",
   "error.notOurDaemon.product": "서비스 포트에서 무언가 응답하고 있지만 스스로 “{product}”라고 밝힙니다. EnvoyCoder는 거기에 연결하지 않았습니다.",
   "error.notOurDaemon.instance": "포트 {port}의 서비스는 이 창이 시작될 때 기대한 서비스가 아닙니다. 다른 EnvoyCoder 서비스가 그것을 대체했을 수 있습니다 — 창을 다시 여세요.",
   "error.shellEndpointFailed": "EnvoyCoder 창이 shell에 서비스 위치를 물을 수 없었습니다. 데스크톱 앱을 다시 빌드하세요(shell 권한 목록이 오래되었습니다).",

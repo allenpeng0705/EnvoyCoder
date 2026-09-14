@@ -264,6 +264,16 @@ body {
   font-size: 12px;
 }
 
+/* The reason, in the daemon's own words: quieter than the sentence that frames it, because it is
+   evidence rather than instruction — but present, since "could not read" without a why is a
+   sentence a user cannot act on. */
+.sidebar__empty-reason {
+  margin: 6px 0 0;
+  color: var(--text-dim);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
 .sidebar__footer {
   flex: none;
   display: flex;

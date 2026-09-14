@@ -62,6 +62,8 @@ export const it: Catalogue = {
   "sidebar.empty.title": "Ancora nessun progetto",
   "sidebar.empty.body": "Aggiungi una cartella in cui lavori. Le attività che avvii lì compaiono qui, e il progetto ricorda quale agente devono usare.",
   "sidebar.empty.noMatch": "Nessuna corrispondenza con «{query}».",
+  "sidebar.empty.cannotLoadTitle": "Impossibile leggere i tuoi progetti",
+  "sidebar.empty.cannotLoadBody": "Questo elenco è sconosciuto, non vuoto — EnvoyCoder non ha potuto chiederlo al suo daemon.",
   "sidebar.section.tasks": "Attività",
   "sidebar.project.attention": "Attività che ti aspettano",
   "sidebar.project.agent": "L'agente con cui partono le nuove attività di questo progetto",
@@ -221,6 +223,8 @@ export const it: Catalogue = {
   "error.notConnectedChange": "EnvoyCoder non è connesso al suo servizio, quindi quella modifica non è stata salvata.",
   "error.connectionClosed": "La connessione è stata chiusa.",
   "error.daemonClosedConnection": "Il servizio ha chiuso la connessione.",
+  "error.daemonTooOld":
+    "Il daemon con cui parla questa finestra è una versione precedente: non conosce {method}. Riavvia EnvoyCoder in modo che la finestra e il suo daemon siano la stessa versione, poi riprova.",
   "error.notOurDaemon.product": "Qualcosa risponde sulla porta del servizio, ma dichiara di essere «{product}». EnvoyCoder non vi si è connesso.",
   "error.notOurDaemon.instance": "Il servizio sulla porta {port} non è quello per cui è stata avviata questa finestra. Un altro servizio EnvoyCoder potrebbe averlo sostituito — riapri la finestra.",
   "error.shellEndpointFailed": "La finestra di EnvoyCoder non ha potuto chiedere alla shell dove sia il servizio. Ricompila l'app desktop (l'elenco dei permessi della shell è obsoleto).",

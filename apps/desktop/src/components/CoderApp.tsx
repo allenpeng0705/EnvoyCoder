@@ -58,6 +58,30 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    */
   const [notice, setNotice] = useState<Notice | undefined>(undefined);
 
+  /**
+   * Why the rail would be empty for a reason other than "there is nothing in it".
+   *
+   * The rail can only draw what the store holds, and the store holds an empty list for two very
+   * different reasons: nobody has registered a project yet, or the window never managed to read them.
+   * This is what tells the difference, in the user's own language, and it is why the rail no longer
+   * says "No projects yet" to a user whose project is on disk — the failure that made "adding a
+   * project did nothing" look true when the daemon had already stored it.
+   *
+   * Both failure shapes are covered, because the window has both: a call that came back refused (the
+   * store keeps the last one), and a connection that never opened (the reason lives on the chip).
+   * While the window is merely still connecting, this stays undefined — a rail that shouts on the
+   * first paint before the first answer arrives would be a new lie, not a fix.
+   */
+  const railUnavailable = useMemo(() => {
+    if (state.loaded) return undefined;
+    const refusal = localize(t, state.error);
+    if (refusal !== undefined) return refusal;
+    if (state.connection.state === "disconnected") {
+      return localizeText(t, state.connection.reason) ?? t("sidebar.empty.cannotLoadBody");
+    }
+    return undefined;
+  }, [state.loaded, state.error, state.connection, t]);
+
   // **The keyboard, which did not exist.** `⌘K` was printed on a button with nothing behind it, so the
   // palette — and "Add project…" inside it — could not be reached by keyboard at all. This mounts the
   // registry from `input/shortcuts.ts` and binds it to the shell's own state.
@@ -180,6 +204,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
             onOpenProjectSettings={() => setSettingsOpen(true)}
             onOpenCommandCenter={() => setPaletteOpen(true)}
             onOpenSettings={() => setSettingsOpen(true)}
+            unavailable={railUnavailable}
           />
         ) : null}
 

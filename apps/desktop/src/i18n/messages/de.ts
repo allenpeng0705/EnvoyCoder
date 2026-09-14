@@ -62,6 +62,8 @@ export const de: Catalogue = {
   "sidebar.empty.title": "Noch keine Projekte",
   "sidebar.empty.body": "Füge ein Verzeichnis hinzu, in dem du arbeitest. Aufgaben, die du darin startest, erscheinen hier, und das Projekt merkt sich, welchen Agenten sie verwenden sollen.",
   "sidebar.empty.noMatch": "Nichts passt zu „{query}“.",
+  "sidebar.empty.cannotLoadTitle": "Deine Projekte konnten nicht gelesen werden",
+  "sidebar.empty.cannotLoadBody": "Diese Liste ist unbekannt, nicht leer — EnvoyCoder konnte den Daemon nicht danach fragen.",
   "sidebar.section.tasks": "Aufgaben",
   "sidebar.project.attention": "Aufgaben, die auf dich warten",
   "sidebar.project.agent": "Der Agent, mit dem neue Aufgaben in diesem Projekt starten",
@@ -221,6 +223,8 @@ export const de: Catalogue = {
   "error.notConnectedChange": "EnvoyCoder ist nicht mit seinem Dienst verbunden, deshalb wurde diese Änderung nicht gespeichert.",
   "error.connectionClosed": "Die Verbindung wurde geschlossen.",
   "error.daemonClosedConnection": "Der Dienst hat die Verbindung geschlossen.",
+  "error.daemonTooOld":
+    "Der Daemon, mit dem dieses Fenster spricht, ist eine ältere Version: Er kennt {method} nicht. Starte EnvoyCoder neu, damit Fenster und Daemon dieselbe Version verwenden, und versuche es erneut.",
   "error.notOurDaemon.product": "Auf dem Port des Dienstes antwortet etwas, das sich „{product}“ nennt. EnvoyCoder hat sich damit nicht verbunden.",
   "error.notOurDaemon.instance": "Der Dienst auf Port {port} ist nicht der, für den dieses Fenster gestartet wurde. Vielleicht hat ihn ein anderer EnvoyCoder-Dienst ersetzt — öffne das Fenster neu.",
   "error.shellEndpointFailed": "Das Fenster von EnvoyCoder konnte die Shell nicht fragen, wo der Dienst ist. Baue die Desktop-App neu (die Berechtigungsliste der Shell ist veraltet).",

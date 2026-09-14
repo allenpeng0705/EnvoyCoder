@@ -14,6 +14,7 @@
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
 import { networkInterfaces, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +29,11 @@ import {
   createCoderDaemonHost,
   createCoderDispatcher,
 } from "@envoycoder/host-bridge";
+
+// The window's own halves, not a hand-written client: the flow this exercises is the window's, and a
+// smoke test that re-implemented it would pass while the window stayed broken.
+import { startCoderDaemon } from "../apps/desktop/src/daemon/serve.js";
+import { createCoderStore } from "../apps/desktop/src/state/coderStore.js";
 
 /**
  * One real JSON-RPC call over a real socket, returning either the result or the error.
@@ -473,6 +479,95 @@ step("every agent in the catalogue can be probed, and missing ones say how to in
     lines.push(`${probe.available ? "✓" : "·"} ${id}${probe.binaryPath ? ` (${probe.binaryPath})` : ""}`);
   }
   return `\n      ${lines.join("\n      ")}`;
+});
+
+/**
+ * The flow a user reported as broken: *"I added a project and it never appeared in the sidebar."*
+ *
+ * It was broken in the way a smoke test exists to catch. The daemon stored the project correctly; the
+ * window asked for its lists with one `Promise.all`, and a daemon that was an *older build* — a shell
+ * attaches to a running daemon rather than replacing it (family rule D2), so an upgrade can leave the
+ * old one holding the port — answered `coder.listProjects` and refused `coder.listTasks`. One failure
+ * discarded both lists, and the rail rendered "No projects yet" for a project that was on disk.
+ *
+ * Nothing in the suite could see it: the store's own tests used one fake connection that answered
+ * everything, and no check ever added a project through the window's own code against a real daemon.
+ * So this step does exactly that, and asserts the two things the user experienced — the store ends up
+ * **loaded** (every list the window needs answered, which a stale daemon fails) and the project is in
+ * the state the rail draws from, with a second window seeing it too.
+ */
+step("a project added through the window's store reaches the rail, and a second window sees it", async () => {
+  const home = await mkdtemp(join(tmpdir(), "envoycoder-smoke-rail-"));
+  const projectDir = await mkdtemp(join(tmpdir(), "envoycoder-smoke-project-"));
+  const daemon = await startCoderDaemon({ port: 0, home, paths: coderPaths(home), skipMeshAttach: true });
+  const window = (): ReturnType<typeof createCoderStore> =>
+    createCoderStore({
+      resolveEndpoint: async () => ({
+        endpoint: { host: "127.0.0.1", port: daemon.port, path: daemon.path },
+        // What the browser dev server reports: no shell, so no claim file was read.
+        verifiedBy: "none",
+      }),
+    });
+  const settle = async (store: ReturnType<typeof createCoderStore>, test: () => boolean) => {
+    const deadline = Date.now() + 8_000;
+    while (Date.now() < deadline) {
+      if (test()) return true;
+      await new Promise((done) => setTimeout(done, 20));
+    }
+    return false;
+  };
+
+  const first = window();
+  try {
+    first.start();
+    if (!(await settle(first, () => first.getSnapshot().connection.state === "connected"))) {
+      throw new Error("the window never connected to the daemon");
+    }
+    // `loaded` is the assertion that matters for version skew: it is only set once projects, tasks,
+    // settings, harnesses and the mesh status have all answered. A daemon missing any one of them —
+    // the stale-build case — leaves the window unloaded and the rail honest about it.
+    if (!(await settle(first, () => first.getSnapshot().loaded))) {
+      throw new Error(
+        "the window never finished loading its lists, so a daemon method it needs is missing",
+      );
+    }
+
+    const added = await first.addProject(projectDir);
+    if (!added.ok) throw new Error(`addProject was refused: ${added.message}`);
+    // The store does not insert the project locally — the daemon's change event is what makes the rail
+    // redraw, deliberately, so that two windows cannot disagree about what exists. Waiting for that
+    // redraw is therefore part of the assertion, not politeness: this is the half that was broken when
+    // the two lists shared one `Promise.all`, because a failed refetch left the state as it was and the
+    // add looked like it had done nothing.
+    if (!(await settle(first, () => first.getSnapshot().projects.length === 1))) {
+      throw new Error(
+        "the project was stored by the daemon but the rail never redrew — the change event did not reach the window, or the refetch discarded it",
+      );
+    }
+    const labels = first.getSnapshot().projects.map((project) => project.label);
+    if (labels[0] !== added.project.label) {
+      throw new Error(`the rail shows “${labels[0]}” where the daemon stored “${added.project.label}”`);
+    }
+
+    // A second window is the multi-window rule, and the reason the daemon broadcasts a change rather
+    // than letting each window guess: a project added at the desk must appear on the phone.
+    const second = window();
+    try {
+      second.start();
+      if (!(await settle(second, () => second.getSnapshot().projects.length === 1))) {
+        throw new Error("a second window did not see the project the first one added");
+      }
+    } finally {
+      second.dispose();
+    }
+
+    return `added “${labels[0]}” at ${projectDir}\n      rail state: loaded=${first.getSnapshot().loaded}, projects=${labels.length}`;
+  } finally {
+    first.dispose();
+    await daemon.stop();
+    await rm(home, { recursive: true, force: true });
+    await rm(projectDir, { recursive: true, force: true });
+  }
 });
 
 for (const { name, run } of steps) {
