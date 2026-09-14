@@ -25,7 +25,7 @@ const FAKE_AGENT = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "fa
  * a fixed port in a test is a test that fails when something else on the machine happens to use it.
  */
 
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -33,6 +33,7 @@ import WebSocket from "ws";
 
 import {
   CODER_EVENTS,
+  HarnessAvailabilitySchema,
   DEFAULT_DAEMON_PATH,
   ENVOYCODER_ERRORS,
   coderErrorCode,
@@ -40,6 +41,7 @@ import {
   coderErrorRef,
 } from "@envoycoder/protocol";
 import { coderPaths } from "@envoycoder/host-bridge";
+import { resetSearchPathCacheForTests } from "@envoycoder/platform";
 
 import { AcpClient } from "../src/daemon/acp/client.js";
 import { readDaemonClaim } from "../src/daemon/lock.js";
@@ -474,6 +476,116 @@ describe("the daemon over a socket", () => {
     // The event carries *what* changed, not the new state, so both windows refetch the same list
     // and cannot disagree about ordering.
     expect(typeof event.at).toBe("string");
+  });
+
+  /**
+   * **The quiet half of the PATH fix, and the ordering problem it creates.**
+   *
+   * `primeSearchPath()` runs at boot, off the critical path, because a login shell runs the user's rc files
+   * and the daemon must not wait for one. That is the right shape and it has a consequence: the first
+   * `coder.listHarnesses` is answered from the daemon's own environment plus the well-known directories, and
+   * the login shell's — better — answer lands *afterwards*. Without a broadcast, a window that painted a row
+   * in that window of time would keep showing an answer we had already replaced, and a user would be told
+   * their agent is missing because the correction arrived a moment late. That is the reported symptom, in a
+   * smaller window.
+   *
+   * Deterministic rather than lucky: `$SHELL` is pointed at a script that sleeps before handing over to a real
+   * shell, so the answer provably cannot land before the subscription below. Without that, this test would pass
+   * on a slow machine and fail on a fast one — and a `describe.skipIf` on Windows, because there is no login
+   * shell to prime from there and the same code path answers immediately.
+   */
+  it.skipIf(process.platform === "win32")(
+    "tells clients the agent list may have changed when the search path resolves",
+    async () => {
+      const dir = await mkdtemp(join(tmpdir(), "envoycoder-slow-shell-"));
+      const slowShell = join(dir, "slow-shell");
+      await writeFile(slowShell, `#!/bin/sh\nsleep 0.4\nexec /bin/sh "$@"\n`);
+      await chmod(slowShell, 0o755);
+      const previousShell = process.env.SHELL;
+      process.env.SHELL = slowShell;
+      // The cache is per process and this daemon runs in process, so a leftover answer from another test
+      // would resolve instantly and the window of time under test would not exist.
+      resetSearchPathCacheForTests();
+
+      try {
+        const { daemon, home } = await bootDaemon();
+        cleanups.push(async () => {
+          await daemon.stop();
+          await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+          await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+        });
+        const client = await connect(daemon.port);
+        cleanups.push(async () => client.close());
+        await client.subscribe(["coder:state-changed"]);
+        const announced = client.waitForEvent(
+          "coder:state-changed",
+          (data) => (data as { kind?: string }).kind === "harnesses",
+        );
+
+        // Awaited, which is a test's privilege: every production caller reads the synchronous snapshot and
+        // never waits for anything.
+        const resolved = await daemon.searchPath();
+        expect(resolved.searchable).toBe(true);
+        expect(resolved.fromLoginShell).toBe(true);
+        // A real search happened, and the answer names its own provenance so a bug report can start there.
+        expect(resolved.source).toBe("login-shell");
+
+        const change = (await announced) as { kind: string; ids?: readonly string[] };
+        expect(change.kind).toBe("harnesses");
+        // The whole-list flavour: no `ids`, because what changed is the answer about *every* agent. A client
+        // refetches the agent list on this, which is exactly what makes the correction reach the row.
+        expect(change.ids).toBeUndefined();
+      } finally {
+        if (previousShell === undefined) delete process.env.SHELL;
+        else process.env.SHELL = previousShell;
+        resetSearchPathCacheForTests();
+      }
+    },
+    30_000,
+  );
+
+  it("serves every agent with a resolved availability, never the old boolean", async () => {
+    // The wire shape a window reads, asserted from a real daemon rather than from a fixture: a build that
+    // served `available` beside `availability`, or neither, would be a build whose settings page cannot say
+    // which part is missing — which is the bug this replaced.
+    const { daemon, home } = await bootDaemon();
+    cleanups.push(async () => {
+      await daemon.stop();
+      await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    });
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+
+    const list = (await client.call("coder.listHarnesses")) as {
+      harnesses: ({ id: string; availability?: unknown; available?: unknown })[];
+    };
+    expect(list.harnesses.length).toBeGreaterThan(0);
+    for (const harness of list.harnesses) {
+      // **Parsed by the contract, from a real daemon.** The five agreement rules are only worth their ink if
+      // the answers this product actually serves satisfy them, and a catalogue change that produced a
+      // self-contradicting summary would fail here rather than in a window.
+      const parsed = HarnessAvailabilitySchema.safeParse(harness.availability);
+      expect(parsed.success, `${harness.id}: ${JSON.stringify(parsed.error?.issues ?? [])}`).toBe(true);
+      expect(Object.hasOwn(harness, "available"), `${harness.id} still carries the old boolean`).toBe(false);
+      // The install hint moved *inside* the availability, where it can only appear for a state that asserts
+      // something is missing — a loose top-level `installHint` would be offered for an agent we simply have
+      // not checked.
+      expect(Object.hasOwn(harness, "installHint"), harness.id).toBe(false);
+    }
+
+    // The singular probe answers with the same shape, from the same function, so the two cannot disagree —
+    // and its resolved path lives *inside* the availability rather than beside it, which is what stops the two
+    // from ever contradicting each other about whether anything was found.
+    const one = (await client.call("coder.probeHarness", { harness: "envoy-harness" })) as {
+      availability: { state: string; binary?: string };
+      binary?: string;
+      detail: string;
+    };
+    expect(HarnessAvailabilitySchema.safeParse(one.availability).success).toBe(true);
+    expect(Object.hasOwn(one, "binary"), "the path is duplicated beside the availability").toBe(false);
+    const drives = one.availability.state === "ready" || one.availability.state === "unsupported";
+    expect(drives).toBe(one.availability.binary !== undefined);
+    expect(one.detail.length).toBeGreaterThan(0);
   });
 
   it("declares exactly the three events the client subscribes to", () => {
@@ -1376,9 +1488,15 @@ describe("asking an agent what it offers, before any run", () => {
     // registered **before** the call that causes it: an event is not replayed for a late subscriber, and
     // a test that subscribed afterwards would wait forever for something that had already happened.
     await client.subscribe(["coder:state-changed"]);
+    // **Two sources of this kind now exist**, and the matcher has to say which one it means. The daemon
+    // announces `harnesses` when it *records an observation* (which carries `ids`) and again when the agent
+    // search path resolves (which does not — it is about the whole list). Matching on `kind` alone would take
+    // whichever arrived first, which is a race rather than a test.
     const announced = client.waitForEvent(
       "coder:state-changed",
-      (data) => (data as { kind?: string }).kind === "harnesses",
+      (data) =>
+        (data as { kind?: string }).kind === "harnesses" &&
+        Array.isArray((data as { ids?: unknown }).ids),
     );
 
     const listed = (await client.call("coder.probeSessionOptions", {

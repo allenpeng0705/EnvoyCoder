@@ -96,7 +96,7 @@ for (const { id, categories } of VERIFIED_AGENTS) {
   const probe = probeHarness(id);
   const definition = harnessDefinition(id);
 
-  describe.skipIf(!probe.available)(
+  describe.skipIf(probe.state !== "ready")(
     `${definition.label}, driven over ACP the way a run drives it`,
     () => {
       /**

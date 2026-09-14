@@ -422,7 +422,16 @@ export function acpAgent(id: string): AcpAgentEntry | undefined {
   return ACP_AGENT_CATALOG.find((entry) => entry.id === id);
 }
 
-/** What a probe found. Mirrors `HarnessProbe` so a UI can render both with one component. */
+/**
+ * What a probe found, for an entry in the **preset** catalogue above.
+ *
+ * `available: boolean` rather than `HarnessProbe`'s five states, and the difference is not drift: this list is
+ * a recipe set (a command line and a link) with no notion of a bridge, so there is no second program to ask
+ * about — "the command's binary is on `PATH`, or it is not" is the whole question. The five states exist for
+ * the *harness* catalogue, where an agent and the adapter we drive it through are two different installs
+ * (`AgentLaunch.agentBinaries`); a UI that renders both lists must therefore map this boolean itself, which is
+ * what `apps/desktop/src/composer/agent-for.ts` does for the one list the window actually shows.
+ */
 export interface AcpAgentProbe {
   id: string;
   available: boolean;

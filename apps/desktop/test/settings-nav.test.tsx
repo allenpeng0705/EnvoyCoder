@@ -120,7 +120,7 @@ const harnesses: CoderState["harnesses"] = (["envoy-harness", "deepseek-harness"
     thinking: true,
     approvalPolicy: true,
   },
-  available: true,
+  availability: { state: "ready" as const, binary: "/usr/local/bin/agent" },
   evidence: "…",
 }));
 
@@ -621,6 +621,133 @@ describe("the pages the bar opens", () => {
     // its agent cannot be asked for permission — the facts that *were* in the older answer.
     expect(screen.getByText("Envoy Harness")).toBeTruthy();
     expect(screen.getAllByText(en["settings.agent.ready"]).length).toBeGreaterThan(0);
+  });
+
+  /**
+   * **Five states, five words — and the one that must never be the wrong word.**
+   *
+   * This is the row the user was reading when they wrote *"why all of them shown 'Not Installed'"*. The chip
+   * used to be one of two words for every false, so a machine with Claude Code, Codex and DeepSeek Harness
+   * installed reported all three as absent — once because the *bridge* was missing and once because a
+   * GUI-launched daemon's `PATH` did not contain the directory they were installed in. The assertions below are
+   * about the **words on screen**, because that is what was wrong and what a user acts on.
+   */
+  it("names the missing thing in each of the five states, and never says 'not installed' when it does not know", () => {
+    // Distinct ids as well as labels: React keys off the id, and five rows sharing one would let the renderer
+    // drop or duplicate a row — which would make every assertion below unreliable in a way that looks green.
+    const installed = (id: string, label: string, over: Record<string, unknown>) =>
+      ({
+        id,
+        label,
+        tier: "catalogued" as const,
+        summary: "…",
+        modes: [],
+        models: { kind: "none" as const, options: [], source: "…" },
+        thinking: { kind: "none" as const, options: [], source: "…" },
+        capabilities: {
+          resume: true,
+          cancel: true,
+          approvals: true,
+          structuredTools: true,
+          streaming: true,
+          images: true,
+          agentMode: true,
+          model: true,
+          thinking: true,
+          approvalPolicy: false,
+        },
+        evidence: "…",
+        ...over,
+      }) as unknown as (typeof harnesses)[number];
+
+    showPane(appScope("agents"), "wide", {
+      harnesses: [
+        installed("deepseek-harness", "Ready Agent", {
+          availability: { state: "ready", binary: "/Users/you/.local/bin/dsh" },
+        }),
+        installed("claudecode", "Bridged Agent", {
+          availability: {
+            state: "needs-bridge",
+            agentBinary: "/Users/you/.local/bin/claude",
+            fix: [{ command: "npm install -g @agentclientprotocol/claude-agent-acp" }],
+          },
+        }),
+        installed("codex", "Absent Agent", {
+          availability: { state: "not-installed", fix: [{ command: "npm install -g @openai/codex" }] },
+        }),
+        installed("cursor", "Unchecked Agent", { availability: { state: "unknown" } }),
+        installed("copilot", "Undrivable Agent", {
+          availability: { state: "unsupported", binary: "/usr/local/bin/copilot" },
+        }),
+      ],
+    });
+
+    // Each state its own word, and each word present exactly once — a chip that collapsed two states would
+    // show one of these twice and the other not at all.
+    for (const key of [
+      "settings.agent.ready",
+      "settings.agent.needsBridge",
+      "settings.agent.notInstalled",
+      "settings.agent.unknown",
+      "settings.agent.unsupported",
+    ] as const) {
+      expect(screen.getAllByText(en[key]), key).toHaveLength(1);
+    }
+
+    /**
+     * **The rule the state exists for**, asserted by *association* rather than by counting.
+     *
+     * Counting would pass for the wrong reason on a page with one agent. What matters is which word ended up on
+     * which row: the bridged agent — the shape of the bug report, an installed agent with no adapter — must
+     * carry "needs its adapter" and must **not** carry "not installed", and the row that does say "not
+     * installed" is the one whose search actually came up empty.
+     */
+    const rowOf = (label: string): HTMLElement => {
+      const row = screen.getByText(label).closest("li");
+      if (!(row instanceof HTMLElement)) throw new Error(`no row for ${label}`);
+      return row;
+    };
+    expect(within(rowOf("Bridged Agent")).getByText(en["settings.agent.needsBridge"])).toBeTruthy();
+    expect(within(rowOf("Bridged Agent")).queryByText(en["settings.agent.notInstalled"])).toBeNull();
+    expect(within(rowOf("Absent Agent")).getByText(en["settings.agent.notInstalled"])).toBeTruthy();
+    // And the one nobody could check says so — the sentence a user must never read as "it is not there".
+    expect(within(rowOf("Unchecked Agent")).getByText(en["settings.agent.unknown"])).toBeTruthy();
+    expect(within(rowOf("Unchecked Agent")).queryByText(en["settings.agent.notInstalled"])).toBeNull();
+    expect(within(rowOf("Undrivable Agent")).getByText(en["settings.agent.unsupported"])).toBeTruthy();
+    expect(within(rowOf("Undrivable Agent")).queryByText(en["settings.agent.notInstalled"])).toBeNull();
+
+    // The install commands, verbatim and untranslated — one per installable state, and a translated command
+    // would be a command that does not run. The bridge's step belongs to the bridged row, the agent's to the
+    // installed-neither row, and neither to `unknown`.
+    expect(screen.getByText("npm install -g @agentclientprotocol/claude-agent-acp")).toBeTruthy();
+    expect(screen.getByText("npm install -g @openai/codex")).toBeTruthy();
+    // Four rows render no command at all: ready, unknown, unsupported, and… nothing else. Asserted as a count
+    // so a regression that offered an install command for `unknown` fails here.
+    expect(screen.queryAllByText(/^npm install/)).toHaveLength(2);
+  });
+
+  it("says a program found in npx's cache is a temporary copy, and still shows it as ready", () => {
+    // The `dsh` case: it resolves out of `~/.npm/_npx/<hash>/node_modules/.bin` — somebody else's cache — and it
+    // really runs, so it is ready; but `npm cache clean` removes it, so the row says where it came from rather
+    // than implying the user installed it properly.
+    const npx = harnesses[1] as unknown as Record<string, unknown>;
+    showPane(appScope("agents"), "wide", {
+      harnesses: [
+        {
+          ...npx,
+          label: "DeepSeek Harness",
+          availability: {
+            state: "ready",
+            binary: "/Users/you/.npm/_npx/1e7f6d9597241db0/node_modules/.bin/dsh",
+            provisional: "npx",
+          },
+        } as unknown as (typeof harnesses)[number],
+      ],
+    });
+    expect(screen.getByText(en["settings.agent.ready"])).toBeTruthy();
+    expect(screen.getByText(en["settings.agent.provisional"])).toBeTruthy();
+    // And no install command: nothing is missing, so nothing may be offered as a fix.
+    expect(screen.queryAllByText(/^npm install/)).toHaveLength(0);
   });
 
   it("keeps the Projects item's band a count, and the page below it a list", () => {

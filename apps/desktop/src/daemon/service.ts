@@ -19,7 +19,7 @@
  * actionable is a code that was chosen wrong.
  */
 
-import { normalizeUserPath } from "@envoycoder/platform";
+import { currentSearchPath, normalizeUserPath } from "@envoycoder/platform";
 import { stat } from "node:fs/promises";
 
 import {
@@ -41,10 +41,12 @@ import {
   ALL_HARNESSES,
   canApplyModel,
   canApplyThinking,
+  harnessAvailability,
   harnessDefinition,
   probeHarness,
   resolveModelChoice,
   sessionFacts,
+  type HarnessProbe,
 } from "@envoycoder/agent-catalog";
 
 import type { CoderPaths } from "@envoycoder/host-bridge";
@@ -71,7 +73,7 @@ export interface CoderServiceDeps {
   /** Injectable so a test can decide whether a path "exists" without a filesystem. */
   isDirectory?: (path: string) => Promise<boolean>;
   /** Injectable probe, so `coder.listHarnesses` is testable without the CLIs installed. */
-  probe?: (harness: HarnessId) => { available: boolean; binaryPath?: string; reason?: string };
+  probe?: (harness: HarnessId) => HarnessProbe;
   isModuleAvailable?: (module: string) => boolean;
   /**
    * Runs, from M2 on.
@@ -104,7 +106,24 @@ export type CoderHandler = (params: unknown) => Promise<unknown>;
  */
 export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcMethod, CoderHandler>> {
   const isDirectory = deps.isDirectory ?? defaultIsDirectory;
-  const probe = deps.probe ?? ((harness: HarnessId) => probeHarness(harness, { moduleAvailable: deps.isModuleAvailable }));
+  /**
+   * The daemon's own probe: the catalogue's, over **the resolved search path** rather than the inherited one.
+   *
+   * `currentSearchPath()` is synchronous and never spawns a shell (see `@envoycoder/platform`): the login
+   * shell's answer, when it arrives, is already cached by `primeSearchPath()` at boot. Passing the list here
+   * is what makes a GUI-launched daemon able to see `~/.local/bin` at all, and `launchForHarness` passes the
+   * same list to the child so the two cannot disagree. `searchable` travels with it, because a list that
+   * could not be assembled is `unknown` rather than `not-installed`.
+   */
+  const search = currentSearchPath();
+  const probe =
+    deps.probe ??
+    ((harness: HarnessId) =>
+      probeHarness(harness, {
+        moduleAvailable: deps.isModuleAvailable,
+        pathDirs: search.dirs,
+        searchable: search.searchable,
+      }));
 
   const handlers: Partial<Record<RpcMethod, CoderHandler>> = {
     /* ────────────────── who am I talking to ────────────────── */
@@ -444,13 +463,17 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     "coder.probeHarness": async (params) => {
       const { harness } = parseRpcParams("coder.probeHarness", params) as { harness: HarnessId };
       const result = probe(harness);
+      const label = harnessDefinition(harness).label;
       return {
         harness,
-        available: result.available,
-        ...(result.binaryPath ? { binary: result.binaryPath } : {}),
-        detail: result.available
-          ? `Ready to run${result.binaryPath ? ` (${result.binaryPath})` : ""}.`
-          : (result.reason ?? `${harnessDefinition(harness).label} is not available on this machine.`),
+        // The five states, from the one function that computes them, so this method and
+        // `coder.listHarnesses` cannot answer the same question differently. It used to flatten to a
+        // boolean here — which could not express `unknown` on the very method whose job is this question.
+        availability: harnessAvailability(result),
+        detail:
+          result.state === "ready"
+            ? `Ready to run${result.binaryPath ? ` (${result.binaryPath})` : ""}.`
+            : (result.reason ?? `${label} is not available on this machine.`),
       };
     },
 
@@ -632,7 +655,7 @@ async function defaultIsDirectory(path: string): Promise<boolean> {
 /** A catalogue entry plus what this machine can actually do with it. */
 function summarize(
   id: HarnessId,
-  probe: (harness: HarnessId) => { available: boolean; binaryPath?: string; reason?: string },
+  probe: (harness: HarnessId) => HarnessProbe,
   /**
    * What this agent published the last time a session was opened with it, if we ever have.
    *
@@ -700,8 +723,13 @@ function summarize(
       // than sent and refused. The catalogue owns the fact; this line is the wire carrying it.
       approvalPolicy: definition.capabilities.approvalPolicy,
     },
-    available: result.available,
-    ...(definition.install?.hint ? { installHint: definition.install.hint } : {}),
+    // **The state, and the commands that fix it.** This replaced `available: boolean | "unknown"` plus a
+    // single `installHint`: the boolean could not say whether the *agent*, the *adapter we drive it
+    // through*, or our own search path was the thing that came up empty, so a user with `claude` and
+    // `codex` installed read "Not installed" about a missing npm bridge. `harnessAvailability` does the
+    // projection and `HarnessAvailabilitySchema` re-checks its five agreement rules on every answer, so a
+    // catalogue change that produced a self-contradicting state fails a test rather than reaching a window.
+    availability: harnessAvailability(result),
     evidence: definition.evidence,
   };
 }

@@ -202,6 +202,16 @@ export function joinFor(platform: PlatformId, ...parts: readonly string[]): stri
 export interface FindBinaryOptions {
   platform?: PlatformId;
   env?: NodeJS.ProcessEnv;
+  /**
+   * The directories to search, in order, **instead of** the ones in `env.PATH`.
+   *
+   * The seam the daemon needs and the reason it exists: a GUI-launched daemon's own `PATH` does not
+   * contain the user's tools (see `./path-discovery.js`), so the list it searches must be the resolved one
+   * rather than the inherited one — and it must be **the same list the spawn uses**, or a program that
+   * probed as present can fail to start. Passing it explicitly rather than fabricating an `env` with a
+   * rewritten `PATH` keeps that visible at the call site, where getting it wrong is a bug.
+   */
+  pathDirs?: readonly string[];
   /** Injectable for tests: does this absolute path exist and is it executable? */
   isExecutable?: (candidate: string) => boolean;
   /** Injectable for tests: split a PATH list. */
@@ -239,10 +249,13 @@ export function findBinary(name: string, options: FindBinaryOptions = {}): strin
   }
 
   const caps = capabilitiesFor(platform);
-  const dirs = (env.PATH ?? env.Path ?? "")
-    .split(caps.pathDelimiter)
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
+  const dirs =
+    options.pathDirs !== undefined
+      ? options.pathDirs.map((entry) => entry.trim()).filter((entry) => entry.length > 0)
+      : (env.PATH ?? env.Path ?? "")
+          .split(caps.pathDelimiter)
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0);
   // Windows also honours `PATHEXT`; we keep our own list in the matrix so this is testable
   // on any OS, and use PATHEXT's contents as a hint when present.
   const suffixes = platform === "windows" ? windowsSuffixes(caps, env) : caps.executableSuffixes;
@@ -532,3 +545,12 @@ export function normalizeUserPath(input: string, home: string): string {
 
   return path;
 }
+
+/**
+ * The `PATH` a GUI-launched process should search, and the provenance of what it found.
+ *
+ * A separate module because it is a separate subject — the daemon's *environment* rather than the OS's
+ * rules for paths and processes — and because it spawns a login shell, which is a thing `findBinary`
+ * must never do. See its header for the measurement this exists for.
+ */
+export * from "./path-discovery.js";

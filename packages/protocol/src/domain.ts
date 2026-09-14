@@ -563,6 +563,17 @@ export const ENVOYCODER_ERRORS = {
   /** The harness binary is not installed (or not on PATH). */
   harnessMissing: "envoycoder.harness-missing",
   /**
+   * We could not *check* whether this agent is usable, so we will not start it and will not claim it is absent.
+   *
+   * The third member of the same family as `harnessMissing` / `harnessUnsupported`, and it exists for the same
+   * reason the other two are separate: the translated sentence a user reads must not assert something we do not
+   * know. A daemon that could not assemble a search path — no `PATH` of its own, no answer from a login shell,
+   * and none of the well-known tool directories — has established nothing about the agent, and answering
+   * "not installed, install it and try again" would send a user to reinstall a program they already have.
+   * Reached from `launchForHarness` when the probe's state is `unknown`; see `HarnessAvailability` in `rpc.ts`.
+   */
+  harnessUnknown: "envoycoder.harness-unknown",
+  /**
    * The agent exists and is installed, but speaks a protocol this product cannot drive yet.
    *
    * Distinct from `harness-missing` on purpose: "install it" is wrong advice for an agent that is

@@ -218,7 +218,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     // no reason.
     unlisted: publishesOnlyInSession(agent),
     supported: props.probeSupported === true,
-    available: agent.available,
+    availability: agent.availability.state,
     state: probeState,
   });
 

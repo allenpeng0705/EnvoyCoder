@@ -841,6 +841,170 @@ export type ProbeOutcome = (typeof PROBE_OUTCOMES)[number];
 
 export const ProbeOutcomeSchema = z.enum(PROBE_OUTCOMES);
 
+/**
+ * **What kind of thing is missing, when something is** — and the answer is never "the agent".
+ *
+ * ## Why a boolean was not enough, and exactly how it lied
+ *
+ * `HarnessSummary.available` used to be `boolean | "unknown"`, and a user read "Not installed" for three
+ * different situations that are not the same sentence:
+ *
+ *   1. **The bridge is missing.** `claudecode` and `codex` are driven through the Agent Client Protocol
+ *      bridges `@agentclientprotocol/claude-agent-acp` and `@agentclientprotocol/codex-acp` — the vendor
+ *      CLIs themselves speak no ACP and never answer `initialize` (measured; see each entry's `evidence`).
+ *      An agent is therefore a **program plus the adapter we drive it through**, and the row said "not
+ *      installed" about the adapter while `claude` 2.1.159 sat in `~/.local/bin`. The user had installed
+ *      the agent; the app refused to say so.
+ *   2. **The thing is installed but the daemon cannot see it.** A GUI launch hands its daemon launchd's
+ *      environment, which on macOS contains no `PATH` at all, so a program in `~/.local/bin` is invisible
+ *      to the search. "Not installed" was a claim about *our* environment dressed as a claim about *the
+ *      user's machine*.
+ *   3. **Nothing was probed.** A daemon that could not run the search knows nothing, and a boolean that
+ *      folds "we did not look" into "false" turns our ignorance into an assertion about somebody else's
+ *      software — precisely the move this project refuses.
+ *
+ * So the state names **the thing that is missing**, and each non-ready state carries what to do about it:
+ *
+ *   * `"ready"` — the program we drive resolved and this build speaks its protocol. It can run.
+ *   * `"unsupported"` — the program is there, and this build has no adapter for the protocol it speaks
+ *     (the four catalogue entries tagged `transport: "cli"`). Distinct from `ready` because the catalogue's
+ *     own doctrine is that **being installed is not being drivable**, and a green chip for an agent whose
+ *     every run is refused by `isDrivableByAcpAdapter` is the same kind of false promise as case 1.
+ *   * `"needs-bridge"` — the agent's own program resolved and the adapter did not. `agentBinary` names what
+ *     was found, `fix` names the install command from the entry.
+ *   * `"not-installed"` — neither resolved, over a search that actually ran.
+ *   * `"unknown"` — we could not run the search (see `SearchPath.searchable`). **Must never render as
+ *     "not installed"**, which is the single rule this field exists for.
+ *
+ * `provisional` is the one provenance fact a resolved program can carry: `dsh` on the machine this was
+ * written on resolves out of `~/.npm/_npx/<hash>/node_modules/.bin`, a directory belonging to somebody
+ * else's `npx` invocation. It **counts as installed** — it resolves and it runs, verified against the real
+ * binary — and it is *marked*, because an installation that `npm cache clean` removes is worth one
+ * sentence rather than silence. See `provisionalCacheOf` in `@envoycoder/platform`.
+ */
+export const HARNESS_STATES = [
+  "ready",
+  "unsupported",
+  "needs-bridge",
+  "not-installed",
+  "unknown",
+] as const;
+
+export type HarnessState = (typeof HARNESS_STATES)[number];
+
+export const HarnessStateSchema = z.enum(HARNESS_STATES);
+
+/** The caches a resolved program may have come out of. A closed list, so the window can name each one. */
+export const TOOL_CACHES = ["npx", "bun-cache", "pnpm-dlx"] as const;
+
+export type ToolCache = (typeof TOOL_CACHES)[number];
+
+export const ToolCacheSchema = z.enum(TOOL_CACHES);
+
+/**
+ * One step that fixes the state, in the order the steps must be run.
+ *
+ * `command` is a command line and is **deliberately never translated**: a translated `npm install -g …` is
+ * a command that does not run (`SectionsFacts.tsx` has carried that rule since `installHint`). A list
+ * rather than one command because `not-installed` on a bridged agent genuinely needs two steps — the agent
+ * itself, then the adapter over it — and picking one of them would leave the user at another "not
+ * installed" a moment later.
+ */
+export interface AvailabilityFix {
+  /** The exact command line. Shown verbatim, in every language. */
+  command: string;
+  /** Where to read more, when the entry names a page. Also shown verbatim. */
+  url?: string;
+}
+
+export const AvailabilityFixSchema = z
+  .object({ command: z.string().min(1), url: z.string().min(1).optional() })
+  .strict();
+
+/**
+ * What this machine can actually do with one agent right now.
+ *
+ * ## The agreement rules the schema enforces rather than trusts
+ *
+ * Same discipline as `models.kind` ⇄ `options` (`AgentModelsSchema`): every field here is a *claim*, and a
+ * claim that contradicts another claim is worse than a missing one, because both travel and a client reads
+ * whichever it trusts. So the schema rejects all five contradictions instead of leaving them to review:
+ *
+ *   1. `binary` is present **exactly when** the state says we found the program we drive (`ready`,
+ *      `unsupported`). A path with `not-installed` is the old lie wearing the new field.
+ *   2. `agentBinary` may appear **only** with `needs-bridge`. It is the evidence for that state — "we found
+ *      `claude`, we did not find `claude-agent-acp`" — and with any other state it would be a path found
+ *      for a reason the state does not describe.
+ *   3. `provisional` may appear **only** with `ready`: provenance is a property of a resolved program.
+ *   4. `fix` appears **exactly when** there is something to install (`needs-bridge`, `not-installed`) and
+ *      must be non-empty. An `unknown` with a fix would be us telling the user to install something we
+ *      never established was missing — the `available: false` bug, reintroduced through the back door.
+ *   5. `unsupported` and `unknown` carry no `fix` for the same reason in two directions: one needs an
+ *      adapter we have not written, the other needs us to look again.
+ */
+export interface HarnessAvailability {
+  state: HarnessState;
+  /** Absolute path to the program we would launch, when we found one. */
+  binary?: string;
+  /** Absolute path to the **agent's own** program, when it is a bridge we drive and it resolved. */
+  agentBinary?: string;
+  /** Set when `binary` came out of another tool's cache rather than an installation of the user's own. */
+  provisional?: ToolCache;
+  /** What to run to get to `ready`, in order. Present exactly when something must be installed. */
+  fix?: readonly AvailabilityFix[];
+}
+
+export const HarnessAvailabilitySchema = z
+  .object({
+    state: HarnessStateSchema,
+    binary: z.string().min(1).optional(),
+    agentBinary: z.string().min(1).optional(),
+    provisional: ToolCacheSchema.optional(),
+    fix: z.array(AvailabilityFixSchema).min(1).readonly().optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const fail = (message: string, path: string) => ctx.addIssue({ code: "custom", message, path: [path] });
+    const drives = value.state === "ready" || value.state === "unsupported";
+    if (drives !== (value.binary !== undefined)) {
+      fail(
+        value.binary !== undefined
+          ? `a resolved program (binary) means we found the thing we drive, so state must be "ready" or ` +
+              `"unsupported", not "${value.state}"`
+          : `state "${value.state}" claims we found the thing we drive, so it must carry its binary path`,
+        "binary",
+      );
+    }
+    if (value.agentBinary !== undefined && value.state !== "needs-bridge") {
+      fail(
+        `agentBinary is the evidence for "needs-bridge" — the agent's own program found while the adapter ` +
+          `we drive was not — so it cannot accompany "${value.state}"`,
+        "agentBinary",
+      );
+    }
+    if (value.state === "needs-bridge" && value.agentBinary === undefined) {
+      fail(`"needs-bridge" must name the agent binary it found`, "agentBinary");
+    }
+    if (value.provisional !== undefined && value.state !== "ready") {
+      fail(`provisional describes a resolved program, so it belongs to "ready" alone`, "provisional");
+    }
+    const installable = value.state === "needs-bridge" || value.state === "not-installed";
+    if (installable && (value.fix === undefined || value.fix.length === 0)) {
+      fail(
+        `"${value.state}" is a statement about something missing, so it must carry the command that fixes ` +
+          `it — a row that says what is absent and not what to do is the sentence this field replaced`,
+        "fix",
+      );
+    }
+    if (!installable && value.fix !== undefined) {
+      fail(
+        `"${value.state}" has nothing to install, so it must not carry an install command: naming one ` +
+          `would claim something is missing that this state does not assert`,
+        "fix",
+      );
+    }
+  });
+
 /** One agent, as a *picker* needs it. Everything the UI promises is gated on `capabilities`. */
 export interface HarnessSummary {
   id: HarnessId;
@@ -913,9 +1077,28 @@ export interface HarnessSummary {
      */
     approvalPolicy: boolean;
   };
-  /** Whether the binary exists right now. `unknown` is honest for a harness we have not probed. */
-  available: boolean | "unknown";
-  installHint?: string;
+  /**
+   * What this machine can actually do with this agent, and what is missing when it cannot.
+   *
+   * **Required, and it replaced `available: boolean | "unknown"`.** The old field is why a user with
+   * `claude`, `codex` and `dsh` all installed read "Not installed" for all three: a boolean cannot say
+   * *which* of the agent, its adapter and our own search turned up empty, and the window had no choice but
+   * to render every false as one word. See `HarnessAvailability` for the five states, the five
+   * contradictions its schema rejects, and why `provisional` is a fact rather than a warning.
+   *
+   * **The compatibility consequence, recorded because this is a wire and an older daemon is real.**
+   * A daemon built before this field sends `available` and `installHint`, and this schema is `.strict()` —
+   * so its `coder.listHarnesses` answer no longer validates. Nothing in the running product validates a
+   * result on the client (the schemas are the declared contract and the tests' instrument), so the window
+   * does not break; it must nonetheless render that answer honestly, and it does:
+   * `availabilityOf()` in `apps/desktop/src/composer/agent-for.ts` reads the legacy boolean and maps it to
+   * a state **without inventing one**. That mapping is the interesting half — a legacy `false` becomes
+   * `unknown`, never `not-installed`, because a daemon that never asked about the agent's own program
+   * cannot support the claim, and it sends no `fix` for the same reason. The user is told the daemon is a
+   * build behind and to restart EnvoyCoder, which is the action that fixes it, rather than being told a
+   * program they installed is missing.
+   */
+  availability: HarnessAvailability;
   /**
    * Where the catalogue's facts came from.
    *
@@ -998,8 +1181,15 @@ export const HarnessSummarySchema = z
         approvalPolicy: z.boolean(),
       })
       .strict(),
-    available: z.union([z.boolean(), z.literal("unknown")]),
-    installHint: z.string().optional(),
+    /**
+     * Whether this agent can be run here, and which of the three things that could be missing is.
+     *
+     * Required, like `models` and `thinking`, and for the strongest version of their reason: the state is
+     * what a user reads before deciding whether to try, and "the field is absent" would be read as "not
+     * installed" by any client that had to guess. Its five states and five agreement rules are documented
+     * on `HarnessAvailability`.
+     */
+    availability: HarnessAvailabilitySchema,
     evidence: z.string(),
   })
   .strict();
@@ -1321,9 +1511,15 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
     result: z
       .object({
         harness: HarnessIdSchema,
-        available: z.boolean(),
-        /** The resolved absolute path when we found one; absent when we did not. */
-        binary: z.string().optional(),
+        /**
+         * The same five states `HarnessSummary.availability` carries, from the same function.
+         *
+         * It used to be `available: z.boolean()` — which could not express `unknown` at all, on the one
+         * method whose whole job is to answer this question, so "we did not look" was unrepresentable here
+         * while it was representable in the list. The resolved path is inside `availability.binary` rather
+         * than beside it, so the two cannot disagree about whether anything was found.
+         */
+        availability: HarnessAvailabilitySchema,
         detail: z.string(),
       })
       .strict(),

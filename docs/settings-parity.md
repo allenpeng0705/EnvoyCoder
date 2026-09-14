@@ -586,7 +586,7 @@ at all, so **ship the disabled row with the git slice, not before it.**
 
 | setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
 |---|---|---|---|---|---|
-| **Enable {provider}** (`providers[id].enabled`) | `providers-section.tsx:248-253`, per provider · `settings.providers.enableProvider` "Enable {{name}}" (`en.ts:2651`) | `true` (`:444`; daemon `server/agent/provider-registry.ts:737`) | daemon: only enabled providers get a client; disabled ⇒ `unavailable`, `listModels` throws "Provider X is disabled" (`provider-registry.ts:375-377`,`:752-754`,`:836-837`) | our equivalent is the ACP catalogue: `apps/desktop/src/state/coderStore.ts` filters `harness.available !== false` (`SettingsPane.tsx:40`) and lists every catalogue entry | **not applicable as a *setting*** — availability in EnvoyCoder is a fact we detect (`available`/`unknown`/`false`), not a switch the user throws. Making it a switch would let a user hide a working agent for no reason |
+| **Enable {provider}** (`providers[id].enabled`) | `providers-section.tsx:248-253`, per provider · `settings.providers.enableProvider` "Enable {{name}}" (`en.ts:2651`) | `true` (`:444`; daemon `server/agent/provider-registry.ts:737`) | daemon: only enabled providers get a client; disabled ⇒ `unavailable`, `listModels` throws "Provider X is disabled" (`provider-registry.ts:375-377`,`:752-754`,`:836-837`) | our equivalent is the ACP catalogue: the pickers filter on `knownMissing()` (`composer/agent-for.ts`, used by `SettingsPane.tsx:40` and the project defaults) and list every catalogue entry except one established to be absent | **not applicable as a *setting*** — availability in EnvoyCoder is a fact we detect (`HarnessSummary.availability.state`, five states: §7.9), not a switch the user throws. Making it a switch would let a user hide a working agent for no reason |
 | **Add provider** (`providers[id]` from the ACP catalogue) | `provider-catalog-list.tsx:108-118` · `providerCatalog.actions.add` "Add" (`en.ts:1587`) | — (action) | persists `{providers:{[id]:{extends:"acp",label,description,command,env,params}}}` (`hooks/use-acp-provider-catalog.ts:11-26`) so a third-party ACP CLI becomes runnable | **the gap this row names is real**: our 38-entry ACP catalogue is in-repo data (`packages/agent-catalog/src/acp-catalog.ts`) and a user cannot add a provider at all | **honour-able with work** — this is `docs/paseo-feature-parity.md` #5 and the work is named there: an open provider id, a provider config file, and list/add/remove RPCs. It is a **new protocol field**, so per family guide §7.4 the shape goes upstream into `@envoycoder/protocol`'s owner decision first — this repo *is* the owner of that package, so the change lands here and `check-wiring` follows |
 | **Remove provider** (`removeProviders`) | `providers-section.tsx:155-164` (menu + confirm) · `settings.providers.actions.remove` (`en.ts:2658`) | — (action) | daemon strips the entry, its overrides **and** its `metadataGeneration.providers` entries (`daemon-config-store.ts:101-159`) | absent with the row above | **honour-able with work** — same slice as Add; a list editor with add and no remove is not a slice |
 | **Add custom model** (`providers[id].additionalModels`) | `provider-diagnostic-sheet.tsx:199-234` (modal form) · `settings.providers.models.addCustomTitle` "Add custom model" (`en.ts:2678`) | `[]` (`provider-registry.ts:735`) | merged on top of discovered models (`provider-registry.ts:383-396`,`:651`): the picker gains ids without replacing the catalogue | our catalogue ships a fixed `models` list per agent (`packages/agent-catalog/src/models.ts`) with no user additions. **Half of this row landed since it was written, and not as a settings control:** the agent is now *asked* what it offers and the answer is recorded, so `deepseek-harness`'s live catalog reaches the picker without a hand-typed id (§7.7). What is still absent is the user's own additions — ids that are not in the agent's catalog at all | **honour-able with work** — needs a per-agent model list on the settings object plus the composer reading it. Small, but it is a **protocol** addition (a `models` array on the agent's stored defaults), so it shares the Add-provider slice's schema change |
@@ -832,8 +832,9 @@ is `apps/desktop/test/settings-coverage.test.ts`.
 
 As written, `SettingsPane.tsx` rendered five controls and two read-only groups: the language select
 (`:80-104`), the default-agent select (`:106-132`, populated from `state.harnesses` filtered by
-`harness.available !== false`, `:40`), the three switches (`:134-171`), an **Agents** list with
-availability chips and install hints (`:173-210`), and the daemon's quarantined-file **notes**
+`knownMissing()` — the one state a picker may drop, §7.9), the three switches (`:134-171`), an **Agents**
+list with an availability chip *per state* plus the install commands that state implies (`:173-210`), and
+the daemon's quarantined-file **notes**
 (`:212-223`, rendered through their key when the daemon sent one). Three findings from reading it
 against the rest of the app, each with its present state:
 
@@ -1200,9 +1201,10 @@ directory, that choice is the line to revisit, and it is recorded where it is ma
 **"Same features" where an agent genuinely cannot do it.** The surface is the same and the reason differs,
 naming the agent — that is the rule, and the probe does not change it. `envoy-harness` gets **no** probe
 button, because there is nothing to learn: its model list is published in its own source and it has no
-thought-level surface at all. No probe is offered either when the agent is not installed, or when the
-daemon is an older build. In all three cases the control is not hidden behind a dead button: the pills keep
-their own sentences for our ignorance and the agent's lack, in the user's language.
+thought-level surface at all. No probe is offered either when the agent cannot be run — any of `not-installed`,
+`needs-bridge`, `unsupported` or `unknown` (§7.9), because the gate is `ready` and not "not obviously
+missing" — or when the daemon is an older build. In all cases the control is not hidden behind a dead
+button: the pills keep their own sentences for our ignorance and the agent's lack, in the user's language.
 
 **Five sentences, and where they live** (`apps/desktop/src/i18n/messages/en.ts`, all seven languages in
 step — `npm run i18n:gap` reports 341/341 for six of them):
@@ -1252,6 +1254,9 @@ user actually pick and run" belongs in the record of what this product does toda
 and the picker offered seven others as recipes nobody had run.
 
 **Five run today, and each one was driven against its real binary rather than read out of a manifest.**
+(The *row* a user reads is a separate question from this table and is answered by §7.9: two of these five
+are driven through an npm bridge that the agent's own CLI does not include, so "installed" needs two
+sentences rather than one.)
 The three that joined were already *listed* — what changed is that their commands were replaced with ones
 that were measured to answer `initialize`, open a session and publish options, and that the catalogue now
 records exactly what was seen. The provenance lives on each entry's `evidence`; the commands and their
@@ -1300,6 +1305,133 @@ live turn through the Claude bridge in its own asking mode ran a shell tool call
 three were **read but not wired** (the bridge's `effort` option, Codex's `reasoning_effort`, and Cursor's
 reasoning-in-the-model-id); the pill stays disabled with our reason rather than sending a level whose
 effect nobody measured.
+
+### 7.9 Which part is missing: availability as five states, and the `PATH` they are found on
+
+The Agents row and the composer chip used to answer one question with one boolean — `HarnessSummary.available`
+was `boolean | "unknown"` — and the user report that ended that was three words long:
+
+> *"I have installed codex and claudecode, deepseek-harness, why all of them shown 'Not Installed'."*
+
+They were right, and there were three independent causes, all of which produced the same wrong word.
+
+**1. An agent is a binary *plus the adapter we drive it through*, and only one of them was recorded.** Claude
+Code and Codex have no ACP mode (§7.8's table is the evidence: `claude -p …` and `codex exec --json` never
+answer `initialize`), so their entries name the **bridges** — `@agentclientprotocol/claude-agent-acp` and
+`@agentclientprotocol/codex-acp`. Both had been verified from throwaway `/tmp` prefixes and never installed
+globally, and the user was never told to install them. So the probe asked about a program that was not there,
+found it absent, and reported the **agent** missing — while `claude` 2.1.159 sat in `~/.local/bin` and `codex`
+in `~/.npm-global/bin`. The catalogue now records both halves (`AgentLaunch.agentBinaries` is the agent's own
+CLI, `install.bridge` is the adapter's command), and the probe asks in the order of specificity: the program we
+drive first, then — only if it is absent and the entry declares a bridge — the agent's own program.
+
+**2. A GUI-launched daemon's `PATH` is not the user's, and nothing repaired it.** Measured on the machine this
+was written on: `launchctl getenv PATH` prints **nothing**, and Finder-launched processes carry no `PATH` in
+their environment at all. `spawn_daemon` in `apps/desktop/src-tauri/src/main.rs` passes only
+`ENVOYCODER_DAEMON_PORT`, so what the daemon inherits depends entirely on where the app was launched from — and
+the same daemon started from a terminal (the `npm run tauri:dev` development arrangement) answered *differently*
+from the same daemon started from Finder. `packages/platform/src/path-discovery.ts` now resolves the list and
+**both probing and spawning use it** (`launchForHarness` reads it once and puts it in the child's environment,
+because a bridge that probed as present and then cannot find the CLI it wraps is worse than one reported
+missing). The order is documented there; the short version:
+
+| # | source | why it is in this position |
+|---|---|---|
+| 1 | `$SHELL -ilc 'printf …"%s" "$PATH"'`, `LOGIN_SHELL_TIMEOUT_MS` = **2500 ms** | the only source that includes what the user's rc files add, which is what "installed" means to them |
+| 2 | the daemon's own `PATH` | honest by definition, kept even when (1) answered, because a profile that *replaces* `PATH` would otherwise make the daemon forget where it was launched from |
+| 3 | `wellKnownBinDirs()`: `~/.local/bin`, `~/.npm-global/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `~/.cargo/bin`, `~/.bun/bin`, each only if it exists | what rescues a GUI launch, where there is no terminal to ask. Nothing on Windows: the registry `PATH` reaches a GUI process there, so there is nothing to repair |
+
+Bounded in three ways rather than one. The timeout kills a shell that hangs; `LOGIN_SHELL_MAX_OUTPUT` (64 KiB)
+drops one that floods; and the output is read **by marker** rather than by "the last line", which is not
+theoretical — this machine's `/bin/zsh -ilc 'printf %s "$PATH"'` prints **`Restored session: Mon Sep 14
+23:42:52 CST 2026` on stdout before the `PATH`**. A value that is not a plausible `PATH` is refused rather than
+believed, because believing one would silently make every agent look uninstalled. **The daemon never waits for
+any of it**: `currentSearchPath()` is synchronous and answers from what has already landed, `primeSearchPath()`
+runs at boot off the critical path, and when the login shell's answer arrives the daemon broadcasts the same
+`harnesses` state change a recorded session uses — so a window that painted a row a moment earlier refetches
+instead of showing an answer we have already replaced.
+
+**3. The window had one word for every false.** `SectionsFacts.tsx` mapped `available === false` to a danger
+chip reading "Not installed", so a missing *bridge* and an invisible *binary* read identically. There are now
+five states, each naming what is absent, and the schema refuses an availability that contradicts itself:
+
+| state | the word | what it asserts | what the row offers |
+|---|---|---|---|
+| `ready` | "Ready" | the program we drive resolved and this build speaks its protocol | nothing to install |
+| `unsupported` | "Cannot be driven yet" | the program is there; no adapter exists for the protocol it speaks (`transport: "cli"`) | nothing — the gap is ours, so offering an install command would be a lie about the user's machine |
+| `needs-bridge` | "Needs its adapter" | **the agent's own CLI resolved and the adapter did not** — the reported bug, named | the adapter's `npm install -g …`, from the entry |
+| `not-installed` | "Not installed" | neither resolved, over a search that ran | the agent's install command **then** the adapter's, in order |
+| `unknown` | "Not checked" | we could not run the search (`SearchPath.searchable` is false) | **no install command**, and the row must never read as "not installed" |
+
+Three further decisions worth recording, because each could have gone the other way:
+
+* **`unknown` is not "not installed", and that is the state's whole reason to exist.** A daemon that could not
+  assemble a search list — no `PATH`, no shell answer, no well-known directory — has established nothing, and
+  the schema *forbids* a `fix` on that state so the window cannot offer an install command for something nobody
+  saw missing. A login shell that **times out** is deliberately *not* this case: the fallbacks still ran, so a
+  search happened and its negative result is real.
+* **A hit inside another tool's cache counts as installed, marked as provisional.** `dsh` resolves here at
+  `~/.npm/_npx/1e7f6d9597241db0/node_modules/.bin/dsh` — a path created for somebody else's `npx` invocation,
+  with a random hash in it, removed by `npm cache clean`. It is a real program and this repository drives it for
+  real (`acp-transport.test.ts`), so "not installed" would be false; but reporting it unqualified would hide why
+  it can vanish. It is `ready` with `provisional: "npx"`, one warn chip, and the entry's install hint still
+  points at a real installation (`npm install -g @deepseek-ai/dsh`). A toolchain manager's directory
+  (`~/.volta`, `~/.asdf`) is deliberately not in that list: those are installations the user chose.
+* **A picker drops only `not-installed`.** `knownMissing()` is the translated rule for
+  `harness.available !== false`; the other four states stay in the list, because hiding an agent a user has
+  configured — one whose adapter is missing, or one nobody has checked — is a worse failure than offering one
+  the row then explains.
+
+**The wire, and the compatibility consequence.** `HarnessSummary.availability` is **required**, and
+`HarnessAvailabilitySchema`'s `superRefine` rejects the five ways it can disagree with itself: `binary` present
+⟺ the state says we found the program we drive; `agentBinary` only with `needs-bridge`; `provisional` only with
+`ready`; `fix` present ⟺ there is something to install, and **non-empty**; and no `fix` on a state that asserts
+nothing is missing. `installHint` is **deleted** — with two install steps it could only name one of them, and the
+commands now travel inside the state that implies them. `coder.probeHarness`'s result widened from
+`available: z.boolean()` (which could not express `unknown` at all) to the same `availability`, so the singular
+probe and the list cannot answer differently.
+
+An **older daemon** sends `available` and `installHint` and no `availability`, and this schema is `.strict()`, so
+its answer no longer validates. Nothing in the running product validates a result on the client — the schemas are
+the declared contract and the tests' instrument — so the window does not break, and `availabilityOf()`
+(`apps/desktop/src/composer/agent-for.ts`) reads the legacy field itself. The mapping is the interesting half: a
+legacy `true` is `ready` (the same claim, and the change does not make it false retroactively) and a legacy
+`"unknown"` is `unknown`, but a legacy **`false` becomes `unknown`, never `not-installed`** — that daemon only
+ever asked whether *the program it drives* was on *its* search path, which for a bridged agent is the adapter, so
+its `false` is exactly the wrong word this change removes. Carrying no `fix`, it cannot be read as advice
+either; the row adds one sentence naming the daemon as a build behind and restarting EnvoyCoder as the fix.
+
+**A refusal has a state too, and it needed a third code.** The settings row is not the only place a state
+becomes a sentence: pressing Send on an agent that cannot run gets a *translated* refusal, keyed, and the key is
+what a German user reads. Two of the states map onto codes that already existed — `needs-bridge` is
+`harness-missing` (something must be installed, and the sentence names both steps) and `unsupported` is
+`harness-unsupported` (nothing to install; the gap is ours). But `unknown` could not borrow either: the existing
+`harness-missing` sentence is *"X is not installed on this machine. Install it, then start the task again."*, and
+that is precisely the claim the state exists to forbid. So `ENVOYCODER_ERRORS.harnessUnknown` and
+`error.harnessUnknown` are new — "EnvoyCoder could not check whether X is installed, so it did not start the
+task. Restart EnvoyCoder and try again." — and `launchForHarness` decides drivability **before** installation,
+because "install it" is wrong advice for an agent we have no adapter for whether or not it is present. That
+ordering is not stylistic: widening the state to include `unsupported` would otherwise have moved every
+installed-but-undrivable agent into the "missing" branch, telling a user with Copilot installed that it is not
+installed. It was caught by writing the test, and it is now pinned by one.
+
+**The gates, and what each one is for.** `apps/desktop/test/launch-search-path.test.ts` also pins the three
+codes apart (`coderErrorCode`/`coderErrorRef`, the half a translated window reads rather than the English
+prose). `packages/platform/test/path-discovery.test.ts` (18 tests: the marker
+against real rc-file noise, a **real** `sleep 30` shell against a 400 ms deadline, garbage with and without the
+marker, the output bound, the source order, `searchable: false`, `~/` expansion, cache isolation, and one leg
+against this machine's real login shell that prints why it did not run when there is none);
+`apps/desktop/test/launch-search-path.test.ts` (4 tests: the probe resolves from a given list **and a real child
+process sees that same list**, and neither is satisfied by the ambient environment);
+`packages/agent-catalog/test/agent-catalog.test.ts` (the four states, `needs-bridge` never reading as "not
+installed", the search order, and the npx-cache marker);
+`packages/protocol/test/rpc.test.ts` (the five agreement rules, each violated deliberately);
+`apps/desktop/test/availability-compat.test.ts` (every legacy answer, including the one that must not become
+"not installed"); `apps/desktop/test/settings-nav.test.tsx` (the five words **as rendered**, associated with the
+right rows); `apps/desktop/test/composer-controls.test.ts` and `apps/desktop/test/daemon-rpc.test.ts` (the four
+non-ready states gate the probe, a real daemon's every summary parses under the contract, and the boot-time
+`harnesses` broadcast). `scripts/smoke.ts`'s catalogue step now prints the state rather than a tick, so the first
+thing a bug report reads is which part is missing.
 
 ---
 

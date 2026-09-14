@@ -25,6 +25,8 @@
  *      both say yes — otherwise it is off, with the reason rendered in the user's language.
  */
 
+import type { HarnessAvailability } from "@envoycoder/protocol";
+
 import { isMessageKey, type MessageKey } from "../i18n/messages/en.js";
 
 /** The facts about one agent, straight from `coder.listHarnesses`. */
@@ -58,9 +60,16 @@ export interface ComposerAgent {
     streaming: boolean;
     images: boolean;
   };
-  available: boolean | "unknown";
-  /** Why it cannot be used, when it cannot. */
-  unavailableReason?: string;
+  /**
+   * **What this machine can do with this agent**, not just whether a binary was found.
+   *
+   * The five states (`HarnessAvailability`), because the one sentence this replaces was wrong in four of
+   * them: `available: false` rendered as "not installed on this machine" for an agent whose *adapter* was
+   * missing, for one this build has no adapter for at all, and for one nobody had looked for. The composer
+   * only ever needs `state === "ready"` to decide whether a control is live; the rest of the value is here
+   * so the *reason* it shows can name the right missing thing and carry the command that fixes it.
+   */
+  availability: HarnessAvailability;
   /**
    * Can this daemon *apply* a mode it is given?
    *
@@ -564,12 +573,30 @@ export function composerControls(
   const capabilities = agent.capabilities;
 
   /* ── can we run it at all ── */
-  const available = agent.available === true;
+  /**
+   * **One sentence per state, and each names the thing that is actually missing.**
+   *
+   * This is the second half of the bug the catalogue's `agentBinaries` fixes: the old code had two
+   * sentences for five situations, so "Claude Code is not installed on this machine" was shown to a user
+   * who had installed it, because what was missing was the ACP bridge — a package they had never been told
+   * about. A `notes` entry is what the composer shows under the send button, so the wrong noun here is the
+   * wrong noun in the place a user reads before typing.
+   *
+   * `needs-bridge` carries the command, because a state whose whole content is "something is missing" and
+   * which does not say what to run is the sentence this repository refuses to ship.
+   */
+  const available = agent.availability.state === "ready";
   if (!available) {
+    const fix = agent.availability.fix?.[0]?.command;
     notes.push(
-      agent.available === "unknown"
-        ? `EnvoyCoder has not checked whether ${agent.label} is installed yet.`
-        : (agent.unavailableReason ?? `${agent.label} is not installed on this machine.`),
+      agent.availability.state === "unknown"
+        ? `EnvoyCoder could not tell whether ${agent.label} is installed — nothing here is a statement about the agent.`
+        : agent.availability.state === "unsupported"
+          ? `${agent.label} is installed, but it speaks a protocol EnvoyCoder cannot drive yet.`
+          : agent.availability.state === "needs-bridge"
+            ? `${agent.label} is installed, but the program EnvoyCoder drives it through is missing` +
+              (fix ? `: ${fix}` : ".")
+            : `${agent.label} is not installed on this machine.` + (fix ? ` ${fix}` : ""),
     );
   }
 
@@ -678,7 +705,7 @@ export function composerControls(
   /* ── sending ── */
   const behaviour = resolveSendBehaviour(state, options.preferred ?? "steer");
   const sendEnabled = available;
-  if (capabilities.approvals && agent.available === true) {
+  if (capabilities.approvals && available) {
     // A fact worth surfacing: the agent can ask, so a stalled turn may be waiting on the user.
     notes.push(`${agent.label} can ask you before it acts.`);
   }

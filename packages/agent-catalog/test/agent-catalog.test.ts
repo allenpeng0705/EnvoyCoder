@@ -172,7 +172,7 @@ describe("invocation", () => {
 
     const checkout = resolveHarnessCommand(
       "envoy-harness",
-      { id: "envoy-harness", available: true, binaryPath: "/peers/envoy-harness/dist/cli/acp-stdio.js", via: "node-script" },
+      { id: "envoy-harness", state: "ready", binaryPath: "/peers/envoy-harness/dist/cli/acp-stdio.js", via: "node-script" },
       withModel,
     );
     // The entry supplies its own `--acp` (it is written for it), so the flags travel without it.
@@ -224,23 +224,108 @@ describe("invocation", () => {
 });
 
 describe("probing", () => {
-  it("reports a missing external agent with the command that installs it", () => {
+  it("reports a missing agent as `not-installed`, with the commands that install it", () => {
     const probe = probeHarness("claudecode", { platform: "linux", find: () => null });
-    expect(probe.available).toBe(false);
+    expect(probe.state).toBe("not-installed");
     expect(probe.reason).toMatch(/not installed/);
     expect(probe.reason).toMatch(/npm install -g/);
+    // **Two steps, in the order they must be run.** The agent and the adapter over it are two installs, and
+    // a row that named one would leave the user at the other a minute later. This is also what rule 4 of
+    // `HarnessAvailabilitySchema` requires of a state that asserts an absence.
+    expect(probe.fix?.map((step) => step.command)).toEqual([
+      "install Claude Code itself: `claude install` (native), or `npm install -g @anthropic-ai/claude-code`",
+      "npm install -g @agentclientprotocol/claude-agent-acp",
+    ]);
   });
 
-  it("reports the resolved path when the agent is present", () => {
+  it("reports a missing *bridge* as `needs-bridge`, and never as `not installed`", () => {
+    // **The reported bug, as an assertion.** The user had installed Claude Code and Codex; the probe looked
+    // for the ACP bridges, which nobody had installed and which the user had never been told to install, and
+    // the row said "Not installed" about the agent. `claude` resolving and `claude-agent-acp` not resolving is
+    // its own state, and it names what was *found* as well as what is missing.
+    const probe = probeHarness("claudecode", {
+      platform: "linux",
+      find: (name) => (name === "claude" ? "/home/you/.local/bin/claude" : null),
+      fileExists: () => false,
+    });
+    expect(probe.state).toBe("needs-bridge");
+    expect(probe.agentBinaryPath).toBe("/home/you/.local/bin/claude");
+    // The thing we drive was *not* found, so no path claims it was.
+    expect(probe.binaryPath).toBeUndefined();
+    // The fix is the adapter alone — the agent is already there — and the sentence says so.
+    expect(probe.fix?.map((step) => step.command)).toEqual([
+      "npm install -g @agentclientprotocol/claude-agent-acp",
+    ]);
+    expect(probe.reason).toMatch(/is installed at \/home\/you\/\.local\/bin\/claude/);
+    expect(probe.reason).toMatch(/adapter/);
+    // And the word that was wrong never appears about the agent.
+    expect(probe.reason).not.toMatch(/not installed\(looked for claude\)/);
+  });
+
+  it("reports `unsupported` for an installed agent whose protocol this build cannot speak", () => {
+    // The catalogue's own doctrine — **being installed is not being drivable** — as a state rather than as a
+    // green chip contradicted by `launchForHarness`. `copilot` is `transport: "cli"`.
+    const probe = probeHarness("copilot", { platform: "linux", find: () => "/usr/local/bin/copilot" });
+    expect(probe).toMatchObject({ state: "unsupported", binaryPath: "/usr/local/bin/copilot" });
+    // Nothing to install: the gap is ours, so no install command may be offered.
+    expect(probe.fix).toBeUndefined();
+  });
+
+  it("reports `unknown`, not `not-installed`, when there was no search path to look on", () => {
+    // The one rule the `unknown` state exists for. A daemon that could not assemble a list has not
+    // established that anything is absent, and "not installed" would be our blindness stated as a fact about
+    // the user's machine.
+    const probe = probeHarness("claudecode", {
+      platform: "linux",
+      find: () => null,
+      fileExists: () => false,
+      searchable: false,
+    });
+    expect(probe.state).toBe("unknown");
+    expect(probe.fix).toBeUndefined();
+    expect(probe.reason).toMatch(/could not tell whether/);
+    // The same inputs over a search that *did* run are a real negative, and that is a different state.
+    expect(
+      probeHarness("claudecode", { platform: "linux", find: () => null, fileExists: () => false, searchable: true }).state,
+    ).toBe("not-installed");
+  });
+
+  it("reports the resolved path when the program we drive is present", () => {
     const probe = probeHarness("codex", { platform: "linux", find: () => "/usr/bin/codex-acp" });
-    expect(probe).toMatchObject({ available: true, binaryPath: "/usr/bin/codex-acp" });
+    expect(probe).toMatchObject({ state: "ready", binaryPath: "/usr/bin/codex-acp" });
   });
 
-  it("looks for the ACP program each entry actually launches, not the vendor's own CLI", () => {
-    // **The point of this slice, as an assertion.** `claude` and `codex` are the CLIs a user installs,
-    // and neither speaks ACP; the programs we spawn are the bridges. A probe that looked for the vendor
-    // CLI would report "available" on a machine where the agent cannot be driven at all — which is the
-    // defect this catalogue was fixed for.
+  it("marks a program found in another tool's cache as provisional, and still counts it as ready", () => {
+    // **The `dsh` question, decided rather than dodged.** `dsh` resolves out of
+    // `~/.npm/_npx/<hash>/node_modules/.bin` on the machine this was written on — a directory belonging to
+    // somebody else's `npx` invocation. It is a real program and this repository drives it for real
+    // (`acp-transport.test.ts`), so "not installed" would be a lie; but it disappears with `npm cache clean`,
+    // so saying nothing would hide the fragility. Ready **and** marked.
+    const npx = probeHarness("deepseek-harness", {
+      platform: "linux",
+      find: () => "/home/you/.npm/_npx/1e7f6d9597241db0/node_modules/.bin/dsh",
+    });
+    expect(npx).toMatchObject({
+      state: "ready",
+      provisional: "npx",
+      binaryPath: "/home/you/.npm/_npx/1e7f6d9597241db0/node_modules/.bin/dsh",
+    });
+
+    // A real installation carries no such marker, which is what makes the marker mean something.
+    const installed = probeHarness("deepseek-harness", { platform: "linux", find: () => "/usr/local/bin/dsh" });
+    expect(installed.state).toBe("ready");
+    expect(installed.provisional).toBeUndefined();
+  });
+
+  it("drives the ACP program each entry actually launches, and asks about the vendor CLI only to diagnose", () => {
+    // **The point of the slice that introduced the bridges, kept as an assertion, and the order it added.**
+    // `claude` and `codex` are the CLIs a user installs, and neither speaks ACP; the programs we *spawn* are
+    // the bridges. So `binaries` — what we launch — is asked first and decides `ready`.
+    //
+    // What this test now also pins is the second question, which is the fix for the bug report: when the
+    // bridge is absent we ask about the **agent's own** program, purely to be able to say which of the two is
+    // missing. Asked *after*, never instead: a probe that reached for the vendor CLI first would report
+    // `needs-bridge` on a machine where everything is installed.
     const looked: string[] = [];
     for (const id of ["claudecode", "codex", "cursor"] as const) {
       looked.length = 0;
@@ -253,12 +338,23 @@ describe("probing", () => {
         fileExists: () => false,
       });
       const launch = HARNESS_CATALOG[id].launch;
-      const binaries = launch.kind === "child-process" ? [...launch.binaries] : [];
-      expect(looked, id).toEqual(binaries);
+      if (launch.kind !== "child-process") throw new Error(`${id} is not a child-process entry`);
+      // The search order, spelled out: the driven program first, then the agent's own if the entry declares
+      // one. Deduplicated, so an entry that drives the agent itself (`cursor`) asks once.
+      expect(looked, id).toEqual([...new Set([...launch.binaries, ...(launch.agentBinaries ?? [])])]);
     }
-    expect(HARNESS_CATALOG.claudecode.launch).toMatchObject({ binaries: ["claude-agent-acp"] });
-    expect(HARNESS_CATALOG.codex.launch).toMatchObject({ binaries: ["codex-acp"] });
+    expect(HARNESS_CATALOG.claudecode.launch).toMatchObject({
+      binaries: ["claude-agent-acp"],
+      agentBinaries: ["claude"],
+    });
+    expect(HARNESS_CATALOG.codex.launch).toMatchObject({
+      binaries: ["codex-acp"],
+      agentBinaries: ["codex"],
+    });
     expect(HARNESS_CATALOG.cursor.launch).toMatchObject({ binaries: ["cursor-agent"] });
+    // `cursor-agent`'s ACP mode is a *subcommand*, not a second package, so there is nothing to bridge and
+    // `needs-bridge` can never be its state. Stated rather than left to the reader of an omission.
+    expect(HARNESS_CATALOG.cursor.launch).not.toHaveProperty("agentBinaries");
   });
 
   it("finds the built-in harness in the peer checkout when it is not installed", () => {
@@ -266,10 +362,10 @@ describe("probing", () => {
     // same as "not available" on a development machine — and answering "install it" to somebody who
     // has it built next door is the kind of message that makes a user stop trusting the app.
     const installed = probeHarness("envoy-harness", { find: () => null, fileExists: () => false });
-    expect(installed.available).toBe(false);
+    expect(installed.state).toBe("not-installed");
 
     const checkedOut = probeHarness("envoy-harness", { find: () => null, fileExists: () => true });
-    expect(checkedOut.available).toBe(true);
+    expect(checkedOut.state).toBe("ready");
     expect(checkedOut.via).toBe("node-script");
     // The path is the *checkout's* ACP entry, next to this repository.
     // Absolute and normalised: the path is built by joining the repository root with the peer's
@@ -312,7 +408,7 @@ describe("probing", () => {
     // answered by a module check, which claimed the built-in harness was present on every machine —
     // including ones where it is not installed at all.
     const present = probeHarness("envoy-harness", { find: () => "/usr/local/bin/envoy-harness", fileExists: () => false });
-    expect(present.available).toBe(true);
+    expect(present.state).toBe("ready");
     expect(present.binaryPath).toBe("/usr/local/bin/envoy-harness");
     expect(present.via).toBe("path");
 
@@ -320,7 +416,7 @@ describe("probing", () => {
     // that asserted "absent" while the file is there would be asserting the wrong thing about the
     // code, which is how a suite starts disagreeing with the product.
     const absent = probeHarness("envoy-harness", { find: () => null, fileExists: () => false });
-    expect(absent.available).toBe(false);
+    expect(absent.state).toBe("not-installed");
     // The instruction has to name the actual fix, not "something went wrong".
     expect(absent.reason).toMatch(/not installed|install/i);
   });

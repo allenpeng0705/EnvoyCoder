@@ -35,9 +35,10 @@
 
 import type { JSX } from "react";
 
-import type { HarnessSummary } from "@envoycoder/protocol";
+import type { HarnessAvailability, HarnessState, HarnessSummary } from "@envoycoder/protocol";
 
 import { APP_VERSION } from "../../app-version.js";
+import { availabilityOf } from "../../composer/agent-for.js";
 import { modeLabel, optionLabel } from "../../composer/controls.js";
 import { useI18n } from "../../i18n/context.js";
 import { formatWhen } from "../../i18n/when.js";
@@ -65,43 +66,23 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
     <>
       <p className="settings__note">{t("settings.agents.note")}</p>
       <ul className="settings__agents">
-        {props.state.harnesses.map((harness) => (
-          <li key={harness.id} className="settings__agent">
-            <div className="settings__agent-head">
-              <strong>{harness.label}</strong>
-              <span className="settings__agent-summary">{harness.summary}</span>
-              <div className="settings__agent-facts">
-                {/* The daemon's own probe, in three states rather than two: `unknown` is a fact and must
-                    not read as "not installed" — the same distinction the availability chip in the rail
-                    makes, from the same field. */}
-                <span
-                  className={`chip ${harness.available === false ? "chip--danger" : harness.available === "unknown" ? "chip--quiet" : "chip--live"}`}
-                >
-                  {harness.available === false
-                    ? t("settings.agent.notInstalled")
-                    : harness.available === "unknown"
-                      ? t("settings.agent.unknown")
-                      : t("settings.agent.ready")}
-                </span>
-                {harness.capabilities.approvals ? null : (
-                  <span className="chip chip--warn" title={t("settings.agent.noApprovals.title")}>
-                    {t("settings.agent.noApprovals")}
-                  </span>
-                )}
-                {harness.capabilities.cancel ? null : (
-                  <span className="chip chip--warn" title={t("settings.agent.noCancel.title")}>
-                    {t("settings.agent.noCancel")}
-                  </span>
-                )}
-                {/* `installHint` is deliberately not translated: it is a command line
-                    (`npm install -g @anthropic-ai/claude-code`), and a translated command is a
-                    command that does not run. */}
-                {harness.installHint ? <span className="settings__hint">{harness.installHint}</span> : null}
+        {props.state.harnesses.map((harness) => {
+          // The wire generation is decided **once per row**, here, and not inside the chip: an older daemon
+          // sends a boolean and no `availability`, and the same fact has to reach the chip, the install
+          // steps and the sentence that explains the daemon is a build behind.
+          const availability = availabilityOf(harness);
+          const legacyDaemon = harness.availability === undefined;
+          return (
+            <li key={harness.id} className="settings__agent">
+              <div className="settings__agent-head">
+                <strong>{harness.label}</strong>
+                <span className="settings__agent-summary">{harness.summary}</span>
+                <RowFacts availability={availability} harness={harness} legacyDaemon={legacyDaemon} />
               </div>
-            </div>
-            <DeclaredFacts harness={harness} />
-          </li>
-        ))}
+              <DeclaredFacts harness={harness} />
+            </li>
+          );
+        })}
         {props.state.harnesses.length === 0 ? (
           <li className="settings__agent">{t("settings.agents.empty")}</li>
         ) : null}
@@ -109,6 +90,100 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
     </>
   );
 }
+
+/**
+ * The chip and the commands for one agent, as a component of its own.
+ *
+ * Split out because the row's head is now long enough that the mapping tables below belong next to their
+ * use rather than folded into the list, and because the three inputs are exactly the three facts the chip
+ * needs: the availability, the agent (for the capability chips) and whether the daemon is a build behind.
+ */
+function RowFacts(props: {
+  availability: HarnessAvailability;
+  harness: HarnessSummary;
+  legacyDaemon: boolean;
+}): JSX.Element {
+  const { t } = useI18n();
+  const { availability, harness, legacyDaemon } = props;
+  return (
+    <div className="settings__agent-facts">
+      {/* **The row's whole job, and the bug it was getting wrong.**
+          This chip used to be `available === false ? "Not installed" : …`, and a user who had installed
+          Claude Code, Codex and DeepSeek Harness read "Not installed" for all three: the agents were there
+          and what was missing was the ACP *bridge* we drive them through, plus a daemon that could not see
+          `~/.local/bin` because a GUI launch hands it no `PATH`. Five states now, each naming the thing that
+          is actually absent — and `unknown` never renders as "not installed", which is the one rule the
+          state exists for. */}
+      <span className={`chip ${AVAILABILITY_CHIP[availability.state]}`}>
+        {t(AVAILABILITY_LABEL[availability.state])}
+      </span>
+      {harness.capabilities.approvals ? null : (
+        <span className="chip chip--warn" title={t("settings.agent.noApprovals.title")}>
+          {t("settings.agent.noApprovals")}
+        </span>
+      )}
+      {harness.capabilities.cancel ? null : (
+        <span className="chip chip--warn" title={t("settings.agent.noCancel.title")}>
+          {t("settings.agent.noCancel")}
+        </span>
+      )}
+      {/* **The provenance of a program found in somebody else's cache.** `dsh` can resolve out of
+          `~/.npm/_npx/<hash>/node_modules/.bin` — it is a real program and it really runs, so calling it
+          absent would be false, but it disappears with `npm cache clean`, so saying nothing would be the
+          other half of the same lie. One warn chip, and one sentence per cache naming what removes it. */}
+      {availability.provisional ? (
+        <span
+          className="chip chip--warn"
+          title={t(`settings.agent.provisional.${availability.provisional}`)}
+        >
+          {t("settings.agent.provisional")}
+        </span>
+      ) : null}
+      {/* **The commands that fix it, in the entry's own words.** Deliberately not translated: a translated
+          `npm install -g …` is a command that does not run. Shown only for the two states that assert
+          something is missing, because `availability.fix` is present exactly then — a state that does not
+          claim an absence must not offer an install command, and the schema rejects one that does.
+          Every step, not only the first: for an agent driven through a bridge, the agent and the bridge are
+          two installs, and naming one lands the user at the other a minute later. */}
+      {(availability.fix ?? []).map((step) => (
+        <span key={step.command} className="settings__hint" title={step.url}>
+          {step.command}
+        </span>
+      ))}
+      {/* A daemon **older than this field** sent a boolean, and `availabilityOf` turned it into a state
+          rather than inventing one. What it cannot do is say which of the two things was absent — so the row
+          says that, and names the action that actually fixes it, rather than lending its authority to a
+          claim the old daemon never made. */}
+      {legacyDaemon ? (
+        <span className="settings__hint">{t("settings.agent.olderDaemon")}</span>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The chip's colour and its word, per state — one table each, so a state can never get one and not the other.
+ *
+ * The colours carry the same distinction the words do: `not-installed` is the only `danger`, because it is
+ * the only state that asserts a program the user was told to install is not there. `needs-bridge` and
+ * `unsupported` are warnings — something is wrong and it is not the user's mistake — and `unknown` is
+ * quiet, deliberately: a state that asserts nothing must not look like an alarm.
+ */
+const AVAILABILITY_CHIP: Record<HarnessState, string> = {
+  ready: "chip--live",
+  unsupported: "chip--warn",
+  "needs-bridge": "chip--warn",
+  "not-installed": "chip--danger",
+  unknown: "chip--quiet",
+};
+
+const AVAILABILITY_LABEL = {
+  ready: "settings.agent.ready",
+  unsupported: "settings.agent.unsupported",
+  "needs-bridge": "settings.agent.needsBridge",
+  "not-installed": "settings.agent.notInstalled",
+  unknown: "settings.agent.unknown",
+} as const satisfies Record<HarnessState, MessageKey>;
 
 /**
  * What one agent published about itself — the four facts a user needs to understand the controls it

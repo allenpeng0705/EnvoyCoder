@@ -110,7 +110,7 @@ function harnessFor(
     // levels only inside a session", which is the state the pill's "not told yet" sentence exists for.
     thinking: harnessThinking(id),
     capabilities,
-    available: true,
+    availability: { state: "ready" as const, binary: "/usr/local/bin/agent" },
     evidence: "cited in `@envoycoder/agent-catalog`",
     ...over,
   };

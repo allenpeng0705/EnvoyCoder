@@ -41,6 +41,7 @@ import {
   createCoderDaemonHost,
   createCoderDispatcher,
 } from "@envoycoder/host-bridge";
+import { primeSearchPath, type SearchPath } from "@envoycoder/platform";
 
 import type { AcpLaunch } from "./acp/client.js";
 import { AcpClient } from "./acp/client.js";
@@ -87,6 +88,14 @@ export interface StartedCoderDaemon {
   mesh(): CoderMeshStatus;
   /** How many clients are attached right now, counting this process as one. */
   connectionCount(): number;
+  /**
+   * The agent search path, once the login shell has answered.
+   *
+   * Exposed because a *test* has to be able to wait for it — every other caller uses the synchronous
+   * `currentSearchPath()` and never waits for anything. It resolves rather than rejects: a shell that is
+   * absent, slow or hostile is not a daemon failure, it is the fallback answer.
+   */
+  searchPath(): Promise<SearchPath>;
   stop(): Promise<void>;
 }
 
@@ -189,6 +198,37 @@ export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): P
     bus.emit("coder:state-changed", change);
   });
 
+  /**
+   * **Find the user's `PATH`, without waiting for it and without gating anything on it.**
+   *
+   * `currentSearchPath()` — what `coder.listHarnesses` and every spawn use — answers synchronously from what
+   * has already landed: the daemon's own environment plus the well-known tool directories
+   * (`@envoycoder/platform`). This call is what *upgrades* that answer with the login shell's, which is the
+   * only source that includes what the user's rc files add.
+   *
+   * Three things about the shape, and each is deliberate:
+   *
+   *   * **Not awaited.** The daemon is listening before this resolves, and no request handler can block on
+   *     it — the timeout is the shell's problem, not the user's. `boot` already published the claim.
+   *   * **A real broadcast follows it.** When the answer lands, "what is installed" can have changed, so
+   *     the same `harnesses` change kind the store uses for a new observation is emitted: a window that
+   *     painted a row a moment ago refetches instead of showing an answer we have already replaced. Without
+   *     this the login shell's answer would arrive *after* the first `coder.listHarnesses` and never be
+   *     drawn — the quiet half of the bug this exists to fix.
+   *   * **Failures are not reported.** A shell that is missing, hangs or prints nonsense leaves the fallback
+   *     answer in place, which is a real search and not an error state; the reason lands in the log for
+   *     whoever is reading it. It is never turned into a claim about an agent.
+   */
+  const searchPathPrimed = primeSearchPath().then((resolved) => {
+    process.stderr.write(
+      `[envoycoder] agent search path from ${resolved.source}: ${resolved.dirs.length} director` +
+        `${resolved.dirs.length === 1 ? "y" : "ies"}` +
+        `${resolved.added.length > 0 ? `, ${resolved.added.length} added from the well-known list` : ""}\n`,
+    );
+    bus.emit("coder:state-changed", { kind: "harnesses", at: new Date().toISOString() });
+    return resolved;
+  });
+
   return {
     instanceId,
     get port() {
@@ -199,6 +239,8 @@ export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): P
     store,
     mesh: () => mesh,
     connectionCount: () => connections,
+    /** What the resolver landed on, for a test and for a shutdown that wants to know it finished. */
+    searchPath: () => searchPathPrimed,
     async stop() {
       unsubscribe();
       // Runs and probes first: an agent is a child process, and a daemon that exits before its children

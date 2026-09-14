@@ -156,7 +156,7 @@ const harnesses: CoderState["harnesses"] = (["envoy-harness", "deepseek-harness"
     thinking: true,
     approvalPolicy: true,
   },
-  available: true,
+  availability: { state: "ready" as const, binary: "/usr/local/bin/agent" },
   evidence: "…",
 }));
 

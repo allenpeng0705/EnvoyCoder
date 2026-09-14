@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import { resolveRunningNode } from "@envoymesh/node-core";
 import { HARNESS_IDS } from "@envoycoder/protocol";
 import { probeHarness } from "@envoycoder/agent-catalog";
+import { currentSearchPath } from "@envoycoder/platform";
 import {
   attachToMeshNode,
   checkPairingCode,
@@ -470,13 +471,40 @@ step("a second daemon refuses to start while one owns the machine", async () => 
 });
 
 step("every agent in the catalogue can be probed, and missing ones say how to install", () => {
+  // **The report this step was rewritten for.** "I have installed codex and claudecode, deepseek-harness,
+  // why all of them shown 'Not Installed'." The old line printed `✓`/`·` from one boolean and could not
+  // tell a missing *agent* from a missing *bridge* — so the smoke said the same thing the window said, and
+  // both were wrong. It now prints the state, the program it resolved, and the install steps, which makes
+  // this output the first thing to read when a row says "not installed" and the user disagrees.
   const lines: string[] = [];
   for (const id of HARNESS_IDS) {
-    const probe = probeHarness(id);
-    if (!probe.available && !probe.reason) {
-      throw new Error(`${id} is unavailable but gives no reason — the UI would show a blank row`);
+    const probe = probeHarness(id, { pathDirs: currentSearchPath().dirs });
+    const installable = probe.state === "needs-bridge" || probe.state === "not-installed";
+    // The two rules the states exist for, checked here against the real catalogue on the real machine:
+    // a state that asserts something is missing must say what to run, and that is the *only* kind of state
+    // allowed to.
+    if (installable && (probe.fix === undefined || probe.fix.length === 0)) {
+      throw new Error(
+        `${id} reports "${probe.state}" but names no install command — the row would say what is absent ` +
+          `and not what to do about it`,
+      );
     }
-    lines.push(`${probe.available ? "✓" : "·"} ${id}${probe.binaryPath ? ` (${probe.binaryPath})` : ""}`);
+    if (!installable && probe.fix !== undefined) {
+      throw new Error(
+        `${id} reports "${probe.state}" and yet offers an install command — a state that asserts nothing ` +
+          `is missing must not tell the user to install something`,
+      );
+    }
+    if (probe.state !== "ready" && !probe.reason) {
+      throw new Error(`${id} is not ready but gives no reason — the UI would show a blank row`);
+    }
+    const where = probe.binaryPath ?? probe.agentBinaryPath;
+    lines.push(
+      `${probe.state === "ready" ? "✓" : "·"} ${id.padEnd(16)} ${probe.state.padEnd(14)}` +
+        `${where ? ` ${where}` : ""}`,
+    );
+    if (probe.fix) for (const step of probe.fix) lines.push(`    → ${step.command}`);
+    if (probe.provisional) lines.push(`    ! from the ${probe.provisional} cache`);
   }
   return `\n      ${lines.join("\n      ")}`;
 });

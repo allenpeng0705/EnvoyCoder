@@ -285,7 +285,7 @@ describe.skipIf(!dsh)("the ACP client, against the real dsh binary", () => {
   }, 90_000);
 });
 
-describe.skipIf(!builtInProbe.available)("the ACP client, against the real built-in harness", () => {
+describe.skipIf(builtInProbe.state !== "ready")("the ACP client, against the real built-in harness", () => {
   /**
    * The *second* native harness, and the one that produces a **successful** turn on this machine.
    *
@@ -414,7 +414,7 @@ describe("the probe, against the real agents", () => {
     expect(stored.map((entry) => entry.harness)).toEqual(["deepseek-harness"]);
   }, 90_000);
 
-  it.skipIf(!builtInProbe.available)(
+  it.skipIf(builtInProbe.state !== "ready")(
     "records that the built-in harness publishes nothing — as an observation, not as our ignorance",
     async () => {
       const bench = await probeBench();

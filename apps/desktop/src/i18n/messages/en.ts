@@ -461,9 +461,37 @@ export const en = {
   "settings.agents.note":
     "What each agent can actually do decides what EnvoyCoder offers. An agent that cannot be asked for permission is not given an approval dialog it would ignore.",
   "settings.agents.empty": "The agent list has not arrived yet.",
+  /* ── the five availability states, and the bug they were written for ──
+     A user with Claude Code, Codex and DeepSeek Harness all installed read **"Not installed"** for every
+     one of them, because the chip had two words for five situations: an agent is not a binary, it is a
+     binary *plus the adapter we drive it through*, and the adapter is a package the user was never told to
+     install. The words below name what is actually missing, so the row can be acted on.
+     `settings.agent.unknown` carries the one rule the state exists for: it must never read as
+     "not installed", because it means *we could not look* and not *it is not there*. */
   "settings.agent.notInstalled": "Not installed",
-  "settings.agent.unknown": "Unknown",
+  "settings.agent.unknown": "Not checked",
   "settings.agent.ready": "Ready",
+  // Installed, and we have no adapter for the protocol it speaks. A different sentence from "not installed",
+  // and a different action (there is none for the user to take — it is ours to write).
+  "settings.agent.unsupported": "Cannot be driven yet",
+  // The state the whole change exists for: the agent is here, the ACP bridge over it is not. The install
+  // command is rendered beside this chip, in the entry's own words and untranslated.
+  "settings.agent.needsBridge": "Needs its adapter",
+  // One warn chip when the program we drive resolved out of another tool's cache rather than an installation
+  // of the user's own. It works — which is why it is not reported as absent — and it can vanish, which is why
+  // it is reported at all. The title names what removes it, per cache.
+  "settings.agent.provisional": "Temporary copy",
+  "settings.agent.provisional.npx":
+    "Found in npm's npx cache, which `npm cache clean` removes. It works, but install the agent properly to keep it.",
+  "settings.agent.provisional.bun-cache":
+    "Found in Bun's package cache, which can be cleared at any time. It works, but install the agent properly to keep it.",
+  "settings.agent.provisional.pnpm-dlx":
+    "Found in pnpm dlx's throwaway store. It works, but install the agent properly to keep it.",
+  // Shown when the daemon predates this field and answered with a plain boolean. That answer was about *the
+  // program the old daemon drove*, which for a bridged agent was the adapter — so the window refuses to
+  // repeat it as a claim about the agent, and names the action that actually fixes the mismatch instead.
+  "settings.agent.olderDaemon":
+    "Your daemon is a build behind and cannot say which part is missing. Restart EnvoyCoder to use the current one.",
   "settings.agent.noApprovals": "No approvals",
   "settings.agent.noApprovals.title": "This agent never asks before acting",
   "settings.agent.noCancel": "Cannot be cancelled",
@@ -609,6 +637,10 @@ export const en = {
     "The agent is waiting for an answer before it can go on. Answer that first — a message sent now would sit behind it.",
   "error.noRunRuntime": "This daemon was started without an agent runtime, so it cannot run tasks.",
   "error.harnessMissing": "{harness} is not installed on this machine. Install it, then start the task again.",
+  // The third member of the family, and it exists so this sentence can avoid the other two's claims: nothing
+  // here says the agent is absent, because the daemon could not look. It names the one action that helps.
+  "error.harnessUnknown":
+    "EnvoyCoder could not check whether {harness} is installed, so it did not start the task. Restart EnvoyCoder and try again.",
   "error.harnessUnsupported":
     "{harness} speaks a protocol EnvoyCoder cannot drive yet, so the task was not started. EnvoyCoder drives agents over ACP — choose one of those instead.",
   "error.notConnected": "EnvoyCoder is not connected to its daemon yet.",

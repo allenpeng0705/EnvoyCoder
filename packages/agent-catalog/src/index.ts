@@ -47,11 +47,21 @@ import { createRequire } from "node:module";
 
 import {
   type AgentMode,
+  type AvailabilityFix,
+  type HarnessAvailability,
   type HarnessId,
+  type HarnessState,
+  type ToolCache,
   BUILT_IN_HARNESSES,
   CATALOGUED_HARNESSES,
 } from "@envoycoder/protocol";
-import { type PlatformId, detectPlatform, findBinary, spawnTreeOptions } from "@envoycoder/platform";
+import {
+  type PlatformId,
+  detectPlatform,
+  findBinary,
+  provisionalCacheOf,
+  spawnTreeOptions,
+} from "@envoycoder/platform";
 
 import { modelArgs, modelIdOf } from "./models.js";
 
@@ -73,6 +83,31 @@ export type AgentLaunch =
       kind: "child-process";
       /** Binary name(s) tried in order; the first that resolves on PATH wins. */
       binaries: readonly string[];
+      /**
+       * The **agent's own** program, when what `binaries` names is a *bridge* over it rather than the agent
+       * itself. Used only to tell "the agent is not installed" from "the agent is installed and its adapter
+       * is not" — it is never launched.
+       *
+       * ## Why an agent needs two binaries recorded, and why one was not enough
+       *
+       * Claude Code and Codex have no ACP mode. Their entries name the Agent Client Protocol **bridges**
+       * (`@agentclientprotocol/claude-agent-acp`, `@agentclientprotocol/codex-acp`), which is correct and
+       * measured — and it produced a bug report that is the reason this field exists: *"I have installed
+       * codex and claudecode … why all of them shown 'Not Installed'."* The bridges had been verified from
+       * throwaway `/tmp` prefixes and never installed globally, so the probe looked for a program the user
+       * had never been told to install, and reported the **agent** missing. `claude` 2.1.159 was sitting in
+       * `~/.local/bin` the whole time.
+       *
+       * The fix is to record both halves of what "installed" means and let the probe say which one is
+       * absent. Absent means "what we drive **is** the agent", which is true for `dsh` (driven as
+       * `dsh --profile acp`), for `cursor-agent` (whose `acp` is a subcommand, not a package) and for the
+       * built-in harness.
+       *
+       * Asserted in `test/agent-catalog.test.ts`: every entry that declares this also declares
+       * `install.bridge`, because a bridge with no install command would leave the user with a state and
+       * nothing to do about it.
+       */
+      agentBinaries?: readonly string[];
       /** Build the argv for a one-shot task. */
       buildArgs: (input: RunInput) => string[];
       /** How output arrives, which decides how much structure we get. */
@@ -286,7 +321,25 @@ export interface HarnessDefinition {
    * because a model list needs a provenance line of its own and a second fact this interface has no
    * field for: how the chosen value gets to the agent. `harnessModels(id)` is the accessor.
    */
-  install?: { hint: string; url?: string };
+  /**
+   * How to get this agent onto a machine, in the two halves that "installed" turned out to mean.
+   *
+   * `hint` is the **agent itself** and `bridge` is the adapter we drive it through, and keeping them apart
+   * is the fix for a bug report rather than a taxonomy: the entry used to carry one hint, which for a
+   * bridged agent was the *bridge's* command — so the row could only ever tell a user to install a package
+   * they had never heard of, while the agent they had installed was reported missing. `not-installed` now
+   * shows both steps in order, and `needs-bridge` shows exactly the second.
+   *
+   * Both are command lines and neither is translated. `test/agent-catalog.test.ts` asserts every entry
+   * declares a `hint` (so a "not installed" row always has something to do) and that every entry with a
+   * `bridge` declares its hint.
+   */
+  install?: {
+    hint: string;
+    url?: string;
+    /** The ACP bridge or vendor subcommand's package, for an entry whose `launch.binaries` is not the agent. */
+    bridge?: { hint: string; url?: string };
+  };
   /** Where the facts came from. `unverified` means "confirm before relying on it". */
   evidence: string;
 }
@@ -390,6 +443,14 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       // And the one whose approval posture we can set: `session/set_policy { autoRun }`.
       approvalPolicy: true,
       worktrees: "external",
+    },
+    install: {
+      // The honest fix for the built-in agent, and it is not an install command because there is nothing to
+      // install: this harness is a **peer** of the family rather than a package we publish (design D4, guide
+      // §7.5), so "it is missing" means the checkout beside this repository is absent or unbuilt. The
+      // repository already has one command that reports exactly which half is wrong
+      // (`scripts/check-envoydeps.mjs`), and pointing at it beats inventing a package name.
+      hint: "run `npm run peers:check` — the built-in harness is the peer checkout beside this repository",
     },
     // Policy: the harness is a **peer** of the family, not a package EnvoyMesh ships
     // (EnvoyMesh design D4). EnvoyCoder clones or copies the harness itself.
@@ -495,6 +556,10 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       // Zed's/Agent Client Protocol's own, which is why it is a dependency rather than a bespoke
       // adapter of ours.
       binaries: ["claude-agent-acp"],
+      // **The agent itself, recorded so "not installed" can be a truthful sentence.** `claude` is what the
+      // user installs and what `claude-agent-acp` drives; the bridge is our adapter, and a row that called
+      // a missing adapter a missing agent is the bug report this field answers. Never launched.
+      agentBinaries: ["claude"],
       // Nothing but the user's own extra arguments: this program *is* the ACP server, so a prompt, a
       // model or a resume id in argv would be handed to something that reads none of them. The model
       // travels as a session config option instead (`./models.ts`), and a resume as `session/resume`.
@@ -530,8 +595,18 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       worktrees: "external",
     },
     install: {
-      hint: "npm install -g @agentclientprotocol/claude-agent-acp (and make sure `claude` is logged in: run `claude` once)",
-      url: "https://www.npmjs.com/package/@agentclientprotocol/claude-agent-acp",
+      // **The agent, not the bridge.** Both routes are real and both were checked: the native installer is
+      // what put `claude` 2.1.159 in `~/.local/bin` on the machine this was written on (`claude install` is
+      // a subcommand of the installed binary), and `@anthropic-ai/claude-code` resolves on npm (2.1.270 at
+      // the time of writing). Naming only the npm route would tell a user with the native install to
+      // reinstall something they already have.
+      hint:
+        "install Claude Code itself: `claude install` (native), or `npm install -g @anthropic-ai/claude-code`",
+      url: "https://code.claude.com/docs/en/setup",
+      bridge: {
+        hint: "npm install -g @agentclientprotocol/claude-agent-acp",
+        url: "https://www.npmjs.com/package/@agentclientprotocol/claude-agent-acp",
+      },
     },
     evidence:
       "VERIFIED against the real binaries on 2026-09-14, macOS. `claude --version` → 2.1.159; " +
@@ -572,6 +647,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       // subcommand, and `codex acp` exits immediately. `codex exec --json` (what this entry used to
       // describe) is a one-shot CLI and never answers an ACP `initialize` — measured, 20 s, no reply.
       binaries: ["codex-acp"],
+      agentBinaries: ["codex"],
       buildArgs: ({ extraArgs }) => [...splitArgs(extraArgs)],
       stream: "jsonl",
       transport: "acp",
@@ -607,8 +683,14 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       worktrees: "external",
     },
     install: {
-      hint: "npm install -g @agentclientprotocol/codex-acp (and sign in once, either `codex login` or an OPENAI_API_KEY in the environment)",
-      url: "https://www.npmjs.com/package/@agentclientprotocol/codex-acp",
+      // The agent (`@openai/codex` — verified on this machine, where `codex` is a symlink into
+      // `~/.npm-global/lib/node_modules/@openai/codex/bin/codex.js`) and then the bridge over it.
+      hint: "npm install -g @openai/codex (then sign in once: `codex login`)",
+      url: "https://www.npmjs.com/package/@openai/codex",
+      bridge: {
+        hint: "npm install -g @agentclientprotocol/codex-acp",
+        url: "https://www.npmjs.com/package/@agentclientprotocol/codex-acp",
+      },
     },
     evidence:
       "VERIFIED against the real binaries on 2026-09-14, macOS. `codex --version` → codex-cli 0.147.0; " +
@@ -952,9 +1034,16 @@ export function harnessesByTier(tier: "built-in" | "catalogued"): HarnessDefinit
 
 export interface HarnessProbe {
   id: HarnessId;
-  /** Ready to run on this machine right now. */
-  available: boolean;
-  /** Absolute path we would launch, when it is a child process. */
+  /**
+   * **Which of the five things is true.** The one field a caller branches on.
+   *
+   * `available: boolean` used to be here and it could not answer the question the window asks: "the agent
+   * is installed and its adapter is not" and "the agent is not installed" are different sentences with
+   * different fixes, and both were `false`. See `HarnessState` in `@envoycoder/protocol` for the five states
+   * and for the bug report that made the boolean unacceptable.
+   */
+  state: HarnessState;
+  /** Absolute path we would launch, when it is a child process and we found one. */
   binaryPath?: string;
   /**
    * How it would be launched.
@@ -966,8 +1055,55 @@ export interface HarnessProbe {
    * the wrong thing as a script is a failure that reads as "the agent is broken".
    */
   via?: "path" | "node-script";
-  /** Why it is not available, in end-user language. */
+  /**
+   * The **agent's own** program, when what we drive is a bridge over it and this is what we found.
+   *
+   * The evidence for `needs-bridge`: "we found `claude` at `~/.local/bin/claude`, and
+   * `claude-agent-acp` is not on the search path". Present for that state alone, which
+   * `HarnessAvailabilitySchema` enforces on the wire too.
+   */
+  agentBinaryPath?: string;
+  /** Set when the program we drive resolved out of another tool's cache. See `provisionalCacheOf`. */
+  provisional?: ToolCache;
+  /**
+   * What to run to reach `ready`, in order, when something must be installed.
+   *
+   * Built from the entry's two install hints: the bridge's steps for `needs-bridge`, and the agent's
+   * followed by the bridge's for `not-installed` — because a bridged agent whose *agent* is missing will
+   * also be missing its bridge, and naming one of the two would land the user on the other a minute later.
+   */
+  fix?: readonly AvailabilityFix[];
+  /** Why it is not ready, in end-user language. Carried for the log and for `coder.probeHarness`. */
   reason?: string;
+}
+
+/** What `probeHarness` is given. */
+export interface ProbeHarnessOptions {
+  platform?: PlatformId;
+  env?: NodeJS.ProcessEnv;
+  /** Injectable for tests. */
+  find?: (name: string) => string | null;
+  /** For in-process harnesses: is the module resolvable? */
+  moduleAvailable?: (module: string) => boolean;
+  /** Injectable for tests, so probing the peer checkout needs no filesystem. */
+  fileExists?: (path: string) => boolean;
+  /**
+   * The directories to search, in this order.
+   *
+   * **The seam that makes probing and spawning agree.** A GUI-launched daemon's own `PATH` does not contain
+   * the user's tools, so the list has to be resolved rather than inherited — and the *same* list has to be
+   * handed to the spawn, or a program that probed as present can fail to start. Omitted means "use the
+   * environment in `env`", which is what a test with no filesystem wants; the daemon always passes it.
+   */
+  pathDirs?: readonly string[];
+  /**
+   * False when no search list could be assembled at all — see `SearchPath.searchable`.
+   *
+   * A `find` that answers `null` for everything cannot, on its own, distinguish "we searched and found
+   * nothing" from "we had nothing to search", and those are `not-installed` and `unknown`. The caller that
+   * resolved the path is the only one that knows, so it says.
+   */
+  searchable?: boolean;
 }
 
 /**
@@ -976,59 +1112,189 @@ export interface HarnessProbe {
  * Deliberately *not* a network call and deliberately not cached: an agent can be installed
  * while the app is open, and "I just installed it, why doesn't it show up" is a support ticket.
  * The caller decides how often to ask.
+ *
+ * The order of the checks is the whole fix, and it is the order of specificity:
+ *
+ *   1. **The program we drive** resolved → `ready`, or `unsupported` if this build cannot speak its
+ *      protocol. Nothing else can be said and nothing else needs to be.
+ *   2. It did not, and the entry declares a bridge → ask whether the **agent's own** program is there. If it
+ *      is, the answer is `needs-bridge` and the fix is the bridge's install command. This step did not exist,
+ *      and without it every bridged agent reported "not installed" about an agent that was installed.
+ *   3. Nothing so far, and the peer checkout is built → `ready` via `node-script` (unchanged).
+ *   4. Nothing at all, **and we could search** → `not-installed`, with the entry's own hint.
+ *   5. Nothing at all and we could not search → `unknown`. Never `not-installed`: we did not look, and the
+ *      difference is the entire point of the state.
  */
-export function probeHarness(
-  id: HarnessId,
-  options: {
-    platform?: PlatformId;
-    env?: NodeJS.ProcessEnv;
-    /** Injectable for tests. */
-    find?: (name: string) => string | null;
-    /** For in-process harnesses: is the module resolvable? */
-    moduleAvailable?: (module: string) => boolean;
-    /** Injectable for tests, so probing the peer checkout needs no filesystem. */
-    fileExists?: (path: string) => boolean;
-  } = {},
-): HarnessProbe {
+export function probeHarness(id: HarnessId, options: ProbeHarnessOptions = {}): HarnessProbe {
   const platform = options.platform ?? detectPlatform();
   const definition = harnessDefinition(id);
+  const fixFor = (steps: "bridge" | "agent") => availabilityFixFor(definition, steps);
   if (definition.launch.kind === "in-process") {
-    const isAvailable = options.moduleAvailable?.(definition.launch.module) ?? true;
+    // No entry uses this variant any more — every agent here is a child process — but the branch stays
+    // because `AgentLaunch` still has the variant, and a missing runtime is a fact this product would have
+    // to report rather than crash on. `unknown` rather than `not-installed` when the caller did not say:
+    // a module we could not ask about is not a module we established is absent.
+    if (options.moduleAvailable === undefined) {
+      return {
+        id,
+        state: "unknown",
+        reason: `EnvoyCoder has not checked whether ${definition.label}'s runtime (${definition.launch.module}) is present.`,
+      };
+    }
+    const isAvailable = options.moduleAvailable(definition.launch.module);
     return {
       id,
-      available: isAvailable,
+      state: isAvailable ? "ready" : "not-installed",
       ...(isAvailable
         ? {}
         : {
             reason: `${definition.label} is built into EnvoyCoder, but its runtime (${definition.launch.module}) is not present. Run \`npm run peers:check\` for the exact fix.`,
+            ...(fixFor("agent") ? { fix: fixFor("agent") } : {}),
           }),
     };
   }
 
-  const find = options.find ?? ((name: string) => findBinary(name, { platform, env: options.env }));
-  for (const binary of definition.launch.binaries) {
+  const launch = definition.launch;
+  const find =
+    options.find ??
+    ((name: string) =>
+      findBinary(name, {
+        platform,
+        env: options.env,
+        ...(options.pathDirs !== undefined ? { pathDirs: options.pathDirs } : {}),
+      }));
+
+  for (const binary of launch.binaries) {
     const resolved = find(binary);
-    if (resolved) return { id, available: true, binaryPath: resolved, via: "path" };
+    if (!resolved) continue;
+    const provisional = provisionalCacheOf(resolved);
+    // The installed-but-not-drivable case, and it is not the `ready` chip: `launchForHarness` refuses every
+    // entry whose transport is not ACP with `harnessUnsupported`, so a green chip here would promise a run
+    // that cannot happen.
+    if (launch.transport !== "acp") {
+      return {
+        id,
+        state: "unsupported",
+        binaryPath: resolved,
+        via: "path",
+        ...(provisional ? { provisional } : {}),
+        reason: `${definition.label} is installed at ${resolved}, but it speaks a protocol EnvoyCoder cannot drive yet.`,
+      };
+    }
+    return {
+      id,
+      state: "ready",
+      binaryPath: resolved,
+      via: "path",
+      ...(provisional ? { provisional } : {}),
+    };
+  }
+
+  // Step 2: the bridge is missing. Is the agent itself there? This is the question nobody was asking.
+  if (launch.agentBinaries && launch.agentBinaries.length > 0) {
+    for (const binary of launch.agentBinaries) {
+      const resolved = find(binary);
+      if (!resolved) continue;
+      return {
+        id,
+        state: "needs-bridge",
+        agentBinaryPath: resolved,
+        ...(fixFor("bridge") ? { fix: fixFor("bridge") } : {}),
+        reason:
+          `${definition.label} is installed at ${resolved}, but the Agent Client Protocol adapter ` +
+          `EnvoyCoder drives it through (${launch.binaries.join(", ")}) is not installed` +
+          (definition.install?.bridge ? `. ${definition.install.bridge.hint}` : "."),
+      };
+    }
   }
 
   // Not on PATH: for a harness we are allowed to run from a clone, look in the peer checkout. This
   // is what makes `envoy-harness` usable on a development machine without `npm i -g`, and it is the
   // arrangement the family's guide describes — the product clones the harness itself.
-  const peer = definition.launch.devCheckout;
+  const peer = launch.devCheckout;
   const peerEntry = peer?.entry();
   if (peerEntry && (options.fileExists ?? defaultFileExists)(peerEntry)) {
-    return { id, available: true, binaryPath: peerEntry, via: "node-script" };
+    return { id, state: "ready", binaryPath: peerEntry, via: "node-script" };
+  }
+
+  // Step 5 before step 4: a search that never happened cannot support a claim of absence.
+  if (options.searchable === false) {
+    return {
+      id,
+      state: "unknown",
+      reason:
+        `EnvoyCoder could not tell whether ${definition.label} is installed: it has no search path to ` +
+        `look on (no PATH from this process, no answer from a login shell, and no tool directory it ` +
+        `could find). Nothing on this row is a statement about the agent.`,
+    };
   }
 
   return {
     id,
-    available: false,
+    state: "not-installed",
+    ...(fixFor("agent") ? { fix: fixFor("agent") } : {}),
     reason:
-      `${definition.label} is not installed (looked for ${definition.launch.binaries.join(", ")} on PATH` +
+      `${definition.label} is not installed (looked for ${launch.binaries.join(", ")} on PATH` +
+      (launch.agentBinaries && launch.agentBinaries.length > 0
+        ? `, and for ${launch.agentBinaries.join(", ")}`
+        : "") +
       (peerEntry ? `, and at ${peerEntry}` : "") +
       ")" +
-      (definition.install ? `. ${definition.install.hint}` : ""),
+      (definition.install ? `. ${definition.install.hint}` : "") +
+      (definition.install?.bridge ? ` Then: ${definition.install.bridge.hint}` : ""),
   };
+}
+
+/**
+ * A probe, projected onto the **wire**.
+ *
+ * A function rather than "let the daemon pick the fields out", for the reason this repository keeps giving:
+ * the five states have five agreement rules (`HarnessAvailabilitySchema`), and the way to be sure a probe
+ * satisfies them is to have exactly one place that turns one into the other — a second copy at the call
+ * site is the copy that goes stale, and the failure would be a `coder.listHarnesses` answer the contract
+ * refuses. `test/agent-catalog.test.ts` runs every catalogue entry through this and parses the result, so
+ * the rules are checked against the real catalogue rather than against a hand-built example.
+ *
+ * `via` and `reason` are deliberately dropped: `via` is a launch fact (`resolveHarnessCommand` reads it)
+ * and `reason` is English prose for the log. What travels is the state, the paths that make it checkable,
+ * the provenance of a resolved program, and the commands that fix it.
+ */
+export function harnessAvailability(probe: HarnessProbe): HarnessAvailability {
+  return {
+    state: probe.state,
+    ...(probe.binaryPath !== undefined ? { binary: probe.binaryPath } : {}),
+    ...(probe.agentBinaryPath !== undefined ? { agentBinary: probe.agentBinaryPath } : {}),
+    ...(probe.provisional !== undefined ? { provisional: probe.provisional } : {}),
+    ...(probe.fix !== undefined ? { fix: probe.fix } : {}),
+  };
+}
+
+/**
+ * The install steps that fix one entry's availability, as the wire wants them.
+ *
+ * Two shapes out of one entry, and the difference is what the user is missing: `"bridge"` is the adapter
+ * alone, `"agent"` is the agent followed by the adapter — because a bridged agent whose agent is absent is
+ * almost always missing its adapter too, and a row that named only the first step would send the user back
+ * to another "not installed" a minute later.
+ *
+ * Returns `undefined` when the entry declares no such hint, which is what keeps rule 4 of
+ * `HarnessAvailabilitySchema` honest: an installable state must carry a command, so an entry with nothing
+ * to say cannot produce one. `test/agent-catalog.test.ts` asserts every entry has an agent hint, so no
+ * state in practice is fix-less.
+ */
+function availabilityFixFor(
+  definition: HarnessDefinition,
+  steps: "bridge" | "agent",
+): readonly AvailabilityFix[] | undefined {
+  const agent = definition.install;
+  const stepsOut: AvailabilityFix[] = [];
+  if (steps === "agent" && agent) {
+    stepsOut.push({ command: agent.hint, ...(agent.url ? { url: agent.url } : {}) });
+  }
+  if (agent?.bridge) {
+    stepsOut.push({ command: agent.bridge.hint, ...(agent.bridge.url ? { url: agent.bridge.url } : {}) });
+  }
+  return stepsOut.length > 0 ? stepsOut : undefined;
 }
 
 /**
@@ -1128,7 +1394,7 @@ export function resolveHarnessCommand(
   if (definition.launch.kind !== "child-process") {
     throw new Error(`${id} is not a child-process harness, so there is no command to resolve.`);
   }
-  if (!probe.available || !probe.binaryPath) {
+  if (probe.state !== "ready" || !probe.binaryPath) {
     throw new Error(
       probe.reason ?? `${definition.label} is not available on this machine, so it cannot be started.`,
     );

@@ -91,7 +91,7 @@ import { join } from "node:path";
 import type { HarnessId, ProbeOutcome } from "@envoycoder/protocol";
 import { coderErrorMessage } from "@envoycoder/protocol";
 import { harnessDefinition, observeSessionOptions, probeHarness } from "@envoycoder/agent-catalog";
-import type { PlatformId } from "@envoycoder/platform";
+import { currentSearchPath, type PlatformId } from "@envoycoder/platform";
 import type { CoderPaths } from "@envoycoder/host-bridge";
 
 import { AcpClient, type AcpLaunch } from "./acp/client.js";
@@ -285,8 +285,18 @@ export class SessionProbe {
   /** The agent's installed build, or `undefined` when we cannot tell. Path + mtime + size. */
   private async fingerprintOf(harness: HarnessId): Promise<string | undefined> {
     if (this.deps.fingerprint) return this.deps.fingerprint(harness);
-    const probe = probeHarness(harness, this.deps.platform ? { platform: this.deps.platform } : {});
-    if (!probe.available || probe.binaryPath === undefined) return undefined;
+    // The same resolved search path the launch uses, for the same reason `launchForHarness` reads it once:
+    // a fingerprint taken from a *different* list than the one the spawn will search would key the cache on
+    // a build we are not running. `ready` and `unsupported` both resolved a path, and either is worth
+    // fingerprinting — an agent we cannot drive still has a build, and the node list must show a change
+    // when the user installs a new one.
+    const search = currentSearchPath();
+    const probe = probeHarness(harness, {
+      pathDirs: search.dirs,
+      searchable: search.searchable,
+      ...(this.deps.platform ? { platform: this.deps.platform } : {}),
+    });
+    if (probe.binaryPath === undefined) return undefined;
     // `stat`, not a hash: this runs on every ask, and a build whose content changed without its mtime or
     // size changing is not a case worth reading 40 MB per click for. Wrapped rather than allowed to
     // throw, because a fingerprint we cannot take must not fail an ask.

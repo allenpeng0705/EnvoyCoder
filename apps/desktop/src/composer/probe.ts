@@ -45,7 +45,7 @@
  *     "unreachable", and the composer already names the install hint for that agent elsewhere.
  */
 
-import type { ProbeOutcome } from "@envoycoder/protocol";
+import type { HarnessState, ProbeOutcome } from "@envoycoder/protocol";
 
 import type { MessageKey } from "../i18n/messages/en.js";
 import { localNotice, type Notice } from "../i18n/notice.js";
@@ -85,11 +85,19 @@ export function probeAsk(input: {
   unlisted: boolean;
   /** Does this daemon serve `coder.probeSessionOptions`? */
   supported: boolean;
-  /** Is the agent installed? `unknown` is not yes. */
-  available: boolean | "unknown";
+  /**
+   * Can we run this agent? The five-state `state`, not a boolean.
+   *
+   * This gate used to be `available: boolean | "unknown"`, and it is a gate rather than a label: pressing
+   * the button spends an agent process. Only `ready` may ask — `unsupported` would be refused by
+   * `isDrivableByAcpAdapter`, `needs-bridge` has no adapter to spawn, and `not-installed`/`unknown` have
+   * nothing to start. `unknown` is deliberately *not* yes, which the old union encoded by accident; taking
+   * the state makes the single rule readable in one type.
+   */
+  availability: HarnessState;
   state: ProbeState;
 }): ProbeAsk {
-  const nothingToAsk = !input.unlisted || !input.supported || input.available !== true;
+  const nothingToAsk = !input.unlisted || !input.supported || input.availability !== "ready";
   if (nothingToAsk) return { ask: false, enabled: false, force: false };
 
   switch (input.state.state) {

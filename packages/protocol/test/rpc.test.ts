@@ -27,6 +27,7 @@ import {
   ENVOYCODER_ERRORS,
   RPC_METHODS,
   RPC_SPECS,
+  HarnessAvailabilitySchema,
   RUN_EVENT_KINDS,
   RunEventSchema,
   TaskSchema,
@@ -355,7 +356,7 @@ describe("the thinking level an agent offers, and what 'no list' means", () => {
         // same terms as the other three — see the two assertions below.
         approvalPolicy: true,
       },
-      available: true,
+      availability: { state: "ready", binary: "/usr/local/bin/agent" },
       evidence: "…",
       ...over,
     });
@@ -372,6 +373,64 @@ describe("the thinking level an agent offers, and what 'no list' means", () => {
     expect(
       spec.result.safeParse({ harnesses: [{ ...built, capabilities: capabilitiesWithoutPolicy }] }).success,
     ).toBe(false);
+  });
+
+  /**
+   * **The five availability states, and the five ways two of their fields can disagree.**
+   *
+   * The rules live in `HarnessAvailabilitySchema`'s `superRefine` and the point of this test is that they are
+   * *enforced*, not documented: a state that contradicts its own evidence is worse than a missing one, because
+   * both travel on the wire and a client reads whichever it trusts. Every case below is a real mistake a
+   * catalogue change could make — the first being the original bug, restated as a schema violation.
+   */
+  it("rejects an availability that disagrees with itself, on all five rules", () => {
+    const ok = {
+      ready: { state: "ready", binary: "/usr/local/bin/dsh" },
+      bridged: {
+        state: "needs-bridge",
+        agentBinary: "/Users/you/.local/bin/claude",
+        fix: [{ command: "npm install -g @agentclientprotocol/claude-agent-acp" }],
+      },
+      missing: { state: "not-installed", fix: [{ command: "npm install -g @openai/codex" }] },
+      unknown: { state: "unknown" },
+      unsupported: { state: "unsupported", binary: "/usr/local/bin/copilot" },
+      provisional: { state: "ready", binary: "/Users/you/.npm/_npx/a1b2/node_modules/.bin/dsh", provisional: "npx" },
+    };
+    for (const [name, value] of Object.entries(ok)) {
+      expect(HarnessAvailabilitySchema.safeParse(value).success, name).toBe(true);
+    }
+
+    const rejects = (value: unknown, why: string) => {
+      const parsed = HarnessAvailabilitySchema.safeParse(value);
+      expect(parsed.success, why).toBe(false);
+    };
+
+    // 1. A resolved path means we found the thing we drive, so the state has to say so — and vice versa. This
+    //    is the reported bug as a type error: "not installed" *with* a binary beside it.
+    rejects({ state: "not-installed", binary: "/usr/bin/x" }, "a path with not-installed");
+    rejects({ state: "ready" }, "ready with nothing found");
+    // 2. `agentBinary` is the evidence for exactly one state.
+    rejects(
+      { state: "ready", binary: "/usr/bin/x", agentBinary: "/usr/bin/claude" },
+      "agentBinary outside needs-bridge",
+    );
+    rejects(
+      { state: "needs-bridge", fix: [{ command: "npm i -g b" }] },
+      "needs-bridge without the agent it found",
+    );
+    // 3. Provenance belongs to a resolved program.
+    rejects({ state: "not-installed", provisional: "npx" }, "provisional without a program");
+    // 4. A state asserting an absence must carry the command. Applying the old `available: false` behaviour —
+    //    a row that says something is missing and not what to do — is refused here.
+    rejects({ state: "not-installed" }, "not-installed with no fix");
+    rejects({ state: "needs-bridge", agentBinary: "/usr/bin/claude" }, "needs-bridge with no fix");
+    rejects({ state: "not-installed", fix: [] }, "an empty fix list");
+    rejects({ state: "needs-bridge", agentBinary: "/usr/bin/claude", fix: [] }, "an empty fix list");
+    // 5. And a state that asserts nothing must not tell the user to install something — which is the back door
+    //    the old boolean was: `unknown` carrying an install command would turn our blindness into advice.
+    rejects({ state: "unknown", fix: [{ command: "npm i -g x" }] }, "unknown with a fix");
+    rejects({ state: "ready", binary: "/usr/bin/x", fix: [{ command: "npm i -g x" }] }, "ready with a fix");
+    rejects({ state: "unsupported", binary: "/usr/bin/x", fix: [{ command: "npm i -g x" }] }, "unsupported with a fix");
   });
 
   it("carries the level on the task, on the run, and in the transcript's first event", () => {
@@ -468,7 +527,7 @@ describe("the agent's mode, and a task's folder", () => {
       },
       thinking: { kind: "none", options: [], source: "…" },
       capabilities,
-      available: true,
+      availability: { state: "ready", binary: "/usr/local/bin/agent" },
       evidence: "…",
     });
     const full = {

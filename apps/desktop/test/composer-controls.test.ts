@@ -48,7 +48,7 @@ function agent(over: Partial<ComposerAgent> = {}): ComposerAgent {
       streaming: true,
       images: false,
     },
-    available: true,
+    availability: { state: "ready", binary: "/usr/local/bin/agent" },
     ...over,
   };
 }
@@ -546,19 +546,53 @@ describe("the controls follow the agent's capabilities", () => {
     expect(noCancel.controls.find((c) => c.kind === "images")?.enabled).toBe(true);
   });
 
-  it("disables sending for an agent that is not available, and says why", () => {
+  it("disables sending for an agent that is not installed, and says so", () => {
     const missing = composerControls(
-      agent({ available: false, unavailableReason: "Claude Code is not installed (looked for claude on PATH)." }),
+      agent({
+        availability: {
+          state: "not-installed",
+          fix: [{ command: "npm install -g @anthropic-ai/claude-code" }],
+        },
+      }),
       idle,
     );
     expect(missing.send.enabled).toBe(false);
     expect(missing.send.reason).toMatch(/not installed/);
+    // The command travels with the reason, because a state whose content is "this is missing" and which does
+    // not say what to run is the sentence this whole change removed.
+    expect(missing.send.reason).toContain("npm install -g @anthropic-ai/claude-code");
   });
 
-  it("distinguishes 'we have not looked' from 'it is missing'", () => {
-    const unknown = composerControls(agent({ available: "unknown" }), idle);
+  it("says the *adapter* is missing when the agent itself is installed", () => {
+    // **The bug report, in the composer.** The old sentence for every false was "is not installed on this
+    // machine", and a user who had installed Claude Code read it about the agent. The two are different
+    // sentences now, and only one of them is a claim about the user's machine.
+    const bridged = composerControls(
+      agent({
+        availability: {
+          state: "needs-bridge",
+          agentBinary: "/home/you/.local/bin/claude",
+          fix: [{ command: "npm install -g @agentclientprotocol/claude-agent-acp" }],
+        },
+      }),
+      idle,
+    );
+    expect(bridged.send.enabled).toBe(false);
+    expect(bridged.send.reason).toMatch(/is installed, but the program EnvoyCoder drives it through is missing/);
+    expect(bridged.send.reason).toContain("npm install -g @agentclientprotocol/claude-agent-acp");
+    expect(bridged.send.reason).not.toMatch(/is not installed on this machine/);
+  });
+
+  it("distinguishes 'we could not tell' from 'it is missing', from 'we cannot drive it'", () => {
+    const unknown = composerControls(agent({ availability: { state: "unknown" } }), idle);
     expect(unknown.send.enabled).toBe(false);
-    expect(unknown.send.reason).toMatch(/has not checked/);
+    expect(unknown.send.reason).toMatch(/could not tell whether/);
+    expect(unknown.send.reason).not.toMatch(/is not installed/);
+
+    const undrivable = composerControls(agent({ availability: { state: "unsupported", binary: "/usr/bin/copilot" } }), idle);
+    expect(undrivable.send.enabled).toBe(false);
+    expect(undrivable.send.reason).toMatch(/speaks a protocol EnvoyCoder cannot drive yet/);
+    expect(undrivable.send.reason).not.toMatch(/is not installed/);
   });
 });
 
@@ -711,7 +745,7 @@ describe("why the mode picker is off", () => {
  * publishes nothing. Each of those is a different sentence, and only one of them is about the agent.
  */
 describe("the pre-flight probe decides whether to ask at all", () => {
-  const canAsk = { unlisted: true, supported: true, available: true as const, agent: "DeepSeek Harness" };
+  const canAsk = { unlisted: true, supported: true, availability: "ready" as const, agent: "DeepSeek Harness" };
 
   it("asks when the agent publishes its options only inside a session", () => {
     // The gap the slice closes: `deepseek-harness` publishes a model list and a thought level in the
@@ -797,10 +831,14 @@ describe("the pre-flight probe decides whether to ask at all", () => {
       { ...canAsk, unlisted: false, state: { state: "idle" } as ProbeState },
       // An older daemon: the shell attaches to whichever build owns the port, and this method is new.
       { ...canAsk, supported: false, state: { state: "idle" } as ProbeState },
-      // Not installed: a probe could only come back "unreachable", and the composer names the install hint
-      // for that agent elsewhere.
-      { ...canAsk, available: false, state: { state: "idle" } as ProbeState },
-      { ...canAsk, available: "unknown" as const, state: { state: "idle" } as ProbeState },
+      // Every state that is not `ready`, and there are four: a probe of any of them could only come back
+      // "unreachable", and the composer names what is missing (and what to run) on the agent chip instead.
+      // `not-installed` and `unknown` are the pair the old boolean conflated; `needs-bridge` and
+      // `unsupported` are the two it could not express at all.
+      { ...canAsk, availability: "not-installed" as const, state: { state: "idle" } as ProbeState },
+      { ...canAsk, availability: "unknown" as const, state: { state: "idle" } as ProbeState },
+      { ...canAsk, availability: "needs-bridge" as const, state: { state: "idle" } as ProbeState },
+      { ...canAsk, availability: "unsupported" as const, state: { state: "idle" } as ProbeState },
     ];
     for (const input of cases) {
       const ask = probeAsk(input);
