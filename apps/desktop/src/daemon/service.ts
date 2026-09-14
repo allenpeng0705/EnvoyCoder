@@ -200,9 +200,55 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         pinned?: boolean;
         harness?: HarnessId;
         model?: string;
+        cwd?: string;
+        agentModeId?: string;
         extraArgs?: string;
       };
-      const task = await deps.store.updateTask(input);
+
+      /**
+       * A new working directory, checked here rather than in the store — the same division
+       * `coder.addProject` uses, and for the same reason: a task row pointing at a folder that does
+       * not exist is a row whose next run cannot start, and the moment to say so is while the user is
+       * looking at the control they just used.
+       */
+      let cwd: string | undefined;
+      if (input.cwd !== undefined) {
+        cwd = normalizeUserPath(input.cwd, deps.paths.home);
+        if (!(await isDirectory(cwd))) {
+          throw coderError(
+            ENVOYCODER_ERRORS.pathMissing,
+            `${cwd} is not a directory on this machine, so the agent would have nowhere to run. The task's folder is unchanged.`,
+            ref("error.updateTask.notDirectory", { path: cwd }),
+          );
+        }
+      }
+
+      /**
+       * **A stored mode the new harness cannot honour is dropped here, not left to fail later.**
+       *
+       * Modes are per agent — `envoy-harness` takes `default | plan | review`, `deepseek-harness`
+       * takes none — so switching the agent can strand a mode the task remembers. Keeping it would
+       * make every later run of this task refuse, with a sentence about a mode the user chose for a
+       * *different* agent and has since replaced. Clearing it means the next run starts the way the
+       * agent's own default does, which is what "no mode chosen" already means.
+       */
+      let agentModeId = input.agentModeId;
+      let clearAgentMode = false;
+      if (input.harness !== undefined) {
+        const next = harnessDefinition(input.harness);
+        const kept = agentModeId ?? deps.store.findTask(input.id)?.agentModeId;
+        if (kept !== undefined && !next.modes.some((mode) => mode.id === kept)) {
+          agentModeId = undefined;
+          clearAgentMode = true;
+        }
+      }
+
+      const task = await deps.store.updateTask({
+        ...input,
+        ...(cwd !== undefined ? { cwd } : {}),
+        ...(agentModeId !== undefined ? { agentModeId } : {}),
+        ...(clearAgentMode ? { clearAgentMode: true } : {}),
+      });
       if (!task) throw notFound("task", input.id);
       return { task };
     },
@@ -221,12 +267,17 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         prompt: string;
         mode?: "queue" | "steer";
         resume?: boolean;
+        agentModeId?: string;
       };
       const runs = requireRuns(deps);
       const run = await runs.start({
         taskId: input.taskId,
         prompt: input.prompt,
         ...(input.resume !== undefined ? { resume: input.resume } : {}),
+        // Passed straight through: `RunManager` is where the catalogue lives, and it refuses a mode
+        // this agent cannot accept. Checking here too would be a second copy of the same rule, and the
+        // copy that goes stale is always the one further from the data.
+        ...(input.agentModeId !== undefined ? { agentModeId: input.agentModeId } : {}),
       });
       return { run };
     },
@@ -441,8 +492,10 @@ function summarize(
     tier: definition.tier,
     summary: definition.summary,
     // The agent's own modes, so a composer can render its picker from the wire rather than from a
-    // hardcoded list. Empty means "the agent declares none here" — for the two ACP harnesses the real
-    // answer arrives in the `session/new` response, and a static guess would go stale.
+    // hardcoded list. Empty means "the agent declares none here", which for `deepseek-harness` is the
+    // answer rather than a gap: its ACP surface has no `session/set_mode`, so it has nothing to offer.
+    // (This said the real answer "arrives in the `session/new` response" — it does not, for either
+    // harness. See the citations on `agentMode` in `@envoycoder/agent-catalog`.)
     modes: definition.modes,
     capabilities: {
       resume: definition.capabilities.resume,
@@ -451,6 +504,10 @@ function summarize(
       structuredTools: definition.capabilities.structuredTools,
       streaming: definition.capabilities.streaming,
       images: definition.capabilities.images,
+      // Carried so a composer can enable its mode picker on the daemon's answer rather than on its
+      // own assumption. `modes` alone is not enough to decide: an agent can declare modes it has no
+      // way to be *set* into, and a picker that offered one would be a control that does nothing.
+      agentMode: definition.capabilities.agentMode,
     },
     available: result.available,
     ...(definition.install?.hint ? { installHint: definition.install.hint } : {}),

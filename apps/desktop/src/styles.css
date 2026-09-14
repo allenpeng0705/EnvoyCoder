@@ -745,6 +745,71 @@ body {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
+/* The row above the field: the task's folder, and the agent's own mode.
+
+   Pills rather than full-width fields, because both are facts about this run that a user changes
+   rarely — a second row of form controls above the message box is what turns a composer into a
+   settings form. Compact height (`--control-tight`), so the row never competes with the message
+   itself, which is the thing actually being typed. */
+.composer__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) 0;
+}
+
+.composer__control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.composer__control-label {
+  color: var(--foreground-muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.composer__pill {
+  display: block;
+  max-width: 260px;
+  height: var(--control-tight);
+  padding: 0 var(--space-2);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface-2);
+  color: var(--foreground);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  line-height: calc(var(--control-tight) - 2px);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.composer__pill:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+/* A control that cannot work is **disabled and explained**, never omitted: a user looking for the
+   folder cannot tell "this window has no chooser" from "the app forgot to draw it". The sentence is
+   the line below, in `.composer__control-note` — muted, because it is an explanation rather than a
+   failure, and red above the field reads as one. */
+.composer__pill:disabled {
+  color: var(--foreground-extra-muted);
+  cursor: default;
+}
+
+.composer__control-note {
+  margin: 0;
+  padding: var(--space-1) var(--space-2) 0;
+  color: var(--foreground-muted);
+  font-size: var(--font-size-sm);
+}
+
 .composer__input {
   width: 100%;
   min-height: var(--control-field);

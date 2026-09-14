@@ -23,9 +23,15 @@
  * | `fail` | a JSON-RPC error, the way a real agent reports a missing credential |
  * | `slow` | one chunk, then silence — so a test can cancel or steer mid-turn |
  * | `resume-me` | announces the session id it was given, so a resume is observable |
+ * | `mode-me` | announces its collaboration mode, so `session/set_mode` is observable |
+ *
+ * `FAKE_ACP_NO_SET_MODE=1` makes it refuse `session/set_mode` with `-32601`, the way
+ * `deepseek-harness` does. That is how a test proves the honest failure mode: an agent that cannot be
+ * put into the requested mode **fails the run** rather than quietly working in the wrong one.
  *
  * The protocol shapes are the ones the real agent emits, taken from
- * `../deepseek-harness/packages/acp/acp/src/updates.ts`.
+ * `../deepseek-harness/packages/acp/acp/src/updates.ts`. The mode ids and the refusal sentence are
+ * `envoy-harness`'s own (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:352-375`).
  */
 
 import process from "node:process";
@@ -33,6 +39,9 @@ import process from "node:process";
 let buffer = "";
 let sessionId = null;
 let sessionCounter = 0;
+/** The three `ModeKind`s `envoy-harness` accepts, and the one this session is currently in. */
+const MODES = ["default", "plan", "review"];
+let collaborationMode = "default";
 const pendingPrompts = new Map();
 
 const send = (message) => process.stdout.write(`${JSON.stringify(message)}\n`);
@@ -110,6 +119,14 @@ function handlePrompt(id, params) {
     return;
   }
 
+  if (text.includes("mode-me")) {
+    // Proves which mode the session is *in*, which is the only way to tell a mode that reached the
+    // agent from one a client merely believed it had sent.
+    update({ sessionUpdate: "agent_message_chunk", messageId: "m-mode", content: { type: "text", text: `mode: ${collaborationMode}` } });
+    ok(id, { stopReason: "end_turn" });
+    return;
+  }
+
   if (text.includes("think")) {
     update({ sessionUpdate: "agent_thought_chunk", messageId: "m-1", content: { type: "text", text: "let me consider" } });
     update({ sessionUpdate: "agent_message_chunk", messageId: "m-1", content: { type: "text", text: "here is the answer" } });
@@ -166,6 +183,24 @@ function handle(message) {
     case "session/close":
       ok(id, {});
       return;
+    case "session/set_mode": {
+      // **The peer's own contract, copied rather than approximated.** `envoy-harness` accepts
+      // `{sessionId, mode}` and answers `-32602 mode must be default|plan|review` for anything else,
+      // so a client that prettified or translated a mode id fails here — which is exactly the drift a
+      // fixture should catch. `FAKE_ACP_NO_SET_MODE` models the other harness, which has no such
+      // method at all.
+      if (process.env.FAKE_ACP_NO_SET_MODE) {
+        fail(id, -32601, "session/set_mode not supported");
+        return;
+      }
+      if (!MODES.includes(params?.mode)) {
+        fail(id, -32602, "mode must be default|plan|review");
+        return;
+      }
+      collaborationMode = params.mode;
+      ok(id, {});
+      return;
+    }
     case "session/prompt":
       handlePrompt(id, params);
       return;

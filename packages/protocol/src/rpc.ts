@@ -348,6 +348,7 @@ export const TaskSchema = z
     title: z.string(),
     harness: HarnessIdSchema,
     model: z.string().optional(),
+    agentModeId: z.string().min(1).optional(),
     extraArgs: z.string().optional(),
     status: TaskStatusSchema,
     createdAt: z.string(),
@@ -568,6 +569,14 @@ export interface HarnessSummary {
     structuredTools: boolean;
     streaming: boolean;
     images: boolean;
+    /**
+     * Can the daemon apply one of those modes?
+     *
+     * False for an agent that declares modes but speaks a protocol with no way to choose one — and
+     * false is what makes the composer *disable* its picker with a reason rather than offer a choice
+     * that would be dropped on the floor.
+     */
+    agentMode: boolean;
   };
   /** Whether the binary exists right now. `unknown` is honest for a harness we have not probed. */
   available: boolean | "unknown";
@@ -604,6 +613,15 @@ export const HarnessSummarySchema = z
         structuredTools: z.boolean(),
         streaming: z.boolean(),
         images: z.boolean(),
+        /**
+         * Whether the daemon can put this agent into a mode it declares.
+         *
+         * The one fact a composer needs before it may enable its picker, and deliberately separate
+         * from `modes`: an agent can have modes and still have no way to be *set* into one. Required,
+         * because "we did not ask" is not an answer here — an enabled picker is a promise that the
+         * choice reaches the agent.
+         */
+        agentMode: z.boolean(),
       })
       .strict(),
     available: z.union([z.boolean(), z.literal("unknown")]),
@@ -780,6 +798,19 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
         pinned: z.boolean().optional(),
         harness: HarnessIdSchema.optional(),
         model: z.string().optional(),
+        /**
+         * Move the task to another folder.
+         *
+         * Applied to the **next run**, because that is the truth of it: `runs.ts` launches the agent
+         * with `task.cwd`, so a run already in flight keeps the directory it started in. The window
+         * says exactly that beside the control while a run is live, instead of pretending to move an
+         * agent that is already working somewhere.
+         *
+         * Normalised and checked by the daemon the same way `coder.addProject` does it, so `~/repo`,
+         * `"~/repo"` and `~/repo/` are one directory rather than three failures.
+         */
+        cwd: z.string().min(1).optional(),
+        agentModeId: z.string().min(1).optional(),
         extraArgs: z.string().optional(),
       })
       .strict(),
@@ -807,6 +838,20 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
          * supposed to catch rather than cause.
          */
         resume: z.boolean().optional(),
+        /**
+         * The agent's own mode for this run (`AgentMode.id`, from `HarnessSummary.modes`).
+         *
+         * Named `agentModeId` rather than `agentMode` so that the *value* is unambiguous: it is an id
+         * the agent gave us, passed through verbatim, and not an object we assemble. `mode` above is
+         * ours (`queue | steer`); this one is the agent's.
+         *
+         * The daemon **refuses** the call when it cannot honour it — the harness is not one we can
+         * drive over ACP, its `capabilities.agentMode` is false, or the id is not one it declares —
+         * rather than starting the agent in a posture the user did not ask for. Silently ignoring a
+         * request for `plan` produces an agent that edits files, which is the failure this field
+         * exists to prevent.
+         */
+        agentModeId: z.string().min(1).optional(),
       })
       .strict(),
     result: z.object({ run: AgentRunSchema }).strict(),

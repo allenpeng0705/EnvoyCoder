@@ -381,6 +381,91 @@ describe("starting a task from the window", () => {
     expect(result.ok === false ? result.message : "").toContain("refused in this test");
     expect(s.getSnapshot().error).toBeTruthy();
   });
+
+  it("sends the agent's mode with the run, and only when there is one", async () => {
+    const { store: s, connection } = await store();
+    const run: AgentRun = { id: "run-1", taskId: "w1", harness: "envoy-harness", hostId: "local", startedAt: "", status: "running" };
+    connection.answers.set("coder.startRun", { run });
+    connection.answers.set("coder.tailRun", { run, events: [] });
+
+    await s.startRun("w1", "plan this", { agentModeId: "plan" });
+    expect(connection.calls.find((call) => call.method === "coder.startRun")?.params).toEqual({
+      taskId: "w1",
+      prompt: "plan this",
+      agentModeId: "plan",
+    });
+
+    // **The negative half, and the one that matters for the agents that have no modes.** The daemon
+    // falls back to the mode the *task* remembers when the field is absent, so a store that always sent
+    // one — even as `undefined` — would be a second, quieter source of truth. It is not sent at all.
+    connection.calls.length = 0;
+    await s.startRun("w1", "just do it");
+    const params = connection.calls.find((call) => call.method === "coder.startRun")?.params ?? {};
+    expect(Object.keys(params)).not.toContain("agentModeId");
+  });
+});
+
+describe("changing a task's folder or mode from the window", () => {
+  it("passes the new folder through, and hands back the task the daemon stored", async () => {
+    const { store: s, connection } = await store();
+    connection.answers.set("coder.updateTask", {
+      task: {
+        id: "w1",
+        projectId: "local::/repo",
+        cwd: "/elsewhere/api",
+        title: "a task",
+        harness: "envoy-harness",
+        status: "idle",
+        createdAt: "",
+        updatedAt: "",
+      },
+    });
+
+    const result = await s.updateTask({ id: "w1", cwd: "/elsewhere/api" });
+    // The field reaches the wire, spelled the way `coder.updateTask` declares it.
+    expect(connection.calls.find((call) => call.method === "coder.updateTask")?.params).toEqual({
+      id: "w1",
+      cwd: "/elsewhere/api",
+    });
+    expect(result.ok).toBe(true);
+    // …and the *daemon's* answer is what the caller gets: the path the daemon normalised, not the one
+    // the window typed. The list itself is refetched from the `coder:state-changed` event the daemon
+    // emits, which is the mechanism every other window relies on too.
+    expect(result.ok ? result.task.cwd : "").toBe("/elsewhere/api");
+  });
+
+  it("passes a mode through the same call, because both are facts about the task", async () => {
+    const { store: s, connection } = await store();
+    connection.answers.set("coder.updateTask", {
+      task: {
+        id: "w1",
+        projectId: "local::/repo",
+        cwd: "/repo",
+        title: "a task",
+        harness: "envoy-harness",
+        agentModeId: "review",
+        status: "idle",
+        createdAt: "",
+        updatedAt: "",
+      },
+    });
+
+    const result = await s.updateTask({ id: "w1", agentModeId: "review" });
+    expect(connection.calls.find((call) => call.method === "coder.updateTask")?.params).toEqual({
+      id: "w1",
+      agentModeId: "review",
+    });
+    expect(result.ok ? result.task.agentModeId : undefined).toBe("review");
+  });
+
+  it("keeps a refusal rather than pretending the change landed", async () => {
+    const { store: s } = await store();
+    // No answer registered: the daemon refused, which is what "that is not a folder on this machine"
+    // looks like at this seam.
+    const result = await s.updateTask({ id: "w1", cwd: "/gone" });
+    expect(result.ok).toBe(false);
+    expect(s.getSnapshot().error).toBeTruthy();
+  });
 });
 
 describe("answering an approval", () => {

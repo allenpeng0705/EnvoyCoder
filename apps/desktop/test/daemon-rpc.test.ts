@@ -540,4 +540,288 @@ describe("a run, driven over the socket", () => {
     expect(tasks.tasks[0]?.runId).toBe(started.run.id);
     collector();
   }, 30_000);
+
+  it("puts the agent into the mode the window asked for, over the real wire", async () => {
+    // The claim a mode picker makes, end to end: the id goes out as a parameter of `coder.startRun`,
+    // survives the daemon, and comes back out of the *agent's* mouth. Anything less — asserting the
+    // request was sent, or that the task remembers the id — would pass on a daemon that never calls
+    // `session/set_mode` at all, which is exactly the state this milestone started from.
+    const home = await mkdtemp(join(tmpdir(), "envoycoder-m2-mode-"));
+    cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+
+    const daemon = await startCoderDaemon({
+      port: 0,
+      home,
+      paths: coderPaths(home),
+      skipMeshAttach: true,
+      isDirectory: async () => true,
+      // The scripted agent, whose mode ids and refusal sentence are the peer harness's own.
+      resolveLaunch: () => ({ command: process.execPath, args: [FAKE_AGENT], cwd: home }),
+    });
+    cleanups.push(async () => daemon.stop());
+
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+    // Events are pushed only to a connection that asked for them (`coder.subscribe`) — the family's
+    // transport's rule, and not something this test may skip.
+    await client.subscribe(["coder:run-event"]);
+
+    const project = (await client.call("coder.addProject", { path: join(home, "repo") })) as {
+      project: { id: string };
+    };
+    const task = (await client.call("coder.createTask", {
+      projectId: project.project.id,
+      title: "plan first",
+    })) as { task: { id: string } };
+
+    const started = (await client.call("coder.startRun", {
+      taskId: task.task.id,
+      prompt: "mode-me",
+      agentModeId: "plan",
+    })) as { run: { id: string } };
+    await client.waitForEvent("coder:run-event", (data) => (data as { kind?: string }).kind === "run.ended");
+
+    const snapshot = (await client.call("coder.getRun", { runId: started.run.id })) as {
+      events: { kind: string; text?: string }[];
+    };
+    expect(
+      snapshot.events.some(
+        (event) => event.kind === "run.output" && (event.text ?? "").includes("mode: plan"),
+      ),
+    ).toBe(true);
+  }, 30_000);
+
+  it("refuses a mode an agent cannot take, and starts nothing", async () => {
+    const home = await mkdtemp(join(tmpdir(), "envoycoder-m2-nomode-"));
+    cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+
+    const daemon = await startCoderDaemon({
+      port: 0,
+      home,
+      paths: coderPaths(home),
+      skipMeshAttach: true,
+      isDirectory: async () => true,
+      resolveLaunch: () => ({ command: process.execPath, args: [FAKE_AGENT], cwd: home }),
+    });
+    cleanups.push(async () => daemon.stop());
+
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+
+    const project = (await client.call("coder.addProject", { path: join(home, "repo") })) as {
+      project: { id: string };
+    };
+    // `deepseek-harness`: a real ACP agent with no `session/set_mode`, so a mode cannot be honoured.
+    const task = (await client.call("coder.createTask", {
+      projectId: project.project.id,
+      title: "no modes here",
+      harness: "deepseek-harness",
+    })) as { task: { id: string } };
+
+    await expect(
+      client.call("coder.startRun", { taskId: task.task.id, prompt: "hello", agentModeId: "plan" }),
+    ).rejects.toThrow(/cannot be put into a mode/);
+
+    // **Nothing was started.** The refusal has to come before the agent does, or a user is left with an
+    // agent running in a posture they did not choose *and* an error message.
+    const runs = (await client.call("coder.listRuns", {})) as { runs: unknown[] };
+    expect(runs.runs).toHaveLength(0);
+    const tasks = (await client.call("coder.listTasks", {})) as { tasks: { status: string }[] };
+    expect(tasks.tasks[0]?.status).toBe("idle");
+  }, 30_000);
+});
+
+/**
+ * Changing a task's folder, over the socket.
+ *
+ * The two halves that matter are the ones a component test cannot reach: the daemon **normalises and
+ * checks** the path the way it already does for `coder.addProject` (a person types `~/work/api`, wraps
+ * a path with a space in quotes, or pastes one with the trailing slash Finder gives), and it **writes
+ * it to disk**, so a task reopened after a restart still points at the folder the user chose.
+ */
+describe("changing the folder a task runs in", () => {
+  it("normalises what a person types, and keeps the task's own row", async () => {
+    const home = await mkdtemp(join(tmpdir(), "envoycoder-m2-cwd-"));
+    cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+
+    const wanted = join(home, "work", "api");
+    const daemon = await startCoderDaemon({
+      port: 0,
+      home,
+      paths: coderPaths(home),
+      skipMeshAttach: true,
+      // The real filesystem, because normalisation is about *what the filesystem means*: a stub that
+      // says yes to anything would let a bug in the `~/` expansion pass.
+      isDirectory: async (path) => path === wanted || path.startsWith(home),
+    });
+    cleanups.push(async () => daemon.stop());
+
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+
+    const project = (await client.call("coder.addProject", { path: join(home, "repo") })) as {
+      project: { id: string };
+    };
+    const task = (await client.call("coder.createTask", {
+      projectId: project.project.id,
+      title: "somewhere else",
+    })) as { task: { id: string; cwd: string } };
+    expect(task.task.cwd).toBe(join(home, "repo"));
+
+    // Three spellings of one directory, and the same answer for all three.
+    for (const typed of [`"${wanted}"`, `${wanted}/`]) {
+      const updated = (await client.call("coder.updateTask", { id: task.task.id, cwd: typed })) as {
+        task: { cwd: string; projectId: string };
+      };
+      expect(updated.task.cwd, typed).toBe(wanted);
+      // The row stays filed under its project: a user who moved where the agent works did not ask for
+      // the task to jump to a different heading in the rail.
+      expect(updated.task.projectId).toBe(project.project.id);
+    }
+
+    // And it survives a restart, because the next run reads it from the task rather than from memory.
+    client.close();
+    await daemon.stop();
+    const second = await startCoderDaemon({
+      port: 0,
+      home,
+      paths: coderPaths(home),
+      skipMeshAttach: true,
+      isDirectory: async () => true,
+    });
+    cleanups.push(async () => second.stop());
+    const secondClient = await connect(second.port);
+    cleanups.push(async () => secondClient.close());
+    const listed = (await secondClient.call("coder.listTasks", {})) as { tasks: { cwd: string }[] };
+    expect(listed.tasks[0]?.cwd).toBe(wanted);
+  }, 30_000);
+
+  it("refuses a folder that is not there, and leaves the task where it was", async () => {
+    const home = await mkdtemp(join(tmpdir(), "envoycoder-m2-badcwd-"));
+    cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+
+    const daemon = await startCoderDaemon({
+      port: 0,
+      home,
+      paths: coderPaths(home),
+      skipMeshAttach: true,
+      isDirectory: async (path) => path === join(home, "repo"),
+    });
+    cleanups.push(async () => daemon.stop());
+
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+
+    const project = (await client.call("coder.addProject", { path: join(home, "repo") })) as {
+      project: { id: string };
+    };
+    const task = (await client.call("coder.createTask", {
+      projectId: project.project.id,
+      title: "stays put",
+    })) as { task: { id: string; cwd: string } };
+
+    const missing = join(home, "gone");
+    await expect(client.call("coder.updateTask", { id: task.task.id, cwd: missing })).rejects.toThrow(
+      /not a directory on this machine/,
+    );
+
+    // **Unchanged, not half-applied.** A refusal that had already written the row would leave a task
+    // whose next run cannot start, which is worse than the mistake it was reporting.
+    const tasks = (await client.call("coder.listTasks", {})) as { tasks: { cwd: string }[] };
+    expect(tasks.tasks[0]?.cwd).toBe(task.task.cwd);
+  }, 30_000);
+
+  it("says what each agent can do about modes, so a window never has to guess", async () => {
+    const { daemon, home } = await bootDaemon();
+    cleanups.push(async () => {
+      await daemon.stop();
+      await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    });
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+
+    const answer = (await client.call("coder.listHarnesses", {})) as {
+      harnesses: {
+        id: string;
+        modes: { id: string; labelKey?: string }[];
+        capabilities: { agentMode: boolean };
+      }[];
+    };
+    const byId = new Map(answer.harnesses.map((harness) => [harness.id, harness]));
+
+    // The three ids are the peer's own, and the picker's labels carry a key because *we* wrote them —
+    // an agent's own wording would arrive without one and be shown as the agent wrote it.
+    const envoy = byId.get("envoy-harness");
+    expect(envoy?.modes.map((mode) => mode.id)).toEqual(["default", "plan", "review"]);
+    expect(envoy?.modes.every((mode) => typeof mode.labelKey === "string")).toBe(true);
+    expect(envoy?.capabilities.agentMode).toBe(true);
+
+    // No `session/set_mode` on this one's ACP surface, so the mode is not offered and the field says so.
+    expect(byId.get("deepseek-harness")?.modes).toEqual([]);
+    expect(byId.get("deepseek-harness")?.capabilities.agentMode).toBe(false);
+
+    // Every entry answers the question, so a client never has to treat "absent" as "no".
+    for (const harness of answer.harnesses) {
+      expect(typeof harness.capabilities.agentMode, harness.id).toBe("boolean");
+    }
+  }, 30_000);
+});
+
+/**
+ * Switching the agent, and the mode the task was remembering.
+ *
+ * Modes are per agent — `envoy-harness` takes `default | plan | review`, `deepseek-harness` takes none
+ * — so a task carrying a mode across a harness change carries something the new agent cannot honour.
+ * Left in place, `RunManager` would refuse *every* later run of that task, with a sentence about a
+ * choice the user made for an agent they have since replaced. This is the test for the fix: the stale
+ * mode goes, and the task runs again.
+ */
+describe("changing which agent a task uses", () => {
+  it("forgets a mode the new agent cannot take, so the task does not become unrunnable", async () => {
+    const home = await mkdtemp(join(tmpdir(), "envoycoder-m2-switch-"));
+    cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+
+    const daemon = await startCoderDaemon({
+      port: 0,
+      home,
+      paths: coderPaths(home),
+      skipMeshAttach: true,
+      isDirectory: async () => true,
+      resolveLaunch: () => ({ command: process.execPath, args: [FAKE_AGENT], cwd: home }),
+    });
+    cleanups.push(async () => daemon.stop());
+
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+
+    const project = (await client.call("coder.addProject", { path: join(home, "repo") })) as {
+      project: { id: string };
+    };
+    const task = (await client.call("coder.createTask", {
+      projectId: project.project.id,
+      title: "switching agents",
+    })) as { task: { id: string } };
+
+    const withMode = (await client.call("coder.updateTask", {
+      id: task.task.id,
+      agentModeId: "plan",
+    })) as { task: { agentModeId?: string } };
+    expect(withMode.task.agentModeId).toBe("plan");
+
+    const switched = (await client.call("coder.updateTask", {
+      id: task.task.id,
+      harness: "deepseek-harness",
+    })) as { task: { harness: string; agentModeId?: string } };
+    expect(switched.task.harness).toBe("deepseek-harness");
+    // Away, and absent rather than `undefined` on the wire: an absent field is what `TaskSchema` means
+    // by "no mode", and it survives the JSON round trip through the task file.
+    expect(Object.prototype.hasOwnProperty.call(switched.task, "agentModeId")).toBe(false);
+
+    // And the proof that the drop was worth making: the task starts.
+    await client.subscribe(["coder:run-event"]);
+    await client.call("coder.startRun", { taskId: task.task.id, prompt: "hello" });
+    await client.waitForEvent("coder:run-event", (data) => (data as { kind?: string }).kind === "run.ended");
+    const tasks = (await client.call("coder.listTasks", {})) as { tasks: { status: string }[] };
+    expect(tasks.tasks[0]?.status).toBe("done");
+  }, 30_000);
 });

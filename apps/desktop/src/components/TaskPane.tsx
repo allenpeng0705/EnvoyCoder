@@ -19,11 +19,14 @@
 import type { JSX } from "react";
 
 import { useEffect, useRef, useState } from "react";
-import type { HarnessId, Project, RunEvent, Task } from "@envoycoder/protocol";
+import type { HarnessId, HarnessSummary, Project, RunEvent, Task } from "@envoycoder/protocol";
 
+import { hasShellPicker, pickFolder } from "../client/folder-picker.js";
+import { composerControls, modeOffReason } from "../composer/controls.js";
 import { useT } from "../i18n/context.js";
 import { localize, localizeText, statusKey } from "../i18n/notice.js";
 import { buildTranscript, type TranscriptEntry } from "../state/transcript.js";
+import { ComposerControls } from "./ComposerControls.js";
 
 export interface TaskPaneProps {
   task: Task;
@@ -35,7 +38,27 @@ export interface TaskPaneProps {
   onSend: (text: string, mode: "queue" | "steer") => void | Promise<void>;
   onCancel: () => void | Promise<void>;
   onAnswer: (requestId: string, optionId: string) => void | Promise<void>;
-  onStart: (prompt: string) => void | Promise<void>;
+  /**
+   * Start this task's run with the first message.
+   *
+   * `agentModeId` arrives **only when there is one to send** — when the agent can be put into a mode
+   * and one is chosen. The daemon reads the task's stored mode when this is absent, so the two say the
+   * same thing; carrying it here as well is what keeps the picker's *displayed* value and the value the
+   * run is started with identical even if the `updateTask` that saved the choice is still in flight.
+   */
+  onStart: (prompt: string, agentModeId?: string) => void | Promise<void>;
+  /** Remember the agent's mode for this task, so the next run starts the way the user left it. */
+  onChangeMode?: (agentModeId: string) => void | Promise<void>;
+  /** Move this task to another folder. Applies to the next run — the agent keeps the one it started in. */
+  onChangeFolder?: (path: string) => void | Promise<void>;
+  /**
+   * The agents this daemon offers, from `coder.listHarnesses` — the mode picker's data.
+   *
+   * Optional because the list arrives asynchronously, and because a pane rendered on its own (a test,
+   * a preview) has no daemon to ask. Absent means *unknown*, which the control says out loud rather
+   * than rendering as an agent with no modes — two different facts that must not look alike.
+   */
+  harnesses?: readonly HarnessSummary[];
   /** Shown under the composer when a send was refused, in the daemon's words. */
   notice?: string | undefined;
 }
@@ -60,6 +83,10 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   const running = props.runLive;
   const [text, setText] = useState("");
   const [mode, setMode] = useState<"queue" | "steer">("queue");
+  /** A mode the user has just chosen, before the task's saved copy comes back. */
+  const [pickedMode, setPickedMode] = useState<string | undefined>(undefined);
+  /** Why the folder chooser would not open, after a click that tried. */
+  const [pickerProblem, setPickerProblem] = useState<string | undefined>(undefined);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   /** The task the transcript was last scrolled for — a new task always starts at its end. */
@@ -67,6 +94,39 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
 
   const transcript = buildTranscript(events);
   const approvalOpen = transcript.pendingApprovalId !== undefined;
+
+  // A different task in the same pane is a different agent with different modes, so a choice made for
+  // the previous one must not appear to be in force here.
+  useEffect(() => {
+    setPickedMode(undefined);
+    setPickerProblem(undefined);
+  }, [task.id]);
+
+  /* ── the two controls above the field: what they offer is decided in `composer/controls.ts` ── */
+  const summary = props.harnesses?.find((harness) => harness.id === task.harness);
+  const agent = agentFor(task.harness, summary);
+  const controls = composerControls(agent, { running, approvalPending: approvalOpen });
+  // What the picker shows: the user's just-made choice, else what the task remembers, else the agent's
+  // own default. In that order, so a click is never overwritten by a request still in flight.
+  const selectedModeId = pickedMode ?? task.agentModeId ?? controls.mode.selected ?? undefined;
+  const modeEnabled = controls.mode.enabled;
+  const modeOff = modeOffReason(controls.mode, { known: summary !== undefined, agent: agent.label });
+
+  // `hasShellPicker()` is synchronous on purpose (see `folder-picker.ts`): a control that decides after
+  // an `await` looks like a dead click, and a disabled one can say why in the same tick as the render.
+  const canChooseFolder = props.onChangeFolder !== undefined && hasShellPicker();
+
+  const chooseFolder = async (): Promise<void> => {
+    if (!props.onChangeFolder) return;
+    setPickerProblem(undefined);
+    const result = await pickFolder(t("task.composer.folder.aria"));
+    if (result.kind === "picked") {
+      await props.onChangeFolder(result.path);
+      return;
+    }
+    // A closed dialog is not an error and is not reported; a dialog that would not open is.
+    if (result.kind === "unavailable") setPickerProblem(result.reason);
+  };
 
   // **Follow the newest row, but do not steal the scrollbar.** An agent writes while the user reads:
   // jumping to the bottom on every event makes the history unreachable, and never moving means the
@@ -86,6 +146,10 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     const value = text.trim();
     if (value === "") return;
     if (running) void props.onSend(value, mode);
+    // The mode travels only when the picker is on and something is chosen. Passing it always would
+    // mean inventing an "undefined mode" for the agents that have none, and the daemon already reads
+    // the task's stored mode when the argument is absent.
+    else if (modeEnabled && selectedModeId !== undefined) void props.onStart(value, selectedModeId);
     else void props.onStart(value);
     setText("");
   };
@@ -174,6 +238,25 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
 
       <footer className="composer">
         <div className="composer__card">
+          {/* **Two controls above the field, and both say what they will do.** Each applies to the
+              *next run* — the agent is launched with `task.cwd` and put into its mode right after
+              `session/new` — so neither pretends to move or re-mode a run that is already going. */}
+          <ComposerControls
+            cwd={task.cwd}
+            projectPath={project?.path}
+            canChooseFolder={canChooseFolder}
+            folderProblem={pickerProblem}
+            onChooseFolder={() => void chooseFolder()}
+            modes={controls.mode.options}
+            selectedModeId={selectedModeId}
+            modeOff={modeOff}
+            onChooseMode={(chosen) => {
+              setPickedMode(chosen);
+              void props.onChangeMode?.(chosen);
+            }}
+            running={running}
+          />
+
           <textarea
             ref={inputRef}
             className="composer__input"
@@ -402,6 +485,35 @@ function summarize(value: unknown, limit = 400): string {
     }
   }
   return text.length > limit ? `${text.slice(0, limit)}\n…` : text;
+}
+
+/**
+ * The facts about the agent this task runs on, straight from the wire.
+ *
+ * `modes` and `available` default to "we were not told", which the control treats as *unknown* rather
+ * than as "none" — the distinction `composer/controls.ts` exists to preserve.
+ */
+function agentFor(
+  harness: HarnessId,
+  summary: HarnessSummary | undefined,
+): Parameters<typeof composerControls>[0] {
+  return {
+    id: harness,
+    label: summary?.label ?? labelForHarness(harness),
+    modes: summary?.modes ?? [],
+    capabilities: {
+      resume: summary?.capabilities.resume ?? false,
+      cancel: summary?.capabilities.cancel ?? false,
+      approvals: summary?.capabilities.approvals ?? false,
+      structuredTools: summary?.capabilities.structuredTools ?? false,
+      streaming: summary?.capabilities.streaming ?? false,
+      images: summary?.capabilities.images ?? false,
+    },
+    available: summary?.available ?? "unknown",
+    // **The wire is the only thing that may turn the picker on.** No summary, or a summary that says the
+    // daemon cannot set this agent's mode, both leave it off with the reason shown.
+    modesApplicable: summary?.capabilities.agentMode === true,
+  };
 }
 
 function labelForHarness(harness: HarnessId): string {

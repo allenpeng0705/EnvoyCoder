@@ -18,12 +18,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AgentModeSchema,
   CODER_EVENTS,
   ENVOYCODER_ERRORS,
   RPC_METHODS,
   RPC_SPECS,
   RUN_EVENT_KINDS,
   RunEventSchema,
+  TaskSchema,
   coderError,
   coderErrorCode,
   coderErrorMessage,
@@ -203,6 +205,106 @@ describe("run events", () => {
 
   it("refuses an event with no sequence number, because a gap must be detectable", () => {
     expect(RunEventSchema.safeParse({ ...base, seq: undefined, kind: "run.status", status: "running" }).success).toBe(false);
+  });
+});
+
+/**
+ * The two fields this milestone added, at the wire, and the same fields refused when they do not
+ * belong.
+ *
+ * Every spec here is `.strict()`, so the acceptance half is cheap and the *rejection* half is the one
+ * worth writing: a schema that silently accepted an extra key is how a client ends up sending a field
+ * the daemon ignores — the "control that does nothing" failure, one layer further down.
+ */
+describe("the agent's mode, and a task's folder", () => {
+  it("accepts an agent mode on a run, and refuses an unnamed one", () => {
+    const spec = RPC_SPECS["coder.startRun"];
+    expect(spec.params.safeParse({ taskId: "w1", prompt: "hi", agentModeId: "plan" }).success).toBe(true);
+    // `mode` (ours: queue|steer) and `agentModeId` (the agent's) are different fields, and the ids the
+    // agent accepts are not ours to validate: an empty one is the only shape that is always wrong.
+    expect(spec.params.safeParse({ taskId: "w1", prompt: "hi", agentMode: "plan" }).success).toBe(false);
+    expect(spec.params.safeParse({ taskId: "w1", prompt: "hi", agentModeId: "" }).success).toBe(false);
+    expect(
+      spec.params.safeParse({ taskId: "w1", prompt: "hi", mode: "steer", agentModeId: "plan" }).success,
+    ).toBe(true);
+  });
+
+  it("accepts a folder on updateTask, and refuses an empty path", () => {
+    const spec = RPC_SPECS["coder.updateTask"];
+    expect(spec.params.safeParse({ id: "w1", cwd: "/repo/packages/api" }).success).toBe(true);
+    // An empty path is the shape a UI bug produces, and it would replace a real directory with one
+    // that cannot exist.
+    expect(spec.params.safeParse({ id: "w1", cwd: "" }).success).toBe(false);
+    expect(spec.params.safeParse({ id: "w1", cwd: "/repo", agentModeId: "review" }).success).toBe(true);
+    // A field nobody implemented must not ride along unnoticed.
+    expect(spec.params.safeParse({ id: "w1", worktree: "/repo" }).success).toBe(false);
+  });
+
+  it("keeps the task's mode on the task, so a later run reuses it", () => {
+    const base = {
+      id: "w1",
+      projectId: "local::/repo",
+      cwd: "/repo",
+      title: "a task",
+      harness: "envoy-harness",
+      status: "idle",
+      createdAt: "2026-09-13T10:00:00.000Z",
+      updatedAt: "2026-09-13T10:00:00.000Z",
+    };
+    expect(TaskSchema.safeParse({ ...base, agentModeId: "plan" }).success).toBe(true);
+    expect(TaskSchema.safeParse(base).success).toBe(true);
+    // The stored value is an id, not a copy of the catalogue's entry: a task file carrying last
+    // release's labels would show a user last release's wording.
+    expect(TaskSchema.safeParse({ ...base, agentMode: { id: "plan" } }).success).toBe(false);
+  });
+
+  it("requires the wire to say whether a mode can be applied at all", () => {
+    const spec = RPC_SPECS["coder.listHarnesses"];
+    const harness = (capabilities: Record<string, unknown>): unknown => ({
+      id: "envoy-harness",
+      label: "Envoy Harness",
+      tier: "built-in",
+      summary: "…",
+      modes: [{ id: "plan", label: "Plan" }],
+      capabilities,
+      available: true,
+      evidence: "…",
+    });
+    const full = {
+      resume: true,
+      cancel: true,
+      approvals: true,
+      structuredTools: true,
+      streaming: true,
+      images: false,
+      agentMode: true,
+    };
+
+    expect(spec.result.safeParse({ harnesses: [harness(full)] }).success).toBe(true);
+    // Missing is **not** allowed to mean "no": the picker's enabled state is a promise that the choice
+    // reaches the agent, and a client left to guess would guess wrong in one direction or the other.
+    const { agentMode: _omitted, ...withoutIt } = full;
+    expect(spec.result.safeParse({ harnesses: [harness(withoutIt)] }).success).toBe(false);
+    expect(
+      spec.result.safeParse({ harnesses: [harness({ ...full, agentMode: "yes" })] }).success,
+    ).toBe(false);
+  });
+
+  it("carries our wording for a mode only when we wrote it", () => {
+    // `label`/`description` are prose; `labelKey`/`descriptionKey` are the keys a window renders
+    // instead. A third-party agent's mode arrives with neither key, and showing its own words is the
+    // rule the approval prompt's option labels already follow.
+    const mine = AgentModeSchema.safeParse({
+      id: "plan",
+      label: "Plan",
+      descriptionKey: "task.agentMode.plan.description",
+      labelKey: "task.agentMode.plan.label",
+    });
+    expect(mine.success).toBe(true);
+    expect(AgentModeSchema.safeParse({ id: "plan", label: "Plan" }).success).toBe(true);
+    expect(AgentModeSchema.safeParse({ id: "plan", label: "Plan", titleKey: "x" }).success).toBe(false);
+    // The id and the label are the agent's contract; an empty one is not a mode.
+    expect(AgentModeSchema.safeParse({ id: "", label: "Plan" }).success).toBe(false);
   });
 });
 

@@ -83,6 +83,20 @@ export interface AcpClientOptions {
   requestTimeoutMs?: number;
   /** Per-request budget for the handshake, which should be quick or is broken. */
   handshakeTimeoutMs?: number;
+  /**
+   * The agent's own mode to set once the session exists (`session/set_mode`).
+   *
+   * **Set after `session/new`, never in it.** `session/new` accepts a working directory and nothing
+   * else about behaviour (`../envoy-harness/packages/envoy-harness/src/protocol/acp-server.ts:88-95`
+   * reads `cwd` and answers `{sessionId}`), so a mode is a *second* call on a session that already
+   * exists. That ordering is also why a mode change cannot retroactively apply to a run already in
+   * flight: by the time the user picks another one, the session this client opened is the one it set.
+   *
+   * Whether the agent accepts one is the **caller's** decision, not this client's: knowing that
+   * `envoy-harness` answers `session/set_mode` and `deepseek-harness` does not is a catalogue fact,
+   * and a client that carried it would have to be forked for the next agent.
+   */
+  agentModeId?: string;
 }
 
 /** What the agent said it can do. Recorded so the run's capabilities are the agent's, not ours. */
@@ -174,7 +188,9 @@ export class AcpClient {
    *
    * A `resumeSessionId` asks the agent to continue an earlier session rather than start a new one —
    * the capability the catalogue records, and the reason a task can be picked up after the app was
-   * closed.
+   * closed. When an `agentModeId` is given it is applied to whichever session we ended up with, new
+   * or resumed: a resumed session carries the mode the agent last had, and the task's stored mode is
+   * what the user is being promised.
    */
   static async start(
     options: AcpClientOptions & { resumeSessionId?: string },
@@ -193,6 +209,7 @@ export class AcpClient {
       client.agentInfoValue = info;
       if (options.resumeSessionId) await client.resume(options.resumeSessionId);
       else await client.newSession();
+      if (options.agentModeId) await client.setMode(options.agentModeId)
       return client;
     } catch (error) {
       // A half-started agent is a process we own and must not leak.
@@ -261,6 +278,29 @@ export class AcpClient {
       this.options.handshakeTimeoutMs ?? 30_000,
     );
     this.sessionIdValue = sessionId;
+  }
+
+  /**
+   * Put the open session into one of the agent's own modes.
+   *
+   * The parameter names are the agent's, not ours: `{sessionId, mode}`, with the value passed through
+   * verbatim — `envoy-harness` validates it against exactly `default | plan | review`
+   * (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:352-375`, answering
+   * `-32602 mode must be default|plan|review` for anything else), so a mode id we translated or
+   * prettified would be a mode the agent refuses.
+   *
+   * Awaited, and **not** best-effort. A mode that failed to apply is the one failure a user cannot
+   * detect by reading the transcript: the agent still answers, it just does the thing plan mode
+   * exists to prevent. Throwing here fails the run, with the agent's own words, which is the only
+   * outcome that does not mislead.
+   */
+  private async setMode(mode: string): Promise<void> {
+    const sessionId = this.requireSession();
+    await this.request(
+      "session/set_mode",
+      { sessionId, mode },
+      this.options.handshakeTimeoutMs ?? 30_000,
+    );
   }
 
   /**

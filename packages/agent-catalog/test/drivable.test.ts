@@ -57,3 +57,54 @@ describe("which agents this product can actually run", () => {
     }
   });
 });
+
+/**
+ * Which agents can be put into one of their own modes — a **different** question from what they have.
+ *
+ * `modes` is the list a picker offers; `capabilities.agentMode` is whether the daemon can *set* one.
+ * The pair is easy to conflate, and conflating them is how a composer ends up offering a picker for an
+ * agent whose protocol has no way to receive it — a control that silently does nothing, which is the
+ * failure the whole honesty rule exists to prevent. So both halves are pinned here, against the peer
+ * checkouts' own source rather than against memory.
+ */
+describe("which agents can be put into a mode", () => {
+  it("names exactly the peer's three mode ids for the built-in harness", () => {
+    // `session/set_mode` validates against `ModeKind` and answers
+    // `-32602 mode must be default|plan|review` for anything else
+    // (`../envoy-harness/packages/envoy-harness/src/plan/mode-kind.ts`;
+    // `.../src/protocol/acp-params.ts:352-375`). A label we invented would be a mode it refuses, so the
+    // ids are asserted rather than trusted to a reviewer.
+    expect(HARNESS_CATALOG["envoy-harness"].modes.map((mode) => mode.id)).toEqual([
+      "default",
+      "plan",
+      "review",
+    ]);
+    expect(HARNESS_CATALOG["envoy-harness"].capabilities.agentMode).toBe(true);
+  });
+
+  it("offers nothing for the harness whose ACP surface has no session/set_mode", () => {
+    // `deepseek-harness` registers new/list/resume/close/setConfigOption/prompt/cancel and nothing else
+    // (`../deepseek-harness/packages/acp/acp/src/index.ts:384-390`), and the configuration it reports
+    // per session is the model and the reasoning effort (`.../src/model-control.ts:188-220`). Empty is
+    // the *answer*, so the catalogue says so rather than listing modes the agent would ignore.
+    expect(HARNESS_CATALOG["deepseek-harness"].modes).toEqual([]);
+    expect(HARNESS_CATALOG["deepseek-harness"].capabilities.agentMode).toBe(false);
+  });
+
+  it("keeps the two facts consistent everywhere, in the direction that could lie", () => {
+    for (const id of ALL_HARNESSES) {
+      const entry = HARNESS_CATALOG[id];
+      // Declaring modes we cannot set is legitimate — the third-party CLI entries do it, their list
+      // comes from Paseo's manifest, and `isDrivableByAcpAdapter` refuses to launch them anyway. What
+      // is *not* legitimate is claiming we can set a mode while declaring none: an enabled picker with
+      // no choices behind it.
+      if (entry.capabilities.agentMode) {
+        expect(entry.modes.length, `${id} claims settable modes but declares none`).toBeGreaterThan(0);
+      }
+      for (const mode of entry.modes) {
+        expect(mode.id.trim(), `${id} has a blank mode id`).not.toBe("");
+        expect(mode.label.trim(), `${id} mode ${mode.id} has no label`).not.toBe("");
+      }
+    }
+  });
+});

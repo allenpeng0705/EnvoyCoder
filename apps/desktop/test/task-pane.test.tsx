@@ -15,15 +15,20 @@
  */
 
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { Project, RunEvent, Task } from "@envoycoder/protocol";
+import type { HarnessSummary, Project, RunEvent, Task } from "@envoycoder/protocol";
 
 import { TaskPane } from "../src/components/TaskPane.js";
 
 // Testing-library only auto-cleans when vitest globals are on, which this repo does not use.
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // The folder chooser belongs to the shell, so a test that lends the window one has to take it back:
+  // "this window has no chooser" is itself an assertion in the tests below.
+  delete (globalThis as { __TAURI__?: unknown }).__TAURI__;
+});
 
 const task: Task = {
   id: "w1",
@@ -51,6 +56,52 @@ let seq = 0;
 function event(payload: Record<string, unknown>): RunEvent {
   seq += 1;
   return { ...base, seq, ...payload } as RunEvent;
+}
+
+/**
+ * One agent, exactly as `coder.listHarnesses` carries it.
+ *
+ * The two entries here are the two real ones, because the *point* of the mode control is that the wire
+ * decides what it offers: `envoy-harness` declares the three `ModeKind`s and accepts `session/set_mode`;
+ * `deepseek-harness` has no such method on its ACP surface, so it declares no modes and says the daemon
+ * cannot set one.
+ */
+function harnessFor(
+  id: "envoy-harness" | "deepseek-harness",
+  over: Partial<HarnessSummary> = {},
+): HarnessSummary {
+  const capabilities = {
+    resume: true,
+    cancel: true,
+    approvals: true,
+    structuredTools: true,
+    streaming: true,
+    images: false,
+    agentMode: id === "envoy-harness",
+  };
+  return {
+    id,
+    label: id === "envoy-harness" ? "Envoy Harness" : "DeepSeek Harness",
+    tier: id === "envoy-harness" ? "built-in" : "catalogued",
+    summary: "…",
+    modes:
+      id === "envoy-harness"
+        ? [
+            { id: "default", label: "Default", labelKey: "task.agentMode.default.label", descriptionKey: "task.agentMode.default.description" },
+            { id: "plan", label: "Plan", labelKey: "task.agentMode.plan.label", descriptionKey: "task.agentMode.plan.description" },
+            { id: "review", label: "Review", labelKey: "task.agentMode.review.label", descriptionKey: "task.agentMode.review.description" },
+          ]
+        : [],
+    capabilities,
+    available: true,
+    evidence: "cited in `@envoycoder/agent-catalog`",
+    ...over,
+  };
+}
+
+/** Give this window a shell with a folder chooser, the way the desktop app has one. */
+function lendShell(invoke: () => Promise<unknown>): void {
+  (globalThis as { __TAURI__?: unknown }).__TAURI__ = { core: { invoke } };
 }
 
 function renderPane(
@@ -303,5 +354,163 @@ describe("the new chat, which is where a session starts", () => {
     const row = document.querySelector(".row--user");
     expect(row).toBeTruthy();
     expect(row?.querySelector(".row__text")?.textContent).toBe("add the keys");
+  });
+});
+
+/**
+ * The two controls above the field: the task's folder, and the agent's own mode.
+ *
+ * Three things are asserted, and each is a way the naive version lies:
+ *
+ *   1. **The folder shown is the folder used.** Truncated for the pill, whole in its `title` — a user
+ *      deciding "is my agent in the right repository?" reads the end of a path, not the beginning.
+ *   2. **The picker's enabled state comes off the wire.** `capabilities.agentMode` is the only thing
+ *      that turns it on; an agent with modes it cannot be *set* into gets a disabled picker and a
+ *      sentence saying so, and an agent we have not been told about gets a *different* sentence.
+ *   3. **Both say "next run" while one is running.** The agent is launched with `task.cwd` and put into
+ *      its mode right after `session/new`, so neither control can move or re-mode a run already going —
+ *      and pretending otherwise is how a user concludes the app ignored them.
+ */
+describe("the folder control", () => {
+  const nested = { ...task, cwd: "/repo/packages/api" };
+
+  it("shows the folder relative to the project, with the whole path in the title", () => {
+    renderPane([], { task: nested });
+    const pill = screen.getByLabelText("Change this task's folder");
+    // Relative, because that is the shape a user recognises: the project is already named in the header.
+    expect(pill.textContent).toBe("packages/api");
+    // Nothing is hidden: the full path is one hover away.
+    expect(pill.getAttribute("title")).toBe("/repo/packages/api");
+  });
+
+  it("is disabled with the reason shown when this window has no chooser", () => {
+    // A browser dev server, or Linux without zenity. A button that silently does nothing is worse than
+    // one that says why it cannot.
+    renderPane([], { task: nested, onChangeFolder: vi.fn() });
+    const pill = screen.getByLabelText("Change this task's folder") as HTMLButtonElement;
+    expect(pill.disabled).toBe(true);
+    expect(screen.getByText(/no folder chooser/i)).toBeTruthy();
+  });
+
+  it("changes the folder through the shell's picker when there is one", async () => {
+    lendShell(async () => "/elsewhere/deep/api");
+    const onChangeFolder = vi.fn();
+    renderPane([], { task: nested, onChangeFolder });
+
+    const pill = screen.getByLabelText("Change this task's folder") as HTMLButtonElement;
+    expect(pill.disabled).toBe(false);
+    fireEvent.click(pill);
+
+    // The chosen path, not the one on screen: the click is a request, and the daemon is what decides
+    // whether the folder exists.
+    await waitFor(() => expect(onChangeFolder).toHaveBeenCalledWith("/elsewhere/deep/api"));
+  });
+
+  it("says a closed dialog changed nothing, and does not invent a failure for it", async () => {
+    lendShell(async () => null);
+    const onChangeFolder = vi.fn();
+    renderPane([], { task: nested, onChangeFolder });
+    fireEvent.click(screen.getByLabelText("Change this task's folder"));
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(onChangeFolder).not.toHaveBeenCalled();
+    expect(screen.queryByText(/could not open/i)).toBeNull();
+  });
+
+  it("tells the user the change applies to the next run while one is live", () => {
+    lendShell(async () => null);
+    renderPane([], { task: nested, runLive: true, onChangeFolder: vi.fn() });
+    // Not a disabled control: the choice is real and will be used. It is the *running* agent that keeps
+    // the directory it started in, and the sentence has to say so.
+    expect(screen.getByText(/still working in \/repo\/packages\/api/)).toBeTruthy();
+  });
+});
+
+describe("the agent's mode control", () => {
+  const envoyTask = { ...task, harness: "envoy-harness" as const };
+
+  it("offers the modes the wire declares, in our language, and saves the choice", async () => {
+    const onChangeMode = vi.fn();
+    renderPane([], { task: envoyTask, harnesses: [harnessFor("envoy-harness")], onChangeMode });
+
+    const picker = screen.getByLabelText("Mode") as HTMLSelectElement;
+    expect(picker.disabled).toBe(false);
+    // The labels come from the catalogue, by key, because *we* wrote them — an agent's own mode names
+    // would arrive without keys and be shown as the agent wrote them.
+    expect([...picker.options].map((option) => option.textContent)).toEqual(["Default", "Plan", "Review"]);
+
+    fireEvent.change(picker, { target: { value: "plan" } });
+    expect(onChangeMode).toHaveBeenCalledWith("plan");
+  });
+
+  it("is disabled with the reason shown for an agent whose protocol has no modes", () => {
+    // The real `deepseek-harness` shape: it speaks ACP, it has no `session/set_mode`, and its own
+    // per-session configuration is the model and the reasoning effort. Offering a plan picker here
+    // would be offering a control that does nothing.
+    renderPane([], { task, harnesses: [harnessFor("deepseek-harness")] });
+    const picker = screen.getByLabelText("Mode") as HTMLSelectElement;
+    expect(picker.disabled).toBe(true);
+    expect(screen.getByText("DeepSeek Harness does not offer selectable modes.")).toBeTruthy();
+  });
+
+  it("is disabled even when modes are declared, if the daemon cannot set one", () => {
+    // The state the wire permits and the catalogue really uses: a `catalogued` CLI entry declares its
+    // modes (they come from Paseo's provider manifest) while `capabilities.agentMode` is false, because
+    // we cannot drive that agent at all. A picker keyed on "the agent has modes" alone would be enabled
+    // here, and every choice a user made would go nowhere.
+    const declared = harnessFor("envoy-harness", {
+      capabilities: { ...harnessFor("envoy-harness").capabilities, agentMode: false },
+    });
+    renderPane([], { task: envoyTask, harnesses: [declared] });
+
+    const picker = screen.getByLabelText("Mode") as HTMLSelectElement;
+    expect(picker.disabled).toBe(true);
+    // …and the options are still *listed*, so a user can see what the agent offers even though this
+    // build cannot choose for it.
+    expect([...picker.options].map((option) => option.textContent)).toEqual(["Default", "Plan", "Review"]);
+    expect(screen.getByText(/not wired up yet/)).toBeTruthy();
+  });
+
+  it("says it has not been told yet, which is not the same as 'this agent has none'", () => {
+    // The list arrives asynchronously, and a pane with no daemon has none at all. Reporting an agent's
+    // *lack* of modes when the truth is our own ignorance is the mistake this asserts against.
+    renderPane([], { task: envoyTask });
+    expect(screen.getByText(/has not been told which modes Envoy Harness offers yet/)).toBeTruthy();
+    expect(screen.queryByText(/does not offer selectable modes/)).toBeNull();
+  });
+
+  it("sends the chosen mode with the first message, so the picker is not decorative", () => {
+    const { onStart } = renderPane([], {
+      task: envoyTask,
+      harnesses: [harnessFor("envoy-harness")],
+      runLive: false,
+    });
+    fireEvent.change(screen.getByLabelText("Mode"), { target: { value: "plan" } });
+    fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "plan it out" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    expect(onStart).toHaveBeenCalledWith("plan it out", "plan");
+  });
+
+  it("sends no mode at all when the picker is off, so the agent's own default stands", () => {
+    // The negative half of the test above, and the reason `onStart`'s second argument is optional: an
+    // app that always sent something would override whatever the user configured in the agent itself.
+    const { onStart } = renderPane([], {
+      task,
+      harnesses: [harnessFor("deepseek-harness")],
+      runLive: false,
+    });
+    fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "just do it" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    expect(onStart).toHaveBeenCalledWith("just do it");
+  });
+
+  it("tells the user the mode applies to the next run while one is live", () => {
+    renderPane([], { task: envoyTask, runLive: true, harnesses: [harnessFor("envoy-harness")] });
+    expect(screen.getByText(/keeps the mode it started with/)).toBeTruthy();
+    // The folder's sentence is its own, and this is a mode-only change: one control's note must not
+    // be stretched to cover the other, or a user reads a warning about something they never touched.
+    expect(screen.queryByText(/still working in/)).toBeNull();
   });
 });

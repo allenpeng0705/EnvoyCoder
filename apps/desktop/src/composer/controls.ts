@@ -19,16 +19,19 @@
  *      the turn is parked until somebody answers. See `docs/paseo-design-decisions.md`.
  *   2. **The send label states what will happen**, never just "Send": `Interrupt agent` while a turn
  *      runs, `Queue message` when it will wait, `Send and steer` when it joins.
- *   3. **A control we cannot honour is disabled with a reason, not hidden.** The mode picker is the live
- *      example: the agent's modes are known, and `coder.startRun` has no `agentModeId` field yet, so
- *      selecting one would be a silent no-op — the exact bug class we just removed from `resume`.
+ *   3. **A control we cannot honour is disabled with a reason, not hidden.** The mode picker is the
+ *      live example: the agent's modes and whether the daemon can *set* one both travel on the wire
+ *      (`HarnessSummary.modes` and `.capabilities.agentMode`), and the picker is enabled only when
+ *      both say yes — otherwise it is off, with the reason rendered in the user's language.
  */
+
+import { isMessageKey, type MessageKey } from "../i18n/messages/en.js";
 
 /** The facts about one agent, straight from `coder.listHarnesses`. */
 export interface ComposerAgent {
   id: string;
   label: string;
-  modes: readonly { id: string; label: string; description?: string; unattended?: boolean }[];
+  modes: readonly ComposerMode[];
   capabilities: {
     resume: boolean;
     cancel: boolean;
@@ -41,11 +44,26 @@ export interface ComposerAgent {
   /** Why it cannot be used, when it cannot. */
   unavailableReason?: string;
   /**
-   * Can this daemon *apply* a mode it is given? Today: no — `coder.startRun` takes the send behaviour
-   * (`mode: queue|steer`) and has no field for the agent's own mode. When that lands, this becomes true
-   * and the picker turns on by itself.
+   * Can this daemon *apply* a mode it is given?
+   *
+   * The caller sets this from the wire (`HarnessSummary.capabilities.agentMode`), and it is kept as its
+   * own field here — rather than read out of `capabilities` — because there is exactly one answer this
+   * module is allowed to branch on, and it is the flag the picker's honesty turns on. `undefined` means
+   * "nobody told us", which is treated as **no**: a control whose wiring we cannot prove is off, with
+   * the reason shown.
    */
   modesApplicable?: boolean;
+}
+
+/** One mode, as the picker needs it. `labelKey`/`descriptionKey` are ours; the rest is the agent's. */
+export interface ComposerMode {
+  id: string;
+  label: string;
+  description?: string;
+  /** Set when the wording is ours rather than the agent's — see `modeLabel`. */
+  labelKey?: string;
+  descriptionKey?: string;
+  unattended?: boolean;
 }
 
 export interface ComposerState {
@@ -63,23 +81,118 @@ export interface ComposerControl {
   kind: "agent" | "mode" | "cancel" | "approvals" | "images";
   label: string;
   enabled: boolean;
-  /** Present when `enabled` is false, and always user-facing: it is shown, not logged. */
+  /**
+   * Present when `enabled` is false, and always user-facing: it is shown, not logged.
+   *
+   * English, and the *same sentence* as `reasonKey`'s catalogue entry — the arrangement
+   * `folder-picker.ts` explains: this module is also called by code with no translator (a script, a
+   * future CLI), while a window renders the key in the user's language and picks it by
+   * `reasonKey`, never by comparing prose.
+   */
   reason?: string;
+  /** The catalogue key for `reason`. Absent only for a reason that is not ours to word. */
+  reasonKey?: MessageKey;
+  /** The values `reasonKey`'s template needs. */
+  reasonValues?: Record<string, string | number>;
 }
 
 export interface ComposerControls {
   agent: { id: string; label: string; available: boolean };
   mode: {
-    options: readonly { id: string; label: string; description?: string; unattended?: boolean }[];
+    options: readonly ComposerMode[];
     selected: string | null;
     enabled: boolean;
     reason?: string;
+    reasonKey?: MessageKey;
+    reasonValues?: Record<string, string | number>;
   };
   send: { behaviour: SendBehaviour; label: string; enabled: boolean; reason?: string };
   /** The controls the agent's capabilities allow, in the order a composer should draw them. */
   controls: ComposerControl[];
   /** Anything worth telling the user about this agent, in their language. */
   notes: string[];
+}
+
+/**
+ * A mode's label in the user's language.
+ *
+ * A catalogue mode carries `labelKey` only when the wording is **ours** — the three `envoy-harness`
+ * modes are its `ModeKind`, and we wrote their labels, so they are ours to translate. A mode an agent
+ * named itself arrives with no key and is shown exactly as the agent wrote it, which is the same rule
+ * the approval prompt's option labels follow.
+ *
+ * The key is checked rather than trusted: `HarnessSummary` comes off the wire, so a daemon one version
+ * ahead can send a key this window's catalogue does not have, and `mode.plan.label` on screen is worse
+ * than the English sentence.
+ */
+export function modeLabel(mode: ComposerMode, t: (key: MessageKey) => string): string {
+  return mode.labelKey !== undefined && isMessageKey(mode.labelKey) ? t(mode.labelKey) : mode.label;
+}
+
+/** A mode's one-line explanation, on the same terms as `modeLabel`. */
+export function modeDescription(
+  mode: ComposerMode | undefined,
+  t: (key: MessageKey) => string,
+): string | undefined {
+  if (mode === undefined) return undefined;
+  if (mode.descriptionKey !== undefined && isMessageKey(mode.descriptionKey)) {
+    return t(mode.descriptionKey);
+  }
+  return mode.description;
+}
+
+/** Why the mode picker is off: a catalogue key, and the values its template needs. */
+export interface ModeOffReason {
+  key: MessageKey;
+  values?: Record<string, string | number>;
+}
+
+/**
+ * Which reason leaves the mode picker off — or nothing, when it works.
+ *
+ * Three facts produce a disabled picker and they are **not interchangeable**, so this is the one place
+ * that decides between them:
+ *
+ *   * `known` is false — nothing has told us what this agent offers yet. Our ignorance, and the one a
+ *     naive implementation turns into "this agent has no modes", which is a claim about somebody else's
+ *     product that we are in no position to make.
+ *   * the agent declares none — a fact about the agent.
+ *   * the daemon cannot set one — a fact about our adapter.
+ *
+ * Returning `undefined` is the contract for "the control works": the caller enables the picker exactly
+ * when this is `undefined`, so there is one answer rather than two that can disagree.
+ */
+export function modeOffReason(
+  decision: { enabled: boolean; reasonKey?: MessageKey; reasonValues?: Record<string, string | number> },
+  input: { known: boolean; agent: string },
+): ModeOffReason | undefined {
+  if (decision.enabled) return undefined;
+  if (!input.known) return { key: "task.composer.agentMode.unknown", values: { agent: input.agent } };
+  return decision.reasonKey
+    ? { key: decision.reasonKey, values: decision.reasonValues ?? { agent: input.agent } }
+    : undefined;
+}
+
+/**
+ * A folder, in the few characters a pill has room for.
+ *
+ * **Relative to the project first**, because that is the shape the user recognises: a task in a
+ * monorepo package is `packages/api`, and the project is already named in the pane's header. A folder
+ * that is genuinely elsewhere has no project to be relative to, so it gets the last two segments with a
+ * `…` standing for everything the pill cannot show — the whole path is one hover away, in its `title`.
+ *
+ * Pure and tested, because this is the string a user decides "is my agent in the right repository?"
+ * from, and getting it wrong is silent.
+ */
+export function shortenFolder(cwd: string, projectPath?: string): string {
+  const clean = cwd.replace(/\\/g, "/").replace(/\/+$/, "");
+  const root = projectPath?.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (root !== undefined && root !== "" && clean !== root && clean.startsWith(`${root}/`)) {
+    return clean.slice(root.length + 1);
+  }
+  const parts = clean.split("/").filter(Boolean);
+  if (parts.length <= 2) return cwd;
+  return `…/${parts.slice(-2).join("/")}`;
 }
 
 /**
@@ -136,10 +249,21 @@ export function composerControls(
   const selected = options.selectedModeId ?? agent.modes.find((mode) => mode.unattended !== true)?.id ?? null;
   const modesKnown = agent.modes.length > 0;
   const modeEnabled = modesKnown && agent.modesApplicable === true && available;
+  /**
+   * Which of the two reasons applies, and it is not a wording choice: an agent with **no** modes has
+   * nothing to offer, while an agent with modes we cannot set has something a user can see and cannot
+   * yet use. Saying the first when the second is true is how a user concludes the agent has no plan
+   * mode — when it has one, and we simply cannot reach it.
+   */
   const modeReason = !modesKnown
-    ? `${agent.label} does not offer selectable modes${capabilities.approvals ? " here" : ""}.`
+    ? `${agent.label} does not offer selectable modes.`
     : agent.modesApplicable !== true
       ? `Choosing a mode for ${agent.label} is not wired up yet, so the picker is off rather than silently ignored.`
+      : undefined;
+  const modeReasonKey: MessageKey | undefined = !modesKnown
+    ? "task.composer.agentMode.none"
+    : agent.modesApplicable !== true
+      ? "task.composer.agentMode.notWired"
       : undefined;
 
   /* ── sending ── */
@@ -156,7 +280,14 @@ export function composerControls(
   /* ── the controls the agent's capabilities allow ── */
   const controls: ComposerControl[] = [
     { kind: "agent", label: agent.label, enabled: available, ...(sendEnabled ? {} : { reason: notes[0] }) },
-    { kind: "mode", label: "Mode", enabled: modeEnabled, ...(modeReason ? { reason: modeReason } : {}) },
+    {
+      kind: "mode",
+      label: "Mode",
+      enabled: modeEnabled,
+      ...(modeReason ? { reason: modeReason } : {}),
+      ...(modeReasonKey ? { reasonKey: modeReasonKey } : {}),
+      ...(modeReasonKey ? { reasonValues: { agent: agent.label } } : {}),
+    },
     {
       kind: "cancel",
       label: "Stop",
@@ -184,6 +315,8 @@ export function composerControls(
       selected,
       enabled: modeEnabled,
       ...(modeReason ? { reason: modeReason } : {}),
+      ...(modeReasonKey ? { reasonKey: modeReasonKey } : {}),
+      ...(modeReasonKey ? { reasonValues: { agent: agent.label } } : {}),
     },
     send: {
       behaviour,

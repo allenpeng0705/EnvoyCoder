@@ -144,6 +144,32 @@ export interface AgentCapabilities {
   streaming: boolean;
   /** Can it take image attachments? */
   images: boolean;
+  /**
+   * Can this daemon put the agent into one of its own modes, over the protocol it speaks?
+   *
+   * Separate from `modes` on purpose, because the two answer different questions and only this one
+   * decides whether the composer's picker is offered. `modes` says what the agent *has*; this says
+   * whether we can *set* one. Both first-party harnesses name their modes honestly, and only one of
+   * them accepts a way to choose:
+   *
+   *   * `envoy-harness` answers the ACP method `session/set_mode` with `{sessionId, mode}`, and its
+   *     accepted kinds are exactly `default | plan | review`
+   *     (`../envoy-harness/packages/envoy-harness/src/protocol/acp-server.ts:431` handling,
+   *     `.../src/plan/mode-kind.ts` for `ModeKind`, `.../src/protocol/acp-params.ts:352-375` for the
+   *     parameter check that rejects anything else).
+   *   * `deepseek-harness` has **no** `session/set_mode`: its ACP surface offers `session/new`,
+   *     `session/resume`, `session/close`, `session/set_config_option` and `session/prompt`
+   *     (`../deepseek-harness/packages/acp/acp/src/index.ts:384-390`), and the only configuration it
+   *     reports is the **model** and the **reasoning effort**
+   *     (`.../src/model-control.ts:188-220`). There is no mode to set, so we say so instead of
+   *     offering a control that would be silently ignored — which is why `modes` is empty there and
+   *     this is `false`.
+   *
+   * The third-party CLI entries are all `false`: they declare modes with their own ids (carried over
+   * from Paseo's provider manifest), and `isDrivableByAcpAdapter` already refuses to launch them at
+   * all — so a mode could not be applied even if one were chosen.
+   */
+  agentMode: boolean;
   /** Does it know about git worktrees itself, or do we manage them? */
   worktrees: "native" | "external";
 }
@@ -159,10 +185,19 @@ export interface HarnessDefinition {
   /**
    * The modes the *agent* offers, for the composer's picker (see `AgentMode` in the protocol).
    *
-   * Evidence-based, and empty where we genuinely do not know: the lists for the four third-party CLIs
-   * come from Paseo's provider manifest, which drives them every day. Both first-party harnesses are
-   * empty on purpose — they speak ACP, and ACP reports its session modes in the `session/new` response,
-   * so a static list here would be a guess that goes stale.
+   * Evidence-based, and empty where we genuinely do not know. The lists for the four third-party CLIs
+   * come from Paseo's provider manifest, which drives them every day. `envoy-harness`'s list is its
+   * own `ModeKind`, read out of the peer checkout. `deepseek-harness` is empty **and that is the
+   * answer, not a gap**: its ACP surface has no `session/set_mode`, so it offers nothing here to
+   * choose. `capabilities.agentMode` is the flag a caller branches on; this array is only what to
+   * put in a picker.
+   *
+   * (This comment used to claim both harnesses were empty because "ACP reports its session modes in
+   * the `session/new` response". That was wrong about both of them: `envoy-harness` answers
+   * `session/new` with `{sessionId}` alone — `.../src/protocol/acp-server.ts:88-95` — and
+   * `deepseek-harness` answers `{sessionId, configOptions}` where the options are the model and the
+   * reasoning effort, not a mode. An empty list justified by a mechanism that does not exist is how
+   * a whole feature gets argued out of the product by a comment.)
    */
   modes: readonly AgentMode[];
   install?: { hint: string; url?: string };
@@ -177,7 +212,33 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
     id: "envoy-harness",
     label: "Envoy Harness",
     tier: "built-in",
-    modes: [],
+    // Exactly the peer's `ModeKind`, one for one and in its order
+    // (`../envoy-harness/packages/envoy-harness/src/plan/mode-kind.ts`), because a mode id we invent
+    // is a mode id `session/set_mode` refuses with `mode must be default|plan|review`. The labels are
+    // ours — the ids are passed through verbatim and are the contract.
+    modes: [
+      {
+        id: "default",
+        label: "Default",
+        labelKey: "task.agentMode.default.label",
+        description: "Do the work, asking before anything destructive.",
+        descriptionKey: "task.agentMode.default.description",
+      },
+      {
+        id: "plan",
+        label: "Plan",
+        labelKey: "task.agentMode.plan.label",
+        description: "Investigate and propose a plan. Change nothing yet.",
+        descriptionKey: "task.agentMode.plan.description",
+      },
+      {
+        id: "review",
+        label: "Review",
+        labelKey: "task.agentMode.review.label",
+        description: "Check and report. Change nothing.",
+        descriptionKey: "task.agentMode.review.description",
+      },
+    ],
     summary: "EnvoyCoder's built-in agent — structured tools, approvals and sessions.",
     launch: {
       kind: "child-process",
@@ -217,6 +278,8 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       structuredTools: true,
       streaming: true,
       images: true,
+      // The one harness whose modes we can actually set: `session/set_mode`, ids `default|plan|review`.
+      agentMode: true,
       worktrees: "external",
     },
     // Policy: the harness is a **peer** of the family, not a package EnvoyMesh ships
@@ -264,6 +327,14 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       structuredTools: true,
       streaming: true,
       images: false,
+      // **False, and not a gap to be filled.** This surface has no `session/set_mode`
+      // (`../deepseek-harness/packages/acp/acp/src/index.ts:384-390` registers
+      // new/list/resume/close/setConfigOption/prompt/cancel and nothing else), and the per-session
+      // configuration it does report is the model and the reasoning effort
+      // (`.../src/model-control.ts:188-220`). So there is no mode for the composer to offer, and
+      // `runs.ts` refuses a run that asks for one rather than quietly starting an unrestricted agent
+      // in what the user believed was plan mode.
+      agentMode: false,
       worktrees: "external",
     },
     install: {
@@ -317,6 +388,9 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       structuredTools: true,
       streaming: true,
       images: true,
+      // Not an ACP agent at all, so `isDrivableByAcpAdapter` refuses to launch it — a mode could not
+      // be applied even if this picker offered one. Same for every other `catalogued` entry below.
+      agentMode: false,
       worktrees: "external",
     },
     install: { hint: "npm install -g @anthropic-ai/claude-code", url: "https://docs.anthropic.com/en/docs/claude-code" },
@@ -358,6 +432,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       structuredTools: true,
       streaming: true,
       images: true,
+      agentMode: false,
       worktrees: "external",
     },
     install: { hint: "npm install -g @openai/codex", url: "https://github.com/openai/codex" },
@@ -390,6 +465,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       structuredTools: false,
       streaming: true,
       images: false,
+      agentMode: false,
       worktrees: "external",
     },
     install: { hint: "npm install -g @github/copilot", url: "https://github.com/features/copilot/cli/" },
@@ -428,6 +504,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       structuredTools: false,
       streaming: true,
       images: false,
+      agentMode: false,
       worktrees: "external",
     },
     install: { hint: "see the project's install instructions", url: "https://github.com/anomalyco/opencode" },
@@ -462,6 +539,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       structuredTools: false,
       streaming: true,
       images: false,
+      agentMode: false,
       worktrees: "external",
     },
     evidence:
@@ -520,6 +598,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       structuredTools: false,
       streaming: true,
       images: false,
+      agentMode: false,
       worktrees: "external",
     },
     install: {
@@ -554,6 +633,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       structuredTools: false,
       streaming: true,
       images: false,
+      agentMode: false,
       worktrees: "external",
     },
     install: { hint: "see pi.dev", url: "https://pi.dev" },

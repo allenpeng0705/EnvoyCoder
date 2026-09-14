@@ -444,11 +444,18 @@ export class CoderStore {
   async startRun(
     taskId: string,
     prompt: string,
-    options: { resume?: boolean } = {},
+    options: { resume?: boolean; agentModeId?: string } = {},
   ): Promise<{ ok: true; run: AgentRun } | Refusal> {
     const result = await this.mutate(
       "coder.startRun",
-      { taskId, prompt, ...(options.resume !== undefined ? { resume: options.resume } : {}) },
+      {
+        taskId,
+        prompt,
+        ...(options.resume !== undefined ? { resume: options.resume } : {}),
+        // Absent rather than `undefined` when there is no mode: the daemon reads the task's stored one
+        // in that case, and an explicit `null` would be a third meaning nobody asked for.
+        ...(options.agentModeId !== undefined ? { agentModeId: options.agentModeId } : {}),
+      },
       (answer) => ({ ok: true as const, run: (answer as { run: AgentRun }).run }),
     );
     if (result.ok) {
@@ -511,7 +518,7 @@ export class CoderStore {
   }
 
   async updateTask(
-    input: { id: string; title?: string; pinned?: boolean },
+    input: { id: string; title?: string; pinned?: boolean; cwd?: string; agentModeId?: string },
   ): Promise<{ ok: true; task: Task } | Refusal> {
     return this.mutate("coder.updateTask", input, (result) => ({
       ok: true,

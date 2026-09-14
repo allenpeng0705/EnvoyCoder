@@ -22,8 +22,10 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { RunEvent } from "@envoycoder/protocol";
+import { coderErrorCode, coderErrorMessage, coderErrorRef } from "@envoycoder/protocol";
 import { coderPaths } from "@envoycoder/host-bridge";
 
+import { en, isMessageKey } from "../src/i18n/messages/en.js";
 import type { AcpLaunch } from "../src/daemon/acp/client.js";
 import { RunManager } from "../src/daemon/runs.js";
 import { CoderStore } from "../src/daemon/store.js";
@@ -53,18 +55,31 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-async function bench(): Promise<Bench> {
+/**
+ * A run manager over a throwaway home, driving the fixture.
+ *
+ * `harness` matters to the mode tests: the catalogue is what decides whether an agent can be put into
+ * a mode at all, so a test about a refusal needs a task whose agent genuinely has none.
+ */
+async function bench(
+  options: { harness?: "envoy-harness" | "deepseek-harness"; agentEnv?: Record<string, string> } = {},
+): Promise<Bench> {
   const home = await mkdtemp(join(tmpdir(), "envoycoder-m2-"));
   const paths = coderPaths(home);
   const store = await CoderStore.open({ paths });
   const project = await store.addProject({ path: join(home, "repo") });
-  const task = await store.createTask({ projectId: project.project.id, title: "a task" });
+  const task = await store.createTask({
+    projectId: project.project.id,
+    title: "a task",
+    ...(options.harness ? { harness: options.harness } : {}),
+  });
 
   const events: RunEvent[] = [];
   const launch: AcpLaunch = {
     command: process.execPath,
     args: [FAKE_AGENT],
     cwd: home,
+    ...(options.agentEnv ? { env: options.agentEnv } : {}),
   };
 
   const manager = new RunManager({
@@ -100,6 +115,12 @@ async function bench(): Promise<Bench> {
 
 const kinds = (events: readonly RunEvent[], kind: RunEvent["kind"]): RunEvent[] =>
   events.filter((event) => event.kind === kind);
+
+/** What the agent said about itself, from the transcript it produced. */
+const said = (events: readonly RunEvent[], needle: string): boolean =>
+  kinds(events, "run.output").some(
+    (event) => event.kind === "run.output" && event.text.includes(needle),
+  );
 
 /* ────────────────────────────── the tests ────────────────────────────── */
 
@@ -352,5 +373,126 @@ describe("one run per task", () => {
     await expect(b.manager.start({ taskId: b.taskId, prompt: "another" })).rejects.toThrow(
       /already running/,
     );
+  });
+});
+
+describe("the agent's own mode", () => {
+  it("reaches the agent, and the agent confirms which one it is in", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "mode-me", agentModeId: "plan" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    // The two halves of "the control does something real": the client sent `session/set_mode` (or the
+    // fixture would have refused the handshake and failed the run), and the *agent* says which mode it
+    // ended up in. Asserting only the request would pass on a client that sent the wrong parameter
+    // name, which is precisely how a mode picker comes to be decorative.
+    expect(said(b.events, "mode: plan")).toBe(true);
+  });
+
+  it("is not sent at all when the task has none, so an agent's own default is left alone", async () => {
+    // The negative half: with no mode chosen, a client that always called `session/set_mode` would
+    // override whatever the user configured in the agent itself. `default` here is the fixture's own
+    // starting value, and nothing should have moved it.
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "mode-me" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    expect(said(b.events, "mode: default")).toBe(true);
+    expect(said(b.events, "mode: plan")).toBe(false);
+  });
+
+  it("reuses the mode the task remembers, so a choice survives to the next run", async () => {
+    const b = await bench();
+    await b.store.updateTask({ id: b.taskId, agentModeId: "review" });
+
+    await b.manager.start({ taskId: b.taskId, prompt: "mode-me" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    expect(said(b.events, "mode: review")).toBe(true);
+  });
+
+  it("refuses a mode the agent does not declare, before anything is spawned", async () => {
+    const b = await bench();
+    // The window can only offer ids from the wire, so this is a bug or a client built against a
+    // different catalogue — either way the honest answer is a refusal, not a run in some other mode.
+    const failure = await b.manager
+      .start({ taskId: b.taskId, prompt: "hello", agentModeId: "bypassPermissions" })
+      .then(
+        () => undefined,
+        (error: unknown) => error as Error,
+      );
+
+    expect(failure, "the run should have been refused").toBeDefined();
+    expect(failure?.message).toContain('does not offer a mode called "bypassPermissions"');
+    // Nothing ran: no process, no transcript, no rail row claiming to be working.
+    expect(b.events).toEqual([]);
+    expect(b.store.findTask(b.taskId)?.status).toBe("idle");
+  });
+
+  it("refuses a mode for an agent whose protocol has no way to be given one", async () => {
+    // `deepseek-harness` is the real case: it speaks ACP, it has no `session/set_mode`, and asking for
+    // plan mode would otherwise start an agent that edits files while the user believes it will not.
+    const b = await bench({ harness: "deepseek-harness" });
+    const failure = await b.manager
+      .start({ taskId: b.taskId, prompt: "hello", agentModeId: "plan" })
+      .then(
+        () => undefined,
+        (error: unknown) => error as Error,
+      );
+
+    expect(failure?.message).toContain("cannot be put into a mode");
+    expect(b.events).toEqual([]);
+  });
+
+  it("fails the run when the agent itself refuses to be put into a mode", async () => {
+    // The last line of defence, and the one the other two cannot cover: a harness whose catalogue says
+    // it takes modes, an agent that answers `-32601` anyway (a build one version behind, a proxy in
+    // between). Continuing would be a run in an unknown posture, so the run ends with the agent's own
+    // words instead — the same treatment every other start-up failure gets.
+    const b = await bench({ agentEnv: { FAKE_ACP_NO_SET_MODE: "1" } });
+    await b.manager.start({ taskId: b.taskId, prompt: "hello", agentModeId: "plan" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to fail");
+
+    const ended = kinds(b.events, "run.ended")[0];
+    expect(ended?.kind === "run.ended" ? ended.status : "").toBe("failed");
+    const note = kinds(b.events, "run.status").find(
+      (event) => event.kind === "run.status" && event.status === "failed",
+    );
+    expect(note?.kind === "run.status" ? (note.note ?? "") : "").toContain("session/set_mode not supported");
+    // And the work never started: no prompt reached the agent.
+    expect(said(b.events, "mode:")).toBe(false);
+  });
+
+  it("carries a key a translated window can read, matching the English on the wire", async () => {
+    // The same guarantee `daemon-errors-i18n.test.ts` makes for the handler table, for the two refusals
+    // this file produces: a German user must read German, and an English one must read exactly the
+    // sentence the daemon sent — which is why `en.ts` repeats it rather than paraphrasing it.
+    const unsupported = await bench({ harness: "deepseek-harness" })
+      .then((b) => b.manager.start({ taskId: b.taskId, prompt: "hi", agentModeId: "plan" }))
+      .then(() => undefined, (error: unknown) => (error as Error).message);
+    const unknown = await bench()
+      .then((b) => b.manager.start({ taskId: b.taskId, prompt: "hi", agentModeId: "nope" }))
+      .then(() => undefined, (error: unknown) => (error as Error).message);
+
+    const render = (template: string, values: Record<string, string>): string =>
+      template.replace(/\{(\w+)\}/g, (whole, name: string) =>
+        Object.prototype.hasOwnProperty.call(values, name) ? values[name]! : whole,
+      );
+
+    const cases: readonly [string | undefined, keyof typeof en, Record<string, string>][] = [
+      [unsupported, "error.agentModeUnsupported", { harness: "DeepSeek Harness" }],
+      [unknown, "error.agentModeUnknown", { harness: "Envoy Harness", mode: "nope" }],
+    ];
+
+    for (const [wire, key, values] of cases) {
+      const ref = coderErrorRef(wire ?? "");
+      expect(ref?.key, `${key} carried no key`).toBe(key);
+      // A key the catalogue does not have is worse than none: it falls back to English while looking
+      // translated in review.
+      expect(isMessageKey(ref?.key ?? "")).toBe(true);
+      expect(coderErrorCode(wire ?? "")).not.toBeNull();
+      // …and the two sentences are the same sentence, with the same values in the same places.
+      expect(coderErrorMessage(wire ?? ""), key).toBe(render(en[key], values));
+    }
   });
 });

@@ -95,6 +95,25 @@ export interface UpdateTaskInput {
   pinned?: boolean;
   harness?: HarnessId;
   model?: string;
+  /**
+   * Move the task to another folder. Already normalised and checked as a directory by the caller —
+   * the store owns data, not the filesystem (the same division `coder.addProject` uses).
+   *
+   * It is *not* `projectId`: a task can point at a subdirectory of its project (a monorepo package),
+   * and a folder chosen elsewhere does not refile the row. Refiling would mean the rail reshuffling
+   * under a user who only asked to change where the agent works, so the two facts stay separate.
+   */
+  cwd?: string;
+  /** The agent's own mode for this task's next run. */
+  agentModeId?: string;
+  /**
+   * Forget the stored mode, leaving the key off the task entirely.
+   *
+   * Explicit rather than "send `agentModeId: undefined`", because those two are different requests on
+   * a JSON wire: an absent field means "leave it as it is", and only a caller that knows the mode is
+   * no longer valid — the handler, which can see the agent that replaced it — may say "drop it".
+   */
+  clearAgentMode?: boolean;
   extraArgs?: string;
 }
 
@@ -301,6 +320,12 @@ export class CoderStore {
       ...(input.pinned !== undefined ? { pinned: input.pinned } : {}),
       ...(input.harness !== undefined ? { harness: input.harness } : {}),
       ...(input.model !== undefined ? { model: input.model } : {}),
+      ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+      ...(input.agentModeId !== undefined
+        ? { agentModeId: input.agentModeId }
+        : input.clearAgentMode === true
+          ? { agentModeId: undefined }
+          : {}),
       ...(input.extraArgs !== undefined ? { extraArgs: input.extraArgs } : {}),
       updatedAt: this.now().toISOString(),
     };

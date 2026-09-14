@@ -161,6 +161,42 @@ export const en = {
   "task.composer.start": "Start",
   "task.composer.submit.blocked": "Answer the request above first",
 
+  /* ── the two controls above the field: the folder, and the agent's own mode ──
+     Both are about *this task*, both applied to the **next run**, and that shared property is why
+     each carries its own "next run" sentence instead of one shared note: a user who changed only the
+     folder should not be told about a mode they did not touch. */
+  "task.composer.folder.label": "Folder",
+  "task.composer.folder.aria": "Change this task's folder",
+  "task.composer.folder.noPicker":
+    "This window has no folder chooser, so this task's folder cannot be changed here.",
+  "task.composer.folder.nextRun":
+    "The agent is still working in {path}. A new folder applies to the next run.",
+  "task.composer.agentMode.label": "Mode",
+  "task.composer.agentMode.title": "What the agent is allowed to do in this task",
+  // What the picker shows in place of a mode, in the two states where there is none to show. The
+  // sentence under it is always the specific reason; this is only the control's own value.
+  "task.composer.agentMode.unset": "Not set",
+  // The two reasons a picker can be off, and they are different facts: the first is about the agent,
+  // the second about our adapter. Both are catalogue strings because both are read by a user.
+  "task.composer.agentMode.none": "{agent} does not offer selectable modes.",
+  "task.composer.agentMode.notWired":
+    "Choosing a mode for {agent} is not wired up yet, so the picker is off rather than silently ignored.",
+  // A third, and the one that is easiest to mistake for the first: nothing has told us yet.
+  "task.composer.agentMode.unknown":
+    "EnvoyCoder has not been told which modes {agent} offers yet, so the picker is off for now.",
+  "task.composer.agentMode.nextRun":
+    "The agent keeps the mode it started with. Your choice applies to the next run.",
+
+  /* ── the modes an agent can be put into, in our words rather than the agent's ──
+     `AgentMode.labelKey`/`descriptionKey` point here for every mode **we** named; a mode a
+     third-party agent named itself carries no key and is shown as the agent wrote it. */
+  "task.agentMode.default.label": "Default",
+  "task.agentMode.default.description": "Do the work, asking before anything destructive.",
+  "task.agentMode.plan.label": "Plan",
+  "task.agentMode.plan.description": "Investigate and propose a plan. Change nothing yet.",
+  "task.agentMode.review.label": "Review",
+  "task.agentMode.review.description": "Check and report. Change nothing.",
+
   /* ── a status, in the words a user reads ── */
   "status.queued": "Waiting to start",
   "status.running": "Working",
@@ -230,6 +266,16 @@ export const en = {
     "{path} is not a directory on this machine. Pick a folder that exists — EnvoyCoder runs agents in it, so the path has to be real.",
   "error.createTask.notDirectory":
     "{path} is not a directory on this machine, so there is nowhere to run the agent. It was the working directory for \"{title}\".",
+  "error.updateTask.notDirectory":
+    "{path} is not a directory on this machine, so the agent would have nowhere to run. The task's folder is unchanged.",
+  // The mode is the agent's, and the two refusals below keep the two causes apart: the harness has no
+  // way to be given one, or the id is not one it declares. Both refuse the *run* rather than starting
+  // an agent in a posture the user did not ask for — an agent that edits files when the user chose
+  // "plan" has been misdescribed, not merely inconvenienced.
+  "error.agentModeUnsupported":
+    "{harness} cannot be put into a mode over the protocol EnvoyCoder speaks to it, so the run was not started. Leave the mode unset to run {harness} in its own default.",
+  "error.agentModeUnknown":
+    "{harness} does not offer a mode called \"{mode}\", so the run was not started. Pick one of its modes and try again.",
   // The straight quotes are the daemon's own (`service.ts`, `runs.ts` write `${id}` inside `"…"`),
   // and they are kept here deliberately: this entry *is* the sentence an English user already reads,
   // and an equality test in `daemon-errors-i18n.test.ts` fails if the two ever drift.

@@ -312,8 +312,11 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               project={projectFor(state.projects, active)}
               events={active.runId ? (state.runs[active.runId]?.events ?? []) : []}
               runLive={active.runId ? state.runs[active.runId]?.run.endedAt === undefined : false}
-              onStart={async (prompt) => {
-                const result = await props.actions.startRun(active.id, prompt);
+              harnesses={state.harnesses}
+              onStart={async (prompt, agentModeId) => {
+                const result = await props.actions.startRun(active.id, prompt, {
+                  ...(agentModeId !== undefined ? { agentModeId } : {}),
+                });
                 if (!result.ok) {
                   setNotice(result);
                   return;
@@ -325,6 +328,19 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
                   const named = taskTitleFromPrompt(prompt);
                   if (named !== "") await props.actions.updateTask({ id: active.id, title: named });
                 }
+              }}
+              // The mode is saved on the task, not merely sent with the next run: it is part of what
+              // this task *is*, and a choice that vanished with the window would make the picker
+              // decorative. The run reads the task's copy, so the two can never disagree.
+              onChangeMode={async (agentModeId) => {
+                const result = await props.actions.updateTask({ id: active.id, agentModeId });
+                if (!result.ok) setNotice(result);
+              }}
+              // A refusal here is worth showing: "that is not a folder on this machine" is the one
+              // thing the user has to fix before the next run can start.
+              onChangeFolder={async (path) => {
+                const result = await props.actions.updateTask({ id: active.id, cwd: path });
+                if (!result.ok) setNotice(result);
               }}
               onSend={async (text, mode) => {
                 if (!active.runId) return;

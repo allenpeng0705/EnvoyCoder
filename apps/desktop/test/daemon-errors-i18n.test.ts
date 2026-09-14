@@ -111,6 +111,15 @@ describe("every refusal a user can read", () => {
       key: "error.taskNotFound",
     },
     {
+      // The folder control's own refusal: `isDirectory` says no to everything in this fixture, so the
+      // path is reached exactly as the window reaches it when a user picks a folder that has gone.
+      // (The other half of the check below — that the English matches byte for byte — is what stops
+      // this sentence and `en.ts` drifting apart, and it is only *this* test that can see both.)
+      method: "coder.updateTask",
+      params: { id: "w1", cwd: "/tmp/envoycoder-does-not-exist" },
+      key: "error.updateTask.notDirectory",
+    },
+    {
       method: "coder.archiveTask",
       params: { id: "w-nope" },
       key: "error.taskNotFound",

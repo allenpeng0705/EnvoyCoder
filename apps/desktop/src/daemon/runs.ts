@@ -132,6 +132,14 @@ export interface StartRunInput {
   /** Rejoin the task's last agent session instead of starting a new one. */
   resume?: boolean;
   model?: string;
+  /**
+   * The agent's own mode for this run (`AgentMode.id`).
+   *
+   * Defaults to the task's stored `agentModeId`, so a choice made in the composer survives to the
+   * next run without the caller having to repeat it. Whatever the source, it is checked against the
+   * catalogue before anything is spawned — see `resolveAgentMode`.
+   */
+  agentModeId?: string;
 }
 
 export class RunManager {
@@ -204,6 +212,11 @@ export class RunManager {
     }
 
     const model = input.model ?? task.model;
+    // **Checked before anything is spawned.** A mode the agent cannot accept has two possible
+    // outcomes and only one of them is honest: refuse the call, or start an agent in a posture the
+    // user did not ask for. The second is not a smaller version of the first — a user who chose
+    // `plan` and got an unrestricted agent has been told something false about what is running.
+    const agentModeId = resolveAgentMode(task.harness, input.agentModeId ?? task.agentModeId);
     const launch = this.deps.resolveLaunch
       ? this.deps.resolveLaunch({
           harness: task.harness,
@@ -253,7 +266,7 @@ export class RunManager {
 
     // The turn runs in the background: `coder.startRun` answers as soon as the run *exists*, so the
     // UI renders a task starting rather than blocking until it finishes.
-    void this.drive(live, input.prompt, input.resume === true);
+    void this.drive(live, input.prompt, input.resume === true, agentModeId);
     return run;
   }
 
@@ -325,7 +338,12 @@ export class RunManager {
    * returns, either the user interrupted (so the run ends unless a `steer` is waiting), or a queued
    * message takes over as the next turn, or the run finishes.
    */
-  private async drive(live: LiveRun, firstPrompt: string, resume: boolean): Promise<void> {
+  private async drive(
+    live: LiveRun,
+    firstPrompt: string,
+    resume: boolean,
+    agentModeId: string | undefined,
+  ): Promise<void> {
     const startClient = this.deps.startClient ?? AcpClient.start;
     try {
       const resumeSessionId = resume ? this.lastSession.get(live.run.taskId) : undefined;
@@ -339,6 +357,9 @@ export class RunManager {
           live.stderr = [...live.stderr.slice(-20), line];
         },
         ...(resumeSessionId ? { resumeSessionId } : {}),
+        // Passed only when the catalogue says this agent accepts one, which is why the client needs no
+        // per-agent knowledge of its own: it sets what it is given and reports what comes back.
+        ...(agentModeId ? { agentModeId } : {}),
       });
       live.client = client;
 
@@ -686,6 +707,48 @@ function takeIntent(live: { intent: "none" | "cancel" | "steer" }): "none" | "ca
   const intent = live.intent;
   live.intent = "none";
   return intent;
+}
+
+/**
+ * The mode a run starts in, or a refusal that names why it cannot be one.
+ *
+ * ## Why the daemon checks rather than passing it through
+ *
+ * `session/set_mode` is not a method every ACP agent answers. `envoy-harness` implements it with
+ * `default | plan | review`; `deepseek-harness` does not implement it at all, and its own per-session
+ * configuration is the model and the reasoning effort. So "the window offered a picker" is not proof
+ * that a given agent accepts a mode, and the check has to be against the *harness*, from the
+ * catalogue — the same source the window renders its picker from, which is what keeps the two ends
+ * telling the user the same story.
+ *
+ * Two refusals, and the code tells them apart the way `ENVOYCODER_ERRORS` says to: the **cause** is
+ * the harness when its protocol has no way to be put into a mode, and the **caller's** mistake when
+ * the id is one this agent never declared. A client that has just been told "this agent cannot do
+ * modes" offers the user something different from one told "that mode name is not one of its".
+ *
+ * Returning `undefined` for "no mode requested" is deliberate: that is not a failure, it is an agent
+ * running in its own default, and the task file says nothing rather than naming a default it did not
+ * choose.
+ */
+function resolveAgentMode(harness: HarnessId, requested: string | undefined): string | undefined {
+  if (requested === undefined) return undefined;
+  const definition = harnessDefinition(harness);
+
+  if (!definition.capabilities.agentMode) {
+    throw coderError(
+      ENVOYCODER_ERRORS.harnessUnsupported,
+      `${definition.label} cannot be put into a mode over the protocol EnvoyCoder speaks to it, so the run was not started. Leave the mode unset to run ${definition.label} in its own default.`,
+      ref("error.agentModeUnsupported", { harness: definition.label }),
+    );
+  }
+  if (!definition.modes.some((mode) => mode.id === requested)) {
+    throw coderError(
+      ENVOYCODER_ERRORS.badRequest,
+      `${definition.label} does not offer a mode called "${requested}", so the run was not started. Pick one of its modes and try again.`,
+      ref("error.agentModeUnknown", { harness: definition.label, mode: requested }),
+    );
+  }
+  return requested;
 }
 
 /** ACP's stop reason → the status the rail shows. */

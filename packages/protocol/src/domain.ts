@@ -208,6 +208,18 @@ export interface Task {
   harness: HarnessId;
   /** Provider-qualified model actually used (defaults resolved at creation). */
   model?: string;
+  /**
+   * The agent's own mode for this task (`AgentMode.id`), once one has been chosen.
+   *
+   * On the task, and not only on the start call, for the same reason `harness` and `model` are: how
+   * the agent should behave is part of what the task *is*, so the next run — from this window, from
+   * the phone, or after a restart — starts the way the user left it. Absent means "whatever the agent
+   * does by default", which is a different statement from naming that default explicitly.
+   *
+   * It is a bare id rather than a nested `AgentMode`: the catalogue is what knows the labels, and a
+   * task file that carried a copy of them would show a user last release's wording.
+   */
+  agentModeId?: string;
   extraArgs?: string;
   status: TaskStatus;
   createdAt: string;
@@ -279,8 +291,9 @@ export function statusIsActive(status: TaskStatus): boolean {
  *
  * They were both called `mode` on the wire, which is how a client ends up sending "plan" where the
  * daemon expects "queue". The composer's field keeps the name `mode` because it is already in use and
- * documented; the agent's mode is `agentModeId`, and it is deliberately **not** accepted by
- * `coder.startRun` yet — see the note on that spec.
+ * documented; the agent's mode is `agentModeId`, and `coder.startRun` takes it beside `mode` — see the
+ * note on that spec, which also says what the daemon does when the agent cannot be put into a mode at
+ * all (it refuses the run rather than starting it in a posture the user did not ask for).
  */
 export interface AgentMode {
   /** The agent's own id for the mode, passed through verbatim. */
@@ -289,6 +302,22 @@ export interface AgentMode {
   label: string;
   /** One line explaining the posture, when the agent offers one. */
   description?: string;
+  /**
+   * Catalogue keys for `label` and `description` — the same mechanism `coderError` uses for its
+   * refusals, applied to data instead of to a failure.
+   *
+   * `label` and `description` are prose *we* wrote when the mode is ours to name (the three
+   * `envoy-harness` modes are its `ModeKind`, labelled by us), and a German window must not read an
+   * English sentence we authored. A mode a third-party agent named itself arrives without these keys,
+   * and the window shows the agent's own words — which is the rule the approval prompt's option
+   * labels already follow.
+   *
+   * Plain `string` rather than a `MessageKey`, because this type is the *wire's*: the protocol cannot
+   * know a window's catalogue. The consumer checks (`isMessageKey`) and falls back to `label`, so a
+   * key from a build one version ahead renders the sentence rather than `mode.plan.label`.
+   */
+  labelKey?: string;
+  descriptionKey?: string;
   /**
    * The most-permissioned no-prompt mode — "just do it" — when the agent has one.
    *
@@ -303,6 +332,8 @@ export const AgentModeSchema = z
     id: z.string().min(1),
     label: z.string().min(1),
     description: z.string().optional(),
+    labelKey: z.string().optional(),
+    descriptionKey: z.string().optional(),
     unattended: z.boolean().optional(),
   })
   .strict();
