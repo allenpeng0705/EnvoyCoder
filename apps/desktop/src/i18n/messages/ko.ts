@@ -94,6 +94,8 @@ export const ko: Catalogue = {
   "palette.addProject.subtitle": "작업하는 디렉터리를 등록합니다",
   "palette.addProject.pickPrompt": "프로젝트 폴더 선택",
   "palette.addProject.noFolder": "폴더를 선택하지 않아 아무것도 추가되지 않았습니다.",
+  "palette.addProject.needs": "어느 폴더입니까? 전체 경로를 붙여넣으세요.",
+  "palette.addProject.needsPlaceholder": "/Users/you/work/repo",
   "palette.newTask.title": "{project}의 새 작업",
   "palette.newTask.label": "에이전트가 무엇을 해야 하나요?",
   "palette.newTask.placeholder": "작업을 설명하세요",

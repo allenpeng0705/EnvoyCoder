@@ -607,6 +607,33 @@ export function isRpcMethod(value: string): value is RpcMethod {
   return (RPC_METHODS as readonly string[]).includes(value);
 }
 
+/**
+ * Which of *this build's* methods the daemon we are talking to does not have.
+ *
+ * `coder.hello` already carries the daemon's own `RPC_METHODS` — the list compiled into *its* bundle —
+ * which is the honest answer to "are the window and its daemon the same build?". They are two
+ * artifacts started at different times, and the family's rule D2 (one owner at a time, everyone else
+ * attaches) means starting the app does **not** replace a daemon that is already holding the port: so
+ * after an upgrade the new window can end up talking to the old daemon, which is exactly what happened
+ * here — the window asked for `coder.listTasks`, a method added since, and got `Method not found`.
+ *
+ * Comparing the two lists answers that at *connect* time instead of at the first failed call, and it
+ * needs nothing new on the wire, because both halves already describe themselves.
+ *
+ * Two deliberate asymmetries:
+ *
+ *   * A daemon with **more** methods is the newer half; that is not skew and nothing is reported.
+ *   * An **empty** advertised list means the daemon does not describe itself at all — a build from
+ *     before this field carried anything. That is not evidence that every method is missing, so
+ *     `missingMethods` returns nothing and the window falls back to letting the calls speak. Reporting
+ *     "your daemon lacks all 20 methods" there would be a worse lie than the one this prevents.
+ */
+export function missingMethods(advertised: readonly string[]): RpcMethod[] {
+  if (advertised.length === 0) return [];
+  const has = new Set(advertised);
+  return RPC_METHODS.filter((method) => !has.has(method));
+}
+
 /* ────────────────────────────── language ───────────────────────────── */
 
 /**

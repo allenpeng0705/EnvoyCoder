@@ -94,6 +94,8 @@ export const it: Catalogue = {
   "palette.addProject.subtitle": "Registra una cartella in cui lavori",
   "palette.addProject.pickPrompt": "Scegli una cartella di progetto",
   "palette.addProject.noFolder": "Non è stata scelta alcuna cartella, quindi non è stato aggiunto nulla.",
+  "palette.addProject.needs": "Quale cartella? Incolla il percorso completo.",
+  "palette.addProject.needsPlaceholder": "/Users/you/work/repo",
   "palette.newTask.title": "Nuova attività in {project}",
   "palette.newTask.label": "Cosa deve fare l'agente?",
   "palette.newTask.placeholder": "Descrivi l'attività",

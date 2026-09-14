@@ -94,6 +94,8 @@ export const zh: Catalogue = {
   "palette.addProject.subtitle": "注册一个你工作的目录",
   "palette.addProject.pickPrompt": "选择项目文件夹",
   "palette.addProject.noFolder": "没有选择文件夹，因此未添加任何内容。",
+  "palette.addProject.needs": "哪个文件夹？请粘贴完整路径。",
+  "palette.addProject.needsPlaceholder": "/Users/you/work/repo",
   "palette.newTask.title": "{project} 中的新任务",
   "palette.newTask.label": "智能体该做什么？",
   "palette.newTask.placeholder": "描述这个任务",

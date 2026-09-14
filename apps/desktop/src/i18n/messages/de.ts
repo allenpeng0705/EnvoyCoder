@@ -94,6 +94,8 @@ export const de: Catalogue = {
   "palette.addProject.subtitle": "Ein Verzeichnis registrieren, in dem du arbeitest",
   "palette.addProject.pickPrompt": "Projektordner wählen",
   "palette.addProject.noFolder": "Es wurde kein Ordner gewählt, also wurde nichts hinzugefügt.",
+  "palette.addProject.needs": "Welcher Ordner? Füge den vollständigen Pfad ein.",
+  "palette.addProject.needsPlaceholder": "/Users/you/work/repo",
   "palette.newTask.title": "Neue Aufgabe in {project}",
   "palette.newTask.label": "Was soll der Agent tun?",
   "palette.newTask.placeholder": "Beschreibe die Aufgabe",

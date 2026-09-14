@@ -17,7 +17,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import type { AgentRun, RunEvent } from "@envoycoder/protocol";
+import { RPC_METHODS, type AgentRun, type RunEvent } from "@envoycoder/protocol";
 
 import type { CoderConnection, ConnectionStatus, HelloResult } from "../src/client/connection.js";
 import { createCoderStore, type CoderState } from "../src/state/coderStore.js";
@@ -138,6 +138,98 @@ describe("the store's connection to the daemon", () => {
     // too — a window that only listened to runs would show a stale sidebar.
     expect(connection.listeners.get("coder:state-changed")?.size).toBe(1);
     expect(state().loaded).toBe(true);
+  });
+
+  it("knows the daemon is an older build at connect, without waiting for a call to fail", async () => {
+    const connection = new FakeConnection();
+    // What an older build advertises: its own compiled catalogue, missing the method added since. This
+    // is the situation that produced "I added a project and it never appeared" — the shell attaches to a
+    // daemon already owning the port (family rule D2), so the new window kept talking to the old build.
+    const older: HelloResult = {
+      product: "EnvoyCoder",
+      version: "0.1.0",
+      instanceId: "daemon-from-an-older-build",
+      home: "/home/you/.envoymesh",
+      stateDir: "/home/you/.envoymesh/EnvoyCoder",
+      startedAt: "2026-09-14T01:41:19.093Z",
+      windowCount: 1,
+      methods: ["coder.hello", "coder.listProjects", "coder.getSettings"],
+      mesh: { kind: "no-node" },
+      notes: [],
+    };
+    connection.hello = older;
+
+    const created = createCoderStore({
+      resolveEndpoint: async () => endpoint,
+      connect: () => connection as unknown as CoderConnection,
+    });
+    await created.start();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const state = created.getSnapshot();
+    expect(state.hello?.instanceId).toBe("daemon-from-an-older-build");
+    expect(state.error?.key).toBe("error.daemonTooOld");
+    // …and it did not ask for the method it already knew was missing: firing a call whose answer is
+    // known produces a raw transport error in front of a user for no new information.
+    expect(connection.calls.map((call) => call.method)).not.toContain("coder.listTasks");
+    // The list it could not read is marked unknown rather than empty, so the rail does not claim a
+    // project has no tasks.
+    expect(state.tasksKnown).toBe(false);
+    expect(state.projects).toEqual([]);
+  });
+
+  it("says nothing when the daemon is the same build, or a newer one", async () => {
+    const connection = new FakeConnection();
+    connection.hello = {
+      product: "EnvoyCoder",
+      version: "0.1.0",
+      instanceId: "same-build",
+      home: "/home/you/.envoymesh",
+      stateDir: "/home/you/.envoymesh/EnvoyCoder",
+      startedAt: "2026-09-14T01:41:19.093Z",
+      windowCount: 1,
+      // A daemon with *more* than this window: `coder.somethingFromTheFuture`. Not skew.
+      methods: [...RPC_METHODS, "coder.somethingFromTheFuture"],
+      mesh: { kind: "no-node" },
+      notes: [],
+    };
+    const created = createCoderStore({
+      resolveEndpoint: async () => endpoint,
+      connect: () => connection as unknown as CoderConnection,
+    });
+    await created.start();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(created.getSnapshot().error).toBeUndefined();
+    expect(connection.calls.map((call) => call.method)).toContain("coder.listTasks");
+  });
+
+  it("treats an empty method list as 'no idea', not as 'no methods'", async () => {
+    // A daemon that predates the field sends nothing. Skipping every call on that basis would break the
+    // window against a daemon that works perfectly well.
+    const connection = new FakeConnection();
+    connection.hello = {
+      product: "EnvoyCoder",
+      version: "0.1.0",
+      instanceId: "quiet-daemon",
+      home: "/home/you/.envoymesh",
+      stateDir: "/home/you/.envoymesh/EnvoyCoder",
+      startedAt: "2026-09-14T01:41:19.093Z",
+      windowCount: 1,
+      methods: [],
+      mesh: { kind: "no-node" },
+      notes: [],
+    };
+    const created = createCoderStore({
+      resolveEndpoint: async () => endpoint,
+      connect: () => connection as unknown as CoderConnection,
+    });
+    await created.start();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(created.getSnapshot().error).toBeUndefined();
+    expect(connection.calls.map((call) => call.method)).toContain("coder.listTasks");
+    expect(created.getSnapshot().tasksKnown).toBe(true);
   });
 
   it("reports a failure to reach the daemon instead of rendering an empty rail", async () => {

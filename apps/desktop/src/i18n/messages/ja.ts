@@ -94,6 +94,8 @@ export const ja: Catalogue = {
   "palette.addProject.subtitle": "作業するディレクトリを登録します",
   "palette.addProject.pickPrompt": "プロジェクトのフォルダーを選択",
   "palette.addProject.noFolder": "フォルダーが選ばれなかったため、何も追加されませんでした。",
+  "palette.addProject.needs": "どのフォルダーですか？フルパスを貼り付けてください。",
+  "palette.addProject.needsPlaceholder": "/Users/you/work/repo",
   "palette.newTask.title": "{project} の新しいタスク",
   "palette.newTask.label": "エージェントに何をさせますか？",
   "palette.newTask.placeholder": "タスクを説明してください",

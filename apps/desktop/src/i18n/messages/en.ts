@@ -96,6 +96,8 @@ export const en = {
   "palette.addProject.subtitle": "Register a directory you work in",
   "palette.addProject.pickPrompt": "Choose a project folder",
   "palette.addProject.noFolder": "No folder was chosen, so nothing was added.",
+  "palette.addProject.needs": "Which folder? Paste its full path.",
+  "palette.addProject.needsPlaceholder": "/Users/you/work/repo",
   "palette.newTask.title": "New task in {project}",
   "palette.newTask.label": "What should the agent do?",
   "palette.newTask.placeholder": "Describe the task",

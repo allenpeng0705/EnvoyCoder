@@ -42,7 +42,7 @@ import type {
   RunMode,
   Task,
 } from "@envoycoder/protocol";
-import { DEFAULT_CODER_SETTINGS } from "@envoycoder/protocol";
+import { DEFAULT_CODER_SETTINGS, missingMethods } from "@envoycoder/protocol";
 
 import { localNotice, noticeFromError, type Notice, type Refusal } from "../i18n/notice.js";
 import { buildTranscript, type Transcript } from "./transcript.js";
@@ -139,6 +139,14 @@ export class CoderStore {
   private disposers: (() => void)[] = [];
   /** Coalesces a burst of change events into one refetch. See `scheduleRefresh`. */
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * The methods the connected daemon says it has — its own build's catalogue, from `hello`.
+   *
+   * Empty until a daemon describes itself, and empty *means* "no idea": an older daemon that sends an
+   * empty list is not a daemon with no methods, so nothing is skipped and the calls speak for
+   * themselves. See `missingMethods` in `@envoycoder/protocol` for why this exists.
+   */
+  private advertised = new Set<string>();
 
   constructor(options: CoderStoreOptions = {}) {
     this.options = options;
@@ -201,7 +209,20 @@ export class CoderStore {
     this.disposers.push(
       connection.onStatus((status) => {
         this.set({ connection: status });
-        if (status.state === "connected") void this.loadAll();
+        if (status.state === "connected") {
+          // **`hello` is recorded here, and it was not being recorded at all.** The field existed in the
+          // state, the Settings pane read `hello.stateDir` and `hello.version` from it, and the status
+          // bar read `hello.windowCount` — every one of them falling back to a default because nothing
+          // ever wrote it. The connection has verified the handshake before it reports "connected", so
+          // this is the moment the identity is known.
+          this.set({ hello: connection.hello });
+          // Identity first, then the lists: a window that is told at connect time that its daemon is
+          // an older build can say so before anything fails, rather than after the rail has already
+          // rendered a lie. `hello` is already in hand — the connection verified it before it counted
+          // as connected — so this costs nothing and adds nothing to the wire.
+          this.noteVersionSkew(connection.hello);
+          void this.loadAll();
+        }
       }),
     );
 
@@ -301,6 +322,37 @@ export class CoderStore {
   }
 
   /**
+   * Say it at connect time when the daemon is an older build than this window.
+   *
+   * The window and its daemon are two artifacts. A shell *attaches* to a daemon that already owns the
+   * machine (family rule D2) instead of replacing it, so upgrading and restarting the app can leave
+   * the previous build answering the port — and the symptom a user sees is not an error but a *lie*:
+   * an empty rail, because the method that would have filled it is not in the old build.
+   *
+   * `hello` carries the daemon's own method list, so this is known before the first call. The notice
+   * names the missing method, because that is the evidence, and `error.daemonTooOld` is the key the
+   * failed-call path uses too — one sentence for one situation, whichever way the window found out.
+   */
+  private noteVersionSkew(hello: HelloResult | undefined): void {
+    if (!hello) return;
+    this.advertised = new Set(hello.methods);
+    const missing = missingMethods(hello.methods);
+    if (missing.length === 0) {
+      // The same build, or a newer daemon — neither is skew. Clear only a skew notice, so a refusal the
+      // user just earned is not wiped out by a reconnect.
+      if (this.state.error?.key === "error.daemonTooOld") this.set({ error: undefined });
+      return;
+    }
+    this.set({
+      error: {
+        message: `The daemon does not know ${missing.join(", ")}.`,
+        key: "error.daemonTooOld",
+        values: { method: missing[0] ?? "" },
+      },
+    });
+  }
+
+  /**
    * One read that reports its failure instead of throwing, so its sibling still lands.
    *
    * Deliberately not a `Promise.all` of the calls themselves: the point is that the two lists fail
@@ -313,6 +365,13 @@ export class CoderStore {
   ): Promise<{ ok: true; value: T } | { ok: false; error: unknown }> {
     const connection = this.connection;
     if (!connection) return { ok: false, error: new Error(`There is no connection to call ${method}.`) };
+    // A call this daemon cannot serve is not worth making: the answer is known, and the transport's own
+    // words for it are the sentence `noteVersionSkew` has already turned into advice. The error below
+    // is deliberately the *same text* the transport would have produced, so both paths end in one
+    // notice — a caller cannot tell (and must not care) which one happened.
+    if (this.advertised.size > 0 && !this.advertised.has(method)) {
+      return { ok: false, error: new Error(`Method not found: ${method}`) };
+    }
     try {
       return { ok: true, value: await connection.callTyped<T>(method, params) };
     } catch (error) {

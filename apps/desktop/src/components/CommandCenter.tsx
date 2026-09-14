@@ -80,13 +80,36 @@ export interface CommandCenterProps {
   contributions: readonly CommandContribution[];
   /** Shown at the foot while an action is in flight, and on failure. */
   status?: string | undefined;
+  /**
+   * Open *inside* a workflow rather than on the catalogue.
+   *
+   * "New task" and "Add project" are not choices between workflows — the user has already said what
+   * they want, and answering with twenty rows to search through again is the friction this removes. An
+   * id means "activate that row as if it had been clicked"; a prefix means "show only those rows",
+   * which is how a task is started in one of several projects, where the chooser *is* the list.
+   *
+   * Both are plain strings, so the effect that honours them can depend on them without re-running on
+   * every render and re-staging the palette mid-keystroke — which a predicate prop would have done.
+   */
+  initialCommandId?: string | undefined;
+  initialIdPrefix?: string | undefined;
 }
 
 export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
   const t = useT();
   const [query, setQuery] = useState("");
   const [stage, setStage] = useState<{ command: CommandContribution } | undefined>(undefined);
+  /**
+   * A restriction on the visible rows, set when the palette is opened for one workflow.
+   *
+   * Not a filter of the search field: the search field is the user's, and this is the shell's. Typing
+   * must not lift a restriction the shell applied — nor should clearing the search restore the whole
+   * catalogue halfway through starting a task.
+   */
+  const [subset, setSubset] = useState<{ prefix: string } | undefined>(undefined);
   const inputRef = useRef<HTMLInputElement>(null);
+  /** Which intent has already been honoured for this opening — see the effect below. */
+  const appliedIntent = useRef<string | undefined>(undefined);
 
   // Reset on close rather than on open: the palette should come back the way it was left only if
   // the user reopens it *for the same thing*, which is exactly what `stage` records. Closing is a
@@ -95,8 +118,112 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
     if (!props.open) {
       setQuery("");
       setStage(undefined);
+      setSubset(undefined);
     }
   }, [props.open]);
+
+  /**
+   * Activating a row — from a click, or from the intent the shell opened the palette with.
+   *
+   * One function rather than two paths, because "the row the user clicked" and "the row the shell asked
+   * for" must behave identically: a picker that opens for a click but not for ⌘N would be a bug nobody
+   * could see in the code that claims to do this.
+   */
+  const activate = (row: CommandContribution): void => {
+    // A command with a picker asks the operating system first: a folder chooser
+    // beats pasting an absolute path, and this is the only place that knows
+    // whether the picker exists on this machine.
+    // **Synchronous decision first.** In a window with no shell there is no picker to
+    // await, so the prompt must appear in the same tick as the click — the previous
+    // version hopped through a promise to discover that, and a click that shows
+    // nothing for a moment is a click a user reports as "nothing happened".
+    if (row.pick && !hasShellPicker()) {
+      if (row.needs) {
+        setStage({
+          command: {
+            ...row,
+            needs: { ...row.needs, label: `${row.needs.label} (${t("palette.noPicker")})` },
+          },
+        });
+        setQuery("");
+        return;
+      }
+    }
+    if (row.pick && hasShellPicker()) {
+      // **Never leave the row dead.** A picker can be absent (no shell, no
+      // zenity) or fail, and the first version of this returned silently in those
+      // cases — the row appeared to do nothing at all. Every path now ends in
+      // either a run or the text stage, and the reason is *shown* on the stage
+      // label instead of being swallowed.
+      void (async () => {
+        let picked: string | null = null;
+        let why: string | undefined;
+        try {
+          picked = await row.pick!();
+          if (picked === null) {
+            const probed = await pickFolderUnavailableReason(t);
+            why = probed;
+          }
+        } catch (error) {
+          why = error instanceof Error ? error.message : String(error);
+        }
+        if (picked !== null) {
+          void row.run(picked);
+          props.onClose();
+          return;
+        }
+        if (row.needs) {
+          setStage({
+            command: why
+              ? { ...row, needs: { ...row.needs, label: `${row.needs.label} (${why})` } }
+              : row,
+          });
+          setQuery("");
+        }
+      })();
+      return;
+    }
+    if (row.needs) {
+      setStage({ command: row });
+      setQuery("");
+    } else {
+      void row.run("");
+      props.onClose();
+    }
+  };
+
+  /**
+   * Honour the intent the palette was opened with.
+   *
+   * Runs on open only — `stage` and `subset` are the palette's own state afterwards, so the intent
+   * cannot fight the user for control of the field they are typing in.
+   */
+  useEffect(() => {
+    if (!props.open) {
+      appliedIntent.current = undefined;
+      return;
+    }
+    // **Once per opening, not once per render.** `contributions` is rebuilt whenever the store refreshes
+    // its lists, and those refreshes arrive on their own schedule — a task event from another window
+    // mid-typing would otherwise re-activate the intent, clear the field the user is writing in, and
+    // look like a keyboard that drops characters.
+    const key = `${props.initialCommandId ?? ""}|${props.initialIdPrefix ?? ""}`;
+    if (appliedIntent.current === key) return;
+    appliedIntent.current = key;
+
+    const wanted = props.initialCommandId
+      ? props.contributions.find((row) => row.id === props.initialCommandId)
+      : undefined;
+    if (wanted) {
+      setSubset(undefined);
+      activate(wanted);
+      return;
+    }
+    setSubset(props.initialIdPrefix ? { prefix: props.initialIdPrefix } : undefined);
+    // `activate` is rebuilt every render by design (it closes over `t` and `props`); including it would
+    // re-run this on each keystroke. The intent props are the trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.open, props.initialCommandId, props.initialIdPrefix, props.contributions]);
 
   useEffect(() => {
     if (props.open) inputRef.current?.focus();
@@ -105,6 +232,7 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
   const rows = useMemo(() => {
     const text = (stage ? "" : query).trim().toLowerCase();
     const matching = props.contributions.filter((row) => {
+      if (subset && !row.id.startsWith(subset.prefix)) return false;
       if (!text) return true;
       return (
         row.title.toLowerCase().includes(text) ||
@@ -121,7 +249,7 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
       else groups.set(row.group, [row]);
     }
     return [...groups.entries()];
-  }, [props.contributions, query, stage]);
+  }, [props.contributions, query, stage, subset]);
 
   if (!props.open) return null;
 
@@ -194,68 +322,7 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
                       <button
                         type="button"
                         className="palette__item"
-                        onClick={() => {
-                          // A command with a picker asks the operating system first: a folder chooser
-                          // beats pasting an absolute path, and this is the only place that knows
-                          // whether the picker exists on this machine.
-                          // **Synchronous decision first.** In a window with no shell there is no picker to
-                          // await, so the prompt must appear in the same tick as the click — the previous
-                          // version hopped through a promise to discover that, and a click that shows
-                          // nothing for a moment is a click a user reports as "nothing happened".
-                          if (row.pick && !hasShellPicker()) {
-                            if (row.needs) {
-                              setStage({
-                                command: {
-                                  ...row,
-                                  needs: { ...row.needs, label: `${row.needs.label} (${t("palette.noPicker")})` },
-                                },
-                              });
-                              setQuery("");
-                              return;
-                            }
-                          }
-                          if (row.pick && hasShellPicker()) {
-                            // **Never leave the row dead.** A picker can be absent (no shell, no
-                            // zenity) or fail, and the first version of this returned silently in those
-                            // cases — the row appeared to do nothing at all. Every path now ends in
-                            // either a run or the text stage, and the reason is *shown* on the stage
-                            // label instead of being swallowed.
-                            void (async () => {
-                              let picked: string | null = null;
-                              let why: string | undefined;
-                              try {
-                                picked = await row.pick!();
-                                if (picked === null) {
-                                  const probed = await pickFolderUnavailableReason(t);
-                                  why = probed;
-                                }
-                              } catch (error) {
-                                why = error instanceof Error ? error.message : String(error);
-                              }
-                              if (picked !== null) {
-                                void row.run(picked);
-                                props.onClose();
-                                return;
-                              }
-                              if (row.needs) {
-                                setStage({
-                                  command: why
-                                    ? { ...row, needs: { ...row.needs, label: `${row.needs.label} (${why})` } }
-                                    : row,
-                                });
-                                setQuery("");
-                              }
-                            })();
-                            return;
-                          }
-                          if (row.needs) {
-                            setStage({ command: row });
-                            setQuery("");
-                          } else {
-                            void row.run("");
-                            props.onClose();
-                          }
-                        }}
+                        onClick={() => activate(row)}
                       >
                         <strong>{row.title}</strong>
                         {row.selected ? <span className="palette__check" aria-label={t("palette.selected")} /> : null}
@@ -320,6 +387,15 @@ export function buildCommandContributions(input: {
         // The dialog's own title is platform UI a user reads, so it is translated too.
         const picked = await pickFolder(t("palette.addProject.pickPrompt"));
         return picked.kind === "picked" ? picked.path : null;
+      },
+      // **The text stage the comment above promised and this row did not have.** With a picker the user
+      // never sees it; without one — a browser window, or a Linux box with no zenity/kdialog — the row
+      // had no `needs`, so it fell straight through to `run("")` and answered "No folder was chosen" to a
+      // user who had chosen nothing because nothing was ever offered. It also means the "picker failed"
+      // path has somewhere to land, instead of silently doing nothing.
+      needs: {
+        label: t("palette.addProject.needs"),
+        placeholder: t("palette.addProject.needsPlaceholder"),
       },
       run: (value) => input.onAddProject(value.trim()),
     },

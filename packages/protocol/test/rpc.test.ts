@@ -28,6 +28,7 @@ import {
   coderErrorCode,
   coderErrorMessage,
   coderErrorRef,
+  missingMethods,
   missingRpcSpecs,
   orphanRpcSpecs,
   parseMessageRef,
@@ -222,5 +223,30 @@ describe("hello", () => {
     };
     expect(spec.result.safeParse(withoutInstance).success).toBe(false);
     expect(spec.result.safeParse({ ...withoutInstance, instanceId: "abc" }).success).toBe(true);
+  });
+});
+
+describe("telling the window and its daemon apart", () => {
+  it("names the methods a daemon's own build does not have", () => {
+    // The failure this answers: the shell attaches to a daemon that already owns the port (family rule
+    // D2), so after an upgrade the window can talk to the previous build — which answers what it has and
+    // refuses the rest with `Method not found`. Both halves describe themselves in `hello`, so the
+    // window can know before it asks.
+    expect(missingMethods([...RPC_METHODS])).toEqual([]);
+    const older = RPC_METHODS.filter((method) => method !== "coder.listTasks");
+    expect(missingMethods(older)).toEqual(["coder.listTasks"]);
+    // Order follows this build's catalogue, so the notice names the first method a user would notice.
+    expect(missingMethods(["coder.hello"])).toEqual([...RPC_METHODS].filter((m) => m !== "coder.hello"));
+  });
+
+  it("does not turn 'says nothing' into 'has nothing'", () => {
+    // An empty list is a daemon that predates the field, not one with no methods: reporting all of them
+    // missing would break the window against a daemon that works, which is a worse answer than silence.
+    expect(missingMethods([])).toEqual([]);
+  });
+
+  it("ignores a daemon with more methods than this window", () => {
+    // The daemon is the newer half. Nothing this window can ask for is missing, so this is not skew.
+    expect(missingMethods([...RPC_METHODS, "coder.somethingFromTheFuture"])).toEqual([]);
   });
 });

@@ -94,6 +94,8 @@ export const fr: Catalogue = {
   "palette.addProject.subtitle": "Enregistrer un dossier dans lequel vous travaillez",
   "palette.addProject.pickPrompt": "Choisir un dossier de projet",
   "palette.addProject.noFolder": "Aucun dossier n'a été choisi, donc rien n'a été ajouté.",
+  "palette.addProject.needs": "Quel dossier ? Collez son chemin complet.",
+  "palette.addProject.needsPlaceholder": "/Users/you/work/repo",
   "palette.newTask.title": "Nouvelle tâche dans {project}",
   "palette.newTask.label": "Que doit faire l'agent ?",
   "palette.newTask.placeholder": "Décrivez la tâche",

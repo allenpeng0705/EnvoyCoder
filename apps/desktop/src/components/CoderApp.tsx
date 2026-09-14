@@ -41,11 +41,45 @@ export interface CoderAppProps {
   actions: CoderStore;
 }
 
+/**
+ * Where "New task" should land, given what there is to choose from.
+ *
+ * One project means there is no choice to make, so the palette opens on that project's command and the
+ * user's first keystroke is the task's title — the whole point of starting the workflow directly. With
+ * several, the chooser *is* the list: the palette is restricted to the new-task rows, which are titled
+ * "New task in {project}", so picking a project is one click and then the same single field. Zero
+ * projects is not a task flow at all: it sends the user to registering one, which is the only useful
+ * next step.
+ */
+function newTaskIntent(projects: readonly Project[]): { commandId?: string; idPrefix?: string } {
+  if (projects.length === 0) return { commandId: "project.add" };
+  if (projects.length === 1) return { commandId: `task.new.${projects[0]!.id}` };
+  return { idPrefix: "task.new." };
+}
+
 export function CoderApp(props: CoderAppProps): JSX.Element {
   const t = useT();
   const { state } = props;
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  /**
+   * What the palette was opened *for*, if anything.
+   *
+   * Every task affordance in this window used to open the same thing: the catalogue of every command,
+   * which then had to be searched for the one the button already named. The user's words for it were
+   * *"the new task or add task still open the dialog including all the things"* — and they are right:
+   * "New task" is a workflow, not a choice between workflows. So a button opens the palette **on its own
+   * command**, and only ⌘K opens the catalogue.
+   */
+  const [paletteIntent, setPaletteIntent] = useState<
+    { commandId?: string; idPrefix?: string } | undefined
+  >(undefined);
+
+  /** Open the palette on a workflow. `undefined` intent is the catalogue (⌘K). */
+  const openPalette = (intent?: { commandId?: string; idPrefix?: string }): void => {
+    setPaletteIntent(intent);
+    setPaletteOpen(true);
+  };
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [railOpen, setRailOpen] = useState(true);
   /**
@@ -86,9 +120,13 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
   // palette — and "Add project…" inside it — could not be reached by keyboard at all. This mounts the
   // registry from `input/shortcuts.ts` and binds it to the shell's own state.
   useShortcuts({
-    "commandCenter.open": () => setPaletteOpen(true),
-    "search.find": () => setPaletteOpen(true),
-    "newTask": () => setPaletteOpen(true),
+    // ⌘K and ⌘P stay the catalogue: that is what a command palette is for, and a user who presses it is
+    // asking "what can this app do?" rather than "start a task".
+    "commandCenter.open": () => openPalette(),
+    "search.find": () => openPalette(),
+    // ⌘N asks for one thing, so it starts that workflow: the task's project is chosen by picking a row
+    // (or skipped entirely when there is only one project to choose from).
+    "newTask": () => openPalette(newTaskIntent(state.projects)),
     "settings.open": () => setSettingsOpen(true),
     "sidebar.toggle": () => setRailOpen((open) => !open),
   });
@@ -198,11 +236,13 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               const project = state.projects.find((candidate) => candidate.id === projectId);
               // Opening the palette is the visible response; a sentence explaining it is noise.
               if (project) setNotice(undefined);
-              setPaletteOpen(true);
+              // "+ New" on a project header already named the workflow *and* the project, so the palette
+              // opens on that project's task field — not on the catalogue with this row to be found.
+              openPalette({ commandId: `task.new.${projectId}` });
             }}
-            onAddProject={() => setPaletteOpen(true)}
+            onAddProject={() => openPalette({ commandId: "project.add" })}
             onOpenProjectSettings={() => setSettingsOpen(true)}
-            onOpenCommandCenter={() => setPaletteOpen(true)}
+            onOpenCommandCenter={() => openPalette()}
             onOpenSettings={() => setSettingsOpen(true)}
             unavailable={railUnavailable}
             tasksUnknown={!state.tasksKnown}
@@ -257,8 +297,15 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
 
       <CommandCenter
         open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
+        onClose={() => {
+          setPaletteOpen(false);
+          // The intent is spent on open, so it is cleared with the palette: reopening it later must not
+          // silently drop the user back into a workflow they have already moved on from.
+          setPaletteIntent(undefined);
+        }}
         contributions={contributions}
+        initialCommandId={paletteIntent?.commandId}
+        initialIdPrefix={paletteIntent?.idPrefix}
       />
     </div>
   );
