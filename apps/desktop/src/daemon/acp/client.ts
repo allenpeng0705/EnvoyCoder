@@ -97,6 +97,24 @@ export interface AcpClientOptions {
    * and a client that carried it would have to be forked for the next agent.
    */
   agentModeId?: string;
+  /**
+   * The agent's own session configuration to set once the session exists
+   * (`session/set_config_option { sessionId, configId, value }`).
+   *
+   * **Where a model goes when it is not an argument.** `deepseek-harness` has no model flag: it
+   * advertises its models as a standard ACP `select` option on the session it just opened and takes a
+   * change through this method (`../deepseek-harness/packages/acp/acp/README.md:70,76`;
+   * `.../packages/acp/acp/src/index.ts:388`). `envoy-harness`, by contrast, reads `--provider`/`--model`
+   * from argv, so it never uses this.
+   *
+   * The **value is opaque and belongs to the agent** — `configId` and the encoding are decided in
+   * `@envoycoder/agent-catalog` (see `SessionModelConfig` there) and passed through verbatim, for the
+   * same reason a mode id is: a value this client prettified would be one the agent refuses, and the
+   * refusals here are real — an id outside the agent's catalog comes back as `invalid params:
+   * unknown model option: …`. Awaited and **not** best-effort, like `agentModeId`: a model that failed
+   * to apply is invisible in the transcript, and the run would report a model it is not using.
+   */
+  sessionConfig?: { configId: string; value: string };
 }
 
 /** What the agent said it can do. Recorded so the run's capabilities are the agent's, not ours. */
@@ -209,6 +227,12 @@ export class AcpClient {
       client.agentInfoValue = info;
       if (options.resumeSessionId) await client.resume(options.resumeSessionId);
       else await client.newSession();
+      // **Order matters, and it is the agent's.** The model goes first because it is the more
+      // fundamental of the two — the mode changes what the agent may *do*, the model changes what is
+      // doing it — and because the method that carries it exists whether or not the agent has modes.
+      // Neither call is conditional on the other: an agent can accept a model and no mode, which is
+      // exactly `deepseek-harness`.
+      if (options.sessionConfig) await client.setSessionConfig(options.sessionConfig);
       if (options.agentModeId) await client.setMode(options.agentModeId)
       return client;
     } catch (error) {
@@ -299,6 +323,27 @@ export class AcpClient {
     await this.request(
       "session/set_mode",
       { sessionId, mode },
+      this.options.handshakeTimeoutMs ?? 30_000,
+    );
+  }
+
+  /**
+   * Set one of the agent's own session configuration options — the model, for `deepseek-harness`.
+   *
+   * `{sessionId, configId, value}`, exactly as the agent's own dispatcher reads it
+   * (`../deepseek-harness/packages/acp/acp/src/index.ts:333-340`), with the value untouched: it is an
+   * *opaque* selector value owned by the agent, and the catalogue is what knows how to build one.
+   *
+   * Awaited rather than best-effort, for the same reason as `setMode` and with the same consequence:
+   * the run fails with the agent's own sentence instead of continuing on a model nobody chose. The
+   * agent's refusal is specific and readable (`unknown model option: ["x","y"]`, mapped to `invalid
+   * params`), so the user learns which value was wrong rather than that "the model failed".
+   */
+  private async setSessionConfig(config: { configId: string; value: string }): Promise<void> {
+    const sessionId = this.requireSession();
+    await this.request(
+      "session/set_config_option",
+      { sessionId, configId: config.configId, value: config.value },
       this.options.handshakeTimeoutMs ?? 30_000,
     );
   }

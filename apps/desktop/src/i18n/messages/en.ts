@@ -187,6 +187,36 @@ export const en = {
   "task.composer.agentMode.nextRun":
     "The agent keeps the mode it started with. Your choice applies to the next run.",
 
+  /* ── the model the task runs on ──
+     The third control, and the one with the most ways to be wrong, so its states are spelled out.
+     The list, when there is one, comes from the agent itself (`HarnessSummary.models`); the two
+     sentences below it exist because "we have no list" has two entirely different causes — the agent
+     publishes none but takes one, or we have not been told yet — and only one of them means the user
+     cannot choose. */
+  "task.composer.model.label": "Model",
+  "task.composer.model.title": "Which model the agent uses for this task",
+  // The picker's own "no model chosen" value, and free text's placeholder. Both say *whose* default
+  // applies, because "default" alone leaves the user guessing whose.
+  "task.composer.model.agentDefault": "The agent's own default",
+  "task.composer.model.placeholder": "provider/model",
+  // Why the control is off. Three facts, three sentences — folding them together is how a user
+  // concludes an agent has no models when it has some we cannot reach.
+  "task.composer.model.none": "{agent} does not take a model.",
+  "task.composer.model.notWired":
+    "Choosing a model for {agent} is not wired up yet, so the control is off rather than silently ignored.",
+  "task.composer.model.unknown":
+    "EnvoyCoder has not been told which models {agent} offers yet, so the control is off for now.",
+  // The free-text case: the agent accepts a model and publishes no list we can read before a run
+  // exists. The field is *usable* — this note says what shape the value has to be, and why.
+  "task.composer.model.freeText":
+    // Deliberately **no worked example containing a provider name.** The value has to use the provider
+    // name the agent itself uses, and that is the agent's own catalog id — verified against the real
+    // binary, where it is `deepseek-official` and not `deepseek`. An example would teach the wrong name
+    // and every copy of it would go stale with somebody else's catalog.
+    "{agent} publishes its models only inside a running session, so there is no list to choose from here. Type one as provider/model, using the provider name {agent} itself uses — and if it does not have that model the run stops with the agent's own words, rather than quietly using another one.",
+  "task.composer.model.nextRun":
+    "The agent keeps the model it started on. Your choice applies to the next run.",
+
   /* ── the modes an agent can be put into, in our words rather than the agent's ──
      `AgentMode.labelKey`/`descriptionKey` point here for every mode **we** named; a mode a
      third-party agent named itself carries no key and is shown as the agent wrote it. */
@@ -276,6 +306,20 @@ export const en = {
     "{harness} cannot be put into a mode over the protocol EnvoyCoder speaks to it, so the run was not started. Leave the mode unset to run {harness} in its own default.",
   "error.agentModeUnknown":
     "{harness} does not offer a mode called \"{mode}\", so the run was not started. Pick one of its modes and try again.",
+  // The model's three refusals, and they are three because the causes are: the agent takes no model at
+  // all; it takes one but not this one (so we cannot tell which provider it belongs to); or the value
+  // is not in the `provider/model` shape those agents need to build a route. All three refuse the run
+  // — `envoy-harness` parses `--model` and then ignores it when no provider is given, which would
+  // leave an agent answering on its own default while the transcript named the user's choice.
+  "error.modelUnsupported":
+    "{harness} does not take a model, so the run was not started. Clear the model and start it again to run {harness} with its own default.",
+  "error.modelUnknown":
+    "{harness} does not publish a model called \"{model}\", so EnvoyCoder cannot tell which provider it belongs to and the run was not started. Pick one of the models {harness} publishes.",
+  // No worked example here, deliberately: the provider name is the agent's own catalog id — verified
+  // against the real binary, where it is `deepseek-official` and not `deepseek` — so any concrete pair
+  // would teach a name that is wrong for the agent reading this sentence.
+  "error.modelNotProviderQualified":
+    "{harness} needs a model written as provider/model — the provider name, a slash, then the model — and \"{model}\" does not name both, so the run was not started.",
   // The straight quotes are the daemon's own (`service.ts`, `runs.ts` write `${id}` inside `"…"`),
   // and they are kept here deliberately: this entry *is* the sentence an English user already reads,
   // and an equality test in `daemon-errors-i18n.test.ts` fails if the two ever drift.

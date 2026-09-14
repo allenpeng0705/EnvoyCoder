@@ -32,6 +32,14 @@ export interface ComposerAgent {
   id: string;
   label: string;
   modes: readonly ComposerMode[];
+  /**
+   * What this agent publishes about its models, and what an empty list means.
+   *
+   * `undefined` is **not** "no models" — it is "nobody has told us", which is a different sentence on
+   * screen and a different control. The three real states (and the reason the empty list is safe) are
+   * `AgentModels.kind`'s: `"listed"`, `"free-text"`, `"none"`.
+   */
+  models?: ComposerModels | undefined;
   capabilities: {
     resume: boolean;
     cancel: boolean;
@@ -53,6 +61,38 @@ export interface ComposerAgent {
    * the reason shown.
    */
   modesApplicable?: boolean;
+  /**
+   * Can this daemon *make* a chosen model the one the agent runs on?
+   *
+   * The model's half of `modesApplicable`, from `HarnessSummary.capabilities.model`, and separate from
+   * `models` for the same reason: an agent can publish a list this build still has no way to deliver
+   * to, and enabling the control on a list alone would offer a choice that is dropped. `undefined` is
+   * again **no**.
+   */
+  modelApplicable?: boolean;
+}
+
+/**
+ * One model, as the control needs it.
+ *
+ * The three parts are the wire's (`AgentModel`): `id` is provider-qualified and is what the task
+ * stores, `label` is what the user reads, and `provider`/`model` are already taken apart so nothing
+ * downstream has to split the id — which gets ids containing a slash wrong.
+ */
+export interface ComposerModel {
+  id: string;
+  label: string;
+  description?: string;
+  provider: string;
+  model: string;
+}
+
+/** What an agent publishes about its models — `AgentModels`, restated for this module. */
+export interface ComposerModels {
+  kind: "listed" | "free-text" | "none";
+  options: readonly ComposerModel[];
+  /** Where the answer came from. For maintainers; never rendered. */
+  source: string;
 }
 
 /** One mode, as the picker needs it. `labelKey`/`descriptionKey` are ours; the rest is the agent's. */
@@ -78,7 +118,7 @@ export type SendBehaviour = "send" | "queue" | "steer" | "interrupt";
 
 export interface ComposerControl {
   /** A stable id the component can key on. */
-  kind: "agent" | "mode" | "cancel" | "approvals" | "images";
+  kind: "agent" | "mode" | "model" | "cancel" | "approvals" | "images";
   label: string;
   enabled: boolean;
   /**
@@ -100,6 +140,24 @@ export interface ComposerControls {
   agent: { id: string; label: string; available: boolean };
   mode: {
     options: readonly ComposerMode[];
+    selected: string | null;
+    enabled: boolean;
+    reason?: string;
+    reasonKey?: MessageKey;
+    reasonValues?: Record<string, string | number>;
+  };
+  /**
+   * The model control, in the three shapes the wire can ask for.
+   *
+   * `kind` is not derived here from `options.length` — it is carried, because those two facts differ
+   * and the difference is the whole point: `"free-text"` with no options is a **usable** control, and
+   * a caller that decided "no options means no control" would disable a feature the agent supports.
+   * `enabled` is the single answer to "may the user change this?", so there is one flag rather than two
+   * that can disagree.
+   */
+  model: {
+    kind: "listed" | "free-text" | "none";
+    options: readonly ComposerModel[];
     selected: string | null;
     enabled: boolean;
     reason?: string;
@@ -147,6 +205,9 @@ export interface ModeOffReason {
   values?: Record<string, string | number>;
 }
 
+/** Why the model control is off. The same pair, for the same reason. */
+export type ModelOffReason = ModeOffReason;
+
 /**
  * Which reason leaves the mode picker off — or nothing, when it works.
  *
@@ -171,6 +232,85 @@ export function modeOffReason(
   return decision.reasonKey
     ? { key: decision.reasonKey, values: decision.reasonValues ?? { agent: input.agent } }
     : undefined;
+}
+
+/**
+ * Which reason leaves the model control off — or nothing, when it works.
+ *
+ * `modeOffReason`'s twin, and it exists for the same reason: the three facts that produce a disabled
+ * control are not interchangeable, and only the first is a fact about the agent.
+ *
+ *   * `known` is false — the harness list has not arrived. Our ignorance.
+ *   * the agent takes no model — `kind: "none"`, which is a fact about the agent and the only state
+ *     that means "there is nothing to set".
+ *   * the daemon cannot deliver one — a fact about our adapter.
+ *
+ * The middle case is where the value-level rule lives, and it is worth restating where the branch is:
+ * **`options` being empty is never the test.** A `"free-text"` agent has no options and a control that
+ * works, so a caller that asked `options.length === 0` here would disable exactly the feature this
+ * slice exists to add. The test is `kind === "none"`.
+ *
+ * Returning `undefined` is the contract for "the control works", the same contract `modeOffReason`
+ * has: the caller enables it exactly when this is `undefined`.
+ */
+export function modelOffReason(
+  decision: {
+    kind: "listed" | "free-text" | "none";
+    enabled: boolean;
+    reasonKey?: MessageKey;
+    reasonValues?: Record<string, string | number>;
+  },
+  input: { known: boolean; agent: string },
+): ModelOffReason | undefined {
+  if (decision.enabled) return undefined;
+  if (!input.known) return { key: "task.composer.model.unknown", values: { agent: input.agent } };
+  if (decision.kind === "none") {
+    return { key: "task.composer.model.none", values: { agent: input.agent } };
+  }
+  return decision.reasonKey
+    ? { key: decision.reasonKey, values: decision.reasonValues ?? { agent: input.agent } }
+    : undefined;
+}
+
+/**
+ * The note under the model control, when it is not a refusal.
+ *
+ * Two cases, and the point is that they differ:
+ *
+ *   * **free text** — the sentence naming the `provider/model` shape and where the provider name comes
+ *     from. That sentence is what makes the control usable rather than merely present: it turns "we have
+ *     no list" into an instruction, and without it the user has a field and no way to know what the
+ *     agent will accept.
+ *   * **a list** — nothing. The options are self-explanatory, and a line repeating the label is noise.
+ *
+ * A disabled control gets its reason instead (`modelOffReason`), and this returns `undefined` there, so
+ * the two can never both draw a line under the same control.
+ */
+export function modelNote(
+  model: {
+    kind: "listed" | "free-text" | "none";
+  },
+  input: { enabled: boolean },
+): MessageKey | undefined {
+  if (!input.enabled) return undefined;
+  if (model.kind === "free-text") return "task.composer.model.freeText";
+  return undefined;
+}
+
+/**
+ * Is this string a value the model control may hand to the daemon?
+ *
+ * The daemon refuses what it cannot resolve, so this is not the enforcement layer — it is the layer
+ * that decides whether a **free-text** field's contents are worth committing to the task at all while
+ * the user is still typing. Committing `deepseek` on the way to `deepseek/deepseek-chat` would save a
+ * value that makes the next run refuse, so a half-written value is kept in the field and not saved.
+ *
+ * `""` is meaningful and is handled by the caller: empty means "the agent's own default", which clears
+ * the stored model rather than naming one.
+ */
+export function looksLikeModelValue(value: string): boolean {
+  const slash = value.indexOf("/");
+  return slash > 0 && slash < value.length - 1;
 }
 
 /**
@@ -230,7 +370,12 @@ export function resolveSendBehaviour(
 export function composerControls(
   agent: ComposerAgent,
   state: ComposerState,
-  options: { preferred?: "queue" | "steer"; selectedModeId?: string } = {},
+  options: {
+    preferred?: "queue" | "steer";
+    selectedModeId?: string;
+    /** The task's stored model, provider-qualified. Absent means "the agent's own default". */
+    selectedModelId?: string;
+  } = {},
 ): ComposerControls {
   const notes: string[] = [];
   const capabilities = agent.capabilities;
@@ -266,6 +411,44 @@ export function composerControls(
       ? "task.composer.agentMode.notWired"
       : undefined;
 
+  /* ── the model this task runs on ── */
+  /**
+   * Unlike the mode, there is nothing to branch on for *availability*: an agent that is not installed
+   * still publishes whatever it publishes, and the reason it cannot run is on the agent chip, not on
+   * this control. The mode picker takes the same line, and the two agreeing matters more here than
+   * either choice alone — a user reading two differently-disabled controls learns a rule that is not
+   * ours to teach.
+   *
+   * What does switch the control off is `modelApplicable`, the daemon saying it cannot deliver the
+   * value: a list that cannot be applied is a list we must not offer.
+   */
+  const models = agent.models;
+  const modelKind = models?.kind ?? "none";
+  const modelEnabled = models !== undefined && modelKind !== "none" && agent.modelApplicable === true;
+  /**
+   * Three reasons in a fixed order, because they are three different claims about the world. The
+   * `notWired` one is the one a reader is most likely to conflate with `none`: an agent can take a
+   * model and we can still have no way to give it one, which is precisely the third-party entries.
+   *
+   * `models === undefined` produces no key here on purpose — that is the caller's `known: false`, which
+   * says "we have not asked yet" and which `modelOffReason` words, because only the caller knows
+   * whether the list is absent or the answer is.
+   */
+  const modelReason = models === undefined
+    ? undefined
+    : modelKind === "none"
+      ? `${agent.label} does not take a model.`
+      : agent.modelApplicable !== true
+        ? `Choosing a model for ${agent.label} is not wired up yet, so the control is off rather than silently ignored.`
+        : undefined;
+  const modelReasonKey: MessageKey | undefined = models === undefined
+    ? undefined
+    : modelKind === "none"
+      ? "task.composer.model.none"
+      : agent.modelApplicable !== true
+        ? "task.composer.model.notWired"
+        : undefined;
+
   /* ── sending ── */
   const behaviour = resolveSendBehaviour(state, options.preferred ?? "steer");
   const sendEnabled = available;
@@ -287,6 +470,14 @@ export function composerControls(
       ...(modeReason ? { reason: modeReason } : {}),
       ...(modeReasonKey ? { reasonKey: modeReasonKey } : {}),
       ...(modeReasonKey ? { reasonValues: { agent: agent.label } } : {}),
+    },
+    {
+      kind: "model",
+      label: "Model",
+      enabled: modelEnabled,
+      ...(modelReason ? { reason: modelReason } : {}),
+      ...(modelReasonKey ? { reasonKey: modelReasonKey } : {}),
+      ...(modelReasonKey ? { reasonValues: { agent: agent.label } } : {}),
     },
     {
       kind: "cancel",
@@ -317,6 +508,19 @@ export function composerControls(
       ...(modeReason ? { reason: modeReason } : {}),
       ...(modeReasonKey ? { reasonKey: modeReasonKey } : {}),
       ...(modeReasonKey ? { reasonValues: { agent: agent.label } } : {}),
+    },
+    model: {
+      kind: modelKind,
+      options: models?.options ?? [],
+      // What the control shows as chosen: the task's stored model, or nothing, which the control
+      // renders as the agent's own default. There is deliberately **no** "first option" fallback —
+      // defaulting to a model the user never chose is how a task quietly stops running on the model
+      // somebody picked for it last week.
+      selected: options.selectedModelId ?? null,
+      enabled: modelEnabled,
+      ...(modelReason ? { reason: modelReason } : {}),
+      ...(modelReasonKey ? { reasonKey: modelReasonKey } : {}),
+      ...(modelReasonKey ? { reasonValues: { agent: agent.label } } : {}),
     },
     send: {
       behaviour,

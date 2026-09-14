@@ -61,7 +61,14 @@ import {
   type TaskStatus,
   coderError,
 } from "@envoycoder/protocol";
-import { harnessDefinition, isDrivableByAcpAdapter, probeHarness, resolveHarnessCommand } from "@envoycoder/agent-catalog";
+import {
+  harnessDefinition,
+  harnessModelDelivery,
+  isDrivableByAcpAdapter,
+  probeHarness,
+  resolveHarnessCommand,
+  resolveModelChoice,
+} from "@envoycoder/agent-catalog";
 import type { PlatformId } from "@envoycoder/platform";
 
 import type { CoderPaths } from "@envoycoder/host-bridge";
@@ -105,6 +112,15 @@ interface LiveRun {
   seq: number;
   client: AcpClient | undefined;
   launch: AcpLaunch;
+  /**
+   * The model this run was started on, taken apart for the agent's own protocol.
+   *
+   * Resolved once, in `start`, from the catalogue — and kept on the live run rather than looked up
+   * again in `drive`, because the two must be the same answer. `launch` already carries the argv half
+   * of it (the catalogue's `buildArgs` built those flags from the same value); this is the half that
+   * cannot travel in argv, which `AcpClient` applies to the session once it exists.
+   */
+  modelConfig: { configId: string; value: string } | undefined;
   /** The turn currently in flight, so `send` can tell "queued" from "steered". */
   turn: Promise<{ stopReason: string }> | undefined;
   /** Messages the user sent, oldest first. */
@@ -217,6 +233,20 @@ export class RunManager {
     // user did not ask for. The second is not a smaller version of the first — a user who chose
     // `plan` and got an unrestricted agent has been told something false about what is running.
     const agentModeId = resolveAgentMode(task.harness, input.agentModeId ?? task.agentModeId);
+    // The model, on exactly the same terms and for a failure that is easier to miss: `envoy-harness`
+    // parses `--model` whether or not `--provider` is there and *then ignores it*
+    // (`../envoy-harness/packages/envoy-harness/src/cli/run/acp.ts:100-106`), so a model we could not
+    // take apart would leave the agent answering on its default while the transcript named the user's
+    // choice. Refusing here is the only outcome that does not mislead — and it happens before the
+    // process exists, so there is nothing half-started to clean up.
+    //
+    // **Resolved before the launch, and the order is load-bearing.** The catalogue's `buildArgs` also
+    // turns the model into flags, and for a value it cannot resolve `modelArgs` throws a plain `Error`
+    // with no code and no catalogue key. Building the launch first would therefore surface *that*
+    // failure — a sentence a translated window cannot render, from a layer that cannot know which
+    // refusal it is — where this produces the keyed one. Both refuse; only one of them is explainable
+    // to a user.
+    const modelConfig = resolveModelDelivery(task.harness, model);
     const launch = this.deps.resolveLaunch
       ? this.deps.resolveLaunch({
           harness: task.harness,
@@ -245,6 +275,7 @@ export class RunManager {
       seq: 0,
       client: undefined,
       launch,
+      modelConfig,
       turn: undefined,
       queued: [],
       intent: "none",
@@ -360,6 +391,10 @@ export class RunManager {
         // Passed only when the catalogue says this agent accepts one, which is why the client needs no
         // per-agent knowledge of its own: it sets what it is given and reports what comes back.
         ...(agentModeId ? { agentModeId } : {}),
+        // The other half of the same division. Some agents take a model in argv (already in `launch`)
+        // and some through the session's own configuration, and *which* is a catalogue fact the client
+        // must not know — so the daemon hands it a config id and a value, or nothing at all.
+        ...(live.modelConfig ? { sessionConfig: live.modelConfig } : {}),
       });
       live.client = client;
 
@@ -749,6 +784,60 @@ function resolveAgentMode(harness: HarnessId, requested: string | undefined): st
     );
   }
   return requested;
+}
+
+/**
+ * How the chosen model reaches this agent — or a refusal naming why it cannot.
+ *
+ * ## The three outcomes, and why the middle one is not "ignore it"
+ *
+ *   * **No model asked for** (`undefined`) — the agent runs its own default, and the task file says
+ *     nothing rather than naming a default it did not choose. Not an error.
+ *   * **A model this agent takes** — returned as the agent's own session-configuration pair when it is
+ *     an agent that reads one there (`deepseek-harness`), or as `undefined` when the value already
+ *     travelled in argv (`envoy-harness`, where the catalogue's `buildArgs` built the flags). Two
+ *     deliveries, one resolution: the *split* is the catalogue's, and doing it twice is how the two
+ *     ends come to disagree.
+ *   * **A model this agent cannot take** — refused, before a process exists. Both sub-cases refuse:
+ *     an agent with no model support at all, and an id it does not publish (which we cannot map to a
+ *     provider ourselves, and which `envoy-harness` would silently drop on the floor).
+ *
+ * The refusal codes are the catalogue's (`noModelSupport` / `unknownModel` /
+ * `notProviderQualified`), turned into one translated sentence each, because "this agent has no model"
+ * and "we do not know that model" are different things to tell a user.
+ */
+function resolveModelDelivery(
+  harness: HarnessId,
+  model: string | undefined,
+): { configId: string; value: string } | undefined {
+  if (model === undefined || model === "") return undefined;
+  const label = harnessDefinition(harness).label;
+  const resolved = resolveModelChoice(harness, model);
+  if (!resolved.ok) {
+    throw coderError(
+      resolved.code === "noModelSupport"
+        ? ENVOYCODER_ERRORS.harnessUnsupported
+        : ENVOYCODER_ERRORS.badRequest,
+      `${resolved.reason} The run was not started.`,
+      ref(
+        resolved.code === "noModelSupport"
+          ? "error.modelUnsupported"
+          : resolved.code === "unknownModel"
+            ? "error.modelUnknown"
+            : "error.modelNotProviderQualified",
+        { harness: label, model },
+      ),
+    );
+  }
+  const delivery = harnessModelDelivery(harness);
+  // No delivery at all, for an agent that was never launchable anyway: `launchFromCatalogue` refuses
+  // it by name a few lines later, and inventing a second refusal here would be two sentences for one
+  // fact. The argv entries need nothing from this function beyond the check above.
+  if (delivery === undefined || delivery.kind === "argv") return undefined;
+  return {
+    configId: delivery.configId,
+    value: delivery.encode({ provider: resolved.provider, model: resolved.model }),
+  };
 }
 
 /** ACP's stop reason → the status the rail shows. */

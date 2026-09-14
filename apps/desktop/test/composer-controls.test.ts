@@ -8,13 +8,16 @@
 
 import { describe, expect, it } from "vitest";
 
-import { ALL_HARNESSES, HARNESS_CATALOG } from "@envoycoder/agent-catalog";
+import { ALL_HARNESSES, HARNESS_CATALOG, canApplyModel } from "@envoycoder/agent-catalog";
 
 import {
   composerControls,
+  looksLikeModelValue,
   modeDescription,
   modeLabel,
   modeOffReason,
+  modelNote,
+  modelOffReason,
   shortenFolder,
   resolveSendBehaviour,
   sendLabel,
@@ -125,6 +128,157 @@ describe("the mode picker is honest about what it can do", () => {
     const on = composerControls(agent({ modesApplicable: true }), idle);
     expect(on.mode.reasonKey).toBeUndefined();
     expect(on.mode.reasonValues).toBeUndefined();
+  });
+});
+
+/**
+ * The model control, which has one more state than the mode picker and differs from it in exactly the
+ * place a careless implementation collapses two facts into one.
+ *
+ * ## The claim under test
+ *
+ * **An empty list is not "you cannot set a model".** `deepseek-harness` publishes its models only
+ * inside a live session's `configOptions`, so a composer has no list before a run exists — and the agent
+ * still takes one through `session/set_config_option`. That is `kind: "free-text"`, with no options and
+ * a **usable** control, and the tests below assert both halves: the control is on, and the state that
+ * turns it off is `"none"` rather than an empty array.
+ *
+ * The three off-states are asserted separately too, because they are three different claims and only
+ * one of them is about the agent. A single sentence covering all three is how a user concludes an agent
+ * has no models when it has some we cannot reach.
+ */
+describe("the model control is honest about what it can do", () => {
+  const withModels = (
+    models: ComposerAgent["models"],
+    over: Partial<ComposerAgent> = {},
+  ): ComposerAgent => agent({ models, modelApplicable: true, ...over });
+
+  const LISTED: NonNullable<ComposerAgent["models"]> = {
+    kind: "listed",
+    options: [
+      { id: "anthropic/claude-sonnet-4-6", label: "claude-sonnet-4-6", provider: "anthropic", model: "claude-sonnet-4-6" },
+      { id: "openai/gpt-4o", label: "gpt-4o", provider: "openai", model: "gpt-4o" },
+    ],
+    source: "the peer's DEFAULT_PROVIDER_MODELS",
+  };
+
+  it("offers the agent's published list as a picker, with nothing preselected", () => {
+    const controls = composerControls(withModels(LISTED), idle);
+
+    expect(controls.model.kind).toBe("listed");
+    expect(controls.model.enabled).toBe(true);
+    expect(controls.model.options).toHaveLength(2);
+    expect(controls.model.reason).toBeUndefined();
+    expect(controls.model.reasonKey).toBeUndefined();
+    // **Nothing is preselected, and that is a decision rather than an omission.** The agent's own
+    // default is a real state — it is what a task is in before anybody chooses — and defaulting to the
+    // first entry would silently move every task onto a model nobody picked.
+    expect(controls.model.selected).toBeNull();
+    // …while the task's stored model wins over that, so a choice survives to the next run.
+    const remembered = composerControls(withModels(LISTED), idle, { selectedModelId: "openai/gpt-4o" });
+    expect(remembered.model.selected).toBe("openai/gpt-4o");
+  });
+
+  it("is ON and takes free text when the agent publishes no list but accepts a model", () => {
+    // The middle state, and the reason this control is not a `<select>`: `deepseek-harness` answers
+    // `session/new` with `{sessionId, configOptions}` and enumerates provider/model choices from a live
+    // LLM catalog, so the list exists only per session. Cataloguing one would mean inventing it.
+    const controls = composerControls(
+      withModels({ kind: "free-text", options: [], source: "README.md:76 — opaque choices, live catalog" }),
+      idle,
+    );
+
+    expect(controls.model.kind).toBe("free-text");
+    expect(controls.model.options).toEqual([]);
+    // The assertion this state exists for: an empty list and an enabled control, at once.
+    expect(controls.model.enabled).toBe(true);
+    expect(controls.model.reason).toBeUndefined();
+    // And why it may be enabled at all: the daemon has a real way to deliver the value.
+    expect(canApplyModel("deepseek-harness")).toBe(true);
+  });
+
+  it("is off with the agent as the cause only when the agent takes no model at all", () => {
+    const controls = composerControls(
+      withModels({ kind: "none", options: [], source: "no model flag recorded" }),
+      idle,
+    );
+    expect(controls.model.enabled).toBe(false);
+    expect(controls.model.reasonKey).toBe("task.composer.model.none");
+    expect(controls.model.reasonValues).toEqual({ agent: "Claude Code" });
+    const english = createTranslator("en").t;
+    // The template plus the values *is* the sentence a window shows — asserted, because a key without
+    // the matching English would make the two surfaces say different things.
+    expect(english(controls.model.reasonKey!, controls.model.reasonValues)).toBe(controls.model.reason);
+  });
+
+  it("is off with a different reason when we cannot deliver a model we can see", () => {
+    // The third-party entries: several record a model flag, and `isDrivableByAcpAdapter` refuses to
+    // launch any of them. Keeping the options visible with the control off is what makes "this build
+    // cannot do it yet" readable as distinct from "this agent has no models".
+    const controls = composerControls(agent({ models: LISTED, modelApplicable: false }), idle);
+    expect(controls.model.enabled).toBe(false);
+    expect(controls.model.options).toHaveLength(2);
+    expect(controls.model.reasonKey).toBe("task.composer.model.notWired");
+    expect(controls.model.reason).toMatch(/not wired up yet/);
+    expect(controls.controls.find((control) => control.kind === "model")?.reasonKey).toBe(
+      "task.composer.model.notWired",
+    );
+  });
+
+  it("treats 'nobody told us' as a third state rather than as 'this agent has none'", () => {
+    // The harness list has not arrived, or this pane was rendered without a daemon. That is *our*
+    // ignorance, and the sentence has to say so — the mistake the mode picker's `unknown` reason exists
+    // to prevent, repeated here because the same shape of bug reappears on every new control.
+    const controls = composerControls(agent(), idle); // no `models` at all
+    expect(controls.model.enabled).toBe(false);
+
+    const off = modelOffReason(controls.model, { known: false, agent: "Claude Code" });
+    expect(off?.key).toBe("task.composer.model.unknown");
+    expect(createTranslator("en").t(off!.key, off!.values)).toMatch(/has not been told which models/);
+    // Not the agent's fault, and not the same sentence.
+    expect(off?.key).not.toBe("task.composer.model.none");
+
+    // And when the wire *has* answered, the same call gives the fact about the agent instead. One
+    // function, two sentences, because only the caller knows whether the answer is in.
+    const none = composerControls(withModels({ kind: "none", options: [], source: "…" }), idle);
+    expect(modelOffReason(none.model, { known: true, agent: "Claude Code" })?.key).toBe(
+      "task.composer.model.none",
+    );
+  });
+
+  it("returns no reason at all while the control works", () => {
+    // The contract `modeOffReason` has, kept identical: `undefined` means "the control works", so the
+    // caller enables it exactly when this is `undefined` — one answer rather than two that can
+    // disagree. A `free-text` control with no options **must** take this branch.
+    const free = composerControls(withModels({ kind: "free-text", options: [], source: "…" }), idle);
+    expect(modelOffReason(free.model, { known: true, agent: "Claude Code" })).toBeUndefined();
+    const listed = composerControls(withModels(LISTED), idle);
+    expect(modelOffReason(listed.model, { known: true, agent: "Claude Code" })).toBeUndefined();
+  });
+
+  it("knows what is worth committing from a free-text field, and what is half-typed", () => {
+    // The field keeps a draft, and only a value naming both halves is handed upwards: committing
+    // `deepseek` on the way to `deepseek/deepseek-chat` would save a value that makes the next run
+    // refuse. Empty is not a draft — it is "the agent's own default", handled by the caller.
+    expect(looksLikeModelValue("deepseek/deepseek-chat")).toBe(true);
+    expect(looksLikeModelValue("ollama/meta-llama/Llama-3-70b")).toBe(true);
+    expect(looksLikeModelValue("deepseek")).toBe(false);
+    expect(looksLikeModelValue("deepseek/")).toBe(false);
+    expect(looksLikeModelValue("/deepseek-chat")).toBe(false);
+    expect(looksLikeModelValue("")).toBe(false);
+  });
+
+  it("says which shape a free-text model has to be, since the user cannot guess it", () => {
+    // That sentence is what makes the field usable rather than merely present: `provider/model` is a
+    // requirement of the agent's protocol, not a preference of ours.
+    const free = composerControls(withModels({ kind: "free-text", options: [], source: "…" }), idle);
+    expect(modelNote(free.model, { enabled: free.model.enabled })).toBe(
+      "task.composer.model.freeText",
+    );
+    // A list needs no explanation, and a disabled control already has its reason line.
+    const listed = composerControls(withModels(LISTED), idle);
+    expect(modelNote(listed.model, { enabled: true })).toBeUndefined();
+    expect(modelNote(free.model, { enabled: false })).toBeUndefined();
   });
 });
 

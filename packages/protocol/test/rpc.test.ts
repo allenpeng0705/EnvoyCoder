@@ -19,6 +19,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   AgentModeSchema,
+  AgentModelsSchema,
+  AgentModelSchema,
   CODER_EVENTS,
   ENVOYCODER_ERRORS,
   RPC_METHODS,
@@ -216,6 +218,76 @@ describe("run events", () => {
  * worth writing: a schema that silently accepted an extra key is how a client ends up sending a field
  * the daemon ignores — the "control that does nothing" failure, one layer further down.
  */
+describe("the model an agent publishes, and what an empty list means", () => {
+  const MODEL = {
+    id: "anthropic/claude-sonnet-4-6",
+    label: "claude-sonnet-4-6",
+    description: "Anthropic",
+    provider: "anthropic",
+    model: "claude-sonnet-4-6",
+  };
+
+  it("carries the choice taken apart, so nothing downstream splits the id", () => {
+    expect(AgentModelSchema.safeParse(MODEL).success).toBe(true);
+    // `provider` and `model` are **required**, not derivable: an Ollama tag or a Hugging Face id can
+    // itself contain a slash (`meta-llama/Llama-3-70b`), and a `split("/")` would hand the agent a
+    // provider called `meta-llama`. A model without both halves is not a model we can route.
+    const { provider: _p, ...withoutProvider } = MODEL;
+    expect(AgentModelSchema.safeParse(withoutProvider).success).toBe(false);
+    const { model: _m, ...withoutModel } = MODEL;
+    expect(AgentModelSchema.safeParse(withoutModel).success).toBe(false);
+    // An id and a label are both mandatory: the id is the contract, the label is what a user reads.
+    expect(AgentModelSchema.safeParse({ ...MODEL, id: "" }).success).toBe(false);
+    expect(AgentModelSchema.safeParse({ ...MODEL, label: "" }).success).toBe(false);
+    // And nothing invented rides along.
+    expect(AgentModelSchema.safeParse({ ...MODEL, contextWindow: 200_000 }).success).toBe(false);
+  });
+
+  it("refuses a list that disagrees with what it says the list means", () => {
+    const listed = { kind: "listed", options: [MODEL], source: "…" };
+    expect(AgentModelsSchema.safeParse(listed).success).toBe(true);
+
+    // **The rule the whole feature turns on.** `"listed"` with no options would be a picker with
+    // nothing in it; options with another kind would be a list nothing promised. Either way the
+    // composer has to guess, and the guess that matters is this one: an empty list read as "the user
+    // cannot set a model" disables a control for an agent that accepts one.
+    expect(AgentModelsSchema.safeParse({ kind: "listed", options: [], source: "…" }).success).toBe(false);
+    expect(
+      AgentModelsSchema.safeParse({ kind: "free-text", options: [MODEL], source: "…" }).success,
+    ).toBe(false);
+    expect(AgentModelsSchema.safeParse({ kind: "none", options: [MODEL], source: "…" }).success).toBe(false);
+
+    // The two states that mean "no list", and they are **not** the same claim about the agent: one says
+    // it accepts a model we cannot enumerate, the other that there is nothing to set.
+    expect(AgentModelsSchema.safeParse({ kind: "free-text", options: [], source: "…" }).success).toBe(true);
+    expect(AgentModelsSchema.safeParse({ kind: "none", options: [], source: "…" }).success).toBe(true);
+    // A fourth kind is not a kind: a client that invented one would be telling its own UI a story the
+    // daemon never told it.
+    expect(AgentModelsSchema.safeParse({ kind: "dynamic", options: [], source: "…" }).success).toBe(false);
+  });
+
+  it("requires a source, so no list can travel without where it came from", () => {
+    // The provenance is for maintainers and is never rendered, but it is *required* for the reason the
+    // catalogue's `evidence` is: a list on the wire with no citation behind it is a list somebody made
+    // up, and nothing downstream can tell the difference.
+    expect(AgentModelsSchema.safeParse({ kind: "none", options: [], source: "" }).success).toBe(false);
+    const { source: _s, ...withoutSource } = { kind: "none", options: [], source: "…" };
+    expect(AgentModelsSchema.safeParse(withoutSource).success).toBe(false);
+  });
+
+  it("takes a model on the run, so the choice reaches the agent this time and not only the task", () => {
+    const spec = RPC_SPECS["coder.startRun"];
+    expect(spec.params.safeParse({ taskId: "w1", prompt: "go", model: MODEL.id }).success).toBe(true);
+    // Empty is not a model: "the agent's own default" is the *absence* of the field, because a run
+    // started with `model: ""` would record a model called nothing on `run.started`.
+    expect(spec.params.safeParse({ taskId: "w1", prompt: "go", model: "" }).success).toBe(false);
+    // And the task keeps its copy, so a run started after a restart uses the same model.
+    expect(
+      RPC_SPECS["coder.updateTask"].params.safeParse({ id: "w1", model: MODEL.id }).success,
+    ).toBe(true);
+  });
+});
+
 describe("the agent's mode, and a task's folder", () => {
   it("accepts an agent mode on a run, and refuses an unnamed one", () => {
     const spec = RPC_SPECS["coder.startRun"];
@@ -266,6 +338,11 @@ describe("the agent's mode, and a task's folder", () => {
       tier: "built-in",
       summary: "…",
       modes: [{ id: "plan", label: "Plan" }],
+      models: {
+        kind: "listed",
+        options: [{ id: "anthropic/x", label: "x", provider: "anthropic", model: "x" }],
+        source: "…",
+      },
       capabilities,
       available: true,
       evidence: "…",
@@ -278,6 +355,7 @@ describe("the agent's mode, and a task's folder", () => {
       streaming: true,
       images: false,
       agentMode: true,
+      model: true,
     };
 
     expect(spec.result.safeParse({ harnesses: [harness(full)] }).success).toBe(true);
@@ -288,6 +366,11 @@ describe("the agent's mode, and a task's folder", () => {
     expect(
       spec.result.safeParse({ harnesses: [harness({ ...full, agentMode: "yes" })] }).success,
     ).toBe(false);
+    // The model's flag is required for exactly the same reason, and it is a *separate* field rather
+    // than a reuse of `agentMode` because the two wires differ: `envoy-harness` takes its mode over ACP
+    // and its model through argv, so a daemon can honour one and not the other.
+    const { model: _alsoOmitted, ...withoutModel } = full;
+    expect(spec.result.safeParse({ harnesses: [harness(withoutModel)] }).success).toBe(false);
   });
 
   it("carries our wording for a mode only when we wrote it", () => {

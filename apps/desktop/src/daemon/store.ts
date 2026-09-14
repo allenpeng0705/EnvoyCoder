@@ -114,6 +114,14 @@ export interface UpdateTaskInput {
    * no longer valid — the handler, which can see the agent that replaced it — may say "drop it".
    */
   clearAgentMode?: boolean;
+  /**
+   * Forget the stored model, on the same terms as `clearAgentMode` and for the same reason: the model
+   * on a task is provider-qualified (`anthropic/claude-sonnet-4-6`) and one agent resolves it by
+   * looking it up in its own published list, so a value that was right for the agent the user replaced
+   * can be unresolvable for the new one. Absent means leave it alone; only the handler, which is the
+   * only place that can see both values, may say drop it.
+   */
+  clearModel?: boolean;
   extraArgs?: string;
 }
 
@@ -319,7 +327,14 @@ export class CoderStore {
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.pinned !== undefined ? { pinned: input.pinned } : {}),
       ...(input.harness !== undefined ? { harness: input.harness } : {}),
-      ...(input.model !== undefined ? { model: input.model } : {}),
+      // `clearModel` is the model's half of `clearAgentMode` below, and it exists for the same reason:
+      // `{model: undefined}` survives `JSON.stringify` as *nothing at all*, so a task could not be sent
+      // back to "the agent's own default" by a patch — only by an explicit flag the store acts on.
+      ...(input.model !== undefined
+        ? { model: input.model }
+        : input.clearModel === true
+          ? { model: undefined }
+          : {}),
       ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
       ...(input.agentModeId !== undefined
         ? { agentModeId: input.agentModeId }

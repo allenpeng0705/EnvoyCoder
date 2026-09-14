@@ -137,6 +137,41 @@ describe.skipIf(!dsh)("the ACP client, against the real dsh binary", () => {
     for (const update of updates) expect(typeof update.sessionUpdate).toBe("string");
   }, 360_000);
 
+  it("names the real agent's own session-config method, and gets its own refusal for a model it lacks", async () => {
+    // **Why this test is worth having even though it always fails to set a model.** The one thing about
+    // the model path that a fixture cannot prove is the *method name*: a client that sent
+    // `session/setConfigOption` — the same name in camelCase, which is what every source file uses —
+    // would look perfect against our fixture and be answered `method not found` by the real agent, on a
+    // user's machine, only when they first picked a model.
+    //
+    // So the assertion is about *which* refusal comes back. A deliberately impossible value is sent, and
+    // the agent must answer with its own configuration error (unknown model option / no model selection)
+    // rather than a transport-level "unsupported". Credential-independent on purpose: the refusal
+    // happens before any provider is called, so this holds on a machine with no keys at all — which is
+    // exactly why it can run in CI for everyone rather than behind `RUN_LIVE_ACP`.
+    const { cwd, dshHome } = await workdir();
+
+    let error: Error | undefined;
+    try {
+      const client = await AcpClient.start({
+        launch: { command: dsh as string, args: ["--profile", "acp"], cwd, env: { DSH_HOME: dshHome } },
+        requestTimeoutMs: 120_000,
+        // The encoding the catalogue builds: a JSON array of provider and model
+        // (`model-control.ts:235-237`). The provider here is one no catalog has, so the agent must say so.
+        sessionConfig: { configId: "model", value: JSON.stringify(["envoycoder", "no-such-model"]) },
+      });
+      cleanups.push(async () => client.stop());
+    } catch (caught) {
+      error = caught instanceof Error ? caught : new Error(String(caught));
+    }
+
+    expect(error, "the real agent accepted a model it cannot have").toBeDefined();
+    expect(error!.message).toMatch(/unknown model option|no model selection/i);
+    // The distinction that matters: not a protocol-level refusal, which is what a wrong method name or
+    // a wrong parameter shape would produce.
+    expect(error!.message).not.toMatch(/not supported|method not found|-32601/i);
+  }, 180_000);
+
   it("stops the process, so a cancelled run leaves nothing behind", async () => {
     const { cwd, dshHome } = await workdir();
     const client = await AcpClient.start({

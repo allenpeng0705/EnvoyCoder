@@ -53,6 +53,8 @@ import {
 } from "@envoycoder/protocol";
 import { type PlatformId, detectPlatform, findBinary, spawnTreeOptions } from "@envoycoder/platform";
 
+import { modelArgs, modelIdOf } from "./models.js";
+
 // `require` from inside an ES module, for the two filesystem questions this package asks (does the
 // peer checkout exist? which repository are we in?). Kept to `require` rather than a static import
 // so nothing in the catalogue pulls `node:fs` into a client bundle that only reads the catalogue.
@@ -125,6 +127,16 @@ export interface RunInput {
   prompt: string;
   /** Working directory, already absolute and platform-normalised. */
   cwd: string;
+  /**
+   * The model this run is on, in the **provider-qualified** form the task stores
+   * (`anthropic/claude-sonnet-4-6`).
+   *
+   * One vocabulary on the whole path — picker, task, run, argv — because the two agents that can
+   * actually be launched want opposite things from it and neither wants the other's shape:
+   * `envoy-harness` splits it into `--provider` and `--model`, while `deepseek-harness` re-encodes the
+   * pair as one opaque session-config value. Which of those happens is the entry's business
+   * (`./models.ts`), not the caller's; an entry that takes only a bare id asks `modelIdOf` for one.
+   */
   model?: string;
   extraArgs?: string;
   /** Continue a previous session when the CLI supports it. */
@@ -200,6 +212,13 @@ export interface HarnessDefinition {
    * a whole feature gets argued out of the product by a comment.)
    */
   modes: readonly AgentMode[];
+  /**
+   * The models this agent publishes are **not** here.
+   *
+   * They are in `./models.ts`, keyed by the same ids (`HARNESS_MODELS`, `HARNESS_MODEL_DELIVERY`),
+   * because a model list needs a provenance line of its own and a second fact this interface has no
+   * field for: how the chosen value gets to the agent. `harnessModels(id)` is the accessor.
+   */
   install?: { hint: string; url?: string };
   /** Where the facts came from. `unverified` means "confirm before relying on it". */
   evidence: string;
@@ -257,7 +276,17 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       // protocol that *has* `session/cancel` and `session/request_permission` is, and a spawned
       // agent has that too (`docs/envoycoder-harness.md` §2).
       binaries: ["envoy-harness", "envoy"],
-      buildArgs: ({ extraArgs }) => ["run", "--acp", ...splitArgs(extraArgs)],
+      // The model travels as **flags**, and both of them. Its `--acp` dispatch builds a live agent
+      // only when `--provider` is set and reads `--model` only in that branch
+      // (`../envoy-harness/packages/envoy-harness/src/cli/run/acp.ts:100-106`), so `--model` alone is
+      // parsed, dropped and then reported to the user as the model they chose. `modelArgs` emits the
+      // pair or nothing at all, and throws rather than dropping one — see `./models.ts`.
+      buildArgs: ({ extraArgs, model }) => [
+        "run",
+        "--acp",
+        ...modelArgs(model, "envoy-harness"),
+        ...splitArgs(extraArgs),
+      ],
       stream: "jsonl",
       transport: "acp",
       resumeArgs: () => [],
@@ -267,8 +296,13 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       devCheckout: {
         entry: () => resolvePeerEntry("envoy-harness", "packages/envoy-harness/dist/cli/acp-stdio.js"),
         // The entry is already the ACP server: `src/cli/acp-stdio.ts:13-14` runs with `--acp` itself
-        // and filters a duplicate, so only the user's own extra arguments travel.
-        args: ({ extraArgs }) => splitArgs(extraArgs),
+        // and filters a duplicate, so only the user's own extra arguments travel. The model flags are
+        // the *installed* argv's, because the checkout entry declares `--acp` and nothing else: the
+        // `--provider`/`--model` flags it needs are read from the same argv parser.
+        args: ({ extraArgs, model }) => [
+          ...modelArgs(model, "envoy-harness"),
+          ...splitArgs(extraArgs),
+        ],
       },
     },
     capabilities: {
@@ -374,7 +408,10 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
         "--output-format",
         "stream-json",
         "--verbose",
-        ...(model ? ["--model", model] : []),
+        // The bare id, not the provider-qualified value the task stores: this CLI's flag is unverified
+        // and it is not an agent we can launch, so the user's own model name travels unchanged rather
+        // than being reshaped into something we have not checked it accepts (`./models.ts`, `modelIdOf`).
+        ...(model ? ["--model", modelIdOf(model)] : []),
         ...splitArgs(extraArgs),
       ],
       stream: "jsonl",
@@ -417,7 +454,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
         "exec",
         "--cd",
         cwd,
-        ...(model ? ["--model", model] : []),
+        ...(model ? ["--model", modelIdOf(model)] : []),
         "--json",
         prompt,
         ...splitArgs(extraArgs),
@@ -490,7 +527,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       binaries: ["opencode"],
       buildArgs: ({ prompt, model, extraArgs }) => [
         "run",
-        ...(model ? ["--model", model] : []),
+        ...(model ? ["--model", modelIdOf(model)] : []),
         prompt,
         ...splitArgs(extraArgs),
       ],
@@ -526,7 +563,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       buildArgs: ({ prompt, model, extraArgs }) => [
         "-p",
         prompt,
-        ...(model ? ["--model", model] : []),
+        ...(model ? ["--model", modelIdOf(model)] : []),
         ...splitArgs(extraArgs),
       ],
       stream: "jsonl",
@@ -916,3 +953,6 @@ export function splitArgs(raw: string | undefined): string[] {
 }
 
 export * from "./acp-catalog.js";
+// The model facts live in their own module — see its head for why a per-agent model list, its
+// provenance and the way the value travels are one subject rather than three lines per entry.
+export * from "./models.js";

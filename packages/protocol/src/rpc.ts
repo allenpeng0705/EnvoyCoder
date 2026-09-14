@@ -554,6 +554,91 @@ export const CoderPeerSchema = z
   })
   .strict();
 
+/**
+ * One model a task can be run on.
+ *
+ * `id` is the value that travels: it is what the picker shows as chosen, what `coder.updateTask.model`
+ * stores, and what the run is started with. It is **provider-qualified**, which is the shape
+ * `TaskDefaults.model` has documented since the first release (`anthropic/claude-sonnet-4.5`,
+ * `deepseek/deepseek-v4`).
+ *
+ * `provider` and `model` are that same choice taken apart, and they are on the wire rather than left
+ * for the daemon to recover by splitting the id, because **splitting is not safe**: an Ollama tag or a
+ * Hugging Face repository id can itself contain a slash (`meta-llama/Llama-3-70b`), and a naive
+ * `split("/")` would then hand the agent a provider called `meta-llama`. Both agents here want the two
+ * fields separately anyway — `envoy-harness` as `--provider` / `--model`, `deepseek-harness` inside one
+ * opaque session-config value.
+ */
+export interface AgentModel {
+  /** Provider-qualified, and the value stored on the task. */
+  id: string;
+  label: string;
+  description?: string;
+  provider: string;
+  model: string;
+}
+
+export const AgentModelSchema = z
+  .object({
+    id: z.string().min(1),
+    label: z.string().min(1),
+    description: z.string().optional(),
+    provider: z.string().min(1),
+    model: z.string().min(1),
+  })
+  .strict();
+
+/**
+ * Can a model be chosen for this agent at all, and where does the list come from?
+ *
+ * The three values are three different facts, and the type exists so that **an empty list can never be
+ * read as "this agent takes no model"** — the one mistake that would turn a supported feature into a
+ * disabled control:
+ *
+ *   * `"listed"` — the agent publishes the models it accepts, and `options` is that list. Non-empty by
+ *     construction (see the refinement on the schema below), because a list we can show is the only
+ *     reason to say `"listed"`.
+ *   * `"free-text"` — the agent accepts a model but publishes **no** list EnvoyCoder can read before a
+ *     session exists. `options` is empty **and the control is still usable**: it takes what the user
+ *     types. This is the state `deepseek-harness` is in, and reporting it as `"none"` would be a claim
+ *     about somebody else's product that we are in no position to make.
+ *   * `"none"` — the agent takes no model at all. Only this value means "there is nothing to set".
+ *
+ * `kind` and `options` are one fact stated twice on purpose: a client that only reads `options` gets
+ * "we have nothing to show", and `kind` is what says whether that is because the agent has none or
+ * because we cannot enumerate them. The schema rejects the two disagreeing.
+ */
+export interface AgentModels {
+  kind: "listed" | "free-text" | "none";
+  /** Non-empty if and only if `kind` is `"listed"`. */
+  options: readonly AgentModel[];
+  /**
+   * Where this answer came from, or why there is none — a repository, a file and a line range.
+   *
+   * Carried on the wire for the same reason `HarnessSummary.evidence` is, and **never rendered**: it
+   * cites somebody else's source tree, which is what a maintainer needs and a user never does. The
+   * user-facing half is `HarnessSummary.capabilities.model` plus the reason the composer words.
+   */
+  source: string;
+}
+
+export const AgentModelsSchema = z
+  .object({
+    kind: z.enum(["listed", "free-text", "none"]),
+    options: z.array(AgentModelSchema).readonly(),
+    source: z.string().min(1),
+  })
+  .strict()
+  .refine((value) => (value.kind === "listed") === (value.options.length > 0), {
+    // The rule the whole feature turns on, enforced rather than trusted: `"listed"` with no options
+    // would be a picker with nothing in it, and options with another kind would be a list nobody
+    // promised. Either way the composer would have to guess, and guessing is how a control ends up
+    // offering a model that will never reach the agent.
+    message:
+      'models.kind and models.options must agree: "listed" means options is non-empty, and any other ' +
+      "kind means the list is empty (use \"free-text\" when the agent accepts a model but publishes no list).",
+  });
+
 /** One agent, as a *picker* needs it. Everything the UI promises is gated on `capabilities`. */
 export interface HarnessSummary {
   id: HarnessId;
@@ -562,6 +647,14 @@ export interface HarnessSummary {
   summary: string;
   /** The agent's own modes. Empty is a fact ("it declares none here"), not a missing answer. */
   modes: readonly AgentMode[];
+  /**
+   * Which models this agent publishes, and how a choice reaches it.
+   *
+   * Required rather than optional, on the same reasoning as `capabilities.agentMode`: "the field is
+   * absent" must never be readable as "this agent has no models", because those two lead to opposite
+   * controls — free text, and a disabled pill. See `AgentModels` for what the empty list means.
+   */
+  models: AgentModels;
   capabilities: {
     resume: boolean;
     cancel: boolean;
@@ -577,6 +670,16 @@ export interface HarnessSummary {
      * that would be dropped on the floor.
      */
     agentMode: boolean;
+    /**
+     * Can the daemon make a chosen model the one this agent runs on?
+     *
+     * Separate from `models` for exactly the reason `agentMode` is separate from `modes`, and it is
+     * the flag the composer's model control is enabled on: an agent can publish a list (or accept free
+     * text) that this build still has no wired-up way to deliver — the catalogue entries for
+     * third-party CLIs are precisely that case. Required, so "we did not ask" is not an answer here:
+     * enabling the control is a promise that the choice reaches the agent.
+     */
+    model: boolean;
   };
   /** Whether the binary exists right now. `unknown` is honest for a harness we have not probed. */
   available: boolean | "unknown";
@@ -605,6 +708,13 @@ export const HarnessSummarySchema = z
      * we list what the catalogue knows and leave the list empty where it is genuinely dynamic.
      */
     modes: z.array(AgentModeSchema).readonly(),
+    /**
+     * The models this agent publishes, and what an empty list means.
+     *
+     * Required, and shaped so that the *reason* travels with the list: a client that sees no options
+     * still has to know whether that is the agent's answer or ours, which is what `kind` carries.
+     */
+    models: AgentModelsSchema,
     capabilities: z
       .object({
         resume: z.boolean(),
@@ -622,6 +732,14 @@ export const HarnessSummarySchema = z
          * choice reaches the agent.
          */
         agentMode: z.boolean(),
+        /**
+         * Whether the daemon can put this agent on a model it publishes or accepts.
+         *
+         * Separate from `models` on the same terms as `agentMode`, and separate from `agentMode`
+         * because the two are genuinely different wires: `envoy-harness` takes a mode through ACP and a
+         * model through **argv**, so a daemon can honour one and not the other.
+         */
+        model: z.boolean(),
       })
       .strict(),
     available: z.union([z.boolean(), z.literal("unknown")]),
@@ -852,6 +970,20 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
          * exists to prevent.
          */
         agentModeId: z.string().min(1).optional(),
+        /**
+         * The model for this run, provider-qualified (`AgentModel.id` from `HarnessSummary.models`).
+         *
+         * Sent — like `agentModeId` — as an **override for this run**, because a model the user picks in
+         * the composer is applied to the run they are about to start. It is stored on the task as well
+         * (`coder.updateTask.model`), so a run started after a restart uses the same model without the
+         * window having to repeat it, and the daemon falls back to the task when this is absent.
+         *
+         * The daemon **refuses** a model it cannot take apart or that the harness does not publish,
+         * rather than starting the agent on its own default: `envoy-harness` parses `--model` and then
+         * ignores it unless `--provider` accompanies it, so a dropped model would leave an agent
+         * answering on one model while the transcript named another.
+         */
+        model: z.string().min(1).optional(),
       })
       .strict(),
     result: z.object({ run: AgentRunSchema }).strict(),

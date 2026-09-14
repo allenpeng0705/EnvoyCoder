@@ -313,9 +313,10 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               events={active.runId ? (state.runs[active.runId]?.events ?? []) : []}
               runLive={active.runId ? state.runs[active.runId]?.run.endedAt === undefined : false}
               harnesses={state.harnesses}
-              onStart={async (prompt, agentModeId) => {
+              onStart={async (prompt, agentModeId, model) => {
                 const result = await props.actions.startRun(active.id, prompt, {
                   ...(agentModeId !== undefined ? { agentModeId } : {}),
+                  ...(model !== undefined ? { model } : {}),
                 });
                 if (!result.ok) {
                   setNotice(result);
@@ -334,6 +335,14 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               // decorative. The run reads the task's copy, so the two can never disagree.
               onChangeMode={async (agentModeId) => {
                 const result = await props.actions.updateTask({ id: active.id, agentModeId });
+                if (!result.ok) setNotice(result);
+              }}
+              // The model is saved on the task for the same reason the mode is: it is part of what this
+              // task *is*, and a run started after a restart must use the same model without the window
+              // having to repeat it. `""` travels as-is — it is the control's "the agent's own default",
+              // and the daemon is what decides to drop the stored model rather than store an empty one.
+              onChangeModel={async (model) => {
+                const result = await props.actions.updateTask({ id: active.id, model });
                 if (!result.ok) setNotice(result);
               }}
               // A refusal here is worth showing: "that is not a folder on this machine" is the one

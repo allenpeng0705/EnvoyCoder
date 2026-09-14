@@ -110,7 +110,11 @@ describe("invocation", () => {
       "stream-json",
       "--verbose",
       "--model",
-      "anthropic/claude-sonnet-4.5",
+      // **The bare id, not the provider-qualified value the task stores.** `claude --model` takes a
+      // model name, not a route, so the provider half is ours to hold and not this CLI's to receive —
+      // and this entry's flag surface is `unverified`, so the user's own name is passed through rather
+      // than reshaped into something we have not checked it accepts.
+      "claude-sonnet-4.5",
     ]);
     // Children (build tools, language servers) must die with the agent.
     expect(invocation.spawn.detached).toBe(true);
@@ -131,6 +135,59 @@ describe("invocation", () => {
     // The prompt travels over the protocol, never in argv: an argv prompt is visible to every other
     // process on the machine, and ACP has a field for it.
     expect(invocation.args).not.toContain("x");
+  });
+
+  it("puts the chosen model into the built-in harness's argv, as the pair its dispatch reads", () => {
+    // **The link that a unit test of `modelArgs` cannot cover**: that the entry's `buildArgs` *calls*
+    // it. Both the installed CLI's argv and the peer-checkout entry's run through here, and they are
+    // different code paths (`buildHarnessInvocation` vs `resolveHarnessCommand`), so both are asserted —
+    // the model must reach the agent whichever way it was launched.
+    const withModel = { prompt: "x", cwd: "/repo", model: "anthropic/claude-sonnet-4-6" };
+
+    const installed = buildHarnessInvocation("envoy-harness", withModel, {
+      platform: "linux",
+      binaryPath: "/usr/local/bin/envoy-harness",
+    });
+    expect(installed.args).toEqual([
+      "run",
+      "--acp",
+      "--provider",
+      "anthropic",
+      "--model",
+      "claude-sonnet-4-6",
+    ]);
+
+    const checkout = resolveHarnessCommand(
+      "envoy-harness",
+      { id: "envoy-harness", available: true, binaryPath: "/peers/envoy-harness/dist/cli/acp-stdio.js", via: "node-script" },
+      withModel,
+    );
+    // The entry supplies its own `--acp` (it is written for it), so the flags travel without it.
+    expect(checkout.args).toEqual([
+      "/peers/envoy-harness/dist/cli/acp-stdio.js",
+      "--provider",
+      "anthropic",
+      "--model",
+      "claude-sonnet-4-6",
+    ]);
+
+    // No model is no flags — **not** an empty `--provider`, which the harness would read as a provider
+    // named "" and then fail on before it ever started the agent.
+    expect(
+      buildHarnessInvocation("envoy-harness", { prompt: "x", cwd: "/repo" }, {
+        platform: "linux",
+        binaryPath: "/usr/local/bin/envoy-harness",
+      }).args,
+    ).toEqual(["run", "--acp"]);
+
+    // And a model we cannot turn into a pair throws here rather than emitting a bare `--model`, which
+    // the harness parses and then ignores — a run on a model the user did not choose.
+    expect(() =>
+      buildHarnessInvocation("envoy-harness", { prompt: "x", cwd: "/repo", model: "gpt-4o" }, {
+        platform: "linux",
+        binaryPath: "/usr/local/bin/envoy-harness",
+      }),
+    ).toThrow(/does not publish a model/);
   });
 
   it("has no in-process harness left, so the argv guard is currently unreachable", () => {

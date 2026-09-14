@@ -22,7 +22,7 @@ import { useEffect, useRef, useState } from "react";
 import type { HarnessId, HarnessSummary, Project, RunEvent, Task } from "@envoycoder/protocol";
 
 import { hasShellPicker, pickFolder } from "../client/folder-picker.js";
-import { composerControls, modeOffReason } from "../composer/controls.js";
+import { composerControls, modeOffReason, modelOffReason } from "../composer/controls.js";
 import { useT } from "../i18n/context.js";
 import { localize, localizeText, statusKey } from "../i18n/notice.js";
 import { buildTranscript, type TranscriptEntry } from "../state/transcript.js";
@@ -41,14 +41,20 @@ export interface TaskPaneProps {
   /**
    * Start this task's run with the first message.
    *
-   * `agentModeId` arrives **only when there is one to send** — when the agent can be put into a mode
-   * and one is chosen. The daemon reads the task's stored mode when this is absent, so the two say the
-   * same thing; carrying it here as well is what keeps the picker's *displayed* value and the value the
-   * run is started with identical even if the `updateTask` that saved the choice is still in flight.
+   * `agentModeId` and `model` arrive **only when there is one to send** — when the agent can be put
+   * into a mode or onto a model and one is chosen. The daemon reads the task's stored values when an
+   * argument is absent, so the two say the same thing; carrying them here as well is what keeps the
+   * control's *displayed* value and the value the run is started with identical even if the
+   * `updateTask` that saved the choice is still in flight.
    */
-  onStart: (prompt: string, agentModeId?: string) => void | Promise<void>;
+  onStart: (prompt: string, agentModeId?: string, model?: string) => void | Promise<void>;
   /** Remember the agent's mode for this task, so the next run starts the way the user left it. */
   onChangeMode?: (agentModeId: string) => void | Promise<void>;
+  /**
+   * Remember this task's model. `""` clears it, which is a real choice — the agent's own default —
+   * and the only way to undo a model without replacing it with another one.
+   */
+  onChangeModel?: (model: string) => void | Promise<void>;
   /** Move this task to another folder. Applies to the next run — the agent keeps the one it started in. */
   onChangeFolder?: (path: string) => void | Promise<void>;
   /**
@@ -85,6 +91,8 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   const [mode, setMode] = useState<"queue" | "steer">("queue");
   /** A mode the user has just chosen, before the task's saved copy comes back. */
   const [pickedMode, setPickedMode] = useState<string | undefined>(undefined);
+  /** A model the user has just chosen, for the same reason and with the same lifetime. */
+  const [pickedModel, setPickedModel] = useState<string | undefined>(undefined);
   /** Why the folder chooser would not open, after a click that tried. */
   const [pickerProblem, setPickerProblem] = useState<string | undefined>(undefined);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -99,18 +107,38 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   // the previous one must not appear to be in force here.
   useEffect(() => {
     setPickedMode(undefined);
+    setPickedModel(undefined);
     setPickerProblem(undefined);
   }, [task.id]);
 
-  /* ── the two controls above the field: what they offer is decided in `composer/controls.ts` ── */
+  /* ── the controls above the field: what they offer is decided in `composer/controls.ts` ── */
   const summary = props.harnesses?.find((harness) => harness.id === task.harness);
   const agent = agentFor(task.harness, summary);
-  const controls = composerControls(agent, { running, approvalPending: approvalOpen });
-  // What the picker shows: the user's just-made choice, else what the task remembers, else the agent's
+
+  /**
+   * Both controls, in one call: they branch on the same two facts (what the agent publishes, and
+   * whether the daemon can deliver it), and computing them separately is how the two ends come to
+   * disagree about the agent. The task's own model is passed in so `model.selected` is the value the
+   * control would show with nothing clicked.
+   */
+  const controls = composerControls(agent, { running, approvalPending: approvalOpen }, {
+    selectedModelId: task.model,
+  });
+
+  // What each picker shows: the user's just-made choice, else what the task remembers, else the agent's
   // own default. In that order, so a click is never overwritten by a request still in flight.
   const selectedModeId = pickedMode ?? task.agentModeId ?? controls.mode.selected ?? undefined;
   const modeEnabled = controls.mode.enabled;
   const modeOff = modeOffReason(controls.mode, { known: summary !== undefined, agent: agent.label });
+  // The model's half of the same rule, and it reads the *logic's* answer rather than the task again:
+  // `task.model` is handed to `composerControls` above, so "what the control shows" is decided in one
+  // place instead of being recomputed here where the two could drift. `undefined` — nothing stored and
+  // nothing picked — is the agent's own default, which is a state rather than a missing value.
+  const selectedModelId = pickedModel ?? controls.model.selected ?? undefined;
+  const modelOff = modelOffReason(controls.model, {
+    known: summary !== undefined,
+    agent: agent.label,
+  });
 
   // `hasShellPicker()` is synchronous on purpose (see `folder-picker.ts`): a control that decides after
   // an `await` looks like a dead click, and a disabled one can say why in the same tick as the render.
@@ -148,9 +176,13 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     if (running) void props.onSend(value, mode);
     // The mode travels only when the picker is on and something is chosen. Passing it always would
     // mean inventing an "undefined mode" for the agents that have none, and the daemon already reads
-    // the task's stored mode when the argument is absent.
-    else if (modeEnabled && selectedModeId !== undefined) void props.onStart(value, selectedModeId);
-    else void props.onStart(value);
+    // the task's stored mode when the argument is absent. The model travels on identical terms, and
+    // `""` — the control's "the agent's own default" — is not a model to pass, so it is dropped here
+    // and the daemon reads the task, which the `updateTask` that saved the clearing has just emptied.
+    else {
+      const chosenModel = selectedModelId !== undefined && selectedModelId !== "" ? selectedModelId : undefined;
+      void props.onStart(value, modeEnabled ? selectedModeId : undefined, chosenModel);
+    }
     setText("");
   };
 
@@ -253,6 +285,18 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
             onChooseMode={(chosen) => {
               setPickedMode(chosen);
               void props.onChangeMode?.(chosen);
+            }}
+            modelKind={controls.model.kind}
+            models={controls.model.options}
+            selectedModelId={selectedModelId}
+            modelOff={modelOff}
+            agentLabel={agent.label}
+            onChooseModel={(chosen) => {
+              // `""` is the agent's own default, and it is kept as the empty string here rather than
+              // collapsed to `undefined`: the pane must show the click immediately, and `undefined`
+              // would fall through to the task's stored model — the very value the user just cleared.
+              setPickedModel(chosen);
+              void props.onChangeModel?.(chosen);
             }}
             running={running}
           />
@@ -501,6 +545,10 @@ function agentFor(
     id: harness,
     label: summary?.label ?? labelForHarness(harness),
     modes: summary?.modes ?? [],
+    // Passed through whole, `undefined` included: "nobody has told us what it publishes" is a third
+    // state with its own sentence, and defaulting it to `{ kind: "none", options: [] }` would turn our
+    // ignorance into a claim about the agent.
+    models: summary?.models,
     capabilities: {
       resume: summary?.capabilities.resume ?? false,
       cancel: summary?.capabilities.cancel ?? false,
@@ -513,6 +561,9 @@ function agentFor(
     // **The wire is the only thing that may turn the picker on.** No summary, or a summary that says the
     // daemon cannot set this agent's mode, both leave it off with the reason shown.
     modesApplicable: summary?.capabilities.agentMode === true,
+    // The same rule for the model, on its own flag: an agent can publish a list this build still has no
+    // way to deliver to, so "it has models" is not the question — "can we apply one" is.
+    modelApplicable: summary?.capabilities.model === true,
   };
 }
 

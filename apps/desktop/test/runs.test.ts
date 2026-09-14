@@ -21,7 +21,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { RunEvent } from "@envoycoder/protocol";
+import type { HarnessId, RunEvent } from "@envoycoder/protocol";
 import { coderErrorCode, coderErrorMessage, coderErrorRef } from "@envoycoder/protocol";
 import { coderPaths } from "@envoycoder/host-bridge";
 
@@ -58,11 +58,12 @@ afterEach(async () => {
 /**
  * A run manager over a throwaway home, driving the fixture.
  *
- * `harness` matters to the mode tests: the catalogue is what decides whether an agent can be put into
- * a mode at all, so a test about a refusal needs a task whose agent genuinely has none.
+ * `harness` matters to the mode and model tests: the catalogue is what decides whether an agent can be
+ * put into a mode, or onto a model, at all — so a test about a refusal needs a task whose agent
+ * genuinely has none.
  */
 async function bench(
-  options: { harness?: "envoy-harness" | "deepseek-harness"; agentEnv?: Record<string, string> } = {},
+  options: { harness?: HarnessId; agentEnv?: Record<string, string> } = {},
 ): Promise<Bench> {
   const home = await mkdtemp(join(tmpdir(), "envoycoder-m2-"));
   const paths = coderPaths(home);
@@ -494,5 +495,132 @@ describe("the agent's own mode", () => {
       // …and the two sentences are the same sentence, with the same values in the same places.
       expect(coderErrorMessage(wire ?? ""), key).toBe(render(en[key], values));
     }
+  });
+});
+
+/**
+ * The model a run is started on.
+ *
+ * ## What only this layer can prove
+ *
+ * The two agents that can be launched take a model in two **different** ways, and the daemon decides
+ * which — not the client, and not the caller. So the claim worth testing here is precisely that
+ * distinction, and it takes both halves:
+ *
+ *   * for `deepseek-harness` the value is set on the session the agent just opened, and the agent's own
+ *     report of its configuration is the only evidence that it arrived (`model-me`);
+ *   * for `envoy-harness` the value travels in **argv** and `session/set_config_option` is never called —
+ *     so the same probe must come back empty, or the two deliveries have both fired.
+ *
+ * `agent-catalog/test/models.test.ts` pins the flags and the encoding; `daemon-rpc.test.ts` runs the
+ * whole path over a socket. What is here is the daemon's own decision, with a scripted agent that
+ * answers, so a wrong decision fails as a refusal from the *agent* rather than as a passing assertion
+ * about an object.
+ */
+describe("the model a run is started on", () => {
+  it("is set on the session for the agent that takes one there, and the agent reports it back", async () => {
+    const b = await bench({ harness: "deepseek-harness" });
+    await b.manager.start({ taskId: b.taskId, prompt: "model-me", model: "deepseek/deepseek-chat" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    // The **opaque** value, exactly as the agent's own protocol wants it: a JSON array of the provider
+    // and the model (`model-control.ts:235-237`). Asserting the reported value rather than the request
+    // is what stops a client that sent the right ids under the wrong encoding from passing.
+    expect(said(b.events, 'model: ["deepseek","deepseek-chat"]')).toBe(true);
+    // And the run records the model the task asked for, in the same provider-qualified form the task
+    // stores — so the window, the transcript and the agent all name one string.
+    const started = kinds(b.events, "run.started")[0];
+    expect(started && started.kind === "run.started" ? started.model : undefined).toBe(
+      "deepseek/deepseek-chat",
+    );
+  });
+
+  it("is taken from the task when the caller does not repeat it, so a choice survives a restart", async () => {
+    const b = await bench({ harness: "deepseek-harness" });
+    await b.store.updateTask({ id: b.taskId, model: "deepseek/deepseek-chat" });
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "model-me" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    expect(run.model).toBe("deepseek/deepseek-chat");
+    expect(said(b.events, 'model: ["deepseek","deepseek-chat"]')).toBe(true);
+  });
+
+  it("leaves the session's configuration alone for the agent that reads it from argv", async () => {
+    // The negative half, and the one that would catch a daemon that "helpfully" set both. For
+    // `envoy-harness` the model is a pair of launch flags
+    // (`../envoy-harness/packages/envoy-harness/src/cli/run/acp.ts:100-106`); calling
+    // `session/set_config_option` at it as well would be a second, undocumented write against a
+    // protocol that has no such method in its own dispatch, and the fixture reports the empty state
+    // rather than accepting it silently.
+    const b = await bench({ harness: "envoy-harness" });
+    await b.manager.start({ taskId: b.taskId, prompt: "model-me", model: "anthropic/claude-sonnet-4-6" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    expect(said(b.events, "model: (none)")).toBe(true);
+    // The run still knows which model it is on — that record is ours, not the agent's.
+    const started = kinds(b.events, "run.started")[0];
+    expect(started && started.kind === "run.started" ? started.model : undefined).toBe(
+      "anthropic/claude-sonnet-4-6",
+    );
+  });
+
+  it("refuses a model this agent does not publish, rather than starting on its own default", async () => {
+    // **The failure that is invisible afterwards.** `envoy-harness` parses `--model` and then ignores
+    // it unless `--provider` came too, and for `deepseek-harness` a wrong id would be refused later by
+    // the agent — but a daemon that simply *dropped* a model it could not resolve would start an agent
+    // on its own default while the transcript, the task and the window all named the user's choice.
+    // So the refusal happens here, before a process exists, and it is keyed for a translated window.
+    const b = await bench({ harness: "envoy-harness" });
+
+    const wire = await b.manager
+      .start({ taskId: b.taskId, prompt: "hi", model: "meta-llama/Llama-3-70b" })
+      .then(() => undefined, (error: unknown) => (error as Error).message);
+
+    const ref = coderErrorRef(wire ?? "");
+    expect(ref?.key).toBe("error.modelUnknown");
+    expect(ref?.values).toEqual({ harness: "Envoy Harness", model: "meta-llama/Llama-3-70b" });
+    expect(isMessageKey(ref?.key ?? "")).toBe(true);
+    expect(coderErrorMessage(wire ?? "")).toContain("does not publish a model");
+    // Nothing was spawned and nothing was recorded: a refused run leaves no transcript to mislead
+    // anybody reading the task afterwards.
+    expect(kinds(b.events, "run.started")).toEqual([]);
+    expect(b.events).toEqual([]);
+  });
+
+  it("refuses a model the agent takes but cannot be told, when the task's own default is not needed", async () => {
+    // The other refusal code, and a different sentence: "this agent has no model" is not "we do not
+    // know that model". `copilot` records no model flag at all.
+    const b = await bench({ harness: "copilot" });
+    const wire = await b.manager
+      .start({ taskId: b.taskId, prompt: "hi", model: "openai/gpt-4o" })
+      .then(() => undefined, (error: unknown) => (error as Error).message);
+
+    expect(coderErrorRef(wire ?? "")?.key).toBe("error.modelUnsupported");
+    expect(coderErrorMessage(wire ?? "")).toContain("does not take a model");
+    expect(b.events).toEqual([]);
+  });
+
+  it("never sends a half-written model, so a free-text field cannot strand a run", async () => {
+    // The `notProviderQualified` refusal, which is the one a user reaches by typing: free text is the
+    // one control whose value we compose, and these agents need a provider to build a route at all.
+    const b = await bench({ harness: "deepseek-harness" });
+    const wire = await b.manager
+      .start({ taskId: b.taskId, prompt: "hi", model: "deepseek-chat" })
+      .then(() => undefined, (error: unknown) => (error as Error).message);
+
+    expect(coderErrorRef(wire ?? "")?.key).toBe("error.modelNotProviderQualified");
+    expect(b.events).toEqual([]);
+  });
+
+  it("is never sent when the task has none, so the agent's own default stands", async () => {
+    const b = await bench({ harness: "deepseek-harness" });
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "model-me" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    expect(run.model).toBeUndefined();
+    // Not "the first model we know about", and not an empty string: an agent whose model nobody chose
+    // runs on whatever it is configured with, and a control plane that named a default it did not
+    // choose would be describing somebody else's decision as its own.
+    expect(said(b.events, "model: (none)")).toBe(true);
   });
 });

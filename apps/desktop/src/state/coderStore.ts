@@ -444,7 +444,7 @@ export class CoderStore {
   async startRun(
     taskId: string,
     prompt: string,
-    options: { resume?: boolean; agentModeId?: string } = {},
+    options: { resume?: boolean; agentModeId?: string; model?: string } = {},
   ): Promise<{ ok: true; run: AgentRun } | Refusal> {
     const result = await this.mutate(
       "coder.startRun",
@@ -455,6 +455,10 @@ export class CoderStore {
         // Absent rather than `undefined` when there is no mode: the daemon reads the task's stored one
         // in that case, and an explicit `null` would be a third meaning nobody asked for.
         ...(options.agentModeId !== undefined ? { agentModeId: options.agentModeId } : {}),
+        // The same rule for the model, and one extra care: `""` is the control's "the agent's own
+        // default" and is **not** sent, because the daemon's wire schema requires a non-empty model
+        // (`z.string().min(1)`) — a value that means "nothing" must not travel as a model.
+        ...(options.model !== undefined && options.model !== "" ? { model: options.model } : {}),
       },
       (answer) => ({ ok: true as const, run: (answer as { run: AgentRun }).run }),
     );
@@ -518,7 +522,19 @@ export class CoderStore {
   }
 
   async updateTask(
-    input: { id: string; title?: string; pinned?: boolean; cwd?: string; agentModeId?: string },
+    input: {
+      id: string;
+      title?: string;
+      pinned?: boolean;
+      cwd?: string;
+      agentModeId?: string;
+      /**
+       * The model for this task's next run, provider-qualified — or `""` for **the agent's own
+       * default**, which is a real choice and the only way to undo a model without replacing it.
+       * The daemon turns `""` into "drop the stored model" rather than storing an empty string.
+       */
+      model?: string;
+    },
   ): Promise<{ ok: true; task: Task } | Refusal> {
     return this.mutate("coder.updateTask", input, (result) => ({
       ok: true,

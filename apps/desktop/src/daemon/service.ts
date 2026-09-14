@@ -36,7 +36,14 @@ import {
   coderError,
   parseRpcParams,
 } from "@envoycoder/protocol";
-import { ALL_HARNESSES, harnessDefinition, probeHarness } from "@envoycoder/agent-catalog";
+import {
+  ALL_HARNESSES,
+  canApplyModel,
+  harnessDefinition,
+  harnessModels,
+  probeHarness,
+  resolveModelChoice,
+} from "@envoycoder/agent-catalog";
 
 import type { CoderPaths } from "@envoycoder/host-bridge";
 
@@ -224,6 +231,19 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
       }
 
       /**
+       * `""` is how a client says **"the agent's own default"**, and it is not a model called nothing.
+       *
+       * The control's empty value has to mean something on this wire: a task with no model runs on
+       * whatever the agent defaults to, and clearing a choice is a real thing a user does — the only
+       * way to undo a model without replacing it with another. `""` is also the one string that can
+       * never be a model id, so it is unambiguous. It becomes `clearModel`, which drops the key, rather
+       * than a stored empty string that would show up as a model chip on the task header.
+       */
+      let model = input.model;
+      let clearModel = input.model === "";
+      if (model === "") model = undefined;
+
+      /**
        * **A stored mode the new harness cannot honour is dropped here, not left to fail later.**
        *
        * Modes are per agent — `envoy-harness` takes `default | plan | review`, `deepseek-harness`
@@ -243,11 +263,35 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         }
       }
 
+      /**
+       * **A stored model the new agent cannot resolve is dropped here too**, for the same reason and
+       * with the same cost: switching the agent can strand a value the task remembers. The two cases
+       * are genuinely different values, though — `deepseek-harness` takes free text, so a task can
+       * carry a bare `sonnet` that `envoy-harness` has no provider for, and every later run of that
+       * task would then refuse with a sentence about a model the user chose for a *different* agent.
+       * Clearing it means the next run starts on the agent's own default, which is what "no model
+       * chosen" already means.
+       *
+       * Only checked when the harness was given and no model came with it: a model the *current* agent
+       * cannot resolve is left alone, because there it is the run's job to refuse loudly rather than
+       * for a stray edit of the title to quietly erase a choice.
+       */
+      if (input.harness !== undefined && model === undefined) {
+        const kept = deps.store.findTask(input.id)?.model;
+        if (kept !== undefined && kept !== "" && !resolveModelChoice(input.harness, kept).ok) {
+          clearModel = true;
+        }
+      }
+
       const task = await deps.store.updateTask({
         ...input,
         ...(cwd !== undefined ? { cwd } : {}),
+        // Spread *after* `...input` on purpose: an empty `model` on the wire means "clear", so the
+        // empty string must not survive into the patch and become a stored model called nothing.
+        model,
         ...(agentModeId !== undefined ? { agentModeId } : {}),
         ...(clearAgentMode ? { clearAgentMode: true } : {}),
+        ...(clearModel ? { clearModel: true } : {}),
       });
       if (!task) throw notFound("task", input.id);
       return { task };
@@ -268,6 +312,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         mode?: "queue" | "steer";
         resume?: boolean;
         agentModeId?: string;
+        model?: string;
       };
       const runs = requireRuns(deps);
       const run = await runs.start({
@@ -278,6 +323,9 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         // this agent cannot accept. Checking here too would be a second copy of the same rule, and the
         // copy that goes stale is always the one further from the data.
         ...(input.agentModeId !== undefined ? { agentModeId: input.agentModeId } : {}),
+        // Same division for the model: `RunManager` resolves it against the catalogue and refuses what
+        // the agent cannot take, before any process exists.
+        ...(input.model !== undefined ? { model: input.model } : {}),
       });
       return { run };
     },
@@ -497,6 +545,11 @@ function summarize(
     // (This said the real answer "arrives in the `session/new` response" — it does not, for either
     // harness. See the citations on `agentMode` in `@envoycoder/agent-catalog`.)
     modes: definition.modes,
+    // The models this agent publishes — **and what an empty list means**, which is the half a list
+    // alone cannot carry. `deepseek-harness` publishes none we can read before a run exists and still
+    // takes one, so its `kind` is `"free-text"`; rendering that as "no model" would be a claim about
+    // somebody else's product. The list and its citations live in `@envoycoder/agent-catalog`.
+    models: harnessModels(id),
     capabilities: {
       resume: definition.capabilities.resume,
       cancel: definition.capabilities.cancel,
@@ -508,6 +561,11 @@ function summarize(
       // own assumption. `modes` alone is not enough to decide: an agent can declare modes it has no
       // way to be *set* into, and a picker that offered one would be a control that does nothing.
       agentMode: definition.capabilities.agentMode,
+      // The same distinction for the model, and a different wire: whether this daemon can make a chosen
+      // model the one the agent runs on. `envoy-harness` reads it from argv, `deepseek-harness` from the
+      // session it just opened, and the third-party entries from nowhere — so the control is enabled on
+      // this flag and off, with a reason, everywhere it is false.
+      model: canApplyModel(id),
     },
     available: result.available,
     ...(definition.install?.hint ? { installHint: definition.install.hint } : {}),

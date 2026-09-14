@@ -24,14 +24,24 @@
  * | `slow` | one chunk, then silence — so a test can cancel or steer mid-turn |
  * | `resume-me` | announces the session id it was given, so a resume is observable |
  * | `mode-me` | announces its collaboration mode, so `session/set_mode` is observable |
+ * | `model-me` | announces its session config, so `session/set_config_option` is observable |
  *
  * `FAKE_ACP_NO_SET_MODE=1` makes it refuse `session/set_mode` with `-32601`, the way
  * `deepseek-harness` does. That is how a test proves the honest failure mode: an agent that cannot be
  * put into the requested mode **fails the run** rather than quietly working in the wrong one.
  *
+ * `FAKE_ACP_REFUSE_MODEL` is one opaque config value this agent refuses, with the real `dsh`'s own
+ * sentence (`unknown model option: …`, `invalid params`). It is a single value rather than a list
+ * because the value *is* a JSON array — `["provider","model"]` — so any separator-based list would be
+ * ambiguous with it. That refusal is the property the design leans on: because we build the value
+ * instead of picking it from a list the agent published, an id its catalog does not have must fail
+ * **loudly**, and this is what proves that it does.
+ *
  * The protocol shapes are the ones the real agent emits, taken from
  * `../deepseek-harness/packages/acp/acp/src/updates.ts`. The mode ids and the refusal sentence are
- * `envoy-harness`'s own (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:352-375`).
+ * `envoy-harness`'s own (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:352-375`),
+ * and the session-config shape (`{sessionId, configId, value}` in, `{configOptions}` out) is
+ * `deepseek-harness`'s (`../deepseek-harness/packages/acp/acp/src/index.ts:333-340`).
  */
 
 import process from "node:process";
@@ -42,6 +52,16 @@ let sessionCounter = 0;
 /** The three `ModeKind`s `envoy-harness` accepts, and the one this session is currently in. */
 const MODES = ["default", "plan", "review"];
 let collaborationMode = "default";
+/**
+ * The session's own configuration, keyed by the agent's `configId`.
+ *
+ * Starts empty and is filled only by `session/set_config_option`, so `model-me` reports what the
+ * *client* set rather than something the agent would have chosen anyway. A value the client believed
+ * it sent has to be visible here or the test proves nothing about delivery.
+ */
+const sessionConfig = {};
+/** The one opaque model value this agent refuses, when a test asks it to refuse one. */
+const REFUSED_MODEL = process.env.FAKE_ACP_REFUSE_MODEL;
 const pendingPrompts = new Map();
 
 const send = (message) => process.stdout.write(`${JSON.stringify(message)}\n`);
@@ -127,6 +147,15 @@ function handlePrompt(id, params) {
     return;
   }
 
+  if (text.includes("model-me")) {
+    // Proves what the session is *configured with*, which is the only way to tell a model that reached
+    // the agent from one a client merely believed it had sent. Reported as the raw config value,
+    // because that is exactly what the agent stores: an opaque string it was handed and validated.
+    update({ sessionUpdate: "agent_message_chunk", messageId: "m-model", content: { type: "text", text: `model: ${sessionConfig.model ?? "(none)"}` } });
+    ok(id, { stopReason: "end_turn" });
+    return;
+  }
+
   if (text.includes("think")) {
     update({ sessionUpdate: "agent_thought_chunk", messageId: "m-1", content: { type: "text", text: "let me consider" } });
     update({ sessionUpdate: "agent_message_chunk", messageId: "m-1", content: { type: "text", text: "here is the answer" } });
@@ -199,6 +228,38 @@ function handle(message) {
       }
       collaborationMode = params.mode;
       ok(id, {});
+      return;
+    }
+    case "session/set_config_option": {
+      // **The peer's own validation, copied rather than approximated.** `deepseek-harness` looks the
+      // value up in the option state it advertised and throws `unknown model option: <value>` when it
+      // is not there, which its dispatcher maps to `invalid params`
+      // (`../deepseek-harness/packages/acp/acp/src/model-control.ts:105-111`,
+      // `.../src/index.ts:339-342`). A fixture that accepted anything would let a client with a broken
+      // value encoding pass, which is the one thing this test exists to prevent.
+      const { configId, value } = params ?? {};
+      if (configId !== "model") {
+        fail(id, -32602, `unknown session config option: ${String(configId)}`);
+        return;
+      }
+      if (REFUSED_MODEL !== undefined && value === REFUSED_MODEL) {
+        fail(id, -32602, `unknown model option: ${String(value)}`);
+        return;
+      }
+      sessionConfig[configId] = value;
+      // The real method answers with the complete resulting option state, not an acknowledgement.
+      ok(id, {
+        configOptions: [
+          {
+            id: "model",
+            name: "Model",
+            category: "model",
+            type: "select",
+            currentValue: value,
+            options: [{ group: "fake", name: "Fake", options: [{ value, name: String(value) }] }],
+          },
+        ],
+      });
       return;
     }
     case "session/prompt":

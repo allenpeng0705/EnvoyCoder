@@ -20,6 +20,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { HarnessSummary, Project, RunEvent, Task } from "@envoycoder/protocol";
 
+import { canApplyModel, harnessModels } from "@envoycoder/agent-catalog";
+
 import { TaskPane } from "../src/components/TaskPane.js";
 
 // Testing-library only auto-cleans when vitest globals are on, which this repo does not use.
@@ -61,10 +63,12 @@ function event(payload: Record<string, unknown>): RunEvent {
 /**
  * One agent, exactly as `coder.listHarnesses` carries it.
  *
- * The two entries here are the two real ones, because the *point* of the mode control is that the wire
- * decides what it offers: `envoy-harness` declares the three `ModeKind`s and accepts `session/set_mode`;
- * `deepseek-harness` has no such method on its ACP surface, so it declares no modes and says the daemon
- * cannot set one.
+ * The two entries here are the two real ones, because the *point* of these controls is that the wire
+ * decides what they offer: `envoy-harness` declares the three `ModeKind`s, accepts `session/set_mode`,
+ * and publishes its provider defaults as a model list; `deepseek-harness` has no such mode method and
+ * publishes no model list we can read before a run — it takes free text instead. The model facts are
+ * read from the catalogue rather than typed out here, so a change to what the catalogue claims shows up
+ * in this test instead of being shadowed by a stale copy of the old answer.
  */
 function harnessFor(
   id: "envoy-harness" | "deepseek-harness",
@@ -78,6 +82,7 @@ function harnessFor(
     streaming: true,
     images: false,
     agentMode: id === "envoy-harness",
+    model: canApplyModel(id),
   };
   return {
     id,
@@ -92,6 +97,7 @@ function harnessFor(
             { id: "review", label: "Review", labelKey: "task.agentMode.review.label", descriptionKey: "task.agentMode.review.description" },
           ]
         : [],
+    models: harnessModels(id),
     capabilities,
     available: true,
     evidence: "cited in `@envoycoder/agent-catalog`",
@@ -281,7 +287,14 @@ describe("the composer", () => {
     const pane = renderPane([], { runLive: false });
     fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "bump the SDK" } });
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
-    expect(pane.onStart).toHaveBeenCalledWith("bump the SDK");
+    // The task's model travels with the first message: `task` here remembers
+    // `deepseek-official/deepseek-v4-flash`, and a run started from this pane has to be the run on the
+    // model the pane shows. The mode is `undefined` because `deepseek-harness` has none to offer.
+    expect(pane.onStart).toHaveBeenCalledWith(
+      "bump the SDK",
+      undefined,
+      "deepseek-official/deepseek-v4-flash",
+    );
     expect(pane.onSend).not.toHaveBeenCalled();
   });
 
@@ -311,7 +324,11 @@ describe("a task that has not started yet", () => {
     fireEvent.change(field, { target: { value: "Add a health check endpoint" } });
     fireEvent.keyDown(field, { key: "Enter" });
 
-    expect(onStart).toHaveBeenCalledWith("Add a health check endpoint");
+    expect(onStart).toHaveBeenCalledWith(
+      "Add a health check endpoint",
+      undefined,
+      "deepseek-official/deepseek-v4-flash",
+    );
     expect(onSend).not.toHaveBeenCalled();
     expect(screen.queryByLabelText("How to deliver the message")).toBeNull();
   });
@@ -489,7 +506,7 @@ describe("the agent's mode control", () => {
     fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "plan it out" } });
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
 
-    expect(onStart).toHaveBeenCalledWith("plan it out", "plan");
+    expect(onStart).toHaveBeenCalledWith("plan it out", "plan", "deepseek-official/deepseek-v4-flash");
   });
 
   it("sends no mode at all when the picker is off, so the agent's own default stands", () => {
@@ -503,7 +520,11 @@ describe("the agent's mode control", () => {
     fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "just do it" } });
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
 
-    expect(onStart).toHaveBeenCalledWith("just do it");
+    expect(onStart).toHaveBeenCalledWith(
+      "just do it",
+      undefined,
+      "deepseek-official/deepseek-v4-flash",
+    );
   });
 
   it("tells the user the mode applies to the next run while one is live", () => {
@@ -512,5 +533,148 @@ describe("the agent's mode control", () => {
     // The folder's sentence is its own, and this is a mode-only change: one control's note must not
     // be stretched to cover the other, or a user reads a warning about something they never touched.
     expect(screen.queryByText(/still working in/)).toBeNull();
+  });
+});
+
+/**
+ * The model control on screen.
+ *
+ * ## The three shapes, and why this is not one component
+ *
+ * A published list is a `<select>`; an agent that publishes nothing and takes a value is a **text
+ * field**; an agent that takes no model is disabled with the reason under it. The middle case is the one
+ * worth rendering rather than reasoning about: `deepseek-harness` is the agent this app's default task
+ * runs on, it has no list before a session exists, and a control that decided from `options.length`
+ * would render it as a dead pill.
+ *
+ * The last test is the one that proves the choice is not decorative: the model the user picked has to
+ * travel on `onStart`, which is the argument the daemon launches the agent with.
+ */
+describe("the model control", () => {
+  const envoyTask = { ...task, harness: "envoy-harness" as const, model: undefined };
+
+  it("lists the models the agent publishes, and takes the agent's own default as a choice", () => {
+    renderPane([], { task: envoyTask, harnesses: [harnessFor("envoy-harness")], runLive: false });
+
+    const picker = screen.getByLabelText("Model") as HTMLSelectElement;
+    expect(picker.tagName).toBe("SELECT");
+    expect(picker.disabled).toBe(false);
+    // The empty option is first and is the state a task is in before anybody chooses — an agent running
+    // on whatever it defaults to. It is a *choice* here, and picking it is how a user undoes a model.
+    expect([...picker.options].map((option) => option.textContent)).toEqual([
+      "The agent's own default",
+      "gpt-4o",
+      "claude-sonnet-4-6",
+      "deepseek-chat",
+      "MiniMax-M3",
+      "glm-4-flash",
+      "qwen-plus",
+      "llama3.1",
+    ]);
+    expect(picker.value).toBe("");
+    for (const option of [...picker.options]) {
+      // The id is the value, because it is what the task stores and what the daemon resolves.
+      if (option.value !== "") expect(option.value).toContain("/");
+    }
+  });
+
+  it("gives an agent with no published list a usable text field, not a disabled pill", () => {
+    // `deepseek-harness`'s models live in a live session's `configOptions`. There is nothing to list
+    // here and still something to set, so the control is a field — and the sentence under it says which
+    // shape the value has to be, because that is the one thing a user cannot guess.
+    renderPane([], { task: { ...task, harness: "deepseek-harness" as const, model: undefined }, harnesses: [harnessFor("deepseek-harness")], runLive: true });
+
+    const field = screen.getByLabelText("Model") as HTMLInputElement;
+    expect(field.tagName).toBe("INPUT");
+    expect(field.disabled).toBe(false);
+    expect(field.placeholder).toBe("provider/model");
+    expect(screen.getByText(/publishes its models only inside a running session/)).toBeTruthy();
+    // Both facts at once, because they are not alternatives: the instruction is about the value's
+    // shape, the note below it about when the choice takes effect.
+    expect(screen.getByText(/keeps the model it started on/)).toBeTruthy();
+    // Not the refusal sentences: nothing here is being refused.
+    expect(screen.queryByText(/does not take a model/)).toBeNull();
+    expect(screen.queryByText(/not wired up yet/)).toBeNull();
+  });
+
+  it("commits a complete value from the text field, and holds a half-typed one back", () => {
+    // A draft is not a model. Saving `deepseek` on the way to `deepseek/deepseek-chat` would store a
+    // value that makes the next run refuse, so only a value naming both halves is handed upwards.
+    const onChangeModel = vi.fn();
+    renderPane([], {
+      task: { ...task, harness: "deepseek-harness" as const, model: undefined },
+      harnesses: [harnessFor("deepseek-harness")],
+      runLive: false,
+      onChangeModel,
+    });
+
+    const field = screen.getByLabelText("Model");
+    fireEvent.change(field, { target: { value: "deepseek" } });
+    fireEvent.blur(field);
+    expect(onChangeModel).not.toHaveBeenCalled();
+
+    fireEvent.change(field, { target: { value: "deepseek/deepseek-chat" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(onChangeModel).toHaveBeenCalledWith("deepseek/deepseek-chat");
+  });
+
+  it("sends the model the user picked with the first message, so the control is not decorative", () => {
+    const { onStart } = renderPane([], {
+      task: envoyTask,
+      harnesses: [harnessFor("envoy-harness")],
+      runLive: false,
+    });
+    fireEvent.change(screen.getByLabelText("Model"), {
+      target: { value: "anthropic/claude-sonnet-4-6" },
+    });
+    fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "use sonnet" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    // The third argument is what `coder.startRun` carries, and the daemon is what turns it into
+    // `--provider`/`--model` (envoy-harness) or the session config (deepseek-harness).
+    expect(onStart).toHaveBeenCalledWith("use sonnet", "default", "anthropic/claude-sonnet-4-6");
+  });
+
+  it("clears the model when the user picks the agent's own default, rather than storing nothing", () => {
+    // `""` is the request "the agent's own default" — the only way to undo a model without replacing it
+    // — and it must reach the daemon as-is, because the daemon is what decides to drop the stored key
+    // instead of saving an empty string that would show up as a model chip on the task header.
+    const onChangeModel = vi.fn();
+    renderPane([], {
+      task: { ...task, model: "deepseek-official/deepseek-v4-flash" },
+      harnesses: [harnessFor("deepseek-harness")],
+      onChangeModel,
+    });
+
+    const field = screen.getByLabelText("Model");
+    fireEvent.change(field, { target: { value: "" } });
+    fireEvent.blur(field);
+    expect(onChangeModel).toHaveBeenCalledWith("");
+  });
+
+  it("disables the control with the reason, and shows the published models anyway", () => {
+    // A catalogued CLI that records a model flag but cannot be launched: the list stays visible so the
+    // gap reads as "this build cannot do it yet", not as "this agent has no models".
+    const declared = harnessFor("envoy-harness", {
+      id: "claudecode",
+      label: "Claude Code",
+      tier: "catalogued",
+      capabilities: { ...harnessFor("envoy-harness").capabilities, model: false },
+    });
+    renderPane([], { task: { ...envoyTask, harness: "claudecode" }, harnesses: [declared] });
+
+    const picker = screen.getByLabelText("Model") as HTMLSelectElement;
+    expect(picker.disabled).toBe(true);
+    expect([...picker.options].length).toBe(8);
+    expect(screen.getByText(/not wired up yet/)).toBeTruthy();
+  });
+
+  it("says it has not been told yet, rather than blaming the agent", () => {
+    // The same distinction the mode picker makes: the harness list arrives asynchronously, and a pane
+    // rendered without a daemon has none at all. Reporting the agent's *lack* of models when the truth
+    // is our own ignorance is the mistake this asserts against.
+    renderPane([], { task: envoyTask });
+    expect(screen.getByText(/has not been told which models Envoy Harness offers yet/)).toBeTruthy();
+    expect(screen.queryByText(/does not take a model/)).toBeNull();
   });
 });

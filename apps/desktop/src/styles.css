@@ -745,9 +745,9 @@ body {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
-/* The row above the field: the task's folder, and the agent's own mode.
+/* The row above the field: the task's folder, the agent's own mode, and its model.
 
-   Pills rather than full-width fields, because both are facts about this run that a user changes
+   Pills rather than full-width fields, because all three are facts about this run that a user changes
    rarely — a second row of form controls above the message box is what turns a composer into a
    settings form. Compact height (`--control-tight`), so the row never competes with the message
    itself, which is the thing actually being typed. */
@@ -807,6 +807,16 @@ body {
   margin: 0;
   padding: var(--space-1) var(--space-2) 0;
   color: var(--foreground-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* The free-text model field — the one control in this row that is typed into rather than chosen.
+   Sized like the pills beside it, and deliberately not full width: the value is a `provider/model`
+   pair, and a field that stretched across the composer would read as a second message box for
+   something that is a setting. Its `.input` base supplies the border and focus ring. */
+.composer__model-input {
+  width: 220px;
+  height: var(--control-tight);
   font-size: var(--font-size-sm);
 }
 
