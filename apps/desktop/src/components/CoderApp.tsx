@@ -368,6 +368,16 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
           ) : active ? (
             <TaskPane
               task={active}
+              onRemove={async (taskId) => {
+                // The daemon archives rather than deletes (`coder.archiveTask`), which is why the control
+                // says "Remove": the rail forgets the task, the disk does not.
+                const removed = await props.actions.archiveTask(taskId, true);
+                if (!removed.ok) {
+                  setNotice(removed);
+                  return;
+                }
+                if (active.id === taskId) setActiveId(undefined);
+              }}
               project={projectFor(state.projects, active)}
               events={active.runId ? (state.runs[active.runId]?.events ?? []) : []}
               runLive={active.runId ? state.runs[active.runId]?.run.endedAt === undefined : false}

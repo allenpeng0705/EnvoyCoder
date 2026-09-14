@@ -146,6 +146,11 @@ export const en = {
 
   /* ── the composer ── */
   "task.composer.aria": "Message the agent",
+  "task.remove": "Remove task",
+  "task.remove.aria": "Remove this task",
+  "task.remove.confirm": "Remove “{title}” from EnvoyCoder? It leaves the rail and is archived — the folder and its files are not touched.",
+  "task.remove.cta": "Remove",
+  "action.cancel": "Cancel",
   "task.composer.placeholder.approval": "Answer the request above before sending anything",
   "task.composer.placeholder.running": "Add a follow-up — Queue waits for this turn, Steer joins it",
   "task.composer.placeholder.idle": "Describe the task",

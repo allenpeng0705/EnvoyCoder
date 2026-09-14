@@ -74,6 +74,15 @@ export interface TaskPaneProps {
    * than rendering as an agent with no modes — two different facts that must not look alike.
    */
   harnesses?: readonly HarnessSummary[];
+  /**
+   * Remove this task from the app.
+   *
+   * "Remove", not "delete": the daemon archives it, so it leaves the rail while the folder, the files and
+   * the transcript on disk are untouched. A user who reads "delete" and then finds the work still there
+   * has been misled, and the button is where that claim is made.
+   */
+  onRemove: (taskId: string) => void | Promise<void>;
+
   /** Shown under the composer when a send was refused, in the daemon's words. */
   notice?: string | undefined;
 }
@@ -98,6 +107,8 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   const running = props.runLive;
   const [text, setText] = useState("");
   const [mode, setMode] = useState<"queue" | "steer">("queue");
+  /** The destructive step is *inside* the row a user just acted on, never a modal — the family rule. */
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
   /** A mode the user has just chosen, before the task's saved copy comes back. */
   const [pickedMode, setPickedMode] = useState<string | undefined>(undefined);
   /** A model the user has just chosen, for the same reason and with the same lifetime. */
@@ -253,8 +264,44 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               {t("task.cancel")}
             </button>
           ) : null}
+          {/* Design law 3: the destructive colour appears **only inside a confirmation**, never on a
+              row. So the resting control is quiet, and the red button exists only after the user has
+              said what they mean. */}
+          {confirmingRemove ? null : (
+            <button
+              type="button"
+              className="button button--ghost"
+              onClick={() => setConfirmingRemove(true)}
+            >
+              {t("task.remove")}
+            </button>
+          )}
         </div>
       </header>
+
+      {confirmingRemove ? (
+        <div className="confirm" role="alertdialog" aria-label={t("task.remove.aria")}>
+          <p className="confirm__question">
+            {t("task.remove.confirm", { title: task.title || t("task.untitled") })}
+          </p>
+          <div className="confirm__actions">
+            <button
+              type="button"
+              className="button button--danger"
+              onClick={() => void props.onRemove(task.id)}
+            >
+              {t("task.remove.cta")}
+            </button>
+            <button
+              type="button"
+              className="button button--secondary"
+              onClick={() => setConfirmingRemove(false)}
+            >
+              {t("action.cancel")}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="transcript" data-testid="transcript" ref={transcriptRef}>
         {transcript.hasGap ? (

@@ -858,6 +858,32 @@ body {
   font-size: var(--font-size-sm);
 }
 
+/* A destructive question, inline. It reads as part of the pane rather than as a dialog on top of it —
+   the family rule is that a decision shows its context, and a modal hides the thing being decided. */
+.confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  margin: var(--space-3) var(--space-4) 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--destructive);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+}
+
+.confirm__question {
+  margin: 0;
+  font-size: var(--font-size-content);
+}
+
+.confirm__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
 /* ── command center ────────────────────────────────────────────────────── */
 
 .palette-backdrop {
