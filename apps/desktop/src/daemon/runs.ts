@@ -48,7 +48,6 @@
  */
 
 import { appendFile, mkdir } from "node:fs/promises";
-import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -61,21 +60,17 @@ import {
   type TaskStatus,
   coderError,
 } from "@envoycoder/protocol";
-import {
-  harnessDefinition,
-  harnessModelDelivery,
-  isDrivableByAcpAdapter,
-  observeSessionOptions,
-  probeHarness,
-  resolveHarnessCommand,
-  resolveModelChoice,
-  thinkingDelivery,
-} from "@envoycoder/agent-catalog";
+// Only what this file uses: the three delivery helpers (`harnessModelDelivery`, `resolveModelChoice`,
+// `thinkingDelivery`) are `run-options.ts`'s, and were imported here without being read — dead
+// references the compiler does not flag because `noUnusedLocals` is off. Removed while this import
+// block was already being edited.
+import { harnessDefinition, observeSessionOptions } from "@envoycoder/agent-catalog";
 import type { PlatformId } from "@envoycoder/platform";
 
 import type { CoderPaths } from "@envoycoder/host-bridge";
 
 import { AcpClient, type AcpAutoRunPolicy, type AcpLaunch, type AcpPermissionRequest, type AcpUpdate } from "./acp/client.js";
+import { launchForHarness } from "./launch.js";
 import { keyed, ref } from "./messages.js";
 // The values a run asks for, checked against the catalogue before anything is spawned — and the
 // refusals a user reads when this build cannot deliver one. They live in their own module because they
@@ -306,7 +301,17 @@ export class RunManager {
           ...(task.extraArgs ? { extraArgs: task.extraArgs } : {}),
           ...(model ? { model } : {}),
         })
-      : this.launchFromCatalogue(task.harness, task.cwd, model, task.extraArgs);
+      : // **The same function the probe calls** (`launch.ts`), which is the point of it being a module
+        // rather than a method here: a probe starts the agent exactly the way a run does, so a change to
+        // the argv, the environment or the refusals cannot reach one path and miss the other.
+        launchForHarness({
+          harness: task.harness,
+          cwd: task.cwd,
+          paths: this.deps.paths,
+          ...(this.deps.platform ? { platform: this.deps.platform } : {}),
+          ...(task.extraArgs ? { extraArgs: task.extraArgs } : {}),
+          ...(model ? { model } : {}),
+        });
 
     const run: AgentRun = {
       id: randomUUID(),
@@ -360,65 +365,6 @@ export class RunManager {
     // UI renders a task starting rather than blocking until it finishes.
     void this.drive(live, input.prompt, input.resume === true, agentModeId);
     return run;
-  }
-
-  /** The argv from the catalogue, plus the environment an agent needs to keep its own state. */
-  private launchFromCatalogue(
-    harness: HarnessId,
-    cwd: string,
-    model: string | undefined,
-    extraArgs: string | undefined,
-  ): AcpLaunch {
-    // Probe first, then build: where the agent *is* and what argv it understands are different
-    // questions, and the answers differ for a harness living in a peer checkout — there the command
-    // is Node and the script is the first argument. Assuming a bare binary name is how a machine with
-    // the harness cloned but not installed gets `spawn envoy-harness ENOENT`.
-    const probe = probeHarness(harness, this.deps.platform ? { platform: this.deps.platform } : {});
-    if (!probe.available) {
-      // The sentence carries the install link, which is what makes it actionable; the key carries
-      // only the fact, so a translated refusal names the agent without inventing a URL in German.
-      // The link is not lost — it is in the English sentence, in the log, and in the settings list
-      // that shows this agent's install hint.
-      throw coderError(
-        ENVOYCODER_ERRORS.harnessMissing,
-        probe.reason ?? `${harness} is not available on this machine.`,
-        ref("error.harnessMissing", { harness: harnessDefinition(harness).label }),
-      );
-    }
-    // **Installed is not drivable.** This method returns an `AcpLaunch`, and the ACP client then speaks
-    // `initialize` / `session/new` to whatever it spawned. Six catalogue entries describe programs that
-    // do not speak ACP (a one-shot `-p` CLI, an app-server, an HTTP server, a JSONL-RPC mode), so
-    // without this check we would spawn them and wait for a handshake that can never come — after the
-    // picker had already offered them as ready. Refusing here, by name and with the reason, is the same
-    // fail-closed choice the rest of this daemon makes.
-    if (!isDrivableByAcpAdapter(harness)) {
-      const label = harnessDefinition(harness).label;
-      throw coderError(
-        ENVOYCODER_ERRORS.harnessUnsupported,
-        `${label} speaks a protocol EnvoyCoder cannot drive yet (this adapter drives ACP agents only). ` +
-          `Envoy Harness and DeepSeek Harness work today; ${label} needs its own adapter.`,
-        ref("error.harnessUnsupported", { harness: label }),
-      );
-    }
-    const resolved = resolveHarnessCommand(
-      harness,
-      probe,
-      { prompt: "", cwd, ...(model ? { model } : {}), ...(extraArgs ? { extraArgs } : {}) },
-    );
-    const definition = harnessDefinition(harness);
-    return {
-      command: resolved.command,
-      args: resolved.args,
-      cwd,
-      ...(definition.id === "deepseek-harness"
-        ? {
-            // A home of our own per agent, so EnvoyCoder never writes into the state a user's own
-            // `dsh` install owns — and so sessions the control plane starts are separable from the
-            // ones they started by hand.
-            env: { DSH_HOME: join(this.deps.paths.stateDir, "agents", "dsh") },
-          }
-        : {}),
-    };
   }
 
   /* ────────────────────────────── the turn loop ────────────────────────────── */

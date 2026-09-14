@@ -41,6 +41,7 @@ import {
 } from "@envoycoder/protocol";
 import { coderPaths } from "@envoycoder/host-bridge";
 
+import { AcpClient } from "../src/daemon/acp/client.js";
 import { readDaemonClaim } from "../src/daemon/lock.js";
 import { isMessageKey } from "../src/i18n/messages/en.js";
 import { startCoderDaemon, type StartedCoderDaemon } from "../src/daemon/serve.js";
@@ -1287,4 +1288,163 @@ describe("the thinking level a task runs at", () => {
     expect(Number.isNaN(Date.parse(deepseek?.models.observedAt ?? ""))).toBe(false);
     expect(Number.isNaN(Date.parse(deepseek?.thinking.observedAt ?? ""))).toBe(false);
   }, 30_000);
+});
+
+/**
+ * The pre-flight probe, over the socket.
+ *
+ * `session-probe.test.ts` proves the decision against a port object, and `acp-transport.test.ts` proves
+ * the real binaries. What neither can prove is the path a **window** takes: that `coder.probeSessionOptions`
+ * exists in the catalogue and is served, that the three outcomes survive the wire, that a successful probe
+ * lands in the store and reaches the *next* `coder.listHarnesses`, and that a failed one changes nothing.
+ *
+ * The three cases run against one daemon, because that is the situation a user is in: two agents that
+ * behave differently and a third that cannot be started at all. Each is a real child process — the same
+ * fixture the run tests use — so the spawn, the handshake and the teardown are the production ones.
+ */
+describe("asking an agent what it offers, before any run", () => {
+  /** A daemon whose three harnesses answer differently, and a counter of the agents it started. */
+  async function probeBench(): Promise<{
+    client: JsonRpcClient;
+    spawns: () => number;
+    stateFile: string;
+  }> {
+    const home = await mkdtemp(join(tmpdir(), "envoycoder-probe-rpc-"));
+    cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+
+    let spawns = 0;
+    const daemon = await startCoderDaemon({
+      port: 0,
+      home,
+      paths: coderPaths(home),
+      skipMeshAttach: true,
+      // The launch is the *same* seam a run uses, which is the point of the probe reusing it. The three
+      // harness ids stand for the three outcomes: one that publishes, one that answers `{sessionId}` alone,
+      // and one whose binary is not there.
+      resolveLaunch: (input) =>
+        input.harness === "opencode"
+          ? { command: "definitely-not-an-agent-binary", args: [], cwd: home }
+          : {
+              command: process.execPath,
+              args: [FAKE_AGENT],
+              cwd: home,
+              ...(input.harness === "deepseek-harness" ? { env: { FAKE_ACP_PUBLISH_OPTIONS: "1" } } : {}),
+            },
+      // A real client, counted: the cache is only observable as "how many agents did this start".
+      startClient: async (options) => {
+        spawns += 1;
+        return AcpClient.start(options);
+      },
+    });
+    cleanups.push(async () => daemon.stop());
+
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+    return { client, spawns: () => spawns, stateFile: coderPaths(home).sessionOptionsFile };
+  }
+
+  it("publishes what a session published, and nothing about a session that did not open", async () => {
+    const { client, stateFile } = await probeBench();
+
+    const before = (await client.call("coder.listHarnesses", undefined)) as {
+      harnesses: { id: string; models: { kind: string }; thinking: { kind: string } }[];
+    };
+    // The state every user starts in: the agent publishes nothing we have seen, so the window has a text
+    // field and a disabled pill and says which is which.
+    expect(before.harnesses.find((h) => h.id === "deepseek-harness")?.models.kind).toBe("free-text");
+    expect(before.harnesses.find((h) => h.id === "deepseek-harness")?.thinking.kind).toBe("session");
+
+    // The store's change event, which is how a second window learns without polling. The listener is
+    // registered **before** the call that causes it: an event is not replayed for a late subscriber, and
+    // a test that subscribed afterwards would wait forever for something that had already happened.
+    await client.subscribe(["coder:state-changed"]);
+    const announced = client.waitForEvent(
+      "coder:state-changed",
+      (data) => (data as { kind?: string }).kind === "harnesses",
+    );
+
+    const listed = (await client.call("coder.probeSessionOptions", {
+      harness: "deepseek-harness",
+    })) as { harness: string; outcome: string; detail: string };
+    expect(listed.harness).toBe("deepseek-harness");
+    expect(listed.outcome).toBe("listed");
+
+    // …and the window needs no new rendering path: the *same* call it already makes now answers with the
+    // list the agent enumerated, through the same store record a run writes.
+    const after = (await client.call("coder.listHarnesses", undefined)) as {
+      harnesses: {
+        id: string;
+        models: { kind: string; observedAt?: string; options: { id: string; provider: string }[] };
+        thinking: { kind: string; options: { value: string }[] };
+      }[];
+    };
+    const deepseek = after.harnesses.find((h) => h.id === "deepseek-harness");
+    expect(deepseek?.models.kind).toBe("listed");
+    expect(deepseek?.models.options.map((option) => option.id)).toEqual(["fake/flash", "fake/pro"]);
+    expect(deepseek?.thinking.options.map((option) => option.value)).toEqual([
+      "off",
+      "low",
+      "high",
+      "max",
+    ]);
+    expect(Number.isNaN(Date.parse(deepseek?.models.observedAt ?? ""))).toBe(false);
+
+    // The record is on disk, in the file the run path writes, so a daemon restart keeps it.
+    const stored = JSON.parse(await readFile(stateFile, "utf8")) as { harness: string; options: unknown[] }[];
+    expect(stored.map((entry) => entry.harness)).toEqual(["deepseek-harness"]);
+    expect(stored[0]?.options).toHaveLength(2);
+
+    // And the window was told — with kind `harnesses`, which is what makes a client refetch the *agent*
+    // list rather than its task list: what moved is the answer about an agent.
+    const change = (await announced) as { kind: string; ids?: readonly string[] };
+    expect(change.kind).toBe("harnesses");
+    expect(change.ids).toEqual(["deepseek-harness"]);
+  }, 60_000);
+
+  it("records a session that offered nothing as a fact about the agent", async () => {
+    const { client } = await probeBench();
+
+    // A different agent, because the answer is cached per agent: this one answers `session/new` with
+    // `{sessionId, configOptions: []}`, which is what `envoy-harness` does in the real world.
+    const answer = (await client.call("coder.probeSessionOptions", {
+      harness: "envoy-harness",
+    })) as { outcome: string; detail: string };
+
+    expect(answer.outcome).toBe("none");
+    const after = (await client.call("coder.listHarnesses", undefined)) as {
+      harnesses: { id: string; thinking: { kind: string; observedAt?: string } }[];
+    };
+    // `"none"` **with a timestamp**: the pill now says the agent offers no level because we asked, not
+    // because a catalogue entry says so — and those are different sentences to a user.
+    const envoy = after.harnesses.find((h) => h.id === "envoy-harness");
+    expect(envoy?.thinking.kind).toBe("none");
+    expect(Number.isNaN(Date.parse(envoy?.thinking.observedAt ?? ""))).toBe(false);
+  }, 60_000);
+
+  it("says it could not ask, and writes nothing down", async () => {
+    const { client, stateFile } = await probeBench();
+
+    const answer = (await client.call("coder.probeSessionOptions", {
+      harness: "opencode",
+    })) as { outcome: string; detail: string };
+
+    // **The distinction the whole feature turns on.** A spawn that failed is our failure, not the agent's
+    // answer, so it is not recorded — a window that rendered it as "publishes none" would be making a
+    // claim about somebody else's product from evidence it does not have.
+    expect(answer.outcome).toBe("unreachable");
+    expect(answer.detail).toContain("could not ask");
+    await expect(readFile(stateFile, "utf8")).rejects.toThrow();
+  }, 60_000);
+
+  it("answers a repeated ask without starting a second agent", async () => {
+    const { client, spawns } = await probeBench();
+
+    await client.call("coder.probeSessionOptions", { harness: "deepseek-harness" });
+    expect(spawns()).toBe(1);
+    await client.call("coder.probeSessionOptions", { harness: "deepseek-harness" });
+    expect(spawns()).toBe(1);
+    // …and a forced ask is the user pressing the button, which means it.
+    await client.call("coder.probeSessionOptions", { harness: "deepseek-harness", force: true });
+    expect(spawns()).toBe(2);
+  }, 60_000);
 });

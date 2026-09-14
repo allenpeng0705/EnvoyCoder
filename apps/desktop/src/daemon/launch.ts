@@ -1,0 +1,115 @@
+/**
+ * How an agent is started — **one answer, for every path that starts one.**
+ *
+ * ## Why this is its own module
+ *
+ * It used to be a private method on `RunManager`, which was correct while a run was the only thing that
+ * spawned an agent. A **probe** (see `session-probe.ts`) starts the same agent the same way for a
+ * different reason, and the moment there are two callers there are two spawn paths — the second one
+ * written from memory, drifing on the first catalogue change. So the resolution lives here, both
+ * callers call it, and "the agent's command, argv and environment" has exactly one definition in this
+ * daemon.
+ *
+ * ## What it decides, and what it refuses
+ *
+ *   * **Where the agent is.** Probed first, then built: where the agent *is* and what argv it
+ *     understands are different questions, and the answers differ for a harness living in a peer
+ *     checkout — there the command is Node and the script is the first argument. Assuming a bare binary
+ *     name is how a machine with the harness cloned but not installed gets `spawn envoy-harness ENOENT`.
+ *   * **Whether it can be driven at all.** Six catalogue entries describe programs that do not speak
+ *     ACP (a one-shot `-p` CLI, an app-server, an HTTP server, a JSONL-RPC mode), so without this check
+ *     we would spawn them and wait for a handshake that can never come — after the picker had already
+ *     offered them as ready.
+ *   * **A home of its own**, per agent, so EnvoyCoder never writes into the state a user's own `dsh`
+ *     install owns.
+ *
+ * Both refusals are `coderError`s carrying a catalogue key, because a translated window has to be able
+ * to render them. The *sentence* also carries the install link, which is what makes it actionable.
+ */
+
+import { join } from "node:path";
+
+import {
+  ENVOYCODER_ERRORS,
+  type HarnessId,
+  coderError,
+} from "@envoycoder/protocol";
+import {
+  harnessDefinition,
+  isDrivableByAcpAdapter,
+  probeHarness,
+  resolveHarnessCommand,
+} from "@envoycoder/agent-catalog";
+import type { PlatformId } from "@envoycoder/platform";
+import type { CoderPaths } from "@envoycoder/host-bridge";
+
+import type { AcpLaunch } from "./acp/client.js";
+import { ref } from "./messages.js";
+
+export interface LaunchInput {
+  harness: HarnessId;
+  /** The directory the agent treats as its workspace root. */
+  cwd: string;
+  paths: CoderPaths;
+  /**
+   * Which platform's argv and spawn rules to use. Injected so the Windows branch is testable, the same
+   * arrangement `RunManagerDeps.platform` has.
+   */
+  platform?: PlatformId;
+  /** The model, when the agent takes one **in argv** (the catalogue's `buildArgs` builds the flags). */
+  model?: string;
+  /** The user's own extra argv for this task. */
+  extraArgs?: string;
+}
+
+/**
+ * The argv for one agent, plus the environment it needs to keep its own state.
+ *
+ * Throws a keyed `coderError` when the agent cannot be started: not installed (`harnessMissing`) or not
+ * ACP-drivable (`harnessUnsupported`). A caller that is *asking* rather than *running* — the probe —
+ * turns those into "we could not ask", which is the honest rendering of a spawn that never happened.
+ */
+export function launchForHarness(input: LaunchInput): AcpLaunch {
+  const { harness, cwd, model, extraArgs } = input;
+  const probe = probeHarness(harness, input.platform ? { platform: input.platform } : {});
+  if (!probe.available) {
+    // The sentence carries the install link, which is what makes it actionable; the key carries only
+    // the fact, so a translated refusal names the agent without inventing a URL in German. The link is
+    // not lost — it is in the English sentence, in the log, and in the settings list that shows this
+    // agent's install hint.
+    throw coderError(
+      ENVOYCODER_ERRORS.harnessMissing,
+      probe.reason ?? `${harness} is not available on this machine.`,
+      ref("error.harnessMissing", { harness: harnessDefinition(harness).label }),
+    );
+  }
+  if (!isDrivableByAcpAdapter(harness)) {
+    const label = harnessDefinition(harness).label;
+    throw coderError(
+      ENVOYCODER_ERRORS.harnessUnsupported,
+      `${label} speaks a protocol EnvoyCoder cannot drive yet (this adapter drives ACP agents only). ` +
+        `Envoy Harness and DeepSeek Harness work today; ${label} needs its own adapter.`,
+      ref("error.harnessUnsupported", { harness: label }),
+    );
+  }
+  const resolved = resolveHarnessCommand(harness, probe, {
+    prompt: "",
+    cwd,
+    ...(model ? { model } : {}),
+    ...(extraArgs ? { extraArgs } : {}),
+  });
+  const definition = harnessDefinition(harness);
+  return {
+    command: resolved.command,
+    args: resolved.args,
+    cwd,
+    ...(definition.id === "deepseek-harness"
+      ? {
+          // A home of our own per agent, so EnvoyCoder never writes into the state a user's own `dsh`
+          // install owns — and so sessions the control plane starts are separable from the ones they
+          // started by hand.
+          env: { DSH_HOME: join(input.paths.stateDir, "agents", "dsh") },
+        }
+      : {}),
+  };
+}

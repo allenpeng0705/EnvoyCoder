@@ -817,6 +817,30 @@ export const ObservedSessionOptionsSchema = z
   })
   .strict();
 
+/**
+ * What asking an agent "what do you offer?" can come back as — **three answers, never two.**
+ *
+ * The whole point of the union is the third member. A probe is a process spawn, a handshake and a
+ * timeout, so it can fail for reasons that have nothing to do with the agent's abilities; and the one
+ * mistake this type exists to make impossible is reporting that failure as a fact about the agent:
+ *
+ *   * `"listed"` — a session opened and published session configuration options. They are recorded (see
+ *     `ObservedSessionOptions`), so the pickers render the real list.
+ *   * `"none"` — a session opened and published **nothing**. This is a fact about the agent (it is
+ *     exactly what `envoy-harness` does) and it is recorded as one, on the same terms a run records it.
+ *   * `"unreachable"` — we could not ask: the binary is missing, it refused to start, it never answered,
+ *     or the probe ran out of time. **Nothing is recorded**, because an answer we do not have must not
+ *     be written down as an answer the agent gave.
+ *
+ * Same shape and same discipline as `AgentModels.kind` and `AgentThinking.kind`: a `kind`-like field is
+ * required rather than optional so that "absent" can never be read as one of the real answers.
+ */
+export const PROBE_OUTCOMES = ["listed", "none", "unreachable"] as const;
+
+export type ProbeOutcome = (typeof PROBE_OUTCOMES)[number];
+
+export const ProbeOutcomeSchema = z.enum(PROBE_OUTCOMES);
+
 /** One agent, as a *picker* needs it. Everything the UI promises is gated on `capabilities`. */
 export interface HarnessSummary {
   id: HarnessId;
@@ -1301,6 +1325,61 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
         /** The resolved absolute path when we found one; absent when we did not. */
         binary: z.string().optional(),
         detail: z.string(),
+      })
+      .strict(),
+  },
+  /**
+   * The pre-flight probe: open a session with an agent and keep what it publishes about itself.
+   *
+   * ## What it is for
+   *
+   * The model list and the thinking levels of both native harnesses exist **only inside a session**, so
+   * before a first run the window had two choices and both were bad: ask the user to type
+   * `provider/model` from memory, or render an empty picker. This asks the agent instead — the same
+   * question a run asks, at the same point in the session's life, and records the answer through the
+   * same store path (`CoderStore.recordSessionOptions`), so there is one shape of truth and the window
+   * needs no new rendering path.
+   *
+   * ## `force`
+   *
+   * The daemon answers from a recent observation when it has one — a probe is a process spawn, and a
+   * window that re-renders a pane must not spawn an agent each time (see `session-probe.ts` for the
+   * staleness window and the build fingerprint). `force: true` means "ask the agent, not your notes",
+   * and it is what the window's *Ask again* sends: a user who presses a button means it.
+   *
+   * ## Compatibility, stated rather than discovered
+   *
+   * This is a **new method**, not a new field on an existing result. An older daemon refuses it by name,
+   * which is the skew the window already handles (`missingMethods`/`coder.hello`'s `methods`, and the
+   * "restart EnvoyCoder so both come from one build" sentence) — so the open asymmetry §7.2 of
+   * `docs/settings-parity.md` records for a *stricter result schema* is not widened here: nothing in an
+   * older daemon's answers changes shape.
+   */
+  "coder.probeSessionOptions": {
+    params: z
+      .object({
+        harness: HarnessIdSchema,
+        /**
+         * Ask the agent rather than answering from a recent observation. Optional, and absent means
+         * "your notes are fine" — which is what a window asks when it merely needs the list.
+         */
+        force: z.boolean().optional(),
+      })
+      .strict(),
+    result: z
+      .object({
+        harness: HarnessIdSchema,
+        /** Required, for the reason `PROBE_OUTCOMES` gives: a failure must not read as an answer. */
+        outcome: ProbeOutcomeSchema,
+        /**
+         * The evidence, or the reason we could not ask — one English sentence, with its catalogue key
+         * attached when this daemon wrote it (`keyed()`).
+         *
+         * Rendered by the window for `"unreachable"` and for `"none"` (where it is the daemon saying
+         * what happened, in the user's language); for `"listed"` the store's own record supersedes it,
+         * and it stays as the evidence a maintainer and the tests read.
+         */
+        detail: z.string().min(1),
       })
       .strict(),
   },

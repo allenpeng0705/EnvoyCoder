@@ -200,6 +200,15 @@ export const ja: Catalogue = {
   "task.composer.thinking.notWired": "{agent} の思考の度合いを選ぶ機能はまだ接続されていないため、黙って無視されるのではなく、この項目は無効になっています。",
   "task.composer.thinking.unknown": "EnvoyCoder はまだ {agent} が何を提供するか知らされていないため、この項目は今は無効です。",
   "task.composer.thinking.observed": "これは EnvoyCoder が最後に {agent} とセッションを開いたとき（{at}）に提示された思考レベルです。そのとき動いていたモデルに対して挙げられたものなので、変わることがあります。",
+  // 初回実行の前に、エージェント自身に何を提供できるか尋ねる。
+  "task.composer.probe.ask": "{agent} に提供内容を尋ねる",
+  "task.composer.probe.askAgain": "{agent} にもう一度尋ねる",
+  "task.composer.probe.asking":
+    "EnvoyCoder が {agent} に提供内容を尋ねています。そのため一時的に起動し、尋ねたあとで閉じます——エージェントには何も送信していません。",
+  "task.composer.probe.none":
+    "{agent} は応答しましたが、選べるものは何も公開しませんでした。ここには依然として一覧がありません——エージェントが文書化している値を入力するか、初回実行後に選んでください。",
+  "task.composer.probe.failed":
+    "EnvoyCoder は {agent} に提供内容を尋ねられませんでした：{reason} 画面に表示されている内容は変わっていません。",
   "task.composer.thinking.nextRun": "エージェントは開始時の思考レベルを保ちます。あなたの選択は次回の実行に適用されます。",
   "task.agentMode.default.label": "既定",
   "task.agentMode.default.description": "作業を進めますが、破壊的な操作の前には確認します。",

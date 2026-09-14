@@ -24,15 +24,18 @@
  *     up. `RUN_LIVE_ACP=1` asserts the successful turn for a machine that does have a key.
  */
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { findBinary } from "@envoycoder/platform";
-import { probeHarness, resolveHarnessCommand } from "@envoycoder/agent-catalog";
+import { probeHarness, resolveHarnessCommand, sessionFacts } from "@envoycoder/agent-catalog";
+import { coderPaths } from "@envoycoder/host-bridge";
 
 import { AcpClient, type AcpUpdate } from "../src/daemon/acp/client.js";
+import { SessionProbe } from "../src/daemon/session-probe.js";
+import { CoderStore } from "../src/daemon/store.js";
 
 const dsh = findBinary("dsh");
 /**
@@ -259,6 +262,27 @@ describe.skipIf(!dsh)("the ACP client, against the real dsh binary", () => {
     // Idempotent: a daemon shutting down may race its own teardown.
     await client.stop();
   }, 90_000);
+
+  it("tears down once when two callers ask at the same moment", async () => {
+    // **The race this repo has actually seen.** A run's own `finally` stops the client it started while
+    // `RunManager.stopAll` is stopping every live client for shutdown: two callers, one process. Before
+    // this was pinned, each caller got its own promise, both passed the `stopped` check, and the second
+    // sent `session/close` down a stdin the first had already ended — the intermittent
+    // `ERR_STREAM_WRITE_AFTER_END` that can make the vitest *process* leave 1 under load without failing
+    // any one test, which is exactly why it is worth a test of its own rather than a comment.
+    const { cwd, dshHome } = await workdir();
+    const client = await AcpClient.start({
+      launch: { command: dsh as string, args: ["--profile", "acp"], cwd, env: { DSH_HOME: dshHome } },
+      requestTimeoutMs: 60_000,
+    });
+
+    const first = client.stop();
+    const second = client.stop();
+    // One teardown, so one promise: this is the mechanism, and it is observable.
+    expect(second).toBe(first);
+    await Promise.all([first, second]);
+    await expect(client.prompt("anything")).rejects.toThrow(/no longer running/);
+  }, 90_000);
 });
 
 describe.skipIf(!builtInProbe.available)("the ACP client, against the real built-in harness", () => {
@@ -335,14 +359,102 @@ describe.skipIf(!builtInProbe.available)("the ACP client, against the real built
   }, 180_000);
 });
 
-describe.skipIf(dsh)("the ACP client when no agent is installed", () => {
-  it("says so, and names what to install", async () => {
-    // Not a mock: this is the real path a user without the agent meets, and it must fail with a
-    // sentence rather than an `ENOENT` stack from four frames deep.
+/**
+ * The probe, against the real agents.
+ *
+ * The probe's *decisions* are proved with a port object in `session-probe.test.ts`; what only a real
+ * binary can prove is that asking "what do you offer?" of the shipped agents gives the answers this
+ * feature's whole surface rests on: `dsh` publishes a model list and a thought level, and
+ * `envoy-harness` publishes nothing at all. Both are read through the store a run writes, because a
+ * probe that filled a *different* record would be a second shape of truth.
+ */
+describe("the probe, against the real agents", () => {
+  /** A real store under a throwaway home, and a probe that launches agents the way a run does. */
+  async function probeBench(): Promise<{
+    probe: SessionProbe;
+    store: CoderStore;
+    stateFile: string;
+  }> {
+    const home = await mkdtemp(join(tmpdir(), "envoycoder-probe-real-"));
+    const paths = coderPaths(home);
+    cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+    const store = await CoderStore.open({ paths });
+    // No `resolveLaunch`, on purpose: this is the production path — `launchForHarness`, the same function
+    // `RunManager` calls — so the probe is proved to start the real binary with the real argv, including the
+    // `DSH_HOME` of its own that keeps EnvoyCoder out of the user's `dsh` state.
+    const probe = new SessionProbe({ paths, store });
+    cleanups.push(async () => probe.stopAll());
+    return { probe, store, stateFile: paths.sessionOptionsFile };
+  }
+
+  it.skipIf(!dsh)("lands what dsh publishes in the run's own record, where a window already reads", async () => {
+    const bench = await probeBench();
+    const answer = await bench.probe.probe("deepseek-harness");
+
+    expect(answer.outcome).toBe("listed");
+    const recorded = bench.store.sessionOptions("deepseek-harness");
+    expect(recorded?.sessionId, "the real agent named its session").toBeTruthy();
+    expect(Number.isNaN(Date.parse(recorded?.observedAt ?? ""))).toBe(false);
+    // The agent's own config ids, read out of a live `session/new` response. A wrong id here is what the
+    // thinking pill would be built on, which is why the id is asserted rather than a count.
+    const configIds = recorded?.options.map((option) => option.configId) ?? [];
+    expect(configIds).toContain("model");
+    expect(configIds).toContain("reasoning_effort");
+
+    // And the *window's* answer is derived from that record by the same function `coder.listHarnesses`
+    // uses — so this is what the pills will show, not a private summary of it.
+    const facts = sessionFacts("deepseek-harness", recorded);
+    expect(facts.models.kind).toBe("listed");
+    expect(facts.models.options.length).toBeGreaterThan(0);
+    expect(facts.thinking.kind).toBe("listed");
+    expect(facts.thinking.options.length).toBeGreaterThan(0);
+
+    // On disk, in the file a run writes — one shape of truth for both paths.
+    const stored = JSON.parse(await readFile(bench.stateFile, "utf8")) as { harness: string }[];
+    expect(stored.map((entry) => entry.harness)).toEqual(["deepseek-harness"]);
+  }, 90_000);
+
+  it.skipIf(!builtInProbe.available)(
+    "records that the built-in harness publishes nothing — as an observation, not as our ignorance",
+    async () => {
+      const bench = await probeBench();
+      const answer = await bench.probe.probe("envoy-harness");
+
+      // The claim the thinking pill's disabled state rests on, and the *second* of the two ways it can be
+      // true: not "its source has no such method" (that is the catalogue's answer) but "we asked it and it
+      // offered nothing". Before this slice only a run could produce that evidence.
+      expect(answer.outcome).toBe("none");
+      const recorded = bench.store.sessionOptions("envoy-harness");
+      expect(recorded?.options).toEqual([]);
+      expect(Number.isNaN(Date.parse(recorded?.observedAt ?? ""))).toBe(false);
+
+      const facts = sessionFacts("envoy-harness", recorded);
+      expect(facts.thinking.kind).toBe("none");
+      // The models are the catalogue's list, untouched and **unstamped**: a session that says nothing about
+      // models has not contradicted a list that came from the agent's own source, and attaching this
+      // session's time to it would date a fact from somewhere else.
+      expect(facts.models.kind).toBe("listed");
+      expect(facts.models.observedAt).toBeUndefined();
+    },
+    90_000,
+  );
+});
+
+describe("the ACP client when the agent cannot be started at all", () => {
+  it("says so promptly, rather than waiting for an exit that will never come", async () => {
+    // Not a mock: this is the real path a user meets when the configured command is not there, and it must
+    // fail with a sentence rather than an `ENOENT` stack from four frames deep.
+    const started = Date.now();
     await expect(
       AcpClient.start({
         launch: { command: "definitely-not-an-agent-binary", args: [], cwd: tmpdir() },
       }),
     ).rejects.toThrow(/could not start|ENOENT/i);
-  });
+
+    // **The bound is the assertion that matters, and it is a bug this slice found.** A failed spawn emits
+    // `error` and `close` — never `exit` — and `stop()` used to end with an unbounded `await this.exited`,
+    // so the client hung forever and every caller awaiting `stop()` hung with it. The probe hit it on the
+    // first run: a missing binary took the full 30-second probe budget to report itself.
+    expect(Date.now() - started).toBeLessThan(15_000);
+  }, 30_000);
 });

@@ -19,6 +19,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { HarnessSummary, Project, RunEvent, Task } from "@envoycoder/protocol";
+import { withMessageRef } from "@envoycoder/protocol";
 
 import { canApplyModel, canApplyThinking, harnessModels, harnessThinking, HARNESS_CATALOG } from "@envoycoder/agent-catalog";
 
@@ -918,6 +919,166 @@ describe("the model control when the list came from a session", () => {
     expect(screen.getByText(/models DeepSeek Harness listed when EnvoyCoder last opened a session/)).toBeTruthy();
     // The free-text instruction is gone, because there is no longer a field to type into.
     expect(screen.queryByText(/publishes its models only inside a running session/)).toBeNull();
+  });
+});
+
+/* ────────────────────────────── the pre-flight probe, on screen ────────────────────────────── */
+
+/**
+ * The four states of the probe, rendered.
+ *
+ * `composer-controls.test.ts` proves the *decision*; this proves the decision reaches the screen and that
+ * the pane's own state machine — ask once, keep the answer against the agent, never re-ask on a re-render —
+ * behaves. The distinction matters here more than usual: the failure mode being guarded against is a control
+ * that looks like it knows something it does not, and only a render can show that.
+ */
+describe("asking the agent what it offers, before the first run", () => {
+  /**
+   * What the daemon puts on the wire for one of the two answers that are not a list.
+   *
+   * Built with `withMessageRef`, which is what `keyed()` wraps on the daemon's side, so the string here is
+   * the shape the window actually receives — key marker and all — rather than a hand-written approximation
+   * of it.
+   */
+  const daemonSaid = (key: string, sentence: string, values: Record<string, string | number>): string =>
+    withMessageRef(sentence, { key, values });
+
+  it("asks by itself, and says what the ask costs while it runs", async () => {
+    let release: (answer: {
+      ok: true;
+      outcome: "none";
+      detail: string;
+    }) => void = () => undefined;
+    const ask = vi.fn(
+      () =>
+        new Promise<{ ok: true; outcome: "none"; detail: string }>((resolve) => {
+          release = resolve;
+        }),
+    );
+
+    renderPane([], {
+      task: { ...task, harness: "deepseek-harness", model: undefined },
+      harnesses: [harnessFor("deepseek-harness")],
+      probeSupported: true,
+      onProbeAgent: ask,
+    });
+
+    // The composer asks without being pressed: the agent publishes its options only inside a session, and
+    // making the user find a button for our ignorance is the product rule this row exists to break.
+    await waitFor(() => expect(ask).toHaveBeenCalledTimes(1));
+    expect(ask).toHaveBeenCalledWith("deepseek-harness", { force: false });
+
+    // **The state the brief names.** While the probe runs there is no list — and the control says *that*,
+    // including what it costs, instead of showing an empty picker as if the agent had none.
+    expect(screen.getByText(/Asking DeepSeek Harness what it offers/)).toBeTruthy();
+    expect(screen.getByText(/starts it, asks, and closes it again/)).toBeTruthy();
+    // And the one button on screen is disabled while it runs rather than inviting a second process.
+    const button = screen.getByRole("button", { name: /Ask DeepSeek Harness again/ });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+
+    release({
+      ok: true,
+      outcome: "none",
+      detail: daemonSaid(
+        "task.composer.probe.none",
+        "DeepSeek Harness answered and published nothing to choose from, so there is still no list here — type a value it documents, or pick one after the first run.",
+        { agent: "DeepSeek Harness" },
+      ),
+    });
+
+    // **A fact about the agent, in the daemon's words, in the user's language.** Rendered through the key
+    // the daemon sent — not the English sentence it also sent — which is what keeps a German window German
+    // when the sentence came from another process.
+    await waitFor(() =>
+      expect(
+        screen.getByText(/answered and published nothing to choose from, so there is still no list here/),
+      ).toBeTruthy(),
+    );
+    // The second ask is offered, and it is the deliberate one.
+    expect(screen.getByRole("button", { name: /Ask DeepSeek Harness again/ })).toBeTruthy();
+  });
+
+  it("says it could not ask, and never reports that as the agent publishing nothing", async () => {
+    const ask = vi.fn(async () => ({
+      ok: false as const,
+      message: "The daemon does not know coder.probeSessionOptions.",
+      key: "error.daemonTooOld" as const,
+      values: { method: "coder.probeSessionOptions" },
+    }));
+
+    renderPane([], {
+      task: { ...task, harness: "deepseek-harness", model: undefined },
+      harnesses: [harnessFor("deepseek-harness")],
+      probeSupported: true,
+      onProbeAgent: ask,
+    });
+
+    // A failed *call* is the same statement to a user as an agent we could not reach, and the refusal
+    // already carries its own key — so the window renders it rather than composing a second sentence.
+    await waitFor(() => expect(screen.getByText(/daemon.*does not know coder\.probeSessionOptions/)).toBeTruthy());
+    expect(screen.queryByText(/answered and published nothing/)).toBeNull();
+  });
+
+  it("asks a second time only when pressed, and then with force", async () => {
+    const ask = vi.fn(async () => ({
+      ok: true as const,
+      outcome: "unreachable" as const,
+      detail: daemonSaid(
+        "task.composer.probe.failed",
+        "EnvoyCoder could not ask DeepSeek Harness what it offers: spawn ENOENT Nothing you see has changed.",
+        { agent: "DeepSeek Harness", reason: "spawn ENOENT" },
+      ),
+    }));
+
+    renderPane([], {
+      task: { ...task, harness: "deepseek-harness", model: undefined },
+      harnesses: [harnessFor("deepseek-harness")],
+      probeSupported: true,
+      onProbeAgent: ask,
+    });
+
+    await waitFor(() => expect(ask).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(/could not ask DeepSeek Harness what it offers/)).toBeTruthy();
+
+    // A re-render — the transcript, a keystroke — must not ask again: the answer is already here.
+    fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "hello" } });
+    await waitFor(() => expect(ask).toHaveBeenCalledTimes(1));
+
+    // The user pressing the button does, and it forces: the daemon's cache must not answer a press.
+    fireEvent.click(screen.getByRole("button", { name: /Ask DeepSeek Harness again/ }));
+    await waitFor(() => expect(ask).toHaveBeenCalledTimes(2));
+    expect(ask).toHaveBeenLastCalledWith("deepseek-harness", { force: true });
+  });
+
+  it("offers nothing to press for an agent whose options the catalogue already answers", async () => {
+    const ask = vi.fn();
+    renderPane([], {
+      // `envoy-harness`: a model list published in its own source, and no thought-level surface at all —
+      // so a probe would spend a process to learn nothing, and the pane does not offer one.
+      task: { ...task, harness: "envoy-harness" },
+      harnesses: [harnessFor("envoy-harness")],
+      probeSupported: true,
+      onProbeAgent: ask,
+    });
+
+    expect(screen.queryByRole("button", { name: /Ask Envoy Harness/ })).toBeNull();
+    expect(ask).not.toHaveBeenCalled();
+  });
+
+  it("offers nothing either when the daemon is an older build than this window", async () => {
+    const ask = vi.fn();
+    renderPane([], {
+      task: { ...task, harness: "deepseek-harness", model: undefined },
+      harnesses: [harnessFor("deepseek-harness")],
+      // `coder.hello` did not list the method: this window is attached to a daemon that predates it (the
+      // shell attaches to whichever build owns the port). No button, rather than one that comes back
+      // "Method not found" — the global version-skew notice is the sentence for that.
+      probeSupported: false,
+      onProbeAgent: ask,
+    });
+
+    expect(screen.queryByRole("button", { name: /Ask DeepSeek Harness/ })).toBeNull();
+    expect(ask).not.toHaveBeenCalled();
   });
 });
 

@@ -200,6 +200,15 @@ export const de: Catalogue = {
   "task.composer.thinking.notWired": "Wie viel {agent} nachdenkt, lässt sich noch nicht einstellen, deshalb ist das Feld aus, statt still ignoriert zu werden.",
   "task.composer.thinking.unknown": "EnvoyCoder wurde noch nicht gesagt, was {agent} anbietet, deshalb ist das Feld vorerst aus.",
   "task.composer.thinking.observed": "Das sind die Denkstufen, die {agent} angeboten hat, als EnvoyCoder zuletzt eine Sitzung damit geöffnet hat — am {at}. Sie wurden für das damals laufende Modell genannt und können sich deshalb ändern.",
+  // Vor dem ersten Lauf den Agenten selbst fragen, was er anbietet.
+  "task.composer.probe.ask": "{agent} fragen, was er anbietet",
+  "task.composer.probe.askAgain": "{agent} erneut fragen",
+  "task.composer.probe.asking":
+    "EnvoyCoder fragt {agent} gerade, was er anbietet. Er wird dafür kurz gestartet und danach wieder geschlossen — es wird ihm nichts gesendet.",
+  "task.composer.probe.none":
+    "{agent} hat geantwortet und nichts zur Auswahl veröffentlicht, deshalb steht hier weiterhin keine Liste — tippe einen Wert ein, den er dokumentiert, oder wähle einen nach dem ersten Lauf.",
+  "task.composer.probe.failed":
+    "EnvoyCoder konnte {agent} nicht fragen, was er anbietet: {reason} Was du siehst, hat sich nicht geändert.",
   "task.composer.thinking.nextRun": "Der Agent behält die Denkstufe, mit der er gestartet ist. Deine Wahl gilt für den nächsten Lauf.",
   "task.agentMode.default.label": "Standard",
   "task.agentMode.default.description": "Erledigt die Arbeit und fragt vor allem, was zerstören könnte.",

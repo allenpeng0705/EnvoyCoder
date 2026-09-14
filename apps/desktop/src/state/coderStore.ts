@@ -37,6 +37,7 @@ import type {
   CoderSettings,
   HarnessId,
   HarnessSummary,
+  ProbeOutcome,
   Project,
   RunEvent,
   RunMode,
@@ -505,6 +506,34 @@ export class CoderStore {
     optionId: string,
   ): Promise<{ ok: true } | Refusal> {
     return this.mutate("coder.answerApproval", { runId, requestId, optionId }, () => ({ ok: true as const }));
+  }
+
+  /**
+   * Ask an agent what it offers — the pre-flight probe, from the window.
+   *
+   * Three outcomes come back as **successes**, because all three are answers this call produced: the
+   * agent published a list, the agent published nothing, or the daemon could not ask. Only a failure of
+   * the *call* (no connection, a method this daemon does not have, a refused parameter) is a `Refusal`,
+   * and the caller renders that in the same line as `unreachable` — it is the same statement to a user:
+   * we could not ask, and here is why.
+   *
+   * Nothing is refetched here. A successful probe writes the observation through the store, which emits
+   * `coder:state-changed {kind: "harnesses"}`, and the window already refetches the agent list on that
+   * event — the push-driven arrangement this store is built on, rather than a second path that could
+   * disagree with it about when the list is current.
+   */
+  async probeSessionOptions(
+    harness: HarnessId,
+    options: { force?: boolean } = {},
+  ): Promise<{ ok: true; outcome: ProbeOutcome; detail: string } | Refusal> {
+    return this.mutate(
+      "coder.probeSessionOptions",
+      { harness, ...(options.force !== undefined ? { force: options.force } : {}) },
+      (answer) => {
+        const result = answer as { outcome: ProbeOutcome; detail: string };
+        return { ok: true as const, outcome: result.outcome, detail: result.detail };
+      },
+    );
   }
 
   /* ────────────────────────────── actions ────────────────────────────── */

@@ -589,7 +589,7 @@ at all, so **ship the disabled row with the git slice, not before it.**
 | **Enable {provider}** (`providers[id].enabled`) | `providers-section.tsx:248-253`, per provider · `settings.providers.enableProvider` "Enable {{name}}" (`en.ts:2651`) | `true` (`:444`; daemon `server/agent/provider-registry.ts:737`) | daemon: only enabled providers get a client; disabled ⇒ `unavailable`, `listModels` throws "Provider X is disabled" (`provider-registry.ts:375-377`,`:752-754`,`:836-837`) | our equivalent is the ACP catalogue: `apps/desktop/src/state/coderStore.ts` filters `harness.available !== false` (`SettingsPane.tsx:40`) and lists every catalogue entry | **not applicable as a *setting*** — availability in EnvoyCoder is a fact we detect (`available`/`unknown`/`false`), not a switch the user throws. Making it a switch would let a user hide a working agent for no reason |
 | **Add provider** (`providers[id]` from the ACP catalogue) | `provider-catalog-list.tsx:108-118` · `providerCatalog.actions.add` "Add" (`en.ts:1587`) | — (action) | persists `{providers:{[id]:{extends:"acp",label,description,command,env,params}}}` (`hooks/use-acp-provider-catalog.ts:11-26`) so a third-party ACP CLI becomes runnable | **the gap this row names is real**: our 38-entry ACP catalogue is in-repo data (`packages/agent-catalog/src/acp-catalog.ts`) and a user cannot add a provider at all | **honour-able with work** — this is `docs/paseo-feature-parity.md` #5 and the work is named there: an open provider id, a provider config file, and list/add/remove RPCs. It is a **new protocol field**, so per family guide §7.4 the shape goes upstream into `@envoycoder/protocol`'s owner decision first — this repo *is* the owner of that package, so the change lands here and `check-wiring` follows |
 | **Remove provider** (`removeProviders`) | `providers-section.tsx:155-164` (menu + confirm) · `settings.providers.actions.remove` (`en.ts:2658`) | — (action) | daemon strips the entry, its overrides **and** its `metadataGeneration.providers` entries (`daemon-config-store.ts:101-159`) | absent with the row above | **honour-able with work** — same slice as Add; a list editor with add and no remove is not a slice |
-| **Add custom model** (`providers[id].additionalModels`) | `provider-diagnostic-sheet.tsx:199-234` (modal form) · `settings.providers.models.addCustomTitle` "Add custom model" (`en.ts:2678`) | `[]` (`provider-registry.ts:735`) | merged on top of discovered models (`provider-registry.ts:383-396`,`:651`): the picker gains ids without replacing the catalogue | our catalogue ships a fixed `models` list per agent (`packages/agent-catalog/src/models.ts`) with no user additions | **honour-able with work** — needs a per-agent model list on the settings object plus the composer reading it. Small, but it is a **protocol** addition (a `models` array on the agent's stored defaults), so it shares the Add-provider slice's schema change |
+| **Add custom model** (`providers[id].additionalModels`) | `provider-diagnostic-sheet.tsx:199-234` (modal form) · `settings.providers.models.addCustomTitle` "Add custom model" (`en.ts:2678`) | `[]` (`provider-registry.ts:735`) | merged on top of discovered models (`provider-registry.ts:383-396`,`:651`): the picker gains ids without replacing the catalogue | our catalogue ships a fixed `models` list per agent (`packages/agent-catalog/src/models.ts`) with no user additions. **Half of this row landed since it was written, and not as a settings control:** the agent is now *asked* what it offers and the answer is recorded, so `deepseek-harness`'s live catalog reaches the picker without a hand-typed id (§7.7). What is still absent is the user's own additions — ids that are not in the agent's catalog at all | **honour-able with work** — needs a per-agent model list on the settings object plus the composer reading it. Small, but it is a **protocol** addition (a `models` array on the agent's stored defaults), so it shares the Add-provider slice's schema change |
 | **Remove model** | `provider-diagnostic-sheet.tsx:114-118` · `settings.providers.models.removeModel` "Remove {{id}}" (`en.ts:2684`) | — (action) | rewrites `additionalModels` without the id (`:651-667`) | absent with the row above | **honour-able with work** — same slice |
 
 **Section verdict: `not applicable`.** Paseo's `providers` page is a *credential and adapter*
@@ -809,6 +809,12 @@ already tried here and rejected.
   asymmetry worth a decision: either `withoutRetiredSettingsKeys` is applied to that result schema too
   (one function, both directions), or the docs say out loud that a window one build ahead of its daemon
   cannot read settings. **Not decided here, because wire compatibility is not a settings row.**
+  **One later change is on the safe side of it, and it is recorded here so the distinction is not
+  blurred:** the pre-flight probe (§7.7) added a *method* (`coder.probeSessionOptions`) and no field to
+  any existing result, so no answer an older daemon gives changes shape. A window talking to that daemon
+  asks `coder.hello` first, sees the method is not in `methods`, and offers no probe button at all —
+  which is the mechanism `missingMethods` already provides. The asymmetry above is about a *stricter
+  schema refusing a document*, and adding a method does not create one.
 
 **What this document recommends, and it is slice 1 in §8 (§8.1):** make all four honest before
 adding a single Paseo row. Either wire a setting to a real effect or render it disabled with the
@@ -1073,7 +1079,7 @@ JSX — and `test/settings-nav.test.tsx` compares the rendered names with the re
 | **General** | Language; the folder *Add project* starts in | `main.tsx:33` (the root provider re-renders every `t()`); the palette's `project.add` row seeds its text stage with `state.settings.defaultProjectPath` (`CoderApp.tsx`), `test/palette-flow.test.tsx` |
 | **New tasks** | The default agent, the default model, the agent's extra argv | `resolveTaskDefaults` (`packages/task-model/src/index.ts`) — explicit → project → app → fallback; `test/settings-store.test.ts` asserts an app default reaching a created task |
 | **Safety** | *Ask before anything destructive*; *Keep transcripts after a task ends* | the value goes to the agent as its own session policy (`session/set_policy { autoRun }`, mapped by `run-options.ts`), four cases in `test/runs.test.ts`; `appendTranscript` returns early when transcripts are off |
-| **Agents** | Every agent the machine can run: availability, its capability warnings, and the tier, modes, models and thinking levels **it published about itself** | read straight from `HarnessSummary` — the daemon's own answer. Read-only on purpose: availability here is a fact we detect, not a switch a user throws (§5.8) |
+| **Agents** | Every agent the machine can run: availability, its capability warnings, and the tier, modes, models and thinking levels **it published about itself** | read straight from `HarnessSummary` — the daemon's own answer. Read-only on purpose: availability here is a fact we detect, not a switch a user throws (§5.8). The *composer* can now also **ask** an agent for that list before it has ever run (§7.7); this page stays a report, and the ask lives where the choice is made |
 | **Projects** | The list of registered projects, one row each, opening that project's own defaults | `coder.listProjects`; the rows open scope 3, whose three controls write through `coder.updateProject` (whose defaults **replace**, hence the live-id rule of §7.5) |
 | **Keyboard shortcuts** | The keys this window is **listening for**, from the same table the key handler reads | `wiredBindings(actions)` — the table filtered by the actions the shell mounted, so `⌘⇧N`, `⇧?` and `Escape` are absent because nothing is mounted for them. A page that listed the table would advertise keys that do nothing, which is the same lie as a setting that does nothing |
 | **This machine** | The daemon's build, state folder, home folder, start time, and how many windows are attached | `coder.hello`'s own answer, all of it (`packages/protocol/src/rpc.ts:1040-1066`); the notes stay in the frame, below every page |
@@ -1136,6 +1142,109 @@ registry** (the rendered names, in order, equal the registry's title keys). The 
 listed in the file's own header and were each run: a section with nothing in it, a section whose page
 renders `<></>`, a hardcoded ninth item, an item that navigates nowhere, a mark taken from a local
 selection, a bar rendered at 900px, and the whole shortcut table listed instead of the mounted bindings.
+
+### 7.7 The pre-flight probe: asking an agent what it offers, before it has ever run
+
+**The defect, stated as the owner stated it.** Two of the composer's three pills behaved differently per
+agent, and the user could not tell why. `envoy-harness` publishes nothing over ACP: its models come from
+`DEFAULT_PROVIDER_MODELS` in its own source and it takes them as `--provider`/`--model` argv
+(`packages/agent-catalog/src/models.ts:222-234`). `deepseek-harness` **does** publish — `provider/model`
+pairs with names and descriptions, plus a `reasoning_effort` level — but only inside a session's
+`session/new` response. So the same three controls were populated for one agent and hand-typed for the
+other, and the only honest thing the window could say about the second was "type `provider/model` from
+memory" (`task.composer.model.freeText`) or "there is nothing to choose from until it has run once"
+(`task.composer.thinking.notSeen`). Both sentences were true; neither was a feature.
+
+**What this slice added.** A probe: start the agent the way a run does — the same launch resolution,
+`initialize` → `session/new {cwd, mcpServers: []}` → read `configOptions` → close — and write the answer
+through the **same store path a run writes** (`CoderStore.recordSessionOptions`, `session-options.json`).
+The window needed no new rendering path at all: `coder.listHarnesses` reads the record it always read, so
+the pickers fill from the same `AgentModels`/`AgentThinking` the pills were already built on.
+
+**Three outcomes, never two.** `PROBE_OUTCOMES` (`packages/protocol/src/rpc.ts`) is the type, and the third
+member is the whole point — rendering a failure as "publishes none" is the claim this product keeps
+refusing, because it is a statement about somebody else's product made from evidence we do not have:
+
+| outcome | what happened | recorded? | what the window draws |
+|---|---|---|---|
+| `listed` | the session published options | **yes** — normalized by `observeSessionOptions`, the same function a run goes through | nothing extra: the pills fill, and their "observed at {time}" note gains this session's timestamp |
+| `none` | the session opened and published nothing | **yes**, as an observation with `options: []` — "we asked and it offered nothing" is a fact about the agent, and it is what a run records for `envoy-harness` too | `task.composer.probe.none`, the daemon's own keyed sentence |
+| `unreachable` | missing binary, not drivable, refused to start, never answered, budget exhausted | **no, never** | `task.composer.probe.failed`, the daemon's keyed sentence naming the reason |
+
+**The wire: one new method and no new fields.** `coder.probeSessionOptions { harness, force? }` →
+`{ harness, outcome, detail }`, with `outcome` **required** rather than optional so "absent" can never be
+read as one of the three answers — the same discipline `AgentModels.kind` and `AgentThinking.kind` already
+follow. `HarnessSummary` is unchanged: nothing needed to be added to it, because "a probe is in flight" is
+a fact the *window* owns (it made the call), and the answer reaches it through the store's existing
+`coder:state-changed { kind: "harnesses" }` event. An older daemon simply does not have the method, and the
+window checks `coder.hello`'s `methods` before offering the button — see §7.2, where this is recorded as
+*not* widening the open result-schema asymmetry.
+
+**Cost, bounded in four ways, because a probe is a process spawn.**
+
+| bound | how | why that |
+|---|---|---|
+| trigger | the composer asks **once per agent**, when a control that needs the list is on screen (`TaskPane`) | never at daemon boot, never on a timer, never as a side effect of `coder.listHarnesses` — a list call that silently spawned agents would make rendering a sidebar start every installed one. The alternative (a button the user has to find) fails the product's own rule: it makes the user responsible for our ignorance, and it leaves the "a probe is running" state unreachable |
+| cache | in memory, per agent, with `at` and the agent's build fingerprint | a second window, a phone or a re-render gets the answer we already have instead of a new process. In memory on purpose: the durable record is the store's, and a daemon restart is a legitimate moment to ask again |
+| staleness | `PROBE_STALE_MS` = **10 minutes**, and a changed build re-probes regardless | a list changes when the *build* changes (caught by the fingerprint, not by the clock) or when the user's credentials change (rare, and *Ask again* forces with `force: true`). A **failure is never cached**, so the next ask is the retry |
+| timeout | `PROBE_HANDSHAKE_MS` = 20s per handshake request, `PROBE_TIMEOUT_MS` = 30s for the whole probe | the inner budget is the one that fails with a readable sentence; the outer one makes "a probe answers within 30 seconds" a property of the module rather than a hope about two timeouts composing |
+
+Two more, worth stating because they are what a user would notice: probes of one agent are **serialised**
+(a second ask joins the first's answer rather than starting a second process — two racing probes would write
+two observations and the loser could be the older one), and the session is opened in the daemon's own
+scratch directory (`<stateDir>/agent-probe/<agent>`), **not in the user's project**: a probe is not the
+user's work, and an agent that indexed, or ran `git` in, a tree nobody asked it to touch would be a
+side effect of a *settings* control. If an agent's option list ever becomes a function of the working
+directory, that choice is the line to revisit, and it is recorded where it is made.
+
+**"Same features" where an agent genuinely cannot do it.** The surface is the same and the reason differs,
+naming the agent — that is the rule, and the probe does not change it. `envoy-harness` gets **no** probe
+button, because there is nothing to learn: its model list is published in its own source and it has no
+thought-level surface at all. No probe is offered either when the agent is not installed, or when the
+daemon is an older build. In all three cases the control is not hidden behind a dead button: the pills keep
+their own sentences for our ignorance and the agent's lack, in the user's language.
+
+**Five sentences, and where they live** (`apps/desktop/src/i18n/messages/en.ts`, all seven languages in
+step — `npm run i18n:gap` reports 341/341 for six of them):
+
+| key | authored by | shown |
+|---|---|---|
+| `task.composer.probe.ask` / `.askAgain` | the window | the button, whose label says whether this is the first ask or another one |
+| `task.composer.probe.asking` | the window | while the probe runs: it names the agent **and says what the ask costs** — an agent process, started, asked and closed — because a control that spent the user's machine quietly would be the lie this row exists to avoid |
+| `task.composer.probe.none` | the **daemon** (`keyed()`) | the agent answered and published nothing |
+| `task.composer.probe.failed` | the **daemon** (`keyed()`) | we could not ask, with the reason (the agent's or the OS's own words) interpolated as `{reason}` |
+
+The `listed` sentence is deliberately **not** keyed and not drawn: the store's record is what the user
+sees, and a catalogue key whose sentence no window draws is a key nothing keeps honest.
+
+**The gate is four test files, and each one's negative case was run.** `apps/desktop/test/session-probe.test.ts`
+(the decision, with a port object and a real store: outcomes, recording and non-recording, cache, staleness,
+build fingerprint, `force`, in-flight join, timeout, single teardown); `apps/desktop/test/daemon-rpc.test.ts`
+(the three outcomes over a real socket with real child processes, plus the `harnesses` change event and the
+file on disk); `apps/desktop/test/acp-transport.test.ts` (the **real** `dsh` publishing and the **real**
+built-in harness publishing nothing); `apps/desktop/test/composer-controls.test.ts` +
+`apps/desktop/test/task-pane.test.tsx` (the four window states, pure and rendered). Twenty-five mutations
+were applied and each turned its named test red — the table is in the slice's report, and the two that
+matter most are the two this file's own history predicts: deleting the store write, and recording a failure
+as an empty observation.
+
+**Two bugs this slice found in passing, and fixed** — both in `AcpClient`'s teardown, which a probe
+exercises in exactly the shape that finds them:
+
+* **`exit` is not the only way a process ends.** "The process is gone" resolved on `exit` alone, and Node
+  does **not** emit `exit` when the spawn itself failed (it emits `error` and then `close`). `stop()` ends
+  in `await this.exited`, so a bad binary hung the client and every caller awaiting it — the probe hit it on
+  its first run, waiting the full 30-second budget to report a missing binary. The promise now resolves on
+  either event, and `apps/desktop/test/acp-transport.test.ts` asserts the bound (`< 15s`; it hangs when the
+  `close` handler is removed).
+* **The `ERR_STREAM_WRITE_AFTER_END` this repo has been seeing intermittently.** `stop()` was `async`, so
+  *two* callers arriving together — a run's own `finally` and `RunManager.stopAll` during shutdown — each
+  got their own promise, each passed the `stopped` check, and the second one sent `session/close` down a
+  stdin the first had already ended. It is now memoised into one teardown, and the test asserts the
+  mechanism directly (`client.stop()` twice in the same turn returns the *same* promise), which fails when
+  the method goes back to being `async`.
+
+---
 
 ---
 

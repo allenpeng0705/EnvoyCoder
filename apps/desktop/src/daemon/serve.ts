@@ -47,6 +47,7 @@ import { AcpClient } from "./acp/client.js";
 import { createCoderEventBus, createCoderSocketMethods, createNodeService } from "./events.js";
 import { clearDaemonClaim, writeDaemonClaim } from "./lock.js";
 import { RunManager } from "./runs.js";
+import { SessionProbe } from "./session-probe.js";
 import { createCoderHandlers } from "./service.js";
 import { CoderStore } from "./store.js";
 
@@ -122,10 +123,28 @@ export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): P
     ...(options.platform ? { platform: options.platform } : {}),
   });
 
+  /**
+   * The probe: built here beside the run manager, and **started by nothing**.
+   *
+   * It takes the same two injections a run does — the launch resolver and the client constructor — so a
+   * test that drives a fixture agent drives the probe through the same seam, and so a probe can never be
+   * exercised against a different spawn path than the one it uses in production. Nothing is probed at
+   * boot: the only caller is `coder.probeSessionOptions`, which a window sends when a control actually
+   * needs a list.
+   */
+  const probeSession = new SessionProbe({
+    paths,
+    store,
+    ...(options.startClient ? { startClient: options.startClient } : {}),
+    ...(options.resolveLaunch ? { resolveLaunch: options.resolveLaunch } : {}),
+    ...(options.platform ? { platform: options.platform } : {}),
+  });
+
   const handlers = createCoderHandlers({
     store,
     paths,
     runs,
+    probeSession,
     instance: { instanceId, version, startedAt: new Date().toISOString(), connectionCount: () => connections },
     mesh: () => mesh,
     ...(options.isDirectory ? { isDirectory: options.isDirectory } : {}),
@@ -182,9 +201,11 @@ export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): P
     connectionCount: () => connections,
     async stop() {
       unsubscribe();
-      // Runs first: an agent is a child process, and a daemon that exits before its children leaves
-      // agents writing to a user's working tree with nobody watching them.
-      await runs.stopAll();
+      // Runs and probes first: an agent is a child process, and a daemon that exits before its children
+      // leaves agents writing to a user's working tree with nobody watching them. A probe's agent is a
+      // child process too — short-lived, but a daemon that exited out from under one would leave it
+      // waiting on a pipe nobody will ever answer.
+      await Promise.all([runs.stopAll(), probeSession.stopAll()]);
       host.stop();
       await clearDaemonClaim(paths, instanceId);
     },

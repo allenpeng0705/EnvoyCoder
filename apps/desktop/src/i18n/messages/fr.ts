@@ -200,6 +200,15 @@ export const fr: Catalogue = {
   "task.composer.thinking.notWired": "Choisir combien {agent} réfléchit n'est pas encore câblé, le contrôle est donc désactivé plutôt qu'ignoré en silence.",
   "task.composer.thinking.unknown": "EnvoyCoder ne sait pas encore ce que {agent} propose, le contrôle est donc désactivé pour l'instant.",
   "task.composer.thinking.observed": "Voici les niveaux de réflexion que {agent} a proposés la dernière fois qu'EnvoyCoder a ouvert une session avec lui, le {at}. Ils étaient listés pour le modèle qu'il utilisait alors, ils peuvent donc changer.",
+  // Demander à l'agent lui-même ce qu'il propose, avant la première exécution.
+  "task.composer.probe.ask": "Demander à {agent} ce qu'il propose",
+  "task.composer.probe.askAgain": "Redemander à {agent}",
+  "task.composer.probe.asking":
+    "EnvoyCoder demande à {agent} ce qu'il propose. Il est démarré brièvement pour cela, puis refermé — rien ne lui est envoyé.",
+  "task.composer.probe.none":
+    "{agent} a répondu et n'a rien publié à choisir, il n'y a donc toujours pas de liste ici — saisissez une valeur qu'il documente, ou choisissez-en une après la première exécution.",
+  "task.composer.probe.failed":
+    "EnvoyCoder n'a pas pu demander à {agent} ce qu'il propose : {reason} Rien de ce que vous voyez n'a changé.",
   "task.composer.thinking.nextRun": "L'agent garde le niveau de réflexion avec lequel il a démarré. Votre choix s'applique à la prochaine exécution.",
   "task.agentMode.default.label": "Par défaut",
   "task.agentMode.default.description": "Fait le travail, en demandant avant toute action destructrice.",

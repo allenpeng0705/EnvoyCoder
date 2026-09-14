@@ -51,6 +51,7 @@ import type { CoderPaths } from "@envoycoder/host-bridge";
 
 import { keyed, ref } from "./messages.js";
 import type { RunManager } from "./runs.js";
+import type { SessionProbe } from "./session-probe.js";
 import type { CoderStore } from "./store.js";
 
 /** Identity of the running process — what makes `coder.hello` answer *which* daemon this is. */
@@ -80,6 +81,14 @@ export interface CoderServiceDeps {
    * the run methods refuse by name when it is absent rather than answering as if nothing were wrong.
    */
   runs?: RunManager;
+  /**
+   * The pre-flight probe: asking an agent what it offers, before a first run.
+   *
+   * Optional on exactly the same terms as `runs`, and for the same reason: it spawns agents, so a
+   * daemon built without an agent runtime has no probe either — and the method refuses by name rather
+   * than answering with an outcome nothing produced.
+   */
+  probeSession?: SessionProbe;
 }
 
 /** One handler: parameters already parsed, result not yet validated. */
@@ -445,6 +454,33 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
       };
     },
 
+    /**
+     * Ask an agent what it offers — the pre-flight probe.
+     *
+     * A thin handler on purpose. Everything that makes this safe is in `SessionProbe`: the three
+     * outcomes, the per-agent join, the timeout, the build-keyed cache, and the store write. A handler
+     * that decided any of that again would be the second copy of the rule, and the copy that goes stale
+     * is always the one further from the data.
+     *
+     * It is a method of its own rather than a flag on `coder.listHarnesses`, and that matters: a list
+     * call that silently spawned agents would make rendering a sidebar start every installed one.
+     */
+    "coder.probeSessionOptions": async (params) => {
+      const input = parseRpcParams("coder.probeSessionOptions", params) as {
+        harness: HarnessId;
+        force?: boolean;
+      };
+      const probeSession = requireProbeSession(deps);
+      const answer = await probeSession.probe(input.harness, {
+        ...(input.force !== undefined ? { force: input.force } : {}),
+      });
+      return {
+        harness: answer.harness,
+        outcome: answer.outcome,
+        detail: answer.detail,
+      };
+    },
+
     /* ────────────────── the mesh ────────────────── */
     "coder.meshStatus": async (params) => {
       parseRpcParams("coder.meshStatus", params);
@@ -512,6 +548,25 @@ function requireRuns(deps: CoderServiceDeps): RunManager {
     );
   }
   return deps.runs;
+}
+
+/**
+ * The probe, or a refusal naming the same fact `requireRuns` names.
+ *
+ * The sentence and the key are the *same* one: a daemon without an agent runtime cannot run tasks and
+ * cannot ask an agent what it offers, for one reason — there is nothing here that starts agents. A
+ * second key saying the same thing in different words would be a second sentence for a translator to
+ * keep in step with the first.
+ */
+function requireProbeSession(deps: CoderServiceDeps): SessionProbe {
+  if (!deps.probeSession) {
+    throw coderError(
+      ENVOYCODER_ERRORS.harnessFailed,
+      "This daemon was started without an agent runtime, so it cannot run tasks.",
+      ref("error.noRunRuntime"),
+    );
+  }
+  return deps.probeSession;
 }
 
 /**

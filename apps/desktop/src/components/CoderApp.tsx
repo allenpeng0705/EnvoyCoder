@@ -488,6 +488,20 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               events={active.runId ? (state.runs[active.runId]?.events ?? []) : []}
               runLive={active.runId ? state.runs[active.runId]?.run.endedAt === undefined : false}
               harnesses={state.harnesses}
+              // **The window's half of the build-skew rule.** The probe is a method this build added, so a
+              // window attached to an older daemon (the shell attaches to whichever build owns the port)
+              // asks `coder.hello` first — and offers no button at all when the answer is no, rather than
+              // one whose press comes back "Method not found". The global version-skew notice already tells
+              // the user which build is behind and what to do about it.
+              // Read from the state the store already publishes rather than through a new store method:
+              // `hello` **is** the daemon's own method catalogue, and a second accessor for one boolean
+              // would be a second thing for every test double of the store to implement.
+              probeSupported={
+                state.hello?.methods.includes("coder.probeSessionOptions") === true
+              }
+              onProbeAgent={(harness, options) =>
+                props.actions.probeSessionOptions(harness, options)
+              }
               onStart={async (prompt, agentModeId, model, thinkingLevel) => {
                 const result = await props.actions.startRun(active.id, prompt, {
                   ...(agentModeId !== undefined ? { agentModeId } : {}),

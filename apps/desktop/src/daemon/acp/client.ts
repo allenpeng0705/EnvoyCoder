@@ -198,6 +198,8 @@ export class AcpClient {
   private nextId = 1;
   private buffer = "";
   private stopped = false;
+  /** The one teardown, memoised so a second `stop()` joins it rather than racing it. See `stop`. */
+  private stopping: Promise<void> | undefined;
   private exited: Promise<void>;
 
   private agentInfoValue: AcpAgentInfo | undefined;
@@ -233,12 +235,25 @@ export class AcpClient {
       }
     });
 
+    /**
+     * "The process is gone" — resolved on **either** `exit` or `close`, and the second one is not
+     * redundant.
+     *
+     * `exit` does not fire when the spawn itself failed: Node emits `error` and then `close`, and nothing
+     * else. Verified with a one-line script (`spawn("definitely-not-an-agent-binary")` prints
+     * `error ENOENT` and `close`, never `exit`). So a teardown that waited only on `exit` would wait
+     * forever after a bad binary — `stop()` ends in `await this.exited`, and every caller that awaits
+     * `stop()` would hang with it. `close` fires in both cases, so the promise always settles and
+     * "nothing to tear down" is a state this class can actually reach.
+     */
     this.exited = new Promise<void>((resolve) => {
-      child.once("exit", () => {
+      const ended = (): void => {
         this.stopped = true;
         this.failAll(new Error("The agent process ended."));
         resolve();
-      });
+      };
+      child.once("exit", ended);
+      child.once("close", ended);
     });
     child.once("error", (error: Error) => {
       this.failAll(
@@ -508,8 +523,28 @@ export class AcpClient {
     this.notify("session/cancel", { sessionId });
   }
 
-  /** Close the session politely, then the process. Safe to call more than once. */
-  async stop(): Promise<void> {
+  /**
+   * Close the session politely, then the process. **Safe to call more than once — including twice at
+   * the same moment**, which is the case this method's shape exists for.
+   *
+   * Two callers really do arrive together: a run's own `finally` stops the client it started, and
+   * `RunManager.stopAll` stops every live client during shutdown. `stop()` used to be `async`, so each
+   * caller got its own promise, each one passed the `stopped` check, and the second one sent
+   * `session/close` down a stdin the first had already ended — the intermittent
+   * `ERR_STREAM_WRITE_AFTER_END` this repo has seen in CI, which does not fail a test but can make the
+   * vitest *process* exit 1 under load.
+   *
+   * So it is memoised rather than re-entrant: not an `async` method, because an `async` function wraps
+   * whatever it returns in a fresh promise and the two callers would be back to having two.
+   */
+  stop(): Promise<void> {
+    if (this.stopping) return this.stopping;
+    this.stopping = this.teardown();
+    return this.stopping;
+  }
+
+  /** The body of `stop`, run once per client. See that method for why it is behind a memo. */
+  private async teardown(): Promise<void> {
     if (this.stopped) {
       await this.exited;
       return;

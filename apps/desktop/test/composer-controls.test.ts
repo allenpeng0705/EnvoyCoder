@@ -27,6 +27,7 @@ import {
   thinkingOffReason,
   type ComposerAgent,
 } from "../src/composer/controls.js";
+import { probeAsk, publishesOnlyInSession, type ProbeState } from "../src/composer/probe.js";
 import { en, isMessageKey } from "../src/i18n/messages/en.js";
 import { createTranslator } from "../src/i18n/translate.js";
 
@@ -697,5 +698,116 @@ describe("why the mode picker is off", () => {
   it("has nothing to say when a disabled control carried no key", () => {
     // A caller that forgot one is a bug; inventing a sentence for it would hide that in the UI.
     expect(modeOffReason({ enabled: false }, { known: true, agent: "Pi" })).toBeUndefined();
+  });
+});
+
+/* ────────────────────────────── the pre-flight probe ────────────────────────────── */
+
+/**
+ * The four states of "ask the agent what it offers", decided without a DOM.
+ *
+ * The claim under test is the one the whole slice exists for: a control can be *ignorant* and say so,
+ * a control can be *busy* and say so, and a probe that failed must never be rendered as an agent that
+ * publishes nothing. Each of those is a different sentence, and only one of them is about the agent.
+ */
+describe("the pre-flight probe decides whether to ask at all", () => {
+  const canAsk = { unlisted: true, supported: true, available: true as const, agent: "DeepSeek Harness" };
+
+  it("asks when the agent publishes its options only inside a session", () => {
+    // The gap the slice closes: `deepseek-harness` publishes a model list and a thought level in the
+    // `session/new` response, so before a first run the window had nothing to render.
+    const ask = probeAsk({ ...canAsk, state: { state: "idle" } });
+    expect(ask.ask).toBe(true);
+    expect(ask.enabled).toBe(true);
+    // The first ask may be answered from the daemon's cache: "do we know what this agent offers?" is a
+    // question a second window asking it a minute later should not spend a process on.
+    expect(ask.force).toBe(false);
+    expect(ask.buttonKey).toBe("task.composer.probe.ask");
+    expect(ask.note).toBeUndefined();
+  });
+
+  it("names the two controls' answers as one question, not two", () => {
+    // One probe answers both pills — the model list and the levels come from the same response — which is
+    // why the button is drawn once and why the *whole agent* decides, not each control separately.
+    expect(publishesOnlyInSession({ models: { kind: "free-text", options: [], source: "…" } })).toBe(true);
+    expect(
+      publishesOnlyInSession({ thinking: { kind: "session", options: [], source: "…" } }),
+    ).toBe(true);
+    // A catalogue list and a genuine "none" are both already answered, so a probe would spend a process to
+    // learn nothing. This is the gate that keeps `envoy-harness` from ever being spawned for a probe.
+    expect(
+      publishesOnlyInSession({
+        models: { kind: "listed", options: [], source: "…" },
+        thinking: { kind: "none", options: [], source: "…" },
+      }),
+    ).toBe(false);
+    // And our own ignorance — the harness list has not arrived — is *not* a reason to ask either: there is
+    // no agent to ask about yet, and the pills already word this state.
+    expect(publishesOnlyInSession({})).toBe(false);
+  });
+
+  it("says it is asking, rather than showing an empty list while a process runs", () => {
+    const ask = probeAsk({ ...canAsk, state: { state: "asking" } });
+    expect(ask.ask).toBe(false);
+    // Disabled while it runs, and the label already offers the next one: pressing it twice cannot help,
+    // and a button that silently did nothing would read as a dead click.
+    expect(ask.enabled).toBe(false);
+    expect(ask.buttonKey).toBe("task.composer.probe.askAgain");
+    expect(ask.note?.key).toBe("task.composer.probe.asking");
+    expect(ask.note?.values).toEqual({ agent: "DeepSeek Harness" });
+    // The sentence names the agent and says what the ask costs, because it starts one.
+    expect(en["task.composer.probe.asking"]).toMatch(/starts it, asks, and closes it again/);
+  });
+
+  it("draws the daemon's own sentence for the two outcomes that are not a list", () => {
+    for (const outcome of ["none", "unreachable"] as const) {
+      const detail = { message: "the daemon's sentence", key: "task.composer.probe.none" as const };
+      const ask = probeAsk({ ...canAsk, state: { state: "answered", outcome, detail } });
+      // "It published nothing" and "we could not ask" are two sentences, and the daemon is the one that
+      // knows which happened — so the window draws what it sent, key and all, rather than rewording it.
+      expect(ask.note).toBe(detail);
+      expect(ask.ask).toBe(false);
+      expect(ask.enabled).toBe(true);
+      // The second ask forces, because the first one may have been answered from the daemon's cache.
+      expect(ask.force).toBe(true);
+      expect(ask.buttonKey).toBe("task.composer.probe.askAgain");
+    }
+  });
+
+  it("draws nothing for a list, because the list is the answer", () => {
+    const ask = probeAsk({
+      ...canAsk,
+      state: {
+        state: "answered",
+        outcome: "listed",
+        detail: { message: "DeepSeek Harness opened a session and published 2 option(s): model, …" },
+      },
+    });
+    // A second sentence under a pill that just grew options would be noise: the pills show the list, and
+    // their "observed at {time}" note carries the timestamp of the session this probe opened.
+    expect(ask.note).toBeUndefined();
+    expect(ask.enabled).toBe(true);
+    expect(ask.buttonKey).toBe("task.composer.probe.askAgain");
+  });
+
+  it("offers nothing to press for an agent the daemon cannot be asked about", () => {
+    // Three different reasons, one outcome: no button, and no probe. An enabled-looking control that goes
+    // nowhere is the failure this repository keeps writing gates against.
+    const cases = [
+      { ...canAsk, unlisted: false, state: { state: "idle" } as ProbeState },
+      // An older daemon: the shell attaches to whichever build owns the port, and this method is new.
+      { ...canAsk, supported: false, state: { state: "idle" } as ProbeState },
+      // Not installed: a probe could only come back "unreachable", and the composer names the install hint
+      // for that agent elsewhere.
+      { ...canAsk, available: false, state: { state: "idle" } as ProbeState },
+      { ...canAsk, available: "unknown" as const, state: { state: "idle" } as ProbeState },
+    ];
+    for (const input of cases) {
+      const ask = probeAsk(input);
+      expect(ask.ask, JSON.stringify(input.unlisted) + String(input.supported)).toBe(false);
+      expect(ask.enabled).toBe(false);
+      expect(ask.buttonKey).toBeUndefined();
+      expect(ask.note).toBeUndefined();
+    }
   });
 });

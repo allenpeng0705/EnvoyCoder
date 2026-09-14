@@ -276,6 +276,30 @@ export const en = {
   "task.composer.thinking.nextRun":
     "The agent keeps the thinking level it started with. Your choice applies to the next run.",
 
+  /* ── asking the agent what it offers, before the first run ──
+     The model list and the thinking levels of both native harnesses exist only *inside a session*, so
+     before a first run there was nothing to render and the user typed `provider/model` from memory.
+     These five sentences are the whole surface of the pre-flight probe: what the control says while a
+     probe runs, the button that starts one, and the two outcomes that are not a list.
+
+     Two of them (`probe.none`, `probe.failed`) are authored by the **daemon** — its answer carries the
+     key and the window renders it, the same arrangement the approval prompts and the refusals use. The
+     daemon names the agent through `{agent}`, and `probe.failed` interpolates `{reason}`, which is the
+     agent's or the operating system's own words and stays in whatever language it was produced. */
+  "task.composer.probe.ask": "Ask {agent} what it offers",
+  "task.composer.probe.askAgain": "Ask {agent} again",
+  // While it runs, the control says so *and* says what it costs — an agent process, briefly. A control
+  // that showed an empty picker instead would be the lie this whole row exists to prevent.
+  "task.composer.probe.asking":
+    "Asking {agent} what it offers. EnvoyCoder starts it, asks, and closes it again — nothing is sent to it.",
+  // The agent answered and had nothing to publish: a fact about the agent, not about our ignorance.
+  "task.composer.probe.none":
+    "{agent} answered and published nothing to choose from, so there is still no list here — type a value it documents, or pick one after the first run.",
+  // We never got to ask. Named separately from "it published nothing" on purpose: reporting our failure
+  // as a fact about the agent is the defect this distinction exists to prevent.
+  "task.composer.probe.failed":
+    "EnvoyCoder could not ask {agent} what it offers: {reason} Nothing you see has changed.",
+
   /* ── the modes an agent can be put into, in our words rather than the agent's ──
      `AgentMode.labelKey`/`descriptionKey` point here for every mode **we** named; a mode a
      third-party agent named itself carries no key and is shown as the agent wrote it. */

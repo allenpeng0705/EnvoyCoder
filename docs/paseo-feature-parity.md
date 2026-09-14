@@ -36,7 +36,7 @@ bottom of `paseo-design-decisions.md` as refinements, not as divergences.
 | 3 | **The phone pairs and connects** | QR scan → host list → run list → answer approvals | hello shape fixed ✅; nothing persists; no session store | pairing persistence, token store, run list, approval answering (M4) |
 | 4 | **Modes per agent** | `plan`/`acceptEdits`/`bypassPermissions`… chosen per run | modes now on the wire ✅; picker disabled pending `agentModeId` | `agentModeId` on `startRun` + pass-through per transport |
 | 5 | **User-defined ACP providers** | `extends:"acp"` + `command`/`env`/`params` in config | absent; 38-entry catalogue unreachable | open provider id, provider config file, list/add/remove RPCs |
-| 6 | **One composer that adapts to the agent** | agent/model pills, thinking, mode, features, context ring | decision layer written ✅ (`composer/controls.ts`); fixed textarea + Queue/Steer | render the controls; wire the pills |
+| 6 | **One composer that adapts to the agent** | agent/model pills, thinking, mode, features, context ring | decision layer written ✅ (`composer/controls.ts`); the pills render, and since the pre-flight probe the **agent is asked what it offers before its first run** ✅ (`docs/settings-parity.md` §7.7 — `deepseek-harness`'s published list replaces the hand-typed one; `envoy-harness` has nothing to ask, and says so) | features + context ring |
 
 ## Tier 2 — the features a user reaches for next
 

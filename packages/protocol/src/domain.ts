@@ -655,6 +655,16 @@ export const RPC_METHODS = [
   "coder.tailRun",
   "coder.listHarnesses",
   "coder.probeHarness",
+  /**
+   * Ask an agent, right now, what it offers — the pre-flight probe.
+   *
+   * `coder.probeHarness` answers "is it installed"; this answers "what does it publish", which for both
+   * native harnesses is knowable **only from a session**. It is a method of its own rather than a flag on
+   * `coder.listHarnesses` because a list call that silently spawns agents is a trap: a window rendering
+   * a sidebar would start every installed agent, and the user would have no way to tell why the machine
+   * got busy. See `rpc.ts` for the three outcomes and the caching rules.
+   */
+  "coder.probeSessionOptions",
   "coder.meshStatus",
   "coder.listPeers",
   // **`coder.offerRemoteRun` used to sit here, and it is gone on purpose.** It was a spec with no

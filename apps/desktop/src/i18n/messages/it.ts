@@ -200,6 +200,15 @@ export const it: Catalogue = {
   "task.composer.thinking.notWired": "Scegliere quanto {agent} ragiona non è ancora collegato, quindi il controllo è disattivato invece di essere ignorato in silenzio.",
   "task.composer.thinking.unknown": "EnvoyCoder non sa ancora cosa offre {agent}, quindi il controllo è disattivato per ora.",
   "task.composer.thinking.observed": "Questi sono i livelli di ragionamento che {agent} ha offerto l'ultima volta che EnvoyCoder ha aperto una sessione con lui, il {at}. Sono stati elencati per il modello che stava usando allora, quindi possono cambiare.",
+  // Chiedere all'agente stesso cosa offre, prima della prima esecuzione.
+  "task.composer.probe.ask": "Chiedi a {agent} cosa offre",
+  "task.composer.probe.askAgain": "Chiedi di nuovo a {agent}",
+  "task.composer.probe.asking":
+    "EnvoyCoder sta chiedendo a {agent} cosa offre. Per farlo lo avvia brevemente e poi lo richiude — non gli viene inviato nulla.",
+  "task.composer.probe.none":
+    "{agent} ha risposto e non ha pubblicato nulla tra cui scegliere, quindi qui non c'è ancora un elenco — digita un valore che documenta, oppure scegline uno dopo la prima esecuzione.",
+  "task.composer.probe.failed":
+    "EnvoyCoder non è riuscito a chiedere a {agent} cosa offre: {reason} Nulla di ciò che vedi è cambiato.",
   "task.composer.thinking.nextRun": "L'agente mantiene il livello di ragionamento con cui è partito. La tua scelta vale per la prossima esecuzione.",
   "task.agentMode.default.label": "Predefinita",
   "task.agentMode.default.description": "Fa il lavoro, chiedendo prima di qualsiasi azione distruttiva.",

@@ -200,6 +200,15 @@ export const ko: Catalogue = {
   "task.composer.thinking.notWired": "{agent}가 얼마나 생각할지 고르는 기능은 아직 연결되지 않아서, 조용히 무시되는 대신 이 항목이 꺼져 있습니다.",
   "task.composer.thinking.unknown": "EnvoyCoder는 아직 {agent}가 무엇을 제공하는지 전달받지 못해 이 항목이 잠시 꺼져 있습니다.",
   "task.composer.thinking.observed": "EnvoyCoder가 마지막으로 {agent}와 세션을 열었을 때({at}) 제시된 사고 단계입니다. 그때 실행 중이던 모델에 대해 나열된 것이므로 달라질 수 있습니다.",
+  // 첫 실행 전에 에이전트에게 무엇을 제공하는지 직접 묻습니다.
+  "task.composer.probe.ask": "{agent}에게 무엇을 제공하는지 묻기",
+  "task.composer.probe.askAgain": "{agent}에게 다시 묻기",
+  "task.composer.probe.asking":
+    "EnvoyCoder가 {agent}에게 무엇을 제공하는지 묻고 있습니다. 이를 위해 잠시 실행했다가 다시 닫습니다 — 에이전트에 아무것도 보내지 않습니다.",
+  "task.composer.probe.none":
+    "{agent}가 답했지만 선택할 수 있는 것을 공개하지 않았습니다. 그래서 여기에는 여전히 목록이 없습니다 — 에이전트가 문서에 적어 둔 값을 입력하거나, 첫 실행 뒤에 고르세요.",
+  "task.composer.probe.failed":
+    "EnvoyCoder가 {agent}에게 무엇을 제공하는지 묻지 못했습니다: {reason} 지금 보이는 내용은 달라지지 않았습니다.",
   "task.composer.thinking.nextRun": "에이전트는 시작할 때의 사고 단계를 유지합니다. 선택은 다음 실행에 적용됩니다.",
   "task.agentMode.default.label": "기본",
   "task.agentMode.default.description": "작업을 진행하되, 무언가를 지우거나 덮어쓰기 전에 먼저 묻습니다.",

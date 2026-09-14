@@ -62,7 +62,10 @@
  * testable without a DOM, the same split `state/transcript.ts` and `TaskPane` already use.
  */
 
-import { useEffect, useState, type JSX } from "react";
+// No hooks: this component keeps no state of its own (the free-text draft moved into `ModelChoice`,
+// which owns the field that needs it). The `useEffect`/`useState` imports had been dead here since that
+// move — removed while this file was being edited.
+import type { JSX } from "react";
 
 import {
   modeDescription,
@@ -80,6 +83,8 @@ import {
   type ThinkingOffReason,
 } from "../composer/controls.js";
 import { useI18n } from "../i18n/context.js";
+import type { MessageKey } from "../i18n/messages/en.js";
+import { localize, type Notice } from "../i18n/notice.js";
 import { formatWhen } from "../i18n/when.js";
 import { ModelChoice } from "./ModelChoice.js";
 
@@ -149,6 +154,26 @@ export interface ComposerControlsProps {
   onChooseThinking: (level: string) => void;
   /** Is a turn running? Decides the note, never whether a control works. */
   running: boolean;
+  /**
+   * The pre-flight probe's own line, when there is one: "asking…", or the daemon's answer.
+   *
+   * A `Notice` rather than a string because the daemon's answer carries a catalogue key with it — the
+   * window renders it in the user's language, and a language change re-renders a sentence that arrived
+   * minutes ago. Absent means "nothing to say", which is the normal case: a list we observed needs no
+   * sentence of its own, since the pills show it and their note carries the time.
+   */
+  probeNote?: Notice | undefined;
+  /**
+   * The button that asks the agent what it offers — and, in its label, whether this is the first ask or
+   * another one.
+   *
+   * Drawn **once**, under both option-bearing controls, because one probe answers both questions: the
+   * model list and the thinking levels come from the same `session/new` response, so two buttons would
+   * be two controls doing one thing. Absent for an agent the daemon cannot be asked about — an older
+   * build, an agent whose options the catalogue already answers, an agent that is not installed.
+   */
+  probeAction?: { key: MessageKey; enabled: boolean } | undefined;
+  onProbeAgent?: (() => void) | undefined;
 }
 
 export function ComposerControls(props: ComposerControlsProps): JSX.Element {
@@ -194,6 +219,15 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
     },
     { enabled: modelOff === undefined },
   );
+  /**
+   * The probe's sentence, in the user's language.
+   *
+   * Through `localize`, exactly like every other piece of daemon prose: the daemon cannot know which
+   * language this window is in (two windows on one daemon may differ), so it sends the key with the
+   * sentence and the window resolves it — and a key this build does not have falls back to the English
+   * sentence rather than to the key.
+   */
+  const probeText = localize(t, props.probeNote);
   const thinkingObservedNote = thinkingNote(
     { ...(props.thinkingObservedAt !== undefined ? { observedAt: props.thinkingObservedAt } : {}) },
     { enabled: thinkingOff === undefined },
@@ -335,6 +369,30 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
             <p className="composer__control-note">{t("task.composer.model.nextRun")}</p>
           ) : null}
         </>
+      )}
+      {/* **The probe's line, and it is worth saying where it sits.** It is drawn last, once, because it
+          answers a question about *both* option-bearing controls at the same time: the model list and the
+          thinking levels are published in one `session/new` response, so a button under each would be two
+          controls doing one thing. Its two states are the two the pills cannot express — "we are asking
+          right now" (which is why the list is still empty) and "we asked, and this is what came back"
+          (which is a fact about the agent, or about us, either way not a list). */}
+      {props.probeNote === undefined && props.probeAction === undefined ? null : (
+        <p className="composer__control-note">
+          {probeText === undefined ? null : <span>{probeText}</span>}
+          {props.probeAction === undefined || props.onProbeAgent === undefined ? null : (
+            <>
+              {probeText === undefined ? null : " "}
+              <button
+                type="button"
+                className="button button--ghost"
+                disabled={!props.probeAction.enabled}
+                onClick={props.onProbeAgent}
+              >
+                {t(props.probeAction.key, { agent: props.agentLabel })}
+              </button>
+            </>
+          )}
+        </p>
       )}
       {/* The thinking level's own notes, on the model's terms — and its observed sentence carries one
           more fact than the model's does: the levels are listed for the model the session resolved, so

@@ -34,14 +34,15 @@
 import type { JSX } from "react";
 
 import { useEffect, useRef, useState } from "react";
-import type { HarnessSummary, Project, RunEvent, Task } from "@envoycoder/protocol";
+import type { HarnessId, HarnessSummary, ProbeOutcome, Project, RunEvent, Task } from "@envoycoder/protocol";
 
 import { hasShellPicker, pickFolder } from "../client/folder-picker.js";
 import { agentFor } from "../composer/agent-for.js";
 import { composerControls, modeOffReason, modelOffReason, thinkingOffReason } from "../composer/controls.js";
 import { harnessLabel } from "../composer/harness-label.js";
+import { probeAsk, publishesOnlyInSession, type ProbeState } from "../composer/probe.js";
 import { useT } from "../i18n/context.js";
-import { localize, localizeText, statusKey } from "../i18n/notice.js";
+import { localize, localizeText, noticeOf, type Refusal, statusKey } from "../i18n/notice.js";
 import { buildTranscript, type TranscriptEntry } from "../state/transcript.js";
 import { ComposerControls } from "./ComposerControls.js";
 
@@ -89,6 +90,26 @@ export interface TaskPaneProps {
    * than rendering as an agent with no modes — two different facts that must not look alike.
    */
   harnesses?: readonly HarnessSummary[];
+  /**
+   * Ask this agent what it offers, before any run — the pre-flight probe.
+   *
+   * A callback rather than a flag, because the *decision* to ask belongs to this pane (it is the one that
+   * knows a control is being rendered for an agent whose options exist only inside a session) and the
+   * *call* belongs to the store. Absent in a pane rendered without a daemon, which is what a test does —
+   * and then no probe is offered at all, rather than a button that goes nowhere.
+   */
+  onProbeAgent?: (
+    harness: HarnessId,
+    options: { force: boolean },
+  ) => Promise<{ ok: true; outcome: ProbeOutcome; detail: string } | Refusal>;
+  /**
+   * Does the connected daemon serve `coder.probeSessionOptions`?
+   *
+   * From `coder.hello`'s own `methods`, so a window attached to an **older daemon** (the shell attaches to
+   * whichever build owns the port) shows the unaware state instead of a button that would come back
+   * "Method not found". `undefined` is no.
+   */
+  probeSupported?: boolean;
   /** Shown under the composer when a send was refused, in the daemon's words. */
   notice?: string | undefined;
 }
@@ -121,6 +142,14 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   const [pickedThinking, setPickedThinking] = useState<string | undefined>(undefined);
   /** Why the folder chooser would not open, after a click that tried. */
   const [pickerProblem, setPickerProblem] = useState<string | undefined>(undefined);
+  /**
+   * What this pane knows about asking each agent what it offers, **keyed by agent**.
+   *
+   * Keyed by agent rather than by task, and deliberately not cleared when the task changes: the answer is
+   * a fact about an agent, so two tasks on `dsh` share it. A version keyed by task would ask again — and so
+   * start the agent again — every time the user switched between two tasks that use the same one.
+   */
+  const [probes, setProbes] = useState<Record<string, ProbeState>>({});
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   /** The task the transcript was last scrolled for — a new task always starts at its end. */
@@ -177,6 +206,56 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     known: summary !== undefined,
     agent: agent.label,
   });
+
+  /* ── asking the agent what it offers ──
+     The three gates and the four states are decided in `composer/probe.ts`, so they are testable without a
+     DOM; what is here is only the state machine and the call. */
+  const probeState: ProbeState = probes[task.harness] ?? { state: "idle" };
+  const probe = probeAsk({
+    agent: agent.label,
+    // `envoy-harness` publishes its models in its own source and has no thought-level surface, so there is
+    // nothing a probe could learn: this is the gate that keeps the built-in harness from being spawned for
+    // no reason.
+    unlisted: publishesOnlyInSession(agent),
+    supported: props.probeSupported === true,
+    available: agent.available,
+    state: probeState,
+  });
+
+  /**
+   * Ask, and keep the answer against **this agent**.
+   *
+   * The three outcomes arrive as successes (`listed`, `none`, `unreachable`) and a failed *call* arrives as
+   * a `Refusal`; both end up in the same place, because to a user they are the same statement — we could not
+   * ask, and here is why — and the refusal already carries its own key, so it needs no rewording here.
+   */
+  const askAgent = async (force: boolean): Promise<void> => {
+    const ask = props.onProbeAgent;
+    if (!ask) return;
+    const harness = task.harness;
+    setProbes((previous) => ({ ...previous, [harness]: { state: "asking" } }));
+    const answer = await ask(harness, { force });
+    setProbes((previous) => ({
+      ...previous,
+      [harness]: {
+        state: "answered",
+        outcome: answer.ok ? answer.outcome : "unreachable",
+        detail: answer.ok ? (noticeOf(answer.detail) ?? { message: answer.detail }) : answer,
+      },
+    }));
+  };
+
+  /**
+   * The first ask: once per agent, when a control that needs the list is on screen.
+   *
+   * `probe.ask` is true only in the `idle` state of an agent the daemon can be asked about, so this cannot
+   * loop — after the state becomes `asking` it is false, and it stays false once an answer arrives. A pane
+   * that re-renders (a transcript event, a keystroke) does not ask again.
+   */
+  useEffect(() => {
+    if (!probe.ask) return;
+    void askAgent(false);
+  }, [probe.ask, task.harness]);
 
   // `hasShellPicker()` is synchronous on purpose (see `folder-picker.ts`): a control that decides after
   // an `await` looks like a dead click, and a disabled one can say why in the same tick as the render.
@@ -356,6 +435,18 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               void props.onChangeThinking?.(chosen);
             }}
             running={running}
+            probeNote={probe.note}
+            // Drawn only when there is a button to draw: `probe.buttonKey` is absent for an agent the
+            // daemon cannot be asked about, and an enabled-looking control that goes nowhere is the bug
+            // this row keeps refusing.
+            probeAction={
+              probe.buttonKey === undefined
+                ? undefined
+                : { key: probe.buttonKey, enabled: probe.enabled }
+            }
+            onProbeAgent={
+              props.onProbeAgent === undefined ? undefined : () => void askAgent(probe.force)
+            }
           />
 
           <textarea

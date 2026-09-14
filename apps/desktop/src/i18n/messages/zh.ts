@@ -200,6 +200,15 @@ export const zh: Catalogue = {
   "task.composer.thinking.notWired": "为 {agent} 选择思考程度的功能尚未接通，因此这里是禁用状态，而不是被默默忽略。",
   "task.composer.thinking.unknown": "EnvoyCoder 还不知道 {agent} 提供什么，因此这里暂时禁用。",
   "task.composer.thinking.observed": "这些是 EnvoyCoder 上次与 {agent} 打开会话时它提供的思考档位（{at}）。它们是针对当时所用的模型列出的，因此可能会变化。",
+  // 在首次运行之前，先问一下智能体自己提供什么。
+  "task.composer.probe.ask": "问一问 {agent} 提供什么",
+  "task.composer.probe.askAgain": "再问一次 {agent}",
+  "task.composer.probe.asking":
+    "正在问 {agent} 提供什么。EnvoyCoder 会短暂启动它、询问，然后关闭它——不会向它发送任何内容。",
+  "task.composer.probe.none":
+    "{agent} 回答了，但没有发布任何可选项，所以这里仍然没有列表——你可以直接输入它文档中写明的值，或等第一次运行后再选。",
+  "task.composer.probe.failed":
+    "EnvoyCoder 无法询问 {agent} 提供什么：{reason} 你看到的任何内容都没有变化。",
   "task.composer.thinking.nextRun": "智能体会保持开始时使用的思考档位。你的选择将在下次运行时生效。",
   "task.agentMode.default.label": "默认",
   "task.agentMode.default.description": "直接干活，但在做任何破坏性操作前先询问。",
