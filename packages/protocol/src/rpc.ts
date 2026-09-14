@@ -43,6 +43,7 @@ import { z } from "zod";
 import {
   type AgentMode,
   AgentModeSchema,
+  AgentProviderConfigSchema,
   type CoderSettings,
   CoderLanguageSchema,
   CoderSettingsSchema,
@@ -1194,6 +1195,74 @@ export const HarnessSummarySchema = z
   })
   .strict();
 
+/**
+ * One environment variable a provider declared, and whether **this daemon** has it.
+ *
+ * The `set` flag is the whole point, and it is a fact about our process rather than about the agent: a
+ * provider whose credential is missing is not ready *here*, and the alternative to saying so is a spawn
+ * that fails with the agent's own sentence about a login nobody performed. The **name** travels; the
+ * value never does — there is no field for one on this shape either, which is the same enforcement
+ * `AgentProviderConfig.env` states.
+ */
+export const AgentProviderEnvStateSchema = z
+  .object({ name: z.string().min(1), set: z.boolean() })
+  .strict();
+
+export type AgentProviderEnvState = z.infer<typeof AgentProviderEnvStateSchema>;
+
+/**
+ * An agent a **user** declared, as a list needs it.
+ *
+ * Deliberately **not** a `HarnessSummary` with a different id, and the two differences are the honest
+ * ones between "an agent we ship" and "a program you told us about":
+ *
+ *   * `availability` is the *same* field, from the *same* prober, under the *same* five-state schema with
+ *     the same agreement rules — a provider is probed, never believed. What a user typed is a command to
+ *     look for, not a claim that it is there, so a provider whose program is missing reads
+ *     `not-installed` with the command that fixes it, exactly as a catalogue entry does.
+ *   * there is no `capabilities`, no `modes`, no `models` and no `thinking`. We have never opened a
+ *     session with this program, and every one of those fields would be a guess restated as our fact.
+ */
+export interface AgentProviderSummary {
+  /** The user's own id. Never one of `HARNESS_IDS` — `AgentProviderConfigSchema` refuses that. */
+  id: string;
+  label: string;
+  /** The program, as it would be spawned. */
+  command: string;
+  /** The argv after it, verbatim. */
+  args: readonly string[];
+  /**
+   * Every variable the provider names, with whether this daemon has it.
+   *
+   * Required, and empty when the provider names none: a window has to be able to tell "no credential is
+   * needed" from "we have not looked", which is the same rule `models` and `thinking` follow.
+   */
+  env: readonly AgentProviderEnvState[];
+  transport: "acp" | "cli";
+  availability: HarnessAvailability;
+  /**
+   * One English sentence about this row — the probe's own reason when it is not ready.
+   *
+   * For the log and for the tests, like `HarnessSummary.evidence`: the states and the `fix` are what a
+   * window renders, and a translated window reads the *keyed* refusals a launch produces rather than this
+   * line. It exists so a bug report can quote what the daemon actually found.
+   */
+  detail: string;
+}
+
+export const AgentProviderSummarySchema = z
+  .object({
+    id: z.string().min(1),
+    label: z.string().min(1),
+    command: z.string().min(1),
+    args: z.array(z.string()).readonly(),
+    env: z.array(AgentProviderEnvStateSchema).readonly(),
+    transport: z.enum(["acp", "cli"]),
+    availability: HarnessAvailabilitySchema,
+    detail: z.string(),
+  })
+  .strict();
+
 /** What a run looks like to a client: the record, plus the events it may render. */
 export const RunSnapshotSchema = z
   .object({
@@ -1578,6 +1647,86 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
         detail: z.string().min(1),
       })
       .strict(),
+  },
+
+  /* — agents a user declared — */
+  /**
+   * The providers this user has declared, each probed.
+   *
+   * `params: EmptyParams` and a full list, rather than a per-id probe method: a list is what a window
+   * renders, and the probe is what makes each row's state a fact rather than a stored claim. A provider
+   * whose program is missing costs one search per call, which is the same price `coder.listHarnesses`
+   * already pays for nine agents.
+   */
+  "coder.listProviders": {
+    params: EmptyParams,
+    result: z.object({ providers: z.array(AgentProviderSummarySchema).readonly() }).strict(),
+  },
+  /**
+   * Declare an agent of the user's own.
+   *
+   * ## What is required, and the one field that is not
+   *
+   * `transport` is **required**, with no default. A default is us choosing a dialect on the user's behalf
+   * for a program we cannot see, and the two possible outcomes are both bad: defaulting to `"acp"` makes a
+   * one-shot CLI get an `initialize` it will never answer, and defaulting to `"cli"` tells a user their
+   * ACP agent is unsupported. The catalogue records this fact per entry for the same reason
+   * (`AgentLaunch.transport`: "being installed is not being drivable"); here the user is the one who
+   * knows it.
+   *
+   * `id` is optional and derived from the label when absent, so a UI can offer one field. `args` and `env`
+   * are optional and mean "none", which is a normal answer rather than a missing one.
+   *
+   * ## The refusals it carries
+   *
+   *   * an `id` that names one of the nine agents we ship → `envoycoder.provider-id-taken` with a
+   *     translated sentence, because the parameters were exactly what the user meant;
+   *   * an `env` entry that is a **value** rather than an environment variable name →
+   *     `envoycoder.bad-request` with `error.providerEnvNotAName`, the same refusal shape
+   *     `AgentProviderConfigSchema` enforces in the file. The name of the *variable* is quoted in the
+   *     sentence; the thing the user pasted is never echoed, because a refused value is still a secret.
+   */
+  "coder.addProvider": {
+    params: z
+      .object({
+        /**
+         * The id, derived from the label when absent.
+         *
+         * Validated by the daemon against `PROVIDER_ID_PATTERN` and refused with a translated sentence
+         * rather than here, so the failure a user sees names the rule in their own language instead of
+         * quoting a regular expression.
+         */
+        id: z.string().min(1).optional(),
+        label: z.string().min(1),
+        command: z.string().min(1),
+        args: z.array(z.string()).readonly().optional(),
+        /**
+         * The **names** of the environment variables the agent needs.
+         *
+         * `z.array(z.string().min(1))` rather than the stricter name pattern, so the daemon can refuse a
+         * value with a keyed sentence (`error.providerEnvNotAName`) instead of this schema's English
+         * parameter dump. The pattern is still the rule — `AgentProviderConfigSchema` is what enforces it,
+         * and it is what the store parses before anything is written.
+         */
+        env: z.array(z.string().min(1)).readonly().optional(),
+        transport: z.enum(["acp", "cli"]),
+        authMethodId: z.string().min(1).optional(),
+        modeParam: z.enum(["mode", "modeId"]).optional(),
+      })
+      .strict(),
+    result: z.object({ provider: AgentProviderConfigSchema }).strict(),
+  },
+  /**
+   * Forget a provider.
+   *
+   * Nothing else is touched: unlike `coder.removeProject` there are no rows that referred to it, because a
+   * provider is a *recipe* and a task names one of the nine shipped agents. If a later slice lets a task
+   * run on a provider, that slice owes the same archived-not-deleted treatment `removeProject` gives
+   * tasks — which is why this result carries only the id it removed.
+   */
+  "coder.removeProvider": {
+    params: z.object({ id: z.string().min(1) }).strict(),
+    result: z.object({ removed: z.string().min(1) }).strict(),
   },
 
   /* — the mesh — */

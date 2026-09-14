@@ -400,6 +400,20 @@ export const ja: Catalogue = {
   "error.harnessUnknown":
     "EnvoyCoder は {harness} がインストールされているか確認できなかったため、タスクを開始しませんでした。EnvoyCoder を再起動して、もう一度お試しください。",
   "error.harnessUnsupported": "{harness} は EnvoyCoder がまだ扱えないプロトコルで話すため、タスクを開始しませんでした。EnvoyCoder は ACP でエージェントを扱います。代わりにそちらを選んでください。",
+  "error.providerUnsupported":
+    "{provider} は EnvoyCoder がまだ扱えないプロトコルを使っているため、実行は開始されませんでした。EnvoyCoder は ACP でエージェントを動かします — このプログラムが ACP に対応しているなら、プロバイダーの方言を ACP にして、もう一度試してください。",
+  "error.providerNotFound":
+    "ここに \"{id}\" というエージェントプロバイダーはありません。別のウィンドウで削除された可能性があります。",
+  "error.providerEnvNotAName":
+    "EnvoyCoder はエージェントが必要とする環境変数の「名前」だけを保存し、値は決して保存しません。このプロバイダーの環境リストの {position} 番目は変数名ではありません。名前は英数字とアンダースコアで構成し、数字で始めることはできません。プロバイダーは追加されませんでした。",
+  "error.providerEnvUnset.one":
+    "{provider} は環境変数 {name} が EnvoyCoder のサービスの環境にあることを必要としますが、設定されていないため、実行は開始されませんでした。EnvoyCoder はエージェントが必要とする変数の名前だけを保存し、値は決して保存しません — サービスを起動する場所で設定し、EnvoyCoder を再起動してください。",
+  "error.providerEnvUnset.many":
+    "{provider} はこれらの環境変数が EnvoyCoder のサービスの環境にあることを必要としますが、設定されていません: {names}。実行は開始されませんでした。EnvoyCoder はエージェントが必要とする変数の名前だけを保存し、値は決して保存しません — サービスを起動する場所で設定し、EnvoyCoder を再起動してください。",
+  "error.providerIdTaken":
+    "\"{id}\" は EnvoyCoder がすでに同梱しているエージェントの ID です。そのため、あなたのプロバイダーは追加されませんでした。別の名前にしてください。",
+  "error.providerIdInvalid":
+    "\"{name}\" はプロバイダーの ID にはできません。プロバイダーの ID は小文字の英字・数字・ハイフンで構成し、英字または数字で始めます。",
   "error.notConnected": "EnvoyCoder はまだサービスに接続していません。",
   "error.notConnectedChange": "EnvoyCoder がサービスに接続していないため、その変更は保存されませんでした。",
   "error.connectionClosed": "接続が閉じられました。",

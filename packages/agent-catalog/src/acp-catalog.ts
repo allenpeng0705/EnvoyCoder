@@ -32,6 +32,21 @@
  * Append an entry, or let a user declare their own ACP provider in settings (same shape: a command and
  * optional `env`/`params`). Nothing here is compiled into the daemon's dispatch — it is a menu of
  * recipes, and the daemon drives whichever one the user chose.
+ *
+ * **Both halves of that sentence are now real**, and the user's half is `AgentProviderConfig` in
+ * `@envoycoder/protocol` — reached by `coder.listProviders` / `coder.addProvider` /
+ * `coder.removeProvider`, probed by the same prober as the entries below (`./probe.ts`, through
+ * `./providers.ts`) and launched by the same body
+ * (`apps/desktop/src/daemon/launch.ts`'s `launchForProvider`). Two differences between the two tiers
+ * are worth stating here, because this file is where a maintainer looks first:
+ *
+ *   * **An entry's `env` carries values; a provider's carries names only.** That is not an
+ *     inconsistency, it is the security decision: `AUGMENT_DISABLE_AUTO_UPDATE: "1"` is part of a
+ *     *recipe we author and publish* and is not a secret, while a user's provider may need a credential
+ *     — and a credential a user must supply is never stored, so the schema has no field for one.
+ *   * **An entry's `params` has no provider equivalent yet.** `supportsMcpServers` describes how a host
+ *     should open a session; a provider declares only how to start one. When a user needs to say one, it
+ *     becomes a field with a reader, not a key in a bag.
  */
 
 import { findBinary } from "@envoycoder/platform";

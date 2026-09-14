@@ -24,7 +24,7 @@
  *     up. `RUN_LIVE_ACP=1` asserts the successful turn for a machine that does have a key.
  */
 
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -34,6 +34,7 @@ import { probeHarness, resolveHarnessCommand, sessionFacts } from "@envoycoder/a
 import { coderPaths } from "@envoycoder/host-bridge";
 
 import { AcpClient, type AcpUpdate } from "../src/daemon/acp/client.js";
+import { launchForHarness, launchForProvider } from "../src/daemon/launch.js";
 import { SessionProbe } from "../src/daemon/session-probe.js";
 import { CoderStore } from "../src/daemon/store.js";
 
@@ -93,6 +94,60 @@ describe.skipIf(!dsh)("the ACP client, against the real dsh binary", () => {
     expect(client.agentInfo?.protocolVersion).toBe(1);
     expect(client.sessionId).toMatch(/[0-9a-f-]{8,}/);
   }, 90_000);
+
+  /**
+   * **The same path, proven by the agent itself.**
+   *
+   * A provider the user declared and the catalogue's own `deepseek-harness` entry are two *descriptions*
+   * of one program, and this test asks the program whether they arrive the same way: same command, same
+   * argv, and a handshake that reports the same identity. `providers.test.ts` shows the two tiers reach
+   * the same gate over a missing program; this shows a provider's launch object is a real, drivable one —
+   * which is the claim a type-level test cannot make.
+   *
+   * The provider also names `DSH_HOME` instead of having it supplied by the daemon, so the environment
+   * copy is exercised against a real binary: what the child gets is the value from the environment this
+   * launch was handed, and the agent starts with a home of its own rather than writing into the user's.
+   */
+  it("drives a provider the user declared exactly as it drives the catalogue's entry for the same program", async () => {
+    const { cwd, dshHome } = await workdir();
+    const paths = coderPaths(cwd);
+    // The one path the catalogue's entry needs and the provider does not: a state directory of ours, so
+    // EnvoyCoder never writes into the state a user's own `dsh` install owns.
+    await mkdir(join(paths.stateDir, "agents", "dsh"), { recursive: true });
+
+    const fromCatalogue = launchForHarness({ harness: "deepseek-harness", cwd, paths });
+    const fromProvider = launchForProvider({
+      provider: {
+        id: "my-dsh",
+        label: "My DeepSeek Harness",
+        command: dsh as string,
+        args: ["--profile", "acp"],
+        env: ["DSH_HOME"],
+        transport: "acp",
+      },
+      cwd,
+      paths,
+      // The daemon's own environment, which is where a named variable's value comes from.
+      env: { ...process.env, DSH_HOME: dshHome },
+    });
+
+    expect(fromProvider.command).toBe(fromCatalogue.command);
+    expect(fromProvider.args).toEqual(fromCatalogue.args);
+    // The value travelled through the copy and nowhere else.
+    expect(fromProvider.env?.DSH_HOME).toBe(dshHome);
+    expect(fromCatalogue.env?.DSH_HOME).toBe(join(paths.stateDir, "agents", "dsh"));
+
+    const catalogueClient = await AcpClient.start({ launch: fromCatalogue, requestTimeoutMs: 60_000 });
+    cleanups.push(async () => catalogueClient.stop());
+    const providerClient = await AcpClient.start({ launch: fromProvider, requestTimeoutMs: 60_000 });
+    cleanups.push(async () => providerClient.stop());
+
+    // One program, reached two ways, answering as itself both times.
+    expect(fromProvider.env?.PATH).toBe(fromCatalogue.env?.PATH);
+    expect(providerClient.agentInfo?.name).toBe(catalogueClient.agentInfo?.name);
+    expect(providerClient.agentInfo?.name).toBe("deepseek-harness-acp");
+    expect(providerClient.sessionId).toBeTruthy();
+  }, 120_000);
 
   it("reports a missing credential as a readable failure, not as silence", async () => {
     const { cwd, dshHome } = await workdir();

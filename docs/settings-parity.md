@@ -587,8 +587,8 @@ at all, so **ship the disabled row with the git slice, not before it.**
 | setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
 |---|---|---|---|---|---|
 | **Enable {provider}** (`providers[id].enabled`) | `providers-section.tsx:248-253`, per provider · `settings.providers.enableProvider` "Enable {{name}}" (`en.ts:2651`) | `true` (`:444`; daemon `server/agent/provider-registry.ts:737`) | daemon: only enabled providers get a client; disabled ⇒ `unavailable`, `listModels` throws "Provider X is disabled" (`provider-registry.ts:375-377`,`:752-754`,`:836-837`) | our equivalent is the ACP catalogue: the pickers filter on `knownMissing()` (`composer/agent-for.ts`, used by `SettingsPane.tsx:40` and the project defaults) and list every catalogue entry except one established to be absent | **not applicable as a *setting*** — availability in EnvoyCoder is a fact we detect (`HarnessSummary.availability.state`, five states: §7.9), not a switch the user throws. Making it a switch would let a user hide a working agent for no reason |
-| **Add provider** (`providers[id]` from the ACP catalogue) | `provider-catalog-list.tsx:108-118` · `providerCatalog.actions.add` "Add" (`en.ts:1587`) | — (action) | persists `{providers:{[id]:{extends:"acp",label,description,command,env,params}}}` (`hooks/use-acp-provider-catalog.ts:11-26`) so a third-party ACP CLI becomes runnable | **the gap this row names is real**: our 38-entry ACP catalogue is in-repo data (`packages/agent-catalog/src/acp-catalog.ts`) and a user cannot add a provider at all | **honour-able with work** — this is `docs/paseo-feature-parity.md` #5 and the work is named there: an open provider id, a provider config file, and list/add/remove RPCs. It is a **new protocol field**, so per family guide §7.4 the shape goes upstream into `@envoycoder/protocol`'s owner decision first — this repo *is* the owner of that package, so the change lands here and `check-wiring` follows |
-| **Remove provider** (`removeProviders`) | `providers-section.tsx:155-164` (menu + confirm) · `settings.providers.actions.remove` (`en.ts:2658`) | — (action) | daemon strips the entry, its overrides **and** its `metadataGeneration.providers` entries (`daemon-config-store.ts:101-159`) | absent with the row above | **honour-able with work** — same slice as Add; a list editor with add and no remove is not a slice |
+| **Add provider** (`providers[id]` from the ACP catalogue) | `provider-catalog-list.tsx:108-118` · `providerCatalog.actions.add` "Add" (`en.ts:1587`) | — (action) | persists `{providers:{[id]:{extends:"acp",label,description,command,env,params}}}` (`hooks/use-acp-provider-catalog.ts:11-26`) so a third-party ACP CLI becomes runnable | **the plumbing landed; the picker has not.** `AgentProviderConfig` (§7.10) is a provider's shape — id, label, command, args, the **names** of the environment variables it needs, and the dialect it speaks — and `coder.listProviders` / `coder.addProvider` / `coder.removeProvider` store them in `<state>/EnvoyCoder/providers.json` (quarantined rather than emptied when unreadable, replaced rather than merged per id, `providers` broadcast so a second window refetches). Every listed provider is **probed** by the same prober that answers for the nine shipped agents and launched through the same `launchForHarness` body, so its row carries one of the same five `availability` states. What is still absent is the surface: no control adds one, and the 38-entry catalogue is still unreachable from the window | **honour-able with work** — and the work is now one surface rather than a protocol change: a list editor and the catalogue rows, both reading methods that exist. The **security decision** is recorded rather than deferred — `env` is a list of names, so a credential cannot be expressed in the schema, written to disk or logged (§7.10) |
+| **Remove provider** (`removeProviders`) | `providers-section.tsx:155-164` (menu + confirm) · `settings.providers.actions.remove` (`en.ts:2658`) | — (action) | daemon strips the entry, its overrides **and** its `metadataGeneration.providers` entries (`daemon-config-store.ts:101-159`) | `coder.removeProvider` forgets one provider and nothing else — it refuses with `envoycoder.provider-missing` when there is nothing under that id, rather than confirming a removal that did not happen. Nothing refers to a provider today, so unlike `coder.removeProject` there are no rows to archive: a task names a `HarnessId` | **honour-able with work** — wire done and tested over a real socket; the menu item waits for the picker above |
 | **Add custom model** (`providers[id].additionalModels`) | `provider-diagnostic-sheet.tsx:199-234` (modal form) · `settings.providers.models.addCustomTitle` "Add custom model" (`en.ts:2678`) | `[]` (`provider-registry.ts:735`) | merged on top of discovered models (`provider-registry.ts:383-396`,`:651`): the picker gains ids without replacing the catalogue | our catalogue ships a fixed `models` list per agent (`packages/agent-catalog/src/models.ts`) with no user additions. **Half of this row landed since it was written, and not as a settings control:** the agent is now *asked* what it offers and the answer is recorded, so `deepseek-harness`'s live catalog reaches the picker without a hand-typed id (§7.7). What is still absent is the user's own additions — ids that are not in the agent's catalog at all | **honour-able with work** — needs a per-agent model list on the settings object plus the composer reading it. Small, but it is a **protocol** addition (a `models` array on the agent's stored defaults), so it shares the Add-provider slice's schema change |
 | **Remove model** | `provider-diagnostic-sheet.tsx:114-118` · `settings.providers.models.removeModel` "Remove {{id}}" (`en.ts:2684`) | — (action) | rewrites `additionalModels` without the id (`:651-667`) | absent with the row above | **honour-able with work** — same slice |
 
@@ -1437,6 +1437,66 @@ thing a bug report reads is which part is missing.
 
 ---
 
+### 7.10 The agents a user declares: the provider contract, and why it cannot hold a secret
+
+Paseo's `providers` page (§5.8) stores a credential per provider as plaintext `env` in `config.json`.
+This repo declined to copy that, and the refusal shaped the schema rather than the other way round: a
+user-defined agent here names the environment variables it needs and never their values.
+
+**The shape.** `AgentProviderConfig` (`packages/protocol/src/domain.ts`) is the whole contract:
+
+```ts
+{ id, label, command, args, env: readonly string[], transport: "acp" | "cli", authMethodId?, modeParam? }
+```
+
+`env` is `readonly string[]` — a list of **names**, each checked against
+`PROVIDER_ENV_NAME_PATTERN` (`[A-Za-z_][A-Za-z0-9_]*`). That is the security decision, and it is the
+type rather than a rule written beside it: a `Record<string, string>` of values would have a field for
+`sk-live-…`, and this has none, so no caller, no control and no future migration can write one to
+disk. A test asserts the artifact rather than the intent — a recognisable value is put in the daemon's
+environment, a provider is stored naming it, and `providers.json` is then read as bytes and checked
+not to contain it (`apps/desktop/test/providers.test.ts`, `daemon-rpc.test.ts`).
+
+**Where a value goes.** Nowhere but the child. At spawn each named variable is copied from the
+daemon's **own** environment and merged over the `PATH` the probe searched, and a name that is unset
+(including set-to-empty, since `FOO=` exports nothing) is a **refusal**, in the user's language, naming
+the provider and the variables — never a silently skipped variable, which would start an agent that
+cannot authenticate and let it fail with its own sentence. The same fact travels to the window *before*
+a run: `AgentProviderSummary.env` is `{ name, set }[]`, so the row can say which variable is missing
+while nothing on the wire or in a log is a value.
+
+**The dialect is reused, not reinvented.** `transport`, `authMethodId` and `modeParam` are the same
+three facts `AgentLaunch` records for the nine catalogue entries, and `providerLaunch()` maps a
+provider onto that type rather than giving it a private launch vocabulary. That is what lets a provider
+travel the *same* paths as a shipped agent:
+
+* **one prober** — `probeRecipe` in `packages/agent-catalog/src/probe.ts`, over a *recipe*. Before this
+  slice the prober was a function of a `HarnessId`; a provider is not one, and a second prober beside
+  the first is how the two would come to disagree about the same machine. `probeHarness` and
+  `probeProvider` are two thin wrappers over that one body;
+* **one launch body** — `resolveLaunch` in `apps/desktop/src/daemon/launch.ts`, with
+  `launchForHarness` and `launchForProvider` differing only in the two callbacks they hand it, so the
+  `PATH`, the refusals and the dialect fields cannot drift;
+* **one availability projection** — `harnessAvailability`, whose parameter is now `ProbeFinding`
+  rather than `HarnessProbe` for exactly this reason.
+
+A provider is **probed, never believed**: a row the user typed is a recipe, and whether its program is
+on this machine is measured. A program that is present and declared `"cli"` is `unsupported`, a program
+that is absent is `not-installed` with a fix — and for a program we have never heard of, that fix is
+the user's own command line, because nobody can author an install step for somebody else's tool
+(`probe.ts`'s `notInstalledFix` records the choice; the schema requires *some* fix of a state that
+asserts an absence).
+
+**What a provider deliberately does not have.** No `capabilities`, `modes`, `models` or `thinking`:
+we have never opened a session with this program, so every one of those would be the user's guess
+handed back as our fact. The composer's pickers stay off for one, with the reason on screen, until a
+session exists to ask. There is also no model support: a provider's model is whatever the user put in
+`args`.
+
+**What is left.** The picker: a control that adds one, a row per provider, and the 38 catalogue entries
+(`packages/agent-catalog/src/acp-catalog.ts`) as things a user can pick. The RPCs, the storage, the
+probe and the launch path are all in place and tested.
+
 ## 8. The slice plan
 
 Ordered, and ordered by *cheapness times usefulness* rather than by Paseo's section order. Each slice
@@ -1590,10 +1650,12 @@ because both need the same thing first — **a contract change**:
    A fork-local field here would be exactly the mistake the guide names.
 2. **Then, in this repo:** `CoderSettings.appendSystemPrompt`, a **General** row, and the effect in
    `runs.ts` where the session is opened.
-3. **Then the agents half:** an open provider id + a provider config file + list/add/remove RPCs
-   (`packages/agent-catalog` is data; the adapter is code), plus `defaults.models` for the custom-model
-   rows. The schema addition is ours — `@envoycoder/protocol` is this repo's package — so
-   `check-wiring` follows rather than an upstream round trip.
+3. **Then the agents half — landed, except the UI.** An open provider id, a provider config file and
+   `coder.listProviders` / `coder.addProvider` / `coder.removeProvider` all exist (§7.10), with the
+   probe and the launch path shared with the nine shipped agents. What is left of this step is the
+   picker itself, plus `defaults.models` for the custom-model rows. The schema addition was ours —
+   `@envoycoder/protocol` is this repo's package — so `check-wiring` followed rather than an upstream
+   round trip.
 
 **Gate:** the upstream contract test the family requires, plus a daemon test that a configured agent
 appears in `coder.listHarnesses` and a task can be started on it.

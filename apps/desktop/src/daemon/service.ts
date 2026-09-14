@@ -23,6 +23,7 @@ import { currentSearchPath, normalizeUserPath } from "@envoycoder/platform";
 import { stat } from "node:fs/promises";
 
 import {
+  type AgentProviderConfig,
   type AgentRun,
   type CoderLanguage,
   type HarnessId,
@@ -39,19 +40,21 @@ import {
 } from "@envoycoder/protocol";
 import {
   ALL_HARNESSES,
-  canApplyModel,
-  canApplyThinking,
   harnessAvailability,
   harnessDefinition,
+  canApplyThinking,
   probeHarness,
+  probeProvider,
   resolveModelChoice,
-  sessionFacts,
   type HarnessProbe,
+  type ProviderProbe,
 } from "@envoycoder/agent-catalog";
 
 import type { CoderPaths } from "@envoycoder/host-bridge";
 
 import { keyed, ref } from "./messages.js";
+import { createProviderHandlers } from "./providers.js";
+import { summarize } from "./summaries.js";
 import type { RunManager } from "./runs.js";
 import type { SessionProbe } from "./session-probe.js";
 import type { CoderStore } from "./store.js";
@@ -74,6 +77,19 @@ export interface CoderServiceDeps {
   isDirectory?: (path: string) => Promise<boolean>;
   /** Injectable probe, so `coder.listHarnesses` is testable without the CLIs installed. */
   probe?: (harness: HarnessId) => HarnessProbe;
+  /**
+   * The provider probe, injected on the same terms as `probe` and for the same reason: a test that has to
+   * know what a provider row says must not depend on what this machine happens to have installed.
+   */
+  probeProvider?: (provider: AgentProviderConfig) => ProviderProbe;
+  /**
+   * The environment a provider's named variables are read from.
+   *
+   * Injected for one test, and it is a test that cannot be written any other way: "a variable this daemon
+   * does not have is reported per agent" needs a daemon that provably does not have one, and mutating the
+   * test runner's own `process.env` to arrange that would leak into every other file in the run.
+   */
+  env?: NodeJS.ProcessEnv;
   isModuleAvailable?: (module: string) => boolean;
   /**
    * Runs, from M2 on.
@@ -124,8 +140,28 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         pathDirs: search.dirs,
         searchable: search.searchable,
       }));
+  /**
+   * The same list, the same folder of facts, for an agent the user declared.
+   *
+   * Note what is *not* different: `probeProvider` is the same prober `probeHarness` wraps, over the same
+   * resolved search path — see `@envoycoder/agent-catalog`'s `probe.ts` for why there is one body rather
+   * than two, and `launch.ts` for why one *spawn* body is the other half of the same claim.
+   */
+  const providerHandlers = createProviderHandlers({
+    store: deps.store,
+    probe:
+      deps.probeProvider ??
+      ((provider: AgentProviderConfig) =>
+        probeProvider(provider, { pathDirs: search.dirs, searchable: search.searchable })),
+    env: deps.env ?? process.env,
+  });
 
   const handlers: Partial<Record<RpcMethod, CoderHandler>> = {
+    // The agents a user declared: three methods whose whole subject is `AgentProviderConfig`, kept in their
+    // own module because the list handler, the refusals that are the user's to fix and the credential
+    // decision are one subject — and because this file is a table.
+    ...providerHandlers,
+
     /* ────────────────── who am I talking to ────────────────── */
     "coder.hello": async (params) => {
       parseRpcParams("coder.hello", params);
@@ -650,88 +686,6 @@ async function defaultIsDirectory(path: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-/** A catalogue entry plus what this machine can actually do with it. */
-function summarize(
-  id: HarnessId,
-  probe: (harness: HarnessId) => HarnessProbe,
-  /**
-   * What this agent published the last time a session was opened with it, if we ever have.
-   *
-   * Passed in rather than looked up here so `summarize` stays a function of its arguments — and
-   * because the store is the only thing that knows whether a run has happened, which is the fact the
-   * whole "observed, not promised" story turns on.
-   */
-  observed: ObservedSessionOptions | undefined,
-): HarnessSummary {
-  const definition = harnessDefinition(id);
-  const result = probe(id);
-  // **The one place the two halves of "what does this agent offer" are joined.** The catalogue knows
-  // what an agent documents; the store knows what an agent actually said in its last session; and for
-  // the model list and the thinking level the second is the better answer while it lasts. See
-  // `sessionFacts` for the precedence rules, including why a session that says nothing about models
-  // does not overwrite a catalogue list.
-  const facts = sessionFacts(id, observed);
-  return {
-    id,
-    label: definition.label,
-    tier: definition.tier,
-    summary: definition.summary,
-    // The agent's own modes, so a composer can render its picker from the wire rather than from a
-    // hardcoded list. Empty means "the agent declares none here", which for `deepseek-harness` is the
-    // answer rather than a gap: its ACP surface has no `session/set_mode`, so it has nothing to offer.
-    // (This said the real answer "arrives in the `session/new` response" — it does not, for either
-    // harness. See the citations on `agentMode` in `@envoycoder/agent-catalog`.)
-    modes: definition.modes,
-    // The models this agent publishes — **and what an empty list means**, which is the half a list
-    // alone cannot carry. `deepseek-harness` publishes none we can read before a run exists and still
-    // takes one, so its `kind` is `"free-text"`; once a run has happened, the list that run reported
-    // replaces it (`observedAt` says when). Rendering an empty list as "no model" would be a claim
-    // about somebody else's product. The rules and their citations live in `@envoycoder/agent-catalog`.
-    models: facts.models,
-    // The thinking level, on the same terms one step further: it is knowable *only* from a session, so
-    // this is `"session"` (we have not seen one), `"listed"` (we have) or `"none"` (the agent offers
-    // none — recorded from its source and verified for `envoy-harness`, or observed for an agent that
-    // opened a session and published no such option).
-    thinking: facts.thinking,
-    capabilities: {
-      resume: definition.capabilities.resume,
-      cancel: definition.capabilities.cancel,
-      approvals: definition.capabilities.approvals,
-      structuredTools: definition.capabilities.structuredTools,
-      streaming: definition.capabilities.streaming,
-      images: definition.capabilities.images,
-      // Carried so a composer can enable its mode picker on the daemon's answer rather than on its
-      // own assumption. `modes` alone is not enough to decide: an agent can declare modes it has no
-      // way to be *set* into, and a picker that offered one would be a control that does nothing.
-      agentMode: definition.capabilities.agentMode,
-      // The same distinction for the model, and a different wire: whether this daemon can make a chosen
-      // model the one the agent runs on. `envoy-harness` reads it from argv; `deepseek-harness` and the
-      // three agents reached over ACP read it from the session the agent just opened. The four entries
-      // this build cannot launch get it from nowhere — so the control is enabled on this flag, and off
-      // with a reason, everywhere it is false.
-      model: canApplyModel(id),
-      // And the third, which turns on a *different* method (`session/set_config_option`) for an agent
-      // that takes one: `deepseek-harness` yes, `envoy-harness` no — its ACP dispatch has no
-      // thought-level method at all, verified against the built peer.
-      thinking: canApplyThinking(id),
-      // And a fourth, on `session/set_policy` — the method behind "Ask before anything destructive".
-      // True for `envoy-harness` alone, whose `autoRun` values are exactly
-      // `always-confirm | safe-only | off`; `deepseek-harness` answers every method in its own request
-      // table and `session/set_policy` is not one of them, so its row is disabled with a reason rather
-      // than sent and refused. The catalogue owns the fact; this line is the wire carrying it.
-      approvalPolicy: definition.capabilities.approvalPolicy,
-    },
-    // **The state, and the commands that fix it.** This replaced `available: boolean | "unknown"` plus a
-    // single `installHint`: the boolean could not say whether the *agent*, the *adapter we drive it
-    // through*, or our own search path was the thing that came up empty, so a user with `claude` and
-    // `codex` installed read "Not installed" about a missing npm bridge. `harnessAvailability` does the
-    // projection and `HarnessAvailabilitySchema` re-checks its five agreement rules on every answer, so a
-    // catalogue change that produced a self-contradicting state fails a test rather than reaching a window.
-    availability: harnessAvailability(result),
-    evidence: definition.evidence,
-  };
 }
 
 /**

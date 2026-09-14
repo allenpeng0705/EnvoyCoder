@@ -3,7 +3,7 @@
  *
  * ## Why JSON files and not a database
  *
- * Three small collections that a human may need to read, fix or back up — and the reference product
+ * Five small collections that a human may need to read, fix or back up — and the reference product
  * reached the same conclusion for the same data (`docs/envoycoder-paseo-inheritance.md` §2 cites its
  * `projects/projects.json`; Paseo's daemon state is JSON under one home directory, with no database
  * anywhere in it). A database here would buy transactions we do not need and cost the property we
@@ -11,15 +11,11 @@
  *
  * ## The rule that matters more than the format: never destroy a user's file
  *
- * A file we cannot parse is **quarantined, not overwritten**. The bytes are renamed aside with a
- * timestamp, the daemon carries on with the defaults, and the reason is reported through
- * `coder.hello` so the user is told rather than left to discover an empty sidebar. Silently writing
- * over a corrupt file is how a control plane makes someone lose the list of what they were working
- * on, and it is unrecoverable — which is the one failure mode worth being paranoid about here.
- *
- * A single *invalid entry* inside a valid file is a lesser case with a lesser response: the entry
- * is skipped, the rest of the file is kept, and the skip is reported. One bad row must not cost the
- * other forty.
+ * A file we cannot parse is **quarantined, not overwritten**, and a single unusable *entry* inside a
+ * valid file costs that entry rather than the file. Both halves of that rule — with the reasoning, and
+ * with the one place that counts what it had to set aside — are in `./state-file.js`, which is where the
+ * reading, the atomic write and the quarantine now live. What stays here is what a store is *for*: which
+ * collections exist, what a mutation means, and the order they happen in.
  *
  * ## Writers are serialised, and reads are snapshots
  *
@@ -29,11 +25,12 @@
  * than the last one requested.
  */
 
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
-import type { z } from "zod";
+import { mkdir } from "node:fs/promises";
+import { basename } from "node:path";
 
 import {
+  type AgentProviderConfig,
+  AgentProviderConfigSchema,
   type CoderSettings,
   CoderSettingsSchema,
   DEFAULT_CODER_SETTINGS,
@@ -49,9 +46,11 @@ import {
 import type { CoderPaths } from "@envoycoder/host-bridge";
 import { projectIdFor, resolveTaskDefaults, taskIdFor } from "@envoycoder/task-model";
 
+import { StateFiles, type FileNotes } from "./state-file.js";
+
 /** What a mutation reports, so a listener can refetch exactly one list. */
 export interface StoreChange {
-  kind: "projects" | "tasks" | "settings" | "harnesses";
+  kind: "projects" | "tasks" | "settings" | "harnesses" | "providers";
   at: string;
   ids?: readonly string[];
 }
@@ -61,19 +60,6 @@ export interface CoderStoreOptions {
   now?: () => Date;
   /** Where a quarantined file goes. Defaults to beside the original, so it is findable. */
   quarantineSuffix?: (at: Date) => string;
-}
-
-/**
- * A quarantined file's name.
- *
- * `projects.json` becomes `projects.corrupt-20260913T101500Z.json` — **still a `.json` file**, in
- * the same directory, so the user can open it and a backup tool will include it. Renaming it to
- * something without an extension, or moving it to a temp directory, would technically preserve the
- * bytes and practically lose them.
- */
-function defaultQuarantineSuffix(at: Date): string {
-  const stamp = at.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
-  return `.corrupt-${stamp}.json`;
 }
 
 export interface AddProjectInput {
@@ -138,16 +124,25 @@ export interface UpdateTaskInput {
   extraArgs?: string;
 }
 
-/** What the store could not read, in end-user words. Reported at `coder.hello`. */
-export interface StoreNotes {
-  readonly quarantined: readonly { file: string; movedTo: string; reason: string }[];
-  readonly skipped: readonly { file: string; reason: string }[];
-}
+/**
+ * What the store could not read, in end-user words. Reported at `coder.hello`.
+ *
+ * `StateFiles`' own shape, under the name the daemon has always used for it: the class that counts
+ * quarantined and skipped files is `./state-file.js` now, and a second identical interface here would be a
+ * second thing to keep in step.
+ */
+export type StoreNotes = FileNotes;
 
 export class CoderStore {
   private readonly paths: CoderPaths;
   private readonly now: () => Date;
-  private readonly quarantineSuffix: (at: Date) => string;
+  /**
+   * The file half of this class: read, write atomically, set aside what cannot be read.
+   *
+   * See `./state-file.js` for why it is separate — two hundred lines of file handling that had grown
+   * `CoderStore` past the repository's size rule, none of which was about what a store *remembers*.
+   */
+  private readonly files: StateFiles;
 
   private projectsState: Project[] = [];
   private tasksState: Task[] = [];
@@ -159,10 +154,16 @@ export class CoderStore {
    * parsed the file per request would put a filesystem read in the path of a window's first paint.
    */
   private sessionOptionsState: ObservedSessionOptions[] = [];
+  /**
+   * The agents the user declared, one entry per provider.
+   *
+   * In memory as well as on disk for the same reason the observations above are: `coder.listProviders`
+   * probes each one on every call, and a daemon that parsed the file per request would put a filesystem
+   * read in the path of a window's first paint.
+   */
+  private providersState: AgentProviderConfig[] = [];
 
   private readonly listeners = new Set<(change: StoreChange) => void>();
-  private readonly quarantined: { file: string; movedTo: string; reason: string }[] = [];
-  private readonly skipped: { file: string; reason: string }[] = [];
 
   /** The write chain. See the module doc: one mutation at a time, in request order. */
   private tail: Promise<unknown> = Promise.resolve();
@@ -170,7 +171,10 @@ export class CoderStore {
   private constructor(options: CoderStoreOptions) {
     this.paths = options.paths;
     this.now = options.now ?? (() => new Date());
-    this.quarantineSuffix = options.quarantineSuffix ?? defaultQuarantineSuffix;
+    this.files = new StateFiles({
+      ...(options.now ? { now: options.now } : {}),
+      ...(options.quarantineSuffix ? { quarantineSuffix: options.quarantineSuffix } : {}),
+    });
   }
 
   /**
@@ -184,9 +188,9 @@ export class CoderStore {
     const store = new CoderStore(options);
     await mkdir(store.paths.stateDir, { recursive: true });
 
-    const projects = await store.readCollection(store.paths.projectsFile, ProjectSchema);
+    const projects = await store.files.readCollection(store.paths.projectsFile, ProjectSchema);
     store.projectsState = projects.items;
-    if (projects.skipped.length > 0) await store.writeJsonAtomic(store.paths.projectsFile, projects.items);
+    if (projects.skipped.length > 0) await store.files.writeJsonAtomic(store.paths.projectsFile, projects.items);
 
     // **Adoption, not migration.** The file holding these rows was called `workspaces.json` before the
     // vocabulary changed to Project → Tasks, and a rename that ignores the old file would show a user an
@@ -194,9 +198,9 @@ export class CoderStore {
     // moves is to *adopt in place* (EnvoyMesh §5): read the old file when the new one does not exist,
     // then write it back under the new name. One-way, no dual-write, nothing deleted.
     await store.adoptLegacyTasksFile();
-    const tasks = await store.readCollection(store.paths.tasksFile, TaskSchema);
+    const tasks = await store.files.readCollection(store.paths.tasksFile, TaskSchema);
     store.tasksState = tasks.items;
-    if (tasks.skipped.length > 0) await store.writeJsonAtomic(store.paths.tasksFile, tasks.items);
+    if (tasks.skipped.length > 0) await store.files.writeJsonAtomic(store.paths.tasksFile, tasks.items);
 
     store.settingsState = await store.readSettings();
 
@@ -204,13 +208,24 @@ export class CoderStore {
     // costs that entry rather than every observation — and so a file we cannot parse at all is
     // quarantined rather than overwritten. What it holds is *evidence* about other products, so losing
     // it silently would leave a user with a text field where a picker used to be and no explanation.
-    const observed = await store.readCollection(
+    const observed = await store.files.readCollection(
       store.paths.sessionOptionsFile,
       ObservedSessionOptionsSchema,
     );
     store.sessionOptionsState = observed.items;
     if (observed.skipped.length > 0) {
-      await store.writeJsonAtomic(store.paths.sessionOptionsFile, observed.items);
+      await store.files.writeJsonAtomic(store.paths.sessionOptionsFile, observed.items);
+    }
+
+    // The user's own agents, read through the same collection helper as everything else — which is what
+    // gives this file the two properties that matter for a list a user edits by hand: one unusable row
+    // costs that row, and a file we cannot parse at all is **quarantined rather than emptied**. Emptying
+    // it would silently delete every agent the user had declared, which is the failure mode this store's
+    // rule about never destroying a user's file exists to prevent.
+    const providers = await store.files.readCollection(store.paths.providersFile, AgentProviderConfigSchema);
+    store.providersState = providers.items;
+    if (providers.skipped.length > 0) {
+      await store.files.writeJsonAtomic(store.paths.providersFile, providers.items);
     }
     return store;
   }
@@ -246,8 +261,17 @@ export class CoderStore {
     return this.sessionOptionsState.find((entry) => entry.harness === harness);
   }
 
+  /** Every agent the user has declared. Empty is a normal answer, not a missing one. */
+  providers(): readonly AgentProviderConfig[] {
+    return this.providersState;
+  }
+
+  findProvider(id: string): AgentProviderConfig | undefined {
+    return this.providersState.find((provider) => provider.id === id);
+  }
+
   notes(): StoreNotes {
-    return { quarantined: this.quarantined, skipped: this.skipped };
+    return this.files.notes();
   }
 
   /** Subscribe to mutations. Returns an unsubscribe function. */
@@ -257,6 +281,27 @@ export class CoderStore {
       this.listeners.delete(listener);
     };
   }
+
+  /* ────────────────────────────── reading ────────────────────────────── */
+
+/**
+ * The user's settings, with the keys this build has retired dropped before the schema sees them.
+ *
+ * The `.strict()` schema plus the quarantine below is the right treatment for a file we cannot
+ * understand — but it is the wrong treatment for a file we understand *perfectly* and have simply
+ * stopped using. `allowRemoteRuns` is that case: settings slice 1 removed the switch because nothing
+ * read it, and without this strip an upgrading user's whole settings file would be quarantined —
+ * taking their language, their default agent and their nominated folder with it — to discard one key
+ * whose value never reached a single line of code. See `RETIRED_SETTINGS_KEYS` in the protocol.
+ */
+private async readSettings(): Promise<CoderSettings> {
+  const raw = await this.files.readJson(this.paths.settingsFile);
+  if (raw === undefined) return DEFAULT_CODER_SETTINGS;
+  const parsed = CoderSettingsSchema.safeParse(withoutRetiredSettingsKeys(raw));
+  if (parsed.success) return parsed.data;
+  await this.files.quarantine(this.paths.settingsFile, `settings did not match the schema: ${parsed.error.message}`);
+  return DEFAULT_CODER_SETTINGS;
+}
 
   /* ────────────────────────────── mutations ────────────────────────────── */
 
@@ -466,7 +511,7 @@ export class CoderStore {
     const others = this.sessionOptionsState.filter((entry) => entry.harness !== observation.harness);
     this.sessionOptionsState = [...others, observation];
     await this.enqueue(
-      () => this.writeJsonAtomic(this.paths.sessionOptionsFile, this.sessionOptionsState),
+      () => this.files.writeJsonAtomic(this.paths.sessionOptionsFile, this.sessionOptionsState),
       () =>
         this.emit({
           kind: "harnesses",
@@ -506,129 +551,89 @@ export class CoderStore {
     return this.settingsState;
   }
 
+  /**
+   * Declare an agent of the user's own — or **replace** the one already under this id.
+   *
+   * ## Replace rather than merge, and why that is not the same decision `updateSettings` makes
+   *
+   * An app setting is one independent fallback among several, so a patch that carries only a model must
+   * not clear a harness (`updateSettings` merges for exactly that reason). A provider is the opposite
+   * shape: it is a **complete statement of how to start one program** — a command, its argv, the names of
+   * the variables it needs and the dialect it speaks. Merging two of those would leave the user with half
+   * of each: a new command with the previous command's arguments, which is a program that starts and does
+   * something nobody asked for. So the incoming entry wins whole, and `""`-style clearing is not needed
+   * because every field here is required or explicitly absent.
+   *
+   * The stored value is parsed through `AgentProviderConfigSchema` *here* rather than only at the wire, so
+   * the file can never contain something the schema would refuse — including an id that names one of the
+   * nine agents we ship, which a hand-edited file is the only remaining way to attempt.
+   */
+  async addProvider(input: AgentProviderConfig): Promise<{ provider: AgentProviderConfig; created: boolean }> {
+    const provider = AgentProviderConfigSchema.parse(input);
+    const existing = this.providersState.find((candidate) => candidate.id === provider.id);
+    this.providersState = existing
+      ? this.providersState.map((candidate) => (candidate.id === provider.id ? provider : candidate))
+      : [...this.providersState, provider];
+    await this.persistProviders([provider.id]);
+    return { provider, created: existing === undefined };
+  }
+
+  /**
+   * Forget a provider.
+   *
+   * `undefined` when there is nothing under that id, which the handler turns into a refusal rather than a
+   * cheerful success — the same rule `removeProject` follows, so a user whose list changed under them in
+   * another window is told rather than left believing a removal happened twice.
+   *
+   * Nothing else is touched, and that is deliberate rather than an omission: a provider is a *recipe*, and
+   * no row refers to one — a task names a `HarnessId`. If a later slice lets a task run on a provider, that
+   * slice owes the archived-not-deleted treatment `removeProject` gives tasks.
+   */
+  async removeProvider(id: string): Promise<{ removed: string } | undefined> {
+    const current = this.providersState.find((provider) => provider.id === id);
+    if (!current) return undefined;
+    this.providersState = this.providersState.filter((provider) => provider.id !== id);
+    await this.persistProviders([id]);
+    return { removed: id };
+  }
+
   /* ────────────────────────────── reading ────────────────────────────── */
-
-  /**
-   * Read a collection, tolerating both a broken file and a broken row.
-   *
-   * The schema is applied **per element**, not to the whole array: one invalid row costs that row,
-   * not the file. The caller rewrites the file when anything was skipped, so the warning appears
-   * once at startup instead of on every launch for a row that will never be valid.
-   */
-  private async readCollection<S extends z.ZodTypeAny>(
-    file: string,
-    schema: S,
-  ): Promise<{ items: z.infer<S>[]; skipped: string[] }> {
-    const raw = await this.readJson(file);
-    if (raw === undefined) return { items: [], skipped: [] };
-    if (!Array.isArray(raw)) {
-      await this.quarantine(file, `expected a list in ${basename(file)}, found ${typeof raw}`);
-      return { items: [], skipped: [] };
-    }
-
-    const items: z.infer<S>[] = [];
-    const skipped: string[] = [];
-    for (const [index, entry] of raw.entries()) {
-      const parsed = schema.safeParse(entry);
-      if (parsed.success) {
-        items.push(parsed.data as z.infer<S>);
-        continue;
-      }
-      const reason = `entry ${index + 1}: ${parsed.error.issues[0]?.message ?? "did not match the schema"}`;
-      skipped.push(reason);
-      this.skipped.push({ file: basename(file), reason });
-    }
-    if (skipped.length > 0) {
-      this.skipped.push({
-        file: basename(file),
-        reason: `${skipped.length} entr${skipped.length === 1 ? "y was" : "ies were"} left out of the list, and the file has been rewritten without ${skipped.length === 1 ? "it" : "them"}.`,
-      });
-    }
-    return { items, skipped };
-  }
-
-  /**
-   * The user's settings, with the keys this build has retired dropped before the schema sees them.
-   *
-   * The `.strict()` schema plus the quarantine below is the right treatment for a file we cannot
-   * understand — but it is the wrong treatment for a file we understand *perfectly* and have simply
-   * stopped using. `allowRemoteRuns` is that case: settings slice 1 removed the switch because nothing
-   * read it, and without this strip an upgrading user's whole settings file would be quarantined —
-   * taking their language, their default agent and their nominated folder with it — to discard one key
-   * whose value never reached a single line of code. See `RETIRED_SETTINGS_KEYS` in the protocol.
-   */
-  private async readSettings(): Promise<CoderSettings> {
-    const raw = await this.readJson(this.paths.settingsFile);
-    if (raw === undefined) return DEFAULT_CODER_SETTINGS;
-    const parsed = CoderSettingsSchema.safeParse(withoutRetiredSettingsKeys(raw));
-    if (parsed.success) return parsed.data;
-    await this.quarantine(this.paths.settingsFile, `settings did not match the schema: ${parsed.error.message}`);
-    return DEFAULT_CODER_SETTINGS;
-  }
-
-  /**
-   * Read and parse one file.
-   *
-   * `undefined` means "there is nothing here", which covers a missing file and a file whose bytes
-   * were not JSON — the second only after the bytes have been moved aside, since "there is nothing
-   * here" must never be *made* true by us reading it.
-   */
-  private async readJson(file: string): Promise<unknown> {
-    let text: string;
-    try {
-      text = await readFile(file, "utf8");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-      throw error;
-    }
-    if (text.trim() === "") return undefined;
-    try {
-      return JSON.parse(text) as unknown;
-    } catch (error) {
-      await this.quarantine(file, `not readable as JSON: ${error instanceof Error ? error.message : String(error)}`);
-      return undefined;
-    }
-  }
-
-  /** Move an unreadable file aside, and remember that we did. */
-  private async quarantine(file: string, reason: string): Promise<void> {
-    const at = this.now();
-    const movedTo = join(dirname(file), baseNameWithoutExtension(file) + this.quarantineSuffix(at));
-    try {
-      await rename(file, movedTo);
-    } catch (error) {
-      // A file we cannot even move is reported and left alone. Deleting it would be the one action
-      // that turns a recoverable problem into an unrecoverable one.
-      this.quarantined.push({
-        file,
-        movedTo: "",
-        reason: `${reason} (and it could not be moved aside: ${error instanceof Error ? error.message : String(error)})`,
-      });
-      return;
-    }
-    this.quarantined.push({ file, movedTo, reason });
-  }
 
   /* ────────────────────────────── writing ────────────────────────────── */
 
   private persistProjects(ids: readonly string[]): Promise<void> {
     return this.enqueue(
-      () => this.writeJsonAtomic(this.paths.projectsFile, this.projectsState),
+      () => this.files.writeJsonAtomic(this.paths.projectsFile, this.projectsState),
       () => this.emit({ kind: "projects", at: this.now().toISOString(), ids }),
     );
   }
 
   private persistTasks(ids: readonly string[]): Promise<void> {
     return this.enqueue(
-      () => this.writeJsonAtomic(this.paths.tasksFile, this.tasksState),
+      () => this.files.writeJsonAtomic(this.paths.tasksFile, this.tasksState),
       () => this.emit({ kind: "tasks", at: this.now().toISOString(), ids }),
     );
   }
 
   private persistSettings(): Promise<void> {
     return this.enqueue(
-      () => this.writeJsonAtomic(this.paths.settingsFile, this.settingsState),
+      () => this.files.writeJsonAtomic(this.paths.settingsFile, this.settingsState),
       () => this.emit({ kind: "settings", at: this.now().toISOString() }),
+    );
+  }
+
+  /**
+   * The user's provider list, written whole.
+   *
+   * Its own change kind rather than reusing `harnesses`, which is the store's rule for every list: the
+   * event says *what* moved so a client refetches the one list that changed. A second window that heard
+   * `harnesses` here would ask `coder.listHarnesses` — nine agents it already has — and never see the
+   * provider it was just told about.
+   */
+  private persistProviders(ids: readonly string[]): Promise<void> {
+    return this.enqueue(
+      () => this.files.writeJsonAtomic(this.paths.providersFile, this.providersState),
+      () => this.emit({ kind: "providers", at: this.now().toISOString(), ids }),
     );
   }
 
@@ -684,41 +689,14 @@ export class CoderStore {
     const legacy = this.paths.tasksFile.replace(/tasks\.json$/, "workspaces.json");
     if (legacy === this.paths.tasksFile) return false;
     // `readJson` answers `undefined` for a missing file, which is the whole test we need.
-    if ((await this.readJson(this.paths.tasksFile)) !== undefined) return false;
+    if ((await this.files.readJson(this.paths.tasksFile)) !== undefined) return false;
 
-    const previous = await this.readCollection(legacy, TaskSchema);
+    const previous = await this.files.readCollection(legacy, TaskSchema);
     if (previous.items.length === 0) return false;
-    await this.writeJsonAtomic(this.paths.tasksFile, previous.items);
+    await this.files.writeJsonAtomic(this.paths.tasksFile, previous.items);
     return true;
   }
 
-  private async writeJsonAtomic(file: string, value: unknown): Promise<void> {
-    const text = `${JSON.stringify(value, null, 2)}\n`;
-    const temp = `${file}.tmp`;
-    await writeFile(temp, text, { encoding: "utf8", mode: 0o600 });
-
-    let lastError: unknown;
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      try {
-        await rename(temp, file);
-        return;
-      } catch (error) {
-        lastError = error;
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code !== "EPERM" && code !== "EBUSY" && code !== "EACCES") break;
-        await sleep(20 * (attempt + 1));
-      }
-    }
-    // Leave no `.tmp` behind for the next read to trip over.
-    await unlink(temp).catch(() => undefined);
-    throw lastError;
-  }
-}
-
-function baseNameWithoutExtension(file: string): string {
-  const name = basename(file);
-  const dot = name.lastIndexOf(".");
-  return dot > 0 ? name.slice(0, dot) : name;
 }
 
 /**
@@ -734,8 +712,4 @@ function dropCleared<T extends { model?: string; extraArgs?: string }>(defaults:
   if (out.model === "") delete out.model;
   if (out.extraArgs === "") delete out.extraArgs;
   return out;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

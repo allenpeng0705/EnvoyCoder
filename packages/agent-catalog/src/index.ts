@@ -47,7 +47,6 @@ import { createRequire } from "node:module";
 
 import {
   type AgentMode,
-  type AvailabilityFix,
   type HarnessAvailability,
   type HarnessId,
   type HarnessState,
@@ -55,15 +54,11 @@ import {
   BUILT_IN_HARNESSES,
   CATALOGUED_HARNESSES,
 } from "@envoycoder/protocol";
-import {
-  type PlatformId,
-  detectPlatform,
-  findBinary,
-  provisionalCacheOf,
-  spawnTreeOptions,
-} from "@envoycoder/platform";
+import { type PlatformId, detectPlatform, spawnTreeOptions } from "@envoycoder/platform";
 
 import { modelArgs, modelIdOf } from "./models.js";
+import { probeRecipe, type ProbeFinding, type ProbeHarnessOptions, type ProbeRecipe } from "./probe.js";
+import { splitArgs } from "./args.js";
 
 // `require` from inside an ES module, for the two filesystem questions this package asks (does the
 // peer checkout exist? which repository are we in?). Kept to `require` rather than a static import
@@ -1032,218 +1027,64 @@ export function harnessesByTier(tier: "built-in" | "catalogued"): HarnessDefinit
   return ALL_HARNESSES.map(harnessDefinition).filter((entry) => entry.tier === tier);
 }
 
-export interface HarnessProbe {
+export interface HarnessProbe extends ProbeFinding {
+  /**
+   * Which of the nine we ship this probe is about.
+   *
+   * The one field `ProbeFinding` cannot carry, and the reason the prober takes a *recipe* rather than an
+   * id: a provider a user declared is probed by the same code (`providers.ts`), and its id is a name the
+   * user chose rather than a member of `HARNESS_IDS`. Everything else — the five states, the paths that
+   * make them checkable, the fixes — is shared, which is what makes "a provider arrives with the same
+   * states from the same probe" a fact about one function rather than a promise.
+   *
+   * The five-state reasoning that used to be written here now lives on `ProbeFinding.state` in
+   * `probe.ts`, beside the checks that produce it.
+   */
   id: HarnessId;
-  /**
-   * **Which of the five things is true.** The one field a caller branches on.
-   *
-   * `available: boolean` used to be here and it could not answer the question the window asks: "the agent
-   * is installed and its adapter is not" and "the agent is not installed" are different sentences with
-   * different fixes, and both were `false`. See `HarnessState` in `@envoycoder/protocol` for the five states
-   * and for the bug report that made the boolean unacceptable.
-   */
-  state: HarnessState;
-  /** Absolute path we would launch, when it is a child process and we found one. */
-  binaryPath?: string;
-  /**
-   * How it would be launched.
-   *
-   * `path` is the ordinary case — a binary on `PATH`. `node-script` is the **peer checkout**: the
-   * built-in harness is a peer of the family rather than something EnvoyMesh distributes (design D4,
-   * guide §7.5), so a developer who has cloned it next to this repo can run it without a global
-   * install. The distinction is stated rather than inferred from the extension, because launching
-   * the wrong thing as a script is a failure that reads as "the agent is broken".
-   */
-  via?: "path" | "node-script";
-  /**
-   * The **agent's own** program, when what we drive is a bridge over it and this is what we found.
-   *
-   * The evidence for `needs-bridge`: "we found `claude` at `~/.local/bin/claude`, and
-   * `claude-agent-acp` is not on the search path". Present for that state alone, which
-   * `HarnessAvailabilitySchema` enforces on the wire too.
-   */
-  agentBinaryPath?: string;
-  /** Set when the program we drive resolved out of another tool's cache. See `provisionalCacheOf`. */
-  provisional?: ToolCache;
-  /**
-   * What to run to reach `ready`, in order, when something must be installed.
-   *
-   * Built from the entry's two install hints: the bridge's steps for `needs-bridge`, and the agent's
-   * followed by the bridge's for `not-installed` — because a bridged agent whose *agent* is missing will
-   * also be missing its bridge, and naming one of the two would land the user on the other a minute later.
-   */
-  fix?: readonly AvailabilityFix[];
-  /** Why it is not ready, in end-user language. Carried for the log and for `coder.probeHarness`. */
-  reason?: string;
-}
-
-/** What `probeHarness` is given. */
-export interface ProbeHarnessOptions {
-  platform?: PlatformId;
-  env?: NodeJS.ProcessEnv;
-  /** Injectable for tests. */
-  find?: (name: string) => string | null;
-  /** For in-process harnesses: is the module resolvable? */
-  moduleAvailable?: (module: string) => boolean;
-  /** Injectable for tests, so probing the peer checkout needs no filesystem. */
-  fileExists?: (path: string) => boolean;
-  /**
-   * The directories to search, in this order.
-   *
-   * **The seam that makes probing and spawning agree.** A GUI-launched daemon's own `PATH` does not contain
-   * the user's tools, so the list has to be resolved rather than inherited — and the *same* list has to be
-   * handed to the spawn, or a program that probed as present can fail to start. Omitted means "use the
-   * environment in `env`", which is what a test with no filesystem wants; the daemon always passes it.
-   */
-  pathDirs?: readonly string[];
-  /**
-   * False when no search list could be assembled at all — see `SearchPath.searchable`.
-   *
-   * A `find` that answers `null` for everything cannot, on its own, distinguish "we searched and found
-   * nothing" from "we had nothing to search", and those are `not-installed` and `unknown`. The caller that
-   * resolved the path is the only one that knows, so it says.
-   */
-  searchable?: boolean;
 }
 
 /**
- * Is this agent usable here?
+ * The probe, over the catalogue: the recipe from one entry, handed to the one prober.
  *
- * Deliberately *not* a network call and deliberately not cached: an agent can be installed
- * while the app is open, and "I just installed it, why doesn't it show up" is a support ticket.
- * The caller decides how often to ask.
- *
- * The order of the checks is the whole fix, and it is the order of specificity:
- *
- *   1. **The program we drive** resolved → `ready`, or `unsupported` if this build cannot speak its
- *      protocol. Nothing else can be said and nothing else needs to be.
- *   2. It did not, and the entry declares a bridge → ask whether the **agent's own** program is there. If it
- *      is, the answer is `needs-bridge` and the fix is the bridge's install command. This step did not exist,
- *      and without it every bridged agent reported "not installed" about an agent that was installed.
- *   3. Nothing so far, and the peer checkout is built → `ready` via `node-script` (unchanged).
- *   4. Nothing at all, **and we could search** → `not-installed`, with the entry's own hint.
- *   5. Nothing at all and we could not search → `unknown`. Never `not-installed`: we did not look, and the
- *      difference is the entire point of the state.
+ * A wrapper and nothing more, on purpose. `probeRecipe` is where the five checks live — see its module
+ * for the order, which *is* the fix — and this adds the one thing a catalogue id can add: which entry was
+ * asked about. A second body here (the shape before the provider slice) is how the two tiers would have
+ * come to disagree about the same machine.
  */
 export function probeHarness(id: HarnessId, options: ProbeHarnessOptions = {}): HarnessProbe {
-  const platform = options.platform ?? detectPlatform();
-  const definition = harnessDefinition(id);
-  const fixFor = (steps: "bridge" | "agent") => availabilityFixFor(definition, steps);
-  if (definition.launch.kind === "in-process") {
-    // No entry uses this variant any more — every agent here is a child process — but the branch stays
-    // because `AgentLaunch` still has the variant, and a missing runtime is a fact this product would have
-    // to report rather than crash on. `unknown` rather than `not-installed` when the caller did not say:
-    // a module we could not ask about is not a module we established is absent.
-    if (options.moduleAvailable === undefined) {
-      return {
-        id,
-        state: "unknown",
-        reason: `EnvoyCoder has not checked whether ${definition.label}'s runtime (${definition.launch.module}) is present.`,
-      };
-    }
-    const isAvailable = options.moduleAvailable(definition.launch.module);
-    return {
-      id,
-      state: isAvailable ? "ready" : "not-installed",
-      ...(isAvailable
-        ? {}
-        : {
-            reason: `${definition.label} is built into EnvoyCoder, but its runtime (${definition.launch.module}) is not present. Run \`npm run peers:check\` for the exact fix.`,
-            ...(fixFor("agent") ? { fix: fixFor("agent") } : {}),
-          }),
-    };
-  }
+  return { id, ...probeRecipe(harnessRecipe(harnessDefinition(id)), options) };
+}
 
+/**
+ * One catalogue entry, flattened into the launch facts a probe needs.
+ *
+ * The eager `entry()` call is deliberate and unchanged from when this code lived inside `probeHarness`:
+ * it builds a path under the repository root and touches no filesystem, and calling it per probe is what
+ * makes a peer checkout that appears while the app is running visible without a restart.
+ */
+export function harnessRecipe(definition: HarnessDefinition): ProbeRecipe {
   const launch = definition.launch;
-  const find =
-    options.find ??
-    ((name: string) =>
-      findBinary(name, {
-        platform,
-        env: options.env,
-        ...(options.pathDirs !== undefined ? { pathDirs: options.pathDirs } : {}),
-      }));
-
-  for (const binary of launch.binaries) {
-    const resolved = find(binary);
-    if (!resolved) continue;
-    const provisional = provisionalCacheOf(resolved);
-    // The installed-but-not-drivable case, and it is not the `ready` chip: `launchForHarness` refuses every
-    // entry whose transport is not ACP with `harnessUnsupported`, so a green chip here would promise a run
-    // that cannot happen.
-    if (launch.transport !== "acp") {
-      return {
-        id,
-        state: "unsupported",
-        binaryPath: resolved,
-        via: "path",
-        ...(provisional ? { provisional } : {}),
-        reason: `${definition.label} is installed at ${resolved}, but it speaks a protocol EnvoyCoder cannot drive yet.`,
-      };
-    }
+  if (launch.kind === "in-process") {
     return {
-      id,
-      state: "ready",
-      binaryPath: resolved,
-      via: "path",
-      ...(provisional ? { provisional } : {}),
+      label: definition.label,
+      kind: "in-process",
+      binaries: [],
+      transport: "acp",
+      module: launch.module,
+      ...(definition.install ? { install: definition.install } : {}),
     };
   }
-
-  // Step 2: the bridge is missing. Is the agent itself there? This is the question nobody was asking.
-  if (launch.agentBinaries && launch.agentBinaries.length > 0) {
-    for (const binary of launch.agentBinaries) {
-      const resolved = find(binary);
-      if (!resolved) continue;
-      return {
-        id,
-        state: "needs-bridge",
-        agentBinaryPath: resolved,
-        ...(fixFor("bridge") ? { fix: fixFor("bridge") } : {}),
-        reason:
-          `${definition.label} is installed at ${resolved}, but the Agent Client Protocol adapter ` +
-          `EnvoyCoder drives it through (${launch.binaries.join(", ")}) is not installed` +
-          (definition.install?.bridge ? `. ${definition.install.bridge.hint}` : "."),
-      };
-    }
-  }
-
-  // Not on PATH: for a harness we are allowed to run from a clone, look in the peer checkout. This
-  // is what makes `envoy-harness` usable on a development machine without `npm i -g`, and it is the
-  // arrangement the family's guide describes — the product clones the harness itself.
-  const peer = launch.devCheckout;
-  const peerEntry = peer?.entry();
-  if (peerEntry && (options.fileExists ?? defaultFileExists)(peerEntry)) {
-    return { id, state: "ready", binaryPath: peerEntry, via: "node-script" };
-  }
-
-  // Step 5 before step 4: a search that never happened cannot support a claim of absence.
-  if (options.searchable === false) {
-    return {
-      id,
-      state: "unknown",
-      reason:
-        `EnvoyCoder could not tell whether ${definition.label} is installed: it has no search path to ` +
-        `look on (no PATH from this process, no answer from a login shell, and no tool directory it ` +
-        `could find). Nothing on this row is a statement about the agent.`,
-    };
-  }
-
   return {
-    id,
-    state: "not-installed",
-    ...(fixFor("agent") ? { fix: fixFor("agent") } : {}),
-    reason:
-      `${definition.label} is not installed (looked for ${launch.binaries.join(", ")} on PATH` +
-      (launch.agentBinaries && launch.agentBinaries.length > 0
-        ? `, and for ${launch.agentBinaries.join(", ")}`
-        : "") +
-      (peerEntry ? `, and at ${peerEntry}` : "") +
-      ")" +
-      (definition.install ? `. ${definition.install.hint}` : "") +
-      (definition.install?.bridge ? ` Then: ${definition.install.bridge.hint}` : ""),
+    label: definition.label,
+    kind: "child-process",
+    binaries: launch.binaries,
+    transport: launch.transport,
+    ...(launch.agentBinaries ? { agentBinaries: launch.agentBinaries } : {}),
+    ...(launch.devCheckout ? { devCheckoutEntry: launch.devCheckout.entry() } : {}),
+    ...(definition.install ? { install: definition.install } : {}),
   };
 }
+
 
 /**
  * A probe, projected onto the **wire**.
@@ -1258,8 +1099,15 @@ export function probeHarness(id: HarnessId, options: ProbeHarnessOptions = {}): 
  * `via` and `reason` are deliberately dropped: `via` is a launch fact (`resolveHarnessCommand` reads it)
  * and `reason` is English prose for the log. What travels is the state, the paths that make it checkable,
  * the provenance of a resolved program, and the commands that fix it.
+ *
+ * **It takes a `ProbeFinding` rather than a `HarnessProbe`, and the name stayed.** A provider a user
+ * declared is projected by this same function (`providers.ts` probes it, `service.ts` projects it), and
+ * that is the requirement rather than a convenience: "a provider arrives with the same states" is only
+ * true if there is one place that turns a finding into a state. The parameter is the shared half of the
+ * probe — the id is the one field a projection cannot need, because it is the field the two tiers spell
+ * differently.
  */
-export function harnessAvailability(probe: HarnessProbe): HarnessAvailability {
+export function harnessAvailability(probe: ProbeFinding): HarnessAvailability {
   return {
     state: probe.state,
     ...(probe.binaryPath !== undefined ? { binary: probe.binaryPath } : {}),
@@ -1267,34 +1115,6 @@ export function harnessAvailability(probe: HarnessProbe): HarnessAvailability {
     ...(probe.provisional !== undefined ? { provisional: probe.provisional } : {}),
     ...(probe.fix !== undefined ? { fix: probe.fix } : {}),
   };
-}
-
-/**
- * The install steps that fix one entry's availability, as the wire wants them.
- *
- * Two shapes out of one entry, and the difference is what the user is missing: `"bridge"` is the adapter
- * alone, `"agent"` is the agent followed by the adapter — because a bridged agent whose agent is absent is
- * almost always missing its adapter too, and a row that named only the first step would send the user back
- * to another "not installed" a minute later.
- *
- * Returns `undefined` when the entry declares no such hint, which is what keeps rule 4 of
- * `HarnessAvailabilitySchema` honest: an installable state must carry a command, so an entry with nothing
- * to say cannot produce one. `test/agent-catalog.test.ts` asserts every entry has an agent hint, so no
- * state in practice is fix-less.
- */
-function availabilityFixFor(
-  definition: HarnessDefinition,
-  steps: "bridge" | "agent",
-): readonly AvailabilityFix[] | undefined {
-  const agent = definition.install;
-  const stepsOut: AvailabilityFix[] = [];
-  if (steps === "agent" && agent) {
-    stepsOut.push({ command: agent.hint, ...(agent.url ? { url: agent.url } : {}) });
-  }
-  if (agent?.bridge) {
-    stepsOut.push({ command: agent.bridge.hint, ...(agent.bridge.url ? { url: agent.bridge.url } : {}) });
-  }
-  return stepsOut.length > 0 ? stepsOut : undefined;
 }
 
 /**
@@ -1372,11 +1192,6 @@ function resolvePeerEntry(peer: string, relative: string): string {
   return join(root, "..", peer, relative);
 }
 
-function defaultFileExists(path: string): boolean {
-  const { existsSync } = require("node:fs") as typeof import("node:fs");
-  return existsSync(path);
-}
-
 /**
  * Exactly what to run for a harness: the command, and the args *before* the harness's own.
  *
@@ -1384,10 +1199,15 @@ function defaultFileExists(path: string): boolean {
  * what argv this harness understands; this one says what process to start — which is not the same
  * answer for a harness living in a peer checkout, where the command is Node and the first argument
  * is the script.
+ *
+ * It takes a `ProbeFinding` rather than a `HarnessProbe`, which is the same widening
+ * `harnessAvailability` documents: the caller that has just probed is the shared body in
+ * `apps/desktop/src/daemon/launch.ts`, which holds a *finding* — the id is the one field it does not
+ * need here, because the entry's own `id` argument says which entry this is about.
  */
 export function resolveHarnessCommand(
   id: HarnessId,
-  probe: HarnessProbe,
+  probe: ProbeFinding,
   input: RunInput,
 ): { command: string; args: string[] } {
   const definition = harnessDefinition(id);
@@ -1435,41 +1255,16 @@ export function buildHarnessInvocation(
   };
 }
 
-/**
- * Split a user-typed argument string.
- *
- * Quotes are honoured because users paste paths with spaces, and a path split in half is a bug
- * report about "the agent said it could not find my project" rather than about argument
- * parsing. Not a shell: we never expand variables or globs here.
- */
-export function splitArgs(raw: string | undefined): string[] {
-  if (!raw || raw.trim() === "") return [];
-  const out: string[] = [];
-  let current = "";
-  let quote: '"' | "'" | null = null;
-  for (let i = 0; i < raw.length; i += 1) {
-    const char = raw[i]!;
-    if (quote) {
-      if (char === quote) quote = null;
-      else current += char;
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    if (/\s/.test(char)) {
-      if (current) out.push(current);
-      current = "";
-      continue;
-    }
-    current += char;
-  }
-  if (current) out.push(current);
-  return out;
-}
 
 export * from "./acp-catalog.js";
+// How a user-typed argument string becomes argv — shared with a user-declared provider, which takes
+// arguments the same way a catalogue entry does. See its head for why a second splitter would drift.
+export * from "./args.js";
+// **The prober**, in its own module because it is now asked about two tiers: the nine agents in
+// `HARNESS_CATALOG` below and whatever a user declares in settings (`./providers.js`). One body, one
+// order of checks — see its head for why a second one would be the drift this whole slice is about.
+export * from "./probe.js";
+export * from "./providers.js";
 // The model facts live in their own module — see its head for why a per-agent model list, its
 // provenance and the way the value travels are one subject rather than three lines per entry.
 export * from "./models.js";

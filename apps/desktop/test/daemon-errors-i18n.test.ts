@@ -139,6 +139,39 @@ describe("every refusal a user can read", () => {
       params: { runId: "r-nope", text: "hello", mode: "queue" },
       key: "error.noRunRuntime",
     },
+    {
+      // A user's provider may not take the id of an agent we ship: the two rows would be indistinguishable
+      // wherever an id is the key.
+      method: "coder.addProvider",
+      params: { id: "codex", label: "Codex (mine)", command: "my-codex", transport: "acp" },
+      key: "error.providerIdTaken",
+    },
+    {
+      // **A value where a name belongs**, which is the credential case: this project stores variable names
+      // and never values, so a key pasted into that field is refused — and the refusal quotes the
+      // *position*, never what was pasted, because a refusal reaches a log and a bug report.
+      method: "coder.addProvider",
+      params: {
+        id: "my-agent",
+        label: "My Agent",
+        command: "auggie",
+        env: ["sk-live-0000-not-a-real-key"],
+        transport: "acp",
+      },
+      key: "error.providerEnvNotAName",
+    },
+    {
+      // An id a client invented that is not the shape a provider id has. The daemon refuses rather than
+      // silently rewriting it, so a second window and this one agree on what the provider is called.
+      method: "coder.addProvider",
+      params: { id: "My-Agent", label: "My Agent", command: "auggie", transport: "acp" },
+      key: "error.providerIdInvalid",
+    },
+    {
+      method: "coder.removeProvider",
+      params: { id: "no-such-provider" },
+      key: "error.providerNotFound",
+    },
   ];
 
   it("carries a key this build knows, alongside the English sentence", async () => {
@@ -188,6 +221,16 @@ describe("every refusal a user can read", () => {
 
     const missing = await refusalOf(handlers, "coder.updateTask", { id: "w-nope" });
     expect(localize(german, noticeOf(missing)) ?? "").toContain("w-nope");
+
+    // A provider's refusals carry their values too — the id that is taken, the provider that is gone — for
+    // the same reason: "dieser Name ist vergeben" without the name is a sentence a user cannot act on.
+    const taken = await refusalOf(handlers, "coder.addProvider", {
+      id: "codex",
+      label: "Codex (mine)",
+      command: "my-codex",
+      transport: "acp",
+    });
+    expect(localize(german, noticeOf(taken)) ?? "").toContain("codex");
   });
 
   it("leaves a developer-only refusal in English, and says so by having no key", async () => {

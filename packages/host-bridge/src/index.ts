@@ -118,6 +118,20 @@ export interface CoderPaths {
    * it is actually talking to.
    */
   sessionOptionsFile: string;
+  /**
+   * The agents the **user declared** — a command, its argv, and the environment variable *names* it needs.
+   *
+   * Its own file rather than a field on `settings.json`, and the reason is the quarantine rule rather
+   * than taste: settings are one document with one schema, so a single unusable provider entry would
+   * quarantine the file and take the user's language, their folder and their default agent with it. As a
+   * collection, one bad row costs that row — and the file is the thing a user can open and fix, which is
+   * the property that made these JSON files rather than a database in the first place.
+   *
+   * **It never holds a credential.** `AgentProviderConfig.env` is a list of variable *names*; the values
+   * live in the environment of whatever started the daemon. See that interface's own doc for why the shape
+   * is the enforcement rather than a rule beside it.
+   */
+  providersFile: string;
   runsDir: string;
   transcriptsDir: string;
   logsDir: string;
@@ -155,6 +169,7 @@ export function coderPaths(home: string = resolveHomeDir()): CoderPaths {
     tasksFile: join(stateDir, "tasks.json"),
     settingsFile: join(stateDir, "settings.json"),
     sessionOptionsFile: join(stateDir, "session-options.json"),
+    providersFile: join(stateDir, "providers.json"),
     runsDir: join(stateDir, "runs"),
     transcriptsDir: join(stateDir, "transcripts"),
     logsDir: join(stateDir, "logs"),

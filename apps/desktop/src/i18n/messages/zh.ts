@@ -400,6 +400,20 @@ export const zh: Catalogue = {
   "error.harnessUnknown":
     "EnvoyCoder 无法检查这台机器上是否安装了 {harness}，因此没有启动任务。重启 EnvoyCoder 后再试一次。",
   "error.harnessUnsupported": "{harness} 使用的协议 EnvoyCoder 还无法驱动，因此任务没有启动。EnvoyCoder 通过 ACP 驱动智能体——请改用其中之一。",
+  "error.providerUnsupported":
+    "{provider} 使用的协议 EnvoyCoder 还无法驱动，因此这次运行没有启动。EnvoyCoder 通过 ACP 驱动智能体——如果这个程序确实支持 ACP，请把该提供方的方言改为 ACP 后重试。",
+  "error.providerNotFound":
+    "这里没有名为 \"{id}\" 的智能体提供方。它可能已在另一个窗口中被移除。",
+  "error.providerEnvNotAName":
+    "EnvoyCoder 只保存智能体所需环境变量的名称，从不会保存它们的值，而这个提供方环境列表中的第 {position} 项不是一个变量名。变量名由字母、数字和下划线组成，且不能以数字开头。该提供方没有被添加。",
+  "error.providerEnvUnset.one":
+    "{provider} 需要环境变量 {name} 出现在 EnvoyCoder 服务的环境中，而它并未设置，因此这次运行没有启动。EnvoyCoder 只保存智能体所需变量的名称，从不会保存它们的值——请在启动服务的地方设置它，然后重启 EnvoyCoder。",
+  "error.providerEnvUnset.many":
+    "{provider} 需要这些环境变量出现在 EnvoyCoder 服务的环境中，而它们并未设置：{names}。这次运行没有启动。EnvoyCoder 只保存智能体所需变量的名称，从不会保存它们的值——请在启动服务的地方设置它们，然后重启 EnvoyCoder。",
+  "error.providerIdTaken":
+    "\"{id}\" 是 EnvoyCoder 已经自带的某个智能体的标识，因此你的提供方没有被添加。请换一个名字。",
+  "error.providerIdInvalid":
+    "\"{name}\" 不能作为提供方的标识。提供方标识由小写字母、数字和连字符组成，并以字母或数字开头。",
   "error.notConnected": "EnvoyCoder 还没有连接到它的服务。",
   "error.notConnectedChange": "EnvoyCoder 未连接到它的服务，因此该更改没有被保存。",
   "error.connectionClosed": "连接已关闭。",

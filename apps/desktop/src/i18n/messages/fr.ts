@@ -400,6 +400,20 @@ export const fr: Catalogue = {
   "error.harnessUnknown":
     "EnvoyCoder n'a pas pu vérifier si {harness} est installé, donc la tâche n'a pas été lancée. Redémarrez EnvoyCoder et réessayez.",
   "error.harnessUnsupported": "{harness} parle un protocole qu'EnvoyCoder ne sait pas encore piloter, la tâche n'a donc pas été lancée. EnvoyCoder pilote les agents via ACP — choisissez-en un à la place.",
+  "error.providerUnsupported":
+    "{provider} parle un protocole qu'EnvoyCoder ne sait pas encore piloter, donc l'exécution n'a pas été lancée. EnvoyCoder pilote les agents via ACP — si ce programme parle bien ACP, déclarez ACP comme dialecte du fournisseur et réessayez.",
+  "error.providerNotFound":
+    "Il n'y a ici aucun fournisseur d'agent nommé \"{id}\". Il a peut-être été supprimé depuis une autre fenêtre.",
+  "error.providerEnvNotAName":
+    "EnvoyCoder enregistre les noms des variables d'environnement dont un agent a besoin, jamais leurs valeurs, et l'entrée {position} de la liste d'environnement de ce fournisseur n'est pas un nom de variable. Un nom est composé de lettres, de chiffres et de traits de soulignement, et ne commence pas par un chiffre. Le fournisseur n'a pas été ajouté.",
+  "error.providerEnvUnset.one":
+    "{provider} a besoin de la variable d'environnement {name} dans l'environnement du service EnvoyCoder, et elle n'est pas définie, donc l'exécution n'a pas été lancée. EnvoyCoder enregistre les noms des variables dont un agent a besoin, jamais leurs valeurs — définissez-la là où le service est démarré, puis redémarrez EnvoyCoder.",
+  "error.providerEnvUnset.many":
+    "{provider} a besoin de ces variables d'environnement dans l'environnement du service EnvoyCoder, et elles ne sont pas définies : {names}. L'exécution n'a pas été lancée. EnvoyCoder enregistre les noms des variables dont un agent a besoin, jamais leurs valeurs — définissez-les là où le service est démarré, puis redémarrez EnvoyCoder.",
+  "error.providerIdTaken":
+    "\"{id}\" est l'identifiant d'un agent qu'EnvoyCoder fournit déjà, donc votre fournisseur n'a pas été ajouté. Donnez-lui un autre nom.",
+  "error.providerIdInvalid":
+    "\"{name}\" ne peut pas être un identifiant de fournisseur. Un identifiant de fournisseur est composé de lettres minuscules, de chiffres et de tirets, et commence par une lettre ou un chiffre.",
   "error.notConnected": "EnvoyCoder n'est pas encore connecté à son service.",
   "error.notConnectedChange": "EnvoyCoder n'est pas connecté à son service, cette modification n'a donc pas été enregistrée.",
   "error.connectionClosed": "La connexion a été fermée.",

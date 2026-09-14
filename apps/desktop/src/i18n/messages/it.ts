@@ -400,6 +400,20 @@ export const it: Catalogue = {
   "error.harnessUnknown":
     "EnvoyCoder non ha potuto verificare se {harness} è installato, quindi l'attività non è stata avviata. Riavvia EnvoyCoder e riprova.",
   "error.harnessUnsupported": "{harness} parla un protocollo che EnvoyCoder non sa ancora pilotare, quindi l'attività non è stata avviata. EnvoyCoder pilota gli agenti tramite ACP: scegline uno.",
+  "error.providerUnsupported":
+    "{provider} parla un protocollo che EnvoyCoder non sa ancora pilotare, quindi l'esecuzione non è stata avviata. EnvoyCoder pilota gli agenti tramite ACP — se questo programma parla ACP, dichiara ACP come dialetto del provider e riprova.",
+  "error.providerNotFound":
+    "Qui non esiste alcun provider di agenti chiamato \"{id}\". Potrebbe essere stato rimosso da un'altra finestra.",
+  "error.providerEnvNotAName":
+    "EnvoyCoder memorizza i nomi delle variabili d'ambiente che un agente richiede, mai i loro valori, e la voce {position} dell'elenco d'ambiente di questo provider non è un nome di variabile. Un nome è fatto di lettere, cifre e trattini bassi e non inizia con una cifra. Il provider non è stato aggiunto.",
+  "error.providerEnvUnset.one":
+    "{provider} richiede la variabile d'ambiente {name} nell'ambiente del servizio EnvoyCoder, e non è impostata, quindi l'esecuzione non è stata avviata. EnvoyCoder memorizza i nomi delle variabili che un agente richiede, mai i loro valori — impostala dove viene avviato il servizio, poi riavvia EnvoyCoder.",
+  "error.providerEnvUnset.many":
+    "{provider} richiede queste variabili d'ambiente nell'ambiente del servizio EnvoyCoder, e non sono impostate: {names}. L'esecuzione non è stata avviata. EnvoyCoder memorizza i nomi delle variabili che un agente richiede, mai i loro valori — impostale dove viene avviato il servizio, poi riavvia EnvoyCoder.",
+  "error.providerIdTaken":
+    "\"{id}\" è l'identificativo di un agente che EnvoyCoder fornisce già, quindi il tuo provider non è stato aggiunto. Dagli un altro nome.",
+  "error.providerIdInvalid":
+    "\"{name}\" non può essere un identificativo di provider. Un identificativo di provider usa lettere minuscole, cifre e trattini e inizia con una lettera o una cifra.",
   "error.notConnected": "EnvoyCoder non è ancora connesso al suo servizio.",
   "error.notConnectedChange": "EnvoyCoder non è connesso al suo servizio, quindi quella modifica non è stata salvata.",
   "error.connectionClosed": "La connessione è stata chiusa.",

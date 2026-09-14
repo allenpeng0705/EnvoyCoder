@@ -145,6 +145,8 @@ function stateWith(over: Partial<CoderState> = {}): CoderState {
     tasksKnown: true,
     settings,
     harnesses,
+    // A window with no agents the user declared: the list the daemon serves when none exist.
+    providers: [],
     mesh: { kind: "no-node", reason: "" },
     runs: {},
     loaded: true,

@@ -33,6 +33,7 @@
  */
 
 import type {
+  AgentProviderSummary,
   AgentRun,
   CoderSettings,
   HarnessId,
@@ -76,6 +77,20 @@ export interface CoderState {
   tasksKnown: boolean;
   settings: CoderSettings;
   harnesses: readonly HarnessSummary[];
+  /**
+   * The agents **this user declared**, each with the daemon's own probe of it.
+   *
+   * A list of its own rather than rows appended to `harnesses`, and the reason is the daemon's, not this
+   * store's: `HarnessSummary.id` is the closed nine-entry `HarnessId`, and a user's id in that field would
+   * be answered about by `harnessLabel`, `resolveModelMode` and the settings rows with a default each.
+   *
+   * **What arrives here is the daemon's probe, never a default.** `availability` is the same field
+   * `HarnessSummary` carries, from the same prober, so a provider whose program is missing reads
+   * `not-installed` in this window exactly as a catalogue entry does — a row a user typed is a recipe, and
+   * whether it runs here is measured. `env[].set` is the other half: a named variable this daemon does not
+   * have is shown as a fact about our environment, with its **name** and never its value.
+   */
+  providers: readonly AgentProviderSummary[];
   mesh: MeshStatus;
   /**
    * Runs this window knows about, by run id.
@@ -112,6 +127,7 @@ const initialState: CoderState = {
   tasksKnown: false,
   settings: DEFAULT_CODER_SETTINGS,
   harnesses: [],
+  providers: [],
   mesh: { kind: "no-node", reason: "" },
   runs: {},
   loaded: false,
@@ -290,12 +306,20 @@ export class CoderStore {
         ? this.loadSettings()
         : kind === "harnesses"
           ? this.loadHarnesses()
-          : this.loadLists());
+          : kind === "providers"
+            ? this.loadProviders()
+            : this.loadLists());
     }, 16);
   }
 
   async loadAll(): Promise<void> {
-    await Promise.all([this.loadLists(), this.loadSettings(), this.loadHarnesses(), this.loadMesh()]);
+    await Promise.all([
+      this.loadLists(),
+      this.loadSettings(),
+      this.loadHarnesses(),
+      this.loadProviders(),
+      this.loadMesh(),
+    ]);
     this.set({ loaded: true });
   }
 
@@ -406,6 +430,29 @@ export class CoderStore {
     try {
       const answer = await connection.callTyped<{ harnesses: HarnessSummary[] }>("coder.listHarnesses");
       this.set({ harnesses: answer.harnesses });
+    } catch (error) {
+      this.fail(error);
+    }
+  }
+
+  /**
+   * The agents the user declared — **as the daemon probed them, not as the user typed them**.
+   *
+   * Nothing here interprets, defaults or repairs the answer. A missing `availability` would be a daemon
+   * from before this method existed, and that case cannot arise: this method is new in the same build that
+   * declares the field, so an older daemon refuses the *call* by name (which `fail` renders as "restart so
+   * both come from one build") rather than answering with rows whose state has to be invented. That is why
+   * there is no `availabilityOf`-style legacy mapping here, unlike the harness list, where the field
+   * genuinely replaced an older one on a wire that was already in use.
+   */
+  async loadProviders(): Promise<void> {
+    const connection = this.connection;
+    if (!connection || connection.status.state !== "connected") return;
+    try {
+      const answer = await connection.callTyped<{ providers: AgentProviderSummary[] }>(
+        "coder.listProviders",
+      );
+      this.set({ providers: answer.providers });
     } catch (error) {
       this.fail(error);
     }

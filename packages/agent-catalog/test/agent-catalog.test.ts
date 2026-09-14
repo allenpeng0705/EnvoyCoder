@@ -172,7 +172,10 @@ describe("invocation", () => {
 
     const checkout = resolveHarnessCommand(
       "envoy-harness",
-      { id: "envoy-harness", state: "ready", binaryPath: "/peers/envoy-harness/dist/cli/acp-stdio.js", via: "node-script" },
+      // No `id`: the parameter is the **shared half** of a probe (`ProbeFinding`), because the body that
+      // calls this in the daemon holds a finding rather than a `HarnessProbe`. Which entry this is about is
+      // the first argument's job, and it always was — the literal's `id` was never read.
+      { state: "ready", binaryPath: "/peers/envoy-harness/dist/cli/acp-stdio.js", via: "node-script" },
       withModel,
     );
     // The entry supplies its own `--acp` (it is written for it), so the flags travel without it.

@@ -643,6 +643,31 @@ export const en = {
     "EnvoyCoder could not check whether {harness} is installed, so it did not start the task. Restart EnvoyCoder and try again.",
   "error.harnessUnsupported":
     "{harness} speaks a protocol EnvoyCoder cannot drive yet, so the task was not started. EnvoyCoder drives agents over ACP — choose one of those instead.",
+  // ── the agents a **user declared** (`AgentProviderConfig`) ──
+  // Their own sentences rather than the harness ones, because the thing that is wrong is different in
+  // kind: a shipped agent has an adapter we have not written, a provider has a *dialect the user chose*
+  // and can change. Advice that cannot be followed ("choose one of those instead") is not advice.
+  "error.providerUnsupported":
+    "{provider} speaks a protocol EnvoyCoder cannot drive yet, so the run was not started. EnvoyCoder drives agents over ACP — if this program does speak ACP, declare the provider's dialect as ACP and try again.",
+  "error.providerNotFound":
+    "There is no agent provider called \"{id}\" here. It may have been removed from another window.",
+  // No value is echoed, in this sentence or anywhere else: what a user pasted into the name field is
+  // very often the credential itself, and a refusal is a string that reaches a log, a transcript and a
+  // bug report. So the sentence says *which entry* was wrong, which is what a user needs to fix it.
+  "error.providerEnvNotAName":
+    "EnvoyCoder stores the names of the environment variables an agent needs, never their values, and entry {position} of this provider's environment list is not a variable name. A name is letters, digits and underscores, and does not start with a digit. The provider was not added.",
+  "error.providerEnvUnset.one":
+    "{provider} needs the environment variable {name} to be set for EnvoyCoder's daemon, and it is not set, so the run was not started. EnvoyCoder stores the names of the variables an agent needs, never their values — set it where the daemon is started, then restart EnvoyCoder.",
+  // The two-key plural the catalogue's own rule asks for rather than a plural library: a language whose
+  // second form is not "add an s" gets a whole string to write, not a rule to implement six times.
+  "error.providerEnvUnset.many":
+    "{provider} needs these environment variables to be set for EnvoyCoder's daemon, and they are not set: {names}. The run was not started. EnvoyCoder stores the names of the variables an agent needs, never their values — set them where the daemon is started, then restart EnvoyCoder.",
+  "error.providerIdTaken":
+    "\"{id}\" is the id of an agent EnvoyCoder already ships, so your provider was not added. Give your provider another name.",
+  // Reached two ways — an explicit id a client invented, or a name with no letter or digit in it at all
+  // — so the sentence states the rule rather than presuming which of the two happened.
+  "error.providerIdInvalid":
+    "\"{name}\" cannot be an id for a provider. A provider id is lowercase letters, digits and dashes, starting with a letter or a digit.",
   "error.notConnected": "EnvoyCoder is not connected to its daemon yet.",
   "error.notConnectedChange": "EnvoyCoder is not connected to its daemon, so that change was not saved.",
   "error.connectionClosed": "The connection was closed.",

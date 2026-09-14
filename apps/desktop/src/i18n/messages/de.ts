@@ -400,6 +400,20 @@ export const de: Catalogue = {
   "error.harnessUnknown":
     "EnvoyCoder konnte nicht prüfen, ob {harness} installiert ist, und hat die Aufgabe deshalb nicht gestartet. Starte EnvoyCoder neu und versuche es erneut.",
   "error.harnessUnsupported": "{harness} spricht ein Protokoll, das EnvoyCoder noch nicht steuern kann, deshalb wurde die Aufgabe nicht gestartet. EnvoyCoder steuert Agenten über ACP — wähle stattdessen einen davon.",
+  "error.providerUnsupported":
+    "{provider} spricht ein Protokoll, das EnvoyCoder noch nicht steuern kann, deshalb wurde der Lauf nicht gestartet. EnvoyCoder steuert Agenten über ACP — wenn dieses Programm ACP spricht, trage beim Anbieter ACP als Dialekt ein und versuche es erneut.",
+  "error.providerNotFound":
+    "Es gibt hier keinen Agenten-Anbieter namens \"{id}\". Vielleicht wurde er in einem anderen Fenster entfernt.",
+  "error.providerEnvNotAName":
+    "EnvoyCoder speichert die Namen der Umgebungsvariablen, die ein Agent braucht, niemals ihre Werte — und Eintrag {position} der Umgebungsliste dieses Anbieters ist kein Variablenname. Ein Name besteht aus Buchstaben, Ziffern und Unterstrichen und beginnt nicht mit einer Ziffer. Der Anbieter wurde nicht hinzugefügt.",
+  "error.providerEnvUnset.one":
+    "{provider} braucht die Umgebungsvariable {name} in der Umgebung des EnvoyCoder-Dienstes, und sie ist nicht gesetzt, deshalb wurde der Lauf nicht gestartet. EnvoyCoder speichert die Namen der Variablen, die ein Agent braucht, niemals ihre Werte — setze sie dort, wo der Dienst gestartet wird, und starte EnvoyCoder neu.",
+  "error.providerEnvUnset.many":
+    "{provider} braucht diese Umgebungsvariablen in der Umgebung des EnvoyCoder-Dienstes, und sie sind nicht gesetzt: {names}. Der Lauf wurde nicht gestartet. EnvoyCoder speichert die Namen der Variablen, die ein Agent braucht, niemals ihre Werte — setze sie dort, wo der Dienst gestartet wird, und starte EnvoyCoder neu.",
+  "error.providerIdTaken":
+    "\"{id}\" ist die Kennung eines Agenten, den EnvoyCoder bereits mitliefert, deshalb wurde dein Anbieter nicht hinzugefügt. Gib deinem Anbieter einen anderen Namen.",
+  "error.providerIdInvalid":
+    "\"{name}\" kann keine Kennung für einen Anbieter sein. Eine Anbieter-Kennung besteht aus Kleinbuchstaben, Ziffern und Bindestrichen und beginnt mit einem Buchstaben oder einer Ziffer.",
   "error.notConnected": "EnvoyCoder ist noch nicht mit seinem Dienst verbunden.",
   "error.notConnectedChange": "EnvoyCoder ist nicht mit seinem Dienst verbunden, deshalb wurde diese Änderung nicht gespeichert.",
   "error.connectionClosed": "Die Verbindung wurde geschlossen.",

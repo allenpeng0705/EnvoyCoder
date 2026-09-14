@@ -400,6 +400,20 @@ export const ko: Catalogue = {
   "error.harnessUnknown":
     "EnvoyCoder가 {harness} 설치 여부를 확인할 수 없어 작업을 시작하지 않았습니다. EnvoyCoder를 다시 시작한 뒤 다시 시도하세요.",
   "error.harnessUnsupported": "{harness}은(는) EnvoyCoder가 아직 다룰 수 없는 프로토콜을 사용하므로 작업을 시작하지 않았습니다. EnvoyCoder는 ACP로 에이전트를 다룹니다. 대신 그중 하나를 선택하세요.",
+  "error.providerUnsupported":
+    "{provider}은(는) EnvoyCoder가 아직 다룰 수 없는 프로토콜을 사용하므로 실행이 시작되지 않았습니다. EnvoyCoder는 ACP로 에이전트를 구동합니다 — 이 프로그램이 ACP를 지원한다면 공급자의 방언을 ACP로 지정하고 다시 시도하세요.",
+  "error.providerNotFound":
+    "여기에 \"{id}\"이라는 에이전트 공급자가 없습니다. 다른 창에서 제거되었을 수 있습니다.",
+  "error.providerEnvNotAName":
+    "EnvoyCoder는 에이전트가 필요로 하는 환경 변수의 이름만 저장하며 값은 절대 저장하지 않습니다. 이 공급자의 환경 목록에서 {position}번째 항목은 변수 이름이 아닙니다. 이름은 영문자, 숫자, 밑줄로 이루어지며 숫자로 시작할 수 없습니다. 공급자가 추가되지 않았습니다.",
+  "error.providerEnvUnset.one":
+    "{provider}은(는) 환경 변수 {name}이(가) EnvoyCoder 서비스의 환경에 있어야 하는데 설정되어 있지 않으므로 실행이 시작되지 않았습니다. EnvoyCoder는 에이전트가 필요로 하는 변수의 이름만 저장하며 값은 절대 저장하지 않습니다 — 서비스를 시작하는 곳에서 설정한 뒤 EnvoyCoder를 다시 시작하세요.",
+  "error.providerEnvUnset.many":
+    "{provider}은(는) 다음 환경 변수들이 EnvoyCoder 서비스의 환경에 있어야 하는데 설정되어 있지 않습니다: {names}. 실행이 시작되지 않았습니다. EnvoyCoder는 에이전트가 필요로 하는 변수의 이름만 저장하며 값은 절대 저장하지 않습니다 — 서비스를 시작하는 곳에서 설정한 뒤 EnvoyCoder를 다시 시작하세요.",
+  "error.providerIdTaken":
+    "\"{id}\"은(는) EnvoyCoder가 이미 함께 제공하는 에이전트의 ID이므로 공급자가 추가되지 않았습니다. 다른 이름을 사용하세요.",
+  "error.providerIdInvalid":
+    "\"{name}\"은(는) 공급자 ID가 될 수 없습니다. 공급자 ID는 소문자 영문, 숫자, 하이픈으로 이루어지며 영문자나 숫자로 시작합니다.",
   "error.notConnected": "EnvoyCoder가 아직 서비스에 연결되지 않았습니다.",
   "error.notConnectedChange": "EnvoyCoder가 서비스에 연결되어 있지 않아 그 변경은 저장되지 않았습니다.",
   "error.connectionClosed": "연결이 닫혔습니다.",

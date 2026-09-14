@@ -56,6 +56,10 @@ class FakeConnection {
       settings: { defaults: { harness: "envoy-harness" }, requireApprovalForDestructive: true, keepTranscripts: true },
     });
     this.answers.set("coder.listHarnesses", { harnesses: [] });
+    // The list of agents the **user** declared. Answered empty, which is the healthy fresh install and
+    // the shape the daemon serves for it — a missing answer here would make every store test take the
+    // refusal path in `loadProviders` and report a failure nobody staged.
+    this.answers.set("coder.listProviders", { providers: [] });
     this.answers.set("coder.meshStatus", { mesh: { kind: "no-node", reason: "" } });
   }
 
@@ -515,6 +519,62 @@ describe("other windows", () => {
     const { connection, state } = await store();
     connection.push("coder:mesh-status", { kind: "attached", scopeKey: "product:EnvoyCoder", ownerId: "owner" });
     expect(state().mesh.kind).toBe("attached");
+  });
+});
+
+describe("the agents the user declared", () => {
+  it("keeps the daemon's probe verbatim, and defaults nothing", async () => {
+    // **The state in this window is the daemon's probe, not a default.** A provider a user typed is a
+    // recipe; whether its program is on this machine is measured, and the window renders the
+    // measurement. The failure this test exists to catch is the flattering one: a client that read
+    // "there is a provider row" as "it works" would show a runnable agent for a command that is not
+    // there — which is the assertion-instead-of-a-probe defect this whole slice is about.
+    const connection = new FakeConnection();
+    connection.answers.set("coder.listProviders", {
+      providers: [
+        {
+          id: "auggie",
+          label: "Auggie",
+          command: "auggie",
+          args: ["--acp"],
+          env: [{ name: "AUGMENT_TOKEN", set: false }],
+          transport: "acp",
+          availability: { state: "not-installed", fix: [{ command: "auggie --acp" }] },
+          detail: "Auggie is not installed (looked for auggie on PATH)",
+        },
+      ],
+    });
+    const created = createCoderStore({
+      resolveEndpoint: async () => endpoint,
+      connect: () => connection as unknown as CoderConnection,
+    });
+    await created.start();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const providers = created.getSnapshot().providers;
+    expect(providers).toHaveLength(1);
+    expect(providers[0]?.availability.state).toBe("not-installed");
+    // The variables travel as **names and a boolean**, which is the half of the credential story a
+    // window can render: `set: false` says this daemon does not have it, and no value is anywhere.
+    expect(providers[0]?.env).toEqual([{ name: "AUGMENT_TOKEN", set: false }]);
+    created.dispose();
+  });
+
+  it("refetches the providers, not the agents we ship, when the daemon says that list moved", async () => {
+    // A second window that heard `harnesses` here would ask `coder.listHarnesses` — nine agents it
+    // already has — and never see the provider it was just told about. The store's own rule is that the
+    // event names *what* moved so exactly one list is refetched.
+    const { connection } = await store();
+    const providers = connection.calls.filter((call) => call.method === "coder.listProviders").length;
+    const harnesses = connection.calls.filter((call) => call.method === "coder.listHarnesses").length;
+    const tasks = connection.calls.filter((call) => call.method === "coder.listTasks").length;
+
+    connection.push("coder:state-changed", { kind: "providers", at: "2026-09-14T06:00:00.000Z", ids: ["auggie"] });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    expect(connection.calls.filter((call) => call.method === "coder.listProviders").length).toBe(providers + 1);
+    expect(connection.calls.filter((call) => call.method === "coder.listHarnesses").length).toBe(harnesses);
+    expect(connection.calls.filter((call) => call.method === "coder.listTasks").length).toBe(tasks);
   });
 });
 

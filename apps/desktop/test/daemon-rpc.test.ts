@@ -167,6 +167,20 @@ async function connect(port: number, path = DEFAULT_DAEMON_PATH): Promise<JsonRp
   };
 }
 
+/** Call a method that must refuse, and hand back the wire message rather than throwing the test. */
+async function refusalOfCall(
+  client: JsonRpcClient,
+  method: string,
+  params: Record<string, unknown>,
+): Promise<string> {
+  try {
+    await client.call(method, params);
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+  throw new Error(`${method} did not refuse — this test needs a refusal to inspect`);
+}
+
 /** Boot a daemon under a throwaway home, and return it with its state directory. */
 async function bootDaemon(): Promise<{ daemon: StartedCoderDaemon; home: string }> {
   const home = await mkdtemp(join(tmpdir(), "envoycoder-m1-"));
@@ -586,6 +600,262 @@ describe("the daemon over a socket", () => {
     const drives = one.availability.state === "ready" || one.availability.state === "unsupported";
     expect(drives).toBe(one.availability.binary !== undefined);
     expect(one.detail.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * The agents a user declares, over a real socket: **probed, stored, and reported in the user's
+   * language when they cannot be used**.
+   *
+   * Three providers in one round trip, and the three states are the point. A provider that points at a
+   * program that is really here is `ready`; the same program declared as a command-line agent is
+   * `unsupported` (present, and not something this adapter can drive); and a program nothing answers to is
+   * `not-installed` with the command that fixes it. A daemon that answered `ready` because a user typed a
+   * row — the defect this feature exists to avoid — fails on the second and third.
+   */
+  it("lists the providers a user declared, each with the probe's own state", async () => {
+    const { daemon, home } = await bootDaemon();
+    cleanups.push(async () => {
+      await daemon.stop();
+      await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    });
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+
+    const real = process.execPath;
+    const added = (await client.call("coder.addProvider", {
+      id: "real-program",
+      label: "Real Program",
+      command: real,
+      args: ["--acp"],
+      transport: "acp",
+    })) as { provider: { id: string; env: string[] } };
+    expect(added.provider.id).toBe("real-program");
+    // Nothing declared, so nothing to copy — which is a different answer from "we did not look".
+    expect(added.provider.env).toEqual([]);
+
+    await client.call("coder.addProvider", {
+      id: "one-shot",
+      label: "One Shot",
+      command: real,
+      transport: "cli",
+    });
+    await client.call("coder.addProvider", {
+      id: "absent",
+      label: "Absent Agent",
+      command: "envoycoder-not-a-real-binary",
+      args: ["--acp"],
+      transport: "acp",
+    });
+
+    const list = (await client.call("coder.listProviders")) as {
+      providers: {
+        id: string;
+        command: string;
+        env: { name: string; set: boolean }[];
+        availability: { state: string; binary?: string; fix?: { command: string }[] };
+        detail: string;
+      }[];
+    };
+    expect(list.providers.map((entry) => entry.id)).toEqual(["real-program", "one-shot", "absent"]);
+
+    const byId = new Map(list.providers.map((entry) => [entry.id, entry]));
+    // **Parsed by the contract, from a real daemon** — the same five agreement rules the harness list is
+    // held to, because it is the same schema and the same projection.
+    for (const entry of list.providers) {
+      const parsed = HarnessAvailabilitySchema.safeParse(entry.availability);
+      expect(parsed.success, `${entry.id}: ${JSON.stringify(parsed.error?.issues ?? [])}`).toBe(true);
+      expect(entry.detail.length).toBeGreaterThan(0);
+    }
+    expect(byId.get("real-program")?.availability.state).toBe("ready");
+    expect(byId.get("real-program")?.availability.binary).toBe(real);
+    // Installed, and not drivable: `not-installed` here would be wrong advice for a program that is there.
+    expect(byId.get("one-shot")?.availability.state).toBe("unsupported");
+    expect(byId.get("absent")?.availability.state).toBe("not-installed");
+    // The fix for a program we have never heard of is the command the user wrote: nobody can author an
+    // install step for somebody else's tool, and the schema refuses an absence that names nothing to do.
+    expect(byId.get("absent")?.availability.fix).toEqual([
+      { command: "envoycoder-not-a-real-binary --acp" },
+    ]);
+
+    // Removing one leaves the others, and removing it twice is a refusal with a code a client can branch
+    // on rather than a cheerful success.
+    const removed = (await client.call("coder.removeProvider", { id: "one-shot" })) as { removed: string };
+    expect(removed.removed).toBe("one-shot");
+    const after = (await client.call("coder.listProviders")) as { providers: { id: string }[] };
+    expect(after.providers.map((entry) => entry.id)).toEqual(["real-program", "absent"]);
+    await expect(client.call("coder.removeProvider", { id: "one-shot" })).rejects.toThrow(
+      /envoycoder\.provider-missing/,
+    );
+  });
+
+  it("refuses a provider whose id names an agent we ship, and a value where a name belongs", async () => {
+    // Both refusals are the *user's* to fix, so both have to arrive as a sentence in their language with
+    // the catalogue key attached — a Zod dump about a regular expression is a bug report, not an answer.
+    const { daemon, home } = await bootDaemon();
+    cleanups.push(async () => {
+      await daemon.stop();
+      await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    });
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+
+    const taken = await refusalOfCall(client, "coder.addProvider", {
+      id: "codex",
+      label: "Codex (mine)",
+      command: "my-codex",
+      transport: "acp",
+    });
+    expect(coderErrorCode(taken)).toBe(ENVOYCODER_ERRORS.providerIdTaken);
+    expect(coderErrorRef(taken)?.key).toBe("error.providerIdTaken");
+
+    const notAName = await refusalOfCall(client, "coder.addProvider", {
+      id: "my-agent",
+      label: "My Agent",
+      command: "auggie",
+      // A credential pasted into the field that wants a name. It must be refused, and — the important half
+      // — the refusal must not quote it back, because a refusal reaches a log, a transcript and a bug
+      // report, and what a user pastes there is very often the key itself.
+      env: ["sk-live-2b91-not-a-real-key"],
+      transport: "acp",
+    });
+    expect(coderErrorRef(notAName)?.key).toBe("error.providerEnvNotAName");
+    expect(notAName).not.toContain("sk-live-2b91-not-a-real-key");
+
+    // And nothing was stored by either attempt.
+    const list = (await client.call("coder.listProviders")) as { providers: unknown[] };
+    expect(list.providers).toEqual([]);
+  });
+
+  it("keeps a credential out of the file it writes, and out of the answer it serves", async () => {
+    // The mechanism, asserted against the real artifacts rather than described: the value exists in this
+    // process's environment, a provider names it, and then `providers.json` is read as bytes. A schema with
+    // no field for a value is what makes this pass; a `Record<string, string>` of values is what would make
+    // it fail, and that is the shape this project refused to copy from the reference product.
+    const secret = "sk-live-9c31-do-not-store-me";
+    process.env.ENVOYCODER_TEST_SECRET = secret;
+    cleanups.push(async () => {
+      delete process.env.ENVOYCODER_TEST_SECRET;
+    });
+
+    const { daemon, home } = await bootDaemon();
+    cleanups.push(async () => {
+      await daemon.stop();
+      await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    });
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+
+    await client.call("coder.addProvider", {
+      id: "with-credential",
+      label: "With Credential",
+      command: process.execPath,
+      env: ["ENVOYCODER_TEST_SECRET"],
+      transport: "acp",
+    });
+
+    const paths = coderPaths(home);
+    const stored = await readFile(paths.providersFile, "utf8");
+    expect(stored).toContain("ENVOYCODER_TEST_SECRET");
+    expect(stored.includes(secret), "the value reached the file on disk").toBe(false);
+
+    // The wire answer carries the name and a boolean — never the value — and it is the *daemon's* answer
+    // about its own environment, so it is `true` here and would be `false` in a daemon that lacks it.
+    const list = (await client.call("coder.listProviders")) as {
+      providers: { env: { name: string; set: boolean }[] }[];
+    };
+    expect(list.providers[0]?.env).toEqual([{ name: "ENVOYCODER_TEST_SECRET", set: true }]);
+    expect(JSON.stringify(list).includes(secret), "the value reached the wire").toBe(false);
+  });
+
+  it("reports a named variable this daemon does not have, per agent, rather than skipping it", async () => {
+    // A provider whose credential the daemon does not have is **not ready here**, and the window is told
+    // before the user presses run. Silently skipping the variable would start an agent that cannot
+    // authenticate and let it fail with its own sentence about a login nobody performed.
+    const { daemon, home } = await bootDaemon();
+    cleanups.push(async () => {
+      await daemon.stop();
+      await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    });
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+
+    await client.call("coder.addProvider", {
+      id: "needs-a-credential",
+      label: "Needs A Credential",
+      command: process.execPath,
+      env: ["ENVOYCODER_DEFINITELY_NOT_SET"],
+      transport: "acp",
+    });
+
+    const list = (await client.call("coder.listProviders")) as {
+      providers: { env: { name: string; set: boolean }[]; availability: { state: string } }[];
+    };
+    expect(list.providers[0]?.env).toEqual([{ name: "ENVOYCODER_DEFINITELY_NOT_SET", set: false }]);
+    // The *program* is present, so the state stays `ready`: what is missing is a credential, which is a
+    // different sentence and a different action. The refusal is at launch, where `providers.test.ts`
+    // asserts it names the variable and never a value.
+    expect(list.providers[0]?.availability.state).toBe("ready");
+  });
+
+  it("quarantines an unreadable providers file instead of emptying the user's agents", async () => {
+    const home = await mkdtemp(join(tmpdir(), "envoycoder-m1-"));
+    const paths = coderPaths(home);
+    cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+
+    const { mkdir, readdir } = await import("node:fs/promises");
+    await mkdir(paths.stateDir, { recursive: true });
+    await writeFile(paths.providersFile, '[{"id":"auggie","label":"Auggie","command":"auggie",', "utf8");
+
+    const daemon = await startCoderDaemon({ port: 0, home, paths, skipMeshAttach: true });
+    cleanups.push(async () => daemon.stop());
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+
+    const hello = (await client.call("coder.hello", {})) as { notes: string[] };
+    expect(hello.notes.join("\n")).toContain("could not read providers.json");
+    const list = (await client.call("coder.listProviders")) as { providers: unknown[] };
+    expect(list.providers).toEqual([]);
+    const files = await readdir(paths.stateDir);
+    const saved = files.find((name) => name.startsWith("providers.corrupt-"));
+    expect(saved).toBeDefined();
+    expect(await readFile(join(paths.stateDir, saved ?? ""), "utf8")).toContain('"auggie"');
+  });
+
+  it("tells a second window when a provider is added or removed — the multi-window rule", async () => {
+    // A provider list is edited in one window and rendered in another, so it needs the same broadcast every
+    // other list has. The kind is its own (`providers`, not `harnesses`): a client that heard "harnesses"
+    // here would refetch nine agents it already has and never see the row it was told about.
+    const { daemon, home } = await bootDaemon();
+    cleanups.push(async () => {
+      await daemon.stop();
+      await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    });
+
+    const windowOne = await connect(daemon.port);
+    const windowTwo = await connect(daemon.port);
+    cleanups.push(async () => {
+      windowOne.close();
+      windowTwo.close();
+    });
+
+    await windowTwo.subscribe(["coder:state-changed"]);
+    const announced = windowTwo.waitForEvent(
+      "coder:state-changed",
+      (data) => (data as { kind?: string }).kind === "providers",
+    );
+
+    await windowOne.call("coder.addProvider", {
+      id: "shared-provider",
+      label: "Shared Provider",
+      command: process.execPath,
+      transport: "acp",
+    });
+
+    const event = (await announced) as { kind: string; at: string; ids?: readonly string[] };
+    expect(event.kind).toBe("providers");
+    // The id travels, so the other window can tell *which* row moved without refetching to find out.
+    expect(event.ids).toEqual(["shared-provider"]);
+    expect(typeof event.at).toBe("string");
   });
 
   it("declares exactly the three events the client subscribes to", () => {

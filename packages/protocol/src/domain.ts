@@ -154,6 +154,160 @@ export function isBuiltInHarness(value: string): boolean {
   return (BUILT_IN_HARNESSES as readonly string[]).includes(value.trim());
 }
 
+/* ──────────────────────── agents a user declares themselves ──────────────────────── */
+
+/**
+ * The id shape a user's own provider may take.
+ *
+ * A lowercase slug rather than free text, because this value is written to `providers.json`, travels on
+ * the wire, and is what every refusal about it names. Two ids differing only in case are two rows a user
+ * cannot tell apart in a list they read by eye, and one of them would be whichever the file happened to
+ * be sorted into. Lowercase also makes the one collision worth refusing easy to state — see
+ * `AgentProviderConfigSchema`, which refuses an id that names an agent we already ship.
+ */
+export const PROVIDER_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+
+/**
+ * What an environment variable **name** looks like — and why this is a pattern rather than `min(1)`.
+ *
+ * `AgentProviderConfig.env` holds names, and this is the rule that keeps it that: a name is
+ * `[A-Za-z_][A-Za-z0-9_]*`, and a credential is not. `sk-live-…`, `Bearer eyJ…`, a path to a key file, a
+ * base64 blob — every shape a key actually takes contains a character a name cannot. The pattern is
+ * therefore not decoration on top of the "names, never values" decision; it is the half of that decision
+ * a machine can check, and `test/providers.test.ts` asserts it rejects a value that looks like a key.
+ */
+export const PROVIDER_ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * An agent **the user declared** — the ACP provider config, which is how a program we have never heard of
+ * becomes runnable without a release of this product.
+ *
+ * ## Why the shape cannot express a secret, and why that is the whole design
+ *
+ * This project has deliberately refused to store credentials: it declined to copy the reference
+ * product's providers page partly because an `env` map of *values* keeps API keys in plaintext in a
+ * config file. So `env` here is a list of environment variable **names**, and the value is read from the
+ * daemon's own environment when the agent is spawned. The security property is not a rule written in a
+ * doc next to the schema — it is the type:
+ *
+ *   * `env: readonly string[]` **cannot** hold `{"ANTHROPIC_API_KEY": "sk-live-…"}`. There is no field
+ *     for the right-hand side, so no caller, no UI and no future migration can write one to disk. This
+ *     is what "the shape is the enforcement" means, and `test/providers.test.ts` asserts it rather than
+ *     trusting the paragraph: a secret placed in the daemon's environment never appears in the file that
+ *     is written, nor in the answer that is served.
+ *   * A name that is present but unset in the daemon's environment is **reported per agent** — in the
+ *     summary the window reads, and as a keyed refusal at launch. Silently skipping it would start an
+ *     agent that cannot authenticate and blame the agent; defaulting it would be a claim about a
+ *     credential we do not have.
+ *   * Nothing here is ever logged or echoed. Diagnostics name the variable and say `set` / `not set`.
+ *
+ * ## The dialect, reused rather than reinvented
+ *
+ * `transport`, `authMethodId` and `modeParam` are the same three facts, spelled the same way, that
+ * `AgentLaunch` records for the catalogue entries (`packages/agent-catalog/src/index.ts`): whether the
+ * program speaks ACP at all, which `authenticate` method it needs before it will open a session, and
+ * which field name its `session/set_mode` reads. A provider is mapped onto an `AgentLaunch` rather than
+ * given a private launch vocabulary, which is what lets it travel the *same* launch path as a catalogue
+ * entry instead of a second one written from memory.
+ *
+ * ## What is deliberately absent
+ *
+ * There is no `model` / `models` field and no `capabilities` block. We have never run this program, so
+ * any capability here would be the user's guess restated as our fact — and the whole point of a probe is
+ * that we find out instead. A provider takes a model the only way we can honestly offer one: whatever
+ * the user put in `args`, which is theirs and is passed through verbatim.
+ */
+export interface AgentProviderConfig {
+  /** Stable id, unique among providers and never one of `HARNESS_IDS`. */
+  id: string;
+  /** What a user sees in the agent list. */
+  label: string;
+  /**
+   * The program to spawn — a bare name to look up on the search path, or an absolute path.
+   *
+   * Never a shell string: it is passed to `spawn` as the executable, so `foo && rm -rf /` is a file name
+   * that does not exist rather than a command.
+   */
+  command: string;
+  /** The argv after the command, each element passed through verbatim. */
+  args: readonly string[];
+  /**
+   * Environment variables to give the agent, **by name**.
+   *
+   * Each is copied from the daemon's own environment at spawn (see the interface doc: a value cannot be
+   * expressed here, which is the point). Empty is a normal answer, not a missing one.
+   */
+  env: readonly string[];
+  /** How the daemon must speak to this program. `"cli"` is startable but not yet drivable. */
+  transport: "acp" | "cli";
+  /** The ACP `authenticate` method this agent needs before it will open a session, when it needs one. */
+  authMethodId?: string;
+  /** Which field name this agent's `session/set_mode` reads. */
+  modeParam?: "mode" | "modeId";
+}
+
+/**
+ * The stored and served shape of a user's provider, with its agreements enforced.
+ *
+ * Three rules, and each is a contradiction the shape would otherwise allow to travel:
+ *
+ *   1. **The id is not one of the nine we ship.** `id` is the key a list is searched by and the word every
+ *      refusal names, so a provider called `codex` would be a second row with a shipped agent's name — and
+ *      which one a caller meant would depend on which list it happened to consult. The daemon refuses this
+ *      at the wire with a sentence in the user's language; this refuses it in the file, so a hand-edited
+ *      `providers.json` cannot smuggle one in past the handler.
+ *   2. **The two dialect fields belong to ACP.** A `"cli"` program has no `authenticate` method and no
+ *      `session/set_mode` at all, so carrying either would be a launch that reads a field nothing will
+ *      ever ask it for — the shape promising a step that cannot happen.
+ *   3. **No repeated environment name.** Two identical names are one variable, and a list that says
+ *      otherwise makes "which of these is unset" unanswerable.
+ */
+export const AgentProviderConfigSchema = z
+  .object({
+    id: z.string().min(1).max(64).regex(PROVIDER_ID_PATTERN, "expected a lowercase id like `my-agent`"),
+    label: z.string().min(1),
+    command: z.string().min(1),
+    args: z.array(z.string()).readonly(),
+    /**
+     * Names, each checked against `PROVIDER_ENV_NAME_PATTERN`. The value a user might paste in place of a
+     * name is exactly what this rejects, and the failure message names the variable slot rather than
+     * echoing what was typed — a refused value is still a secret, and it must not reach a log.
+     */
+    env: z
+      .array(
+        z
+          .string()
+          .regex(PROVIDER_ENV_NAME_PATTERN, "expected the name of an environment variable, not its value"),
+      )
+      .readonly(),
+    transport: z.enum(["acp", "cli"]),
+    authMethodId: z.string().min(1).optional(),
+    modeParam: z.enum(["mode", "modeId"]).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const fail = (message: string, path: string) => ctx.addIssue({ code: "custom", message, path: [path] });
+    if (isHarnessId(value.id)) {
+      fail(
+        `"${value.id}" is the id of an agent EnvoyCoder already ships, and a provider may not take it — ` +
+          `the two rows would be indistinguishable wherever an id is the key`,
+        "id",
+      );
+    }
+    if (value.transport !== "acp" && (value.authMethodId !== undefined || value.modeParam !== undefined)) {
+      fail(
+        `a "${value.transport}" program has no ACP session to authenticate or to set a mode on, so it ` +
+          `must not declare authMethodId or modeParam`,
+        value.authMethodId !== undefined ? "authMethodId" : "modeParam",
+      );
+    }
+    const seen = new Set<string>();
+    value.env.forEach((name, index) => {
+      if (seen.has(name)) fail(`"${name}" is named twice, and one variable is one variable`, `env.${index}`);
+      seen.add(name);
+    });
+  });
+
 /* ────────────────────────────── the domain ───────────────────────────── */
 
 /**
@@ -596,6 +750,32 @@ export const ENVOYCODER_ERRORS = {
   taskMissing: "envoycoder.task-missing",
   /** No project with that id. */
   projectMissing: "envoycoder.project-missing",
+  /**
+   * No provider the user declared has that id.
+   *
+   * `projectMissing`'s twin, and separate from it for the reason that family exists: the family's
+   * transport flattens `error.code` to `"ERROR"`, so a client branches on the leading `envoycoder.*`
+   * token, and "no agent provider by that name" leads somewhere different from "no project by that
+   * name" — one is a list the user edits, the other is the rail.
+   */
+  providerMissing: "envoycoder.provider-missing",
+  /**
+   * The id a user asked to add names an agent we already ship.
+   *
+   * Its own code rather than `badRequest` because it is not a malformed call: the parameters are exactly
+   * what was intended, and the answer is "that name is taken" — which the window renders as a sentence
+   * beside the field the user typed into, in their language, rather than as a bug report.
+   */
+  providerIdTaken: "envoycoder.provider-id-taken",
+  /**
+   * A provider needs an environment variable this daemon does not have.
+   *
+   * The refusal that keeps "we copied what you named" honest: the alternative is a silently skipped
+   * variable, which produces an agent that cannot authenticate and reports *its own* failure — a sentence
+   * about somebody else's product for a fact about our environment. It names the variable and never a
+   * value; see `AgentProviderConfig.env`.
+   */
+  providerEnvUnset: "envoycoder.provider-env-unset",
   /** No run with that id — typically a daemon that restarted under a window that was still open. */
   runMissing: "envoycoder.run-missing",
   /** The mesh node refused the product session, or granted it fewer methods. */
@@ -666,6 +846,30 @@ export const RPC_METHODS = [
   "coder.tailRun",
   "coder.listHarnesses",
   "coder.probeHarness",
+  /**
+   * The agents a **user** declared, each with what a probe found on this machine.
+   *
+   * A method of its own rather than rows inside `coder.listHarnesses`, and the reason is the type rather
+   * than taste: `HarnessSummary.id` is `HarnessId`, the closed nine-entry union that `harnessLabel`,
+   * `resolveAgentMode`, `resolveModelDelivery` and `canApplyModel` all branch on exhaustively. A user's id
+   * in that field would either have to widen the union everywhere — which is a lie about what we ship —
+   * or be answered about by every one of those functions with a default, which is exactly the assertion
+   * this feature must not make. The *states* are shared (`HarnessAvailability`, from the same probe);
+   * the identity is what stays separate.
+   */
+  "coder.listProviders",
+  /**
+   * Declare an agent of your own: a command, its argv, and the **names** of the environment variables it
+   * needs — never their values (`AgentProviderConfig`).
+   *
+   * Refused, with a sentence in the user's language, when the id names an agent we already ship or when
+   * an environment entry is a value rather than a name. Adding an id that already exists **replaces**
+   * that provider: the entry is a complete statement of how to start a program, so merging two of them
+   * would leave the user with half of each — see `CoderStore.addProvider`.
+   */
+  "coder.addProvider",
+  /** Forget a provider. Nothing is launched and nothing else is touched. */
+  "coder.removeProvider",
   /**
    * Ask an agent, right now, what it offers — the pre-flight probe.
    *

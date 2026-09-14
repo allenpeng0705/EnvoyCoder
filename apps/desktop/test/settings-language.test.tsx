@@ -90,6 +90,7 @@ function stateWith(over: Partial<CoderState> = {}): CoderState {
     tasksKnown: true,
     settings,
     harnesses: [],
+    providers: [],
     mesh: { kind: "no-node", reason: "" },
     runs: {},
     loaded: true,
