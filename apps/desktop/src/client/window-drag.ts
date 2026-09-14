@@ -13,6 +13,15 @@
  * drag itself is asked for explicitly here, from the same `mousedown`, which does not care what was pressed
  * — except for the one thing it must care about: a control that was pressed must get its click.
  *
+ * ## The gate that made two fixes look broken
+ *
+ * **This needs `core:window:allow-start-dragging` in the shell's capability.** Tauri v2 routes both the
+ * attribute and this call through the `start_dragging` command, and `core:default` does not include it: the
+ * refusal is silent, so the window does not move and nothing is logged. Putting the attribute on the right
+ * element and calling the API properly are both necessary and neither is sufficient without it — and because
+ * capabilities are compiled into the binary, no reload and no rebuild of the *frontend* can fix it.
+ * `apps/desktop/test/titlebar.test.ts` now fails if a drag region and that permission ever disagree.
+ *
  * ## Why feature detection rather than a dependency
  *
  * The shell runs with `withGlobalTauri`, so the window API is on `globalThis.__TAURI__` — the same channel

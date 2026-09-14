@@ -22,6 +22,8 @@ const root = join(__dirname, "..");
 const css = readFileSync(join(root, "src/styles.css"), "utf8");
 const app = readFileSync(join(root, "src/components/CoderApp.tsx"), "utf8");
 const main = readFileSync(join(root, "src/main.tsx"), "utf8");
+const capability = readFileSync(join(root, "src-tauri/capabilities/default.json"), "utf8");
+const drag = readFileSync(join(root, "src/client/window-drag.ts"), "utf8");
 
 describe("the title bar", () => {
   it("is a drag region the way Tauri reads one", () => {
@@ -91,5 +93,22 @@ describe("moving the window from its own bar", () => {
     expect(app).toMatch(/className="titlebar__title" data-tauri-drag-region/);
     expect(app).toMatch(/className="titlebar__spacer" data-tauri-drag-region/);
     expect(app).toMatch(/onMouseDown=\{\(event\) => startWindowDrag\(event\)\}/);
+  });
+});
+
+describe("the shell's side of the drag", () => {
+  it("allows the command both drag mechanisms go through", () => {
+    // The failure this exists for: the attribute was on the right element and the API call was correct, and
+    // the window still would not move, because Tauri v2 refuses `start_dragging` unless the capability grants
+    // it — silently. Capabilities are compiled into the binary, so nothing in the frontend could reveal it.
+    expect(capability).toContain("core:window:allow-start-dragging");
+  });
+
+  it("keeps that permission tied to a bar that actually drags", () => {
+    // The other direction: the permission is only here because this app draws its own title bar. If the drag
+    // is ever removed, the grant should go with it rather than linger as a capability nobody can explain.
+    const drags = /data-tauri-drag-region/.test(app) || /startWindowDrag/.test(drag);
+    expect(drags).toBe(true);
+    expect(capability).toContain("core:window:allow-start-dragging");
   });
 });

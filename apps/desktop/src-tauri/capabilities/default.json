@@ -1,7 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "What the EnvoyCoder window may ask the shell to do.",
-  "windows": ["main"],
-  "permissions": ["core:default", "allow-pick-folder", "allow-daemon-shell"]
+  "description": "What the EnvoyCoder window may ask the shell to do. `core:window:allow-start-dragging` is here because this app draws its own title bar: Tauri v2 gates both `data-tauri-drag-region` and an explicit drag request behind that command, `core:default` does not include it, and the refusal is silent \u2014 the window simply does not move, with nothing in the log to say why.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "allow-pick-folder",
+    "allow-daemon-shell",
+    "core:window:allow-start-dragging"
+  ]
 }
