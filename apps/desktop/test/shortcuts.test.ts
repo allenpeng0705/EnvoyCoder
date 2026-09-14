@@ -9,6 +9,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import { isMessageKey } from "../src/i18n/messages/en.js";
 import {
   SHELL_BINDINGS,
   bindingApplies,
@@ -62,22 +63,37 @@ describe("combo matching", () => {
 
 describe("when a binding applies", () => {
   it("keeps letters away from text fields unless the binding opts in", () => {
-    const nav = { id: "newTask", combos: ["Mod+N"], label: "New task" };
-    const palette = { id: "commandCenter.open", combos: ["Mod+K"], label: "Palette", when: { editable: true } };
+    const nav = { id: "newTask", combos: ["Mod+N"], labelKey: "settings.shortcuts.binding.newTask" as const };
+    const palette = {
+      id: "commandCenter.open",
+      combos: ["Mod+K"],
+      labelKey: "settings.shortcuts.binding.commandCenter" as const,
+      when: { editable: true },
+    };
     expect(bindingApplies(nav, { ...mac, scope: "editable" })).toBe(false);
     expect(bindingApplies(palette, { ...mac, scope: "editable" })).toBe(true);
   });
 
   it("keeps almost everything away from a terminal", () => {
     // The agent reads those keys; a shell shortcut that steals them is worse than a missing shortcut.
-    const interrupt = { id: "run.interrupt", combos: ["Escape"], label: "Stop", when: { terminal: true } };
+    const interrupt = {
+      id: "run.interrupt",
+      combos: ["Escape"],
+      labelKey: "settings.shortcuts.binding.interrupt" as const,
+      when: { terminal: true },
+    };
     expect(bindingApplies(interrupt, { ...mac, scope: "terminal" })).toBe(true);
     expect(bindingApplies(SHELL_BINDINGS.find((b) => b.id === "sidebar.toggle")!, { ...mac, scope: "terminal" }))
       .toBe(false);
   });
 
   it("honours a platform restriction, which is how a mac-only binding stays mac-only", () => {
-    const macOnly = { id: "x", combos: ["Mod+1"], label: "x", when: { platform: "mac" as const } };
+    const macOnly = {
+      id: "x",
+      combos: ["Mod+1"],
+      labelKey: "app.name" as const,
+      when: { platform: "mac" as const },
+    };
     expect(bindingApplies(macOnly, { ...mac, scope: "other" })).toBe(true);
     expect(bindingApplies(macOnly, { ...other, scope: "other" })).toBe(false);
   });
@@ -99,8 +115,8 @@ describe("the registry", () => {
 
   it("reports a conflict instead of letting declaration order decide silently", () => {
     const clashing = [
-      { id: "a", combos: ["Mod+J"], label: "A" },
-      { id: "b", combos: ["Mod+J"], label: "B" },
+      { id: "a", combos: ["Mod+J"], labelKey: "app.name" as const },
+      { id: "b", combos: ["Mod+J"], labelKey: "app.name" as const },
     ];
     expect(findConflicts(clashing)).toEqual([{ combo: "mod+j", ids: ["a", "b"] }]);
     // The shipping set has none — this is the assertion that keeps it that way.
@@ -112,10 +128,15 @@ describe("the registry", () => {
     expect(createShortcutRegistry(SHELL_BINDINGS, other).display("commandCenter.open")).toBe("Ctrl+K");
   });
 
-  it("gives every shell binding a label and a group, so the help sheet can be generated", () => {
+  it("gives every shell binding a catalogue key for its label and its group", () => {
+    // **A key, not a sentence.** These were English strings nothing rendered; the settings pane renders
+    // them now, so a hardcoded label would be an English row inside a German window. Asserted against the
+    // catalogue rather than against "is a string": a key the catalogue does not have is a row the pane
+    // would print as `settings.shortcuts.binding.something` for a user to read.
     for (const binding of SHELL_BINDINGS) {
-      expect(binding.label.length, binding.id).toBeGreaterThan(0);
-      expect(binding.group, binding.id).toBeDefined();
+      expect(isMessageKey(binding.labelKey), `${binding.id}: ${binding.labelKey}`).toBe(true);
+      expect(binding.groupKey, binding.id).toBeDefined();
+      expect(isMessageKey(binding.groupKey ?? ""), `${binding.id}: ${binding.groupKey}`).toBe(true);
       expect(binding.combos.length, binding.id).toBeGreaterThan(0);
     }
   });

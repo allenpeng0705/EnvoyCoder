@@ -1,6 +1,5 @@
 /**
- * Settings: the app's defaults for new tasks, and — when the pane is opened from a project's ⋯ button —
- * **that project's** defaults.
+ * Settings: **four scopes in one pane**, and a bar that lists the sections of the first of them.
  *
  * ## What this pane is for, and the rule that shapes every row
  *
@@ -29,47 +28,44 @@
  *     (there is no remote-run path, and `coder.offerRemoteRun` had no handler), and a disabled row would
  *     have been a promise to build one on this pane's terms rather than the mesh's.
  *
- * ## Three scopes and three levels, and what separates them
+ * ## The bar, and the sections it lists
  *
- * The reference product has two settings scopes; this product has three (`CoderSettings` is the app's,
- * `Project.defaults` is a project's, and a task carries its own resolved copy). The app's are here; a
- * project's are here too, in the same pane, reached from the project's ⋯ button — because that button
- * used to open *app* settings and drop the project on the floor, which is the same defect in the UI
- * layer: a control labelled with a scope it did not have.
+ * `state/settings-sections.ts` is the registry: the sections this product can actually fill, each naming
+ * the source that backs it. The bar renders it, the root page renders the same registry as rows, and
+ * `test/settings-nav.test.tsx` refuses a section whose citation is stale and a section that renders
+ * nothing. **A section with nothing in it cannot be added to the bar without failing that test**, which
+ * is the property the owner's brief asks for: *"an eleven-item bar of empty pages is the failure mode,
+ * not the goal."* The sections we do **not** have — the reference product's terminals, plugins, device
+ * pairing, account providers and the rest — are absent rather than empty, and §7.6 of
+ * `docs/settings-parity.md` records each one with the audit's verdict and the reason.
  *
- * The levels are the **navigation depth** of that model, and they exist because a list of every project
- * does not scale inside a page of settings: with thirty projects the app scope becomes thirty rows of
- * someone else's folders between "Keep transcripts" and the agent list. So the list is its own level —
- * the same thing Paseo does, where a section is a page with a back affordance rather than a block of
- * rows on the page you were reading.
+ * ## Three scopes below the sections, and what separates them
  *
- * | level | title | reached from | back control |
+ * | level | page | reached from | back control |
  * |---|---|---|---|
- * | 1 — this machine's settings | *Settings* | the rail's footer button, or `⌘,` | none: it is the root |
- * | 2 — the projects page | *Projects* | the **Projects** row at level 1 | *← All settings* (level 1) |
- * | 3 — one project's settings | *Project settings for api* | a row of level 2, or the rail's `…` menu | *← Projects* (level 2) |
+ * | 0 | *Settings* — the list of sections | the rail's footer button or `⌘,` on a narrow window | none: it is the root |
+ * | 1 | one section | a bar item (wide), or a row of the list (narrow) | *← All settings*, the list |
+ * | 2 | *Projects* — the list of projects | the **Projects** item | *← All settings*, the list |
+ * | 3 | *Project settings for api* | a row of the projects list, or the rail's project `…` menu | *← Projects* |
  *
- * **Each back control names its destination**, and the two differ because their destinations differ: a
- * back control that said "All settings" while landing on the list of projects would be a lie of exactly
- * the kind this pane was rebuilt to remove. Level 2's is the existing `settings.back` pair — that *is*
- * the way back to the app scope, and it is where it always pointed. Level 3's label is not a new string
- * at all: it is the level-2 page's own title, which is the same rule the project rows use for their
- * accessible names — one place, one name.
+ * **Each back control names its destination**, and the two labels differ because the destinations do:
+ * *All settings* is the list of every section, and *Projects* is the page a project's scope came from. A
+ * single control labelled "All settings" that landed on a project's parent would be a lie of exactly the
+ * kind this pane was rebuilt to remove.
  *
  * ## How the levels are wired together, which is one model and not two
  *
  * `settings-scope.ts` owns the state, and `CoderApp` holds one value of it: `SettingsScope | undefined`,
- * where `undefined` is "the pane is closed". So "which level" and "is it open" are one piece of data
- * rather than a boolean beside a payload, and this pane takes the scope as a prop together with **one**
- * callback (`onNavigate`) instead of a callback per destination. The pane says where a press goes by
- * naming the level — `APP_SCOPE`, `PROJECTS_SCOPE`, `projectScope(id)` — and the shell stores it.
+ * where `undefined` is "the pane is closed". This pane takes the scope as a prop together with **one**
+ * callback (`onNavigate`) instead of a callback per destination — the bar's items use that same callback,
+ * naming a section's scope exactly as a project row names a project's. There is no `activeSection` state
+ * beside the scope: `scopeSection` derives the marked item from the scope, so the bar and the page cannot
+ * disagree about where the user is.
  *
  * That leaves exactly two routes into a project's settings, the rail's project `…` menu (*"Project
- * settings"*) and a row of the projects page, both of which are the **same** function
- * (`CoderApp`'s `openProjectSettings`): the only arrangement in which they cannot come to mean
- * different things. Leaving is symmetric: the back controls and the Close button all work.
- *
- * `onNavigate` is a **required** prop. An optional one would allow a caller to render rows that press
+ * settings"*) and a row of the projects page, both of which are the **same** function (`CoderApp`'s
+ * `openProjectSettings`): the only arrangement in which they cannot come to mean different things.
+ * `onNavigate` is a **required** prop: an optional one would allow a caller to render rows that press
  * into nothing, and this pane's entire history is a list of controls that did not do what they said.
  *
  * ## What happens when the project is gone, and why it is the projects page
@@ -77,64 +73,41 @@
  * The pane resolves the scope against `state.projects` on **every render**, so a project removed while
  * its settings are open — in another window, or from its own `…` menu in this one — cannot leave the
  * pane showing rows that write to something that is not there. It lands on the **projects page**: the
- * level the project scope's own back control returns to, so the rule is the one sentence a user
- * already knows ("when the thing you are looking at disappears, the pane does what the back control
- * would have done"). Not the app scope, which would skip a level and leave the user reading this
- * machine's defaults with no list in front of them to pick the project they meant.
- * `settings-scope.ts`'s module doc is the full argument, and `test/settings-scope.test.tsx` asserts it
- * both ways: removed deliberately from the row menu, and vanished from the list underneath the pane.
+ * level the project scope's own back control returns to, so the rule is the one sentence a user already
+ * knows ("when the thing you are looking at disappears, the pane does what the back control would have
+ * done"). `settings-scope.ts`'s module doc is the full argument.
  *
- * ## What this pane does with many projects
+ * ## The window's shape, and why the pane is told rather than sniffing
  *
- * Nothing clever: level 2 is a plain list, one row per project, in the pane's own scrolling body — no
- * virtual list, no paging, no search. The body is the part that scrolls and the header stays put, which
- * is what makes a long list usable and is measured rather than asserted (`docs/settings-parity.md`
- * §7.5). A window with thirty projects scrolls; a window with three hundred would want a filter, and
- * that is the day to build one.
- *
- * The resolution order (`explicit → project → app → fallback`) is `resolveTaskDefaults`'s, and it is why
- * a project's rows say "override": a project that names an agent decides for its tasks, and a project
- * that names nothing inherits this pane's answer.
- *
- * ## Why the rows are grouped, and what is deliberately not copied
- *
- * One column with headings — not a copy of the reference product's twenty-one-section sidebar, which is
- * a navigation structure for a surface four times this size. Three groups carry the settings, and the
- * two read-only groups (the agents found on this machine, the daemon's own notes about what it could not
- * read) stay exactly as they were: the notes in particular are the best thing in this pane, because they
- * say what happened and offer no switch that pretends to fix it.
+ * `layout` arrives as a prop from the shell (`useSettingsLayout`, one `matchMedia` query there and
+ * nowhere else). A pane that measured itself would be a second answer to "is there room for a bar", and
+ * two answers is one too many — the shell needs the same value to decide where *opening* settings lands
+ * (`entryScope`). On a narrow window the pane simply renders no bar: the list of sections **is** the
+ * page, which is the hierarchy this pane already had one level down.
  */
 
-import type { JSX } from "react";
-import { useState } from "react";
+import type { JSX, ReactNode } from "react";
 
-import type {
-  CoderSettings,
-  HarnessId,
-  HarnessSummary,
-  Project,
-  TaskDefaults,
-} from "@envoycoder/protocol";
+import type { CoderSettings, Project, TaskDefaults } from "@envoycoder/protocol";
 
-import { agentFor } from "../composer/agent-for.js";
-import { composerControls, modelNote, modelOffReason } from "../composer/controls.js";
-import { harnessLabel } from "../composer/harness-label.js";
 import { useI18n } from "../i18n/context.js";
-import { LOCALES, LOCALE_LABELS } from "../i18n/locales.js";
-import type { Translator } from "../i18n/translate.js";
-import { formatWhen } from "../i18n/when.js";
+import type { KeyBinding } from "../input/shortcuts.js";
 import type { CoderState } from "../state/coderStore.js";
 import {
-  APP_SCOPE,
+  SECTIONS_SCOPE,
   PROJECTS_SCOPE,
-  projectScope,
   resolveScope,
   scopeProject,
+  scopeSection,
+  type SettingsLayout,
   type SettingsScope,
 } from "../state/settings-scope.js";
-import { ModelChoice } from "./ModelChoice.js";
-import { SettingsShell, StoreNotes, shortPath } from "./SettingsShell.js";
-import { FolderSetting, SettingNavRow, SettingRow, TextSetting } from "./SettingsRows.js";
+import { sectionById, type SettingsSectionId } from "../state/settings-sections.js";
+import { SettingsNav, SettingsSectionRows } from "./SettingsNav.js";
+import { SettingsShell, StoreNotes } from "./SettingsShell.js";
+import { AboutSection, AgentsSection, MachineSection, ShortcutsSection } from "./settings/SectionsFacts.js";
+import { GeneralSection, SafetySection, TasksSection } from "./settings/SectionsControls.js";
+import { ProjectSection, ProjectsSection } from "./settings/SectionsProjects.js";
 
 export interface SettingsPaneProps {
   state: CoderState;
@@ -142,22 +115,32 @@ export interface SettingsPaneProps {
   /** The app-scope patch. Ignored while the pane is open for a project. */
   onUpdate: (patch: Partial<CoderSettings>) => void;
   /**
-   * Which level the pane is showing — this machine's settings, the projects page, or one project's.
+   * Which scope the pane is showing — the sections list, one section, the projects page, or one
+   * project's settings.
    *
-   * Held by the shell (`CoderApp`) and resolved **here**, against `state.projects`, on every render.
-   * The id in a `project` scope is what makes a second edit carry the first (`settings-scope.ts`), and
+   * Held by the shell (`CoderApp`) and resolved **here**, against `state.projects`, on every render. The
+   * id in a `project` scope is what makes a second edit carry the first (`settings-scope.ts`), and
    * resolving it here rather than in the shell means there is one place that decides what an absent
-   * project shows. A `Project` object in this position could not do either.
+   * project shows. A `Project` object in this position could do neither.
    */
   scope: SettingsScope;
+  /** The shape of the window, resolved once by the shell — see the module doc. */
+  layout: SettingsLayout;
   /**
-   * Go to another level of this pane, by naming it.
+   * The keyboard bindings the shell has **mounted an action for** (`wiredBindings`).
    *
-   * One callback rather than one per destination: a row that goes somewhere says *where*, as data, and
-   * this is what stores it. **Required, and not merely present** — an optional callback would let a
-   * caller render the Projects row, or the list of projects, without a destination, which is the defect
-   * this pane was rebuilt to remove: a control that does not do what it says. The shell always knows
-   * where each level is (`settings-scope.ts`), so there is no honest caller without one.
+   * Required rather than optional, on the same reasoning as `onNavigate`: a Shortcuts page with no
+   * bindings would render as an empty list or, worse, as the whole table including three combos that do
+   * nothing. The shell is the only thing that knows which actions exist, so it must say.
+   */
+  shortcuts: readonly KeyBinding[];
+  /**
+   * Go to another scope of this pane, by naming it.
+   *
+   * One callback rather than one per destination: a row or a bar item that goes somewhere says *where*,
+   * as data, and this is what stores it. **Required, and not merely present** — an optional callback
+   * would let a caller render the bar, or the list of sections, without a destination, which is the
+   * defect this pane was rebuilt to remove.
    */
   onNavigate: (scope: SettingsScope) => void;
   /**
@@ -171,604 +154,257 @@ export interface SettingsPaneProps {
    * arriving).
    *
    * **Optional, because it is data rather than a destination.** An absent destination is a control that
-   * presses into nothing, which is why `onNavigate` is required; an absent reason simply means there is no
-   * reason to give, and a caller with nothing to say must not have to invent one.
-   *
-   * It is a prop rather than something this pane derives from `state` on purpose: the rail and this pane
-   * make the same claim about the same list, and two derivations of "why is it empty" are two answers that
-   * can come apart — the rail reading "could not read your projects" beside a count band reading "No
-   * projects". `CoderApp` computes it once and hands it to both (`projectsUnavailable`).
+   * presses into nothing, which is why `onNavigate` is required; an absent reason simply means there is
+   * no reason to give.
    */
   projectsUnavailable?: string | undefined;
 }
 
 /**
- * The three levels, chosen by the scope.
+ * The four scopes, chosen by the scope value.
  *
- * The `switch` is exhaustive on purpose: a fourth level would not compile until it was answered here,
+ * The `switch` is exhaustive on purpose: a fifth scope would not compile until it was answered here,
  * which is the property a boolean could not have.
  */
 export function SettingsPane(props: SettingsPaneProps): JSX.Element {
   const resolved = resolveScope(props.scope, props.state.projects);
   switch (resolved.kind) {
+    case "sections":
+      return <SectionsPage {...props} />;
+    case "app":
+      return <SectionPage {...props} section={resolved.section} />;
     case "projects":
-      return <ProjectsSettings {...props} />;
+      return <ProjectsPage {...props} />;
     case "project": {
       const project = scopeProject(resolved, props.state.projects);
-      // `resolveScope` answers `project` only for an id the live list holds, so the fallback here is
+      // `resolveScope` answers `project` only for an id the live list holds, so this fallback is
       // unreachable — and it falls back the *same way* rather than asserting, so a list that changed
       // between the two reads cannot crash a window.
       return project !== undefined ? (
-        <ProjectSettings {...props} project={project} />
+        <ProjectPage {...props} project={project} />
       ) : (
-        <ProjectsSettings {...props} />
+        <ProjectsPage {...props} />
       );
     }
-    case "app":
-      return <AppSettings {...props} />;
   }
 }
 
-/* ────────────────────────────── the app scope ────────────────────────────── */
+/**
+ * Is the bar rendered beside this scope, in this window?
+ *
+ * **One rule, and it is about the page rather than about the window:** the bar is the list of sections,
+ * so it is rendered beside every page that is *not* the list of sections, and a wide window is the only
+ * shape with room for a column at all. When the pane is on the list — which a narrow window opens on,
+ * and which every back control below a section lands on — the list *is* the page, and a bar beside it
+ * would be the same eight rows twice, which is why the list is rendered as content and the column is
+ * empty on that one page.
+ *
+ * It is exported from this file rather than passed around because two places need the same answer:
+ * `Page` (for the column) and `SectionPage` (for the section's own sentence, which the bar carries when
+ * it is there — see `Page`). Two computations of "is there a bar" is how a page ends up printing a
+ * sentence the bar is already showing three inches away.
+ */
+function showsBar(layout: SettingsLayout, scope: SettingsScope): boolean {
+  return layout === "wide" && scopeSection(scope) !== undefined;
+}
 
-function AppSettings(props: SettingsPaneProps): JSX.Element {
-  const { t, locale, preference } = useI18n();
-  const { settings } = props.state;
-  const available = props.state.harnesses.filter((harness) => harness.available !== false);
-  // A value the daemon has not stored yet reads as `system`, which is what the daemon will apply.
-  const language = settings.language ?? "system";
-  const defaultHarness = settings.defaults.harness ?? "envoy-harness";
-  // The folder the chooser would not open in, or `undefined`. Kept here rather than in the row so the
-  // sentence survives a re-render: a problem the user has to read must not vanish on the next paint.
-  const [folderProblem, setFolderProblem] = useState<string | undefined>(undefined);
-
+/**
+ * Every page renders through this: the frame, the bar when there is room for it and something to put in
+ * it, and the daemon's own notes at the bottom.
+ *
+ * **The bar's marked item is derived here, from the scope** — never passed in as a choice. A caller that
+ * could mark an item the scope does not name would be able to draw a bar that disagrees with the page
+ * beside it, which is the failure mode of every settings pane that keeps a selection of its own.
+ *
+ * **The notes are in the frame rather than on a page.** They are facts about the file this daemon read,
+ * not about the scope being shown — a quarantined `projects.json` is worth knowing while reading the
+ * Projects page — so every page renders them identically, at the bottom, and no page offers a switch
+ * that pretends to fix what they describe.
+ */
+function Page(
+  props: SettingsPaneProps & {
+    title: string;
+    back?: { label: string; title: string; onClick: () => void };
+  } & { children: ReactNode },
+): JSX.Element {
+  const { t } = useI18n();
   return (
     <SettingsShell
-      title={t("settings.title")}
-      ariaLabel={t("settings.title")}
+      title={props.title}
+      // The pane's accessible name is the same words as its title: one place, one name.
+      ariaLabel={props.title}
       state={props.state}
       onClose={props.onClose}
+      {...(props.back !== undefined ? { back: props.back } : {})}
+      {...(showsBar(props.layout, props.scope)
+        ? {
+            nav: (
+              <SettingsNav
+                current={scopeSection(props.scope)}
+                onNavigate={props.onNavigate}
+                projects={props.state.projects}
+                {...(props.projectsUnavailable !== undefined
+                  ? { projectsUnavailable: props.projectsUnavailable }
+                  : {})}
+              />
+            ),
+          }
+        : {})}
     >
-      <h2 className="settings__heading">{t("settings.group.general")}</h2>
-
-      {/* **The language, and why it is a daemon setting rather than `localStorage`.**
-          It is a per-user preference, and the daemon already owns this user's settings: a value in
-          the webview's own storage would be invisible to the phone, would not survive a webview
-          cache clear, and would have to be re-sent to whichever surface renders a refusal. Stored
-          with the rest, it follows the user to every window and every client — which is what
-          "the language must be unified" requires, since the daemon's refusals are rendered by
-          whoever is looking. */}
-      <SettingRow
-        title={t("settings.language.title")}
-        detail={t("settings.language.detail")}
-        developerNote="settings.language"
-      >
-        <select
-          className="select"
-          value={language}
-          aria-label={t("settings.language.aria")}
-          onChange={(event) =>
-            props.onUpdate({ language: event.target.value as CoderSettings["language"] })
-          }
-        >
-          <option value="system">{t("settings.language.system")}</option>
-          {LOCALES.map((option) => (
-            // Endonyms: a language is listed in its own language, so the one a user is looking for
-            // is the one they can read. The row is also the only place the *resolved* locale is
-            // visible, when the setting is "system".
-            <option key={option} value={option}>
-              {LOCALE_LABELS[option]}
-              {option === locale && preference === "system" ? ` — ${t("settings.language.system")}` : ""}
-            </option>
-          ))}
-        </select>
-      </SettingRow>
-
-      {/* **The one setting that is read by a workflow rather than by the app.**
-          `defaultProjectPath` sat in the schema, was advertised on the wire and was read by nobody until
-          slice 1. It is read now by the palette's own `project.add` row, which seeds its text stage with
-          it — so the field a user meets when they add a project starts from the folder they nominated
-          instead of asking them to paste one they have already told us about. */}
-      <SettingRow
-        title={t("settings.defaultPath.title")}
-        detail={t("settings.defaultPath.detail")}
-        developerNote="settings.defaultProjectPath"
-        note={folderProblem}
-      >
-        <FolderSetting
-          ariaLabel={t("settings.defaultPath.title")}
-          value={settings.defaultProjectPath}
-          placeholder={t("settings.defaultPath.placeholder")}
-          onCommit={(value) => {
-            setFolderProblem(undefined);
-            // `""` is "clear it": a user who nominated a folder must be able to un-nominate one, and a
-            // JSON patch cannot carry an absent key (`daemon/store.ts` records why).
-            props.onUpdate({ defaultProjectPath: value });
-          }}
-          pickPrompt={t("palette.addProject.pickPrompt")}
-          onProblem={setFolderProblem}
-        />
-      </SettingRow>
-
-      <h2 className="settings__heading">{t("settings.group.newTasks")}</h2>
-
-      <SettingRow
-        title={t("settings.defaultHarness.title")}
-        detail={t("settings.defaultHarness.detail")}
-        developerNote="settings.defaults.harness"
-      >
-        <select
-          className="select"
-          value={defaultHarness}
-          aria-label={t("settings.defaultHarness.title")}
-          onChange={(event) =>
-            props.onUpdate({ defaults: { harness: event.target.value as HarnessId } })
-          }
-        >
-          {available.length === 0 ? (
-            // An empty picker is a lie by omission: it suggests nothing is installed when the
-            // truth is that we have not been told yet.
-            <option value={defaultHarness}>{defaultHarness}</option>
-          ) : null}
-          {available.map((harness) => (
-            <option key={harness.id} value={harness.id}>
-              {harness.label}
-              {harness.tier === "catalogued" ? ` ${t("settings.needsInstalling")}` : ""}
-            </option>
-          ))}
-        </select>
-      </SettingRow>
-
-      {/* **Read but unsettable, until now.** `resolveTaskDefaults` has honoured `defaults.model` since
-          it was written, and no control wrote one — a capability a user was told about by the docs and
-          could not reach. The shapes are the composer's, from the same `ModelChoice`, so the app's
-          default model, a project's default model and a task's model cannot come to mean three things. */}
-      <ModelRow
-        idPrefix="setting-app"
-        harness={defaultHarness}
-        summary={summaryFor(props.state, defaultHarness)}
-        value={settings.defaults.model}
-        title={t("settings.defaultModel.title")}
-        detail={t("settings.defaultModel.detail")}
-        developerNote="settings.defaults.model"
-        onChoose={(model) => props.onUpdate({ defaults: { model } })}
-      />
-
-      {/* And its sibling, which is free text by nature: argv belongs to the agent's own CLI, and the row
-          therefore has to say what it is for rather than pretend to know what is valid. */}
-      <SettingRow
-        title={t("settings.extraArgs.title")}
-        detail={t("settings.extraArgs.detail")}
-        developerNote="settings.defaults.extraArgs"
-      >
-        <TextSetting
-          ariaLabel={t("settings.extraArgs.title")}
-          value={settings.defaults.extraArgs}
-          placeholder={t("settings.extraArgs.placeholder")}
-          onCommit={(value) => props.onUpdate({ defaults: { extraArgs: value } })}
-        />
-      </SettingRow>
-
-      <h2 className="settings__heading">{t("settings.group.safety")}</h2>
-
-      <ApprovalRow
-        state={props.state}
-        harness={defaultHarness}
-        checked={settings.requireApprovalForDestructive}
-        onToggle={(checked) => props.onUpdate({ requireApprovalForDestructive: checked })}
-      />
-
-      <SettingRow
-        title={t("settings.transcripts.title")}
-        detail={t("settings.transcripts.detail")}
-        developerNote="settings.keepTranscripts"
-      >
-        <input
-          type="checkbox"
-          checked={settings.keepTranscripts}
-          onChange={(event) => props.onUpdate({ keepTranscripts: event.target.checked })}
-          aria-label={t("settings.transcripts.title")}
-        />
-      </SettingRow>
-
-      <h2 className="settings__heading">{t("settings.group.projects")}</h2>
-      {/* **The row that gives the projects their own level.** With three projects the list fits here and
-          with thirty it does not: thirty rows of someone else's folders between "Keep transcripts" and
-          the agent list is not a section, it is the page. So level 1 carries one row — its second band
-          is the count, which is the fact a user wants before deciding to go in — and the list itself is
-          level 2 (`ProjectsSettings` below).
-          It says how many and goes there. Nothing else about this scope changed, and the note that used
-          to sit here ("selecting one opens its own") moved to level 2 with the list, because that is
-          where selecting one is what happens.
-          **A count is a claim about the list, which is why this band is four strings and not one
-          interpolated `{count} projects`**: "40 projects", "1 project", "No projects", and — when the
-          window could not read the list at all — "Could not be read", because "No projects" over a list
-          nobody read is the rail's own historical defect wearing a different hat. */}
-      <SettingNavRow
-        title={t("settings.projects.title")}
-        detail={projectsCount(t, props.state.projects.length, props.projectsUnavailable)}
-        // The developer fact: the method whose answer the count is, which is the number a support
-        // question about a missing project turns on.
-        developerNote="coder.listProjects"
-        // The destination's own title — the same key the level-2 heading uses — so the row announces
-        // where it goes rather than only how many things are there.
-        actionLabel={t("settings.projects.title")}
-        onSelect={() => props.onNavigate(PROJECTS_SCOPE)}
-      />
-
-      <h2 className="settings__heading">{t("settings.agents.heading")}</h2>
-      <p className="settings__note">{t("settings.agents.note")}</p>
-      <ul className="settings__agents">
-        {props.state.harnesses.map((harness) => (
-          <li key={harness.id} className="settings__agent">
-            <div>
-              <strong>{harness.label}</strong>
-              <span className="settings__agent-summary">{harness.summary}</span>
-            </div>
-            <div className="settings__agent-facts">
-              <span className={`chip ${harness.available === false ? "chip--danger" : harness.available === "unknown" ? "chip--quiet" : "chip--live"}`}>
-                {harness.available === false
-                  ? t("settings.agent.notInstalled")
-                  : harness.available === "unknown"
-                    ? t("settings.agent.unknown")
-                    : t("settings.agent.ready")}
-              </span>
-              {harness.capabilities.approvals ? null : (
-                <span className="chip chip--warn" title={t("settings.agent.noApprovals.title")}>
-                  {t("settings.agent.noApprovals")}
-                </span>
-              )}
-              {harness.capabilities.cancel ? null : (
-                <span className="chip chip--warn" title={t("settings.agent.noCancel.title")}>
-                  {t("settings.agent.noCancel")}
-                </span>
-              )}
-              {/* `installHint` is deliberately not translated: it is a command line
-                  (`npm install -g @anthropic-ai/claude-code`), and a translated command is a
-                  command that does not run. */}
-              {harness.installHint ? <span className="settings__hint">{harness.installHint}</span> : null}
-            </div>
-          </li>
-        ))}
-        {props.state.harnesses.length === 0 ? (
-          <li className="settings__agent">{t("settings.agents.empty")}</li>
-        ) : null}
-      </ul>
-
+      {props.children}
       <StoreNotes notes={props.state.notes} />
     </SettingsShell>
   );
 }
 
-/* ────────────────────────────── the projects page ────────────────────────────── */
+/* ────────────────────────── level 0: the list of sections ────────────────────────── */
 
 /**
- * Level 2: the list of projects, and nothing else.
+ * The root: the list of sections, as a page. What a narrow window opens on, and where every back control
+ * below a section lands.
  *
- * This is the block that used to sit at the end of level 1, moved one level down unchanged — the same
- * rows, the same two bands, the same accessible names, the same empty state — because its shape was
- * never the problem. Its *address* was: a list that grows with the number of projects belongs on a page
- * of its own, not between two settings.
- *
- * It is still navigation and only navigation: a project's own controls (folder, agent, model, arguments)
- * live at level 3, because a control that edits a project while the pane is titled "Projects" is a
- * control labelled with a scope it does not have.
- *
- * **With many projects, the body scrolls.** No virtual list, no paging, no cap: the rows are plain
- * `<li>`s in the pane's scrolling body (`.settings`, `overflow-y: auto`), which is what keeps the
- * header — and the back control in it — on screen while the list moves under it. That is measured in a
- * real window rather than asserted here (§7.5 of `docs/settings-parity.md` has the numbers); the point
- * at which a plain list stops being enough is a filter, and that is a later decision than this one.
+ * It is the bar's own registry rendered as content rather than a second list: one row per section, the
+ * same two bands, and each row opens a page whose back control returns here. There is no bar beside it —
+ * see `showsBar` — because on this page the list *is* the index, and the same eight rows twice in one
+ * view is not a layout, it is a duplicate. That is also why the pane's layout does not change what a row
+ * does: the same scope, the same rows, the same destinations, whether the window has room for a column
+ * or not.
  */
-function ProjectsSettings(props: SettingsPaneProps): JSX.Element {
+function SectionsPage(props: SettingsPaneProps): JSX.Element {
   const { t } = useI18n();
-  const projects = props.state.projects;
-
   return (
-    <SettingsShell
-      title={t("settings.projects.title")}
-      ariaLabel={t("settings.projects.title")}
-      state={props.state}
-      // The way back to the root, and it names it — "All settings", the destination rather than the
-      // direction. This is the same label and the same pair of keys the project scope used to carry;
-      // what changed is which level owns it, because level 3 now returns *here* and has to say so.
-      back={{
-        label: t("settings.back"),
-        title: t("settings.back.title"),
-        onClick: () => props.onNavigate(APP_SCOPE),
-      }}
-      onClose={props.onClose}
-    >
-      <p className="settings__note">{t("settings.projects.note")}</p>
-      {projects.length === 0 && props.projectsUnavailable !== undefined ? (
-        // **Not the empty state.** The page reached with a list nobody could read must not teach what a
-        // project is — that sentence answers "why is this empty?" and the honest answer is "it is not
-        // empty, it is unknown". The two keys are the rail's (`sidebar.empty.cannotLoad*`) rather than
-        // copies: the rail says this about the same list in the same window, and a second copy would be a
-        // second thing to keep translated and true. A `sidebar.*` key rendered in the pane is the same
-        // reuse `settings.projects.empty` already makes of `sidebar.footer.add`.
-        <>
-          <p className="settings__note">{t("sidebar.empty.cannotLoadTitle")}</p>
-          <p className="settings__note">{t("sidebar.empty.cannotLoadBody")}</p>
-          <p className="settings__note">{props.projectsUnavailable}</p>
-        </>
-      ) : projects.length === 0 ? (
-        // Design law 6, at the one place in this pane a user can arrive at nothing: the page says how a
-        // project gets here instead of rendering an empty box. It names the rail's own control through
-        // that control's label (`sidebar.footer.add`), so renaming or translating the button cannot leave
-        // this sentence pointing at a word that is not on screen.
-        <p className="settings__note">{t("settings.projects.empty", { add: t("sidebar.footer.add") })}</p>
-      ) : (
-        <ul className="settings__projects">
-          {projects.map((project) => (
-            <li key={project.id}>
-              <SettingNavRow
-                title={project.label}
-                // The second line is the path, abbreviated the way the project scope abbreviates it
-                // (`shortPath`), with the whole path on hover: two projects called `api` are told apart
-                // by where they live, and the tail is the part that differs.
-                detail={shortPath(project.path)}
-                detailTitle={project.path}
-                developerNote={project.id}
-                // The destination's own title, so the row announces where it goes rather than only what
-                // it shows. Same key as the level-3 heading, which is the point: one name for one place.
-                actionLabel={t("settings.project.title", { project: project.label })}
-                onSelect={() => props.onNavigate(projectScope(project.id))}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
-    </SettingsShell>
+    <Page {...props} title={t("settings.title")}>
+      <p className="settings__note">{t("settings.sections.note")}</p>
+      <SettingsSectionRows
+        onNavigate={props.onNavigate}
+        projects={props.state.projects}
+        {...(props.projectsUnavailable !== undefined
+          ? { projectsUnavailable: props.projectsUnavailable }
+          : {})}
+      />
+    </Page>
   );
 }
 
-/* ────────────────────────────── the project scope ────────────────────────────── */
+/* ────────────────────────── level 1: one section ────────────────────────── */
 
-function ProjectSettings(props: SettingsPaneProps & { project: Project }): JSX.Element {
+/**
+ * One section of this machine's settings.
+ *
+ * The `switch` below is the compile-time half of the registry's gate: adding a section id to
+ * `SettingsSectionId` does not typecheck until it is answered here, so a section cannot exist in the bar
+ * without a page. The runtime half is `test/settings-nav.test.tsx`, which renders each one and refuses a
+ * body with no row in it.
+ */
+function SectionPage(props: SettingsPaneProps & { section: SettingsSectionId }): JSX.Element {
   const { t } = useI18n();
-  const { project, state } = props;
-  const available = state.harnesses.filter((harness) => harness.available !== false);
-  const defaults = project.defaults ?? {};
-  // The project's own agent decides which models it offers, exactly as the composer reads a task's.
-  const harness = defaults.harness ?? state.settings.defaults.harness ?? "envoy-harness";
-
-  /**
-   * Write one of the three, **with the other two carried along**.
-   *
-   * A project's defaults replace rather than merge (`Store.updateProject`), so a patch that said only
-   * "the agent is now DeepSeek" would silently clear that project's model. Spreading the current values
-   * is what makes each control edit one thing.
-   */
-  const write = (patch: Partial<TaskDefaults>): void => {
-    props.onUpdateProject?.({ ...defaults, ...patch });
-  };
-
+  const section = sectionById(props.section);
   return (
-    <SettingsShell
-      title={t("settings.project.title", { project: project.label })}
-      ariaLabel={t("settings.project.title", { project: project.label })}
-      state={state}
+    <Page
+      {...props}
+      title={t(section.titleKey)}
+      // The way back to the root, and it names it — *All settings*, the destination rather than the
+      // direction. It is the same pair of keys every page below the root uses, because the destination
+      // is the same page: the list of every section.
+      back={{
+        label: t("settings.back"),
+        title: t("settings.back.title"),
+        onClick: () => props.onNavigate(SECTIONS_SCOPE),
+      }}
+    >
+      {/* **The section's own sentence, printed once.** It is the bar item's second band when there is a
+          bar, and the page's first line when there is not — one sentence for one place, rendered in the
+          one place that can show it. Printing it in both would be the same sentence twice in the same
+          view, which is noise rather than information, and a page that started with its own caption
+          beside a bar that already says it is exactly what a reader skips.
+          A section whose band is data rather than a sentence (Projects) renders nothing here at all:
+          its scope is the projects page, and that page carries its own note. */}
+      {!showsBar(props.layout, props.scope) && section.band.kind === "sentence" ? (
+        <p className="settings__note">{t(section.band.key)}</p>
+      ) : null}
+      {sectionBody(props)}
+    </Page>
+  );
+}
+
+/** The eight pages, one arm each. Exhaustive: a new section id is a compile error until it is here. */
+function sectionBody(props: SettingsPaneProps & { section: SettingsSectionId }): ReactNode {
+  switch (props.section) {
+    case "general":
+      return <GeneralSection state={props.state} onUpdate={props.onUpdate} />;
+    case "tasks":
+      return <TasksSection state={props.state} onUpdate={props.onUpdate} />;
+    case "safety":
+      return <SafetySection state={props.state} onUpdate={props.onUpdate} />;
+    case "agents":
+      return <AgentsSection state={props.state} onUpdate={props.onUpdate} />;
+    case "shortcuts":
+      return (
+        <ShortcutsSection
+          state={props.state}
+          onUpdate={props.onUpdate}
+          shortcuts={props.shortcuts}
+        />
+      );
+    case "machine":
+      return <MachineSection state={props.state} onUpdate={props.onUpdate} />;
+    case "about":
+      return <AboutSection state={props.state} onUpdate={props.onUpdate} />;
+    // The Projects section is not a page of rows at level 1: its page *is* the list of projects, one
+    // level down, and the bar item opens that instead. The arm exists so the switch stays total, and it
+    // renders what the bar item promises rather than a second, emptier Projects page.
+    case "projects":
+      return <ProjectsSection {...props} projects={props.state.projects} />;
+  }
+}
+
+/* ────────────────────────── level 2: the projects page ────────────────────────── */
+
+/**
+ * The list of registered projects — the page the **Projects** item opens.
+ *
+ * It is navigation and only navigation: a project's own controls live at level 3, because a control that
+ * edits a project while the pane is titled *Projects* is a control labelled with a scope it does not
+ * have.
+ */
+function ProjectsPage(props: SettingsPaneProps): JSX.Element {
+  const { t } = useI18n();
+  return (
+    <Page
+      {...props}
+      title={t("settings.projects.title")}
+      back={{
+        label: t("settings.back"),
+        title: t("settings.back.title"),
+        onClick: () => props.onNavigate(SECTIONS_SCOPE),
+      }}
+    >
+      <ProjectsSection {...props} projects={props.state.projects} />
+    </Page>
+  );
+}
+
+/* ────────────────────────── level 3: one project ────────────────────────── */
+
+function ProjectPage(props: SettingsPaneProps & { project: Project }): JSX.Element {
+  const { t } = useI18n();
+  return (
+    <Page
+      {...props}
+      title={t("settings.project.title", { project: props.project.label })}
       // The way back, and the reason it is in the header rather than at the end of the rows: the scope
       // was entered *from* the list of projects (the row that named this project, or the rail's project
       // menu), so leaving it belongs where the pane says where you are. It names its destination —
-      // **"Projects"**, the level-2 page's own title, not "All settings" and not "Back" — because a
-      // control named after the direction you are moving is one a user has to press to find out what it
-      // does, and because "All settings" here would be a lie: it lands on the list, not on the root.
-      // Reusing the page's title as the label is the same rule the project rows follow for their
-      // accessible names: one place, one name.
+      // **"Projects"**, the level-2 page's own title, not "All settings" and not "Back" — because
+      // "All settings" here would be a lie: it lands on the list, not on the root. Reusing the page's
+      // title as the label is the same rule the project rows follow for their accessible names.
       back={{
         label: t("settings.projects.title"),
         title: t("settings.project.back.title"),
         onClick: () => props.onNavigate(PROJECTS_SCOPE),
       }}
-      onClose={props.onClose}
     >
-      <p className="settings__note">{t("settings.project.detail")}</p>
-
-      <SettingRow
-        title={t("settings.project.folder.title")}
-        detail={t("settings.project.folder.detail")}
-        developerNote="project.path"
-      >
-        <span className="chip chip--quiet" title={project.path}>
-          {shortPath(project.path)}
-        </span>
-      </SettingRow>
-
-      <SettingRow
-        title={t("settings.project.harness.title")}
-        detail={t("settings.project.harness.detail")}
-        developerNote="project.defaults.harness"
-      >
-        <select
-          className="select"
-          value={harness}
-          aria-label={t("settings.project.harness.title")}
-          onChange={(event) => write({ harness: event.target.value as HarnessId })}
-        >
-          {available.length === 0 || available.every((entry) => entry.id !== harness) ? (
-            <option value={harness}>{labelForHarness(harness, state)}</option>
-          ) : null}
-          {available.map((entry) => (
-            <option key={entry.id} value={entry.id}>
-              {entry.label}
-              {entry.tier === "catalogued" ? ` ${t("settings.needsInstalling")}` : ""}
-            </option>
-          ))}
-        </select>
-      </SettingRow>
-
-      <ModelRow
-        idPrefix="setting-project"
-        harness={harness}
-        summary={summaryFor(state, harness)}
-        value={defaults.model}
-        title={t("settings.project.model.title")}
-        detail={t("settings.project.model.detail")}
-        developerNote="project.defaults.model"
-        onChoose={(model) => write({ model })}
-      />
-
-      <SettingRow
-        title={t("settings.extraArgs.title")}
-        detail={t("settings.project.extraArgs.detail")}
-        developerNote="project.defaults.extraArgs"
-      >
-        <TextSetting
-          ariaLabel={t("settings.extraArgs.title")}
-          value={defaults.extraArgs}
-          placeholder={t("settings.extraArgs.placeholder")}
-          onCommit={(value) => write({ extraArgs: value })}
-        />
-      </SettingRow>
-    </SettingsShell>
+      <ProjectSection {...props} projects={props.state.projects} project={props.project} />
+    </Page>
   );
-}
-
-/* ────────────────────────────── rows with a decision in them ────────────────────────────── */
-
-/**
- * The model a run will start on — the app's default, or a project's.
- *
- * The three shapes and the reasons are `composer/controls.ts`'s, and that is the point: this row asks
- * the *same* function the composer does, with a state that says "nothing is running and no approval is
- * waiting". A second implementation of "which shape is this control" is how the pane and the composer
- * would come to disagree about whether an agent takes a model at all — which is the one disagreement
- * that turns a supported feature into a disabled control.
- */
-function ModelRow(props: {
-  idPrefix: string;
-  harness: HarnessId;
-  summary: HarnessSummary | undefined;
-  value: string | undefined;
-  title: string;
-  detail: string;
-  developerNote: string;
-  onChoose: (model: string) => void;
-}): JSX.Element {
-  const { t, locale } = useI18n();
-  const agent = agentFor(props.harness, props.summary);
-  // One call, exactly as the composer makes it — see the doc above for why that matters.
-  const controls = composerControls(agent, { running: false, approvalPending: false }, {
-    ...(props.value !== undefined ? { selectedModelId: props.value } : {}),
-  });
-  const off = modelOffReason(controls.model, {
-    known: props.summary !== undefined,
-    agent: agent.label,
-  });
-  const noteKey = modelNote(controls.model, { enabled: off === undefined });
-  const at =
-    controls.model.observedAt !== undefined
-      ? formatWhen(controls.model.observedAt, locale)
-      : undefined;
-
-  const note =
-    off !== undefined
-      ? t(off.key, off.values)
-      : noteKey !== undefined
-        ? t(noteKey, { agent: agent.label, at: at ?? "" })
-        : undefined;
-
-  const titleId = `${props.idPrefix}-model`;
-
-  return (
-    <SettingRow
-      title={props.title}
-      detail={props.detail}
-      developerNote={props.developerNote}
-      titleId={titleId}
-      note={note}
-    >
-      <ModelChoice
-        labelId={titleId}
-        kind={controls.model.kind}
-        options={controls.model.options}
-        selected={props.value}
-        off={off}
-        title={t("task.composer.model.title")}
-        onChoose={props.onChoose}
-      />
-    </SettingRow>
-  );
-}
-
-/**
- * "Ask before anything destructive" — the row the whole slice exists for.
- *
- * **What it does now.** The value is handed to the agent as its own session policy at the start of every
- * run (`session/set_policy { autoRun }`), which is the only mechanism that can change whether an agent
- * stops to ask: `envoy-harness` validates `always-confirm | safe-only | off` and its live permission hook
- * asks per tool call on the result. `true` states the fail-closed posture, `false` asks it to stop
- * asking; `resolveApprovalPolicy` in the daemon owns the mapping and records why the strict value is the
- * one for `true`.
- *
- * **What it does not do, said on screen.** Only `envoy-harness` documents such a method —
- * `deepseek-harness` registers nine ACP methods and `session/set_policy` is not among them — so when the
- * default agent is one of the others, the row is **disabled and names it**. The alternative, a live
- * switch that stores a preference no agent hears, is precisely the lie this slice removes.
- */
-function ApprovalRow(props: {
-  state: CoderState;
-  harness: HarnessId;
-  checked: boolean;
-  onToggle: (checked: boolean) => void;
-}): JSX.Element {
-  const { t } = useI18n();
-  const summary = summaryFor(props.state, props.harness);
-  const agent = summary?.label ?? harnessLabel(props.harness);
-  const supported = summary?.capabilities.approvalPolicy === true;
-  const note = supported
-    ? t("settings.approvals.reaches", { agent })
-    : summary === undefined
-      ? t("settings.approvals.unknown", { agent })
-      : t("settings.approvals.unsupported", { agent });
-
-  return (
-    <SettingRow
-      title={t("settings.approvals.title")}
-      detail={t("settings.approvals.detail")}
-      developerNote="settings.requireApprovalForDestructive"
-      titleId="setting-approvals"
-      note={note}
-    >
-      <input
-        type="checkbox"
-        checked={props.checked}
-        disabled={!supported}
-        onChange={(event) => props.onToggle(event.target.checked)}
-        aria-labelledby="setting-approvals"
-      />
-    </SettingRow>
-  );
-}
-
-/* ────────────────────────────── formatting ────────────────────────────── */
-
-function summaryFor(state: CoderState, harness: HarnessId): HarnessSummary | undefined {
-  return state.harnesses.find((entry) => entry.id === harness);
-}
-
-function labelForHarness(harness: HarnessId, state: CoderState): string {
-  return summaryFor(state, harness)?.label ?? harnessLabel(harness);
-}
-
-/**
- * How many projects, in words — the second band of the level-1 row.
- *
- * Three keys rather than one interpolated `{count} projects`, because "1 projects" and "0 projects" are
- * the two forms every language gets wrong and neither is fixable by a formatter the catalogue does not
- * have: a translator needs "1 project" and "No projects" as sentences of their own, and Japanese and
- * Korean do not pluralise at all (their forms differ from the English ones, which is the point). The
- * zero form is a sentence rather than a number with a noun after it for the same reason the empty state
- * is: "No projects" is what a person says.
- */
-function projectsCount(t: Translator["t"], count: number, unavailable?: string): string {
-  // The list could not be read: a number is a claim this window cannot make, and the honest band is the
-  // one that says so. (`unavailable` is the shell's own sentence about the same list — this band needs a
-  // short form of it, and the full sentence plus the reason are on level 2.)
-  if (count === 0 && unavailable !== undefined) return t("settings.projects.count.unknown");
-  if (count === 0) return t("settings.projects.count.none");
-  if (count === 1) return t("settings.projects.count.one");
-  return t("settings.projects.count", { count });
 }

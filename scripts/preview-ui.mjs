@@ -33,7 +33,10 @@ const flag = (name) => {
   return i >= 0 ? process.argv[i + 1] : undefined;
 };
 const waitMs = Number(flag("wait") ?? 1500);
-const port = 9222;
+/** `--size WxH`: the window the picture is taken in — the settings bar has two layouts. */
+const size = flag("size") ?? "1440,900";
+/** `--port N` — the Chrome debugging port. See `audit-ui.mjs` for why it is overridable. */
+const port = Number(flag("port") ?? 9222);
 
 const profile = mkdtempSync(join(tmpdir(), "envoycoder-shot-"));
 const chrome = spawn(
@@ -45,7 +48,7 @@ const chrome = spawn(
     "--hide-scrollbars",
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${profile}`,
-    "--window-size=1440,900",
+    `--window-size=${size}`,
     url,
   ],
   { stdio: "ignore" },
@@ -54,18 +57,22 @@ const chrome = spawn(
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function target() {
+  // Matched by URL, for the reason audit-ui.mjs records at length: a debugging port can outlive the
+  // browser that opened it, and a picture of another application is worse than no picture.
   for (let i = 0; i < 60; i += 1) {
     try {
       const res = await fetch(`http://127.0.0.1:${port}/json/list`);
       const list = await res.json();
-      const page = list.find((t) => t.type === "page" && t.webSocketDebuggerUrl);
+      const page = list.find(
+        (t) => t.type === "page" && t.webSocketDebuggerUrl && String(t.url).startsWith(url),
+      );
       if (page) return page.webSocketDebuggerUrl;
     } catch {
       /* not up yet */
     }
     await sleep(250);
   }
-  throw new Error("chrome never exposed a page target");
+  throw new Error(`chrome never exposed a page at ${url}`);
 }
 
 const ws = new WebSocket(await target());
@@ -92,19 +99,37 @@ const evaluate = async (expression) => {
   return res.result?.result?.value;
 };
 
+/**
+ * `--click "text"`, or `--clicks "Settings|Projects"` for a walk.
+ *
+ * The plural form is here because a two-level surface cannot be photographed with one press: the
+ * settings bar's sections are one press *below* the button that opens settings, and a picture of the
+ * first screen only would be a picture of the screen the owner already knows.
+ */
 const clickText = flag("click");
-if (clickText) {
+const clicks = (flag("clicks") ?? "").split("|").map((part) => part.trim()).filter(Boolean);
+if (clickText) clicks.unshift(clickText);
+for (const wanted of clicks) {
   const clicked = await evaluate(`(() => {
-    const wanted = ${JSON.stringify(clickText)};
-    const nodes = [...document.querySelectorAll("button, [role=button], a, li, .task-row, .project__header")];
-    const hit = nodes.find((n) => (n.textContent ?? "").trim().includes(wanted));
+    const wanted = ${JSON.stringify(wanted)};
+    // **Interactive elements first, and a wrapper only as a last resort.** These lists are one button
+    // inside one li, and querySelectorAll returns nodes in *document* order — so a selector list that
+    // includes li matches the wrapper before the button inside it, and clicking a wrapper does nothing.
+    // Measured: three screenshots taken through this function were byte-identical, because every click
+    // after the first landed on an li. The fallback stays for a list whose row really is an li.
+    const interactive = "button, [role=button], a, input, select, textarea, .task-row, .project__header";
+    const matches = (list) => list.filter((n) => (n.textContent ?? "").trim().includes(wanted)
+      || (n.getAttribute?.("aria-label") ?? "") === wanted
+      || (n.getAttribute?.("title") ?? "") === wanted);
+    const hit = matches([...document.querySelectorAll(interactive)])[0]
+      ?? matches([...document.querySelectorAll("li")])[0];
     if (!hit) return "NOT FOUND: " + wanted;
     hit.scrollIntoView({ block: "center" });
     hit.click();
-    return "clicked";
+    return "clicked <" + hit.tagName + " class=" + (hit.className || hit.getAttribute("aria-label")) + ">";
   })()`);
-  console.log(`click "${clickText}": ${clicked}`);
-  await sleep(700);
+  console.log(`click "${wanted}": ${clicked}`);
+  await sleep(800);
 }
 
 const type = flag("type");

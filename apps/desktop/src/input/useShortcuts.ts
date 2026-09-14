@@ -13,10 +13,23 @@
 
 import { useEffect, useRef } from "react";
 
-import { createShortcutRegistry, platformOf, SHELL_BINDINGS, type FocusScope } from "./shortcuts.js";
+import {
+  createShortcutRegistry,
+  platformOf,
+  SHELL_BINDINGS,
+  type FocusScope,
+  type ShortcutActions,
+} from "./shortcuts.js";
 
-/** What each binding does. A binding with no action here simply does nothing — that is honest. */
-export type ShortcutActions = Readonly<Record<string, (() => void) | undefined>>;
+/**
+ * What each binding does. A binding with no action here simply does nothing — that is honest, and it is
+ * why the settings pane's Shortcuts section lists `wiredBindings(actions)` rather than the table: the
+ * one place that can answer "is this key listened for" is the object this hook is given.
+ *
+ * The type is declared in `shortcuts.ts` so that `wiredBindings` can filter the table without the two
+ * modules importing each other; it is re-exported here because this is where the actions are mounted.
+ */
+export type { ShortcutActions } from "./shortcuts.js";
 
 /** Where the keystroke is going, which decides whether a binding may fire. */
 function scopeOf(target: EventTarget | null): FocusScope {
@@ -30,8 +43,15 @@ function scopeOf(target: EventTarget | null): FocusScope {
   return "other";
 }
 
-/** The platform string a renderer reports, turned into the axis the bindings use. */
-function currentPlatform(): string {
+/**
+ * The platform string a renderer reports, turned into the axis the bindings use.
+ *
+ * Exported because the settings pane renders the **same** combos the keyboard layer fires on: the
+ * Shortcuts section builds a display registry from this value, so `Mod+K` reads as `⌘K` on a Mac and
+ * `Ctrl+K` elsewhere in the pane exactly as it does in the handler. Two spellings of "which platform is
+ * this" is how a help sheet ends up telling a Windows user to press Cmd.
+ */
+export function currentPlatform(): string {
   const ua =
     typeof navigator === "undefined" ? "" : `${navigator.platform ?? ""} ${navigator.userAgent ?? ""}`;
   return /mac|iphone|ipad/i.test(ua) ? "darwin" : "other";

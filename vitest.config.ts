@@ -1,7 +1,16 @@
+import { readFileSync } from "node:fs";
+
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
+
+/** The same build constant the app inlines (`apps/desktop/vite.config.ts`), so a test sees the real
+    number rather than the "this build carries no version" branch — which is itself asserted, once,
+    by deleting the global in the test that covers it. */
+const { version } = JSON.parse(
+  readFileSync(new URL("apps/desktop/package.json", import.meta.url), "utf8"),
+);
 
 /**
  * Aliases point at **source**, not build output.
@@ -11,6 +20,7 @@ const here = fileURLToPath(new URL(".", import.meta.url));
  * start. Source resolution in tests is the smaller lie.
  */
 export default defineConfig({
+  define: { __ENVOYCODER_VERSION__: JSON.stringify(version) },
   resolve: {
     alias: {
       "@envoycoder/protocol": `${here}packages/protocol/src/index.ts`,

@@ -834,12 +834,19 @@ against the rest of the app, each with its present state:
 1. **There is no section structure.** Paseo's sidebar has twenty-one sections; ours is one scrolling
    column of a `<div className="settings">`. That is fine for six rows and will not survive the first
    slice in §8.1, which takes it to eleven.
-   **Now:** four headings — *General*, *New tasks start with*, *Safety* and *Projects* — plus the two
-   read-only groups below them, unchanged. Still not a copied sidebar, and it should not become one
-   until the pane is four times this size. *Projects* is the one group that is not a setting: it is a
-   single row — the count of registered projects as its second band — that opens the list, which is now
-   a level of its own (§7.5). The list outgrew the group: with thirty projects it was thirty rows of
-   other people's folders sitting between *Keep transcripts* and the agent list.
+   **Then:** four headings — *General*, *New tasks start with*, *Safety* and *Projects* — plus the two
+   read-only groups below them, unchanged: four headings over one column, which is what the first slice
+   could afford.
+   **Now: a bar, and eight sections that are places rather than headings.** The owner asked for the
+   reference product's settings left bar; the answer is that bar with **our** contents. The sections are
+   `general`, `tasks`, `safety`, `agents`, `projects`, `shortcuts`, `machine` and `about` — held as data in
+   `apps/desktop/src/state/settings-sections.ts`, rendered by `components/SettingsNav.tsx`, and each one
+   required to name the source that backs it. §7.6 is the section-by-section account, including the
+   reference-product sections that are **absent** and why. This is still not Paseo's sidebar and must not
+   become it: it lists eight sections, every one of which has something to read or change, where Paseo's
+   lists twenty-one of which five carry no user-settable value at all (§2). *Projects* is the one section
+   that is not a page of settings: it is the list of registered projects, and its bar item's second band
+   is the count.
 2. **"Project settings" opens app settings.** `CoderSidebar.tsx` rendered a per-project `⋯` button
    whose accessible name was *"Project settings for {project}"* (`sidebar.project.settings.aria`,
    interpolated with the project label) and whose handler was
@@ -886,7 +893,7 @@ Recorded because both are in shipped comments and would be repeated by the next 
   *Projects* row opens the list, whose rows open the same project scope with a back control that returns
   (§7.5).
 
-### 7.5 The settings navigation model — three levels, one pane, and two back controls that differ
+### 7.5 The settings navigation model — four scopes, one pane, one bar, and two back controls that differ
 
 Paseo's app settings hold a **`projects`** section whose rows are the way into each project's own
 settings (`screens/projects-screen.tsx:115` → the separate `project-settings-screen.tsx`). We build the
@@ -899,11 +906,71 @@ be inline is now a page reached from a single row, which is also the shape Paseo
 have (a section is a page with a back affordance, not a block of rows on the page you were reading).
 Three levels, one pane:
 
-| level | title | reached from | back control |
+| scope | title | reached from | back control |
 |---|---|---|---|
-| 1 — this machine's settings | *Settings* | the footer's Settings button, or `⌘,` (both `openAppSettings`, `CoderApp.tsx:165`) | none: it is the root |
-| 2 — the projects page | *Projects* | the **Projects** row at level 1 (`SettingsPane.tsx:359-378`) | *← All settings* (`settings.back`), level 1 |
-| 3 — one project's settings | *Project settings for api* | a row of level 2, or the rail's project `…` menu | *← Projects*, level 2 |
+| 0 — the list of sections | *Settings* | the footer's Settings button, or `⌘,` — **on a narrow window** (`entryScope("narrow")`) | none: it is the root |
+| 1 — one section, e.g. *New tasks* | that section's own name | a bar item, or a row of scope 0 | *← All settings* (`settings.back`), scope 0 |
+| 2 — the projects page | *Projects* | the **Projects** item in the bar | *← All settings* (`settings.back`), scope 0 |
+| 3 — one project's settings | *Project settings for api* | a row of scope 2, or the rail's project `…` menu | *← Projects*, scope 2 |
+
+**The bar is this model, not a second one beside it.** A section **is** a scope: pressing an item calls
+the same `onNavigate(scope)` every other row in this pane calls, and the marked item is *derived* from the
+scope (`scopeSection`, `settings-scope.ts`) rather than kept as an `activeSection` beside it — one value
+behind both the mark and the page, so the two cannot disagree. There is no callback per destination and no
+route: `scopeForSection` is the inverse of `scopeSection`, and the pair is what makes the bar and the pages
+one navigation rather than two that agree by convention.
+
+**Where opening lands depends on the window, not on history.** `entryScope(layout)` gives scope 1 on a
+wide window (the bar is already beside the content, so a page of links to it would be a page of links to
+the thing next to it) and scope 0 on a narrow one. That is a fact about the window rather than about where
+the user came from, which is the state this section refuses a few paragraphs below.
+
+**The bar is the index, so the index is never rendered twice.** `showsBar` (in `SettingsPane.tsx`) is one
+rule: the bar is beside every page that is **not** the list of sections. On scope 0 the list *is* the page
+— the same registry, one row per section, each opening a page whose back control returns here — and a
+column holding the same eight rows beside it would be a duplicate rather than a layout. The same rule
+decides where a section's own sentence is printed: it is the bar item's second band when there is a bar,
+and the page's first line when there is not, and the measurement below confirms it appears **once** either
+way.
+
+**The breakpoint is measured, not chosen: 1100px.** `npm run ui:audit` probes this surface now
+(`--click Settings`, `--size WxH`, plus a `settings` block that focuses a bar item and reads the painted
+ring), and the widest settings row — the language row, whose height is its *sentence* wrapping into more
+lines beside a control that keeps its width — measured: **71px at 1440, 88 at 1280 and 1200, 105 at 1140
+and 1100, 123 at 1090 and 1060, 140 at 1024, 192 at 960**. The crossing between a three-line sentence and
+four lines or more sits at 1100, so `WIDE_LAYOUT_QUERY` is `(min-width: 1100px)` and the code carries the
+same table. Below it the bar is not squeezed: the sections become the page, and measured there every row
+is **54px** at the full width of the pane. At 1440 with the rail at its default 300px the bar is 216px and
+the body 924px; at 1100 it is 216px and 584px; at 1090 there is no bar and the body is 790px. No
+horizontal overflow at any width measured (0px at 900, 1000, 1090, 1100, 1200 and 1440).
+
+**And the measurement earned its keep three times.** The first run reported the settings pane absent at
+every width: `--click "Settings"` searched `textContent` only, and the rail's footer button carries an icon
+glyph and an `aria-label`, so the click found nothing. The second run attached to a **stale Chrome** from an
+earlier session and reported a different application's window (forty projects, none of them ours); both
+tools now match the debug target by **URL** and take a `--port`, and `--click` matches the words a user
+reads *or* the name a screen reader reads. The third: the click heuristic walked `button, li, …` in
+document order, so it hit the `li` wrapper before the button inside it and clicked nothing — three
+screenshots came out **byte-identical**, which is what pointed at it. A picture that cannot differ is the
+cheapest failing check available, and it is the one that caught this.
+
+**The contrast of the bar's second band was fixed because it was measured.** On the current item's fill
+(`--bg-active`, the rail's own selected token) the caption in `--text-muted` reads **3.83:1** at 12px —
+under the 4.5:1 small text needs, and the same 3.83 the chip rule in `styles.css` already records, because
+it is the same tone on the same fill. So the current item's caption reads `--text` (**9.14:1** measured),
+which is the rule this repo already applies to its chips: the background carries the selection and the
+small text stays readable. The idle item's label and caption both measure **6.52:1** on `--bg-raised`. The
+focus ring was measured too, on a focused item: `2px solid rgb(32, 116, 74)` — the sheet's
+`--focus-ring-color` — with the offset inverted to `-2px` so a full-width item's ring cannot be clipped by
+the column.
+
+**The keyboard was measured the same way**, with Chrome dispatching real key events at the running window
+(not synthetic ones from a script): Tab from the pane's back control reaches *Close*, then the bar's
+current item — `BUTTON[General] .settings-nav__item tabindex=0` — then the section page's first control,
+which is **one tab stop for eight items**; ArrowDown on that item moves focus to `BUTTON[New tasks]` while
+the page stays on *General*; and Enter on it renders *New tasks*. That last step is the one jsdom cannot
+do — it does not synthesise the click a real Enter produces — which is why `test/settings-nav.test.tsx`
+asserts the element **is a button** (native activation) and separately that pressing it navigates.
 
 **The scope is data, not a prop plus a flag.** `apps/desktop/src/state/settings-scope.ts` owns it:
 `{ kind: "app" } | { kind: "projects" } | { kind: "project", id }` (`:60-77`), with `APP_SCOPE` and
@@ -978,16 +1045,97 @@ checker is the guard, and `settings-language.test.tsx`'s standalone render had t
 navigation callback when its type changed — which is how the requirement announced itself in this
 restructure.
 
-**Where the code lives, and why it is three files.** `components/SettingsPane.tsx` is the three levels
-(the `switch` on the scope, and the rows each one holds — 773 lines), `components/SettingsShell.tsx` is the
-frame they all render through (title, back control, daemon chips, the scrolling body, and the daemon's
-notes — 129 lines), and `components/SettingsRows.tsx` is the row shapes they are built from. The split is
-along the line the code already had, and it happened because adding level 2 pushed the pane past this
-repo's own rule (*"past ~800 lines, split it"*, `AGENTS.md`): the frame's five props were being passed
-identically by three levels, which is a component rather than a block of JSX.
+**Where the code lives, and why it is five files.** `components/SettingsPane.tsx` is the scopes (the
+`switch` on the scope, the section switch below it, and the shell wiring), `components/SettingsNav.tsx` is
+the bar and the same registry as a page, `components/SettingsShell.tsx` is the frame every page renders
+through (title, back control, the bar's column, the daemon chips, the scrolling body, the notes),
+`components/SettingsRows.tsx` is the row shapes they are built from, and `components/settings/` holds the
+eight section pages plus the two rows with a decision in them. Each split happened at this repo's own rule
+(*"past ~800 lines, split it"*, `AGENTS.md`) as the pane grew a level, then a level and a bar: a frame
+passed identically by every page is a component, and eight pages in one file is a file nobody reads.
 
-**What this is not.** No breadcrumb chain, no settings sidebar of our own, no routes: one pane, three
-levels, one row down and one back control up at each step. That is Paseo's shape at Paseo's scale.
+**What this is not.** No breadcrumb chain and no routes: one pane, one bar, one row down and one back
+control up at each step. The bar is real now, and it is **not** Paseo's sidebar — eight sections against
+twenty-one, every one of them filled, with the sections we do not have recorded as absent rather than
+rendered empty (§7.6). "No settings sidebar of our own" was the position while this pane was six rows and
+four headings; the position changed when the sections did, and this paragraph is the record of it.
+
+### 7.6 The bar's sections, and the reference product's sections that are not there
+
+The owner's brief lists eleven sections from the reference product's settings and asks for "the left bar
+for setting". This is that bar with **our** contents: eight sections, every one of which has something to
+read or change, held as data in `apps/desktop/src/state/settings-sections.ts` and rendered by
+`components/SettingsNav.tsx`. The registry is the bar's own list — there is no second list of items in the
+JSX — and `test/settings-nav.test.tsx` compares the rendered names with the registry's keys.
+
+| section | what is in it | where it is read or enforced |
+|---|---|---|
+| **General** | Language; the folder *Add project* starts in | `main.tsx:33` (the root provider re-renders every `t()`); the palette's `project.add` row seeds its text stage with `state.settings.defaultProjectPath` (`CoderApp.tsx`), `test/palette-flow.test.tsx` |
+| **New tasks** | The default agent, the default model, the agent's extra argv | `resolveTaskDefaults` (`packages/task-model/src/index.ts`) — explicit → project → app → fallback; `test/settings-store.test.ts` asserts an app default reaching a created task |
+| **Safety** | *Ask before anything destructive*; *Keep transcripts after a task ends* | the value goes to the agent as its own session policy (`session/set_policy { autoRun }`, mapped by `run-options.ts`), four cases in `test/runs.test.ts`; `appendTranscript` returns early when transcripts are off |
+| **Agents** | Every agent the machine can run: availability, its capability warnings, and the tier, modes, models and thinking levels **it published about itself** | read straight from `HarnessSummary` — the daemon's own answer. Read-only on purpose: availability here is a fact we detect, not a switch a user throws (§5.8) |
+| **Projects** | The list of registered projects, one row each, opening that project's own defaults | `coder.listProjects`; the rows open scope 3, whose three controls write through `coder.updateProject` (whose defaults **replace**, hence the live-id rule of §7.5) |
+| **Keyboard shortcuts** | The keys this window is **listening for**, from the same table the key handler reads | `wiredBindings(actions)` — the table filtered by the actions the shell mounted, so `⌘⇧N`, `⇧?` and `Escape` are absent because nothing is mounted for them. A page that listed the table would advertise keys that do nothing, which is the same lie as a setting that does nothing |
+| **This machine** | The daemon's build, state folder, home folder, start time, and how many windows are attached | `coder.hello`'s own answer, all of it (`packages/protocol/src/rpc.ts:1040-1066`); the notes stay in the frame, below every page |
+| **About** | This window's build against the daemon's, and what a mismatch means | `apps/desktop/package.json` inlined by `vite.config.ts` into `src/app-version.ts`, against `hello.version` |
+
+**Where a section is absent, it is absent, and this is why.** The audit already holds the verdict for every
+one of these; the point of the table is that *not building a page* was a decision with a reason rather than
+an omission. Nothing below is rendered disabled either — the argument is under the table.
+
+| reference-product section | verdict (this document) | in our bar | why |
+|---|---|---|---|
+| `host` — Overview | **not applicable** (§5.1) | no | three of its five rows are per-host identity a one-daemon install cannot use. What is usable is reported by **This machine**; the two shell-lifecycle rows (manage/kill the built-in daemon) are **honour-able now** and need a field in the Rust shell, not a bar item |
+| `projects` | **honour-able with work** (§5.2) | **yes** | the section carries no user-settable value in Paseo either: it is navigation into a per-project screen. Ours is the list plus scope 3 |
+| `connections` | **not applicable** (§5.3) | no | there is no connection list: one loopback daemon, and the remote path fails closed until a session store exists |
+| `pair-device` | **honour-able with work** (§5.4) | no | the pairing contract is written, but `coder.pairDevice` is deliberately absent from the dispatcher catalogue — minting a credential is the node's act — and the session store it needs is roadmap M1. A disabled row here would be §7.2's lesson twice: a row and a method that must be written together, against a handler |
+| `agents` | **not applicable** (§5.5) | **yes, with different contents** | four of its five rows are subsystems we do not have. Our **Agents** section is a *report* of what each agent published (tier, availability, declared modes/models/thinking, capability warnings), not Paseo's page; the row we can honour — saved agent profiles — is §8.4's work |
+| `providers` | **not applicable** (§5.8) | no | Paseo's page is credential and adapter management, and it stores API keys in plaintext `env` in `config.json` (§9). **The audit says in as many words that we should not copy it.** Our equivalent facts live in **Agents** (what is installed) and **New tasks** (which model a task starts on) |
+| `terminals` | **not applicable** (§5.10) | no | no terminal subsystem — and Paseo's own daemon never reads the terminal profiles it persists, which is the inverse of a defect we have |
+| `plugins` | **not applicable** (§5.11) | no | no plugin runtime and no extension points, and Paseo's own are explicitly unsandboxed |
+| `permissions` | **not applicable** (§4.8) | no | that section is OS permissions — microphone, screen recording — and we request none. **Our Safety section is not this one**: it is what an *agent* may do without asking, which the audit records as honour-able now and which is built |
+| `integrations` | **not applicable** (§4.6) | no | it installs a CLI we do not ship, from a shell we do not use, by rewriting the user's shell rc |
+| `notifications` | **not applicable** (§4.7) | no | no OS notification path and no tray, so there is nothing to silence |
+| `appearance` | **honour-able with work** (§4.2) | no | the largest honest win, and slice 2 (§8.2) — but nothing of it is built, so there is no page to link to. **Measured, and it is worth recording for whoever builds it:** setting `data-theme="light"` on the running window does *not* give a light window — `styles.css`'s own palette (`--bg-raised`, `--text`, …) has no light block, so the pane title measured rgb(250,250,250) on rgb(250,250,250), a contrast of **1.0**. The theme control needs a light palette in `styles.css` as well as the token sheet's, which is more than "one dropdown" |
+| `shortcuts` | **honour-able with work** (§4.5) | **yes, read-only** | overrides, a grown table and conflict reporting are slice 5 (§8.5) and are not built. What *is* built is the registry and the mounted handler, so the section lists the keys the window listens for and says in as many words that a key not on the list does nothing in this build. No control on that page writes anything, and none says it does |
+| `about` | **honour-able with work** (§4.10) | **yes** | the audit called the version-mismatch row "a real control-plane need and nearly free". It was, with one correction: the **window's** half is not free. The renderer is a bundle served from disk with no process to read its own `package.json`, so the number is a build-time constant (`vite.config.ts` → `src/app-version.ts`), and when nothing inlined one the page says so rather than comparing a guess. The channel row (auto-update) is still N/A — there is no updater |
+| `layout`, `editor`, `diagnostics`, `metadata`, `usage` | **not applicable** (§4.3, §4.4, §4.9, §5.6, §5.9) | no | multi-pane workspace placement, an editor we do not ship, a native-only terminal renderer (its two useful things are actions, and our equivalents are the pane's own chips and notes), which model writes text we never generate, and a quota fetcher for accounts we do not have |
+| `workspaces` — archive merged PRs | **must be disabled-with-reason** (§5.7) | no | the one section this document says should be *shown disabled*, and it also says when: **with the git slice, not before it.** There is no git service, so the row has nothing to switch; shipping it now would be a promise on a page with nothing else on it. When the git slice lands, the row and its reason ship together |
+
+**Why absence rather than a disabled row, in one place.** The vocabulary in §1 exists for the case where
+the row is meaningful and we cannot honour it *yet* — "Ask before anything destructive" is exactly that
+today, and it renders disabled with the agent named. What the eleven named sections above have in common is
+different: each needs a **subsystem** that does not exist (a terminal, a plugin runtime, an OS notification
+path, an account system, a git service, a session store). A disabled control there would be a promise
+attached to work that is not settings work, which §7.2 already argued and this restructure followed.
+
+**What that leaves as future bar items, named so they are not rediscovered:** user-defined agents (§5.8's
+two honour-able rows, §8.4), a system prompt (§5.5 `appendSystemPrompt`, upstream first), saved agent
+profiles (§5.5), and `autoArchiveAfterMerge` the day the git service exists (§5.7). Each is a section that
+would be added to the registry above with its own contents and its own citations — which is the shape this
+document is asking the next person to follow rather than invent.
+
+**Driving the window found a crash, and the crash was evidence.** The daemon already running on this
+machine while this section was written is a build behind: its `HarnessSummary` carries `modes` and **no
+`models` and no `thinking`** — verified by asking it (`coder.listHarnesses`, read-only) and comparing with
+a daemon built from the current source, which sends both. The window accepts that answer, the new Agents
+page read `harness.models.options` and threw, React unmounted the pane — there is no error boundary above
+the shell here — and the user got an empty window. That is §7.2's wire asymmetry as a **live** state rather
+than a hypothesis, and it is why the page now answers an older daemon with one sentence in the user's
+language ("the daemon did not send what {agent} publishes about itself … restart EnvoyCoder so both come
+from one build") instead of taking the application down. The regression test asserts the window is still a
+window on that answer, and it fails with the same `TypeError` when the guard is removed — which is how it
+was checked, since no jsdom fixture had produced that shape until this was seen in a browser.
+
+**The gate that keeps the bar honest** is `apps/desktop/test/settings-nav.test.tsx`, and it asks three
+questions rather than one: **does every section name a source that still contains what it claims** (every
+citation re-read against the file, with the negative case proved on a fabricated registry: no content, a
+missing file, and a moved line each fail), **does every section render a row** (each of the eight is
+rendered alone and refused if its body holds no control, list item or definition row), and **is the bar the
+registry** (the rendered names, in order, equal the registry's title keys). The mutations that fail it are
+listed in the file's own header and were each run: a section with nothing in it, a section whose page
+renders `<></>`, a hardcoded ninth item, an item that navigates nowhere, a mark taken from a local
+selection, a bar rendered at 900px, and the whole shortcut table listed instead of the mounted bindings.
 
 ---
 
@@ -1051,8 +1199,14 @@ not, and three more fields were read by the app with no control writing them.
   defaults **replace** rather than merge, unlike the app's.
 * Add the **section structure** the pane needs before it grows: one heading per group. Not a copied
   sidebar — one column, headings, in the order the slices below give.
-  **Outcome — three headings:** *General*, *New tasks start with*, *Safety*, plus the two read-only
-  groups below them, unchanged.
+  **Outcome — three headings, and then a bar.** The headings were *General*, *New tasks start with*,
+  *Safety*, plus the two read-only groups. The owner has since asked for the reference product's settings
+  left bar, and the answer is that bar with our contents: the headings became **eight sections** with
+  their own pages, the bar lists the registry, and on a narrow window the registry is the page. §7.6 is
+  the section-by-section account and the list of sections we deliberately do not have. The rule this
+  bullet was written to protect is unchanged and now has a gate: a section cannot be added to the bar
+  without naming the source that backs it, and `test/settings-nav.test.tsx` fails a section with nothing
+  behind it.
 
 **Gate:** a test that asserts every field of `CoderSettings` is either read at a named site or absent
 from the schema. Written as a test rather than a grep so that adding a field without a reader fails

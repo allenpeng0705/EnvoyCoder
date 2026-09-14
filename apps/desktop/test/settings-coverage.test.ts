@@ -137,6 +137,12 @@ const NOT_A_READER: readonly string[] = [
   // Where a field is rendered. A control writing or showing a value says nothing about any workflow
   // consuming it — which is the whole distinction between "the pane has a row for it" and "it works".
   "apps/desktop/src/components/SettingsPane.tsx",
+  // …and the section pages the pane renders, added to this list when the pane was split into sections.
+  // The directory rather than six file names: the *reason* is that everything under it exists to draw
+  // settings, so a needle found there is a row, not a reader, whichever file it lands in. A new section
+  // page is therefore covered the day it is written, which is the opposite of how this defect used to
+  // arrive (`defaultProjectPath` was citeable from the pane that rendered it).
+  "apps/desktop/src/components/settings",
   // Where a field is declared, schematised, parsed and defaulted. `CoderSettingsSchema` naming a field
   // is what makes it *storable*; it is not a reader.
   "packages/protocol/src",

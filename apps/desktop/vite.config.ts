@@ -1,5 +1,18 @@
+import { readFileSync } from "node:fs";
+
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+
+/**
+ * **The window's own version, inlined at build time.**
+ *
+ * The daemon can report its version over `coder.hello`; the renderer cannot, because it is a bundle
+ * served from disk with no process to read a `package.json` from — so the number is baked in here and
+ * `src/app-version.ts` is the one module that reads it. Same file the daemon's own version comes from
+ * (`apps/desktop/package.json`), which is what makes "these two should agree" a sentence About can
+ * print: both halves are built together, and a mismatch means one of them is a build behind.
+ */
+const { version } = JSON.parse(readFileSync(new URL("package.json", import.meta.url), "utf8"));
 
 /**
  * The desktop UI is a plain Vite app, served from disk by the Tauri shell and by `vite dev` in a
@@ -10,6 +23,7 @@ import react from "@vitejs/plugin-react";
  */
 export default defineConfig({
   plugins: [react()],
+  define: { __ENVOYCODER_VERSION__: JSON.stringify(version) },
   clearScreen: false,
   server: {
     /**

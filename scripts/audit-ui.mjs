@@ -34,22 +34,54 @@ if (!CHROME) {
 const url = process.argv[2];
 const i = process.argv.indexOf("--click");
 const click = i >= 0 ? process.argv[i + 1] : undefined;
-const port = 9333;
+/**
+ * `--size WxH` — the window the surface is measured in.
+ *
+ * Added for the settings bar, whose whole layout is a question about width: the bar is a column beside
+ * the content while there is room for two, and the sections become the page when there is not. A tool
+ * that could only measure one window size could not check the decision at all.
+ */
+const sizeFlag = process.argv.indexOf("--size");
+const size = sizeFlag >= 0 ? process.argv[sizeFlag + 1] : "1440,900";
+/**
+ * `--port N` — the Chrome debugging port.
+ *
+ * Overridable because a port can be **held by a browser this run did not start** (a leftover from a
+ * killed run, or another tool on the machine), and two tools fighting over 9333 would leave one of them
+ * measuring whatever the other had open. The default stays, so the documented invocation is unchanged.
+ */
+const portFlag = process.argv.indexOf("--port");
+const port = portFlag >= 0 ? Number(process.argv[portFlag + 1]) : 9333;
 const profile = mkdtempSync(join(tmpdir(), "envoycoder-audit-"));
 const chrome = spawn(
   CHROME,
-  ["--headless=new", "--disable-gpu", "--no-first-run", `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "--window-size=1440,900", url],
+  ["--headless=new", "--disable-gpu", "--no-first-run", `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, `--window-size=${size}`, url],
   { stdio: "ignore" },
 );
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * **The page we asked for, not just any page.**
+ *
+ * A debugging port outlives the browser that opened it often enough for this to matter: an earlier run
+ * that was killed before its cleanup, or another tool on the machine, leaves a target list behind — and
+ * a measurer that attaches to the first page it finds then reports numbers about a different application
+ * entirely, which is worse than reporting nothing. So the target is matched by **URL**, and its absence
+ * is a hard failure.
+ */
 let wsUrl;
 for (let n = 0; n < 60 && !wsUrl; n += 1) {
   try {
     const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
-    wsUrl = list.find((t) => t.type === "page" && t.webSocketDebuggerUrl)?.webSocketDebuggerUrl;
+    wsUrl = list.find((t) => t.type === "page" && t.webSocketDebuggerUrl && String(t.url).startsWith(url))
+      ?.webSocketDebuggerUrl;
   } catch { /* not up */ }
   if (!wsUrl) await sleep(250);
+}
+if (!wsUrl) {
+  console.error(`no page at ${url} on the debugging port ${port} — refusing to measure a page nobody asked for.`);
+  chrome.kill();
+  process.exit(2);
 }
 const ws = new WebSocket(wsUrl);
 await new Promise((r) => ws.once("open", r));
@@ -68,7 +100,24 @@ const evaluate = async (expression) =>
 await send("Runtime.enable");
 await sleep(3500);
 if (click) {
-  await evaluate(`(() => { const n=[...document.querySelectorAll("button,li,.task-row")].find(e=>(e.textContent||"").includes(${JSON.stringify(click)})); n&&n.click(); })()`);
+  // **By the words a user reads, or by the name a screen reader reads.** The rail's footer buttons carry
+  // an icon glyph and an `aria-label`, so a text-only search found nothing and every measurement after
+  // `--click "Settings"` reported the settings pane as absent — which is how this was found.
+  const clicked = await evaluate(`(() => {
+    const wanted = ${JSON.stringify(click)};
+    // Interactive elements first, wrapper second — see the note in preview-ui.mjs: an \`li\` before its own
+    // button is what made three screenshots identical.
+    const interactive = "button, [role=button], a, input, select, textarea, .task-row";
+    const matches = (list) => list.filter((n) => (n.textContent ?? "").trim().includes(wanted)
+      || (n.getAttribute?.("aria-label") ?? "") === wanted
+      || (n.getAttribute?.("title") ?? "") === wanted);
+    const hit = matches([...document.querySelectorAll(interactive)])[0]
+      ?? matches([...document.querySelectorAll("li")])[0];
+    if (!hit) return "NOT FOUND: " + wanted;
+    hit.click();
+    return "clicked <" + hit.tagName + ">";
+  })()`);
+  console.log(`click "${click}": ${clicked}`);
   await sleep(900);
 }
 
@@ -107,6 +156,56 @@ const audit = await evaluate(`(() => {
     };
   };
   const text = document.querySelector(".row__text") ?? document.querySelector(".transcript__empty-body");
+  /**
+   * **The settings pane, measured rather than described.**
+   *
+   * Three claims the settings work makes in prose and cannot check by looking: that the bar is a column
+   * beside the content while there is room for one, that a settings row keeps its sentence and its
+   * control on one line at that width (the reason the breakpoint is where it is), and that the focus ring
+   * is the token sheet's own ring actually painted.
+   */
+  const settingsProbe = () => {
+    const layout = document.querySelector(".settings-layout");
+    const navEl = document.querySelector(".settings-nav");
+    const paneBody = document.querySelector(".settings");
+    if (!layout || !paneBody) return { present: false };
+    const item = document.querySelector(".settings-nav__item--current") ?? document.querySelector(".settings-nav__item");
+    let ring = null;
+    if (item) {
+      // Focus it the way a keyboard user would, then read what the browser painted: :focus-visible
+      // needs a real focus, which element.focus() gives.
+      item.focus();
+      const cs = getComputedStyle(item);
+      ring = { item: cs.outlineWidth + " " + cs.outlineStyle + " " + cs.outlineColor, offset: cs.outlineOffset, active: document.activeElement === item };
+    }
+    const itemRect = item ? item.getBoundingClientRect() : null;
+    // A row whose control sits *below* its text has wrapped: the text band and the control cannot both
+    // fit, which is the measurement the breakpoint is chosen by. Counting them is what turns "squeezed"
+    // into a number.
+    let wrapped = 0;
+    let tallest = 0;
+    for (const row of document.querySelectorAll(".settings .setting")) {
+      const textBand = row.querySelector(".setting__text");
+      const control = row.querySelector(".setting__control");
+      const height = row.getBoundingClientRect().height;
+      tallest = Math.max(tallest, Math.round(height));
+      if (textBand && control && control.getBoundingClientRect().top > textBand.getBoundingClientRect().top + 4) wrapped += 1;
+    }
+    return {
+      present: true,
+      columns: getComputedStyle(layout).gridTemplateColumns,
+      nav: navEl ? { w: Math.round(navEl.getBoundingClientRect().width), items: navEl.querySelectorAll(".settings-nav__item").length } : null,
+      current: item ? item.getAttribute("aria-label") : null,
+      itemWidth: itemRect ? Math.round(itemRect.width) : null,
+      ring,
+      bodyWidth: Math.round(paneBody.getBoundingClientRect().width),
+      bodyScroll: { scrollHeight: paneBody.scrollHeight, clientHeight: paneBody.clientHeight },
+      rowsTotal: document.querySelectorAll(".settings .setting").length,
+      rowsWrapped: wrapped,
+      tallestRow: tallest,
+    };
+  };
+
   return {
     theme: document.documentElement.dataset.theme,
     viewport: { w: innerWidth, h: innerHeight },
@@ -118,6 +217,7 @@ const audit = await evaluate(`(() => {
     title: probe(".pane__title", "pane title"),
     chip: probe(".suggestion, .chip", "chip / suggestion"),
     body: text ? { contrast: contrast(getComputedStyle(text).color, bgOf(text)), fontSize: getComputedStyle(text).fontSize, lineHeight: getComputedStyle(text).lineHeight } : { missing: true },
+    settings: settingsProbe(),
   };
 })()`);
 

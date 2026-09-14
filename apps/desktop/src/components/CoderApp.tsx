@@ -24,7 +24,8 @@ import type { JSX } from "react";
 
 import { useMemo, useState } from "react";
 
-import { useShortcuts } from "../input/useShortcuts.js";
+import { useShortcuts, type ShortcutActions } from "../input/useShortcuts.js";
+import { wiredBindings } from "../input/shortcuts.js";
 import type { Project, Task } from "@envoycoder/protocol";
 import { taskTitleFromPrompt } from "@envoycoder/task-model";
 
@@ -35,11 +36,12 @@ import { CommandCenter, buildCommandContributions } from "./CommandCenter.js";
 import { TaskPane } from "./TaskPane.js";
 import { MeshStatusBar } from "./MeshStatusBar.js";
 import { SettingsPane } from "./SettingsPane.js";
+import { useSettingsLayout } from "./SettingsNav.js";
 import type { CoderState } from "../state/coderStore.js";
 import type { CoderStore } from "../state/coderStore.js";
 import {
-  APP_SCOPE,
   PROJECTS_SCOPE,
+  entryScope,
   projectScope,
   scopeProjectId,
   type SettingsScope,
@@ -135,10 +137,17 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    * Which settings the pane is showing — and whether it is showing at all.
    *
    * **One value, not a boolean beside a payload.** `undefined` is "the pane is closed"; anything else is
-   * a level of the pane's own navigation (`settings-scope.ts`): this machine's settings, the list of
-   * projects, or one project's. A `settingsOpen: boolean` beside a `settingsProjectId?: string` could say
-   * "open, and also on no particular project and not on the list either" — three states that the code
-   * would have to keep agreeing about, and the third level's arrival is what made that unaffordable.
+   * a scope of the pane's own navigation (`settings-scope.ts`): the list of sections, one section, the
+   * list of projects, or one project's defaults. A `settingsOpen: boolean` beside a
+   * `settingsProjectId?: string` could say "open, and also on no particular project and not on the list
+   * either" — states the code would have to keep agreeing about, and the *third* scope's arrival is what
+   * made that unaffordable. The fourth (a section) and the root (the list of sections) were added without
+   * touching any of the three that already existed, which is the property the union was chosen for.
+   *
+   * Where the pane opens depends on the window, not on history: `entryScope(layout)` — a wide window
+   * opens on the first section, because the bar listing the others is already beside it, and a narrow one
+   * opens on the list of sections, because the bar has no room to be a column there. That is a fact about
+   * the window rather than "where the user came from", which is the state `settings-scope.ts` refuses.
    *
    * The project row's menu item says "Project settings" (`sidebar.project.settings`) and carries the
    * project through, so the pane renders that project's defaults (`docs/settings-parity.md` §7.3, §8.1).
@@ -161,8 +170,18 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    * reached deliberately, and `removeProjectRow` moves the scope down a level itself so the fallback does
    * not have to wait for the refetch the daemon's change event triggers.
    */
+  /**
+   * How much room this window has — **one `matchMedia` query, read once, handed to both readers.**
+   *
+   * Two things need it and they must not disagree: where *opening* settings lands (`entryScope`: a wide
+   * window has the bar already, so it opens on the first section; a narrow one opens on the list of
+   * sections, which is the page the bar would otherwise be), and whether the pane renders the bar at all.
+   * The pane is told rather than sniffing, so a second query cannot exist — and a test can render the
+   * narrow layout without a browser.
+   */
+  const layout = useSettingsLayout();
   const [settingsScope, setSettingsScope] = useState<SettingsScope | undefined>(undefined);
-  const openAppSettings = (): void => setSettingsScope(APP_SCOPE);
+  const openAppSettings = (): void => setSettingsScope(entryScope(layout));
   const closeSettings = (): void => setSettingsScope(undefined);
   /**
    * The one way into a project's settings, whoever asks.
@@ -265,7 +284,13 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
   // **The keyboard, which did not exist.** `⌘K` was printed on a button with nothing behind it, so the
   // palette — and "Add project…" inside it — could not be reached by keyboard at all. This mounts the
   // registry from `input/shortcuts.ts` and binds it to the shell's own state.
-  useShortcuts({
+  //
+  // It is a named value rather than an inline argument because the settings pane renders the *same*
+  // object: `wiredBindings` below is the table filtered by the actions here, which is what makes the
+  // Shortcuts section a report of what the window listens for instead of a list of what the table
+  // declares — three of the eight bindings have no action in this build, and a page that printed their
+  // combos would be advertising keys that do nothing.
+  const shortcutActions: ShortcutActions = {
     // ⌘K and ⌘P stay the catalogue: that is what a command palette is for, and a user who presses it is
     // asking "what can this app do?" rather than "start a task".
     "commandCenter.open": () => openPalette(),
@@ -284,7 +309,11 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
     },
     "settings.open": openAppSettings,
     "sidebar.toggle": () => setRailOpen((open) => !open),
-  });
+  };
+  useShortcuts(shortcutActions);
+  // Cheap (eight comparisons) and derived, so no `useMemo`: memoising it would add a dependency array
+  // that has to be kept in step with the object above for no measurable gain.
+  const wiredShortcuts = wiredBindings(shortcutActions);
 
   // The active task follows the data rather than being remembered across a reconnect: an id from a
   // previous daemon is a row that is no longer there, and rendering a pane for it would show a task
@@ -417,18 +446,24 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
           {settingsScope !== undefined ? (
             <SettingsPane
               state={state}
-              // Which level the pane is on: this machine's settings, the projects page, or one project's.
-              // The pane resolves the scope against the live project list itself, so a project that has
-              // gone cannot leave it rendering rows that write to something that is not there.
+              // Which scope the pane is on: the list of sections, one section, the projects page, or one
+              // project's. The pane resolves it against the live project list itself, so a project that
+              // has gone cannot leave it rendering rows that write to something that is not there.
               scope={settingsScope}
+              // The window's shape, resolved once above: it decides whether the bar is rendered beside
+              // the content or the list of sections *is* the content.
+              layout={layout}
+              // The keys the shell has actually mounted, not the table: see `shortcutActions` above.
+              shortcuts={wiredShortcuts}
               // The same value the rail renders as "could not read your projects" — see its own doc
               // above. The pane needs it for the same reason: a count band that reads "No projects" over
               // a list nobody could read is the failure this shell already fixed once.
               projectsUnavailable={projectsUnavailable}
-              // The pane's own navigation, and it is this one function or none: the pane names the level a
-              // press goes to (`APP_SCOPE`, `PROJECTS_SCOPE`, `projectScope(id)`) and the shell stores it.
-              // One callback rather than four is what makes "each back control returns to its own level" a
-              // property of the data instead of four handlers that have to agree.
+              // The pane's own navigation, and it is this one function or none: a row — a bar item, a
+              // section row, a project row — names the scope a press goes to (`scopeForSection`,
+              // `projectScope(id)`, `SECTIONS_SCOPE`) and the shell stores it. One callback rather than
+              // four is what makes "each back control returns to its own level" a property of the data
+              // instead of four handlers that have to agree.
               onNavigate={setSettingsScope}
               onClose={closeSettings}
               onUpdate={(patch) => void props.actions.updateSettings(patch)}

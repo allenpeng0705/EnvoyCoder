@@ -1144,9 +1144,113 @@ body {
 
 /* ────────────────────────────── settings ────────────────────────────── */
 
+/* **The body and the bar are one row, not two.** `.pane` gives its `1fr` row to this wrapper, and the
+   wrapper is what decides whether there is a column beside the body. `min-height: 0` on both is what
+   keeps the scrolling honest: without it a grid item's automatic minimum size is its content, so a long
+   list of projects makes the *page* scroll instead of the body — and the back control stops staying put,
+   which is the one thing §7.5 measured as working. */
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pane--sections .settings-layout {
+  grid-template-columns: 216px minmax(0, 1fr);
+}
+
+/* The bar: the shape of this app's own rail — items full width, one flat hover, the current one filled —
+   in the settings pane's own column. It scrolls on its own, so a window too short for eight items moves
+   the items under a fixed header rather than pushing the page's rows out of the window. */
+.settings-nav {
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-2);
+  border-right: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.settings-nav__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+}
+
+.settings-nav__item {
+  display: block;
+  width: 100%;
+  padding: var(--space-1-5) var(--space-2);
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--motion-fade) var(--motion-ease);
+}
+
+.settings-nav__item:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* **The token focus ring, drawn inside the item.** The ring is the sheet's (`--focus-ring-width` /
+   `--focus-ring-color`); the *offset* is inverted, because a full-width item with a 2px ring pushed 2px
+   outside it would have its left and right edges clipped by the column. Inverted, the ring is complete
+   and still 2px of the accent colour against the item's own background. */
+.settings-nav__item:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(-1 * var(--focus-ring-offset));
+}
+
+/* The item the pane is on. Filled rather than coloured: the bar's items are names, and an accent colour
+   on a name would read as a status. `aria-current="page"` is what says "you are here" to a screen
+   reader; this is the same fact for the eye. */
+/* The item the pane is on: the rail's own selected fill (`--bg-active`, the same token
+   `.task-row--active` uses), so the bar reads as part of this app rather than as a second navigation
+   with its own idea of "selected". */
+.settings-nav__item--current {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.settings-nav__label {
+  display: block;
+  font-weight: var(--font-weight-medium);
+}
+
+.settings-nav__item--current .settings-nav__label {
+  font-weight: var(--font-weight-semibold);
+}
+
+.settings-nav__detail {
+  display: block;
+  margin-top: 1px;
+  font-size: var(--font-size-sm);
+  /* The second band, and it is a *caption*: measured against the item's own background in the browser
+     (`ui:audit`), not assumed — a caption that fails contrast is a sentence nobody reads. */
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+/* **Measured, not chosen.** On `--bg-active` the caption in `--text-muted` reads **3.83:1** at 12px,
+   which is under the 4.5:1 small text needs — the same 3.83 the chip rule above records, because it is
+   the same tone on the same fill. So the caption on the current item reads `--text` (9.14:1 measured),
+   and the rail's own rule applies: the *background* carries the selection, and the small text stays
+   readable. The label keeps its own weight, so the two bands are still told apart. */
+.settings-nav__item--current .settings-nav__detail {
+  color: var(--text);
+}
+
 .settings {
   padding: 16px;
   overflow-y: auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -1238,7 +1342,8 @@ body {
 /* The app scope's list of projects: the way into each project's own settings. One column, no bullet —
    the label of each row is the bullet — and tighter than the 18px between sections, because these rows
    are a list of each other rather than separate settings. */
-.settings__projects {
+.settings__projects,
+.settings__sections {
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1303,11 +1408,87 @@ body {
   gap: 10px;
 }
 
+/* One agent, as two bands: who it is (with its chips), and what it says about itself. A column rather
+   than a row, because the second band is a definition list rather than a single chip and would push the
+   first one off the card's width if the two shared a line. */
 .settings__agent {
   display: flex;
-  gap: 12px;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.settings__agent-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+}
+
+/* The facts the agent published, label over value. `display: contents` on the wrapper is what lets the
+   two-column grid hold `dt`/`dd` pairs without a wrapper element per row. */
+.settings__agent-declared {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-0-5) var(--space-3);
+  font-size: var(--font-size-sm);
+}
+
+.settings__agent-declared > div {
+  display: contents;
+}
+
+.settings__agent-declared dt {
+  color: var(--text-dim);
+}
+
+.settings__agent-declared dd {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+/* ── the keyboard, as a page ── */
+
+.settings__shortcut-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.settings__bindings {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.settings__binding {
+  display: flex;
   align-items: baseline;
   justify-content: space-between;
+  gap: var(--space-4);
+  padding-bottom: var(--space-1-5);
+  border-bottom: 1px solid var(--border-accent);
+}
+
+.settings__binding .setting__title {
+  margin: 0;
+  font-weight: var(--font-weight-normal);
+}
+
+/* A key a user presses, drawn as one: mono, the chip surface, and no more emphasis than that. */
+.kbd {
+  flex: none;
+  padding: 1px var(--space-1-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
 }
 
 .settings__agent-summary {

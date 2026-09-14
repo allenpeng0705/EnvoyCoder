@@ -1,5 +1,18 @@
 /**
- * The settings navigation model, from the rail to the daemon — **three levels in one pane**.
+ * The settings navigation model, from the rail to the daemon — **four scopes in one pane, and a bar that
+ * lists the sections of the first**.
+ *
+ * ## What the bar changed, and what it did not
+ *
+ * The app scope used to be one page with four headings; it is eight sections now, reached from a bar
+ * (wide windows) or from the list of sections (narrow ones), and the root of the navigation is that
+ * list. So the assertions that lived in `describe("the projects page, and the count row that opens
+ * it")` walk one step further than they did: the **Projects** item is in the bar rather than a row among
+ * the app scope's settings, and the level below it is unchanged. **None were deleted** — the count band,
+ * the two back controls that must not say the same thing, the fallback to the projects page and the
+ * "which level is this" assertions are all here, at the level they now describe. What moved is *which
+ * page a row is on*: the default-agent row is a section of its own (*New tasks*), so the test that
+ * asserts "a project's controls are not on this page" walks to that section first.
  *
  * ## What this proves that the pane's own tests cannot
  *
@@ -19,13 +32,18 @@
  * the snapshot. It was re-broken deliberately, by resolving the project once in a `useState`, to check
  * that it still catches it (the mutation table is in the commit that added this restructure).
  *
- * ## The three levels, and the journey each test walks
+ * ## The scopes, and the journey each test walks
  *
  * | | title | arrived at by | leaves by |
  * |---|---|---|---|
- * | 1 | *Settings* | the rail's footer button (⌘, is bound to the same function) | — it is the root |
- * | 2 | *Projects* | the **Projects** row at level 1 | *← All settings* |
- * | 3 | *Project settings for api* | a row of level 2, or the rail's project `…` menu | *← Projects* |
+ * | 0 | *Settings* — the list of sections | the rail's footer button on a narrow window | — it is the root |
+ * | 1 | one section (e.g. *New tasks*) | a bar item, or a row of level 0 | *← All settings* (level 0) |
+ * | 2 | *Projects* | the **Projects** item | *← All settings* (level 0) |
+ * | 3 | *Project settings for api* | a row of level 2, or the rail's project `…` menu | *← Projects* (level 2) |
+ *
+ * jsdom has no `matchMedia`, so `useSettingsLayout` falls back to **wide** — which is why every journey
+ * below walks with the bar on screen. The narrow layout walks the same scopes through the list of
+ * sections instead, and `settings-nav.test.tsx` is where that is asserted.
  *
  * Every test below starts at the rail's footer button rather than at `CoderApp`'s initial state,
  * because that is the only entry the owner's brief names, and a journey that starts halfway is a
@@ -69,12 +87,17 @@ import { CoderApp } from "../src/components/CoderApp.js";
 import { I18nProvider } from "../src/i18n/context.js";
 import type { CoderState, CoderStore } from "../src/state/coderStore.js";
 import {
-  APP_SCOPE,
   PROJECTS_SCOPE,
+  SECTIONS_SCOPE,
+  appScope,
+  entryScope,
   projectScope,
   resolveScope,
+  scopeForSection,
   scopeProjectId,
+  scopeSection,
 } from "../src/state/settings-scope.js";
+import { DEFAULT_SECTION_ID, SETTINGS_SECTIONS } from "../src/state/settings-sections.js";
 
 afterEach(cleanup);
 
@@ -371,20 +394,42 @@ describe("the projects page, and the count row that opens it", () => {
   /**
    * Reach this machine's settings the way the owner's brief describes them: the entry at the **bottom of
    * the rail** (the footer's Settings button — ⌘, is bound to the same function). Every test below starts
-   * here, which is the point: the Projects row is inside the app scope and the list is one level below
-   * it, so this is a two-step journey a test cannot assume.
+   * here, which is the point: the Projects item is in the bar beside this page and the list is one level
+   * below it, so this is a two-step journey a test cannot assume.
+   *
+   * On this window it lands on the **first section** (`entryScope("wide")` — jsdom has no `matchMedia`,
+   * and the fallback is the layout with the bar in it). The list of every section is what a narrow window
+   * opens on, and `settings-nav.test.tsx` walks that one.
    */
   const openAppSettings = (): void => {
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeTruthy();
   };
 
-  /** Level 1's one navigation row — named with the words of the page it opens, which are its own title. */
+  /**
+   * The bar's **Projects** item — named with the words of the page it opens, which are its own title.
+   *
+   * It is the bar's item rather than a row among the app scope's settings, and that is the move this
+   * restructure made: the section is an *index entry* now, and the page below it is unchanged.
+   */
   const projectsRow = (): HTMLElement => screen.getByRole("button", { name: "Projects" });
 
-  /** Level 2, the way a user reaches it: the row at level 1. */
+  /** Level 2, the way a user reaches it: the item in the bar. */
   const openProjectsPage = (): void => {
     openAppSettings();
     fireEvent.click(projectsRow());
+  };
+
+  /**
+   * One bar item, by its own name — the way into a section.
+   *
+   * Named here rather than in each test because the *name* is the assertion: a bar item is labelled with
+   * the page's own title, so a renamed section cannot leave a test passing on a label the user no longer
+   * sees.
+   */
+  const barItem = (label: string): HTMLElement => {
+    const nav = screen.getByRole("navigation", { name: "Settings sections" });
+    return within(nav).getByRole("button", { name: label });
   };
 
   /**
@@ -403,15 +448,17 @@ describe("the projects page, and the count row that opens it", () => {
     await vi.waitFor(() => expect(updateProject).toHaveBeenCalled());
   };
 
-  it("counts the projects on the app scope and opens the page from there", () => {
-    // Level 1 carries **one** row where the list used to be: the count is its second band, and pressing
-    // it opens the list rather than any particular project. Both halves are asserted, because a row that
-    // counts correctly and goes nowhere is the defect class this pane was rebuilt to remove — and a row
-    // that went straight into the first project's settings would pass a test that only checked the count.
+  it("counts the projects in the bar and opens the page from there", () => {
+    // The bar carries **one** item where the list used to be: the count is its second band, and pressing
+    // it opens the list rather than any particular project. Both halves are asserted, because an item that
+    // counts correctly and goes nowhere is the defect class this pane was rebuilt to remove — and one that
+    // went straight into the first project's settings would pass a test that only checked the count.
     show({ projects: [project, otherProject] });
     openAppSettings();
 
-    expect(screen.getByRole("heading", { name: "Projects" })).toBeTruthy();
+    // The page the window opened on is a *section*, not the list: the bar is beside it and its own title
+    // is what the pane says — the Projects heading belongs to the page one press away.
+    expect(screen.getByRole("heading", { name: "General" })).toBeTruthy();
     const row = projectsRow();
     expect(row.tagName).toBe("BUTTON");
     expect(within(row).getByText("2 projects")).toBeTruthy();
@@ -444,10 +491,30 @@ describe("the projects page, and the count row that opens it", () => {
     cleanup();
     show({ projects: [] });
     openAppSettings();
-    // And with nothing to list the row is still there — which is what keeps the teaching page reachable
+    // And with nothing to list the item is still there — which is what keeps the teaching page reachable
     // for a user who has not added a project yet. That is the reason this third case is worth asserting
-    // rather than "the row hides": a hidden row is a dead end with no way to learn what a project is.
+    // rather than "the item hides": a hidden item is a dead end with no way to learn what a project is.
     expect(within(projectsRow()).getByText("No projects")).toBeTruthy();
+  });
+
+  it("marks the section you are on, and only that one", () => {
+    // The bar says where the user is, and it says it from the **scope** rather than from a selection of
+    // its own: `scopeSection(scope)` is the one value behind both the marked item and the page beside it,
+    // so a bar that marked something else would be a second answer to "where am I".
+    show({ projects: [project, otherProject] });
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(barItem("General").getAttribute("aria-current")).toBe("page");
+
+    fireEvent.click(barItem("New tasks"));
+    expect(barItem("New tasks").getAttribute("aria-current")).toBe("page");
+    expect(barItem("General").getAttribute("aria-current")).toBeNull();
+    expect(screen.getByRole("heading", { name: "New tasks" })).toBeTruthy();
+
+    // A project's scope belongs to the Projects item, whether it was reached through the list or through
+    // the rail's menu: `scopeSection` answers "projects" for both.
+    fireEvent.click(barItem("Projects"));
+    expect(barItem("Projects").getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("heading", { name: "Projects" })).toBeTruthy();
   });
 
   it("lists every project it was given, each with its own path", () => {
@@ -507,42 +574,61 @@ describe("the projects page, and the count row that opens it", () => {
   });
 
   it("gives each back control its own level, and each one names it", () => {
-    // **The reason the two labels must differ.** Level 3's back control returns to the *list*, so it says
-    // "Projects"; level 2's returns to this machine's settings, so it says "All settings". A single
-    // control labelled "All settings" that landed on the list would be a lie of exactly the kind this
-    // pane was rebuilt to remove, and the assertion below is written so that either control taking the
-    // other's label — or the other's destination — fails here.
+    // **The reason the two labels must differ.** Level 3's back control returns to the *list of
+    // projects*, so it says "Projects"; level 2's returns to the root, so it says "All settings". A single
+    // control labelled "All settings" that landed on a project's parent would be a lie of exactly the kind
+    // this pane was rebuilt to remove, and the assertions below are written so that either control taking
+    // the other's label — or the other's destination — fails here.
     show({ projects: [project, otherProject] });
     openProjectsPage();
     fireEvent.click(rowFor("web"));
     expect(screen.getByRole("heading", { name: "Project settings for web" })).toBeTruthy();
 
-    // Level 3 → level 2. It says where it goes (the page's own title), and it is a button, so Enter and
-    // Space reach it exactly as they reach Close beside it.
-    const backToProjects = screen.getByRole("button", { name: "Projects" });
+    // **Two buttons are named "Projects" on this page, and that is the model rather than a collision.**
+    // One is the bar's item, which is where the user is (it carries `aria-current`); the other is the back
+    // control in the pane's header, which is how they leave. They lead to the same page — deliberately:
+    // the bar is the index and the back control is "up", and a user who resizes the window keeps one of
+    // them. Picking the control out by the absence of `aria-current` is what makes this test about the
+    // *back control* rather than about whichever button the DOM happened to list first.
+    const barProjects = screen.getByRole("button", { name: "Projects", current: "page" });
+    expect(barProjects).toBeTruthy();
+    const backToProjects = screen.getByRole("button", { name: "Projects", current: false });
     expect(backToProjects.tagName).toBe("BUTTON");
+    // …and it is the *only* way out of this page: nothing here says "All settings", because that would
+    // land two levels up rather than on the list this project came from.
     expect(screen.queryByRole("button", { name: "All settings" })).toBeNull();
     fireEvent.click(backToProjects);
 
     // Landed on the list, not on the root: this is the assertion that fails if level 3's back control is
-    // wired to the app scope "because that is where back went before".
+    // wired to the root "because that is where back went before".
     expect(screen.queryByRole("heading", { name: "Project settings for web" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Projects" })).toBeTruthy();
     expect(rowFor("web")).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "Safety" })).toBeNull();
+    // And no section's own rows came with it: this page is a list, not the app scope wearing a list's
+    // title.
+    expect(screen.queryByLabelText("Ask before anything destructive")).toBeNull();
 
-    // Level 2 → level 1, and only that control says "All settings".
+    // Level 2 → level 0, the list of sections. Only this control says "All settings".
     const backToApp = screen.getByRole("button", { name: "All settings" });
     expect(backToApp.tagName).toBe("BUTTON");
     fireEvent.click(backToApp);
 
+    // The root is the list of sections — and on this page the bar is **not** rendered, because the list
+    // in the bar and the list in the page are the same eight rows: the index moved from the column into
+    // the content rather than being printed twice.
     expect(screen.getByRole("heading", { name: "Settings" })).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "Settings sections" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Safety" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Projects" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Project settings for / })).toBeNull();
+
+    // And the section that was a heading beside the row before this restructure is now a page of its own,
+    // one press from here — which is the whole round trip, walked to the end rather than assumed.
+    fireEvent.click(screen.getByRole("button", { name: "Safety" }));
     expect(screen.getByRole("heading", { name: "Safety" })).toBeTruthy();
-    // The section heading at level 1, and beside it the count row that is now the way back down — which is
-    // the whole round trip: the row that was pressed at level 2 is two levels down and one press away, and
-    // no *project* row is here, because projects are what level 2 is for.
-    expect(screen.getByRole("heading", { name: "Projects" })).toBeTruthy();
-    expect(projectsRow()).toBeTruthy();
+    expect(screen.getByLabelText("Ask before anything destructive")).toBeTruthy();
+    // The bar is back, marking the section the user is on.
+    expect(screen.getByRole("button", { name: "Safety", current: "page" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Project settings for / })).toBeNull();
   });
 
@@ -607,11 +693,15 @@ describe("the projects page, and the count row that opens it", () => {
     // The list is navigation. A project's own rows — the ones this pane draws when a project is selected
     // — must not be on the page above it, or a control would be labelled with a scope it does not have.
     // Asserted on the project-only *wording* ("here"), which is what tells them apart, and asserted at
-    // both levels because the restructure moved the list and could have moved a control with it.
+    // every level because the restructure moved rows between sections and could have moved a control
+    // with them.
     show({ projects: [project, otherProject] });
     openAppSettings();
 
-    // Level 1: this machine's settings, and no project's.
+    // The section the default agent lives on — its own page since the sections landed — and the project's
+    // version of the same row is nowhere near it.
+    fireEvent.click(barItem("New tasks"));
+    expect(screen.getByRole("heading", { name: "New tasks" })).toBeTruthy();
     expect(screen.queryByLabelText("The agent new tasks here start with")).toBeNull();
     expect(screen.queryByLabelText("The model new tasks here start on")).toBeNull();
     expect(screen.getByLabelText("The agent new tasks start with")).toBeTruthy();
@@ -620,7 +710,7 @@ describe("the projects page, and the count row that opens it", () => {
 
     // Level 2: the same, one level down — and level 1's own settings are not here either. This page is a
     // list; a page that carried the app scope's rows as well would be a second settings page wearing a
-    // list's title, which is the failure the assertion below catches.
+    // list's title, which is the failure the assertions below catch.
     expect(screen.queryByLabelText("The agent new tasks here start with")).toBeNull();
     expect(screen.queryByLabelText("The model new tasks here start on")).toBeNull();
     expect(screen.queryByText("Folder")).toBeNull();
@@ -668,11 +758,41 @@ describe("the projects page, and the count row that opens it", () => {
  * when the caller has no idea anything was removed.
  */
 describe("the scope as data", () => {
-  it("passes the two fixed levels through untouched, as the same object", () => {
-    expect(resolveScope(APP_SCOPE, [])).toBe(APP_SCOPE);
+  it("passes every scope that names no project through untouched, as the same object", () => {
+    // The root, a section, the projects list: none of them can fail to resolve, so they come back as the
+    // same object and a caller may compare by identity.
+    expect(resolveScope(SECTIONS_SCOPE, [])).toBe(SECTIONS_SCOPE);
     expect(resolveScope(PROJECTS_SCOPE, [])).toBe(PROJECTS_SCOPE);
+    const safety = appScope("safety");
+    expect(resolveScope(safety, [])).toBe(safety);
     expect(scopeProjectId(PROJECTS_SCOPE, [project])).toBeUndefined();
-    expect(scopeProjectId(APP_SCOPE, [project])).toBeUndefined();
+    expect(scopeProjectId(SECTIONS_SCOPE, [project])).toBeUndefined();
+    expect(scopeProjectId(appScope("general"), [project])).toBeUndefined();
+  });
+
+  it("answers which bar item is current, from the scope rather than from a selection", () => {
+    // The inverse pair, both directions, so the bar and the pages cannot disagree: `scopeForSection` is
+    // what a press stores, `scopeSection` is what the bar reads back.
+    expect(scopeSection(SECTIONS_SCOPE)).toBeUndefined();
+    for (const section of SETTINGS_SECTIONS) {
+      expect(scopeSection(scopeForSection(section.id)), section.id).toBe(section.id);
+    }
+    // **Projects is the one section whose scope is not an app scope**: it is the list of registered
+    // projects, a page with a back control of its own, and a project's scope belongs to it.
+    expect(scopeForSection("projects")).toBe(PROJECTS_SCOPE);
+    expect(scopeSection(projectScope(project.id))).toBe("projects");
+    expect(scopeSection(PROJECTS_SCOPE)).toBe("projects");
+  });
+
+  it("opens on the list of sections only when there is no room for the bar", () => {
+    // The one thing the window's shape decides. A wide window has the bar already, so opening settings on
+    // the list would be a page of links to the column beside it; a narrow one has no bar, so the list is
+    // the page. It is a fact about the window rather than about where the user came from — the state this
+    // module's doc refuses to keep.
+    expect(entryScope("narrow")).toBe(SECTIONS_SCOPE);
+    const wide = entryScope("wide");
+    expect(wide.kind).toBe("app");
+    expect(scopeSection(wide)).toBe(DEFAULT_SECTION_ID);
   });
 
   it("resolves a project scope against the live list, and falls back to the projects page", () => {
@@ -688,13 +808,23 @@ describe("the scope as data", () => {
 
   it("is a union a switch has to exhaust, not a boolean with a payload", () => {
     // The property that the previous shape could not have: `undefined` project meant "the app scope",
-    // and there was no value at all that meant "the projects page" — so the third level could not be
+    // and there was no value at all that meant "the projects page" — so that level could not be
     // expressed, and a caller that wanted it would have rendered the first one instead. Asserted as a
-    // compile-time fact with a runtime witness, because the type is the guard.
-    const scopes = [APP_SCOPE, PROJECTS_SCOPE, projectScope("local::/work/api")] as const;
+    // compile-time fact with a runtime witness, because the type is the guard — and the *fourth* scope
+    // (a section) and the root were added later without any of the first three changing, which is what
+    // the union buys.
+    const scopes = [
+      SECTIONS_SCOPE,
+      appScope("general"),
+      PROJECTS_SCOPE,
+      projectScope("local::/work/api"),
+    ] as const;
     const levels = scopes.map((scope) => scope.kind);
-    expect(levels).toEqual(["app", "projects", "project"]);
-    // And the third one carries an id rather than a project: an object here is the snapshot bug.
+    expect(levels).toEqual(["sections", "app", "projects", "project"]);
+    // A section scope carries the section's **id**, so the registry is what names it and a section that
+    // does not exist cannot be expressed.
+    expect(Object.keys(appScope("general"))).toEqual(["kind", "section"]);
+    // And a project's scope carries an id rather than a project: an object here is the snapshot bug.
     const held = projectScope(project.id);
     expect(Object.keys(held)).toEqual(["kind", "id"]);
   });

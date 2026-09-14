@@ -24,6 +24,8 @@
  *      the same scope is a finding the shell can show.
  */
 
+import type { MessageKey } from "../i18n/messages/en.js";
+
 /** The platforms this app runs on. `mac` is the only one where `Mod` means Cmd. */
 export type ShortcutPlatform = "mac" | "other";
 
@@ -48,10 +50,17 @@ export interface KeyBinding {
   id: string;
   /** One or more combos, any of which fires the binding. First is the one shown in help. */
   combos: readonly string[];
-  /** What a user reads in the help sheet. */
-  label: string;
-  /** The group it belongs to in the help sheet, most-reached-for first. */
-  group?: string;
+  /**
+   * What a user reads in a help sheet or in the Shortcuts section of settings — **as a catalogue key
+   * rather than as a sentence**.
+   *
+   * The table used to carry English here, and nothing rendered it, so nothing noticed. A renderer is
+   * what makes the difference: a `label: "New task"` is an English row inside a German settings pane,
+   * and only a key can be translated. The pane that lists these bindings is why this is a key now.
+   */
+  labelKey: MessageKey;
+  /** The group it belongs to in a help sheet, most-reached-for first. A key, for the same reason. */
+  groupKey?: MessageKey;
   when?: ShortcutWhen;
 }
 
@@ -218,14 +227,42 @@ export function createShortcutRegistry(
   };
 }
 
+/**
+ * What each binding does, as the shell mounts it: `id → action`.
+ *
+ * Declared here rather than in `useShortcuts.ts` so that `wiredBindings` below can be stated in the
+ * same module as the table it reads, without the hook and the table importing each other.
+ */
+export type ShortcutActions = Readonly<Record<string, (() => void) | undefined>>;
+
+/**
+ * The bindings this window actually listens for — **the table filtered by the actions that exist**.
+ *
+ * The distinction is not academic. Three of the eight bindings in `SHELL_BINDINGS` have no action in
+ * the shell today (`window.new`, `help.shortcuts`, `run.interrupt`), and `useShortcuts` documents why
+ * that is honest: a binding with no action does nothing and swallows no keystroke. A *settings
+ * section* that listed the whole table would undo exactly that honesty — it would print `⇧?` for a
+ * help sheet that does not open, which is a row that does nothing, in the pane that was rebuilt to
+ * remove rows that do nothing.
+ *
+ * So the Shortcuts section renders this, and a test asserts every row it renders is an id the shell
+ * mounted an action for. Adding a ninth binding to the table cannot make the pane advertise it.
+ */
+export function wiredBindings(
+  actions: ShortcutActions,
+  bindings: readonly KeyBinding[] = SHELL_BINDINGS,
+): readonly KeyBinding[] {
+  return bindings.filter((binding) => actions[binding.id] !== undefined);
+}
+
 /** The bindings the sidebar and shell need, in one place so the help sheet can be generated from them. */
 export const SHELL_BINDINGS: readonly KeyBinding[] = [
-  { id: "commandCenter.open", combos: ["Mod+K"], label: "Open the command center", group: "General", when: { editable: true } },
-  { id: "newTask", combos: ["Mod+N"], label: "New task", group: "Projects & tasks" },
-  { id: "search.find", combos: ["Mod+P"], label: "Search files and tasks", group: "General" },
-  { id: "window.new", combos: ["Mod+Shift+N"], label: "New window", group: "Layout" },
-  { id: "sidebar.toggle", combos: ["Mod+B"], label: "Toggle the sidebar", group: "Layout", when: { editable: true } },
-  { id: "settings.open", combos: ["Mod+,"], label: "Settings", group: "General", when: { editable: true } },
-  { id: "help.shortcuts", combos: ["Shift+?"], label: "Keyboard shortcuts", group: "General" },
-  { id: "run.interrupt", combos: ["Escape"], label: "Stop the agent", group: "Agent input", when: { editable: true, terminal: true } },
+  { id: "commandCenter.open", combos: ["Mod+K"], labelKey: "settings.shortcuts.binding.commandCenter", groupKey: "settings.shortcuts.group.general", when: { editable: true } },
+  { id: "newTask", combos: ["Mod+N"], labelKey: "settings.shortcuts.binding.newTask", groupKey: "settings.shortcuts.group.projects" },
+  { id: "search.find", combos: ["Mod+P"], labelKey: "settings.shortcuts.binding.search", groupKey: "settings.shortcuts.group.general" },
+  { id: "window.new", combos: ["Mod+Shift+N"], labelKey: "settings.shortcuts.binding.windowNew", groupKey: "settings.shortcuts.group.layout" },
+  { id: "sidebar.toggle", combos: ["Mod+B"], labelKey: "settings.shortcuts.binding.sidebar", groupKey: "settings.shortcuts.group.layout", when: { editable: true } },
+  { id: "settings.open", combos: ["Mod+,"], labelKey: "settings.shortcuts.binding.settings", groupKey: "settings.shortcuts.group.general", when: { editable: true } },
+  { id: "help.shortcuts", combos: ["Shift+?"], labelKey: "settings.shortcuts.binding.help", groupKey: "settings.shortcuts.group.general" },
+  { id: "run.interrupt", combos: ["Escape"], labelKey: "settings.shortcuts.binding.interrupt", groupKey: "settings.shortcuts.group.agentInput", when: { editable: true, terminal: true } },
 ];

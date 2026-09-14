@@ -1,19 +1,31 @@
 /**
- * The language setting, as a user meets it.
+ * The language setting, and the sections bar, as a user meets them.
  *
  * ## What this proves that `i18n.test.ts` cannot
  *
- * That file proves the catalogues and the lookup. This one proves the **row**: that the setting the
+ * That file proves the catalogues and the lookup. This one proves the **rows**: that the setting the
  * daemon stores is the one on screen, that the options are the family's seven in their own language,
- * and that picking one asks the daemon to store it (`onUpdate`). It also renders the whole pane
- * inside a German provider, which is the cheapest available proof that the context actually reaches
- * a component that is not the app shell — a provider mounted around `CoderApp` is invisible to a
- * component rendered on its own, and "the pane is English while the rail is German" is exactly the
- * half-translated window this milestone exists to prevent.
+ * and that picking one asks the daemon to store it (`onUpdate`). It also renders the whole pane inside a
+ * German provider, which is the cheapest available proof that the context actually reaches a component
+ * that is not the app shell — a provider mounted around `CoderApp` is invisible to a component rendered
+ * on its own, and "the pane is English while the rail is German" is exactly the half-translated window
+ * this milestone exists to prevent. And since the sections bar landed, it is the proof that the bar's
+ * own names are translated: eight section names are rendered here in German, one per bar item, so a
+ * section that ships with an English title fails a test rather than a user's screen.
+ *
+ * ## What moved when the pane became sections, and what did not
+ *
+ * The pane used to be one scrolling column with four headings, so this file could assert *all* of it in
+ * one render: the language row, the agents list, the Projects group and the daemon's notes were on the
+ * same page. A section is a page now, so each assertion moved to the page it is about — **none were
+ * dropped**: the language rows are asserted on *General*, the Projects row and its count band on the bar
+ * (where the row lives now) and on the *Projects* page, and the notes are asserted where they have
+ * always been rendered but now from every page (they are facts about the file the daemon read, not about
+ * the scope being shown).
  */
 
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CoderSettings } from "@envoycoder/protocol";
@@ -21,13 +33,16 @@ import type { CoderSettings } from "@envoycoder/protocol";
 import { CoderSidebar } from "../src/components/CoderSidebar.js";
 import { SettingsPane } from "../src/components/SettingsPane.js";
 import { I18nProvider } from "../src/i18n/context.js";
+import { wiredBindings, type ShortcutActions } from "../src/input/shortcuts.js";
 import type { CoderState } from "../src/state/coderStore.js";
 import {
-  APP_SCOPE,
   PROJECTS_SCOPE,
+  SECTIONS_SCOPE,
+  appScope,
   projectScope,
   type SettingsScope,
 } from "../src/state/settings-scope.js";
+import { SETTINGS_SECTIONS } from "../src/state/settings-sections.js";
 
 afterEach(cleanup);
 
@@ -36,6 +51,20 @@ const settings: CoderSettings = {
   requireApprovalForDestructive: true,
   keepTranscripts: true,
   language: "de",
+};
+
+/**
+ * The keys the shell mounts actions for, which is what the Shortcuts page lists.
+ *
+ * The same five ids `CoderApp` wires (`shortcutActions` there); declared here as data so this file does
+ * not have to render the shell to test the pane's own translation of them.
+ */
+const WIRED: ShortcutActions = {
+  "commandCenter.open": () => {},
+  "search.find": () => {},
+  newTask: () => {},
+  "settings.open": () => {},
+  "sidebar.toggle": () => {},
 };
 
 function stateWith(over: Partial<CoderState> = {}): CoderState {
@@ -73,7 +102,7 @@ function stateWith(over: Partial<CoderState> = {}): CoderState {
 function renderPane(
   over: Partial<CoderState> = {},
   preference: "system" | "de" | "ja" = "de",
-  scope: SettingsScope = APP_SCOPE,
+  scope: SettingsScope = appScope("general"),
 ) {
   const onUpdate = vi.fn();
   render(
@@ -82,13 +111,19 @@ function renderPane(
         state={stateWith(over)}
         onClose={vi.fn()}
         onUpdate={onUpdate}
-        // Which level of the pane: this machine's settings by default, and the parameter is what lets the
-        // level-2 assertions below render the page the row opens.
+        // Which scope the pane is on: one section by default, and the parameter is what lets the
+        // assertions below render the list of sections, the projects page or a project's own page.
         scope={scope}
-        // The pane's own navigation, which is required rather than optional: a caller that renders the
-        // Projects row without a destination is a control that presses into nothing. This test is about
-        // the language, so the destination is a stub — `settings-scope.test.tsx` is where the levels are
-        // asserted through the shell that owns them.
+        // The window's shape. **Wide**, because that is the layout with the bar in it, and the bar is
+        // what most of the assertions below are about; a narrow window renders the same registry as the
+        // page instead (`settings-nav.test.tsx` walks that one).
+        layout="wide"
+        // The bindings the shell mounted — see `WIRED`.
+        shortcuts={wiredBindings(WIRED)}
+        // The pane's own navigation, which is required rather than optional: a caller that renders a row
+        // without a destination is a control that presses into nothing. This test is about wording, so
+        // the destination is a stub — `settings-nav.test.tsx` and `settings-scope.test.tsx` are where the
+        // navigation itself is asserted, through the shell that owns it.
         onNavigate={vi.fn()}
       />
     </I18nProvider>,
@@ -125,29 +160,76 @@ describe("the language row", () => {
   });
 });
 
-describe("the rest of the pane, in the same language", () => {
+describe("the sections bar, in the same language", () => {
+  /** The pane's German section names, in the order the registry puts them. */
+  const GERMAN_SECTIONS = [
+    "Allgemein",
+    "Neue Aufgaben",
+    "Sicherheit",
+    "Agenten",
+    "Projekte",
+    "Tastenkürzel",
+    "Dieser Computer",
+    "Über",
+  ];
+
+  it("names every section in German, one bar item each", () => {
+    // **One German name per section, asserted from the rendered bar** — the assertion a section with a
+    // hardcoded English title cannot pass, and the reason `KeyBinding` and the registry carry catalogue
+    // keys rather than sentences.
+    renderPane();
+    const nav = screen.getByRole("navigation", { name: "Bereiche der Einstellungen" });
+    expect(within(nav).getAllByRole("button")).toHaveLength(GERMAN_SECTIONS.length);
+    for (const label of GERMAN_SECTIONS) {
+      expect(within(nav).getByRole("button", { name: label })).toBeTruthy();
+    }
+    // The registry itself is the list the bar renders, so the two orders agree or this fails.
+    expect(SETTINGS_SECTIONS).toHaveLength(GERMAN_SECTIONS.length);
+  });
+
   it("is German too — one window, one language", () => {
     renderPane();
-    expect(screen.getByText("Einstellungen")).toBeTruthy();
-    expect(screen.getByText("Agenten auf diesem Computer")).toBeTruthy();
+    // The section's own name is the pane's title, and it is the same German word as the bar item above.
+    expect(screen.getByRole("heading", { name: "Allgemein" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Schließen" })).toBeTruthy();
-    // The harness list is empty in this fixture, and even that sentence is translated.
+    // The section's sentence is in the bar on a wide window (its second band), and on the page itself on
+    // a narrow one — printed once either way, which is asserted here and again in `settings-nav.test.tsx`.
+    const nav = screen.getByRole("navigation", { name: "Bereiche der Einstellungen" });
+    expect(
+      within(nav).getByText("Die Sprache dieses Fensters und der Ordner, in dem ein neues Projekt startet."),
+    ).toBeTruthy();
+    // **Once.** The bar carries the sentence and the page does not repeat it; a `getAllByText` of two
+    // would be the same sentence rendered twice in one view, which is the thing `showsBar` prevents.
+    expect(
+      screen.getAllByText("Die Sprache dieses Fensters und der Ordner, in dem ein neues Projekt startet."),
+    ).toHaveLength(1);
+    // The Projects item's second band is a count, and even that sentence is translated.
+    expect(screen.getByRole("button", { name: "Projekte" }).getAttribute("title")).toBe("Keine Projekte");
+  });
+
+  it("translates the page an agent's facts are on", () => {
+    // The agents list used to be a block on the one settings page; it is a page of its own now, and its
+    // empty state is still a sentence rather than an empty box.
+    renderPane({}, "de", appScope("agents"));
+    expect(screen.getByRole("heading", { name: "Agenten" })).toBeTruthy();
     expect(screen.getByText("Die Agentenliste ist noch nicht angekommen.")).toBeTruthy();
-    // …including the Projects group, whose two sentences *moved one level down* in this restructure: the
-    // section is a single row here now (its second band is the count, and this fixture has no projects),
-    // and the sentence that says how a project gets here is on the page the row opens. The heading and the
-    // row are asserted where they are; the sentences that moved are asserted on level 2 below, which is
-    // where they now live — nothing was dropped, and nothing stayed asserting a block that is gone.
-    expect(screen.getByRole("heading", { name: "Projekte" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Projekte" })).toBeTruthy();
-    expect(screen.getByText("Keine Projekte")).toBeTruthy();
+  });
+
+  it("translates the list of sections, which is what a narrow window opens on", () => {
+    renderPane({}, "de", SECTIONS_SCOPE);
+    expect(screen.getByRole("heading", { name: "Einstellungen" })).toBeTruthy();
+    expect(screen.getByText(/Bereich für Bereich/)).toBeTruthy();
+    // Every section is reachable as a row here as well as from the bar, and each row is named in German.
+    for (const label of GERMAN_SECTIONS) {
+      expect(screen.getByRole("button", { name: label })).toBeTruthy();
+    }
   });
 
   it("is German on the projects page too, back control included", () => {
-    // **The level the restructure added, in the language this file exists for.** Two things are worth more
-    // than the prose: the sentences that moved here from level 1 (the override note and the empty state,
-    // both of them German), and the back control — which must name *its* destination, so it says
-    // "Alle Einstellungen" here and something else at the level below.
+    // **The level the earlier restructure added, in the language this file exists for.** Two things are
+    // worth more than the prose: the sentences that moved here from the app scope (the override note and
+    // the empty state, both of them German), and the back control — which must name *its* destination,
+    // so it says "Alle Einstellungen" here and something else at the level below.
     renderPane({ projects: [] }, "de", PROJECTS_SCOPE);
     expect(screen.getByRole("heading", { name: "Projekte" })).toBeTruthy();
     expect(
@@ -169,11 +251,27 @@ describe("the rest of the pane, in the same language", () => {
       projectScope("local::/work/api"),
     );
     expect(screen.getByRole("heading", { name: "Projekteinstellungen für api" })).toBeTruthy();
-    const back = screen.getByRole("button", { name: "Projekte" });
+    // Two buttons say "Projekte" on this page — the bar's own item, marked current, and the back
+    // control — so the back control is asserted where it is: in the pane's header.
+    const back = screen.getByRole("button", { name: "Projekte", current: false }) as HTMLButtonElement;
     expect(back.getAttribute("title")).toBe("Zurück zur Projektliste");
+    expect(screen.getByRole("button", { name: "Projekte", current: "page" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Alle Einstellungen" })).toBeNull();
   });
 
+  it("translates the keyboard page's own rows, which are the table's keys", () => {
+    // The bindings' labels used to be English strings nothing rendered. A page that renders them is why
+    // they are catalogue keys, and this is the assertion that says so.
+    renderPane({}, "de", appScope("shortcuts"));
+    expect(screen.getByRole("heading", { name: "Tastenkürzel" })).toBeTruthy();
+    expect(screen.getByText("Neue Aufgabe")).toBeTruthy();
+    expect(screen.getByText("Befehlspalette öffnen")).toBeTruthy();
+    // The combos themselves are not translated — a key is a key.
+    expect(screen.getByText("Ctrl+K")).toBeTruthy();
+  });
+});
+
+describe("the rest of the pane, in the same language", () => {
   it("leaves no English in the rail or the pane either", () => {
     // The owner's criterion, taken literally: *"we cannot give a German UI with English errors"* —
     // and the same applies to the rail and the pane, which are read far more often than an error.
@@ -232,14 +330,16 @@ describe("the rest of the pane, in the same language", () => {
   });
 
   it("takes the language from the provider, not from a module-level default", () => {
-    renderPane({ settings: { ...settings, language: "ja" } }, "ja");
-    expect(screen.getByText("設定")).toBeTruthy();
+    renderPane({ settings: { ...settings, language: "ja" } }, "ja", appScope("general"));
+    expect(screen.getByRole("heading", { name: "一般" })).toBeTruthy();
     expect(screen.getByLabelText("言語")).toBeTruthy();
   });
 
   it("renders a daemon note through its key when it sent one", () => {
     // The startup notes are the daemon's sentences, and the ones it can key are rendered in the
-    // user's language like everything else — the diagnostic reason stays as it came.
+    // user's language like everything else — the diagnostic reason stays as it came. They are rendered
+    // from every page since the sections landed: a quarantined projects.json is worth reading while
+    // looking at any of them.
     renderPane({
       notes: [
         'EnvoyCoder could not read projects.json, so it moved it aside to /tmp/x and started that list empty. (bad json) [envoycoder.key] {"key":"note.quarantined.moved","values":{"name":"projects.json","movedTo":"/tmp/x","reason":"bad json"}}',

@@ -330,9 +330,39 @@ export const en = {
   "settings.noDaemon": "No daemon",
   "settings.daemon": "Daemon {version}",
   "settings.daemon.title": "The daemon this window is attached to",
-  "settings.group.general": "General",
-  "settings.group.newTasks": "New tasks start with",
-  "settings.group.safety": "Safety",
+  /* ── the sections, and the bar that lists them ──
+     One key per section, and it is the name of **one place**: the bar item's label, the page's own
+     title, the row on the list of sections, and the label of the back control on any page below it. The
+     registry that holds them is `apps/desktop/src/state/settings-sections.ts`; `settings.section.*` is
+     therefore a list of places rather than a list of headings on one page, which is what the four
+     `settings.group.*` keys this replaced used to be.
+     `settings.projects.title` names the Projects section too, and is deliberately not duplicated here:
+     it was already one string used three times, and a second key for the same place is a second thing to
+     keep translated and true. */
+  "settings.nav.aria": "Settings sections",
+  "settings.sections.note":
+    "This window's settings, section by section. Every section has something to read or change inside it.",
+  "settings.section.general.title": "General",
+  "settings.section.general.detail":
+    "The language this window speaks, and the folder a new project starts from.",
+  "settings.section.tasks.title": "New tasks",
+  "settings.section.tasks.detail":
+    "The agent, the model and the arguments every new task starts with.",
+  "settings.section.safety.title": "Safety",
+  "settings.section.safety.detail":
+    "What an agent may do without asking you, and what is kept afterwards.",
+  "settings.section.agents.title": "Agents",
+  "settings.section.agents.detail":
+    "Every agent this machine can run, and what each one says it can do.",
+  "settings.section.shortcuts.title": "Keyboard shortcuts",
+  "settings.section.shortcuts.detail":
+    "Every key this window is listening for, read from the table the keyboard layer reads.",
+  "settings.section.machine.title": "This machine",
+  "settings.section.machine.detail":
+    "The daemon this window is attached to, and what it was started with.",
+  "settings.section.about.title": "About",
+  "settings.section.about.detail":
+    "Which build this window is, and which build the daemon is.",
   "settings.language.title": "Language",
   "settings.language.detail":
     "The language of this window — every label, notice and error, including the ones the daemon sends back. Saved with your settings on this machine, so it follows you to your other windows and to the phone.",
@@ -392,7 +422,6 @@ export const en = {
      `{add}` is the rail's own Add-project label (`sidebar.footer.add`) rather than the word "Add"
      repeated here, so the sentence keeps naming the control it means when the control is renamed or
      translated. */
-  "settings.group.projects": "Projects",
   "settings.projects.title": "Projects",
   "settings.projects.count": "{count} projects",
   "settings.projects.count.one": "1 project",
@@ -405,7 +434,6 @@ export const en = {
     "Each project can override this machine's settings. Selecting one opens its own.",
   "settings.projects.empty":
     "No projects yet. A project is a folder on this machine that agents work in — add one with {add} at the bottom of the rail, or from the Command Center.",
-  "settings.agents.heading": "Agents on this machine",
   "settings.agents.note":
     "What each agent can actually do decides what EnvoyCoder offers. An agent that cannot be asked for permission is not given an approval dialog it would ignore.",
   "settings.agents.empty": "The agent list has not arrived yet.",
@@ -416,6 +444,92 @@ export const en = {
   "settings.agent.noApprovals.title": "This agent never asks before acting",
   "settings.agent.noCancel": "Cannot be cancelled",
   "settings.agent.noCancel.title": "The only way to stop this agent is to end its process",
+  /* ── what an agent says about itself, on the Agents page ──
+     Read from `HarnessSummary`: the daemon's own answer, not our opinion. Two rules decide the wording.
+     A value **we** wrote carries a catalogue key and is translated (`modeLabel`); a value the **agent**
+     wrote is shown as the agent wrote it — a model label has no key in the protocol at all — which is the
+     same rule the approval prompt's option labels follow. And the three states of `AgentThinking` are
+     kept apart: `session` is not `none`, and telling a user their agent offers no thinking levels when
+     the truth is that nobody has opened a session with it is the sentence the protocol forbids. */
+  "settings.agent.tier.title": "Where it comes from",
+  "settings.agent.tier.builtIn": "Ships with EnvoyCoder",
+  "settings.agent.tier.catalogued": "A tool from EnvoyCoder's catalogue",
+  "settings.agent.modes.title": "Modes it offers",
+  "settings.agent.models.title": "Models it publishes",
+  "settings.agent.modelsFreeText": "Any model you type for it",
+  "settings.agent.thinking.title": "Thinking levels",
+  "settings.agent.thinkingSession": "It lists these only inside a session, and none has run yet",
+  "settings.agent.noneDeclared": "None declared",
+  // A daemon one build behind does not send what an agent publishes about itself, and the window accepts
+  // its answer rather than refusing the whole list. This is the sentence that says so — see
+  // `DeclaredFacts` in `components/settings/SectionsFacts.tsx` for the crash it replaced.
+  "settings.agent.notDeclared":
+    "The daemon this window is talking to did not send what {agent} publishes about itself, so there is nothing to show here. That happens when the two are different builds; restart EnvoyCoder so both come from one build.",
+
+  /* ── the keyboard, listed from the table the key handler reads ──
+     `settings.shortcuts.binding.*` are labels for ids in `input/shortcuts.ts`, which used to carry
+     English sentences nothing rendered. The pane renders them now, which is why they are keys.
+     `settings.shortcuts.note` says the one thing a reader has to know: a key that is not on this page
+     does nothing in this build — three of the eight declared bindings have no action mounted, and a page
+     that listed them would be advertising keys that do nothing. */
+  "settings.shortcuts.note":
+    "Every key this window is listening for, read from the same table the keyboard layer reads. A key that is not on this list does nothing in this build.",
+  "settings.shortcuts.empty": "This build listens for no keyboard shortcuts.",
+  "settings.shortcuts.group.general": "General",
+  "settings.shortcuts.group.projects": "Projects and tasks",
+  "settings.shortcuts.group.layout": "Layout",
+  "settings.shortcuts.group.agentInput": "Agent input",
+  "settings.shortcuts.binding.commandCenter": "Open the command center",
+  "settings.shortcuts.binding.newTask": "New task",
+  "settings.shortcuts.binding.search": "Search files and tasks",
+  "settings.shortcuts.binding.windowNew": "New window",
+  "settings.shortcuts.binding.sidebar": "Toggle the sidebar",
+  "settings.shortcuts.binding.settings": "Settings",
+  "settings.shortcuts.binding.help": "Keyboard shortcuts",
+  "settings.shortcuts.binding.interrupt": "Stop the agent",
+
+  /* ── the daemon this window is attached to ──
+     All of it is `coder.hello`'s own answer. The build and the state folder are also chips in the pane's
+     header on every page — deliberately: a chip answers "which daemon am I talking to" while a user is
+     reading something else, and this page is where the facts that do not fit in a chip live. */
+  "settings.machine.note":
+    "Everything on this page is what the daemon itself said when this window attached to it.",
+  "settings.machine.noDaemon":
+    "No daemon has answered this window yet, so there is nothing to report about one.",
+  "settings.machine.version.title": "The daemon's build",
+  "settings.machine.version.detail":
+    "The version of the program that stores your settings and runs your agents.",
+  "settings.machine.stateDir.title": "Settings and transcripts live in",
+  "settings.machine.stateDir.detail":
+    "One folder on this machine, holding your settings, the project list, and the transcripts a task keeps.",
+  "settings.machine.home.title": "The folder it treats as home",
+  "settings.machine.home.detail":
+    "A path you type as ~ means this folder. Nothing else is read from it, and nothing is written to it by this window.",
+  "settings.machine.started.title": "Started at",
+  "settings.machine.started.detail": "When this daemon process started.",
+  "settings.machine.windows.title": "Windows attached",
+  "settings.machine.windows.detail": "How many windows are talking to this daemon right now, including this one.",
+  "settings.machine.windows.one": "1 window",
+  "settings.machine.windows.many": "{count} windows",
+
+  /* ── the one comparison a control plane needs ──
+     Both halves of EnvoyCoder are built together, so a difference means one of them is a build behind —
+     and a daemon a build behind can refuse settings this window writes, which `docs/settings-parity.md`
+     §7.2 records on the wire. The window's own version is a build constant (`app-version.ts`); when
+     nothing inlined one, this page says so instead of printing a placeholder that looks like a number. */
+  "settings.about.note":
+    "EnvoyCoder is two halves — this window, and the daemon that stores your settings and runs your agents — and they are built together, so their versions should match.",
+  "settings.about.window.title": "This window",
+  "settings.about.window.detail": "The build this window's own files came from.",
+  "settings.about.daemon.title": "The daemon",
+  "settings.about.daemon.detail": "The build of the process this window is talking to.",
+  "settings.about.noVersion": "Not known",
+  "settings.about.unknown":
+    "One of the two builds is not known to this window, so there is nothing to compare.",
+  "settings.about.match": "The window and the daemon are the same build.",
+  "settings.about.mismatch":
+    "This window is {window} and the daemon is {daemon} — different builds. A daemon from another build can refuse settings this window writes, so restart EnvoyCoder and let both come from one build.",
+
   "settings.notes.heading": "Things worth knowing",
 
   /* ── what the daemon says when it refuses ── */
