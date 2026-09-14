@@ -230,6 +230,68 @@ describe("the project row as the product registers it", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add project" }));
     expect(onAddProject).toHaveBeenCalledWith("/Users/you/work/repo");
   });
+
+  it("opens the field on the folder the settings nominated, where there is one", () => {
+    // **`defaultProjectPath`'s end-to-end proof.** The key sat in `CoderSettings`, was validated at the
+    // wire and read by nobody until settings slice 1 (`docs/settings-parity.md` §7.1): the honest fix is
+    // not a second control but a reader, and this is the one — the palette's own row, seeding the field
+    // it already asks for. Asserted through the real `buildCommandContributions` rather than a fixture,
+    // for the reason the describe above records: a fixture more capable than the product passes while
+    // the product does nothing.
+    const t = createTranslator("en", CATALOGUES.en).t;
+    const onAddProject = vi.fn();
+    const contributions = buildCommandContributions({
+      t,
+      projects: [],
+      tasks: [],
+      onAddProject,
+      onNewTask: vi.fn(),
+      onOpenSettings: vi.fn(),
+      onPairPhone: vi.fn(),
+      onToggleRail: vi.fn(),
+      onRevealTask: vi.fn(),
+      defaultProjectPath: "/Users/you/work",
+    });
+
+    delete (globalThis as { __TAURI__?: unknown }).__TAURI__;
+    render(<CommandCenter open onClose={vi.fn()} contributions={contributions} />);
+    fireEvent.click(screen.getByText("Add project…"));
+
+    const field = screen.getByLabelText(/^Which folder\? Paste its full path\./) as HTMLInputElement;
+    // Seeded, not pre-committed: the user still sees it and can still change it.
+    expect(field.value).toBe("/Users/you/work");
+    // …and the confirm button is therefore live, which is what makes the seed a shortcut rather than a
+    // different question.
+    expect((screen.getByRole("button", { name: "Add project" }) as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add project" }));
+    expect(onAddProject).toHaveBeenCalledWith("/Users/you/work");
+  });
+
+  it("opens the field empty when the setting has never been set", () => {
+    // The other half, and the reason the field is not simply defaulted in `run`: a user who has
+    // nominated nothing must not be handed a folder we invented. The shipped state is "no key", so
+    // this is the case almost every user meets.
+    const t = createTranslator("en", CATALOGUES.en).t;
+    const contributions = buildCommandContributions({
+      t,
+      projects: [],
+      tasks: [],
+      onAddProject: vi.fn(),
+      onNewTask: vi.fn(),
+      onOpenSettings: vi.fn(),
+      onPairPhone: vi.fn(),
+      onToggleRail: vi.fn(),
+      onRevealTask: vi.fn(),
+    });
+
+    delete (globalThis as { __TAURI__?: unknown }).__TAURI__;
+    render(<CommandCenter open onClose={vi.fn()} contributions={contributions} />);
+    fireEvent.click(screen.getByText("Add project…"));
+
+    const field = screen.getByLabelText(/^Which folder\? Paste its full path\./) as HTMLInputElement;
+    expect(field.value).toBe("");
+  });
 });
 
 describe("the task row as the product registers it", () => {

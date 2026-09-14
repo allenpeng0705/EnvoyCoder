@@ -44,6 +44,7 @@ import {
   ProjectSchema,
   type Task,
   TaskSchema,
+  withoutRetiredSettingsKeys,
 } from "@envoycoder/protocol";
 import type { CoderPaths } from "@envoycoder/host-bridge";
 import { projectIdFor, resolveTaskDefaults, taskIdFor } from "@envoycoder/task-model";
@@ -280,6 +281,15 @@ export class CoderStore {
     return { project, created: true };
   }
 
+  /**
+   * Update a project — its label, its tags, and **the defaults new tasks in it inherit**.
+   *
+   * The defaults *replace* rather than merge, which is the opposite of `updateSettings` and deliberate:
+   * a project's defaults are a complete statement about that project ("this one runs on DeepSeek"),
+   * while the app's are a set of independent fallbacks. The patch shape carries `""` for "clear", on the
+   * same terms as `updateSettings` — a project scope whose model control can be emptied has to be able
+   * to empty it — and `dropCleared` is what keeps the sentinel out of the stored file.
+   */
   async updateProject(
     id: string,
     patch: { label?: string; defaults?: Project["defaults"]; tags?: readonly string[] },
@@ -289,7 +299,7 @@ export class CoderStore {
     const next: Project = {
       ...current,
       ...(patch.label !== undefined ? { label: patch.label } : {}),
-      ...(patch.defaults !== undefined ? { defaults: patch.defaults } : {}),
+      ...(patch.defaults !== undefined ? { defaults: dropCleared(patch.defaults) } : {}),
       ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
     };
     this.projectsState = this.projectsState.map((project) => (project.id === id ? next : project));
@@ -466,12 +476,30 @@ export class CoderStore {
     );
   }
 
-  async updateSettings(patch: Partial<CoderSettings>): Promise<CoderSettings> {    const next: CoderSettings = {
+  /**
+   * Apply a settings patch, with `""` meaning **"clear it"** rather than "store an empty value".
+   *
+   * The rule exists because of a fact about JSON rather than a preference: `{model: undefined}` survives
+   * `JSON.stringify` as *nothing at all*, so a control that can choose a value could not un-choose one
+   * by sending a patch. `coder.updateSettings` therefore accepts `""` on `defaultProjectPath` and on
+   * `defaults.model` / `defaults.extraArgs` (see the wire schema), and this method is where that
+   * sentinel stops: the key is **dropped**, so `CoderSettingsSchema` can keep requiring `min(1)` for
+   * what is actually written to disk, and `resolveTaskDefaults` sees an absent key — which is exactly
+   * the state "the app has no default" means.
+   *
+   * `defaults` merges rather than replaces: a client that sends `{harness}` must not silently clear a
+   * model the user chose in another window.
+   */
+  async updateSettings(patch: Partial<CoderSettings>): Promise<CoderSettings> {
+    const mergedDefaults = { ...this.settingsState.defaults, ...(patch.defaults ?? {}) };
+    const next: CoderSettings = {
       ...this.settingsState,
       ...patch,
-      // `defaults` merges rather than replaces: a client that sends `{harness}` must not silently
-      // clear a model the user chose in another window.
-      defaults: { ...this.settingsState.defaults, ...(patch.defaults ?? {}) },
+      // Undefined rather than `""`: the spread above would otherwise write the sentinel into the file,
+      // and `ProjectDefaultsSchema` refuses it — a schema error at *this* point would surface as a
+      // failed RPC for a user who did something entirely legal.
+      ...(patch.defaultProjectPath === "" ? { defaultProjectPath: undefined } : {}),
+      defaults: dropCleared(mergedDefaults),
     };
     this.settingsState = CoderSettingsSchema.parse(next);
     await this.persistSettings();
@@ -519,10 +547,20 @@ export class CoderStore {
     return { items, skipped };
   }
 
+  /**
+   * The user's settings, with the keys this build has retired dropped before the schema sees them.
+   *
+   * The `.strict()` schema plus the quarantine below is the right treatment for a file we cannot
+   * understand — but it is the wrong treatment for a file we understand *perfectly* and have simply
+   * stopped using. `allowRemoteRuns` is that case: settings slice 1 removed the switch because nothing
+   * read it, and without this strip an upgrading user's whole settings file would be quarantined —
+   * taking their language, their default agent and their nominated folder with it — to discard one key
+   * whose value never reached a single line of code. See `RETIRED_SETTINGS_KEYS` in the protocol.
+   */
   private async readSettings(): Promise<CoderSettings> {
     const raw = await this.readJson(this.paths.settingsFile);
     if (raw === undefined) return DEFAULT_CODER_SETTINGS;
-    const parsed = CoderSettingsSchema.safeParse(raw);
+    const parsed = CoderSettingsSchema.safeParse(withoutRetiredSettingsKeys(raw));
     if (parsed.success) return parsed.data;
     await this.quarantine(this.paths.settingsFile, `settings did not match the schema: ${parsed.error.message}`);
     return DEFAULT_CODER_SETTINGS;
@@ -681,6 +719,21 @@ function baseNameWithoutExtension(file: string): string {
   const name = basename(file);
   const dot = name.lastIndexOf(".");
   return dot > 0 ? name.slice(0, dot) : name;
+}
+
+/**
+ * Drop the entries a client used `""` to clear, so the sentinel never reaches the disk.
+ *
+ * One function because there are three of them (`model` and `extraArgs` on a project *and* on the app
+ * settings) and the rule is one rule: **`""` is the wire's "nothing chosen", and absence is what the
+ * stored document means by it.** `harness` is deliberately not part of this — an empty harness is not a
+ * state, it is a bug, and the schema refuses it.
+ */
+function dropCleared<T extends { model?: string; extraArgs?: string }>(defaults: T): T {
+  const out = { ...defaults };
+  if (out.model === "") delete out.model;
+  if (out.extraArgs === "") delete out.extraArgs;
+  return out;
 }
 
 function sleep(ms: number): Promise<void> {

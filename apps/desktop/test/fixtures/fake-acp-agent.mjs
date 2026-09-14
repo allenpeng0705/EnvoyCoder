@@ -26,10 +26,15 @@
  * | `mode-me` | announces its collaboration mode, so `session/set_mode` is observable |
  * | `model-me` | announces its session config, so `session/set_config_option` is observable |
  * | `thinking-me` | announces its thinking level, so the *second* config option is observable too |
+ * | `policy-me` | announces its session's `autoRun` policy, so `session/set_policy` is observable |
  *
  * `FAKE_ACP_NO_SET_MODE=1` makes it refuse `session/set_mode` with `-32601`, the way
  * `deepseek-harness` does. That is how a test proves the honest failure mode: an agent that cannot be
  * put into the requested mode **fails the run** rather than quietly working in the wrong one.
+ *
+ * `FAKE_ACP_NO_SET_POLICY=1` does the same for `session/set_policy`. It models an agent that has no
+ * policy method while *our* catalogue still claims one, which is the drift that matters: the daemon must
+ * fail the run with the agent's own words rather than proceed in an approval posture it did not set.
  *
  * `FAKE_ACP_REFUSE_MODEL` is one opaque config value this agent refuses, with the real `dsh`'s own
  * sentence (`unknown model option: …`, `invalid params`). It is a single value rather than a list
@@ -100,6 +105,27 @@ const pendingPrompts = new Map();
  * So the stronger model offers a level the fast one does not (`ultra`), and a client that got the order
  * wrong is answered with the agent's own refusal rather than quietly succeeding.
  */
+/**
+ * The session's own approval posture, as `session/set_policy` set it, or `null` while nobody has.
+ *
+ * **The peer's state, not ours.** `envoy-harness` keeps a per-session policy whose `autoRun` is
+ * *unset* until a caller sends one — a fresh session answers `session/get_policy` with a sandbox and an
+ * approval mode and **no** `autoRun` at all — so `null` here is the honest initial value and a fixture
+ * that started at `"safe-only"` would let a daemon that never sent a policy look like one that did
+ * (`../envoy-harness/packages/envoy-harness/src/protocol/agent-backend.ts:536-545`, the `getPolicy`
+ * that omits the key; the defaults it is built over are `session-backend.ts:417-420`).
+ */
+let autoRunPolicy = null;
+
+/**
+ * The `autoRun` values `envoy-harness` validates, verbatim (`protocol/acp-params.ts:237-295`).
+ *
+ * Copied rather than approximated for the same reason the mode ids are: the value crosses a process
+ * boundary into somebody else's parameter check, so a fixture that accepted anything would let a
+ * client with a misspelled posture — or a translated one — pass every test here.
+ */
+const AUTO_RUN_POLICIES = ["always-confirm", "safe-only", "off"];
+
 const MODEL_DEFAULT = '["fake","flash"]';
 
 const REASONING_BY_MODEL = {
@@ -274,6 +300,16 @@ function handlePrompt(id, params) {
     return;
   }
 
+  if (text.includes("policy-me")) {
+    // The approval posture's half of the same proof the mode and the model have, on its own prompt for
+    // the same reason: a test that asserted several at once could not tell the posture that reached the
+    // agent from one that was dropped while the model arrived. `(none)` is the peer's own "no autoRun
+    // has been set" state, and it is a different answer from any of the three values.
+    update({ sessionUpdate: "agent_message_chunk", messageId: "m-policy", content: { type: "text", text: `autoRun: ${autoRunPolicy ?? "(none)"}` } });
+    ok(id, { stopReason: "end_turn" });
+    return;
+  }
+
   if (text.includes("think")) {
     update({ sessionUpdate: "agent_thought_chunk", messageId: "m-1", content: { type: "text", text: "let me consider" } });
     update({ sessionUpdate: "agent_message_chunk", messageId: "m-1", content: { type: "text", text: "here is the answer" } });
@@ -349,6 +385,51 @@ function handle(message) {
       }
       collaborationMode = params.mode;
       ok(id, {});
+      return;
+    }
+    case "session/set_policy": {
+      // **The peer's own contract, copied rather than approximated, and transcribed from the wire.**
+      // `envoy-harness` accepts `{sessionId, autoRun?, sandbox?, approval?, preset?}`, requires at least
+      // one of those four, and answers `-32602 preset, sandbox, approval, or autoRun required` when it
+      // gets none (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:237-295`).
+      //
+      // Driven against the **built peer** to check the transcription, not only read out of its source.
+      // On a fresh session:
+      //
+      //   session/get_policy                          → {sandbox:"workspace-write",approval:"on-request"}
+      //   session/set_policy {autoRun:"always-confirm"}→ accepted, and get_policy then reports it
+      //   session/set_policy {autoRun:"off"}           → accepted, and get_policy then reports it
+      //   session/set_policy {autoRun:"sometimes"}     → -32602 preset, sandbox, approval, or autoRun
+      //   session/set_policy {sandbox:"read-only"}     → accepted, autoRun left exactly as it was
+      //
+      // Three facts from that run are modelled here: the **absent `autoRun`** on a fresh session (which
+      // is why `autoRunPolicy` starts `null`), the refusal sentence, and that a policy set without
+      // `sandbox` does not move the sandbox — the boundary that lets this daemon send `autoRun` alone.
+      //
+      // The extra `{result: …}` nesting is the peer's own, not a mistake here: `session/set_policy`,
+      // `session/set_model` and `session/get_policy` answer `{result: <payload>}` while
+      // `session/set_mode` and `session/new` answer the payload directly
+      // (`.../src/protocol/acp-server.ts:294-315` against `:431-440`). We ignore the payload either way —
+      // `AcpClient.setPolicy` awaits the call and reads nothing from it — so the envelope is copied
+      // rather than tidied, because a fixture that tidied it would be the wrong half of the protocol to
+      // be wrong about. It is a peer-side inconsistency worth reporting upstream (family guide §7.4),
+      // not something to work around here.
+      if (process.env.FAKE_ACP_NO_SET_POLICY) {
+        fail(id, -32601, "session/set_policy not supported");
+        return;
+      }
+      if (params?.sessionId !== sessionId) {
+        fail(id, -32602, `unknown session: ${String(params?.sessionId)}`);
+        return;
+      }
+      if (!AUTO_RUN_POLICIES.includes(params?.autoRun)) {
+        fail(id, -32602, "preset, sandbox, approval, or autoRun required");
+        return;
+      }
+      autoRunPolicy = params.autoRun;
+      // Only the keys that were handed over, inside the peer's envelope — so a client that reads
+      // `result.result.autoRun` to learn the posture works here too.
+      ok(id, { result: { autoRun: autoRunPolicy } });
       return;
     }
     case "session/set_config_option": {

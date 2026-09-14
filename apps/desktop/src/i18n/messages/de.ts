@@ -18,6 +18,9 @@
  *
  * Agent names and their install hints (`Claude Code`, `npm install -g …`), the mesh's own status
  * vocabulary, and the palette's search keywords: product names, command lines and typed synonyms.
+ * The example path in `settings.defaultPath.placeholder` is kept verbatim for the same reason
+ * `palette.addProject.needsPlaceholder` already is — a path is not prose, and a translated one names
+ * a directory that does not exist.
  *
  * ## Form
  *
@@ -223,19 +226,41 @@ export const de: Catalogue = {
   "settings.noDaemon": "Kein Dienst",
   "settings.daemon": "Dienst {version}",
   "settings.daemon.title": "Der Dienst, mit dem dieses Fenster verbunden ist",
+  "settings.group.general": "Allgemein",
   "settings.language.title": "Sprache",
   "settings.language.detail": "Die Sprache dieses Fensters — jede Beschriftung, jeder Hinweis und jeder Fehler, auch die, die der Dienst zurückschickt. Sie wird mit deinen Einstellungen auf diesem Computer gespeichert und folgt dir zu deinen anderen Fenstern und aufs Telefon.",
   "settings.language.aria": "Sprache",
   "settings.language.system": "Wie dieser Computer",
+  "settings.folder.choose": "Auswählen…",
+  "settings.defaultPath.title": "Der Ordner, in dem „Projekt hinzufügen“ startet",
+  "settings.defaultPath.detail": "Beim Hinzufügen eines Projekts wird nach einem Ordner gefragt. Wenn du ihn hier nennst, ist das Feld bereits mit dem Ort gefüllt, an dem du arbeitest — du kannst trotzdem einen anderen eintippen.",
+  "settings.defaultPath.placeholder": "/Users/you/work",
+  "settings.group.newTasks": "Neue Aufgaben starten mit",
   "settings.defaultHarness.title": "Der Agent, mit dem neue Aufgaben starten",
   "settings.defaultHarness.detail": "Ein Projekt kann das überschreiben; das hier gilt, wenn es das nicht tut.",
   "settings.needsInstalling": "(muss installiert werden)",
+  "settings.defaultModel.title": "Das Modell, mit dem neue Aufgaben starten",
+  "settings.defaultModel.detail": "Leer gelassen läuft jede neue Aufgabe auf dem Modell, das der Agent selbst wählt. Auch das kann ein Projekt überschreiben.",
+  "settings.extraArgs.title": "Zusätzliche Argumente für den Agenten",
+  "settings.extraArgs.detail": "Sie werden genau so, wie du sie eintippst, an die Kommandozeile des Agenten übergeben — nach denen, die EnvoyCoder selbst baut. Lass das Feld leer, außer die Dokumentation des Agenten nennt eine Option, die du bei jeder Aufgabe dabei haben willst.",
+  "settings.extraArgs.placeholder": "--verbose",
+  "settings.group.safety": "Sicherheit",
   "settings.approvals.title": "Vor allem Destruktiven fragen",
   "settings.approvals.detail": "Agenten halten an und warten auf dich, statt Dateien zu überschreiben. Wenn du das ausschaltest, kann eine Aufgabe deinen Arbeitsbaum ohne Nachfrage ändern.",
-  "settings.remoteRuns.title": "Die Agenten dieses Computers mit deinen anderen Computern teilen",
-  "settings.remoteRuns.detail": "Standardmäßig aus. Wenn es an ist, kann eine Aufgabe von einem deiner anderen Computer hier laufen, in einem Verzeichnis von dir.",
+  "settings.approvals.reaches": "Wird {agent} bei jedem Lauf als eigene Richtlinie übergeben, damit das Nachfragen dort geschieht, wo die Arbeit geschieht.",
+  "settings.approvals.unsupported": "EnvoyCoder kann das für {agent} nicht ändern: Dieser Agent kann nichts entgegennehmen und fragt nach eigenen Regeln. Wähle einen Agenten, dem EnvoyCoder eine Richtlinie übergeben kann, oder beantworte die Rückfragen von {agent} selbst.",
+  "settings.approvals.unknown": "EnvoyCoder weiß noch nicht, was {agent} akzeptiert; deshalb bleibt das aus, statt eine Wahl zu speichern, die niemand liest.",
   "settings.transcripts.title": "Transkripte nach dem Ende einer Aufgabe behalten",
   "settings.transcripts.detail": "Die Aufzeichnung dessen, was ein Agent getan hat, auf diesem Computer. Ausschalten spart Platz und macht „was hat es geändert?“ später unbeantwortbar.",
+  "settings.project.title": "Projekteinstellungen für {project}",
+  "settings.project.detail": "Diese gelten für neue Aufgaben in diesem Projekt und überschreiben die Einstellungen dieses Computers. Eine Aufgabe, die du selbst eingerichtet hast, hat weiterhin Vorrang.",
+  "settings.project.folder.title": "Ordner",
+  "settings.project.folder.detail": "Wo Agenten für Aufgaben in diesem Projekt laufen.",
+  "settings.project.harness.title": "Der Agent, mit dem neue Aufgaben hier starten",
+  "settings.project.harness.detail": "Überschreibt den für diesen Computer gewählten Agenten.",
+  "settings.project.model.title": "Das Modell, mit dem neue Aufgaben hier starten",
+  "settings.project.model.detail": "Überschreibt das Modell dieses Computers. Leer heißt: der Agent entscheidet.",
+  "settings.project.extraArgs.detail": "Wird bei jeder Aufgabe in diesem Projekt an die Kommandozeile des Agenten übergeben — nach denen, die EnvoyCoder selbst baut.",
   "settings.agents.heading": "Agenten auf diesem Computer",
   "settings.agents.note": "Was ein Agent tatsächlich kann, entscheidet, was EnvoyCoder anbietet. Ein Agent, den man nicht um Erlaubnis bitten kann, bekommt keinen Genehmigungsdialog, den er ignorieren würde.",
   "settings.agents.empty": "Die Agentenliste ist noch nicht angekommen.",

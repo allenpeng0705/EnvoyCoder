@@ -49,7 +49,11 @@ class FakeConnection {
     this.answers.set("coder.listProjects", { projects: [] });
     this.answers.set("coder.listTasks", { tasks: [] });
     this.answers.set("coder.getSettings", {
-      settings: { defaults: { harness: "envoy-harness" }, requireApprovalForDestructive: true, allowRemoteRuns: false, keepTranscripts: true },
+      // **The shape the daemon actually sends**, and it lost a key rather than gaining one: settings
+      // slice 1 removed `allowRemoteRuns` (there was no remote path to gate), so a fixture that still
+      // carried it would be describing a wire nobody serves — and, because this fake answers without
+      // validation, it would keep passing while every real daemon refused.
+      settings: { defaults: { harness: "envoy-harness" }, requireApprovalForDestructive: true, keepTranscripts: true },
     });
     this.answers.set("coder.listHarnesses", { harnesses: [] });
     this.answers.set("coder.meshStatus", { mesh: { kind: "no-node", reason: "" } });

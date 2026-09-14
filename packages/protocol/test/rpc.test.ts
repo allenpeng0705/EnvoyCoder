@@ -351,6 +351,9 @@ describe("the thinking level an agent offers, and what 'no list' means", () => {
         agentMode: true,
         model: true,
         thinking: false,
+        // The fourth delivery flag, added by settings slice 1: `session/set_policy`. Required on the
+        // same terms as the other three — see the two assertions below.
+        approvalPolicy: true,
       },
       available: true,
       evidence: "…",
@@ -359,6 +362,16 @@ describe("the thinking level an agent offers, and what 'no list' means", () => {
     expect(spec.result.safeParse({ harnesses: [harness({})] }).success).toBe(true);
     const { thinking: _t, ...withoutFact } = harness({}) as Record<string, unknown>;
     expect(spec.result.safeParse({ harnesses: [withoutFact] }).success).toBe(false);
+    // And the fourth flag's absence, which is the one that decides whether the approvals row is a live
+    // switch or a disabled row with a reason. A client left to guess would guess "enabled" often enough
+    // to ship a control the agent is never told about, which is the defect this flag exists to end.
+    // Destructured off **`capabilities`**, not off the harness — a flag is not a fact, and a
+    // destructure at the wrong level would remove nothing and assert nothing.
+    const built = harness({}) as { capabilities: Record<string, unknown> } & Record<string, unknown>;
+    const { approvalPolicy: _p, ...capabilitiesWithoutPolicy } = built.capabilities;
+    expect(
+      spec.result.safeParse({ harnesses: [{ ...built, capabilities: capabilitiesWithoutPolicy }] }).success,
+    ).toBe(false);
   });
 
   it("carries the level on the task, on the run, and in the transcript's first event", () => {
@@ -468,6 +481,9 @@ describe("the agent's mode, and a task's folder", () => {
       agentMode: true,
       model: true,
       thinking: true,
+      // A fourth wire again, and the one the approvals row rests on: `envoy-harness` takes a session
+      // policy, `deepseek-harness` has no such method at all.
+      approvalPolicy: true,
     };
 
     expect(spec.result.safeParse({ harnesses: [harness(full)] }).success).toBe(true);
@@ -487,6 +503,12 @@ describe("the agent's mode, and a task's folder", () => {
     // no thought-level method at all, which is exactly `envoy-harness`.
     const { thinking: _thinkingOmitted, ...withoutThinking } = full;
     expect(spec.result.safeParse({ harnesses: [harness(withoutThinking)] }).success).toBe(false);
+    // And the approval policy's, which is the *fourth* wire: an agent can take a model and a mode and
+    // still have no `session/set_policy`, which is exactly `deepseek-harness`. The settings row is
+    // disabled on this flag, so an absent one must fail the parse rather than silently disabling — or
+    // worse, enabling — the control.
+    const { approvalPolicy: _policyOmitted, ...withoutPolicy } = full;
+    expect(spec.result.safeParse({ harnesses: [harness(withoutPolicy)] }).success).toBe(false);
     // The thinking *fact* is required too, so "absent" can never be read as "this agent has none".
     const { thinking: _factOmitted, ...harnessWithoutFact } = harness(full) as Record<string, unknown>;
     expect(spec.result.safeParse({ harnesses: [harnessWithoutFact] }).success).toBe(false);

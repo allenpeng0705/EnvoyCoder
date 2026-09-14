@@ -1056,6 +1056,32 @@ body {
   flex: 0 0 auto;
 }
 
+/* **What is true *now*, and it has to look different from what is always true.** `setting__detail` is
+   the sentence a setting carries in every state; this is the reason a control is disabled, the folder a
+   chooser would not open in, or what the stored choice actually reaches. The pane's rule is that a
+   control which cannot be honoured says *why* on screen — a reason rendered in the same grey as the
+   description is a reason a user skims past, so this band is warmer and sits with the control it
+   explains. */
+.setting__note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--warn, #c09664);
+}
+
+/* A text field with the system's folder chooser beside it: the field takes the width, the button stays
+   its own size. Without this the button drops to its own line, which reads as a second step rather than
+   the same one — and the chooser is an alternative to typing, not a follow-up to it. */
+.setting__field-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.setting__field-group .input {
+  min-width: 220px;
+}
+
 .settings__heading {
   margin: 0;
   font-size: 13px;

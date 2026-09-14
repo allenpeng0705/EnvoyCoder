@@ -18,6 +18,9 @@
  *
  * Agent names and their install hints (`Claude Code`, `npm install -g …`), the mesh's own status
  * vocabulary, and the palette's search keywords: product names, command lines and typed synonyms.
+ * The example path in `settings.defaultPath.placeholder` is kept verbatim for the same reason
+ * `palette.addProject.needsPlaceholder` already is — a path is not prose, and a translated one names
+ * a directory that does not exist.
  *
  * ## Form
  *
@@ -223,19 +226,41 @@ export const it: Catalogue = {
   "settings.noDaemon": "Nessun servizio",
   "settings.daemon": "Servizio {version}",
   "settings.daemon.title": "Il servizio a cui è collegata questa finestra",
+  "settings.group.general": "Generale",
   "settings.language.title": "Lingua",
   "settings.language.detail": "La lingua di questa finestra — ogni etichetta, avviso ed errore, compresi quelli che il servizio restituisce. Viene salvata con le tue impostazioni su questo computer, quindi ti segue sulle altre finestre e sul telefono.",
   "settings.language.aria": "Lingua",
   "settings.language.system": "Come questo computer",
+  "settings.folder.choose": "Scegli…",
+  "settings.defaultPath.title": "La cartella da cui parte «Aggiungi progetto»",
+  "settings.defaultPath.detail": "Aggiungere un progetto chiede una cartella. Indicarla qui precompila il campo con il posto in cui tieni il tuo lavoro, e puoi comunque digitarne un'altra.",
+  "settings.defaultPath.placeholder": "/Users/you/work",
+  "settings.group.newTasks": "Le nuove attività partono con",
   "settings.defaultHarness.title": "L'agente con cui partono le nuove attività",
   "settings.defaultHarness.detail": "Un progetto può sostituirlo; questo vale quando non lo fa.",
   "settings.needsInstalling": "(da installare)",
+  "settings.defaultModel.title": "Il modello con cui partono le nuove attività",
+  "settings.defaultModel.detail": "Lasciato vuoto, ogni nuova attività usa il modello che l'agente sceglie da sé. Anche questo può essere sostituito da un progetto.",
+  "settings.extraArgs.title": "Argomenti aggiuntivi per l'agente",
+  "settings.extraArgs.detail": "Vengono passati alla riga di comando dell'agente esattamente come li digiti, dopo quelli che EnvoyCoder costruisce da sé. Lascia vuoto, a meno che la documentazione dell'agente non indichi un'opzione che vuoi su ogni attività.",
+  "settings.extraArgs.placeholder": "--verbose",
+  "settings.group.safety": "Sicurezza",
   "settings.approvals.title": "Chiedi prima di qualsiasi azione distruttiva",
   "settings.approvals.detail": "Gli agenti si fermano e ti aspettano invece di sovrascrivere file. Disattivarlo significa che un'attività può modificare il tuo albero di lavoro senza chiedere.",
-  "settings.remoteRuns.title": "Condividi gli agenti di questo computer con i tuoi altri computer",
-  "settings.remoteRuns.detail": "Disattivato per impostazione predefinita. Quando è attivo, un'attività proveniente da un altro tuo computer può girare qui, in una tua cartella.",
+  "settings.approvals.reaches": "Viene passato a {agent} come sua politica a ogni esecuzione, così la richiesta avviene dove avviene il lavoro.",
+  "settings.approvals.unsupported": "EnvoyCoder non può cambiarlo per {agent}: non ha modo di riceverlo e chiede secondo le proprie regole. Scegli un agente a cui EnvoyCoder può passare una politica, oppure rispondi alle richieste di {agent} stesso.",
+  "settings.approvals.unknown": "EnvoyCoder non sa ancora cosa accetta {agent}, quindi questa opzione resta disattivata invece di salvare una scelta che nessuno legge.",
   "settings.transcripts.title": "Conserva le trascrizioni dopo la fine di un'attività",
   "settings.transcripts.detail": "Il resoconto di ciò che un agente ha fatto, conservato su questo computer. Disattivarlo risparmia spazio e rende «cosa ha cambiato?» senza risposta in seguito.",
+  "settings.project.title": "Impostazioni del progetto {project}",
+  "settings.project.detail": "Valgono per le nuove attività di questo progetto e sostituiscono le impostazioni di questo computer. Un'attività configurata da te ha comunque la precedenza.",
+  "settings.project.folder.title": "Cartella",
+  "settings.project.folder.detail": "Dove girano gli agenti per le attività di questo progetto.",
+  "settings.project.harness.title": "L'agente con cui partono qui le nuove attività",
+  "settings.project.harness.detail": "Sostituisce l'agente scelto per questo computer.",
+  "settings.project.model.title": "Il modello con cui partono qui le nuove attività",
+  "settings.project.model.detail": "Sostituisce il modello di questo computer. Vuoto significa che decide l'agente.",
+  "settings.project.extraArgs.detail": "Viene passato alla riga di comando dell'agente per ogni attività di questo progetto, dopo quelli che EnvoyCoder costruisce da sé.",
   "settings.agents.heading": "Agenti su questo computer",
   "settings.agents.note": "Ciò che ogni agente sa fare davvero decide cosa offre EnvoyCoder. A un agente a cui non si può chiedere il permesso non viene mostrato un dialogo di approvazione che ignorerebbe.",
   "settings.agents.empty": "L'elenco degli agenti non è ancora arrivato.",

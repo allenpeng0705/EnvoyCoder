@@ -182,6 +182,32 @@ export interface AgentCapabilities {
    * all — so a mode could not be applied even if one were chosen.
    */
   agentMode: boolean;
+  /**
+   * Can the daemon decide whether this agent **asks before destructive actions**?
+   *
+   * The flag behind the app setting "Ask before anything destructive". It is a fourth delivery
+   * question, on a fourth wire, and it is separate from `approvals` — which says whether the agent can
+   * stop and ask at all. This says whether *we* may change that behaviour:
+   *
+   *   * `envoy-harness` answers the ACP method `session/set_policy` with
+   *     `{sessionId, sandbox?, approval?, autoRun?, preset?}`; `autoRun` is exactly
+   *     `always-confirm | safe-only | off`, decided per tool call by `shouldAskUnderAutoRun` in the
+   *     live permission hook (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:237-295`,
+   *     `.../src/permissions/auto-run.ts:48-70`, `.../src/protocol/agent-backend-host.ts:217-231`).
+   *     Verified against the built peer, not only its source: `session/get_policy` on a fresh session
+   *     answers `{sandbox:"workspace-write",approval:"on-request"}` with **no** `autoRun`, and
+   *     `session/set_policy {autoRun:"off"}` is accepted and echoed back.
+   *   * `deepseek-harness` has **no** `session/set_policy`: its ACP surface registers initialize,
+   *     authenticate, session/new, session/list, session/resume, session/close,
+   *     session/setConfigOption, session/prompt and session/cancel, and nothing else
+   *     (`@deepseek-ai/dsh-acp` `lib/index.js:1322`, the whole request table on one line). So a policy
+   *     sent to it would be answered `method not found`, which is why the setting's control is disabled
+   *     with a reason when this agent is the one in play rather than silently dropped.
+   *
+   * Every catalogued entry is `false`: they are the same claim as `agentMode` — a third-party CLI this
+   * adapter cannot even launch has no policy we could set.
+   */
+  approvalPolicy: boolean;
   /** Does it know about git worktrees itself, or do we manage them? */
   worktrees: "native" | "external";
 }
@@ -314,6 +340,8 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       images: true,
       // The one harness whose modes we can actually set: `session/set_mode`, ids `default|plan|review`.
       agentMode: true,
+      // And the one whose approval posture we can set: `session/set_policy { autoRun }`.
+      approvalPolicy: true,
       worktrees: "external",
     },
     // Policy: the harness is a **peer** of the family, not a package EnvoyMesh ships
@@ -369,6 +397,12 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       // `runs.ts` refuses a run that asks for one rather than quietly starting an unrestricted agent
       // in what the user believed was plan mode.
       agentMode: false,
+      // **False for the same reason, and it is the reason the approvals row is disabled with a reason
+      // when this agent is the one in play.** The request table above lists every method this surface
+      // answers and `session/set_policy` is not among them, so asking this agent to stop asking — or to
+      // keep asking — would be answered `method not found`, failing the run rather than changing the
+      // posture. It asks before it acts, on its own terms; that is what we report.
+      approvalPolicy: false,
       worktrees: "external",
     },
     install: {
@@ -428,6 +462,8 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       // Not an ACP agent at all, so `isDrivableByAcpAdapter` refuses to launch it — a mode could not
       // be applied even if this picker offered one. Same for every other `catalogued` entry below.
       agentMode: false,
+      // Same claim, same reason: no ACP policy method for this entry to be handed one through.
+      approvalPolicy: false,
       worktrees: "external",
     },
     install: { hint: "npm install -g @anthropic-ai/claude-code", url: "https://docs.anthropic.com/en/docs/claude-code" },
@@ -470,6 +506,8 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       streaming: true,
       images: true,
       agentMode: false,
+      // Same claim, same reason: no ACP policy method for this entry to be handed one through.
+      approvalPolicy: false,
       worktrees: "external",
     },
     install: { hint: "npm install -g @openai/codex", url: "https://github.com/openai/codex" },
@@ -503,6 +541,8 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       streaming: true,
       images: false,
       agentMode: false,
+      // Same claim, same reason: no ACP policy method for this entry to be handed one through.
+      approvalPolicy: false,
       worktrees: "external",
     },
     install: { hint: "npm install -g @github/copilot", url: "https://github.com/features/copilot/cli/" },
@@ -542,6 +582,8 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       streaming: true,
       images: false,
       agentMode: false,
+      // Same claim, same reason: no ACP policy method for this entry to be handed one through.
+      approvalPolicy: false,
       worktrees: "external",
     },
     install: { hint: "see the project's install instructions", url: "https://github.com/anomalyco/opencode" },
@@ -577,6 +619,8 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       streaming: true,
       images: false,
       agentMode: false,
+      // Same claim, same reason: no ACP policy method for this entry to be handed one through.
+      approvalPolicy: false,
       worktrees: "external",
     },
     evidence:
@@ -636,6 +680,8 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       streaming: true,
       images: false,
       agentMode: false,
+      // Same claim, same reason: no ACP policy method for this entry to be handed one through.
+      approvalPolicy: false,
       worktrees: "external",
     },
     install: {
@@ -671,6 +717,8 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       streaming: true,
       images: false,
       agentMode: false,
+      // Same claim, same reason: no ACP policy method for this entry to be handed one through.
+      approvalPolicy: false,
       worktrees: "external",
     },
     install: { hint: "see pi.dev", url: "https://pi.dev" },

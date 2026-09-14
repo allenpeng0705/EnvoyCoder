@@ -75,12 +75,17 @@ import type { PlatformId } from "@envoycoder/platform";
 
 import type { CoderPaths } from "@envoycoder/host-bridge";
 
-import { AcpClient, type AcpLaunch, type AcpPermissionRequest, type AcpUpdate } from "./acp/client.js";
+import { AcpClient, type AcpAutoRunPolicy, type AcpLaunch, type AcpPermissionRequest, type AcpUpdate } from "./acp/client.js";
 import { keyed, ref } from "./messages.js";
-// The three values a run asks for, checked against the catalogue before anything is spawned — and the
+// The values a run asks for, checked against the catalogue before anything is spawned — and the
 // refusals a user reads when this build cannot deliver one. They live in their own module because they
 // are one subject (see its head), and this file is about the run loop rather than about the rules.
-import { resolveAgentMode, resolveModelDelivery, resolveThinkingDelivery } from "./run-options.js";
+import {
+  resolveAgentMode,
+  resolveApprovalPolicy,
+  resolveModelDelivery,
+  resolveThinkingDelivery,
+} from "./run-options.js";
 import type { CoderStore } from "./store.js";
 
 export interface RunManagerDeps {
@@ -131,6 +136,16 @@ interface LiveRun {
    * model it has resolved (`dsh-acp/lib/index.js:494-508`), so the model goes first.
    */
   sessionConfigs: readonly { configId: string; value: string }[];
+  /**
+   * Whether this agent was told to ask before destructive actions — the app setting, resolved for this
+   * run's agent, and `undefined` when that agent has no `session/set_policy` to be told through.
+   *
+   * On the live run for the same reason `sessionConfigs` is: it is resolved once, from the settings
+   * that were current when the run started, and `drive` must apply *that* answer rather than reading
+   * the settings again a moment later — a user who flips the switch mid-run should not get a posture
+   * the run's own record disagrees with.
+   */
+  sessionPolicy: { autoRun: AcpAutoRunPolicy } | undefined;
   /** The turn currently in flight, so `send` can tell "queued" from "steered". */
   turn: Promise<{ stopReason: string }> | undefined;
   /** Messages the user sent, oldest first. */
@@ -271,6 +286,19 @@ export class RunManager {
     // session and the agent is the authority on what it currently accepts.
     const thinkingLevel = input.thinkingLevel ?? task.thinkingLevel;
     const thinkingConfig = resolveThinkingDelivery(task.harness, thinkingLevel);
+    /**
+     * Whether this agent asks before destructive actions — the app setting, resolved for *this* agent.
+     *
+     * Read from the settings the daemon owns rather than from the caller, because it is not a property
+     * of the run: `requireApprovalForDestructive` is the user's decision about this machine, and a task
+     * started from the phone or from a second window has to be governed by the same one.
+     * `undefined` for an agent with no `session/set_policy` — deliberately not a refusal, for the
+     * reasons `resolveApprovalPolicy` records, and disclosed on screen by the settings row instead.
+     */
+    const sessionPolicy = resolveApprovalPolicy(
+      task.harness,
+      this.settings().requireApprovalForDestructive,
+    );
     const launch = this.deps.resolveLaunch
       ? this.deps.resolveLaunch({
           harness: task.harness,
@@ -307,6 +335,7 @@ export class RunManager {
         ...(modelConfig ? [modelConfig] : []),
         ...(thinkingConfig && thinkingLevel ? [{ ...thinkingConfig, value: thinkingLevel }] : []),
       ],
+      sessionPolicy,
       turn: undefined,
       queued: [],
       intent: "none",
@@ -428,6 +457,11 @@ export class RunManager {
         // must not know — so the daemon hands it a config id and a value, in the order they must be
         // applied, or nothing at all.
         ...(live.sessionConfigs.length > 0 ? { sessionConfigs: live.sessionConfigs } : {}),
+        // And the posture, on the same division: which method carries it and which values it accepts is
+        // the catalogue's and the agent's business, and `RunManager` hands over a resolved value or
+        // nothing. Absent is the normal case — every agent but `envoy-harness` — and it means "leave
+        // this agent's own approval policy alone".
+        ...(live.sessionPolicy ? { sessionPolicy: live.sessionPolicy } : {}),
       });
       live.client = client;
 

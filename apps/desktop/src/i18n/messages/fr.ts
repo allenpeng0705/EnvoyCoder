@@ -18,6 +18,9 @@
  *
  * Agent names and their install hints (`Claude Code`, `npm install -g …`), the mesh's own status
  * vocabulary, and the palette's search keywords: product names, command lines and typed synonyms.
+ * The example path in `settings.defaultPath.placeholder` is kept verbatim for the same reason
+ * `palette.addProject.needsPlaceholder` already is — a path is not prose, and a translated one names
+ * a directory that does not exist.
  *
  * ## Form
  *
@@ -223,19 +226,41 @@ export const fr: Catalogue = {
   "settings.noDaemon": "Aucun service",
   "settings.daemon": "Service {version}",
   "settings.daemon.title": "Le service auquel cette fenêtre est attachée",
+  "settings.group.general": "Général",
   "settings.language.title": "Langue",
   "settings.language.detail": "La langue de cette fenêtre — chaque libellé, chaque avis et chaque erreur, y compris ceux que le service renvoie. Elle est enregistrée avec vos réglages sur cet ordinateur, et vous suit donc sur vos autres fenêtres et sur le téléphone.",
   "settings.language.aria": "Langue",
   "settings.language.system": "Comme cet ordinateur",
+  "settings.folder.choose": "Choisir…",
+  "settings.defaultPath.title": "Le dossier dans lequel « Ajouter un projet » démarre",
+  "settings.defaultPath.detail": "Ajouter un projet demande un dossier. L'indiquer ici pré-remplit le champ avec l'endroit où vous rangez votre travail, et vous pouvez toujours en saisir un autre.",
+  "settings.defaultPath.placeholder": "/Users/you/work",
+  "settings.group.newTasks": "Les nouvelles tâches démarrent avec",
   "settings.defaultHarness.title": "L'agent avec lequel démarrent les nouvelles tâches",
   "settings.defaultHarness.detail": "Un projet peut le remplacer ; ceci s'applique quand ce n'est pas le cas.",
   "settings.needsInstalling": "(à installer)",
+  "settings.defaultModel.title": "Le modèle avec lequel démarrent les nouvelles tâches",
+  "settings.defaultModel.detail": "Laissé vide, chaque nouvelle tâche tourne sur le modèle que l'agent choisit lui-même. Un projet peut aussi remplacer ceci.",
+  "settings.extraArgs.title": "Arguments supplémentaires pour l'agent",
+  "settings.extraArgs.detail": "Transmis à la ligne de commande de l'agent exactement comme vous les saisissez, après ceux qu'EnvoyCoder construit lui-même. Laissez vide, sauf si la documentation de l'agent nomme une option que vous voulez sur chaque tâche.",
+  "settings.extraArgs.placeholder": "--verbose",
+  "settings.group.safety": "Sécurité",
   "settings.approvals.title": "Demander avant toute action destructrice",
   "settings.approvals.detail": "Les agents s'arrêtent et vous attendent au lieu d'écraser des fichiers. Désactiver ceci signifie qu'une tâche peut modifier votre arbre de travail sans demander.",
-  "settings.remoteRuns.title": "Partager les agents de cet ordinateur avec vos autres ordinateurs",
-  "settings.remoteRuns.detail": "Désactivé par défaut. Quand c'est activé, une tâche venue d'un de vos autres ordinateurs peut s'exécuter ici, dans un dossier qui vous appartient.",
+  "settings.approvals.reaches": "Transmis à {agent} comme sa propre politique à chaque exécution, pour que la demande se fasse là où le travail se fait.",
+  "settings.approvals.unsupported": "EnvoyCoder ne peut pas changer ceci pour {agent} : il n'a aucun moyen de le recevoir et demande selon ses propres règles. Choisissez un agent auquel EnvoyCoder peut transmettre une politique, ou répondez aux demandes de {agent} lui-même.",
+  "settings.approvals.unknown": "EnvoyCoder ne sait pas encore ce que {agent} accepte ; ce réglage reste donc désactivé plutôt que d'enregistrer un choix que personne ne lit.",
   "settings.transcripts.title": "Conserver les transcriptions après la fin d'une tâche",
   "settings.transcripts.detail": "Le compte rendu de ce qu'un agent a fait, conservé sur cet ordinateur. Le désactiver économise de l'espace et rend « qu'a-t-il modifié ? » sans réponse plus tard.",
+  "settings.project.title": "Réglages du projet {project}",
+  "settings.project.detail": "Ils s'appliquent aux nouvelles tâches de ce projet et remplacent les réglages de cet ordinateur. Une tâche que vous avez configurée vous-même reste prioritaire.",
+  "settings.project.folder.title": "Dossier",
+  "settings.project.folder.detail": "Où les agents s'exécutent pour les tâches de ce projet.",
+  "settings.project.harness.title": "L'agent avec lequel démarrent les nouvelles tâches ici",
+  "settings.project.harness.detail": "Remplace l'agent choisi pour cet ordinateur.",
+  "settings.project.model.title": "Le modèle avec lequel démarrent les nouvelles tâches ici",
+  "settings.project.model.detail": "Remplace le modèle de cet ordinateur. Vide signifie que l'agent décide.",
+  "settings.project.extraArgs.detail": "Transmis à la ligne de commande de l'agent pour chaque tâche de ce projet, après ceux qu'EnvoyCoder construit lui-même.",
   "settings.agents.heading": "Agents sur cet ordinateur",
   "settings.agents.note": "Ce que chaque agent sait réellement faire détermine ce qu'EnvoyCoder propose. Un agent qu'on ne peut pas interroger pour une permission ne reçoit pas de dialogue d'approbation qu'il ignorerait.",
   "settings.agents.empty": "La liste des agents n'est pas encore arrivée.",

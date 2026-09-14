@@ -39,6 +39,7 @@ import {
 } from "@envoycoder/agent-catalog";
 import { ENVOYCODER_ERRORS, type HarnessId, coderError } from "@envoycoder/protocol";
 
+import type { AcpAutoRunPolicy } from "./acp/client.js";
 import { ref } from "./messages.js";
 
 /**
@@ -179,4 +180,58 @@ export function resolveThinkingDelivery(
     );
   }
   return { configId: delivery.configId, value: level };
+}
+
+/**
+ * Whether this agent should ask before destructive actions — the value its own policy method takes,
+ * or nothing when it has no such method.
+ *
+ * ## Why the app setting is resolved here rather than into a second control
+ *
+ * "Ask before anything destructive" is an **app** setting, not a per-task one (`CoderSettings`), but
+ * the mechanism that honours it is a **session** method on one agent out of the catalogue. So the
+ * setting's effect is a small resolution with three answers, and they are the same three
+ * `resolveModelDelivery` has:
+ *
+ *   * **The agent accepts a policy** — `{ autoRun }`, handed to `AcpClient` and stated on the session
+ *     that agent just opened. `envoy-harness` validates exactly
+ *     `always-confirm | safe-only | off`, and its live permission hook asks per tool call on the result
+ *     (`shouldAskUnderAutoRun`, `agent-backend-host.ts:217-231`, so the hook is what a
+ *     `session/request_permission` actually comes from).
+ *   * **The agent has no such method** — `undefined`, and **not** a thrown error.
+ *   * **Nothing to say** — also `undefined`: `false` is a posture, and so is the default.
+ *
+ * ## Why the second answer is `undefined` and not a refusal
+ *
+ * Every other resolver in this module refuses a value the agent cannot take, and it is tempting to
+ * refuse here for symmetry. It would be wrong, and in a way worth stating: a *task* value the user
+ * chose for *this* agent is a request the user can withdraw ("leave the mode unset"), while this is an
+ * application-wide preference that would then refuse to start any task on an agent that merely has its
+ * own opinion about approvals. The honest outcome is that the run proceeds under the agent's own
+ * policy, and that the settings pane says so **before** the user gets here — which is why the wire
+ * carries `capabilities.approvalPolicy` and the row is disabled with a reason when it is false.
+ *
+ * ## Which value for which state, and why the strict one
+ *
+ *   * `requireApprovalForDestructive: true` → **`always-confirm`**: ask before every tool. That is also
+ *     what the peer does when no policy is sent at all (`shouldAskUnderAutoRun(undefined)` answers
+ *     `undefined`, and the live hook falls through to `shouldAskTool?.(…) ?? true`), so turning the
+ *     setting *on* pins the safe posture rather than silently loosening it — and pins it against a
+ *     harness whose default could change under us. Stated on the session either way, so
+ *     `session/get_policy` can prove which posture a run is in.
+ *   * `false` → **`off`**: never ask.
+ *
+ * `safe-only` — the third value the peer accepts — is deliberately **not** used for the `true` state,
+ * and the reason is the value's own definition: it auto-allows every tool in `AUTO_RUN_SAFE_TOOLS`,
+ * which includes the whole `git` tool regardless of arguments (`permissions/auto-run.ts:16-23`), so a
+ * commit or a push would run without asking. That contradicts the sentence on the row ("ask before
+ * anything destructive"), and a safety control that quietly under-delivers is the exact defect this
+ * slice exists to remove.
+ */
+export function resolveApprovalPolicy(
+  harness: HarnessId,
+  requireApprovalForDestructive: boolean,
+): { autoRun: AcpAutoRunPolicy } | undefined {
+  if (!harnessDefinition(harness).capabilities.approvalPolicy) return undefined;
+  return { autoRun: requireApprovalForDestructive ? "always-confirm" : "off" };
 }

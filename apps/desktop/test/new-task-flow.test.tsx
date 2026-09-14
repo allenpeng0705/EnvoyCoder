@@ -27,7 +27,6 @@ afterEach(cleanup);
 const settings: CoderSettings = {
   defaults: { harness: "envoy-harness" },
   requireApprovalForDestructive: true,
-  allowRemoteRuns: false,
   keepTranscripts: true,
   language: "en",
 };

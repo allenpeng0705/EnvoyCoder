@@ -657,7 +657,14 @@ export const RPC_METHODS = [
   "coder.probeHarness",
   "coder.meshStatus",
   "coder.listPeers",
-  "coder.offerRemoteRun",
+  // **`coder.offerRemoteRun` used to sit here, and it is gone on purpose.** It was a spec with no
+  // handler and no caller: it promised a client that a run could be handed to another machine, which is
+  // a mesh feature rather than a settings change, and nothing in the daemon ever served it. A method in
+  // this catalogue is a claim about what this product can do, so a claim nothing implements is the same
+  // defect as a switch nothing reads. `docs/settings-parity.md` §8.1 records what would bring it back:
+  // a peer directory (`coder.listPeers` returns an empty list today), the session store that makes the
+  // remote path reachable, and a broker decision — then the method and its params are written together,
+  // against a handler.
   "coder.getSettings",
   "coder.updateSettings",
 ] as const;
@@ -724,14 +731,30 @@ export const CoderLanguageSchema = z.enum(CODER_LANGUAGES);
 /* ────────────────────────────── settings ───────────────────────────── */
 
 export interface CoderSettings {
-  /** Where new projects default to when the user does not pick. */
+  /**
+   * The folder the Add-project flow starts from when the user does not pick one.
+   *
+   * Read by the palette's `project.add` row, which seeds its text stage with this value instead of an
+   * empty field (`components/CommandCenter.tsx`). Absent — the shipped state — means the field starts
+   * empty and nothing is assumed about where the user works.
+   */
   defaultProjectPath?: string;
   /** Defaults for new tasks when the project does not override them. */
   defaults: TaskDefaults;
-  /** Ask before running anything a harness marks destructive. Default: true. */
+  /**
+   * Ask before running anything a harness marks destructive. Default: true.
+   *
+   * Delivered to the agent as its own session policy (`session/set_policy { autoRun }`) at the start of
+   * every run, for the agents that document such a method — `envoy-harness` does, `deepseek-harness`
+   * does not. `true` states the fail-closed posture (`always-confirm`: ask before every tool), `false`
+   * asks the agent to stop asking (`off`). `resolveApprovalPolicy` in the daemon owns the mapping; see
+   * `docs/settings-parity.md` §7.1 for which agents it reaches and why the control is disabled, with
+   * the reason on screen, for the ones it cannot.
+   *
+   * This field was **stored and never read** until slice 1 of that document, which is the defect the
+   * `settings-coverage` test now exists to prevent.
+   */
   requireApprovalForDestructive: boolean;
-  /** Share this machine's agents with peers on the mesh. Default: false (fail-closed). */
-  allowRemoteRuns: boolean;
   /** Keep a run's transcript on disk after it ends. */
   keepTranscripts: boolean;
   /**
@@ -748,11 +771,30 @@ export interface CoderSettings {
 export const DEFAULT_CODER_SETTINGS: CoderSettings = {
   defaults: { harness: "envoy-harness" },
   requireApprovalForDestructive: true,
-  allowRemoteRuns: false,
   keepTranscripts: true,
   language: DEFAULT_CODER_LANGUAGE,
 };
 
+/**
+ * The defaults a *patch* may carry, which is not the same shape as the defaults a file may hold.
+ *
+ * Two differences, and both are about `""`:
+ *
+ *   * `model` and `extraArgs` accept `""` on the wire, because a control that can *choose* a value has
+ *     to be able to *clear* one, and `{model: undefined}` survives `JSON.stringify` as nothing at all
+ *     — the same reason `coder.updateTask` has `clearModel`. The store turns `""` into "drop the key",
+ *     so `CoderSettingsSchema` below can keep requiring `min(1)` for what is actually stored.
+ *   * every field is optional: a patch says what changed, not what the whole object is.
+ */
+export const ProjectDefaultsPatchSchema = z
+  .object({
+    harness: HarnessIdSchema.optional(),
+    model: z.string().optional(),
+    extraArgs: z.string().optional(),
+  })
+  .strict();
+
+/** The stored shape: `""` is not a value a settings file may hold. */
 const ProjectDefaultsSchema = z
   .object({
     harness: HarnessIdSchema.optional(),
@@ -766,13 +808,36 @@ export const CoderSettingsSchema = z
     defaultProjectPath: z.string().min(1).optional(),
     defaults: ProjectDefaultsSchema,
     requireApprovalForDestructive: z.boolean(),
-    allowRemoteRuns: z.boolean(),
     keepTranscripts: z.boolean(),
     // Optional, and validated against the same closed list the app's picker offers: a client that
     // asked for a language nobody translated is a client bug the daemon should refuse, not store.
     language: CoderLanguageSchema.optional(),
   })
   .strict();
+
+/**
+ * Settings keys this build used to store and no longer has.
+ *
+ * **Read-side migration, and it is not optional.** `CoderSettingsSchema` is `.strict()`, and a
+ * settings file that fails to parse is *quarantined* — moved aside and replaced by the defaults
+ * (`daemon/store.ts`). So dropping a field from the schema without this list would silently cost an
+ * upgrading user their language, their default agent and their folder the first time the new daemon
+ * read the old file. A retired key is stripped before the schema sees it, which is the honest
+ * treatment: the value was never read by anything, so there is nothing to migrate it into.
+ *
+ * `allowRemoteRuns` is the first entry, removed by settings slice 1: the switch promised to share this
+ * machine's agents with the user's other machines, nothing read it, and `coder.offerRemoteRun` had no
+ * handler (`docs/settings-parity.md` §7.1, §8.1).
+ */
+export const RETIRED_SETTINGS_KEYS: readonly string[] = ["allowRemoteRuns"];
+
+/** Drop retired keys, so an older settings file still parses. */
+export function withoutRetiredSettingsKeys(value: unknown): unknown {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
+  const out: Record<string, unknown> = { ...(value as Record<string, unknown>) };
+  for (const key of RETIRED_SETTINGS_KEYS) delete out[key];
+  return out;
+}
 
 export function parseCoderSettings(value: unknown): CoderSettings {
   return CoderSettingsSchema.parse(value);

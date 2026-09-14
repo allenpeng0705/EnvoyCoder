@@ -468,10 +468,18 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     "coder.updateSettings": async (params) => {
       const input = parseRpcParams("coder.updateSettings", params) as {
         settings: {
+          /**
+           * `""` is **clear it**, not a path: the store drops the key rather than storing an empty
+           * string, because `{defaultProjectPath: undefined}` disappears in `JSON.stringify` and a
+           * control that can choose a folder has to be able to un-choose one (`store.ts:481-506`).
+           */
           defaultProjectPath?: string;
+          /**
+           * Merged rather than replaced, and `""` again means clear for `model`/`extraArgs` — the two
+           * fields whose control is a picker with an "agent's own default" slot.
+           */
           defaults?: { harness?: HarnessId; model?: string; extraArgs?: string };
           requireApprovalForDestructive?: boolean;
-          allowRemoteRuns?: boolean;
           keepTranscripts?: boolean;
           /**
            * The language the window speaks.
@@ -629,6 +637,12 @@ function summarize(
       // that takes one: `deepseek-harness` yes, `envoy-harness` no — its ACP dispatch has no
       // thought-level method at all, verified against the built peer.
       thinking: canApplyThinking(id),
+      // And a fourth, on `session/set_policy` — the method behind "Ask before anything destructive".
+      // True for `envoy-harness` alone, whose `autoRun` values are exactly
+      // `always-confirm | safe-only | off`; `deepseek-harness` answers every method in its own request
+      // table and `session/set_policy` is not one of them, so its row is disabled with a reason rather
+      // than sent and refused. The catalogue owns the fact; this line is the wire carrying it.
+      approvalPolicy: definition.capabilities.approvalPolicy,
     },
     available: result.available,
     ...(definition.install?.hint ? { installHint: definition.install.hint } : {}),

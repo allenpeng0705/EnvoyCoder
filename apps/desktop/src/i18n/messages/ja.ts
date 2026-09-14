@@ -18,6 +18,9 @@
  *
  * Agent names and their install hints (`Claude Code`, `npm install -g …`), the mesh's own status
  * vocabulary, and the palette's search keywords: product names, command lines and typed synonyms.
+ * The example path in `settings.defaultPath.placeholder` is kept verbatim for the same reason
+ * `palette.addProject.needsPlaceholder` already is — a path is not prose, and a translated one names
+ * a directory that does not exist.
  *
  * ## Form
  *
@@ -223,19 +226,41 @@ export const ja: Catalogue = {
   "settings.noDaemon": "サービスなし",
   "settings.daemon": "サービス {version}",
   "settings.daemon.title": "このウィンドウが接続しているサービス",
+  "settings.group.general": "一般",
   "settings.language.title": "言語",
   "settings.language.detail": "このウィンドウの言語です。ラベル、通知、エラー、そしてサービスから返ってくるエラーまで含みます。このコンピューターの設定として保存されるので、他のウィンドウやスマートフォンにも引き継がれます。",
   "settings.language.aria": "言語",
   "settings.language.system": "このコンピューターに合わせる",
+  "settings.folder.choose": "選択…",
+  "settings.defaultPath.title": "「プロジェクトを追加」が最初に開くフォルダー",
+  "settings.defaultPath.detail": "プロジェクトを追加するときはフォルダーを尋ねられます。ここで指定しておくと、入力欄は作業場所であらかじめ埋まった状態で開き、別のパスを打ち込むこともできます。",
+  "settings.defaultPath.placeholder": "/Users/you/work",
+  "settings.group.newTasks": "新しいタスクの開始設定",
   "settings.defaultHarness.title": "新しいタスクを始めるエージェント",
   "settings.defaultHarness.detail": "プロジェクト側で上書きできます。上書きしない場合の答えがこれです。",
   "settings.needsInstalling": "（要インストール）",
+  "settings.defaultModel.title": "新しいタスクが使うモデル",
+  "settings.defaultModel.detail": "空のままにすると、新しいタスクはエージェントが自分で選んだモデルで動きます。プロジェクト側で上書きすることもできます。",
+  "settings.extraArgs.title": "エージェントに渡す追加の引数",
+  "settings.extraArgs.detail": "入力したとおりに、EnvoyCoder が組み立てる引数の後ろに付けてエージェントのコマンドラインへ渡します。エージェントのドキュメントに、毎回のタスクで有効にしたいフラグが書かれている場合以外は空のままにしてください。",
+  "settings.extraArgs.placeholder": "--verbose",
+  "settings.group.safety": "安全",
   "settings.approvals.title": "破壊的な操作の前に確認する",
   "settings.approvals.detail": "エージェントはファイルを上書きせず、止まってあなたを待ちます。これを切ると、タスクは確認なしに作業ツリーを変更できます。",
-  "settings.remoteRuns.title": "このコンピューターのエージェントを他のコンピューターと共有する",
-  "settings.remoteRuns.detail": "既定ではオフです。オンにすると、あなたの別のコンピューターからのタスクが、あなたのディレクトリでここで実行できます。",
+  "settings.approvals.reaches": "実行のたびに {agent} 自身のポリシーとして渡されるので、確認は実際に作業が行われる場所で行われます。",
+  "settings.approvals.unsupported": "EnvoyCoder は {agent} に対してこれを変更できません。このエージェントには設定を渡す方法がなく、独自の基準で確認します。EnvoyCoder がポリシーを渡せるエージェントを選ぶか、{agent} 自身の確認に答えてください。",
+  "settings.approvals.unknown": "EnvoyCoder は {agent} が何を受け付けるかまだ把握していないため、誰も読まない選択を保存せず、この項目はオフのままにします。",
   "settings.transcripts.title": "タスク終了後も記録を残す",
   "settings.transcripts.detail": "エージェントが何をしたかの記録を、このコンピューターに残します。切ると容量を節約できますが、後から「何を変えたのか」に答えられなくなります。",
+  "settings.project.title": "{project} のプロジェクト設定",
+  "settings.project.detail": "このプロジェクトの新しいタスクに適用され、このコンピューターの設定を上書きします。自分で個別に設定したタスクのほうが優先されます。",
+  "settings.project.folder.title": "フォルダー",
+  "settings.project.folder.detail": "このプロジェクトのタスクでエージェントが動く場所。",
+  "settings.project.harness.title": "ここで新しいタスクを始めるエージェント",
+  "settings.project.harness.detail": "このコンピューターで選んだエージェントを上書きします。",
+  "settings.project.model.title": "ここで新しいタスクが使うモデル",
+  "settings.project.model.detail": "このコンピューターのモデルを上書きします。空ならエージェントが決めます。",
+  "settings.project.extraArgs.detail": "このプロジェクトのタスクごとに、EnvoyCoder が組み立てる引数の後ろに付けてエージェントのコマンドラインへ渡します。",
   "settings.agents.heading": "このコンピューターのエージェント",
   "settings.agents.note": "各エージェントに実際にできることが、EnvoyCoder の提供内容を決めます。許可を求められないエージェントには、無視される承認ダイアログを出しません。",
   "settings.agents.empty": "エージェント一覧はまだ届いていません。",

@@ -65,7 +65,6 @@
 import { useEffect, useState, type JSX } from "react";
 
 import {
-  looksLikeModelValue,
   modeDescription,
   modeLabel,
   modelNote,
@@ -82,6 +81,7 @@ import {
 } from "../composer/controls.js";
 import { useI18n } from "../i18n/context.js";
 import { formatWhen } from "../i18n/when.js";
+import { ModelChoice } from "./ModelChoice.js";
 
 export interface ComposerControlsProps {
   /** The folder the agent works in — the one the next run will be launched with. */
@@ -200,34 +200,9 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
   );
 
   /**
-   * The free-text draft, and the one piece of state in this component.
-   *
-   * A text field has to hold what the user is *typing*, which is not yet a model and must not be saved
-   * as one: committing `deepseek` on the way to `deepseek/deepseek-chat` would store a value that makes
-   * the next run refuse. So the field keeps the draft, and only a value that names both halves (or an
-   * emptied field, which means "the agent's own default") is handed upwards.
-   *
-   * Re-seeded when the task changes, so opening another task never shows the last one's typing.
+   * The free-text draft moved into `ModelChoice`, along with the commit rule — a field's state belongs
+   * with the field, and the settings pane's model row needs exactly the same behaviour (see that file).
    */
-  const [draft, setDraft] = useState(props.selectedModelId ?? "");
-  useEffect(() => {
-    setDraft(props.selectedModelId ?? "");
-  }, [props.selectedModelId]);
-
-  const commitModel = (): void => {
-    const value = draft.trim();
-    // Empty is a real choice — "the agent's own default" — and it is the only way to undo a model
-    // without replacing it with another. A half-written value is neither, and is left in the field.
-    if (value === "") {
-      if (props.selectedModelId !== undefined) props.onChooseModel("");
-      return;
-    }
-    // The same predicate the module exports and a test pins, rather than a second copy of it here: the
-    // rule for "this names a provider and a model" has to be one rule, or the field and the test come to
-    // disagree about what is saveable.
-    if (looksLikeModelValue(value) && value !== props.selectedModelId) props.onChooseModel(value);
-  };
-
   return (
     <>
       <div className="composer__controls">
@@ -285,52 +260,19 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
               A list to choose from is a picker. An agent that publishes none and takes one is a text
               field — genuinely usable, with the `provider/model` shape in its note. An agent that takes
               no model is a disabled picker with the reason below it. `options.length === 0` decides
-              nothing here: it is true for the free-text case, which works. */}
-          {props.modelKind === "free-text" ? (
-            <input
-              type="text"
-              className="input composer__model-input"
-              // The visible "Model" span labels both shapes, exactly as it does for the mode picker:
-              // `aria-labelledby` rather than a second `aria-label`, so the name a screen reader
-              // announces and the name on screen cannot drift apart.
-              aria-labelledby="composer-model-label"
-              disabled={modelOff !== undefined}
-              placeholder={t("task.composer.model.placeholder")}
-              title={t("task.composer.model.title")}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              // Enter commits and blur commits: a value typed and then clicked away from is still a
-              // value the user meant, and a field that silently discards one is worse than a slow save.
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  commitModel();
-                }
-              }}
-              onBlur={commitModel}
-            />
-          ) : (
-            <select
-              className="select"
-              // Enabled only when the wire said the daemon can put this agent on a chosen model. An
-              // agent that publishes models it cannot be *set* to keeps the control visible and
-              // disabled, with the reason on the next line.
-              disabled={modelOff !== undefined}
-              aria-labelledby="composer-model-label"
-              title={selectedModel?.description ?? t("task.composer.model.title")}
-              value={props.selectedModelId ?? ""}
-              onChange={(event) => props.onChooseModel(event.target.value)}
-            >
-              {/* "The agent's own default" is a choice, not an empty slot: it is the state a task is in
-                  before anybody picks, and picking it is how a user undoes a model they chose. */}
-              <option value="">{t("task.composer.model.agentDefault")}</option>
-              {props.models.map((model) => (
-                <option key={model.id} value={model.id} title={model.description}>
-                  {model.label}
-                </option>
-              ))}
-            </select>
-          )}
+              nothing here: it is true for the free-text case, which works.
+              The control itself is shared with the settings pane (`ModelChoice`), so the app's default
+              model, a project's default model and a task's model cannot come to mean three things. */}
+          <ModelChoice
+            labelId="composer-model-label"
+            kind={props.modelKind}
+            options={props.models}
+            selected={props.selectedModelId}
+            off={modelOff}
+            title={selectedModel?.description ?? t("task.composer.model.title")}
+            onChoose={props.onChooseModel}
+            inputClassName="input composer__model-input"
+          />
         </div>
 
         <div className="composer__control">

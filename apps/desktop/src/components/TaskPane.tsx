@@ -19,10 +19,12 @@
 import type { JSX } from "react";
 
 import { useEffect, useRef, useState } from "react";
-import type { HarnessId, HarnessSummary, Project, RunEvent, Task } from "@envoycoder/protocol";
+import type { HarnessSummary, Project, RunEvent, Task } from "@envoycoder/protocol";
 
 import { hasShellPicker, pickFolder } from "../client/folder-picker.js";
+import { agentFor } from "../composer/agent-for.js";
 import { composerControls, modeOffReason, modelOffReason, thinkingOffReason } from "../composer/controls.js";
+import { harnessLabel } from "../composer/harness-label.js";
 import { useT } from "../i18n/context.js";
 import { localize, localizeText, statusKey } from "../i18n/notice.js";
 import { buildTranscript, type TranscriptEntry } from "../state/transcript.js";
@@ -223,7 +225,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
           <div className="pane__meta">
             <span className={`chip ${chipFor(task.status)}`}>{t(statusKey(task.status))}</span>
             <span className="chip chip--quiet" title={t("task.meta.agent")}>
-              {labelForHarness(task.harness)}
+              {harnessLabel(task.harness)}
             </span>
             {task.model ? <span className="chip chip--quiet">{task.model}</span> : null}
             <span className="chip chip--quiet" title={t("task.meta.cwd", { path: task.cwd })}>
@@ -569,72 +571,6 @@ function summarize(value: unknown, limit = 400): string {
     }
   }
   return text.length > limit ? `${text.slice(0, limit)}\n…` : text;
-}
-
-/**
- * The facts about the agent this task runs on, straight from the wire.
- *
- * `modes` and `available` default to "we were not told", which the control treats as *unknown* rather
- * than as "none" — the distinction `composer/controls.ts` exists to preserve.
- */
-function agentFor(
-  harness: HarnessId,
-  summary: HarnessSummary | undefined,
-): Parameters<typeof composerControls>[0] {
-  return {
-    id: harness,
-    label: summary?.label ?? labelForHarness(harness),
-    modes: summary?.modes ?? [],
-    // Passed through whole, `undefined` included: "nobody has told us what it publishes" is a third
-    // state with its own sentence, and defaulting it to `{ kind: "none", options: [] }` would turn our
-    // ignorance into a claim about the agent.
-    models: summary?.models,
-    // A third fact about the same agent, passed whole for the same reason: `"session"` means the agent
-    // publishes its thinking levels only inside a session and nobody has opened one yet, and defaulting
-    // it to `{ kind: "none" }` would turn our ignorance into a claim about the agent.
-    thinking: summary?.thinking,
-    capabilities: {
-      resume: summary?.capabilities.resume ?? false,
-      cancel: summary?.capabilities.cancel ?? false,
-      approvals: summary?.capabilities.approvals ?? false,
-      structuredTools: summary?.capabilities.structuredTools ?? false,
-      streaming: summary?.capabilities.streaming ?? false,
-      images: summary?.capabilities.images ?? false,
-    },
-    available: summary?.available ?? "unknown",
-    // **The wire is the only thing that may turn the picker on.** No summary, or a summary that says the
-    // daemon cannot set this agent's mode, both leave it off with the reason shown.
-    modesApplicable: summary?.capabilities.agentMode === true,
-    // The same rule for the model, on its own flag: an agent can publish a list this build still has no
-    // way to deliver to, so "it has models" is not the question — "can we apply one" is.
-    modelApplicable: summary?.capabilities.model === true,
-    // The third flag, on its own wire: whether this daemon can make a chosen level the one the agent
-    // runs at. False for `envoy-harness`, whose ACP surface has no thought-level method at all.
-    thinkingApplicable: summary?.capabilities.thinking === true,
-  };
-}
-
-function labelForHarness(harness: HarnessId): string {
-  switch (harness) {
-    case "envoy-harness":
-      return "Envoy Harness";
-    case "deepseek-harness":
-      return "DeepSeek Harness";
-    case "claudecode":
-      return "Claude Code";
-    case "codex":
-      return "Codex";
-    case "copilot":
-      return "Copilot";
-    case "opencode":
-      return "OpenCode";
-    case "cursor":
-      return "Cursor";
-    case "pi":
-      return "Pi";
-    case "omp":
-      return "OMP (Oh My Pi)";
-  }
 }
 
 function chipFor(status: Task["status"]): string {

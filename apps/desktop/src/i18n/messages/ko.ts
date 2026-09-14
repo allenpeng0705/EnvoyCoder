@@ -18,6 +18,9 @@
  *
  * Agent names and their install hints (`Claude Code`, `npm install -g …`), the mesh's own status
  * vocabulary, and the palette's search keywords: product names, command lines and typed synonyms.
+ * The example path in `settings.defaultPath.placeholder` is kept verbatim for the same reason
+ * `palette.addProject.needsPlaceholder` already is — a path is not prose, and a translated one names
+ * a directory that does not exist.
  *
  * ## Form
  *
@@ -223,19 +226,41 @@ export const ko: Catalogue = {
   "settings.noDaemon": "서비스 없음",
   "settings.daemon": "서비스 {version}",
   "settings.daemon.title": "이 창이 연결된 서비스",
+  "settings.group.general": "일반",
   "settings.language.title": "언어",
   "settings.language.detail": "이 창의 언어입니다. 모든 라벨, 알림, 오류는 물론 서비스가 돌려보내는 오류까지 포함합니다. 이 컴퓨터의 설정과 함께 저장되므로 다른 창과 휴대폰에도 그대로 따라갑니다.",
   "settings.language.aria": "언어",
   "settings.language.system": "이 컴퓨터 설정을 따름",
+  "settings.folder.choose": "선택…",
+  "settings.defaultPath.title": "‘프로젝트 추가’가 시작하는 폴더",
+  "settings.defaultPath.detail": "프로젝트를 추가할 때 폴더를 묻습니다. 여기에 지정해 두면 작업 공간으로 입력란이 미리 채워지고, 다른 경로를 직접 입력할 수도 있습니다.",
+  "settings.defaultPath.placeholder": "/Users/you/work",
+  "settings.group.newTasks": "새 작업의 시작 설정",
   "settings.defaultHarness.title": "새 작업이 시작하는 에이전트",
   "settings.defaultHarness.detail": "프로젝트가 이를 재정의할 수 있습니다. 재정의하지 않을 때 적용되는 값입니다.",
   "settings.needsInstalling": "(설치 필요)",
+  "settings.defaultModel.title": "새 작업이 사용하는 모델",
+  "settings.defaultModel.detail": "비워 두면 새 작업마다 에이전트가 스스로 고른 모델로 실행됩니다. 프로젝트에서 이 값을 덮어쓸 수도 있습니다.",
+  "settings.extraArgs.title": "에이전트에 전달할 추가 인수",
+  "settings.extraArgs.detail": "입력한 그대로 EnvoyCoder가 만든 인수 뒤에 붙여 에이전트의 명령줄로 전달합니다. 에이전트 문서에 모든 작업에 켜 두고 싶은 플래그가 있는 경우가 아니라면 비워 두세요.",
+  "settings.extraArgs.placeholder": "--verbose",
+  "settings.group.safety": "안전",
   "settings.approvals.title": "파괴적인 작업 전에 확인",
   "settings.approvals.detail": "에이전트는 파일을 덮어쓰는 대신 멈추고 당신을 기다립니다. 이 기능을 끄면 작업이 묻지 않고 작업 트리를 바꿀 수 있습니다.",
-  "settings.remoteRuns.title": "이 컴퓨터의 에이전트를 다른 컴퓨터와 공유",
-  "settings.remoteRuns.detail": "기본값은 꺼짐입니다. 켜면 당신의 다른 컴퓨터에서 온 작업이 여기, 당신의 디렉터리에서 실행될 수 있습니다.",
+  "settings.approvals.reaches": "실행할 때마다 {agent}의 자체 정책으로 전달되므로, 확인은 실제 작업이 일어나는 곳에서 이루어집니다.",
+  "settings.approvals.unsupported": "EnvoyCoder는 {agent}에 대해 이 항목을 바꿀 수 없습니다. 이 에이전트는 설정을 받을 방법이 없고 자체 기준으로 확인합니다. EnvoyCoder가 정책을 전달할 수 있는 에이전트를 고르거나, {agent} 자체의 확인에 답하세요.",
+  "settings.approvals.unknown": "EnvoyCoder는 {agent}가 무엇을 받아들이는지 아직 알지 못하므로, 아무도 읽지 않는 선택을 저장하는 대신 이 항목을 꺼 둡니다.",
   "settings.transcripts.title": "작업이 끝난 뒤에도 기록 유지",
   "settings.transcripts.detail": "에이전트가 무엇을 했는지에 대한 기록을 이 컴퓨터에 보관합니다. 끄면 공간을 아끼지만 나중에 “무엇을 바꿨나?”에 답할 수 없게 됩니다.",
+  "settings.project.title": "{project} 프로젝트 설정",
+  "settings.project.detail": "이 프로젝트의 새 작업에 적용되고 이 컴퓨터의 설정을 덮어씁니다. 직접 설정한 작업은 여전히 우선합니다.",
+  "settings.project.folder.title": "폴더",
+  "settings.project.folder.detail": "이 프로젝트의 작업에서 에이전트가 실행되는 위치.",
+  "settings.project.harness.title": "여기서 새 작업을 시작하는 에이전트",
+  "settings.project.harness.detail": "이 컴퓨터에서 고른 에이전트를 덮어씁니다.",
+  "settings.project.model.title": "여기서 새 작업이 사용하는 모델",
+  "settings.project.model.detail": "이 컴퓨터의 모델을 덮어씁니다. 비우면 에이전트가 결정합니다.",
+  "settings.project.extraArgs.detail": "이 프로젝트의 작업마다 EnvoyCoder가 만든 인수 뒤에 붙여 에이전트의 명령줄로 전달합니다.",
   "settings.agents.heading": "이 컴퓨터의 에이전트",
   "settings.agents.note": "각 에이전트가 실제로 할 수 있는 일이 EnvoyCoder가 제공하는 것을 결정합니다. 권한을 물어볼 수 없는 에이전트에게는 무시할 승인 대화상자를 주지 않습니다.",
   "settings.agents.empty": "에이전트 목록이 아직 도착하지 않았습니다.",

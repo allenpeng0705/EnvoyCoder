@@ -41,6 +41,7 @@ import type {
   RunEvent,
   RunMode,
   Task,
+  TaskDefaults,
 } from "@envoycoder/protocol";
 import { DEFAULT_CODER_SETTINGS, missingMethods } from "@envoycoder/protocol";
 
@@ -574,6 +575,28 @@ export class CoderStore {
 
   async removeProject(id: string): Promise<{ ok: true } | Refusal> {
     return this.mutate("coder.removeProject", { id }, () => ({ ok: true }));
+  }
+
+  /**
+   * A project's own defaults — the second scope, and the one the sidebar's `⋯` button edits.
+   *
+   * Sent whole rather than as a patch, because a project's defaults **replace**: a call carrying only a
+   * model would leave that project's agent undefined, and the next task in it would silently fall back
+   * to this machine's default agent. `""` on `model` or `extraArgs` is "clear it", the same sentinel the
+   * daemon's settings patch uses.
+   *
+   * The refusal is returned rather than swallowed, like every other action here: a project that could
+   * not be updated has to say so, because the pane's controls would otherwise keep showing the value the
+   * user chose while the stored one is the old.
+   */
+  async updateProject(input: {
+    id: string;
+    defaults: TaskDefaults;
+  }): Promise<{ ok: true; project: Project } | Refusal> {
+    return this.mutate("coder.updateProject", input, (result) => ({
+      ok: true,
+      project: (result as { project: Project }).project,
+    }));
   }
 
   async updateSettings(patch: Partial<CoderSettings>): Promise<{ ok: true } | Refusal> {

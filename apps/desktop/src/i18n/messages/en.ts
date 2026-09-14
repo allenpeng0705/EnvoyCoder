@@ -291,30 +291,62 @@ export const en = {
   "mesh.scope.title": "Session scope {scope}",
   "mesh.agentsHere": "Agents run on this machine",
 
-  /* ── settings ── */
+  /* ── settings ──
+     Grouped, and grouped by the question a user is asking rather than by the storage that answers it:
+     "what does this app do by default", "what does a new task start with", "what may an agent do
+     without me". The headings are sentence case and are not labels — nothing on this pane needs one. */
   "settings.title": "Settings",
   "settings.close": "Close",
   "settings.stateDir": "State in {path}",
   "settings.noDaemon": "No daemon",
   "settings.daemon": "Daemon {version}",
   "settings.daemon.title": "The daemon this window is attached to",
+  "settings.group.general": "General",
+  "settings.group.newTasks": "New tasks start with",
+  "settings.group.safety": "Safety",
   "settings.language.title": "Language",
   "settings.language.detail":
     "The language of this window — every label, notice and error, including the ones the daemon sends back. Saved with your settings on this machine, so it follows you to your other windows and to the phone.",
   "settings.language.aria": "Language",
   "settings.language.system": "Same as this computer",
+  "settings.folder.choose": "Choose…",
+  "settings.defaultPath.title": "The folder Add project starts in",
+  "settings.defaultPath.detail":
+    "Adding a project asks for a folder. Naming it here means the field is already filled in with the place you keep your work, and you can still type another one.",
+  "settings.defaultPath.placeholder": "/Users/you/work",
   "settings.defaultHarness.title": "The agent new tasks start with",
   "settings.defaultHarness.detail": "A project can override this; this is the answer when it does not.",
   "settings.needsInstalling": "(needs installing)",
+  "settings.defaultModel.title": "The model new tasks start on",
+  "settings.defaultModel.detail":
+    "Left empty, each new task runs on whatever the agent picks for itself. A project can override this too.",
+  "settings.extraArgs.title": "Extra arguments for the agent",
+  "settings.extraArgs.detail":
+    "Passed to the agent's command line exactly as you type them, after the ones EnvoyCoder builds itself. Leave it empty unless the agent's own documentation names a flag you want on every task.",
+  "settings.extraArgs.placeholder": "--verbose",
   "settings.approvals.title": "Ask before anything destructive",
   "settings.approvals.detail":
-    "Agents stop and wait for you instead of overwriting files. Turning this off means a task can change your working tree without asking.",
-  "settings.remoteRuns.title": "Share this machine's agents with your other machines",
-  "settings.remoteRuns.detail":
-    "Off by default. When it is on, a task from another of your machines can run here, in a directory of yours.",
+    "Agents stop and wait for you before every step they take, instead of overwriting files on their own. Turning this off means a task can change your working tree without asking.",
+  "settings.approvals.reaches":
+    "Handed to {agent} as its own policy for every run, so the asking happens where the work does.",
+  "settings.approvals.unsupported":
+    "EnvoyCoder cannot change this for {agent}: it has no way to be told, and asks on its own terms. Pick an agent EnvoyCoder can hand a policy to, or answer {agent}'s own prompts.",
+  "settings.approvals.unknown":
+    "EnvoyCoder has not been told what {agent} accepts yet, so this stays off rather than storing a choice nothing reads.",
   "settings.transcripts.title": "Keep transcripts after a task ends",
   "settings.transcripts.detail":
     "The record of what an agent did, kept on this machine. Turning it off saves space and makes 'what did it change?' unanswerable later.",
+  "settings.project.title": "Project settings for {project}",
+  "settings.project.detail":
+    "These apply to new tasks in this project and override the settings for this machine. A task you set up yourself still wins.",
+  "settings.project.folder.title": "Folder",
+  "settings.project.folder.detail": "Where agents run for tasks in this project.",
+  "settings.project.harness.title": "The agent new tasks here start with",
+  "settings.project.harness.detail": "Overrides the agent chosen for this machine.",
+  "settings.project.model.title": "The model new tasks here start on",
+  "settings.project.model.detail": "Overrides this machine's model. Empty means the agent decides.",
+  "settings.project.extraArgs.detail":
+    "Passed to the agent's command line for every task in this project, after the ones EnvoyCoder builds itself.",
   "settings.agents.heading": "Agents on this machine",
   "settings.agents.note":
     "What each agent can actually do decides what EnvoyCoder offers. An agent that cannot be asked for permission is not given an approval dialog it would ignore.",

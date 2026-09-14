@@ -11,6 +11,12 @@ exists to prevent is the one we already shipped: a settings pane with five contr
 **two do nothing and three more settings have no control at all** (§7.1), beside a Paseo section list
 of twenty-one.
 
+**That defect is fixed, and this document is the record of what it was and what replaced it.** Slice 1
+(§8.1) has been built, so §7.1's rows carry their **current** verdicts rather than the ones they had when
+this inventory was taken, and §7.2 records what the two dead switches do now. Where a §4–§6 verdict was
+about *Paseo's* setting rather than ours, nothing changed — those are still decisions about rows we have
+not built.
+
 The companion gate is `scripts/check-settings-parity.mjs` (`npm run settings:check`). It reads Paseo's
 source, extracts the sections it registers and the settings they read and write, and fails when one of
 them has no verdict here. What it can and cannot see is §10, and it is worth reading before trusting a
@@ -659,49 +665,123 @@ direction", so the two tables below are separated on that basis: what is honest,
 
 ### 7.1 `CoderSettings`, and what reads each field
 
-The type is `packages/protocol/src/domain.ts:726-746`; defaults `:748-754`; schema `:764-775`. It is
-persisted by the daemon as one JSON document beside projects and tasks
-(`apps/desktop/src/daemon/store.ts:522-529` read, `:469-479` update, `:590-593` write; path from
+The type is `packages/protocol/src/domain.ts:733-769`; defaults `:771-776`; schema `:806-819`; the
+patch shape `updateSettings` accepts — where `""` means **clear it** — `:789-796`. It is persisted by the
+daemon as one JSON document beside projects and tasks (`apps/desktop/src/daemon/store.ts:560-567` read,
+through `withoutRetiredSettingsKeys` first (`domain.ts:832-840`); `:493-506` update; path from
 `coderPaths` in `packages/host-bridge/src/index.ts:105`,`:144`), reaches the window through
 `coder.getSettings` (`daemon/service.ts:463-466`) and is written back through `coder.updateSettings`
-(`:468-491`, wire schema `packages/protocol/src/rpc.ts:1304-1309`), and is rendered by
+(`:468-489`, wire schema `packages/protocol/src/rpc.ts:1323-1345`), and is rendered by
 `apps/desktop/src/components/SettingsPane.tsx`.
+
+**`read by` is the column that decides the verdict, and it is deliberately not the pane.** A row in the
+pane is a control; what makes a setting honest is a *workflow* that consumes the value. The two
+exclusions are mechanical rather than a matter of taste — the pane that renders a field and the module
+that declares it — and `apps/desktop/test/settings-coverage.test.ts` is the gate that holds every row
+below to them.
 
 | field | declared | default | rendered | **read by** | honest? |
 |---|---|---|---|---|---|
-| `language?: CoderLanguage` | `domain.ts:745` | `"system"` (`:753`; list `:715-720`) | `SettingsPane.tsx:80-104` | `main.tsx:33` — `I18nProvider preference={state.settings.language ?? "system"}`, which re-renders every `t()` in the window | **yes** |
-| `defaults: TaskDefaults` → `harness?` | `domain.ts:730` (`:756-762`) | `"envoy-harness"` (`:749`) | `SettingsPane.tsx:106-132` | `store.ts:330-332` → `resolveTaskDefaults` (`packages/task-model/src/index.ts:88-105`): explicit → project → **app default** → fallback | **yes** |
-| `defaults.model?` | `domain.ts:759` | — | **no UI anywhere** | `task-model/src/index.ts:101` reads it | **partly** — the resolver honours it, but no control writes it. A capability that exists and is unreachable is a smaller lie than a control that does nothing, and it is still a lie |
-| `defaults.extraArgs?` | `domain.ts:760` | — | **no UI anywhere** | `task-model/src/index.ts:103` reads it | **partly** — as above |
-| `keepTranscripts: boolean` | `domain.ts:736` | `true` (`:752`) | `SettingsPane.tsx:160-171` | `runs.ts:759-763` — `appendTranscript` returns early when false, so the JSONL record is deliberately not kept | **yes** |
-| `requireApprovalForDestructive: boolean` | `domain.ts:732` | `true` (`:750`) | `SettingsPane.tsx:134-145` | **nothing.** Grep over every `src` tree in `packages/` and `apps/` finds it only in the type, the schema, the RPC params and this pane | **no — stored and never read** |
-| `allowRemoteRuns: boolean` | `domain.ts:734` | `false` (`:751`) | `SettingsPane.tsx:147-158` | **nothing.** `coder.offerRemoteRun` is declared in the RPC catalogue (`rpc.ts:1285`, `domain.ts:660`) and has **no handler** — the daemon's handler table (`service.ts:102-468`) does not list it — and `coder.listPeers` returns a hardcoded empty list (`service.ts:454-461`) with its own comment saying discovering peers is unbuilt | **no — stored and never read** |
-| `defaultProjectPath?: string` | `domain.ts:728` | — | **no UI anywhere** | **nothing.** Present in the schema and in the RPC params (`rpc.ts:1304`) and nowhere else | **no — stored and never read** |
+| `language?: CoderLanguage` | `domain.ts:768` | `"system"` (`:775`; list `:722`) | `SettingsPane.tsx:129-152` | `main.tsx:33` — `I18nProvider preference={state.settings.language ?? "system"}`, which re-renders every `t()` in the window | **yes** |
+| `defaults: TaskDefaults` → `harness?` | `domain.ts:743` (`:185-191`) | `"envoy-harness"` (`:772`) | `SettingsPane.tsx:183-207` (app) and `:346-366` (project) | `store.ts:342` → `resolveTaskDefaults` (`packages/task-model/src/index.ts:88-105`): explicit → project → **app default** → fallback (`:98`) | **yes** |
+| `defaults.model?` | `domain.ts:188` | — | `SettingsPane.tsx:213-222` (app) and `:368-377` (project), through the composer's own `ModelChoice` | `task-model/src/index.ts:101` reads it; the controls write it | **yes** — slice 1 closed the gap the old verdict named: the resolver honoured it and now something can set it |
+| `defaults.extraArgs?` | `domain.ts:190` | — | `SettingsPane.tsx:227-237` (app) and `:380-390` (project) | `task-model/src/index.ts:103` reads it; the controls write it | **yes** — as above |
+| `keepTranscripts: boolean` | `domain.ts:759` | `true` (`:774`) | `SettingsPane.tsx:249-259` | `runs.ts:797` — `appendTranscript` returns early when false, so the JSONL record is deliberately not kept | **yes** |
+| `requireApprovalForDestructive: boolean` | `domain.ts:757` | `true` (`:773`) | `SettingsPane.tsx:241-246`, a **disabled-with-reason** row for an agent that cannot be told (`ApprovalRow`, `:477-510`) | `runs.ts:298-301` reads it per run and `resolveApprovalPolicy` (`run-options.ts:231-237`) maps it onto the agent's own session policy: `true` → `session/set_policy {autoRun: "always-confirm"}`, `false` → `{autoRun: "off"}`. `runs.test.ts` proves both positions reach the agent over a real pipe, and that nothing is sent to an agent whose catalogue entry says it cannot be told | **yes** — in the direction the row's wording promises. The row's note says which agent it reaches; "ask before **anything** destructive" is the strict value, and §7.2 says why `safe-only` is deliberately not used for it |
+| `defaultProjectPath?: string` | `domain.ts:741` | — | `SettingsPane.tsx:159-178` | `CoderApp.tsx:224-226` hands it to `buildCommandContributions`, whose `project.add` row seeds its text stage with it (`CommandCenter.tsx:425-435`, entered through `stageInto` `:146-155`). `palette-flow.test.tsx` asserts the seeded field and the empty field | **yes** — it is the folder "Add project…" starts from, which is what its row says |
+| ~~`allowRemoteRuns: boolean`~~ | **removed** — was `domain.ts:734` | — | **removed** — was `SettingsPane.tsx:147-158` | — | **gone, not disabled.** Its effect could not exist: there is no remote-run path, and `coder.offerRemoteRun` was a spec with no handler and no caller. A disabled row would have promised a feature on this pane's terms rather than the mesh's; §7.2 records what a returning version needs first. `coder.offerRemoteRun` came out of the catalogue with it (`protocol/src/rpc.ts`), and `RETIRED_SETTINGS_KEYS` (`domain.ts:832`) strips the old key so an upgrading user's settings file is not quarantined over a value nothing read |
 
-**Four of eight entries are not honest, in three different ways.** Two switches do nothing
-(`requireApprovalForDestructive`, `allowRemoteRuns`); one field is stored, validated, advertised on the
-wire and read by nobody (`defaultProjectPath`); and two are read but unsettable (`defaults.model`,
-`defaults.extraArgs`). The pane is titled "Settings" and shows five controls, of which three are live.
+**All eight entries are honest now, and the verdicts are not "the pane has a row for it".** Every one of
+the seven remaining fields has a reader outside `SettingsPane.tsx` — that exclusion is the whole point of
+the column, and `settings-coverage.test.ts` enforces it — and the eighth was **deleted** rather than
+disabled. The app scope shows **seven** rows where it showed five (the language, the folder "Add
+project…" starts in, the default agent, the default model, the extra arguments, and the two switches),
+and the pane the project's `⋯` button opens holds that project's own three. The two read-only groups
+below them — the agents found on this machine, and the daemon's notes about what it could not read — are
+unchanged, deliberately.
 
-### 7.2 The two switches that do nothing, stated precisely
+### 7.2 What the two dead switches do now, stated precisely
 
-Both look like safety controls, which is what makes them the worst possible ones to fake.
+Both looked like safety controls, which is what made them the worst possible ones to fake. This section
+keeps the finding and records the outcome, because the finding is the reason each row has its present
+shape — and because a future reader who sees only the fixed version would not know which designs were
+already tried here and rejected.
 
-* **`requireApprovalForDestructive`** promises "ask before running anything a harness marks
+* **`requireApprovalForDestructive`** promised "ask before running anything a harness marks
   destructive". The approval machinery **exists and is unconditional**: every ACP
-  `session/request_permission` becomes a `run.approval-requested` event (`runs.ts:585-625`, mapped
-  from the protocol in the header table at `:24`), `answerApproval` settles it (`:704-711`), the RPC
+  `session/request_permission` becomes a `run.approval-requested` event (`runs.ts:626-664`, mapped
+  from the protocol in the header table at `:24`), `answerApproval` settles it (`:739-748`), the RPC
   handler is served (`service.ts:385-404`), the event kinds are on the wire
   (`protocol/src/domain.ts:405-406`,`:511-518`) and the transcript renders the prompt
-  (`TaskPane.tsx:501`). Nothing consults the setting. So the user's choices are: leave it on and get
+  (`TaskPane.tsx:508-553`). Nothing consulted the setting in `HEAD` before slice 1 — verified by
+  `git show HEAD:apps/desktop/src/daemon/runs.ts`, which contains the `keepTranscripts` read at `:763`
+  and no reference to this field at all. So the user's choices were: leave it on and get
   approvals they cannot turn off, or turn it off and get **exactly the same approvals** — having been
   told they turned safety off.
-* **`allowRemoteRuns`** promises "share this machine's agents with your other machines", default
-  **off and fail-closed**. Nothing reads it; there is no remote path for it to gate. The disabled
-  default is genuinely fail-closed — it is inert, not unsafe — but the *label* implies a boundary that
-  is not implemented anywhere. The truthful version of this row today is
-  **must be disabled-with-reason**: "*Running tasks on this machine from your other machines is not
-  built yet. Nothing is shared until it is.*"
+  **Now:** read at `runs.ts:298-301` and delivered as the agent's own session policy
+  (`session/set_policy { autoRun }`), `true` → `always-confirm`, `false` → `off`. The one honest limit
+  is stated on the row rather than hidden: `session/set_policy` is a method `envoy-harness` documents and
+  `deepseek-harness` does not, so for an agent that cannot be told the switch is **disabled with the
+  reason naming that agent** (`capabilities.approvalPolicy` on the wire,
+  `packages/agent-catalog/src/index.ts:186-210`), and no call is sent — `runs.ts:298-301` resolves to
+  `undefined` and the run proceeds under the agent's own policy.
+  `safe-only` — the third value the peer accepts — is deliberately **not** the mapping for `true`: it
+  auto-allows every tool in `AUTO_RUN_SAFE_TOOLS`, which includes the whole `git` tool regardless of
+  arguments, so a commit or a push would run without asking. That contradicts the sentence on the row.
+  **Checked against the built peer, not only against its source.** Driving
+  `../envoy-harness/packages/envoy-harness/dist/cli/acp-stdio.js` directly over stdio, on one session:
+
+  | call | answer |
+  |---|---|
+  | `session/get_policy`, fresh | `{sandbox:"workspace-write", approval:"on-request"}` — **no `autoRun`** |
+  | `session/set_policy {autoRun:"always-confirm"}` | accepted; `get_policy` then reports `autoRun:"always-confirm"` |
+  | `session/set_policy {autoRun:"off"}` | accepted; `get_policy` then reports `autoRun:"off"` |
+  | `session/set_policy {autoRun:"safe-only"}` | accepted |
+  | `session/set_policy {autoRun:"sometimes"}` | `-32602 preset, sandbox, approval, or autoRun required` |
+  | `session/set_policy {sandbox:"read-only"}` | accepted, and `autoRun` left exactly as it was |
+
+  So the three values are the peer's whole vocabulary, an unset posture is genuinely unset rather than
+  "the default one", and a policy sent *without* `sandbox` does not move the sandbox — which is the
+  boundary that lets this daemon send `autoRun` alone. The result envelope carries an extra
+  `{result: …}` nesting compared with `session/set_mode`; we ignore the payload either way and
+  `apps/desktop/test/fixtures/fake-acp-agent.mjs` copies the envelope rather than tidying it. That
+  inconsistency is the peer's and is a candidate for an upstream report (family guide §7.4).
+* **`allowRemoteRuns`** promised "share this machine's agents with your other machines", default
+  **off and fail-closed**. Nothing read it, and there was no remote path for it to gate. The disabled
+  default was genuinely fail-closed — inert, not unsafe — but the *label* implied a boundary that is
+  not implemented anywhere.
+  **Now: removed, control and field together**, and this is the one place this document's original
+  recommendation ("render it **disabled with the reason**") was revised rather than followed. Two
+  reasons, and the second is the decisive one:
+
+  1. **A disabled row is a promise.** It says "this exists and we cannot honour it yet", which points a
+     user at the settings pane for a feature whose prerequisites are a peer directory
+     (`coder.listPeers` returns a hardcoded empty list, `service.ts:454-461`), a session store that makes
+     a remote path reachable at all, and a broker decision (`docs/envoycoder-design.md` §7) — none of
+     which are settings work.
+  2. **Its RPC partner had already gone.** `coder.offerRemoteRun` was a method in the catalogue with no
+     handler and no caller: a spec promising a client that a run could be handed to another machine,
+     which nothing served. It came out of `RPC_METHODS` and `RPC_SPECS` in the same slice. A settings
+     row for a feature whose own protocol entry is a promise nothing implements is the defect twice.
+
+  **What would bring it back**, in the order the work actually goes: the peer directory, then the
+  session store that makes a remote run reachable, then the broker decision — and then the method, its
+  params and the row are written together, against a handler. `RETIRED_SETTINGS_KEYS` (`domain.ts:832`)
+  is what lets an upgrading user's settings file keep its language, its default agent and its nominated
+  folder while the dead key is dropped.
+
+  **Left open, and named here rather than left to be rediscovered: the same key on the *wire*.** The
+  strip protects a settings *file* written by an older build of this product. It does not protect a
+  window talking to a daemon from an older build — and `coder.getSettings`'s result is
+  `z.object({settings: CoderSettingsSchema}).strict()`, so that daemon's answer is refused. Verified:
+  parsing the previous build's answer (`…, allowRemoteRuns: false, …`) against
+  `RPC_SPECS["coder.getSettings"].result` fails with
+  `settings: Unrecognized key(s) in object: 'allowRemoteRuns'`. The failure is loud rather than silent —
+  `loadSettings` reports it and the pane shows a refusal instead of a half-filled document — and the
+  window and daemon normally ship in one bundle, which is why this slice left it alone. It is still an
+  asymmetry worth a decision: either `withoutRetiredSettingsKeys` is applied to that result schema too
+  (one function, both directions), or the docs say out loud that a window one build ahead of its daemon
+  cannot read settings. **Not decided here, because wire compatibility is not a settings row.**
 
 **What this document recommends, and it is slice 1 in §8 (§8.1):** make all four honest before
 adding a single Paseo row. Either wire a setting to a real effect or render it disabled with the
@@ -709,28 +789,45 @@ reason in the user's language; `defaults.model`/`defaults.extraArgs` either get 
 of the type, because a field the resolver reads and no UI writes is a capability users will keep
 filing as "the picker is missing".
 
+**Outcome, so the four are accounted for:** two were wired (`requireApprovalForDestructive` onto the
+agent's own `session/set_policy`, `defaultProjectPath` onto the palette's `project.add` row), two got
+the controls they were missing (`defaults.model`, `defaults.extraArgs`, at both the app and the project
+scope), and one was **deleted** (`allowRemoteRuns`, with `coder.offerRemoteRun`). The gate §8.1 asks for
+is `apps/desktop/test/settings-coverage.test.ts`.
+
 ### 7.3 What the window shows, and three further findings
 
-`SettingsPane.tsx` renders five controls and two read-only groups: the language select (`:80-104`), the
-default-agent select (`:106-132`, populated from `state.harnesses` filtered by
+As written, `SettingsPane.tsx` rendered five controls and two read-only groups: the language select
+(`:80-104`), the default-agent select (`:106-132`, populated from `state.harnesses` filtered by
 `harness.available !== false`, `:40`), the three switches (`:134-171`), an **Agents** list with
 availability chips and install hints (`:173-210`), and the daemon's quarantined-file **notes**
 (`:212-223`, rendered through their key when the daemon sent one). Three findings from reading it
-against the rest of the app:
+against the rest of the app, each with its present state:
 
 1. **There is no section structure.** Paseo's sidebar has twenty-one sections; ours is one scrolling
    column of a `<div className="settings">`. That is fine for six rows and will not survive the first
    slice in §8.1, which takes it to eleven.
+   **Now:** three headings — *General*, *New tasks start with*, *Safety* — one column, in the shape
+   §8.1 asked for. Still not a copied sidebar, and it should not become one until the pane is four
+   times this size.
 2. **"Project settings" opens app settings.** `CoderSidebar.tsx:266-272` renders a per-project `⋯`
    button whose accessible name is *"Project settings for {project}"*
-   (`sidebar.project.settings.aria`, interpolated with the project label) and whose handler is
+   (`sidebar.project.settings.aria`, interpolated with the project label) and whose handler was
    `onOpenProjectSettings={() => setSettingsOpen(true)}` (`CoderApp.tsx:294`) — the project argument
-   is dropped on the floor. This is the §7.2 defect class in the UI layer: a control labelled with a
+   dropped on the floor. This is the §7.2 defect class in the UI layer: a control labelled with a
    scope it does not have.
+   **Now:** the button carries the project through (`openProjectSettings`, `CoderApp.tsx:146-150`) and
+   the pane renders that project's defaults (`SettingsPane.tsx:307-393`), which is the third scope
+   §7.4 said had no screen. `coder.updateProject` gained the defaults patch it needed for it
+   (`packages/protocol/src/rpc.ts:1093-1107`, `store.ts:293-308`). The shell holds the project's **id**
+   and resolves it against `state.projects` on every render, rather than keeping the object it was
+   handed — `CoderApp.tsx:128-155` says why that is load-bearing, and `test/settings-scope.test.tsx`
+   fails on a snapshot: because a project's defaults *replace*, a snapshot meant the second edit in a
+   session wrote the first one away.
 3. **The daemon's notes are the best thing in the pane, and they are not a setting.** The quarantined
-   file list (`store.ts:490-520`, rendered `:212-223`) is what a settings page should do with a
-   problem: say what happened, in the user's language, at the bottom, and do not offer a switch that
-   pretends to fix it.
+   file list (`store.ts:249-251`, rendered `SettingsPane.tsx:562-575`) is what a settings page should do
+   with a problem: say what happened, in the user's language, at the bottom, and do not offer a switch
+   that pretends to fix it. Unchanged by slice 1, deliberately.
 
 ### 7.4 Two claims in this repo that the source does not support
 
@@ -744,8 +841,10 @@ Recorded because both are in shipped comments and would be repeated by the next 
   `apps/mobile/lib` → zero hits). The claim is a statement about the design that is true and a
   statement about the product that is not, and the two are in the same paragraph.
 * **The owner's premise, checked:** `docs/envoycoder-paseo-inheritance.md:55` records Paseo's settings
-  as "two scopes" and our own as three. True, and the third scope (per project) has **no screen
-  either** — the same gap as Paseo's `projects` section, and the same live bug as §7.3.2.
+  as "two scopes" and our own as three. True, and at the time of writing the third scope (per project)
+  had **no screen either** — the same gap as Paseo's `projects` section, and the same live bug as
+  §7.3.2. Slice 1 gave it one: the sidebar's per-project `⋯` button now opens the project's own defaults
+  in the same pane (`SettingsPane.tsx:307-393`), written through `coder.updateProject`.
 
 ---
 
@@ -759,29 +858,88 @@ buys a user. Slices 1–3 need **no upstream change and no new protocol field be
 
 ### 8.1 Slice 1 — Make the settings we already show honest
 
-**Buys the user:** a Settings pane where every control does what it says. Today two of five do not,
-and three more fields are read by the app with no control writing them.
+**Status: built.** What follows is the plan as it was written, with each bullet's outcome attached.
+The outcomes are the honest part: one of them is not what the plan said, and says why.
+
+**Buys the user:** a Settings pane where every control does what it says. At the time, two of five did
+not, and three more fields were read by the app with no control writing them.
 
 * `requireApprovalForDestructive`: either implement the gate (skip the prompt when false — the
-  approval path is `runs.ts:585-625` and the daemon already knows the option list) or render it
+  approval path is `runs.ts:626-664` and the daemon already knows the option list) or render it
   **disabled** with the reason. The decision is worth making explicitly: a control-plane user's
   approval setting is a *policy* setting, and the honest version is "approvals always happen because
   the agent asks, not because we ask it to".
+  **Outcome — a third option, and neither of the two the plan named.** The setting is delivered as the
+  agent's **own session policy**: `session/set_policy { autoRun }`, resolved per run by
+  `resolveApprovalPolicy` (`run-options.ts:231-237`), `true` → `always-confirm`, `false` → `off`. That
+  is strictly better than both branches above — the gate is real, and the *agent* does the asking, which
+  is what this product's approval model already required. It is not fully "implemented", which is why
+  the row carries a second sentence: `envoy-harness` documents the method and `deepseek-harness` does
+  not, so for the latter the switch is **disabled with the reason naming the agent**
+  (`capabilities.approvalPolicy`, `rpc.ts:967-975`). See §7.2.
 * `allowRemoteRuns`: render **disabled with the reason** (§7.2) until there is a remote path.
+  **Outcome — deleted instead, control and field together.** This is the plan revised rather than
+  followed, and §7.2 gives the reasoning: a disabled row promises a feature whose prerequisites are not
+  settings work, and `coder.offerRemoteRun` — the method that would have served it — was itself a spec
+  with no handler, so it went too. `RETIRED_SETTINGS_KEYS` keeps an upgrading user from losing the rest
+  of their settings file to the removed key.
 * `defaultProjectPath`: give it the control it deserves (it is the folder a new task starts in, and
   the folder picker already exists in `apps/desktop/src/client/folder-picker.ts`), or delete it from
   the type and the RPC params.
+  **Outcome — the first option, precisely as the plan was not quite right about it.** The folder is the
+  one **"Add project…" starts in**, not "the folder a new task starts in": a task's folder comes from
+  its project (`project.path`), and a default path has no business overriding that. So the control is a
+  path field with the existing picker beside it, and the *reader* is the palette's `project.add` row,
+  which seeds its text stage with it (`CommandCenter.tsx:425-435`). Two assertions in
+  `palette-flow.test.tsx` cover both states.
 * `defaults.model` / `defaults.extraArgs`: give them controls beside the default agent, or remove them
-  from `TaskDefaults`. The composer already carries a per-task model (`TaskPane.tsx:101`), so the row
+  from `TaskDefaults`. The composer already carries a per-task model (`TaskPane.tsx:102-104`), so the row
   exists — only the app-level default is missing.
+  **Outcome — controls, at both scopes.** The app scope gets a model row and an extra-args row beside
+  the default agent (`SettingsPane.tsx:213-237`) and so does the project scope (`:368-390`), sharing
+  `ModelChoice` with the composer so the three model controls cannot come to mean three things. The
+  `""`-clears-it sentinel exists because a JSON patch cannot carry an absent key; the store drops it
+  (`store.ts:498-502`, `:732-739`).
 * Fix the project `⋯` button (`CoderApp.tsx:294`) so it either opens a project scope or stops
   claiming to.
+  **Outcome — it opens a project scope** (`openProjectSettings`, `CoderApp.tsx:142-145`, rendered
+  `SettingsPane.tsx:307-393`). That is §7.4's third scope, and it needed a write path the daemon did not
+  have: `coder.updateProject`'s defaults patch (`rpc.ts:1093-1107`, `store.ts:293-308`), where the
+  defaults **replace** rather than merge, unlike the app's.
 * Add the **section structure** the pane needs before it grows: one heading per group. Not a copied
   sidebar — one column, headings, in the order the slices below give.
+  **Outcome — three headings:** *General*, *New tasks start with*, *Safety*, plus the two read-only
+  groups below them, unchanged.
 
 **Gate:** a test that asserts every field of `CoderSettings` is either read at a named site or absent
 from the schema. Written as a test rather than a grep so that adding a field without a reader fails
 CI, which is the only way this class of defect stays fixed.
+
+**Built as:** `apps/desktop/test/settings-coverage.test.ts`. It enumerates the fields from
+`CoderSettingsSchema` (the stored shape, not the interface — a field on the interface that is not
+storable is a field nobody can hold), requires a `{ file, needle }` read site for each, refuses a site
+**inside the pane that renders it or the module that declares it** — the two files
+`defaultProjectPath` was found in while it was dead, so a guard that counted them would have passed on
+the defect it was written for — and checks the retired-key list has not crept back into the schema. It
+was verified to fail: adding a `proofOnlyDeadField` to the schema and the interface turns the first
+case red with `- "proofOnlyDeadField"` and `+ (nothing)` in the difference; pointing a field's site at
+`SettingsPane.tsx` turns the third red with *"is where the field is rendered or declared, not where it
+is read"*. Adding a field, the coverage test and the field's own behavioural test is now the cost of a
+settings change, which is the point.
+
+**And the behavioural half, because a read site is a citation rather than a proof.** The guard says
+*where* each value is read; these say it arrives:
+`apps/desktop/test/settings-store.test.ts` (the `""`-clears-it sentinel, merge-versus-replace, the
+retired-key read, and the app defaults reaching a created task),
+`apps/desktop/test/settings-scope.test.tsx` (the project scope's rows, and that a write carries the
+values it is not changing), `apps/desktop/test/palette-flow.test.tsx` (the seeded "Add project" field),
+and four cases in `apps/desktop/test/runs.test.ts` (the approvals policy reaching the agent, both
+positions, not sent to an agent that cannot be told, and a loud failure when the peer refuses anyway).
+
+**Also in this slice, and not in the plan above:** `HarnessSummary.capabilities.approvalPolicy` (a
+fourth delivery flag beside `agentMode`/`model`/`thinking`, `packages/agent-catalog/src/index.ts:186-210`)
+and `RETIRED_SETTINGS_KEYS`/`withoutRetiredSettingsKeys` (`domain.ts:832-840`). Neither is a setting a
+user sees; both are what make the two rows above honest rather than approximately honest.
 
 ### 8.2 Slice 2 — `Appearance`: theme, and the two text sizes
 

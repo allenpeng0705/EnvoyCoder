@@ -18,6 +18,9 @@
  *
  * Agent names and their install hints (`Claude Code`, `npm install -g …`), the mesh's own status
  * vocabulary, and the palette's search keywords: product names, command lines and typed synonyms.
+ * The example path in `settings.defaultPath.placeholder` is kept verbatim for the same reason
+ * `palette.addProject.needsPlaceholder` already is — a path is not prose, and a translated one names
+ * a directory that does not exist.
  *
  * ## Form
  *
@@ -223,19 +226,41 @@ export const zh: Catalogue = {
   "settings.noDaemon": "无服务",
   "settings.daemon": "服务 {version}",
   "settings.daemon.title": "该窗口连接的服务",
+  "settings.group.general": "通用",
   "settings.language.title": "语言",
   "settings.language.detail": "此窗口的语言——所有标签、提示和错误，包括服务返回的那些。它与你的设置一起保存在这台机器上，因此会跟随你到其他窗口和手机。",
   "settings.language.aria": "语言",
   "settings.language.system": "跟随本机",
+  "settings.folder.choose": "选择…",
+  "settings.defaultPath.title": "「添加项目」起始的文件夹",
+  "settings.defaultPath.detail": "添加项目时会询问文件夹。在这里指定后，输入框会预先填好你存放工作的地方，你仍然可以改成别的路径。",
+  "settings.defaultPath.placeholder": "/Users/you/work",
+  "settings.group.newTasks": "新任务的默认值",
   "settings.defaultHarness.title": "新任务默认使用的智能体",
   "settings.defaultHarness.detail": "项目可以覆盖它；项目没有覆盖时以此为准。",
   "settings.needsInstalling": "（需要安装）",
+  "settings.defaultModel.title": "新任务默认使用的模型",
+  "settings.defaultModel.detail": "留空时，每个新任务都使用智能体自己选的模型。项目也可以覆盖这一项。",
+  "settings.extraArgs.title": "传给智能体的额外参数",
+  "settings.extraArgs.detail": "按你输入的原样传给智能体的命令行，排在 EnvoyCoder 自己生成的参数之后。除非智能体自己的文档写明了你想在每次任务中都启用的参数，否则请留空。",
+  "settings.extraArgs.placeholder": "--verbose",
+  "settings.group.safety": "安全",
   "settings.approvals.title": "执行任何破坏性操作前先询问",
   "settings.approvals.detail": "智能体会停下来等你，而不是直接覆盖文件。关闭它意味着任务可以不经询问就改动你的工作区。",
-  "settings.remoteRuns.title": "把本机的智能体共享给你的其他机器",
-  "settings.remoteRuns.detail": "默认关闭。开启后，来自你其他机器的任务可以在这里、在你的某个目录中运行。",
+  "settings.approvals.reaches": "每次运行都会作为 {agent} 自己的策略交给它，因此询问发生在真正干活的地方。",
+  "settings.approvals.unsupported": "EnvoyCoder 无法为 {agent} 更改这一项：它没有办法接收这项设置，会按自己的方式询问。请选择一个 EnvoyCoder 能把策略交给它的智能体，或者直接回答 {agent} 自己的询问。",
+  "settings.approvals.unknown": "EnvoyCoder 还不知道 {agent} 接受什么，因此这一项保持关闭，而不是存下一个没人读取的选择。",
   "settings.transcripts.title": "任务结束后保留对话记录",
   "settings.transcripts.detail": "智能体做过什么的记录，保存在这台机器上。关闭它可以省空间，但会让“它改了什么？”以后无法回答。",
+  "settings.project.title": "{project} 的项目设置",
+  "settings.project.detail": "这些设置适用于该项目中的新任务，并会覆盖本机的设置。你自己单独配置的任务仍然优先。",
+  "settings.project.folder.title": "文件夹",
+  "settings.project.folder.detail": "该项目中的任务运行智能体的位置。",
+  "settings.project.harness.title": "此处新任务默认使用的智能体",
+  "settings.project.harness.detail": "覆盖为本机选择的智能体。",
+  "settings.project.model.title": "此处新任务默认使用的模型",
+  "settings.project.model.detail": "覆盖本机的模型。留空表示由智能体决定。",
+  "settings.project.extraArgs.detail": "该项目中每个任务都会把这段参数传给智能体的命令行，排在 EnvoyCoder 自己生成的参数之后。",
   "settings.agents.heading": "本机上的智能体",
   "settings.agents.note": "每个智能体实际能做什么，决定了 EnvoyCoder 提供什么。无法被请求许可的智能体，不会被塞给它一个会被忽略的批准对话框。",
   "settings.agents.empty": "智能体列表还没有到达。",

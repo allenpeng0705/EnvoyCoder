@@ -507,6 +507,95 @@ describe("the agent's own mode", () => {
 });
 
 /**
+ * "Ask before anything destructive", end to end — the row settings slice 1 exists for.
+ *
+ * ## Why this belongs in the daemon's own tests rather than beside the settings object
+ *
+ * The setting is an app preference; the *effect* is a session method on the agent, and only a real
+ * child process can show that the preference arrived. A test asserting the stored object, or that the
+ * daemon called `session/set_policy` with something, would pass on a daemon that sent the wrong value
+ * to the wrong agent — and "the switch stored a preference nothing read" is the exact defect
+ * `docs/settings-parity.md` §7.1 recorded for this field.
+ *
+ * Three cases, and the third is the one that keeps the settings pane honest:
+ *
+ *   * **on** (the shipped default) → `autoRun: "always-confirm"`, with the agent's own report as the
+ *     evidence rather than the request we sent;
+ *   * **off** → `autoRun: "off"`, because a user who turns the switch off is asking the agent to stop
+ *     asking, and a daemon that only ever sent the strict value would be a switch with one position;
+ *   * **an agent the catalogue says cannot be told** → **no call at all**. The fixture refuses
+ *     `session/set_policy` with `-32601` here, so a daemon that sent one anyway would fail this run;
+ *     the run finishing is what the disabled row's reason ("it has no way to be told") claims.
+ */
+describe("whether the agent asks before it acts", () => {
+  it("is handed to the agent as its own policy, and the agent reports the posture it is in", async () => {
+    const b = await bench();
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "policy-me" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    // The shipped default is `requireApprovalForDestructive: true` and the mapping is
+    // `resolveApprovalPolicy`'s. A run that sent no policy at all reports `(none)` — the peer's own
+    // "unset" state — so this assertion fails for the defect rather than for a formatting change.
+    expect(run.harness).toBe("envoy-harness");
+    expect(said(b.events, "autoRun: always-confirm")).toBe(true);
+  });
+
+  it("stops the agent asking when the user turns the switch off", async () => {
+    const b = await bench();
+    // The daemon's own store, not a caller's argument: the preference is about this machine, so a task
+    // started from a second window or from the phone has to be governed by the same one.
+    await b.store.updateSettings({ requireApprovalForDestructive: false });
+
+    await b.manager.start({ taskId: b.taskId, prompt: "policy-me" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    expect(said(b.events, "autoRun: off")).toBe(true);
+    expect(said(b.events, "autoRun: always-confirm")).toBe(false);
+  });
+
+  it("is not sent at all to an agent that has no way to be told, and the run still works", async () => {
+    // `deepseek-harness` is the real case: nine ACP methods, `session/set_policy` not among them. The
+    // switch is disabled with a reason on screen; this is the other half — the daemon must not send the
+    // call anyway and fail every task on that agent. `FAKE_ACP_NO_SET_POLICY` is what makes the
+    // negative testable: were the daemon to send one, the handshake would fail and this run would not
+    // reach `done`.
+    const b = await bench({
+      harness: "deepseek-harness",
+      agentEnv: { FAKE_ACP_NO_SET_POLICY: "1" },
+    });
+    await b.manager.start({ taskId: b.taskId, prompt: "policy-me" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const ended = kinds(b.events, "run.ended")[0];
+    expect(ended?.kind === "run.ended" ? ended.status : "").toBe("done");
+    expect(said(b.events, "autoRun: (none)")).toBe(true);
+  });
+
+  it("fails the run when the agent refuses, rather than running in an unknown posture", async () => {
+    // **What makes the test above a test.** An agent the catalogue says takes a policy, and a peer that
+    // answers `-32601` anyway — a build a version behind, or a proxy in between. A run whose posture
+    // silently failed to apply would report an approval setting it is not in, so it ends with the
+    // agent's own words instead. Without this case, the previous one would pass just as well against a
+    // fixture that accepted `session/set_policy` from anyone.
+    const b = await bench({ agentEnv: { FAKE_ACP_NO_SET_POLICY: "1" } });
+    await b.manager.start({ taskId: b.taskId, prompt: "policy-me" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to fail");
+
+    const ended = kinds(b.events, "run.ended")[0];
+    expect(ended?.kind === "run.ended" ? ended.status : "").toBe("failed");
+    const note = kinds(b.events, "run.status").find(
+      (event) => event.kind === "run.status" && event.status === "failed",
+    );
+    expect(note?.kind === "run.status" ? (note.note ?? "") : "").toContain(
+      "session/set_policy not supported",
+    );
+    // And the turn never ran: a prompt answered under a posture we failed to set is the outcome this
+    // whole ordering exists to prevent.
+    expect(said(b.events, "autoRun:")).toBe(false);
+  });
+});
+
+/**
  * The model a run is started on.
  *
  * ## What only this layer can prove

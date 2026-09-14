@@ -20,7 +20,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { HarnessSummary, Project, RunEvent, Task } from "@envoycoder/protocol";
 
-import { canApplyModel, canApplyThinking, harnessModels, harnessThinking } from "@envoycoder/agent-catalog";
+import { canApplyModel, canApplyThinking, harnessModels, harnessThinking, HARNESS_CATALOG } from "@envoycoder/agent-catalog";
 
 import { TaskPane } from "../src/components/TaskPane.js";
 
@@ -84,6 +84,10 @@ function harnessFor(
     agentMode: id === "envoy-harness",
     model: canApplyModel(id),
     thinking: canApplyThinking(id),
+    // The fourth delivery flag, added by settings slice 1, and read from the catalogue like the three
+    // above rather than typed out: this is what the settings pane's approvals row is enabled on
+    // (`session/set_policy`), and a copy written here would let the wire and that row disagree.
+    approvalPolicy: HARNESS_CATALOG[id].capabilities.approvalPolicy,
   };
   return {
     id,

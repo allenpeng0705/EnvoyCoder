@@ -61,7 +61,15 @@ export interface CommandContribution {
   /** Extra words that should match this row without being shown. */
   keywords?: readonly string[];
   selected?: boolean;
-  /** What the command needs from the user before it can run. */
+  /**
+   * What the command needs from the user before it can run.
+   *
+   * `value` **seeds the field**, and it is what makes `defaultProjectPath` a setting that does
+   * something rather than one the daemon stores and nobody reads. "Add project…" asks for a folder;
+   * this is where the folder the user nominated in Settings arrives, so the stage opens on the place
+   * they keep their work instead of asking them to paste a path they have already given us. Absent —
+   * the shipped state — means the field starts empty and nothing is assumed.
+   */
   needs?: { label: string; placeholder?: string; value?: string };
   /**
    * Ask for the value *without typing* — a folder picker, for the commands where one exists.
@@ -123,6 +131,24 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
   }, [props.open]);
 
   /**
+   * Enter the value stage for a command, **with the field seeded from `needs.value` when it has one**.
+   *
+   * One function rather than a `setStage`/`setQuery` pair at each of the four places a stage begins
+   * (the picker that is absent, the picker that failed, the row with no picker at all, and pressing
+   * Enter on the first row). Seeding at only some of them is exactly how a setting comes to work when
+   * the user clicks and not when they use the keyboard — so the seeding belongs to "entering the
+   * stage", not to any one caller.
+   *
+   * Seeding the *query* is deliberate: while a command is staged this field is the command's argument,
+   * not the search box, which is why the list is replaced by the stage row. An empty seed leaves the
+   * old behaviour exactly: an empty field and a confirm button that stays disabled.
+   */
+  const stageInto = (command: CommandContribution): void => {
+    setStage({ command });
+    setQuery(command.needs?.value ?? "");
+  };
+
+  /**
    * Activating a row — from a click, or from the intent the shell opened the palette with.
    *
    * One function rather than two paths, because "the row the user clicked" and "the row the shell asked
@@ -139,13 +165,10 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
     // nothing for a moment is a click a user reports as "nothing happened".
     if (row.pick && !hasShellPicker()) {
       if (row.needs) {
-        setStage({
-          command: {
-            ...row,
-            needs: { ...row.needs, label: `${row.needs.label} (${t("palette.noPicker")})` },
-          },
+        stageInto({
+          ...row,
+          needs: { ...row.needs, label: `${row.needs.label} (${t("palette.noPicker")})` },
         });
-        setQuery("");
         return;
       }
     }
@@ -173,19 +196,15 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
           return;
         }
         if (row.needs) {
-          setStage({
-            command: why
-              ? { ...row, needs: { ...row.needs, label: `${row.needs.label} (${why})` } }
-              : row,
-          });
-          setQuery("");
+          stageInto(
+            why ? { ...row, needs: { ...row.needs, label: `${row.needs.label} (${why})` } } : row,
+          );
         }
       })();
       return;
     }
     if (row.needs) {
-      setStage({ command: row });
-      setQuery("");
+      stageInto(row);
     } else {
       void row.run("");
       props.onClose();
@@ -261,7 +280,7 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
     }
     const first = rows[0]?.[1][0];
     if (!first) return;
-    if (first.needs) setStage({ command: first });
+    if (first.needs) stageInto(first);
     else {
       void first.run("");
       props.onClose();
@@ -360,6 +379,16 @@ export function buildCommandContributions(input: {
   onRevealTask: (taskId: string) => void;
   tasks: readonly { id: string; title: string; projectId: string }[];
   /**
+   * The folder the user nominated in Settings, which seeds the "Add project" field.
+   *
+   * **This is the read site that makes `defaultProjectPath` an honest setting.** It sat in the schema,
+   * travelled the RPC and was read by nobody until settings slice 1
+   * (`docs/settings-parity.md` §7.1), and `apps/desktop/test/settings-coverage.test.ts` now fails if a
+   * `CoderSettings` field loses its reader again. Optional because the key is optional on disk:
+   * absent means "the field starts empty", which is not a failure.
+   */
+  defaultProjectPath?: string | undefined;
+  /**
    * The window's translator.
    *
    * Taken as an argument rather than read from context inside this function, because this is not a
@@ -396,6 +425,13 @@ export function buildCommandContributions(input: {
       needs: {
         label: t("palette.addProject.needs"),
         placeholder: t("palette.addProject.needsPlaceholder"),
+        // The settings row's folder, where there is one. Read here rather than defaulted into
+        // `run`'s argument, because the user has to *see* the value before it is used: this field is
+        // editable, and a confirm button that added a folder nobody could read would be the same
+        // defect in the other direction. Spread rather than assigned so an unset setting leaves the
+        // key off entirely — `undefined` and "no default" are the same state, and one of them is
+        // visible in a debugger.
+        ...(input.defaultProjectPath ? { value: input.defaultProjectPath } : {}),
       },
       run: (value) => input.onAddProject(value.trim()),
     },

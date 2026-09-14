@@ -121,6 +121,21 @@ export interface AcpClientOptions {
    * so a model must be set before a level is, and `RunManager` sends them in that order.
    */
   sessionConfigs?: readonly { configId: string; value: string }[];
+  /**
+   * The agent's own session policy to set once the session exists (`session/set_policy`).
+   *
+   * **Where "ask before anything destructive" actually lands.** The app setting is a preference; the
+   * mechanism is this method on the agents that document it, and `resolveApprovalPolicy` in the daemon
+   * is what turns one into the other — the client only carries the value, exactly as it does for a mode
+   * or a session config. Absent means "this agent has no policy method" (or the caller had nothing to
+   * say), which is the normal case for every agent but `envoy-harness`.
+   *
+   * Awaited rather than best-effort, like `agentModeId` and `sessionConfigs`, and for the sharper
+   * version of the same reason: an approval posture that failed to apply is invisible in the
+   * transcript — the agent simply stops asking, or keeps asking — and the run would report a safety
+   * posture it is not in. Throwing fails the run with the agent's own words instead.
+   */
+  sessionPolicy?: { autoRun: AcpAutoRunPolicy };
 }
 
 /** What the agent said it can do. Recorded so the run's capabilities are the agent's, not ours. */
@@ -137,6 +152,23 @@ type Pending = {
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout> | undefined;
 };
+
+/**
+ * The `autoRun` values `session/set_policy` accepts — **the peer's own vocabulary, verbatim**.
+ *
+ * Taken from `envoy-harness`'s parameter check, which is the contract rather than a suggestion:
+ * `always-confirm` (ask before every tool), `safe-only` (auto-allow read-only tools and single safe
+ * shell commands, ask for everything else) and `off` (never ask)
+ * (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:237-295`,
+ * `.../src/permissions/auto-run.ts:1-70`). Verified against the built peer: a fresh session answers
+ * `session/get_policy` with no `autoRun` at all, each of the three values is accepted and echoed back,
+ * and anything else is refused `-32602 preset, sandbox, approval, or autoRun required`.
+ *
+ * A translated or prettified value would be refused by the agent, so this union exists to make that
+ * impossible in our own types: only the catalogue's resolver builds one (`resolveApprovalPolicy`), and
+ * this client passes it through untouched — the same division `agentModeId` and `sessionConfigs` follow.
+ */
+export type AcpAutoRunPolicy = "always-confirm" | "safe-only" | "off";
 
 /** A JSON-RPC failure, with the protocol's own code preserved. */
 export class AcpRequestError extends Error {
@@ -249,6 +281,11 @@ export class AcpClient {
       // `deepseek-harness`.
       for (const config of options.sessionConfigs ?? []) await client.setSessionConfig(config);
       if (options.agentModeId) await client.setMode(options.agentModeId)
+      // **Last, and it is not an ordering nicety.** A mode changes what the agent may *do*; this changes
+      // what it *asks about*, and the peer accepts it only while the session is idle — before the first
+      // prompt, which is exactly where this is. It is also the only one of the four whose absence means
+      // "leave the agent's own policy alone", so a failure here has nothing to fall back to.
+      if (options.sessionPolicy) await client.setPolicy(options.sessionPolicy.autoRun)
       return client;
     } catch (error) {
       // A half-started agent is a process we own and must not leak.
@@ -390,6 +427,31 @@ export class AcpClient {
     // ignored: for an option that depends on the model, this is the only way to learn what the agent
     // offers *now* — see `sessionConfigOptions`.
     if (Array.isArray(result?.configOptions)) this.configOptionsValue = result.configOptions;
+  }
+
+  /**
+   * Set the open session's own approval policy — whether the agent asks before it acts.
+   *
+   * `{sessionId, autoRun}`, the peer's own parameters: it validates the value against
+   * `always-confirm | safe-only | off` and answers `-32602 preset, sandbox, approval, or autoRun
+   * required` for anything else, so the value is passed through verbatim
+   * (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:237-295`). The peer also
+   * exposes `session/get_policy` for the other direction, which is how the setting was verified against
+   * the built binary rather than inferred from its source — the daemon does not call it, because a
+   * policy this daemon set is one it already knows.
+   *
+   * **Only one field is sent, and only ever a bare value.** The method also carries `sandbox` and
+   * `approval` (and a `preset` that expands to all three), and those are the agent's own security
+   * posture — `session/set_mode` is what EnvoyCoder uses to bound what an agent may do, and a settings
+   * row about approvals has no business changing the sandbox underneath it.
+   */
+  private async setPolicy(autoRun: AcpAutoRunPolicy): Promise<void> {
+    const sessionId = this.requireSession();
+    await this.request(
+      "session/set_policy",
+      { sessionId, autoRun },
+      this.options.handshakeTimeoutMs ?? 30_000,
+    );
   }
 
   /**

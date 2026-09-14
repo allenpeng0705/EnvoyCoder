@@ -50,6 +50,7 @@ import {
   type EnvoyCoderErrorCode,
   type HarnessId,
   HarnessIdSchema,
+  ProjectDefaultsPatchSchema,
   RUN_MODES,
   type RunEvent,
   type RpcMethod,
@@ -322,10 +323,18 @@ export interface CoderStateChange {
 
 const TaskStatusSchema = z.enum(TASK_STATUSES);
 
+/**
+ * The defaults a **stored project** may hold — as opposed to the patch shape a write carries.
+ *
+ * `ProjectDefaultsPatchSchema` (the protocol's) is what `coder.updateProject` accepts, and it allows
+ * `model: ""` because a control that can pick a model has to be able to clear one. The store turns
+ * that into "drop the key" before writing, so a stored project never holds an empty model — which is
+ * this schema's rule, and the reason the two shapes exist rather than one lenient one.
+ */
 const ProjectDefaultsSchema = z
   .object({
     harness: HarnessIdSchema.optional(),
-    model: z.string().optional(),
+    model: z.string().min(1).optional(),
     extraArgs: z.string().optional(),
   })
   .strict();
@@ -869,6 +878,16 @@ export interface HarnessSummary {
      * the session configuration, which is the same call the model already uses.
      */
     thinking: boolean;
+    /**
+     * Can the daemon change whether this agent **asks before destructive actions**?
+     *
+     * The flag the settings pane enables "Ask before anything destructive" on. `agentMode`, `model` and
+     * `thinking`'s fourth sibling, and a fourth wire again: `envoy-harness` takes a session policy
+     * through `session/set_policy { autoRun }`, `deepseek-harness` has no such method at all. False
+     * means the row is disabled **with the reason on screen** when this agent is the default one —
+     * never a switch that stores a preference the agent will not be told about.
+     */
+    approvalPolicy: boolean;
   };
   /** Whether the binary exists right now. `unknown` is honest for a harness we have not probed. */
   available: boolean | "unknown";
@@ -945,6 +964,14 @@ export const HarnessSummarySchema = z
          * thought-level method at all, so a daemon can honour one and not the other.
          */
         thinking: z.boolean(),
+        /**
+         * Whether the daemon can tell this agent whether to ask before destructive actions.
+         *
+         * Separate from `approvals`, which says whether the agent can ask at all, and separate from the
+         * other three flags because it is a fourth method: `session/set_policy`. Required, on the same
+         * terms — an enabled control is a promise that the choice reaches the agent.
+         */
+        approvalPolicy: z.boolean(),
       })
       .strict(),
     available: z.union([z.boolean(), z.literal("unknown")]),
@@ -1068,7 +1095,12 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
       .object({
         id: z.string().min(1),
         label: z.string().min(1).optional(),
-        defaults: ProjectDefaultsSchema.optional(),
+        /**
+         * The project's own defaults, and they **replace** rather than merge: a patch that carried only
+         * a model would otherwise leave the harness ambiguous. `ProjectDefaultsPatchSchema` is the patch
+         * shape, so `""` clears a value — see `coder.updateSettings` for why that is not just tidiness.
+         */
+        defaults: ProjectDefaultsPatchSchema.optional(),
         tags: z.array(z.string()).readonly().optional(),
       })
       .strict(),
@@ -1282,14 +1314,6 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
     params: EmptyParams,
     result: z.object({ peers: z.array(CoderPeerSchema).readonly() }).strict(),
   },
-  "coder.offerRemoteRun": {
-    // The broker for a distributed run is an open decision (`docs/envoycoder-design.md` §7), so the
-    // parameters are deliberately not frozen here. The method exists in the catalogue because a
-    // client may already ask *whether* it is supported, and a refusal that names the reason is
-    // better than an unknown-method error.
-    params: z.record(z.unknown()).optional(),
-    result: z.unknown(),
-  },
 
   /* — settings — */
   "coder.getSettings": {
@@ -1301,10 +1325,15 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
       .object({
         settings: z
           .object({
-            defaultProjectPath: z.string().min(1).optional(),
-            defaults: ProjectDefaultsSchema.optional(),
+            /**
+             * `""` is **"clear it"**, not a path: the control that can choose a folder has to be able
+             * to empty it, and `{defaultProjectPath: undefined}` survives `JSON.stringify` as nothing
+             * at all. The store drops the key rather than storing an empty string, so the *stored*
+             * document keeps the `min(1)` rule `CoderSettingsSchema` states.
+             */
+            defaultProjectPath: z.string().optional(),
+            defaults: ProjectDefaultsPatchSchema.optional(),
             requireApprovalForDestructive: z.boolean().optional(),
-            allowRemoteRuns: z.boolean().optional(),
             keepTranscripts: z.boolean().optional(),
             /**
              * The language the UI speaks. Validated here, against the same closed list the picker

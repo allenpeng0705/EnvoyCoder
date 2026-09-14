@@ -125,6 +125,43 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
     if (!started.ok) setNotice(started);
   };
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /**
+   * Which settings the pane is showing: this machine's, or one project's.
+   *
+   * The sidebar's per-project `⋯` button has always been labelled *"Project settings for {project}"*
+   * (`sidebar.project.settings.aria`) and always opened the **app** pane with the project discarded — a
+   * control that does something other than what it says, which is the same defect as a setting that
+   * does nothing. It now carries the project through, and the pane renders that project's defaults
+   * (`docs/settings-parity.md` §7.3, §8.1).
+   *
+   * **An id, not the project object, and that is not a detail.** The first version stored the object it
+   * was handed at click time — a snapshot — while the pane's rows read their current value from it and
+   * write the values it does not touch back alongside the one it does. Since a project's defaults
+   * **replace** rather than merge (`store.ts:293-308`), a snapshot meant the second edit in a session
+   * wrote the first one away: change the model, then the agent, and the model is gone. Resolving the id
+   * against `state.projects` on every render is what makes the second edit carry the first;
+   * `test/settings-scope.test.tsx` fails on the snapshot.
+   *
+   * A project that disappears while the pane is open — removed in another window — falls back to the
+   * app scope. That is the honest answer: the pane is titled "Settings", the rows are this machine's,
+   * and nothing claims to be editing a project that no longer exists.
+   */
+  const [settingsProjectId, setSettingsProjectId] = useState<string | undefined>(undefined);
+  const settingsProject = useMemo(
+    () =>
+      settingsProjectId === undefined
+        ? undefined
+        : props.state.projects.find((project) => project.id === settingsProjectId),
+    [settingsProjectId, props.state.projects],
+  );
+  const openAppSettings = (): void => {
+    setSettingsProjectId(undefined);
+    setSettingsOpen(true);
+  };
+  const openProjectSettings = (project: Project): void => {
+    setSettingsProjectId(project.id);
+    setSettingsOpen(true);
+  };
   const [railOpen, setRailOpen] = useState(true);
   /**
    * The strip's own notice, **as a notice rather than a string**.
@@ -180,7 +217,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
       }
       openPalette(intent);
     },
-    "settings.open": () => setSettingsOpen(true),
+    "settings.open": openAppSettings,
     "sidebar.toggle": () => setRailOpen((open) => !open),
   });
 
@@ -197,6 +234,15 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
       buildCommandContributions({
         t,
         projects: state.projects,
+        // **`defaultProjectPath`'s read site.** The setting is the folder "Add project…" starts from,
+        // and this is what makes that true: the row seeds its text stage with it, so the field a user
+        // meets is already filled in with the place they nominated. Without this line the key was
+        // stored, validated and advertised on the wire while being read by nothing at all
+        // (`docs/settings-parity.md` §7.1), and `test/settings-coverage.test.ts` is the gate that keeps
+        // a field from losing its reader again.
+        ...(state.settings.defaultProjectPath !== undefined
+          ? { defaultProjectPath: state.settings.defaultProjectPath }
+          : {}),
         tasks: state.tasks.map((task) => ({
           id: task.id,
           title: task.title,
@@ -227,12 +273,12 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
           const started = await props.actions.startRun(created.task.id, title);
           if (!started.ok) setNotice(started);
         },
-        onOpenSettings: () => setSettingsOpen(true),
+        onOpenSettings: openAppSettings,
         onPairPhone: () => setNotice(localNotice("palette.pairPhone.notYet")),
         onToggleRail: () => setRailOpen((open) => !open),
         onRevealTask: (taskId) => setActiveId(taskId),
       }),
-    [state.projects, state.tasks, props.actions, t],
+    [state.projects, state.tasks, state.settings.defaultProjectPath, props.actions, t],
   );
 
   return (
@@ -291,9 +337,9 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               void startNewTask(projectId);
             }}
             onAddProject={() => openPalette({ commandId: "project.add" })}
-            onOpenProjectSettings={() => setSettingsOpen(true)}
+            onOpenProjectSettings={openProjectSettings}
             onOpenCommandCenter={() => openPalette()}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenSettings={openAppSettings}
             unavailable={railUnavailable}
             tasksUnknown={!state.tasksKnown}
           />
@@ -303,8 +349,21 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
           {settingsOpen ? (
             <SettingsPane
               state={state}
+              // The project scope when the pane was opened from a project row, and the app scope
+              // otherwise. `settingsProject` is what the `⋯` button carries through, and what makes the
+              // button's accessible name true.
+              {...(settingsProject !== undefined ? { project: settingsProject } : {})}
               onClose={() => setSettingsOpen(false)}
               onUpdate={(patch) => void props.actions.updateSettings(patch)}
+              // A project's defaults, written whole because they replace: see `coderStore.updateProject`.
+              // The refusal goes to the strip rather than vanishing — a project whose defaults could not
+              // be saved must not keep showing the value the user picked.
+              onUpdateProject={(defaults) => {
+                if (!settingsProject) return;
+                void props.actions.updateProject({ id: settingsProject.id, defaults }).then((result) => {
+                  if (!result.ok) setNotice(result);
+                });
+              }}
             />
           ) : active ? (
             <TaskPane
