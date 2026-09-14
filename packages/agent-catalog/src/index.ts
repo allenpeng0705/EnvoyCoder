@@ -956,3 +956,7 @@ export * from "./acp-catalog.js";
 // The model facts live in their own module — see its head for why a per-agent model list, its
 // provenance and the way the value travels are one subject rather than three lines per entry.
 export * from "./models.js";
+// And what an agent publishes **inside a session** — the model list it enumerates there, and its
+// thinking level — in a third, for the same reason: it is the one subject no catalogue can answer on
+// its own, because the answer arrives from a session and is kept with the time it was seen.
+export * from "./session-options.js";

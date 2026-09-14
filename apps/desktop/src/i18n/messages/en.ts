@@ -216,6 +216,43 @@ export const en = {
     "{agent} publishes its models only inside a running session, so there is no list to choose from here. Type one as provider/model, using the provider name {agent} itself uses — and if it does not have that model the run stops with the agent's own words, rather than quietly using another one.",
   "task.composer.model.nextRun":
     "The agent keeps the model it started on. Your choice applies to the next run.",
+  // …and the one note that is not a refusal *or* an instruction: the list on screen came from a real
+  // session, at a real time, and is therefore a record rather than a promise. Printed instead of a
+  // "where the list came from" line, because the answer to that question is what changes the user's
+  // expectations — a model list is per machine, per credential and per agent build.
+  "task.composer.model.observed":
+    "These are the models {agent} listed when EnvoyCoder last opened a session with it, on {at}. It may publish different ones next time.",
+
+  /* ── the thinking level ──
+     The fourth control, and the first one whose options exist **nowhere but in a session**: an agent
+     publishes its thought levels in the `session/new` response, so before a run there is nothing to
+     read — not in a catalogue and not in a fixture. Hence a state the earlier controls do not have:
+     "we have not seen a session yet", which is our ignorance and must never be rendered as "this agent
+     has none". `deepseek-harness`'s own name for the option is `reasoning_effort`; a user reads
+     "thinking", which is the word Paseo's control row uses. */
+  "task.composer.thinking.label": "Thinking",
+  "task.composer.thinking.title": "How much the agent thinks before it answers",
+  // The control's own "no level chosen" value. The agent's words for this state are its own — and for
+  // an agent that publishes a value for it (`"Provider default"`) that value maps here, because the two
+  // are one state: nothing is sent, and the agent decides.
+  "task.composer.thinking.agentDefault": "The agent's own default",
+  // Why the control is off. Three facts, as with the model: the agent offers none, it offers levels we
+  // have not seen yet, or this build cannot deliver one. Only the first is about the agent.
+  "task.composer.thinking.none": "{agent} does not offer a thinking level.",
+  "task.composer.thinking.notSeen":
+    "EnvoyCoder has not opened a session with {agent} yet, and {agent} only lists its thinking levels inside a session — so there is nothing to choose from until it has run once.",
+  "task.composer.thinking.notWired":
+    "Choosing how much {agent} thinks is not wired up yet, so the control is off rather than silently ignored.",
+  "task.composer.thinking.unknown":
+    "EnvoyCoder has not been told what {agent} offers yet, so the control is off for now.",
+  // The observation, said out loud — and it carries more weight here than for the model, because a
+  // thought level is derived from the model the session resolved: the list describes the model that
+  // agent last ran on, so a user who changed the model may see a level the agent no longer accepts.
+  // When it refuses one, the run stops with the agent's own sentence rather than continuing quietly.
+  "task.composer.thinking.observed":
+    "These are the thinking levels {agent} offered when EnvoyCoder last opened a session with it, on {at}. They were listed for the model it was running then, so they can change.",
+  "task.composer.thinking.nextRun":
+    "The agent keeps the thinking level it started with. Your choice applies to the next run.",
 
   /* ── the modes an agent can be put into, in our words rather than the agent's ──
      `AgentMode.labelKey`/`descriptionKey` point here for every mode **we** named; a mode a
@@ -320,6 +357,12 @@ export const en = {
   // would teach a name that is wrong for the agent reading this sentence.
   "error.modelNotProviderQualified":
     "{harness} needs a model written as provider/model — the provider name, a slash, then the model — and \"{model}\" does not name both, so the run was not started.",
+  // The thinking level's one refusal, and note what it is *not*: a level the agent does not publish is
+  // never refused here. The list a user picks from came from an earlier session and describes the model
+  // that session resolved, so the agent is the authority on what it accepts — and it refuses with its
+  // own sentence, which the run surfaces. This refusal is about the agent having no such method at all.
+  "error.thinkingUnsupported":
+    "{harness} cannot be given a thinking level over the protocol EnvoyCoder speaks to it, so the run was not started. Leave the thinking level unset to run {harness} the way it decides for itself.",
   // The straight quotes are the daemon's own (`service.ts`, `runs.ts` write `${id}` inside `"…"`),
   // and they are kept here deliberately: this entry *is* the sentence an English user already reads,
   // and an equality test in `daemon-errors-i18n.test.ts` fails if the two ever drift.

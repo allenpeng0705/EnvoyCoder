@@ -65,9 +65,11 @@ import {
   harnessDefinition,
   harnessModelDelivery,
   isDrivableByAcpAdapter,
+  observeSessionOptions,
   probeHarness,
   resolveHarnessCommand,
   resolveModelChoice,
+  thinkingDelivery,
 } from "@envoycoder/agent-catalog";
 import type { PlatformId } from "@envoycoder/platform";
 
@@ -75,6 +77,10 @@ import type { CoderPaths } from "@envoycoder/host-bridge";
 
 import { AcpClient, type AcpLaunch, type AcpPermissionRequest, type AcpUpdate } from "./acp/client.js";
 import { keyed, ref } from "./messages.js";
+// The three values a run asks for, checked against the catalogue before anything is spawned — and the
+// refusals a user reads when this build cannot deliver one. They live in their own module because they
+// are one subject (see its head), and this file is about the run loop rather than about the rules.
+import { resolveAgentMode, resolveModelDelivery, resolveThinkingDelivery } from "./run-options.js";
 import type { CoderStore } from "./store.js";
 
 export interface RunManagerDeps {
@@ -113,14 +119,18 @@ interface LiveRun {
   client: AcpClient | undefined;
   launch: AcpLaunch;
   /**
-   * The model this run was started on, taken apart for the agent's own protocol.
+   * The model this run was started on, taken apart for the agent's own protocol, and the thinking
+   * level beside it — **in the order they must be applied**.
    *
    * Resolved once, in `start`, from the catalogue — and kept on the live run rather than looked up
    * again in `drive`, because the two must be the same answer. `launch` already carries the argv half
-   * of it (the catalogue's `buildArgs` built those flags from the same value); this is the half that
-   * cannot travel in argv, which `AcpClient` applies to the session once it exists.
+   * of the model (the catalogue's `buildArgs` built those flags from the same value); this is the half
+   * that cannot travel in argv, which `AcpClient` applies to the session once it exists.
+   *
+   * Order is load-bearing rather than tidy: an agent derives the thinking levels it offers from the
+   * model it has resolved (`dsh-acp/lib/index.js:494-508`), so the model goes first.
    */
-  modelConfig: { configId: string; value: string } | undefined;
+  sessionConfigs: readonly { configId: string; value: string }[];
   /** The turn currently in flight, so `send` can tell "queued" from "steered". */
   turn: Promise<{ stopReason: string }> | undefined;
   /** Messages the user sent, oldest first. */
@@ -156,6 +166,15 @@ export interface StartRunInput {
    * catalogue before anything is spawned — see `resolveAgentMode`.
    */
   agentModeId?: string;
+  /**
+   * The agent's own thinking level for this run (`AgentOptionValue.value`).
+   *
+   * Defaults to the task's stored `thinkingLevel`, so a choice made in the composer survives to the
+   * next run without the caller repeating it — the same arrangement `model` has. Checked against the
+   * catalogue before anything is spawned (see `resolveThinkingDelivery`), and **not** checked against
+   * the observed option list, which is a record of an earlier session rather than a promise.
+   */
+  thinkingLevel?: string;
 }
 
 export class RunManager {
@@ -247,6 +266,11 @@ export class RunManager {
     // refusal it is — where this produces the keyed one. Both refuse; only one of them is explainable
     // to a user.
     const modelConfig = resolveModelDelivery(task.harness, model);
+    // The thinking level, on the same terms and with an extra one recorded below: the *value* is not
+    // checked against anything we have seen, because the observed list is a record of an earlier
+    // session and the agent is the authority on what it currently accepts.
+    const thinkingLevel = input.thinkingLevel ?? task.thinkingLevel;
+    const thinkingConfig = resolveThinkingDelivery(task.harness, thinkingLevel);
     const launch = this.deps.resolveLaunch
       ? this.deps.resolveLaunch({
           harness: task.harness,
@@ -261,6 +285,9 @@ export class RunManager {
       taskId: task.id,
       harness: task.harness,
       ...(model ? { model } : {}),
+      // Only when the agent accepted it, which `resolveThinkingDelivery` has just established: a run
+      // that named a level the agent refused never gets here, so this field cannot claim one.
+      ...(thinkingConfig && thinkingLevel ? { thinkingLevel } : {}),
       hostId: task.hostId ?? "local",
       startedAt: this.now(),
       status: "running",
@@ -275,7 +302,11 @@ export class RunManager {
       seq: 0,
       client: undefined,
       launch,
-      modelConfig,
+      sessionConfigs: [
+        // Model first: an agent derives its thinking levels from the model it has resolved.
+        ...(modelConfig ? [modelConfig] : []),
+        ...(thinkingConfig && thinkingLevel ? [{ ...thinkingConfig, value: thinkingLevel }] : []),
+      ],
       turn: undefined,
       queued: [],
       intent: "none",
@@ -292,6 +323,7 @@ export class RunManager {
       kind: "run.started",
       harness: run.harness,
       ...(run.model ? { model: run.model } : {}),
+      ...(run.thinkingLevel ? { thinkingLevel: run.thinkingLevel } : {}),
       hostId: run.hostId,
     });
 
@@ -393,12 +425,19 @@ export class RunManager {
         ...(agentModeId ? { agentModeId } : {}),
         // The other half of the same division. Some agents take a model in argv (already in `launch`)
         // and some through the session's own configuration, and *which* is a catalogue fact the client
-        // must not know — so the daemon hands it a config id and a value, or nothing at all.
-        ...(live.modelConfig ? { sessionConfig: live.modelConfig } : {}),
+        // must not know — so the daemon hands it a config id and a value, in the order they must be
+        // applied, or nothing at all.
+        ...(live.sessionConfigs.length > 0 ? { sessionConfigs: live.sessionConfigs } : {}),
       });
       live.client = client;
 
       if (client.sessionId) this.lastSession.set(live.run.taskId, client.sessionId);
+      // **Only for a session we opened.** A resume is answered with less — both native harnesses reply
+      // to `session/resume` with little more than the session id — so recording it would replace a full
+      // option list with an empty one, which on screen is the difference between a picker and "this
+      // agent offers nothing". The condition is `resumeSessionId`, which is also exactly when
+      // `AcpClient` called `session/new` rather than `session/resume`.
+      if (resumeSessionId === undefined) await this.recordSessionOptions(live, client);
       await this.record(live, {
         kind: "run.session",
         sessionId: client.sessionId ?? "unknown",
@@ -438,6 +477,46 @@ export class RunManager {
     } finally {
       await live.client?.stop().catch(() => undefined);
       live.client = undefined;
+    }
+  }
+
+  /* ────────────────────────────── what the agent told us about itself ────────────────────────────── */
+
+  /**
+   * Write down what this agent published when the session opened.
+   *
+   * ## Why a run is the only place this can happen
+   *
+   * The options are per session — `session/new` answers `{sessionId, configOptions}` and there is no
+   * way to ask an agent what it offers without opening one — so the record is a *by-product* of real
+   * work rather than something the daemon can go and fetch at startup. Two consequences the window
+   * lives with, and states on screen: the first run of an agent teaches us, and the answer is always
+   * about the **last** session rather than the next one.
+   *
+   * ## Why it never fails the run
+   *
+   * This is a note about somebody else's product, not part of the user's work. A write that failed —
+   * a full disk, a state directory removed underneath us — must not take down a session that has
+   * already opened, so the failure is swallowed and the run continues with the options the window
+   * showed before. The alternative would be an agent that worked and a task reported as failed.
+   *
+   * An **empty** observation is recorded rather than skipped: "we opened a session and the agent
+   * published nothing" is a fact about the agent (it is exactly what `envoy-harness` does), and it is
+   * a different statement from "we have not looked yet" — the distinction the thinking pill's two
+   * disabled states rest on.
+   */
+  private async recordSessionOptions(live: LiveRun, client: AcpClient): Promise<void> {
+    try {
+      await this.deps.store.recordSessionOptions(
+        observeSessionOptions({
+          harness: live.run.harness,
+          observedAt: this.now(),
+          ...(client.sessionId !== undefined ? { sessionId: client.sessionId } : {}),
+          configOptions: client.sessionConfigOptions(),
+        }),
+      );
+    } catch {
+      // See the doc above: the record is a courtesy to the next render, not part of the run.
     }
   }
 
@@ -742,102 +821,6 @@ function takeIntent(live: { intent: "none" | "cancel" | "steer" }): "none" | "ca
   const intent = live.intent;
   live.intent = "none";
   return intent;
-}
-
-/**
- * The mode a run starts in, or a refusal that names why it cannot be one.
- *
- * ## Why the daemon checks rather than passing it through
- *
- * `session/set_mode` is not a method every ACP agent answers. `envoy-harness` implements it with
- * `default | plan | review`; `deepseek-harness` does not implement it at all, and its own per-session
- * configuration is the model and the reasoning effort. So "the window offered a picker" is not proof
- * that a given agent accepts a mode, and the check has to be against the *harness*, from the
- * catalogue — the same source the window renders its picker from, which is what keeps the two ends
- * telling the user the same story.
- *
- * Two refusals, and the code tells them apart the way `ENVOYCODER_ERRORS` says to: the **cause** is
- * the harness when its protocol has no way to be put into a mode, and the **caller's** mistake when
- * the id is one this agent never declared. A client that has just been told "this agent cannot do
- * modes" offers the user something different from one told "that mode name is not one of its".
- *
- * Returning `undefined` for "no mode requested" is deliberate: that is not a failure, it is an agent
- * running in its own default, and the task file says nothing rather than naming a default it did not
- * choose.
- */
-function resolveAgentMode(harness: HarnessId, requested: string | undefined): string | undefined {
-  if (requested === undefined) return undefined;
-  const definition = harnessDefinition(harness);
-
-  if (!definition.capabilities.agentMode) {
-    throw coderError(
-      ENVOYCODER_ERRORS.harnessUnsupported,
-      `${definition.label} cannot be put into a mode over the protocol EnvoyCoder speaks to it, so the run was not started. Leave the mode unset to run ${definition.label} in its own default.`,
-      ref("error.agentModeUnsupported", { harness: definition.label }),
-    );
-  }
-  if (!definition.modes.some((mode) => mode.id === requested)) {
-    throw coderError(
-      ENVOYCODER_ERRORS.badRequest,
-      `${definition.label} does not offer a mode called "${requested}", so the run was not started. Pick one of its modes and try again.`,
-      ref("error.agentModeUnknown", { harness: definition.label, mode: requested }),
-    );
-  }
-  return requested;
-}
-
-/**
- * How the chosen model reaches this agent — or a refusal naming why it cannot.
- *
- * ## The three outcomes, and why the middle one is not "ignore it"
- *
- *   * **No model asked for** (`undefined`) — the agent runs its own default, and the task file says
- *     nothing rather than naming a default it did not choose. Not an error.
- *   * **A model this agent takes** — returned as the agent's own session-configuration pair when it is
- *     an agent that reads one there (`deepseek-harness`), or as `undefined` when the value already
- *     travelled in argv (`envoy-harness`, where the catalogue's `buildArgs` built the flags). Two
- *     deliveries, one resolution: the *split* is the catalogue's, and doing it twice is how the two
- *     ends come to disagree.
- *   * **A model this agent cannot take** — refused, before a process exists. Both sub-cases refuse:
- *     an agent with no model support at all, and an id it does not publish (which we cannot map to a
- *     provider ourselves, and which `envoy-harness` would silently drop on the floor).
- *
- * The refusal codes are the catalogue's (`noModelSupport` / `unknownModel` /
- * `notProviderQualified`), turned into one translated sentence each, because "this agent has no model"
- * and "we do not know that model" are different things to tell a user.
- */
-function resolveModelDelivery(
-  harness: HarnessId,
-  model: string | undefined,
-): { configId: string; value: string } | undefined {
-  if (model === undefined || model === "") return undefined;
-  const label = harnessDefinition(harness).label;
-  const resolved = resolveModelChoice(harness, model);
-  if (!resolved.ok) {
-    throw coderError(
-      resolved.code === "noModelSupport"
-        ? ENVOYCODER_ERRORS.harnessUnsupported
-        : ENVOYCODER_ERRORS.badRequest,
-      `${resolved.reason} The run was not started.`,
-      ref(
-        resolved.code === "noModelSupport"
-          ? "error.modelUnsupported"
-          : resolved.code === "unknownModel"
-            ? "error.modelUnknown"
-            : "error.modelNotProviderQualified",
-        { harness: label, model },
-      ),
-    );
-  }
-  const delivery = harnessModelDelivery(harness);
-  // No delivery at all, for an agent that was never launchable anyway: `launchFromCatalogue` refuses
-  // it by name a few lines later, and inventing a second refusal here would be two sentences for one
-  // fact. The argv entries need nothing from this function beyond the check above.
-  if (delivery === undefined || delivery.kind === "argv") return undefined;
-  return {
-    configId: delivery.configId,
-    value: delivery.encode({ provider: resolved.provider, model: resolved.model }),
-  };
 }
 
 /** ACP's stop reason → the status the rail shows. */

@@ -15,7 +15,7 @@
  * both a deterministic script and a real subprocess.
  */
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -480,9 +480,17 @@ describe("the agent's own mode", () => {
         Object.prototype.hasOwnProperty.call(values, name) ? values[name]! : whole,
       );
 
+    // The thinking level's refusal belongs in this list rather than in a test of its own: the property
+    // is "the English on the wire is the entry in the catalogue", and a fourth case is a line here
+    // instead of a fourth near-identical assertion.
+    const thinking = await bench({ harness: "envoy-harness" })
+      .then((b) => b.manager.start({ taskId: b.taskId, prompt: "hi", thinkingLevel: "max" }))
+      .then(() => undefined, (error: unknown) => (error as Error).message);
+
     const cases: readonly [string | undefined, keyof typeof en, Record<string, string>][] = [
       [unsupported, "error.agentModeUnsupported", { harness: "DeepSeek Harness" }],
       [unknown, "error.agentModeUnknown", { harness: "Envoy Harness", mode: "nope" }],
+      [thinking, "error.thinkingUnsupported", { harness: "Envoy Harness" }],
     ];
 
     for (const [wire, key, values] of cases) {
@@ -536,7 +544,7 @@ describe("the model a run is started on", () => {
   });
 
   it("is taken from the task when the caller does not repeat it, so a choice survives a restart", async () => {
-    const b = await bench({ harness: "deepseek-harness" });
+    const b = await bench({ harness: "deepseek-harness", agentEnv: { FAKE_ACP_PUBLISH_OPTIONS: "1" } });
     await b.store.updateTask({ id: b.taskId, model: "deepseek/deepseek-chat" });
     const run = await b.manager.start({ taskId: b.taskId, prompt: "model-me" });
     await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
@@ -622,5 +630,303 @@ describe("the model a run is started on", () => {
     // runs on whatever it is configured with, and a control plane that named a default it did not
     // choose would be describing somebody else's decision as its own.
     expect(said(b.events, "model: (none)")).toBe(true);
+  });
+});
+
+/**
+ * The thinking level a run is started at, and what the session tells us back.
+ *
+ * ## What only this layer can prove
+ *
+ * `agent-catalog/test/session-options.test.ts` pins the catalogue — which agent takes a level, through
+ * which config id, and which state the pill is in. What it cannot pin is the **wire**: that the value
+ * actually reaches a process, in the agent's own encoding, on the same session the model was set on.
+ * So this drives the scripted agent and reads back what its session was configured with, which is the
+ * only evidence that distinguishes a level that arrived from one a client believed it had sent.
+ *
+ * The other half is the observation. A run is the *only* place the daemon can learn what an agent
+ * offers — a session is the only thing that knows — so the record it leaves behind is part of the run's
+ * behaviour, and it is asserted here rather than inferred from a UI test.
+ */
+describe("the thinking level a run is started at", () => {
+  it("reaches the session for the agent that takes one there, and the agent reports it back", async () => {
+    const b = await bench({ harness: "deepseek-harness", agentEnv: { FAKE_ACP_PUBLISH_OPTIONS: "1" } });
+    const run = await b.manager.start({
+      taskId: b.taskId,
+      prompt: "thinking-me",
+      thinkingLevel: "max",
+    });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    // The agent's own id, passed through verbatim: a level we prettified or translated would be one the
+    // agent refuses, and the refusal would arrive after the process existed rather than here.
+    expect(said(b.events, "thinking: max")).toBe(true);
+    // And the run records what it asked for, so a transcript can say what depth the agent worked at
+    // rather than leaving a reader to infer it.
+    expect(run.thinkingLevel).toBe("max");
+    const started = kinds(b.events, "run.started")[0];
+    expect(started && started.kind === "run.started" ? started.thinkingLevel : undefined).toBe("max");
+  });
+
+  it("applies the model before the level, because the agent derives one from the other", async () => {
+    // **The ordering is the agent's, not ours.** `dsh-acp` builds the thinking option from the model the
+    // session resolved (`info.reasoning` for the current route, lib/index.js:494-508), so the levels a
+    // level is validated against belong to the model the session is *now* on. The fixture reproduces
+    // that: `ultra` exists only on the stronger model, so a client that sent the level first is refused
+    // by the agent — which is why this test can tell the two orders apart at all.
+    const b = await bench({ harness: "deepseek-harness", agentEnv: { FAKE_ACP_PUBLISH_OPTIONS: "1" } });
+    await b.manager.start({
+      taskId: b.taskId,
+      prompt: "thinking-me",
+      model: "fake/pro",
+      thinkingLevel: "ultra",
+    });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    expect(said(b.events, "thinking: ultra")).toBe(true);
+    const failed = kinds(b.events, "run.status").filter((event) => event.kind === "run.status" && event.status === "failed");
+    expect(failed).toEqual([]);
+    // Both landed on one session, which is the other property that matters: two `set_config_option`
+    // calls, not one call that overwrote the other.
+    expect(kinds(b.events, "run.session")).toHaveLength(1);
+  });
+
+  it("is taken from the task when the caller does not repeat it, so a choice survives a restart", async () => {
+    const b = await bench({ harness: "deepseek-harness", agentEnv: { FAKE_ACP_PUBLISH_OPTIONS: "1" } });
+    await b.store.updateTask({ id: b.taskId, thinkingLevel: "off" });
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "thinking-me" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    expect(run.thinkingLevel).toBe("off");
+    expect(said(b.events, "thinking: off")).toBe(true);
+  });
+
+  it("refuses a level for an agent with no thought-level method, before anything is spawned", async () => {
+    // `envoy-harness` has none — verified against the built peer, whose `session/set_config_option`
+    // answers `-32601 method not found`. Sending one anyway would mean an agent that answers while
+    // thinking for less time than the user asked for, which is invisible in a transcript; the refusal
+    // names the agent rather than the level, because nothing the user could type would help.
+    const b = await bench({ harness: "envoy-harness" });
+    const wire = await b.manager
+      .start({ taskId: b.taskId, prompt: "hi", thinkingLevel: "max" })
+      .then(() => undefined, (error: unknown) => (error as Error).message);
+
+    expect(coderErrorRef(wire ?? "")?.key).toBe("error.thinkingUnsupported");
+    expect(coderErrorMessage(wire ?? "")).toContain("cannot be given a thinking level");
+    // Nothing was spawned and nothing was recorded: a refused run leaves no transcript to mislead
+    // anybody reading the task afterwards.
+    expect(b.events).toEqual([]);
+  });
+
+  it("sends nothing when no level was chosen, so the agent's own depth stands", async () => {
+    const b = await bench({ harness: "deepseek-harness", agentEnv: { FAKE_ACP_PUBLISH_OPTIONS: "1" } });
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "thinking-me" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    expect(run.thinkingLevel).toBeUndefined();
+    // `""` is the control's "the agent's own default" and is not a level: the request never goes out, so
+    // the agent keeps whatever it decides for itself.
+    expect(said(b.events, "thinking: (none)")).toBe(true);
+  });
+
+  it("does not refuse a level the observed list does not have, and lets the agent say so instead", async () => {
+    // **The deliberate limit of our own validation.** The list a user picks from is a record of an
+    // earlier session, built for the model that session resolved, so treating it as a whitelist would
+    // veto a value the agent would have accepted. The agent validates its own values, refuses loudly,
+    // and this asserts that the refusal we surface is *its* sentence rather than ours.
+    const b = await bench({
+      harness: "deepseek-harness",
+      agentEnv: { FAKE_ACP_PUBLISH_OPTIONS: "1", FAKE_ACP_REFUSE_THINKING: "max" },
+    });
+    await b.manager.start({ taskId: b.taskId, prompt: "thinking-me", thinkingLevel: "max" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const failed = kinds(b.events, "run.status")[0];
+    const note = failed && failed.kind === "run.status" ? (failed.note ?? "") : "";
+    expect(note).toMatch(/unknown reasoning effort/);
+    // **Not keyed, and that is the boundary rather than an omission.** A catalogue key exists for a
+    // sentence *we* author, so a translated window can render our refusal in the user's language; this
+    // sentence is the agent's own words about its own option, and a key would mean inventing a
+    // translation for somebody else's product. The same rule the approval prompt's option labels follow.
+    expect(coderErrorRef(note)).toBeUndefined();
+    // A failed run that still produced output would mean the level had been dropped rather than refused.
+    expect(b.events.filter((event) => event.kind === "run.output")).toEqual([]);
+  });
+});
+
+/**
+ * What a session teaches the daemon, and what it leaves behind for the next window.
+ *
+ * The options a session offers are knowable **only** from a session, so a run is the one moment the
+ * daemon can learn them. It writes them down per agent with the time it saw them, and the window
+ * renders that for the *next* run — the arrangement the whole control row's honesty rests on, since
+ * nothing else can tell a user whether a list is current.
+ */
+describe("what a run learns about the agent", () => {
+  it("records the options a session published, with the time and the session it saw them in", async () => {
+    const b = await bench({ harness: "deepseek-harness", agentEnv: { FAKE_ACP_PUBLISH_OPTIONS: "1" } });
+    await b.manager.start({ taskId: b.taskId, prompt: "hello" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const observed = b.store.sessionOptions("deepseek-harness");
+    expect(observed, "the run recorded nothing").toBeDefined();
+    expect(observed?.options.map((option) => option.configId)).toEqual(["model", "reasoning_effort"]);
+    // The agent's own ids and category, kept verbatim: the mapping to a control is ours, and the record
+    // is of what the agent said rather than of how we interpreted it.
+    expect(observed?.options[1]?.category).toBe("thought_level");
+    // The session it came from, so a maintainer can trace one record back to one run.
+    expect(observed?.sessionId).toMatch(/fake-session-/);
+    expect(Number.isNaN(Date.parse(observed?.observedAt ?? ""))).toBe(false);
+  });
+
+  it("records a session that published nothing, which is not the same as not having looked", async () => {
+    // The default fixture publishes nothing — the shape `envoy-harness` produces in real life (its
+    // `session/new` answers `{sessionId}` alone). The record must still exist: "we opened a session and
+    // it offered nothing" is a fact about the agent, and it is what turns the thinking pill's disabled
+    // state into a statement about the agent rather than about our ignorance.
+    const b = await bench({ harness: "deepseek-harness" });
+    await b.manager.start({ taskId: b.taskId, prompt: "hello" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const observed = b.store.sessionOptions("deepseek-harness");
+    expect(observed).toBeDefined();
+    expect(observed?.options).toEqual([]);
+  });
+
+  it("records what the session said *after* a change, which is the state a picker should offer", async () => {
+    // The method answers with the complete resulting option state rather than an acknowledgement, and
+    // that return value is the more accurate answer for an option derived from the model: `dsh-acp`
+    // rebuilds the thinking list for whatever model the session now resolves. A client that ignored the
+    // echo would offer the levels of the model the agent *started* on.
+    const b = await bench({ harness: "deepseek-harness", agentEnv: { FAKE_ACP_PUBLISH_OPTIONS: "1" } });
+    await b.manager.start({ taskId: b.taskId, prompt: "hello", model: "fake/pro", thinkingLevel: "max" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const observed = b.store.sessionOptions("deepseek-harness");
+    expect(observed?.options.map((option) => option.configId)).toEqual(["model", "reasoning_effort"]);
+    // **The stronger model's levels, not the ones `session/new` advertised.** The session opened on the
+    // agent's default route (`flash`, four levels) and then changed to `pro`, whose levels are a
+    // different list — so this asserts the echo was read, and a client that kept only what the session
+    // first said would offer a user `off` on a model that has no such level.
+    expect(observed?.options[1]?.values.map((value) => value.value)).toEqual(["high", "max", "ultra"]);
+  });
+
+  it("keeps a session that published options from being overwritten by one that published none", async () => {
+    // Two runs on the same agent, and the second is a *resume*: both of ours answer `session/resume`
+    // with little more than the session id. Recording that would replace a full list with an empty one,
+    // which is the difference between a picker and "this agent offers nothing" — so a resume is
+    // deliberately not recorded at all.
+    const b = await bench({ harness: "deepseek-harness", agentEnv: { FAKE_ACP_PUBLISH_OPTIONS: "1" } });
+    await b.manager.start({ taskId: b.taskId, prompt: "hello" });
+    await b.until((events) => kinds(b.events, "run.ended").length === 1, "the first run to end");
+    const first = b.store.sessionOptions("deepseek-harness");
+    expect(first?.options).toHaveLength(2);
+
+    await b.manager.start({ taskId: b.taskId, prompt: "hello again", resume: true });
+    await b.until((events) => kinds(b.events, "run.ended").length === 2, "the second run to end");
+
+    const after = b.store.sessionOptions("deepseek-harness");
+    expect(after?.options).toHaveLength(2);
+    expect(after?.observedAt).toBe(first?.observedAt);
+  });
+});
+
+/**
+ * The record on disk, which is the only reason a window can show a list before a run exists.
+ *
+ * `runs.test.ts`'s tests above prove a run *records*; this proves the record **survives the process**,
+ * because that is its entire purpose: the window that renders the picker is usually a different process
+ * from the run that learned the options, and sometimes a different launch of the app. Two rules of the
+ * store are asserted here too, because this file is data a user can lose if they are wrong: the newest
+ * observation replaces the oldest per agent (a merge would offer a level the agent has dropped), and an
+ * unreadable file is quarantined rather than overwritten.
+ */
+describe("the record of what agents published, on disk", () => {
+  const AT = "2026-09-14T05:23:00.000Z";
+
+  it("is readable by the next process, which is the only reason it is written down", async () => {
+    const home = await mkdtemp(join(tmpdir(), "envoycoder-observed-"));
+    cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+    const paths = coderPaths(home);
+
+    const first = await CoderStore.open({ paths });
+    await first.recordSessionOptions({
+      harness: "deepseek-harness",
+      observedAt: AT,
+      sessionId: "sess-1",
+      options: [
+        {
+          configId: "reasoning_effort",
+          label: "Reasoning effort",
+          category: "thought_level",
+          values: [{ value: "high", label: "High", description: "The default balance." }],
+        },
+      ],
+    });
+
+    // A second store over the same directory: a fresh launch of the app, or the daemon the window
+    // reconnects to. Nothing is kept in memory between the two.
+    const second = await CoderStore.open({ paths });
+    const observed = second.sessionOptions("deepseek-harness");
+    expect(observed?.sessionId).toBe("sess-1");
+    expect(observed?.observedAt).toBe(AT);
+    expect(observed?.options[0]?.values[0]?.label).toBe("High");
+    // And an agent nothing has been recorded for answers `undefined`, which the wire carries as
+    // "nothing has told us yet" rather than as "it has none".
+    expect(second.sessionOptions("envoy-harness")).toBeUndefined();
+    // Nothing was quarantined on the way in: a file this daemon wrote is a file it can read.
+    expect(second.notes().quarantined).toEqual([]);
+    expect(second.notes().skipped).toEqual([]);
+  });
+
+  it("replaces an agent's record rather than merging it, so a dropped level stops being offered", async () => {
+    const home = await mkdtemp(join(tmpdir(), "envoycoder-observed-replace-"));
+    cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+    const store = await CoderStore.open({ paths: coderPaths(home) });
+
+    const option = (values: string[]) => ({
+      configId: "reasoning_effort",
+      label: "Reasoning effort",
+      category: "thought_level",
+      values: values.map((value) => ({ value, label: value })),
+    });
+    await store.recordSessionOptions({
+      harness: "deepseek-harness",
+      observedAt: AT,
+      options: [option(["low", "high", "max"])],
+    });
+    await store.recordSessionOptions({
+      harness: "deepseek-harness",
+      observedAt: "2026-09-15T05:23:00.000Z",
+      options: [option(["off", "low"])],
+    });
+
+    const observed = store.sessionOptions("deepseek-harness");
+    // **Replaced, not unioned.** An agent that has stopped offering `max` must be able to stop being
+    // offered it: a union of everything ever seen would offer a value the agent now refuses, which is
+    // the one failure this control row exists to prevent.
+    expect(observed?.options[0]?.values.map((value) => value.value)).toEqual(["off", "low"]);
+    expect(observed?.observedAt).toBe("2026-09-15T05:23:00.000Z");
+    // One entry per agent, not one per run.
+    expect(await CoderStore.open({ paths: coderPaths(home) }).then((s) => s.sessionOptions("deepseek-harness"))).toBeDefined();
+  });
+
+  it("moves a file it cannot read aside instead of starting over on top of it", async () => {
+    // The store's own rule, applied to this file: what it holds is *evidence* about other products, so
+    // silently overwriting a corrupt one would leave a user with a text field where a picker used to be
+    // and no explanation. The bytes are kept, beside the original, under a name a backup tool includes.
+    const home = await mkdtemp(join(tmpdir(), "envoycoder-observed-corrupt-"));
+    cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+    const paths = coderPaths(home);
+    await CoderStore.open({ paths });
+    await writeFile(paths.sessionOptionsFile, "{ this is not json", "utf8");
+
+    const store = await CoderStore.open({ paths });
+    expect(store.sessionOptions("deepseek-harness")).toBeUndefined();
+    const [note] = store.notes().quarantined;
+    expect(note?.file).toContain("session-options.json");
+    expect(note?.reason).toMatch(/not readable as JSON/);
+    // The bytes survive, in the same directory — the difference between preserving them and losing them.
+    expect(await readFile(note!.movedTo, "utf8")).toBe("{ this is not json");
   });
 });

@@ -22,7 +22,7 @@ import { useEffect, useRef, useState } from "react";
 import type { HarnessId, HarnessSummary, Project, RunEvent, Task } from "@envoycoder/protocol";
 
 import { hasShellPicker, pickFolder } from "../client/folder-picker.js";
-import { composerControls, modeOffReason, modelOffReason } from "../composer/controls.js";
+import { composerControls, modeOffReason, modelOffReason, thinkingOffReason } from "../composer/controls.js";
 import { useT } from "../i18n/context.js";
 import { localize, localizeText, statusKey } from "../i18n/notice.js";
 import { buildTranscript, type TranscriptEntry } from "../state/transcript.js";
@@ -47,7 +47,7 @@ export interface TaskPaneProps {
    * control's *displayed* value and the value the run is started with identical even if the
    * `updateTask` that saved the choice is still in flight.
    */
-  onStart: (prompt: string, agentModeId?: string, model?: string) => void | Promise<void>;
+  onStart: (prompt: string, agentModeId?: string, model?: string, thinkingLevel?: string) => void | Promise<void>;
   /** Remember the agent's mode for this task, so the next run starts the way the user left it. */
   onChangeMode?: (agentModeId: string) => void | Promise<void>;
   /**
@@ -55,6 +55,13 @@ export interface TaskPaneProps {
    * and the only way to undo a model without replacing it with another one.
    */
   onChangeModel?: (model: string) => void | Promise<void>;
+  /**
+   * Remember this task's thinking level, on exactly the model's terms.
+   *
+   * A level is the agent's own id, so `""` here also means "the agent's own default": the value is
+   * cleared rather than stored, and the next run leaves the choice to the agent.
+   */
+  onChangeThinking?: (level: string) => void | Promise<void>;
   /** Move this task to another folder. Applies to the next run — the agent keeps the one it started in. */
   onChangeFolder?: (path: string) => void | Promise<void>;
   /**
@@ -93,6 +100,8 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   const [pickedMode, setPickedMode] = useState<string | undefined>(undefined);
   /** A model the user has just chosen, for the same reason and with the same lifetime. */
   const [pickedModel, setPickedModel] = useState<string | undefined>(undefined);
+  /** A thinking level the user has just chosen, for the same reason again. */
+  const [pickedThinking, setPickedThinking] = useState<string | undefined>(undefined);
   /** Why the folder chooser would not open, after a click that tried. */
   const [pickerProblem, setPickerProblem] = useState<string | undefined>(undefined);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -108,6 +117,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   useEffect(() => {
     setPickedMode(undefined);
     setPickedModel(undefined);
+    setPickedThinking(undefined);
     setPickerProblem(undefined);
   }, [task.id]);
 
@@ -123,6 +133,9 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
    */
   const controls = composerControls(agent, { running, approvalPending: approvalOpen }, {
     selectedModelId: task.model,
+    // The task's stored level, so the picker opens on what the next run will use. Absent is "the
+    // agent's own default", which is a state rather than a missing value — the same rule as the model.
+    ...(task.thinkingLevel !== undefined ? { selectedThinkingLevel: task.thinkingLevel } : {}),
   });
 
   // What each picker shows: the user's just-made choice, else what the task remembers, else the agent's
@@ -136,6 +149,14 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   // nothing picked — is the agent's own default, which is a state rather than a missing value.
   const selectedModelId = pickedModel ?? controls.model.selected ?? undefined;
   const modelOff = modelOffReason(controls.model, {
+    known: summary !== undefined,
+    agent: agent.label,
+  });
+  // The thinking level's half, and it is *two* off-states rather than one: "the agent publishes levels
+  // we have not seen yet" and "this agent offers none" are different sentences, and `thinkingOffReason`
+  // is what keeps the first from being read as the second.
+  const selectedThinkingLevel = pickedThinking ?? controls.thinking.selected ?? undefined;
+  const thinkingOff = thinkingOffReason(controls.thinking, {
     known: summary !== undefined,
     agent: agent.label,
   });
@@ -181,7 +202,15 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     // and the daemon reads the task, which the `updateTask` that saved the clearing has just emptied.
     else {
       const chosenModel = selectedModelId !== undefined && selectedModelId !== "" ? selectedModelId : undefined;
-      void props.onStart(value, modeEnabled ? selectedModeId : undefined, chosenModel);
+      // The thinking level travels on identical terms: only when the control works and something is
+      // chosen, so an agent with no thought-level method is never handed an "undefined level" it would
+      // have to interpret. `""` — the control's "the agent's own default" — is dropped here, and the
+      // daemon reads the task, whose stored level the `updateTask` that cleared it has just emptied.
+      const chosenThinking =
+        thinkingOff === undefined && selectedThinkingLevel !== undefined && selectedThinkingLevel !== ""
+          ? selectedThinkingLevel
+          : undefined;
+      void props.onStart(value, modeEnabled ? selectedModeId : undefined, chosenModel, chosenThinking);
     }
     setText("");
   };
@@ -297,6 +326,17 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               // would fall through to the task's stored model — the very value the user just cleared.
               setPickedModel(chosen);
               void props.onChangeModel?.(chosen);
+            }}
+            thinkingOptions={controls.thinking.options}
+            selectedThinkingLevel={selectedThinkingLevel}
+            thinkingOff={thinkingOff}
+            modelObservedAt={controls.model.observedAt}
+            thinkingObservedAt={controls.thinking.observedAt}
+            onChooseThinking={(chosen) => {
+              // The model's rule, for the model's reason: `""` means "the agent's own default" and has
+              // to be shown at once rather than falling through to the level the user just cleared.
+              setPickedThinking(chosen);
+              void props.onChangeThinking?.(chosen);
             }}
             running={running}
           />
@@ -549,6 +589,10 @@ function agentFor(
     // state with its own sentence, and defaulting it to `{ kind: "none", options: [] }` would turn our
     // ignorance into a claim about the agent.
     models: summary?.models,
+    // A third fact about the same agent, passed whole for the same reason: `"session"` means the agent
+    // publishes its thinking levels only inside a session and nobody has opened one yet, and defaulting
+    // it to `{ kind: "none" }` would turn our ignorance into a claim about the agent.
+    thinking: summary?.thinking,
     capabilities: {
       resume: summary?.capabilities.resume ?? false,
       cancel: summary?.capabilities.cancel ?? false,
@@ -564,6 +608,9 @@ function agentFor(
     // The same rule for the model, on its own flag: an agent can publish a list this build still has no
     // way to deliver to, so "it has models" is not the question — "can we apply one" is.
     modelApplicable: summary?.capabilities.model === true,
+    // The third flag, on its own wire: whether this daemon can make a chosen level the one the agent
+    // runs at. False for `envoy-harness`, whose ACP surface has no thought-level method at all.
+    thinkingApplicable: summary?.capabilities.thinking === true,
   };
 }
 

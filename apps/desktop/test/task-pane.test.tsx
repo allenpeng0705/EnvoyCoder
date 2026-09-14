@@ -20,7 +20,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { HarnessSummary, Project, RunEvent, Task } from "@envoycoder/protocol";
 
-import { canApplyModel, harnessModels } from "@envoycoder/agent-catalog";
+import { canApplyModel, canApplyThinking, harnessModels, harnessThinking } from "@envoycoder/agent-catalog";
 
 import { TaskPane } from "../src/components/TaskPane.js";
 
@@ -83,6 +83,7 @@ function harnessFor(
     images: false,
     agentMode: id === "envoy-harness",
     model: canApplyModel(id),
+    thinking: canApplyThinking(id),
   };
   return {
     id,
@@ -98,6 +99,11 @@ function harnessFor(
           ]
         : [],
     models: harnessModels(id),
+    // Read from the catalogue rather than typed out here, on the same principle as `models`: a change to
+    // what the catalogue claims shows up in this test instead of being shadowed by a stale copy. For
+    // `envoy-harness` that is the observed-none answer; for `deepseek-harness` it is "publishes its
+    // levels only inside a session", which is the state the pill's "not told yet" sentence exists for.
+    thinking: harnessThinking(id),
     capabilities,
     available: true,
     evidence: "cited in `@envoycoder/agent-catalog`",
@@ -294,6 +300,10 @@ describe("the composer", () => {
       "bump the SDK",
       undefined,
       "deepseek-official/deepseek-v4-flash",
+      // `undefined` for the thinking level, on the same terms as the mode: `deepseek-harness` accepts
+      // one, and this task has none chosen and no session observed to choose from, so the run leaves the
+      // decision to the agent rather than sending a level nobody picked.
+      undefined,
     );
     expect(pane.onSend).not.toHaveBeenCalled();
   });
@@ -328,6 +338,7 @@ describe("a task that has not started yet", () => {
       "Add a health check endpoint",
       undefined,
       "deepseek-official/deepseek-v4-flash",
+      undefined,
     );
     expect(onSend).not.toHaveBeenCalled();
     expect(screen.queryByLabelText("How to deliver the message")).toBeNull();
@@ -506,7 +517,15 @@ describe("the agent's mode control", () => {
     fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "plan it out" } });
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
 
-    expect(onStart).toHaveBeenCalledWith("plan it out", "plan", "deepseek-official/deepseek-v4-flash");
+    // Four arguments now, and the fourth is asserted rather than ignored: `envoy-harness` offers no
+    // thinking level, so the run must be started with none. A call that carried `undefined` there by
+    // accident and one that carried a level would otherwise look identical to this test.
+    expect(onStart).toHaveBeenCalledWith(
+      "plan it out",
+      "plan",
+      "deepseek-official/deepseek-v4-flash",
+      undefined,
+    );
   });
 
   it("sends no mode at all when the picker is off, so the agent's own default stands", () => {
@@ -524,6 +543,7 @@ describe("the agent's mode control", () => {
       "just do it",
       undefined,
       "deepseek-official/deepseek-v4-flash",
+      undefined,
     );
   });
 
@@ -631,8 +651,10 @@ describe("the model control", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
 
     // The third argument is what `coder.startRun` carries, and the daemon is what turns it into
-    // `--provider`/`--model` (envoy-harness) or the session config (deepseek-harness).
-    expect(onStart).toHaveBeenCalledWith("use sonnet", "default", "anthropic/claude-sonnet-4-6");
+    // `--provider`/`--model` (envoy-harness) or the session config (deepseek-harness). The fourth is
+    // `undefined` here because this agent declared no thinking levels in the summary, which is the
+    // "not told yet" state — the run is started without a level rather than with an invented one.
+    expect(onStart).toHaveBeenCalledWith("use sonnet", "default", "anthropic/claude-sonnet-4-6", undefined);
   });
 
   it("clears the model when the user picks the agent's own default, rather than storing nothing", () => {
@@ -676,5 +698,221 @@ describe("the model control", () => {
     renderPane([], { task: envoyTask });
     expect(screen.getByText(/has not been told which models Envoy Harness offers yet/)).toBeTruthy();
     expect(screen.queryByText(/does not take a model/)).toBeNull();
+  });
+});
+
+/**
+ * The thinking control on screen.
+ *
+ * ## The state this test exists for
+ *
+ * A thought level is knowable only from a session, so the interesting rendering is not the picker — it is
+ * the two ways there is no picker, and telling them apart. `deepseek-harness` publishes its levels inside
+ * a session and nobody has opened one yet ("we have not looked"); `envoy-harness` has no such method at
+ * all ("it offers none"). A component that rendered one sentence for both would tell the user their agent
+ * cannot think in steps, which one run disproves.
+ *
+ * The observed state is the third: a list a real session published, said out loud to be what it is,
+ * because a level is derived from the model that session resolved and may not survive a model change.
+ */
+describe("the thinking control", () => {
+  const deepseek = { ...task, harness: "deepseek-harness" as const, thinkingLevel: undefined };
+  const LEVELS = {
+    kind: "listed" as const,
+    options: [
+      { value: "off", label: "Off", description: "Use for simple tasks." },
+      { value: "low", label: "Low" },
+      { value: "high", label: "High" },
+      { value: "max", label: "Max" },
+    ],
+    observedAt: "2026-09-14T05:23:00.000Z",
+    source: "observed from the session opened at …",
+  };
+
+  it("lists the levels a session published, with the agent's own words and a way back to the default", () => {
+    renderPane([], {
+      task: deepseek,
+      harnesses: [harnessFor("deepseek-harness", { thinking: LEVELS })],
+      runLive: false,
+    });
+
+    const picker = screen.getByLabelText("Thinking") as HTMLSelectElement;
+    expect(picker.tagName).toBe("SELECT");
+    expect(picker.disabled).toBe(false);
+    // The agent's own words, untranslated, because they are the values it validates: `Off` is not German
+    // in German, it is what the agent accepts.
+    expect([...picker.options].map((option) => option.textContent)).toEqual([
+      "The agent's own default",
+      "Off",
+      "Low",
+      "High",
+      "Max",
+    ]);
+    // The empty option is the state a task is in before anybody chooses, and the only way to undo a
+    // choice — an id is never empty, so the two cannot be confused.
+    expect(picker.value).toBe("");
+    expect([...picker.options].map((option) => option.value)).toEqual(["", "off", "low", "high", "max"]);
+  });
+
+  it("says the list came from a session, and when, instead of promising it", () => {
+    // **The sentence that makes the control honest.** A model or a level an agent lists is per machine
+    // and per credential, so this is a record of one session — and the date is what tells a user whether
+    // that session was this morning or last month. It is the one thing on this row that a fixed string
+    // could not say.
+    renderPane([], {
+      task: deepseek,
+      harnesses: [harnessFor("deepseek-harness", { thinking: LEVELS })],
+      runLive: false,
+    });
+    const note = screen.getByText(/thinking levels DeepSeek Harness offered when EnvoyCoder last opened a session/);
+    expect(note.textContent).toMatch(/2026/);
+    // Not the refusal sentences: nothing here is being refused.
+    expect(screen.queryByText(/does not offer a thinking level/)).toBeNull();
+    expect(screen.queryByText(/only lists its thinking levels inside a session/)).toBeNull();
+  });
+
+  it("sends the chosen level with the first message, so the control is not decorative", () => {
+    // The whole point of the row: the value has to travel on `coder.startRun`, which is what the daemon
+    // turns into `session/set_config_option`. A picker whose choice is dropped is the bug this control
+    // row exists to prevent, and only a test that reads the call can catch it.
+    const { onStart } = renderPane([], {
+      task: deepseek,
+      harnesses: [harnessFor("deepseek-harness", { thinking: LEVELS })],
+      runLive: false,
+    });
+    fireEvent.change(screen.getByLabelText("Thinking"), { target: { value: "max" } });
+    fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "think hard" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    // All four arguments, because they are one call: the model this task remembers, no mode
+    // (`deepseek-harness` has none), and the level the user just chose.
+    expect(onStart).toHaveBeenCalledWith(
+      "think hard",
+      undefined,
+      "deepseek-official/deepseek-v4-flash",
+      "max",
+    );
+  });
+
+  it("remembers the choice on the task, so a run after a restart keeps it", () => {
+    const onChangeThinking = vi.fn();
+    renderPane([], {
+      task: deepseek,
+      harnesses: [harnessFor("deepseek-harness", { thinking: LEVELS })],
+      runLive: false,
+      onChangeThinking,
+    });
+    fireEvent.change(screen.getByLabelText("Thinking"), { target: { value: "low" } });
+    expect(onChangeThinking).toHaveBeenCalledWith("low");
+
+    // And `""` is the request "the agent's own default" — the only way to undo a choice — which must
+    // reach the daemon as-is, because the daemon is what drops the stored key instead of saving a level
+    // called nothing.
+    fireEvent.change(screen.getByLabelText("Thinking"), { target: { value: "" } });
+    expect(onChangeThinking).toHaveBeenLastCalledWith("");
+  });
+
+  it("shows the task's stored level as chosen", () => {
+    renderPane([], {
+      task: { ...deepseek, thinkingLevel: "high" },
+      harnesses: [harnessFor("deepseek-harness", { thinking: LEVELS })],
+      runLive: false,
+    });
+    expect((screen.getByLabelText("Thinking") as HTMLSelectElement).value).toBe("high");
+  });
+
+  it("is off with 'we have not seen a session yet' for the agent that publishes them per session", () => {
+    // `deepseek-harness` before its first run, which is the state a fresh install is in. The control is
+    // disabled and the sentence is about *our* ignorance, with the one step that would fix it.
+    renderPane([], { task: deepseek, harnesses: [harnessFor("deepseek-harness")], runLive: false });
+
+    const picker = screen.getByLabelText("Thinking") as HTMLSelectElement;
+    expect(picker.disabled).toBe(true);
+    expect(screen.getByText(/has not opened a session with DeepSeek Harness yet/)).toBeTruthy();
+    // Not "it offers none", and not "not wired up yet": three different facts, three sentences.
+    expect(screen.queryByText(/does not offer a thinking level/)).toBeNull();
+    expect(screen.queryByText(/Choosing how much/)).toBeNull();
+  });
+
+  it("is off with 'it offers none' for the agent with no thought-level method", () => {
+    // The other disabled state, and the reason both are asserted: `envoy-harness` answers
+    // `session/set_config_option` with `-32601 method not found`, verified against the built peer, so
+    // there is genuinely nothing to offer and the sentence says so about the agent.
+    renderPane([], {
+      task: { ...deepseek, harness: "envoy-harness" },
+      harnesses: [harnessFor("envoy-harness")],
+      runLive: false,
+    });
+    const picker = screen.getByLabelText("Thinking") as HTMLSelectElement;
+    expect(picker.disabled).toBe(true);
+    expect(screen.getByText(/does not offer a thinking level/)).toBeTruthy();
+    expect(screen.queryByText(/has not opened a session/)).toBeNull();
+  });
+
+  it("says the choice applies to the next run while one is live", () => {
+    // The shared property of every control on this row, in its own line: a user who changed only the
+    // thinking level must not be told about the folder or the model.
+    renderPane([], {
+      task: deepseek,
+      harnesses: [harnessFor("deepseek-harness", { thinking: LEVELS })],
+      runLive: true,
+    });
+    expect(screen.getByText(/keeps the thinking level it started with/)).toBeTruthy();
+    // Its own line, not one line shared with the model: the model is also live here and says *its* own
+    // sentence, while the folder — which this user never touched — says nothing at all.
+    expect(screen.getByText(/keeps the model it started on/)).toBeTruthy();
+    expect(screen.queryByText(/still working in/)).toBeNull();
+  });
+});
+
+/**
+ * The model list when it came from a session rather than from the agent's own source.
+ *
+ * The same sentence as the thinking control's, for the same reason — and the state that closes slice 2's
+ * recorded gap: `deepseek-harness` publishes its models only inside a session, so before a run there is a
+ * text field and after one there is the list it actually enumerated.
+ */
+describe("the model control when the list came from a session", () => {
+  const observed = {
+    kind: "listed" as const,
+    options: [
+      {
+        id: "deepseek-official/deepseek-v4-flash",
+        label: "DeepSeek-V4-Flash",
+        description: "Fast, efficient, and economical.",
+        provider: "deepseek-official",
+        model: "deepseek-v4-flash",
+      },
+      {
+        id: "deepseek-official/deepseek-v4-pro",
+        label: "DeepSeek-V4-Pro",
+        provider: "deepseek-official",
+        model: "deepseek-v4-pro",
+      },
+    ],
+    observedAt: "2026-09-14T05:23:00.000Z",
+    source: "observed",
+  };
+
+  it("prefers the published options over the text field, and says where they came from", () => {
+    renderPane([], {
+      task: { ...task, harness: "deepseek-harness", model: undefined },
+      harnesses: [harnessFor("deepseek-harness", { models: observed })],
+      runLive: false,
+    });
+
+    const picker = screen.getByLabelText("Model") as HTMLSelectElement;
+    expect(picker.tagName).toBe("SELECT");
+    expect([...picker.options].map((option) => option.textContent)).toEqual([
+      "The agent's own default",
+      "DeepSeek-V4-Flash",
+      "DeepSeek-V4-Pro",
+    ]);
+    // The agent's own provider id, decoded from its opaque value — `deepseek-official`, not `deepseek`,
+    // which is the name a catalogue list would have got wrong.
+    expect([...picker.options][1]?.value).toBe("deepseek-official/deepseek-v4-flash");
+    expect(screen.getByText(/models DeepSeek Harness listed when EnvoyCoder last opened a session/)).toBeTruthy();
+    // The free-text instruction is gone, because there is no longer a field to type into.
+    expect(screen.queryByText(/publishes its models only inside a running session/)).toBeNull();
   });
 });

@@ -305,7 +305,13 @@ export const CODER_SUBSCRIBE_METHOD = "coder.subscribe";
 
 /** What changed. `ids` names the affected entities when the emitter knows them. */
 export interface CoderStateChange {
-  kind: "projects" | "tasks" | "settings";
+  /**
+   * `harnesses` is the odd one, and it is the honest name for what changed: the **answer about an
+   * agent** moved. A run that opened a session reports what that agent published about itself, so the
+   * composer's options for that agent are new — and a client that refetches tasks on that event would
+   * fetch the wrong list.
+   */
+  kind: "projects" | "tasks" | "settings" | "harnesses";
   at: string;
   ids?: readonly string[];
   /** Which window caused it, so a client can skip work it has already applied. */
@@ -349,6 +355,7 @@ export const TaskSchema = z
     harness: HarnessIdSchema,
     model: z.string().optional(),
     agentModeId: z.string().min(1).optional(),
+    thinkingLevel: z.string().min(1).optional(),
     extraArgs: z.string().optional(),
     status: TaskStatusSchema,
     createdAt: z.string(),
@@ -367,6 +374,7 @@ export const AgentRunSchema = z
     taskId: z.string().min(1),
     harness: HarnessIdSchema,
     model: z.string().optional(),
+    thinkingLevel: z.string().min(1).optional(),
     pid: z.number().int().optional(),
     hostId: z.string().min(1),
     startedAt: z.string(),
@@ -399,6 +407,7 @@ export const RunEventSchema: z.ZodType<RunEvent> = z.discriminatedUnion("kind", 
       kind: z.literal("run.started"),
       harness: HarnessIdSchema,
       model: z.string().optional(),
+      thinkingLevel: z.string().min(1).optional(),
       hostId: z.string().min(1),
     })
     .strict(),
@@ -620,6 +629,18 @@ export interface AgentModels {
    * user-facing half is `HarnessSummary.capabilities.model` plus the reason the composer words.
    */
   source: string;
+  /**
+   * ISO 8601, daemon clock: the session these options were observed from.
+   *
+   * Present **only when the list came from a real session** rather than from a catalogue, and it is
+   * what the window renders instead of a promise: "these are what the agent published the last time we
+   * opened a session with it". A catalogue list has no time and no such sentence — it is what the
+   * agent's own source documents, which is a different kind of answer.
+   *
+   * For `deepseek-harness` this is the *only* way the models get shown at all, and it closes the gap
+   * slice 2 recorded: the list exists per session, so it is recorded when we see one.
+   */
+  observedAt?: string;
 }
 
 export const AgentModelsSchema = z
@@ -627,6 +648,7 @@ export const AgentModelsSchema = z
     kind: z.enum(["listed", "free-text", "none"]),
     options: z.array(AgentModelSchema).readonly(),
     source: z.string().min(1),
+    observedAt: z.string().optional(),
   })
   .strict()
   .refine((value) => (value.kind === "listed") === (value.options.length > 0), {
@@ -638,6 +660,153 @@ export const AgentModelsSchema = z
       'models.kind and models.options must agree: "listed" means options is non-empty, and any other ' +
       "kind means the list is empty (use \"free-text\" when the agent accepts a model but publishes no list).",
   });
+
+/**
+ * One value an agent published for one of its own session configuration options.
+ *
+ * `value` is **opaque and the agent's**: it is what goes back to the agent unchanged, and for
+ * `deepseek-harness`'s model option it is a JSON array rather than a name. `label`/`description` are
+ * what that value is called, taken from the agent's own `name`/`description` fields.
+ *
+ * `labelKey`/`descriptionKey` exist for the same reason `AgentMode` has them — a value **we** named is
+ * ours to translate, one the agent named is shown as the agent wrote it — and they are plain strings
+ * because this type is the wire's: the protocol cannot know a window's catalogue, so the consumer
+ * checks (`isMessageKey`) and falls back to the label. Nothing in this build sets them: every value we
+ * can currently show is the agent's own vocabulary (`Off`, `Low`, `High`, `Max`), and inventing our
+ * words for somebody else's levels would put a second vocabulary on one choice.
+ */
+export interface AgentOptionValue {
+  value: string;
+  label: string;
+  description?: string;
+  labelKey?: string;
+  descriptionKey?: string;
+}
+
+export const AgentOptionValueSchema = z
+  .object({
+    value: z.string(),
+    label: z.string().min(1),
+    description: z.string().optional(),
+    labelKey: z.string().optional(),
+    descriptionKey: z.string().optional(),
+  })
+  .strict();
+
+/**
+ * What an agent offers for its **thinking level** — ACP's `thought_level` option, by another name.
+ *
+ * The ACP category is `thought_level` and `deepseek-harness`'s option id is `reasoning_effort`
+ * (`@deepseek-ai/dsh-acp` 0.1.2-rc.1, `lib/index.js:306`, `:494-508`); a user reads "thinking", which
+ * is what Paseo's control row calls it. One vocabulary, chosen once: the wire, the task field and the
+ * pill all say thinking, and the agent's own two names appear only in citations.
+ *
+ * ## The three `kind`s, and why this is not a list
+ *
+ * The same reasoning as `AgentModels`, one step further, because a thought level is knowable **only
+ * from a session**: an agent publishes it inside the `session/new` response (or in the state returned
+ * by a change), and no catalogue can know it in advance.
+ *
+ *   * `"listed"` — the agent published values and we have them. `options` is that list, non-empty by
+ *     construction.
+ *   * `"session"` — the agent publishes its levels only inside a session, and we have not seen one
+ *     yet. **This is our ignorance**, and rendering it as "none" would be the claim this field exists
+ *     to prevent: it would tell a user that `deepseek-harness` has no thinking levels, which is false
+ *     and which one run disproves.
+ *   * `"none"` — the agent offers none over the protocol we speak to it. Either recorded from its own
+ *     source and verified against the binary (`envoy-harness`, whose ACP dispatch has no
+ *     `session/set_config_option` at all), or **observed**: a session was opened and the agent
+ *     published no thought-level option in it.
+ *
+ * `observedAt` is what keeps the first state from being read as a promise: it says these values came
+ * from a real session at a real time, and a window that shows them says exactly that. It is absent for
+ * a list that came from a catalogue rather than from an agent we watched.
+ */
+export interface AgentThinking {
+  kind: "listed" | "session" | "none";
+  /** Non-empty if and only if `kind` is `"listed"`. */
+  options: readonly AgentOptionValue[];
+  /** ISO 8601, daemon clock: when a session published these. Absent when nothing was observed. */
+  observedAt?: string;
+  /** Where this answer came from, or why there is none. Carried like `AgentModels.source`, never rendered. */
+  source: string;
+}
+
+export const AgentThinkingSchema = z
+  .object({
+    kind: z.enum(["listed", "session", "none"]),
+    options: z.array(AgentOptionValueSchema).readonly(),
+    observedAt: z.string().optional(),
+    source: z.string().min(1),
+  })
+  .strict()
+  .refine((value) => (value.kind === "listed") === (value.options.length > 0), {
+    // `AgentModelsSchema`'s rule, for the same reason: `"listed"` with nothing in it would be a picker
+    // with nothing to pick, and options under another kind would be a list nobody promised.
+    message:
+      'thinking.kind and thinking.options must agree: "listed" means options is non-empty, and any ' +
+      'other kind means the list is empty (use "session" when the agent publishes levels we have not seen yet).',
+  });
+
+/**
+ * One session configuration option, as an agent published it, recorded by the daemon.
+ *
+ * **Not a wire type** — this is what the daemon writes to its own state file after a run
+ * (`session-options.json`, beside `projects.json`), and it is deliberately closer to the agent's own
+ * shape than `AgentThinking`/`AgentModels` are: `configId` and `category` are the agent's own strings,
+ * so the *mapping* from "an option the agent published" to "the thinking pill" is data rather than a
+ * hardcoded id, and a maintainer reading the file sees what the agent actually said.
+ *
+ * The **current** value is deliberately not recorded. A session's current selection describes the
+ * session that has ended — the next run opens a new one — and a stored "current" would be read as a
+ * promise about a run that has not happened. `observedAt` and `sessionId` are the provenance, and
+ * they are the two facts that make the record auditable rather than merely plausible.
+ */
+export interface ObservedSessionOption {
+  /** The agent's own config-option id (`model`, `reasoning_effort`). */
+  configId: string;
+  /** The agent's own label for it (`Model`, `Reasoning effort`). */
+  label: string;
+  /** The agent's own ACP category (`model`, `thought_level`). */
+  category: string;
+  values: readonly AgentOptionValue[];
+}
+
+export const ObservedSessionOptionSchema = z
+  .object({
+    configId: z.string().min(1),
+    label: z.string().min(1),
+    category: z.string(),
+    values: z.array(AgentOptionValueSchema).readonly(),
+  })
+  .strict();
+
+/** Everything one agent published about its own session configuration, and when we watched it. */
+export interface ObservedSessionOptions {
+  harness: HarnessId;
+  /** ISO 8601, daemon clock. */
+  observedAt: string;
+  /** The agent's own session id, for a maintainer tracing one observation back to one run. */
+  sessionId?: string;
+  /**
+   * The options it published, **empty included**.
+   *
+   * An empty list is a fact and not a gap: `envoy-harness` answers `session/new` with `{sessionId}`
+   * alone, so a record with no options is the observation "this agent offered nothing", which is the
+   * only evidence that turns the thinking pill's disabled state into a statement about the agent
+   * rather than about our ignorance.
+   */
+  options: readonly ObservedSessionOption[];
+}
+
+export const ObservedSessionOptionsSchema = z
+  .object({
+    harness: HarnessIdSchema,
+    observedAt: z.string().min(1),
+    sessionId: z.string().optional(),
+    options: z.array(ObservedSessionOptionSchema).readonly(),
+  })
+  .strict();
 
 /** One agent, as a *picker* needs it. Everything the UI promises is gated on `capabilities`. */
 export interface HarnessSummary {
@@ -655,6 +824,16 @@ export interface HarnessSummary {
    * controls — free text, and a disabled pill. See `AgentModels` for what the empty list means.
    */
   models: AgentModels;
+  /**
+   * What this agent offers for its **thinking level**, as the daemon last saw it.
+   *
+   * Required, like `models` and for the same reason turned up a notch: the three states here are
+   * `"listed"` (we have values), `"session"` (the agent publishes them only inside a session, and we
+   * have not seen one) and `"none"` (it offers none). An optional field would collapse the last two
+   * into "absent", and a composer that read absent as "none" would tell a user their agent has no
+   * thinking levels when the truth is that nobody has opened a session with it yet.
+   */
+  thinking: AgentThinking;
   capabilities: {
     resume: boolean;
     cancel: boolean;
@@ -680,6 +859,16 @@ export interface HarnessSummary {
      * enabling the control is a promise that the choice reaches the agent.
      */
     model: boolean;
+    /**
+     * Can the daemon set this agent's thinking level?
+     *
+     * `agentMode` and `model`'s third sibling, and the flag the thinking pill is enabled on. False for
+     * `envoy-harness`, whose ACP dispatch has no `session/set_config_option` at all (its own
+     * `acp-server.ts` answers `-32601 method not found` — verified against the built peer), and false
+     * for the catalogued CLIs this build cannot launch. True for an agent whose levels travel through
+     * the session configuration, which is the same call the model already uses.
+     */
+    thinking: boolean;
   };
   /** Whether the binary exists right now. `unknown` is honest for a harness we have not probed. */
   available: boolean | "unknown";
@@ -715,6 +904,14 @@ export const HarnessSummarySchema = z
      * still has to know whether that is the agent's answer or ours, which is what `kind` carries.
      */
     models: AgentModelsSchema,
+    /**
+     * What this agent offers for its thinking level, and which of the three states that answer is in.
+     *
+     * Required, and shaped so the *reason* travels with the list: an agent that publishes none, one
+     * whose levels we have not seen yet, and one we can offer are three different sentences on screen
+     * and only one of them is about the agent.
+     */
+    thinking: AgentThinkingSchema,
     capabilities: z
       .object({
         resume: z.boolean(),
@@ -740,6 +937,14 @@ export const HarnessSummarySchema = z
          * model through **argv**, so a daemon can honour one and not the other.
          */
         model: z.boolean(),
+        /**
+         * Whether the daemon can set this agent's thinking level.
+         *
+         * Separate from `thinking` on the same terms as `model`, and separate from `model` because the
+         * two are different delivery questions: `envoy-harness` takes a model in argv and has no
+         * thought-level method at all, so a daemon can honour one and not the other.
+         */
+        thinking: z.boolean(),
       })
       .strict(),
     available: z.union([z.boolean(), z.literal("unknown")]),
@@ -929,6 +1134,16 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
          */
         cwd: z.string().min(1).optional(),
         agentModeId: z.string().min(1).optional(),
+        /**
+         * The agent's own thinking level for this task (`AgentOptionValue.value`, from
+         * `HarnessSummary.thinking`).
+         *
+         * `""` means **the agent's own default**, on exactly the terms `model` uses it: it is the
+         * control's "not set" value, it can never be a level an agent publishes as a name, and it
+         * arrives here as a real request — drop the stored choice rather than store a level called
+         * nothing.
+         */
+        thinkingLevel: z.string().optional(),
         extraArgs: z.string().optional(),
       })
       .strict(),
@@ -984,6 +1199,19 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
          * answering on one model while the transcript named another.
          */
         model: z.string().min(1).optional(),
+        /**
+         * The agent's own thinking level for this run (`AgentOptionValue.value`).
+         *
+         * Sent as an **override for this run**, like `model`, and stored on the task as well
+         * (`coder.updateTask.thinkingLevel`) so a run started after a restart keeps it without the
+         * window repeating it. The daemon refuses the call when it cannot honour it — the agent has no
+         * thought-level option in the protocol we speak to it, or this build has no way to deliver one
+         * — rather than starting the agent at a depth the user did not ask for. Unlike `model`, a value
+         * the agent does not currently publish is **not** refused here: the observed list came from an
+         * earlier session and is a record rather than a promise, so the agent is the authority, and it
+         * refuses loudly with its own sentence.
+         */
+        thinkingLevel: z.string().min(1).optional(),
       })
       .strict(),
     result: z.object({ run: AgentRunSchema }).strict(),

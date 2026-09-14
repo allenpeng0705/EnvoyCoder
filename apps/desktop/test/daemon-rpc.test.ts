@@ -1065,3 +1065,226 @@ describe("the model a task runs on", () => {
     expect(failure?.note).toContain("unknown model option");
   }, 30_000);
 });
+
+/**
+ * The thinking level, over the socket and all the way to the agent.
+ *
+ * `runs.test.ts` proves the daemon's own decision, and `agent-catalog/test/session-options.test.ts`
+ * proves the catalogue. What neither can prove is the **socket**: that `coder.startRun` carries the
+ * field, that `coder.listHarnesses` reports the three states a client needs to render a pill honestly,
+ * and — the one that closes slice 2's recorded gap — that a run's observation of what its agent
+ * published comes back on the *next* `coder.listHarnesses` call, so a window shows a list the agent
+ * really enumerated rather than a text field forever.
+ *
+ * That last one is why this block is here rather than in a unit test: the fact has to cross a process
+ * boundary and a file on disk before the window can see it.
+ */
+describe("the thinking level a task runs at", () => {
+  /** A daemon whose agent publishes its options, with a task ready to run. */
+  async function thinkingBench(options: { refuseThinking?: string } = {}): Promise<{
+    client: JsonRpcClient;
+    taskId: string;
+  }> {
+    const home = await mkdtemp(join(tmpdir(), "envoycoder-m2-thinking-"));
+    cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+
+    const daemon = await startCoderDaemon({
+      port: 0,
+      home,
+      paths: coderPaths(home),
+      skipMeshAttach: true,
+      isDirectory: async () => true,
+      resolveLaunch: () => ({
+        command: process.execPath,
+        args: [FAKE_AGENT],
+        cwd: home,
+        env: {
+          FAKE_ACP_PUBLISH_OPTIONS: "1",
+          ...(options.refuseThinking === undefined
+            ? {}
+            : { FAKE_ACP_REFUSE_THINKING: options.refuseThinking }),
+        },
+      }),
+    });
+    cleanups.push(async () => daemon.stop());
+
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+
+    const project = (await client.call("coder.addProject", { path: join(home, "repo") })) as {
+      project: { id: string };
+    };
+    const task = (await client.call("coder.createTask", {
+      projectId: project.project.id,
+      title: "how much thinking",
+      harness: "deepseek-harness",
+    })) as { task: { id: string } };
+    return { client, taskId: task.task.id };
+  }
+
+  it("tells the window what each agent offers, and which of the three states that is", async () => {
+    const { daemon, home } = await bootDaemon();
+    cleanups.push(async () => {
+      await daemon.stop();
+      await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    });
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+
+    const answer = (await client.call("coder.listHarnesses", undefined)) as {
+      harnesses: {
+        id: string;
+        thinking: { kind: string; options: { value: string }[]; observedAt?: string; source: string };
+        capabilities: { thinking: boolean };
+      }[];
+    };
+    const byId = new Map(answer.harnesses.map((harness) => [harness.id, harness]));
+
+    // **The state the pill's honest sentence rests on.** `deepseek-harness` publishes its levels inside
+    // a session, so before a run there is nothing to show — and the wire says *that* rather than "none",
+    // which is a claim about the agent that one run would disprove.
+    const deepseek = byId.get("deepseek-harness");
+    expect(deepseek?.thinking.kind).toBe("session");
+    expect(deepseek?.thinking.options).toEqual([]);
+    expect(deepseek?.thinking.observedAt).toBeUndefined();
+    expect(deepseek?.capabilities.thinking).toBe(true);
+
+    // `envoy-harness` has no thought-level method at all — verified against the built peer — so the
+    // control is disabled with a reason about the *agent*, and there is no delivery either.
+    const envoy = byId.get("envoy-harness");
+    expect(envoy?.thinking.kind).toBe("none");
+    expect(envoy?.capabilities.thinking).toBe(false);
+
+    // Every entry answers both questions, so a client never has to read "absent" as an answer.
+    for (const harness of answer.harnesses) {
+      expect(typeof harness.capabilities.thinking, harness.id).toBe("boolean");
+      expect(harness.thinking.source.length, harness.id).toBeGreaterThan(60);
+    }
+  }, 30_000);
+
+  it("keeps the chosen level on the task, and clears it when the choice is the agent's own", async () => {
+    const { client, taskId } = await thinkingBench();
+
+    const chosen = (await client.call("coder.updateTask", {
+      id: taskId,
+      thinkingLevel: "max",
+    })) as { task: { thinkingLevel?: string } };
+    expect(chosen.task.thinkingLevel).toBe("max");
+
+    // `""` is the control's "the agent's own default", and it means the *key goes away* — not that the
+    // task stores a level called nothing, which would be a value the run had to special-case forever.
+    const cleared = (await client.call("coder.updateTask", { id: taskId, thinkingLevel: "" })) as {
+      task: { thinkingLevel?: string };
+    };
+    expect(Object.prototype.hasOwnProperty.call(cleared.task, "thinkingLevel")).toBe(false);
+  }, 30_000);
+
+  it("forgets a level the new agent cannot take, so switching agent does not strand the task", async () => {
+    // A level is an id in one agent's vocabulary, and `envoy-harness` has no thought-level method at
+    // all. Left on the task, every later run would refuse with a sentence about a choice the user made
+    // for the agent they replaced — so the handler drops it, exactly as it drops a stranded mode.
+    const { client, taskId } = await thinkingBench();
+    await client.call("coder.updateTask", { id: taskId, thinkingLevel: "high" });
+
+    const switched = (await client.call("coder.updateTask", {
+      id: taskId,
+      harness: "envoy-harness",
+    })) as { task: { thinkingLevel?: string } };
+    expect(Object.prototype.hasOwnProperty.call(switched.task, "thinkingLevel")).toBe(false);
+  }, 30_000);
+
+  it("carries the level through the whole path, and the agent confirms what it was handed", async () => {
+    // The value has to reach the *process*: window → `coder.startRun` → the catalogue's config id → the
+    // session the agent just opened. The agent's own report of its configuration is the only evidence
+    // that distinguishes a level that arrived from one a client believed it had sent.
+    const { client, taskId } = await thinkingBench();
+    await client.subscribe(["coder:run-event"]);
+    await client.call("coder.startRun", { taskId, prompt: "thinking-me", thinkingLevel: "low" });
+    await client.waitForEvent("coder:run-event", (data) => (data as { kind?: string }).kind === "run.ended");
+
+    const tasks = (await client.call("coder.listTasks", {})) as { tasks: { status: string; runId?: string }[] };
+    const snapshot = (await client.call("coder.getRun", { runId: tasks.tasks[0]?.runId })) as {
+      events: { kind: string; text?: string; thinkingLevel?: string }[];
+    };
+    const said = snapshot.events
+      .filter((event) => event.kind === "run.output")
+      .map((event) => event.text ?? "")
+      .join("\n");
+    expect(said).toContain("thinking: low");
+    // And the run records the level it asked for, so the transcript can say what depth the agent worked
+    // at rather than leaving a reader to infer it from nothing.
+    const started = snapshot.events.find((event) => event.kind === "run.started");
+    expect(started?.thinkingLevel).toBe("low");
+  }, 30_000);
+
+  it("refuses a level for an agent that has no way to receive one, before starting anything", async () => {
+    const { client, taskId } = await thinkingBench();
+    await client.call("coder.updateTask", { id: taskId, harness: "envoy-harness" });
+
+    await expect(
+      client.call("coder.startRun", { taskId, prompt: "hi", thinkingLevel: "max" }),
+    ).rejects.toThrow(/cannot be given a thinking level/);
+    // Nothing ran: the refusal is a refusal, not a run that quietly ignored the level.
+    const runs = (await client.call("coder.listRuns", { taskId })) as { runs: unknown[] };
+    expect(runs.runs).toEqual([]);
+  }, 30_000);
+
+  it("fails the run with the agent's own words when the agent refuses the level", async () => {
+    // The deliberate limit of our own validation, over the socket: the level the user picked came from a
+    // list an *earlier* session published, for the model that session resolved, so the agent is the
+    // authority on what it accepts now. It refuses loudly, and the user reads its sentence.
+    const { client, taskId } = await thinkingBench({ refuseThinking: "max" });
+    await client.subscribe(["coder:run-event"]);
+    await client.call("coder.startRun", { taskId, prompt: "thinking-me", thinkingLevel: "max" });
+    await client.waitForEvent("coder:run-event", (data) => (data as { kind?: string }).kind === "run.ended");
+
+    const tasks = (await client.call("coder.listTasks", {})) as { tasks: { status: string; runId?: string }[] };
+    expect(tasks.tasks[0]?.status).toBe("failed");
+    const snapshot = (await client.call("coder.getRun", { runId: tasks.tasks[0]?.runId })) as {
+      events: { kind: string; note?: string }[];
+    };
+    const failure = snapshot.events.find((event) => event.kind === "run.status" && event.note !== undefined);
+    expect(failure?.note).toContain("unknown reasoning effort");
+  }, 30_000);
+
+  it("shows the next window what the last session published — the list exists only because a run did", async () => {
+    // **The gap this slice closes, end to end.** Before the run, `deepseek-harness` is `free-text` with a
+    // text field and a local-publishing thinking state; after it, the models and levels the *agent*
+    // enumerated are on the wire, with the time they were seen. Nothing here is inferred: the values
+    // travel from the agent's own `session/new` response, through the daemon's state file, to a client.
+    const { client, taskId } = await thinkingBench();
+
+    const before = (await client.call("coder.listHarnesses", undefined)) as {
+      harnesses: { id: string; models: { kind: string; options: unknown[] }; thinking: { kind: string } }[];
+    };
+    expect(before.harnesses.find((h) => h.id === "deepseek-harness")?.models.kind).toBe("free-text");
+    expect(before.harnesses.find((h) => h.id === "deepseek-harness")?.thinking.kind).toBe("session");
+
+    await client.subscribe(["coder:run-event"]);
+    await client.call("coder.startRun", { taskId, prompt: "hello" });
+    await client.waitForEvent("coder:run-event", (data) => (data as { kind?: string }).kind === "run.ended");
+
+    const after = (await client.call("coder.listHarnesses", undefined)) as {
+      harnesses: {
+        id: string;
+        models: { kind: string; observedAt?: string; options: { id: string; provider: string }[] };
+        thinking: { kind: string; observedAt?: string; options: { value: string; label: string }[] };
+      }[];
+    };
+    const deepseek = after.harnesses.find((h) => h.id === "deepseek-harness");
+    expect(deepseek?.models.kind).toBe("listed");
+    expect(deepseek?.models.options.map((option) => option.id)).toEqual([
+      "fake/flash",
+      "fake/pro",
+    ]);
+    // The provider id is the agent's own, decoded from its opaque value — the fact a catalogue list
+    // would have got wrong.
+    expect(deepseek?.models.options[0]?.provider).toBe("fake");
+    expect(deepseek?.thinking.kind).toBe("listed");
+    expect(deepseek?.thinking.options.map((option) => option.value)).toEqual(["off", "low", "high", "max"]);
+    expect(deepseek?.thinking.options[3]?.label).toBe("Max");
+    // Both carry the time they were observed, because that is what the window's sentence names.
+    expect(Number.isNaN(Date.parse(deepseek?.models.observedAt ?? ""))).toBe(false);
+    expect(Number.isNaN(Date.parse(deepseek?.thinking.observedAt ?? ""))).toBe(false);
+  }, 30_000);
+});

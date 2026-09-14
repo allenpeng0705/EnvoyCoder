@@ -313,10 +313,11 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               events={active.runId ? (state.runs[active.runId]?.events ?? []) : []}
               runLive={active.runId ? state.runs[active.runId]?.run.endedAt === undefined : false}
               harnesses={state.harnesses}
-              onStart={async (prompt, agentModeId, model) => {
+              onStart={async (prompt, agentModeId, model, thinkingLevel) => {
                 const result = await props.actions.startRun(active.id, prompt, {
                   ...(agentModeId !== undefined ? { agentModeId } : {}),
                   ...(model !== undefined ? { model } : {}),
+                  ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
                 });
                 if (!result.ok) {
                   setNotice(result);
@@ -343,6 +344,13 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               // and the daemon is what decides to drop the stored model rather than store an empty one.
               onChangeModel={async (model) => {
                 const result = await props.actions.updateTask({ id: active.id, model });
+                if (!result.ok) setNotice(result);
+              }}
+              // And the thinking level, on exactly the model's terms: stored on the task because it is
+              // part of what this task *is*, with `""` travelling as the request to clear it. The
+              // daemon is what turns that into "drop the key" rather than a level called nothing.
+              onChangeThinking={async (thinkingLevel) => {
+                const result = await props.actions.updateTask({ id: active.id, thinkingLevel });
                 if (!result.ok) setNotice(result);
               }}
               // A refusal here is worth showing: "that is not a folder on this machine" is the one

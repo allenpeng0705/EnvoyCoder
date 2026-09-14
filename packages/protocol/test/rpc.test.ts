@@ -20,6 +20,8 @@ import { describe, expect, it } from "vitest";
 import {
   AgentModeSchema,
   AgentModelsSchema,
+  AgentOptionValueSchema,
+  AgentThinkingSchema,
   AgentModelSchema,
   CODER_EVENTS,
   ENVOYCODER_ERRORS,
@@ -288,6 +290,114 @@ describe("the model an agent publishes, and what an empty list means", () => {
   });
 });
 
+/**
+ * The thinking level, which is the one fact on this wire that no catalogue can answer.
+ *
+ * Two things are asserted here and nothing else, because both halves of the *behaviour* live where the
+ * behaviour is: the schema's three kinds (so a client cannot read "we have not looked" as "the agent
+ * has none"), and the two places a chosen level travels.
+ */
+describe("the thinking level an agent offers, and what 'no list' means", () => {
+  const OPTION = { value: "high", label: "High", description: "The default balance for most tasks." };
+
+  it("keeps a value opaque, and refuses one that is not a value", () => {
+    // `value` is what goes back to the agent unchanged — for a model it is a JSON pair rather than a
+    // name — so it is allowed to be an empty string (this agent uses `""` for "the provider's default")
+    // and is never validated against a shape of ours.
+    expect(AgentOptionValueSchema.safeParse(OPTION).success).toBe(true);
+    expect(AgentOptionValueSchema.safeParse({ value: "", label: "Provider default" }).success).toBe(true);
+    // A label is required: an option a user cannot read is not an option this control can offer.
+    expect(AgentOptionValueSchema.safeParse({ value: "high", label: "" }).success).toBe(false);
+    // `labelKey`/`descriptionKey` are the mechanism for wording that is *ours*; nothing sets them for a
+    // level today, so the field being absent must stay valid.
+    expect(AgentOptionValueSchema.safeParse({ ...OPTION, labelKey: "task.some.key" }).success).toBe(true);
+  });
+
+  it("refuses a list that disagrees with what it says the list means", () => {
+    expect(AgentThinkingSchema.safeParse({ kind: "listed", options: [OPTION], source: "…" }).success).toBe(true);
+    expect(AgentThinkingSchema.safeParse({ kind: "listed", options: [], source: "…" }).success).toBe(false);
+    expect(AgentThinkingSchema.safeParse({ kind: "session", options: [OPTION], source: "…" }).success).toBe(false);
+    // **The distinction this field exists for**, and it is a *value* test rather than a comment test:
+    // `"session"` (publishes levels, none observed yet) and `"none"` (offers none) are both accepted and
+    // are different answers, while a kind nobody defined is not accepted at all.
+    expect(AgentThinkingSchema.safeParse({ kind: "session", options: [], source: "…" }).success).toBe(true);
+    expect(AgentThinkingSchema.safeParse({ kind: "none", options: [], source: "…" }).success).toBe(true);
+    expect(AgentThinkingSchema.safeParse({ kind: "unknown", options: [], source: "…" }).success).toBe(false);
+    // The time travels with an observation, and only with one: a catalogue list has none to give.
+    expect(AgentThinkingSchema.safeParse({ kind: "none", options: [], source: "…", observedAt: "2026-09-14T05:23:00.000Z" }).success).toBe(true);
+    expect(AgentThinkingSchema.safeParse({ kind: "none", options: [], source: "" }).success).toBe(false);
+  });
+
+  it("requires the harness summary to say what the agent offers and whether we can set it", () => {
+    // The two fields are required for the same reason `capabilities.model` is: an absent *fact* must
+    // never be readable as "this agent has none", and an absent *flag* must never be readable as "we
+    // can". Both were the failure the mode picker had.
+    const spec = RPC_SPECS["coder.listHarnesses"];
+    const harness = (over: Record<string, unknown>): unknown => ({
+      id: "envoy-harness",
+      label: "Envoy Harness",
+      tier: "built-in",
+      summary: "…",
+      modes: [],
+      models: { kind: "none", options: [], source: "…" },
+      thinking: { kind: "none", options: [], source: "…" },
+      capabilities: {
+        resume: true,
+        cancel: true,
+        approvals: true,
+        structuredTools: true,
+        streaming: true,
+        images: false,
+        agentMode: true,
+        model: true,
+        thinking: false,
+      },
+      available: true,
+      evidence: "…",
+      ...over,
+    });
+    expect(spec.result.safeParse({ harnesses: [harness({})] }).success).toBe(true);
+    const { thinking: _t, ...withoutFact } = harness({}) as Record<string, unknown>;
+    expect(spec.result.safeParse({ harnesses: [withoutFact] }).success).toBe(false);
+  });
+
+  it("carries the level on the task, on the run, and in the transcript's first event", () => {
+    // Three places, and each is load-bearing: the run's record says what it asked for, the task keeps
+    // the choice for a run started after a restart, and `run.started` is what a client renders before
+    // the agent has said anything.
+    expect(RPC_SPECS["coder.startRun"].params.safeParse({ taskId: "w1", prompt: "go", thinkingLevel: "max" }).success).toBe(true);
+    // `""` is the control's "the agent's own default" and is **not** a level: it clears the stored one,
+    // and a run started with it would record a level called nothing.
+    expect(RPC_SPECS["coder.startRun"].params.safeParse({ taskId: "w1", prompt: "go", thinkingLevel: "" }).success).toBe(false);
+    expect(RPC_SPECS["coder.updateTask"].params.safeParse({ id: "w1", thinkingLevel: "" }).success).toBe(true);
+    expect(RPC_SPECS["coder.updateTask"].params.safeParse({ id: "w1", thinkingLevel: "max" }).success).toBe(true);
+
+    const task = {
+      id: "w1",
+      projectId: "local::/repo",
+      cwd: "/repo",
+      title: "a task",
+      harness: "deepseek-harness",
+      status: "idle",
+      createdAt: "2026-09-13T10:00:00.000Z",
+      updatedAt: "2026-09-13T10:00:00.000Z",
+    };
+    expect(TaskSchema.safeParse({ ...task, thinkingLevel: "max" }).success).toBe(true);
+    // An empty level is not stored — the *absence* of the key is what "the agent decides" means.
+    expect(TaskSchema.safeParse({ ...task, thinkingLevel: "" }).success).toBe(false);
+    expect(RunEventSchema.safeParse({
+      runId: "r1",
+      taskId: "w1",
+      at: "2026-09-13T10:00:00.000Z",
+      seq: 1,
+      kind: "run.started",
+      harness: "deepseek-harness",
+      thinkingLevel: "max",
+      hostId: "local",
+    }).success).toBe(true);
+  });
+});
+
 describe("the agent's mode, and a task's folder", () => {
   it("accepts an agent mode on a run, and refuses an unnamed one", () => {
     const spec = RPC_SPECS["coder.startRun"];
@@ -343,6 +453,7 @@ describe("the agent's mode, and a task's folder", () => {
         options: [{ id: "anthropic/x", label: "x", provider: "anthropic", model: "x" }],
         source: "…",
       },
+      thinking: { kind: "none", options: [], source: "…" },
       capabilities,
       available: true,
       evidence: "…",
@@ -356,6 +467,7 @@ describe("the agent's mode, and a task's folder", () => {
       images: false,
       agentMode: true,
       model: true,
+      thinking: true,
     };
 
     expect(spec.result.safeParse({ harnesses: [harness(full)] }).success).toBe(true);
@@ -371,6 +483,13 @@ describe("the agent's mode, and a task's folder", () => {
     // and its model through argv, so a daemon can honour one and not the other.
     const { model: _alsoOmitted, ...withoutModel } = full;
     expect(spec.result.safeParse({ harnesses: [harness(withoutModel)] }).success).toBe(false);
+    // And the thinking level's, which is a third wire again: an agent can take a model in argv and have
+    // no thought-level method at all, which is exactly `envoy-harness`.
+    const { thinking: _thinkingOmitted, ...withoutThinking } = full;
+    expect(spec.result.safeParse({ harnesses: [harness(withoutThinking)] }).success).toBe(false);
+    // The thinking *fact* is required too, so "absent" can never be read as "this agent has none".
+    const { thinking: _factOmitted, ...harnessWithoutFact } = harness(full) as Record<string, unknown>;
+    expect(spec.result.safeParse({ harnesses: [harnessWithoutFact] }).success).toBe(false);
   });
 
   it("carries our wording for a mode only when we wrote it", () => {

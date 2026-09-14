@@ -38,6 +38,8 @@ import {
   CoderSettingsSchema,
   DEFAULT_CODER_SETTINGS,
   type HarnessId,
+  type ObservedSessionOptions,
+  ObservedSessionOptionsSchema,
   type Project,
   ProjectSchema,
   type Task,
@@ -48,7 +50,7 @@ import { projectIdFor, resolveTaskDefaults, taskIdFor } from "@envoycoder/task-m
 
 /** What a mutation reports, so a listener can refetch exactly one list. */
 export interface StoreChange {
-  kind: "projects" | "tasks" | "settings";
+  kind: "projects" | "tasks" | "settings" | "harnesses";
   at: string;
   ids?: readonly string[];
 }
@@ -122,6 +124,16 @@ export interface UpdateTaskInput {
    * only place that can see both values, may say drop it.
    */
   clearModel?: boolean;
+  /** The agent's own thinking-level id for this task's next run. */
+  thinkingLevel?: string;
+  /**
+   * Forget the stored thinking level, leaving the key off the task entirely.
+   *
+   * `clearModel`'s twin, and needed for the same two reasons: `{thinkingLevel: undefined}` survives
+   * `JSON.stringify` as nothing at all, so "unset it" cannot be expressed as a patch; and switching to
+   * an agent with no thought-level method must be able to leave the task clean rather than unrunnable.
+   */
+  clearThinkingLevel?: boolean;
   extraArgs?: string;
 }
 
@@ -139,6 +151,13 @@ export class CoderStore {
   private projectsState: Project[] = [];
   private tasksState: Task[] = [];
   private settingsState: CoderSettings = DEFAULT_CODER_SETTINGS;
+  /**
+   * What each agent published the last time a session was opened with it, one entry per agent.
+   *
+   * In memory as well as on disk because `coder.listHarnesses` reads it on every call: a daemon that
+   * parsed the file per request would put a filesystem read in the path of a window's first paint.
+   */
+  private sessionOptionsState: ObservedSessionOptions[] = [];
 
   private readonly listeners = new Set<(change: StoreChange) => void>();
   private readonly quarantined: { file: string; movedTo: string; reason: string }[] = [];
@@ -179,6 +198,19 @@ export class CoderStore {
     if (tasks.skipped.length > 0) await store.writeJsonAtomic(store.paths.tasksFile, tasks.items);
 
     store.settingsState = await store.readSettings();
+
+    // Read through the same collection helper as the two lists above, so a single malformed entry
+    // costs that entry rather than every observation — and so a file we cannot parse at all is
+    // quarantined rather than overwritten. What it holds is *evidence* about other products, so losing
+    // it silently would leave a user with a text field where a picker used to be and no explanation.
+    const observed = await store.readCollection(
+      store.paths.sessionOptionsFile,
+      ObservedSessionOptionsSchema,
+    );
+    store.sessionOptionsState = observed.items;
+    if (observed.skipped.length > 0) {
+      await store.writeJsonAtomic(store.paths.sessionOptionsFile, observed.items);
+    }
     return store;
   }
 
@@ -206,6 +238,11 @@ export class CoderStore {
 
   findTask(id: string): Task | undefined {
     return this.tasksState.find((task) => task.id === id);
+  }
+
+  /** What this agent published the last time we opened a session with it, if we ever have. */
+  sessionOptions(harness: HarnessId): ObservedSessionOptions | undefined {
+    return this.sessionOptionsState.find((entry) => entry.harness === harness);
   }
 
   notes(): StoreNotes {
@@ -341,6 +378,14 @@ export class CoderStore {
         : input.clearAgentMode === true
           ? { agentModeId: undefined }
           : {}),
+      // The thinking level's half of the same rule, and it is not folded into `model` because the two
+      // are separate choices: a user can run one agent on a chosen model with the agent's own thinking
+      // depth, and clearing one must not clear the other.
+      ...(input.thinkingLevel !== undefined
+        ? { thinkingLevel: input.thinkingLevel }
+        : input.clearThinkingLevel === true
+          ? { thinkingLevel: undefined }
+          : {}),
       ...(input.extraArgs !== undefined ? { extraArgs: input.extraArgs } : {}),
       updatedAt: this.now().toISOString(),
     };
@@ -386,8 +431,42 @@ export class CoderStore {
     return next;
   }
 
-  async updateSettings(patch: Partial<CoderSettings>): Promise<CoderSettings> {
-    const next: CoderSettings = {
+  /**
+   * Record what one agent published about itself in the session that just opened.
+   *
+   * ## Why this is a *record* and not a setting
+   *
+   * The options a session offers — the models, the thinking levels — are only knowable from a session,
+   * and the window has to render them before the next run exists. So the daemon writes down what it
+   * saw, with the time it saw it, and the window presents that as what it is: an observation from the
+   * last session, which the agent may contradict next time. Two consequences follow, and both are
+   * deliberate:
+   *
+   *   * **The newest observation replaces the oldest, per agent.** It is not a merge: an agent that
+   *     stops offering a level has to be able to stop, and a union of everything ever seen would offer
+   *     a value the agent has since dropped — the one failure this control row exists to prevent.
+   *   * **An observation with no options is recorded too**, because "we opened a session and the agent
+   *     published nothing" is a fact about the agent (it is what `envoy-harness` does), and it is a
+   *     different statement from "we have not looked yet".
+   *
+   * The change kind is `harnesses`, not `tasks`: what moved is the answer about an *agent*, and a
+   * client that refetched its task list on this event would fetch the wrong list.
+   */
+  async recordSessionOptions(observation: ObservedSessionOptions): Promise<void> {
+    const others = this.sessionOptionsState.filter((entry) => entry.harness !== observation.harness);
+    this.sessionOptionsState = [...others, observation];
+    await this.enqueue(
+      () => this.writeJsonAtomic(this.paths.sessionOptionsFile, this.sessionOptionsState),
+      () =>
+        this.emit({
+          kind: "harnesses",
+          at: this.now().toISOString(),
+          ids: [observation.harness],
+        }),
+    );
+  }
+
+  async updateSettings(patch: Partial<CoderSettings>): Promise<CoderSettings> {    const next: CoderSettings = {
       ...this.settingsState,
       ...patch,
       // `defaults` merges rather than replaces: a client that sends `{harness}` must not silently

@@ -18,9 +18,13 @@ import {
   modeOffReason,
   modelNote,
   modelOffReason,
+  optionDescription,
+  optionLabel,
   shortenFolder,
   resolveSendBehaviour,
   sendLabel,
+  thinkingNote,
+  thinkingOffReason,
   type ComposerAgent,
 } from "../src/composer/controls.js";
 import { en, isMessageKey } from "../src/i18n/messages/en.js";
@@ -279,6 +283,246 @@ describe("the model control is honest about what it can do", () => {
     const listed = composerControls(withModels(LISTED), idle);
     expect(modelNote(listed.model, { enabled: true })).toBeUndefined();
     expect(modelNote(free.model, { enabled: false })).toBeUndefined();
+  });
+
+  it("has one sentence per list, and the one it draws when the list came from a session", () => {
+    // **The rule that keeps one pill from having two notes.** The free-text instruction and the
+    // "observed from the last session" sentence answer the same question — what is this list and why
+    // should I trust it — so the module picks exactly one, and the caller renders whatever it gets.
+    const observed = composerControls(
+      withModels({ ...LISTED, observedAt: "2026-09-14T05:23:00.000Z" }),
+      idle,
+    );
+    expect(modelNote(observed.model, { enabled: true })).toBe("task.composer.model.observed");
+    // Not the free-text instruction: this list *is* a list, and telling a user to type a `provider/model`
+    // beside a picker of real models would be advice about a control they are not looking at.
+    expect(modelNote(observed.model, { enabled: true })).not.toBe("task.composer.model.freeText");
+    // A catalogue list has no time to name, so it draws nothing at all.
+    expect(modelNote(composerControls(withModels(LISTED), idle).model, { enabled: true })).toBeUndefined();
+    // And a disabled control still draws neither: its reason line is the sentence.
+    expect(modelNote(observed.model, { enabled: false })).toBeUndefined();
+  });
+
+
+});
+
+/**
+ * The thinking control: the fourth one, and the first whose options exist **nowhere but in a session**.
+ *
+ * ## The claim under test
+ *
+ * An agent publishes its thought levels inside the `session/new` response, so a composer has nothing to
+ * read before a run — not from a catalogue, not from a fixture, not from anywhere. That produces a state
+ * the other controls do not have, and it is the one worth a test: **"publishes levels we have not seen
+ * yet" is not "offers none".** Folding them together tells a user their agent cannot think in steps,
+ * which one run disproves, and it is the same class of mistake as reading an empty model list as "no
+ * model".
+ *
+ * The other half is the observation: a list that came from a real session travels with the *time* it was
+ * seen, because "what it offered last Tuesday" and "what it publishes" are different promises. A level
+ * is derived from the model that session resolved, so the difference is not pedantic.
+ */
+describe("the thinking control is honest about what it can do", () => {
+  const LEVELS = {
+    kind: "listed" as const,
+    options: [
+      { value: "off", label: "Off", description: "Use for simple tasks that do not need reasoning." },
+      { value: "low", label: "Low" },
+      { value: "high", label: "High" },
+      { value: "max", label: "Max" },
+    ],
+    observedAt: "2026-09-14T05:23:00.000Z",
+    source: "observed from the session opened at …",
+  };
+
+  const withThinking = (
+    thinking: ComposerAgent["thinking"],
+    over: Partial<ComposerAgent> = {},
+  ): ComposerAgent => agent({ thinking, thinkingApplicable: true, modelApplicable: true, ...over });
+
+  it("offers the levels a session published, with nothing preselected", () => {
+    const controls = composerControls(withThinking(LEVELS), idle);
+
+    expect(controls.thinking.kind).toBe("listed");
+    expect(controls.thinking.enabled).toBe(true);
+    expect(controls.thinking.options.map((option) => option.value)).toEqual(["off", "low", "high", "max"]);
+    expect(controls.thinking.reason).toBeUndefined();
+    expect(controls.thinking.reasonKey).toBeUndefined();
+    // **Nothing preselected**, for the model's reason: the agent's own depth is a real state — it is
+    // what a task is in before anybody chooses — and defaulting to the first entry would move every task
+    // onto a depth nobody picked.
+    expect(controls.thinking.selected).toBeNull();
+    // …and the task's stored level wins over that, so a choice survives to the next run.
+    const remembered = composerControls(withThinking(LEVELS), idle, { selectedThinkingLevel: "max" });
+    expect(remembered.thinking.selected).toBe("max");
+    // The timestamp travels, because the window's sentence names it. A list with no time would have to
+    // be presented as a promise.
+    expect(controls.thinking.observedAt).toBe("2026-09-14T05:23:00.000Z");
+  });
+
+  it("says 'we have not seen a session' rather than 'this agent has none'", () => {
+    // `deepseek-harness`'s real state before its first run, and the mistake this control exists to
+    // prevent. The level list is empty *and the control is not claiming anything about the agent*.
+    const controls = composerControls(
+      withThinking(
+        { kind: "session", options: [], source: "published per session" },
+        { label: "DeepSeek Harness" },
+      ),
+      idle,
+    );
+
+    expect(controls.thinking.kind).toBe("session");
+    expect(controls.thinking.options).toEqual([]);
+    expect(controls.thinking.enabled).toBe(false);
+
+    const off = thinkingOffReason(controls.thinking, { known: true, agent: "DeepSeek Harness" });
+    expect(off?.key).toBe("task.composer.thinking.notSeen");
+    expect(off?.key).not.toBe("task.composer.thinking.none");
+    // The sentence names the agent *and* the one thing that would fix it, because this is the only
+    // disabled state a user can resolve on their own.
+    expect(createTranslator("en").t(off!.key, off!.values)).toMatch(/has not opened a session with DeepSeek Harness yet/);
+    expect(createTranslator("en").t(off!.key, off!.values)).toMatch(/until it has run once/);
+    // And the same reason the module words in English, asserted word for word — one sentence, two
+    // renderers, which is the arrangement `error.*` uses for the daemon's refusals.
+    expect(createTranslator("en").t(off!.key, off!.values)).toBe(controls.thinking.reason);
+    expect(
+      controls.controls.find((control) => control.kind === "thinking")?.reasonKey,
+    ).toBe("task.composer.thinking.notSeen");
+  });
+
+  it("offers nothing and blames the agent only when the agent offers nothing", () => {
+    // `envoy-harness`, whose ACP surface has no thought-level method at all — verified against the built
+    // peer. This is a fact about the agent, so the sentence says so.
+    const controls = composerControls(
+      withThinking({ kind: "none", options: [], source: "no thought-level method" }, { thinkingApplicable: false }),
+      idle,
+    );
+    expect(controls.thinking.enabled).toBe(false);
+    expect(controls.thinking.reasonKey).toBe("task.composer.thinking.none");
+    expect(controls.thinking.reasonValues).toEqual({ agent: "Claude Code" });
+    // `none` wins over "not wired up yet", and the order is the point: telling a user we have work to do
+    // when there is nothing to wire is a different — and worse — lie than staying quiet.
+    expect(controls.thinking.reasonKey).not.toBe("task.composer.thinking.notWired");
+    expect(createTranslator("en").t(controls.thinking.reasonKey!, controls.thinking.reasonValues)).toBe(
+      controls.thinking.reason,
+    );
+  });
+
+  it("is off with a third reason when the agent has levels this build cannot deliver", () => {
+    // A catalogued CLI that publishes levels and cannot be launched: the list stays *visible* with the
+    // control off, so the gap reads as "this build cannot do it yet" rather than as something false
+    // about the agent. Exactly the rule the model control follows for the same entries.
+    const controls = composerControls(withThinking(LEVELS, { thinkingApplicable: false }), idle);
+    expect(controls.thinking.enabled).toBe(false);
+    expect(controls.thinking.options).toHaveLength(4);
+    expect(controls.thinking.reasonKey).toBe("task.composer.thinking.notWired");
+    expect(controls.thinking.reason).toMatch(/not wired up yet/);
+  });
+
+  it("treats 'nobody told us' as a fourth state, worded as our ignorance", () => {
+    // The harness list has not arrived, or the pane was rendered without a daemon. Note that the
+    // *kind* falls back to `"none"` here and the control is still not described as the agent's fault:
+    // `thinkingOffReason` checks `known` first, which is why the caller passes it.
+    const controls = composerControls(agent(), idle); // no `thinking` at all
+    expect(controls.thinking.enabled).toBe(false);
+
+    const off = thinkingOffReason(controls.thinking, { known: false, agent: "Claude Code" });
+    expect(off?.key).toBe("task.composer.thinking.unknown");
+    expect(createTranslator("en").t(off!.key, off!.values)).toMatch(/has not been told what Claude Code offers yet/);
+    expect(off?.key).not.toBe("task.composer.thinking.none");
+    expect(off?.key).not.toBe("task.composer.thinking.notSeen");
+
+    // And when the wire *has* answered, the same call gives the fact about the agent instead — one
+    // function, three sentences, because only the caller knows whether the answer is in.
+    const none = composerControls(withThinking({ kind: "none", options: [], source: "…" }), idle);
+    expect(thinkingOffReason(none.thinking, { known: true, agent: "Claude Code" })?.key).toBe(
+      "task.composer.thinking.none",
+    );
+    // The function's **own contract**, asserted independently of what `composerControls` happened to put
+    // in `reasonKey`: a decision that says `"none"` is worded as "the agent offers none", whoever built
+    // the object. Without this the branch is only reachable through a path that already carries the same
+    // key, and a reordering of the checks inside `thinkingOffReason` would go unnoticed.
+    expect(
+      thinkingOffReason({ kind: "none", enabled: false }, { known: true, agent: "Envoy Harness" })?.key,
+    ).toBe("task.composer.thinking.none");
+  });
+
+  it("offers the agent's own 'provider default' as the control's own empty value, not twice", () => {
+    // The real agent publishes `{value: "", name: "Provider default"}` for a provider that has no default
+    // effort of its own, and that is the *same state* as the control's first option — nothing is sent and
+    // the agent decides. Two rows meaning one thing is a picker a user cannot read, and two `<option>`s
+    // with one `value` is a `<select>` whose selection cannot be read back; so the agent's is folded into
+    // ours. What must survive the fold is the *state*: the control still offers "the agent's own default".
+    const published = [
+      { value: "", label: "Provider default" },
+      { value: "low", label: "Low" },
+      { value: "high", label: "High" },
+    ];
+    const controls = composerControls(
+      withThinking({ kind: "listed", options: published, observedAt: undefined, source: "…" }),
+      idle,
+    );
+    expect(controls.thinking.options.map((option) => option.value)).toEqual(["low", "high"]);
+    // Not "no options" and not a disabled control: the agent's choice is still reachable, as the empty
+    // value the component renders first.
+    expect(controls.thinking.enabled).toBe(true);
+    expect(controls.thinking.selected).toBeNull();
+    // The other values are untouched, in the agent's own order, with the agent's own labels.
+    expect(controls.thinking.options.map((option) => option.label)).toEqual(["Low", "High"]);
+  });
+
+  it("returns no reason at all while the control works", () => {
+    // The contract the other two have, kept identical: `undefined` means "the control works", so the
+    // caller enables it exactly when this is `undefined`. A `listed` control is the case that must take
+    // this branch — a function that returned a reason for the `session` kind unconditionally would
+    // disable a working picker the moment an agent published one statically.
+    const listed = composerControls(withThinking(LEVELS), idle);
+    expect(thinkingOffReason(listed.thinking, { known: true, agent: "Claude Code" })).toBeUndefined();
+  });
+
+  it("draws the thinking control's observed sentence only while that control works", () => {
+    // `modelNote`'s contract, for the fourth control — asserted separately because the two call sites are
+    // separate, and a change to one would otherwise be invisible to the other's test.
+    const listed = composerControls(withThinking(LEVELS), idle);
+    expect(thinkingNote(listed.thinking, { enabled: listed.thinking.enabled })).toBe(
+      "task.composer.thinking.observed",
+    );
+    // Nothing observed, nothing to say: a list from the agent's own catalogue has no time to name.
+    const statically = composerControls(withThinking({ ...LEVELS, observedAt: undefined }), idle);
+    expect(thinkingNote(statically.thinking, { enabled: true })).toBeUndefined();
+    // And no note under a disabled control, because its reason line is already there — the rule that
+    // keeps one pill from carrying two sentences.
+    expect(thinkingNote(listed.thinking, { enabled: false })).toBeUndefined();
+  });
+
+  it("shows the agent's own word for a level, and translates only wording that is ours", () => {
+    // Every level this build can show is the agent's vocabulary — `Off`, `Low`, `High`, `Max` are the
+    // words `deepseek-harness` publishes, and it validates exactly them, so a translation would be a
+    // value the agent refuses. The mechanism for *our* wording exists and is shared with the mode
+    // picker, which is what the second half asserts.
+    const t = createTranslator("en").t;
+    expect(optionLabel({ value: "high", label: "High" }, t)).toBe("High");
+    expect(optionDescription({ value: "high", label: "High", description: "The default balance." }, t)).toBe(
+      "The default balance.",
+    );
+    expect(optionDescription({ value: "high", label: "High" }, t)).toBeUndefined();
+    // A keyed label is resolved through the translator, and the marker function proves it: asserting
+    // this with the *English* translator would be vacuous, because `t("task.agentMode.plan.label")` is
+    // the same word as the label it would have fallen back to. The mode picker's own test uses the same
+    // marker for the same reason.
+    const marked = (key: string): string => `«${key}»`;
+    expect(optionLabel({ value: "plan", label: "Plan", labelKey: "task.agentMode.plan.label" }, marked)).toBe(
+      "«task.agentMode.plan.label»",
+    );
+    expect(
+      optionDescription(
+        { value: "plan", label: "Plan", description: "ours", descriptionKey: "task.agentMode.plan.description" },
+        marked,
+      ),
+    ).toBe("«task.agentMode.plan.description»");
+    // A key this build does not have falls back to the sentence rather than to the key.
+    expect(optionLabel({ value: "x", label: "X", labelKey: "task.thinking.fromTheFuture" }, t)).toBe("X");
+    expect(optionLabel({ value: "x", label: "X", labelKey: "task.thinking.fromTheFuture" }, marked)).toBe("X");
   });
 });
 

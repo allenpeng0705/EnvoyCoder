@@ -40,6 +40,16 @@ export interface ComposerAgent {
    * `AgentModels.kind`'s: `"listed"`, `"free-text"`, `"none"`.
    */
   models?: ComposerModels | undefined;
+  /**
+   * What this agent offers for its **thinking level**, and which of the three states that is in.
+   *
+   * The fourth control, and the one whose options exist nowhere but in a session: an agent publishes
+   * its thought levels in the `session/new` response, so a catalogue cannot know them and neither can a
+   * fixture. `undefined` here means the same thing it means for `models` — nobody has told us — and
+   * `kind: "session"` means the agent *does* publish them and we have not seen a session yet. Neither
+   * may be rendered as "this agent has none", which is what `kind: "none"` is for.
+   */
+  thinking?: ComposerThinking | undefined;
   capabilities: {
     resume: boolean;
     cancel: boolean;
@@ -70,6 +80,14 @@ export interface ComposerAgent {
    * again **no**.
    */
   modelApplicable?: boolean;
+  /**
+   * Can this daemon *set* a chosen thinking level on this agent?
+   *
+   * From `HarnessSummary.capabilities.thinking`, and separate from `thinking` for the reason the other
+   * two flags are separate from their lists: `envoy-harness` offers no thought level at all, while a
+   * catalogued CLI could offer one this build has no way to deliver. `undefined` is again **no**.
+   */
+  thinkingApplicable?: boolean;
 }
 
 /**
@@ -93,16 +111,39 @@ export interface ComposerModels {
   options: readonly ComposerModel[];
   /** Where the answer came from. For maintainers; never rendered. */
   source: string;
+  /**
+   * When these options were observed from a real session, if they were.
+   *
+   * The one field that lets a caller say *what kind of answer* this is: a list the agent's own source
+   * documents, or a list somebody watched it publish last Tuesday. Only the second may be presented as
+   * "this is what it offered last time", which is why the timestamp travels with the list rather than
+   * being reconstructed from a log.
+   */
+  observedAt?: string;
+}
+
+/**
+ * One thinking level, as the picker needs it — `WordedOption` plus the opaque value that travels.
+ *
+ * `value` is the agent's id, and it is what goes back to it; `label` is what a user reads.
+ */
+export interface ComposerThinkingOption extends WordedOption {
+  value: string;
+}
+
+/** What an agent offers for its thinking level — `AgentThinking`, restated for this module. */
+export interface ComposerThinking {
+  kind: "listed" | "session" | "none";
+  options: readonly ComposerThinkingOption[];
+  /** When a session published these. Absent when nothing has been observed. */
+  observedAt?: string;
+  /** Where the answer came from. For maintainers; never rendered. */
+  source: string;
 }
 
 /** One mode, as the picker needs it. `labelKey`/`descriptionKey` are ours; the rest is the agent's. */
-export interface ComposerMode {
+export interface ComposerMode extends WordedOption {
   id: string;
-  label: string;
-  description?: string;
-  /** Set when the wording is ours rather than the agent's — see `modeLabel`. */
-  labelKey?: string;
-  descriptionKey?: string;
   unattended?: boolean;
 }
 
@@ -118,7 +159,7 @@ export type SendBehaviour = "send" | "queue" | "steer" | "interrupt";
 
 export interface ComposerControl {
   /** A stable id the component can key on. */
-  kind: "agent" | "mode" | "model" | "cancel" | "approvals" | "images";
+  kind: "agent" | "mode" | "model" | "thinking" | "cancel" | "approvals" | "images";
   label: string;
   enabled: boolean;
   /**
@@ -160,6 +201,27 @@ export interface ComposerControls {
     options: readonly ComposerModel[];
     selected: string | null;
     enabled: boolean;
+    /** When a session published this list, so the caller can say so on screen. Never invented here. */
+    observedAt?: string;
+    reason?: string;
+    reasonKey?: MessageKey;
+    reasonValues?: Record<string, string | number>;
+  };
+  /**
+   * The thinking control — the model control's shape, one step further out.
+   *
+   * There is no `free-text` counterpart here, and that is a fact about the two subjects rather than an
+   * omission: a model id is a `provider/model` pair a user *can* compose, while a thinking level is an
+   * id in the agent's own vocabulary (`off`, `high`, `max`) that nobody outside the agent can guess. So
+   * this control has a picker or a reason, never a text field — and never a value we made up.
+   */
+  thinking: {
+    kind: "listed" | "session" | "none";
+    options: readonly ComposerThinkingOption[];
+    selected: string | null;
+    enabled: boolean;
+    /** When a session published these, so the caller can say so on screen. Never invented here. */
+    observedAt?: string;
     reason?: string;
     reasonKey?: MessageKey;
     reasonValues?: Record<string, string | number>;
@@ -172,19 +234,55 @@ export interface ComposerControls {
 }
 
 /**
- * A mode's label in the user's language.
+ * Anything a picker shows one row of, and whose words may be **ours** rather than the agent's.
  *
- * A catalogue mode carries `labelKey` only when the wording is **ours** — the three `envoy-harness`
- * modes are its `ModeKind`, and we wrote their labels, so they are ours to translate. A mode an agent
- * named itself arrives with no key and is shown exactly as the agent wrote it, which is the same rule
- * the approval prompt's option labels follow.
+ * The two controls that carry an agent's own vocabulary — a mode and a thinking level — need exactly
+ * the same resolution, so the shape and the two functions below are shared rather than copied. The
+ * public entry points keep their own names (`modeLabel` for a mode, `optionLabel` for a thinking value)
+ * because their parameter is what tells a reader which one they are holding: a mode is identified by
+ * `id`, a thinking level by `value`, and those two must not be confused on the wire.
+ */
+export interface WordedOption {
+  label: string;
+  description?: string;
+  /** Set only when the wording is **ours**, and then it is the catalogue key of our own sentence. */
+  labelKey?: string;
+  descriptionKey?: string;
+}
+
+/**
+ * A picker row's label in the user's language.
+ *
+ * A catalogue entry carries `labelKey` only when the wording is **ours** — the three `envoy-harness`
+ * modes are its `ModeKind`, and we wrote their labels, so they are ours to translate. A label an agent
+ * wrote itself (`Plan`, `Off`, `Max`) arrives with no key and is shown exactly as the agent wrote it,
+ * which is the same rule the approval prompt's option labels follow.
  *
  * The key is checked rather than trusted: `HarnessSummary` comes off the wire, so a daemon one version
  * ahead can send a key this window's catalogue does not have, and `mode.plan.label` on screen is worse
  * than the English sentence.
  */
+function wordedLabel(option: WordedOption, t: (key: MessageKey) => string): string {
+  return option.labelKey !== undefined && isMessageKey(option.labelKey)
+    ? t(option.labelKey)
+    : option.label;
+}
+
+/** A picker row's one-line explanation, on the same terms as `wordedLabel`. */
+function wordedDescription(
+  option: WordedOption | undefined,
+  t: (key: MessageKey) => string,
+): string | undefined {
+  if (option === undefined) return undefined;
+  if (option.descriptionKey !== undefined && isMessageKey(option.descriptionKey)) {
+    return t(option.descriptionKey);
+  }
+  return option.description;
+}
+
+/** A mode's label in the user's language. See `wordedLabel` for the rule and `optionLabel` for its twin. */
 export function modeLabel(mode: ComposerMode, t: (key: MessageKey) => string): string {
-  return mode.labelKey !== undefined && isMessageKey(mode.labelKey) ? t(mode.labelKey) : mode.label;
+  return wordedLabel(mode, t);
 }
 
 /** A mode's one-line explanation, on the same terms as `modeLabel`. */
@@ -192,11 +290,27 @@ export function modeDescription(
   mode: ComposerMode | undefined,
   t: (key: MessageKey) => string,
 ): string | undefined {
-  if (mode === undefined) return undefined;
-  if (mode.descriptionKey !== undefined && isMessageKey(mode.descriptionKey)) {
-    return t(mode.descriptionKey);
-  }
-  return mode.description;
+  return wordedDescription(mode, t);
+}
+
+/**
+ * A thinking level's label, on exactly the mode's terms.
+ *
+ * A separate name rather than a shared one because the *shape* differs: a level is identified by the
+ * opaque `value` that travels back to the agent, a mode by its `id`. Nothing in this build sets
+ * `labelKey` on a level — every value we can show is the agent's own word for it — so this resolves the
+ * agent's label today and would translate ours the day a catalogue entry names its own levels.
+ */
+export function optionLabel(option: ComposerThinkingOption, t: (key: MessageKey) => string): string {
+  return wordedLabel(option, t);
+}
+
+/** A thinking level's one-line explanation, on the same terms as `optionLabel`. */
+export function optionDescription(
+  option: ComposerThinkingOption | undefined,
+  t: (key: MessageKey) => string,
+): string | undefined {
+  return wordedDescription(option, t);
 }
 
 /** Why the mode picker is off: a catalogue key, and the values its template needs. */
@@ -207,6 +321,9 @@ export interface ModeOffReason {
 
 /** Why the model control is off. The same pair, for the same reason. */
 export type ModelOffReason = ModeOffReason;
+
+/** Why the thinking control is off. The same pair again — one shape for all three controls. */
+export type ThinkingOffReason = ModeOffReason;
 
 /**
  * Which reason leaves the mode picker off — or nothing, when it works.
@@ -289,12 +406,76 @@ export function modelOffReason(
 export function modelNote(
   model: {
     kind: "listed" | "free-text" | "none";
+    observedAt?: string;
   },
   input: { enabled: boolean },
 ): MessageKey | undefined {
   if (!input.enabled) return undefined;
   if (model.kind === "free-text") return "task.composer.model.freeText";
+  // The third case, and the one this control gained with the observation channel: a list a real session
+  // published is a **record rather than a promise**, and the sentence that says so names the time. The
+  // two cases cannot both apply — a list we observed is `"listed"` by construction — so the order here
+  // is a reading order rather than a precedence.
+  if (model.observedAt !== undefined) return "task.composer.model.observed";
   return undefined;
+}
+
+/**
+ * The note under the thinking control, when it is not a refusal.
+ *
+ * `modelNote`'s twin, down to the contract: a *disabled* control gets its reason line and no note, so
+ * the two can never both draw a sentence under one pill and leave a user to work out which applies.
+ *
+ * The one note this control has is the observation — the levels a real session published, which the
+ * caller must then say out loud *with the time it saw them*, because a level is derived from the model
+ * that session resolved and the list can therefore change.
+ */
+export function thinkingNote(
+  thinking: { observedAt?: string },
+  input: { enabled: boolean },
+): MessageKey | undefined {
+  if (!input.enabled) return undefined;
+  return thinking.observedAt !== undefined ? "task.composer.thinking.observed" : undefined;
+}
+
+/**
+ * Which reason leaves the thinking control off — or nothing, when it works.
+ *
+ * `modelOffReason`'s twin, and the same three-facts argument, with one twist that is the reason this
+ * control needed its own reasoning at all:
+ *
+ *   * `known` is false — the harness list has not arrived. Our ignorance.
+ *   * the agent offers none — `kind: "none"`, a fact about the agent, recorded from its source or from a
+ *     session that published nothing.
+ *   * anything else that leaves it off — and here that is **two** distinct facts, which is why the caller
+ *     puts them in `reasonKey` rather than here: the agent publishes levels we have not seen yet
+ *     (`"session"`, our ignorance again, worded differently because the user can *fix* this one by
+ *     running the agent), and this build cannot deliver a level to it at all (our adapter).
+ *
+ * The order is not arbitrary: `"none"` is checked before the caller's key, because an agent that offers
+ * nothing would otherwise be described as "not wired up yet" — telling a user we have work to do when the
+ * truth is that there is nothing to wire.
+ *
+ * Returning `undefined` is the contract for "the control works", the same one `modeOffReason` and
+ * `modelOffReason` have, so the caller enables it exactly when this is `undefined`.
+ */
+export function thinkingOffReason(
+  decision: {
+    kind: "listed" | "session" | "none";
+    enabled: boolean;
+    reasonKey?: MessageKey;
+    reasonValues?: Record<string, string | number>;
+  },
+  input: { known: boolean; agent: string },
+): ThinkingOffReason | undefined {
+  if (decision.enabled) return undefined;
+  if (!input.known) return { key: "task.composer.thinking.unknown", values: { agent: input.agent } };
+  if (decision.kind === "none") {
+    return { key: "task.composer.thinking.none", values: { agent: input.agent } };
+  }
+  return decision.reasonKey
+    ? { key: decision.reasonKey, values: decision.reasonValues ?? { agent: input.agent } }
+    : undefined;
 }
 
 /**
@@ -375,6 +556,8 @@ export function composerControls(
     selectedModeId?: string;
     /** The task's stored model, provider-qualified. Absent means "the agent's own default". */
     selectedModelId?: string;
+    /** The task's stored thinking level. Absent means "the agent's own default". */
+    selectedThinkingLevel?: string;
   } = {},
 ): ComposerControls {
   const notes: string[] = [];
@@ -449,6 +632,49 @@ export function composerControls(
         ? "task.composer.model.notWired"
         : undefined;
 
+  /* ── how much the agent thinks ── */
+  /**
+   * The fourth control, and the one with the most ways to be *ignorant* rather than wrong.
+   *
+   * Its options are per session, so there are three states and two of them are not the agent's fault:
+   *
+   *   * `thinking === undefined` — the harness list has not arrived. `known: false` at the caller, and
+   *     no `reasonKey` here on purpose, exactly as for the model.
+   *   * `kind: "session"` — the agent publishes its levels only inside a session and we have not seen
+   *     one. **This is our ignorance**, and it is the state a careless implementation renders as "this
+   *     agent has no thinking levels", which one run disproves.
+   *   * `kind: "none"` — the agent offers none, recorded from its own source (verified for
+   *     `envoy-harness`) or observed (a session that published no such option). The only state that is
+   *     a fact about the agent.
+   *
+   * `availability` is deliberately **not** part of `thinkingEnabled`, which is the line the model
+   * control already takes and for the same reason: an agent that is not installed still publishes what
+   * it publishes, and the reason it cannot run is on the agent chip and the send button, not on a
+   * control whose whole job is to say what the agent offers. The two option-bearing controls agreeing
+   * matters more here than either choice alone.
+   */
+  const thinking = agent.thinking;
+  const thinkingKind = thinking?.kind ?? "none";
+  const thinkingEnabled = thinkingKind === "listed" && agent.thinkingApplicable === true;
+  const thinkingReason = thinking === undefined
+    ? undefined
+    : thinkingKind === "none"
+      ? `${agent.label} does not offer a thinking level.`
+      : agent.thinkingApplicable !== true
+        ? `Choosing how much ${agent.label} thinks is not wired up yet, so the control is off rather than silently ignored.`
+        : thinkingKind === "session"
+          ? `EnvoyCoder has not opened a session with ${agent.label} yet, and ${agent.label} only lists its thinking levels inside a session — so there is nothing to choose from until it has run once.`
+          : undefined;
+  const thinkingReasonKey: MessageKey | undefined = thinking === undefined
+    ? undefined
+    : thinkingKind === "none"
+      ? "task.composer.thinking.none"
+      : agent.thinkingApplicable !== true
+        ? "task.composer.thinking.notWired"
+        : thinkingKind === "session"
+          ? "task.composer.thinking.notSeen"
+          : undefined;
+
   /* ── sending ── */
   const behaviour = resolveSendBehaviour(state, options.preferred ?? "steer");
   const sendEnabled = available;
@@ -478,6 +704,14 @@ export function composerControls(
       ...(modelReason ? { reason: modelReason } : {}),
       ...(modelReasonKey ? { reasonKey: modelReasonKey } : {}),
       ...(modelReasonKey ? { reasonValues: { agent: agent.label } } : {}),
+    },
+    {
+      kind: "thinking",
+      label: "Thinking",
+      enabled: thinkingEnabled,
+      ...(thinkingReason ? { reason: thinkingReason } : {}),
+      ...(thinkingReasonKey ? { reasonKey: thinkingReasonKey } : {}),
+      ...(thinkingReasonKey ? { reasonValues: { agent: agent.label } } : {}),
     },
     {
       kind: "cancel",
@@ -518,9 +752,33 @@ export function composerControls(
       // somebody picked for it last week.
       selected: options.selectedModelId ?? null,
       enabled: modelEnabled,
+      // Passed through so the caller can say *when* the agent listed these, which is the difference
+      // between "these are the models it publishes" and "these are what it offered last Tuesday".
+      ...(models?.observedAt !== undefined ? { observedAt: models.observedAt } : {}),
       ...(modelReason ? { reason: modelReason } : {}),
       ...(modelReasonKey ? { reasonKey: modelReasonKey } : {}),
       ...(modelReasonKey ? { reasonValues: { agent: agent.label } } : {}),
+    },
+    thinking: {
+      kind: thinkingKind,
+      // **One option is filtered, and it is not a value we are dropping.** `deepseek-harness` publishes
+      // `{value: "", name: "Provider default"}` when the resolved provider has no default effort of its
+      // own (`@deepseek-ai/dsh-acp` `lib/index.js:307`, `:502-508`), and that is the *same state* as the
+      // control's own first option: nothing is sent, and the agent decides. Offering both would put two
+      // rows meaning one thing in the picker — and two options with the same `value=""` in one `<select>`
+      // is a control whose selection cannot be read back. Ours wins because it is the one a user can also
+      // reach on an agent that publishes no such value at all, and because it is the one we translate.
+      options: (thinking?.options ?? []).filter(option => option.value !== ""),
+      // The task's stored level, or nothing — which the control renders as the agent's own default.
+      // The same rule as the model's, for the same reason: there is no "first option" fallback, because
+      // defaulting to a level nobody chose is how a task quietly starts thinking less than its user
+      // asked for on a machine that happens to list its levels in another order.
+      selected: options.selectedThinkingLevel ?? null,
+      enabled: thinkingEnabled,
+      ...(thinking?.observedAt !== undefined ? { observedAt: thinking.observedAt } : {}),
+      ...(thinkingReason ? { reason: thinkingReason } : {}),
+      ...(thinkingReasonKey ? { reasonKey: thinkingReasonKey } : {}),
+      ...(thinkingReasonKey ? { reasonValues: { agent: agent.label } } : {}),
     },
     send: {
       behaviour,

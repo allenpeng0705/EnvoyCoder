@@ -280,7 +280,15 @@ export class CoderStore {
     if (this.refreshTimer) clearTimeout(this.refreshTimer);
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = undefined;
-      void (kind === "settings" ? this.loadSettings() : this.loadLists());
+      // Three of the four kinds land in a list; `harnesses` is the odd one and refetches on its own.
+      // What moved there is the *answer about an agent* — a run reports what it published when its
+      // session opened — so a client that fetched task lists on this event would fetch the wrong list,
+      // and the composer's pickers would keep showing what the agent offered before it last ran.
+      void (kind === "settings"
+        ? this.loadSettings()
+        : kind === "harnesses"
+          ? this.loadHarnesses()
+          : this.loadLists());
     }, 16);
   }
 
@@ -444,7 +452,7 @@ export class CoderStore {
   async startRun(
     taskId: string,
     prompt: string,
-    options: { resume?: boolean; agentModeId?: string; model?: string } = {},
+    options: { resume?: boolean; agentModeId?: string; model?: string; thinkingLevel?: string } = {},
   ): Promise<{ ok: true; run: AgentRun } | Refusal> {
     const result = await this.mutate(
       "coder.startRun",
@@ -459,6 +467,11 @@ export class CoderStore {
         // default" and is **not** sent, because the daemon's wire schema requires a non-empty model
         // (`z.string().min(1)`) — a value that means "nothing" must not travel as a model.
         ...(options.model !== undefined && options.model !== "" ? { model: options.model } : {}),
+        // And the same rule again for the thinking level, whose schema also demands a non-empty value
+        // for exactly the same reason: `""` is a request to clear, not a level.
+        ...(options.thinkingLevel !== undefined && options.thinkingLevel !== ""
+          ? { thinkingLevel: options.thinkingLevel }
+          : {}),
       },
       (answer) => ({ ok: true as const, run: (answer as { run: AgentRun }).run }),
     );
@@ -534,6 +547,13 @@ export class CoderStore {
        * The daemon turns `""` into "drop the stored model" rather than storing an empty string.
        */
       model?: string;
+      /**
+       * The thinking level for this task's next run, as the agent's own id — or `""` for **the agent's
+       * own default**, which the daemon turns into "drop the stored level" rather than storing an empty
+       * string. A level is an id in the agent's vocabulary (`off`, `low`, `high`, `max`), so there is no
+       * equivalent of the model's free-text case: it is stored exactly as the agent published it.
+       */
+      thinkingLevel?: string;
     },
   ): Promise<{ ok: true; task: Task } | Refusal> {
     return this.mutate("coder.updateTask", input, (result) => ({

@@ -158,7 +158,7 @@ describe.skipIf(!dsh)("the ACP client, against the real dsh binary", () => {
         requestTimeoutMs: 120_000,
         // The encoding the catalogue builds: a JSON array of provider and model
         // (`model-control.ts:235-237`). The provider here is one no catalog has, so the agent must say so.
-        sessionConfig: { configId: "model", value: JSON.stringify(["envoycoder", "no-such-model"]) },
+        sessionConfigs: [{ configId: "model", value: JSON.stringify(["envoycoder", "no-such-model"]) }],
       });
       cleanups.push(async () => client.stop());
     } catch (caught) {
@@ -169,6 +169,79 @@ describe.skipIf(!dsh)("the ACP client, against the real dsh binary", () => {
     expect(error!.message).toMatch(/unknown model option|no model selection/i);
     // The distinction that matters: not a protocol-level refusal, which is what a wrong method name or
     // a wrong parameter shape would produce.
+    expect(error!.message).not.toMatch(/not supported|method not found|-32601/i);
+  }, 180_000);
+
+
+  it("publishes a thought level, and accepts a change to it with the agent's own config id", async () => {
+    // **The one thing about the thinking level that a fixture cannot prove**: the config id.
+    // `reasoning_effort` and the ACP category `thought_level` were read out of the installed package
+    // (`@deepseek-ai/dsh-acp`, `lib/index.js:306`, `:494-508`), and a wrong id would look perfect
+    // against our fixture — which we wrote — and be answered `unknown session config option` here, on a
+    // user's machine, only when they first picked a level.
+    //
+    // Credential-independent on purpose: the option state is built before any provider is called, so
+    // this holds on a machine with no API keys at all — which is why it can run for everyone rather
+    // than behind `RUN_LIVE_ACP`.
+    const { cwd, dshHome } = await workdir();
+    const client = await AcpClient.start({
+      launch: { command: dsh as string, args: ["--profile", "acp"], cwd, env: { DSH_HOME: dshHome } },
+      requestTimeoutMs: 60_000,
+    });
+    cleanups.push(async () => client.stop());
+
+    const options = client.sessionConfigOptions() as {
+      id?: unknown;
+      category?: unknown;
+      type?: unknown;
+      options?: { value?: unknown; name?: unknown; description?: unknown }[];
+    }[];
+    const thought = options.find((option) => option.category === "thought_level");
+    expect(thought, "the real agent published no thought-level option").toBeDefined();
+    // The agent's own id, which is what the catalogue sends with: the field is the *contract* between
+    // `HARNESS_THINKING_DELIVERY` and this binary.
+    expect(thought?.id).toBe("reasoning_effort");
+    expect(thought?.type).toBe("select");
+    // Real values with real names, which is why the pill can show the agent's own words rather than
+    // ours: these are the strings the agent validates a change against.
+    const values = (thought?.options ?? []).map((option) => option.value);
+    expect(values.length).toBeGreaterThan(0);
+    expect(values.every((value) => typeof value === "string")).toBe(true);
+
+    // And a change with that id is **accepted**, which is the half a name alone cannot prove: the
+    // catalogue's own delivery goes through `sessionConfigs`, so this is the daemon's real path.
+    const accepted = await AcpClient.start({
+      launch: { command: dsh as string, args: ["--profile", "acp"], cwd, env: { DSH_HOME: dshHome } },
+      requestTimeoutMs: 60_000,
+      sessionConfigs: [{ configId: "reasoning_effort", value: String(values[0]) }],
+    });
+    cleanups.push(async () => accepted.stop());
+    expect(accepted.sessionId).toBeTruthy();
+  }, 180_000);
+
+  it("refuses an unknown level with its own sentence, rather than accepting anything", async () => {
+    // The other half of the same fact, and the reason free validation is not enough: the agent looks the
+    // value up in the state it advertised and refuses anything else. That refusal is what a user meets
+    // when an observed list is out of date — our own validation deliberately does not veto a level, so
+    // this is the loud failure the design relies on.
+    const { cwd, dshHome } = await workdir();
+
+    let error: Error | undefined;
+    try {
+      const client = await AcpClient.start({
+        launch: { command: dsh as string, args: ["--profile", "acp"], cwd, env: { DSH_HOME: dshHome } },
+        requestTimeoutMs: 60_000,
+        sessionConfigs: [{ configId: "reasoning_effort", value: "envoycoder-not-a-level" }],
+      });
+      cleanups.push(async () => client.stop());
+    } catch (caught) {
+      error = caught instanceof Error ? caught : new Error(String(caught));
+    }
+
+    expect(error, "the real agent accepted a level it does not offer").toBeDefined();
+    expect(error!.message).toMatch(/unknown reasoning effort/i);
+    // Not a protocol-level refusal: `method not found` or `-32601` would mean the id or the parameter
+    // shape is wrong, which is exactly what this pair of tests is here to tell apart.
     expect(error!.message).not.toMatch(/not supported|method not found|-32601/i);
   }, 180_000);
 
@@ -224,6 +297,41 @@ describe.skipIf(!builtInProbe.available)("the ACP client, against the real built
     // `end_turn`, not `cancelled` and not a thrown error: the turn was accepted and finished. This is
     // the assertion `dsh` cannot make without a credential.
     expect(result.stopReason).toBe("end_turn");
+  }, 180_000);
+
+  it("publishes no session configuration options at all — the fact the thinking pill's reason rests on", async () => {
+    // **Verified against the built peer rather than inferred from its source.** The catalogue says
+    // `envoy-harness` has no thought-level method (`capabilities.thinking: false`), and the window
+    // disables the pill with a sentence about the *agent* on the strength of it. That claim has two
+    // halves and this test is the first: a session it opens offers nothing, so there is no level (or
+    // model) for a picker to list.
+    const { cwd } = await workdir();
+    const resolved = resolveHarnessCommand("envoy-harness", builtInProbe, { prompt: "", cwd });
+
+    const client = await AcpClient.start({
+      launch: { command: resolved.command, args: resolved.args, cwd },
+      requestTimeoutMs: 60_000,
+    });
+    cleanups.push(async () => client.stop());
+
+    expect(client.sessionConfigOptions()).toEqual([]);
+
+    // And the second half: the method the model and the thinking level both travel through is not
+    // implemented, so a level sent anyway would be answered `method not found` — which is why the daemon
+    // refuses *before* spawning rather than letting a run fail here.
+    let error: Error | undefined;
+    try {
+      const second = await AcpClient.start({
+        launch: { command: resolved.command, args: resolved.args, cwd },
+        requestTimeoutMs: 60_000,
+        sessionConfigs: [{ configId: "reasoning_effort", value: "high" }],
+      });
+      cleanups.push(async () => second.stop());
+    } catch (caught) {
+      error = caught instanceof Error ? caught : new Error(String(caught));
+    }
+    expect(error, "the built-in harness accepted a session config option").toBeDefined();
+    expect(error!.message).toMatch(/not supported|method not found|-32601/i);
   }, 180_000);
 });
 

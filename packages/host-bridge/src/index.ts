@@ -108,6 +108,16 @@ export interface CoderPaths {
   projectsFile: string;
   tasksFile: string;
   settingsFile: string;
+  /**
+   * What each agent published about itself the last time a session was opened with it.
+   *
+   * Its own file rather than a field on a task, because it is **per agent**, not per task: two tasks on
+   * `deepseek-harness` share one answer, and a copy per task would be the same fact stored N times and
+   * stale in N-1 places. Written by the daemon after a run (`stores.ts`'s `recordSessionOptions`) and
+   * read by `coder.listHarnesses`, so the window can offer the models and thinking levels of the agent
+   * it is actually talking to.
+   */
+  sessionOptionsFile: string;
   runsDir: string;
   transcriptsDir: string;
   logsDir: string;
@@ -144,6 +154,7 @@ export function coderPaths(home: string = resolveHomeDir()): CoderPaths {
     projectsFile: join(stateDir, "projects.json"),
     tasksFile: join(stateDir, "tasks.json"),
     settingsFile: join(stateDir, "settings.json"),
+    sessionOptionsFile: join(stateDir, "session-options.json"),
     runsDir: join(stateDir, "runs"),
     transcriptsDir: join(stateDir, "transcripts"),
     logsDir: join(stateDir, "logs"),

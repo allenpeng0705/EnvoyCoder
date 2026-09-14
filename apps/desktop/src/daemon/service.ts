@@ -27,6 +27,7 @@ import {
   type CoderLanguage,
   type HarnessId,
   type HarnessSummary,
+  type ObservedSessionOptions,
   type RpcMethod,
   type RunEvent,
   type CoderMeshStatus,
@@ -39,10 +40,11 @@ import {
 import {
   ALL_HARNESSES,
   canApplyModel,
+  canApplyThinking,
   harnessDefinition,
-  harnessModels,
   probeHarness,
   resolveModelChoice,
+  sessionFacts,
 } from "@envoycoder/agent-catalog";
 
 import type { CoderPaths } from "@envoycoder/host-bridge";
@@ -209,6 +211,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         model?: string;
         cwd?: string;
         agentModeId?: string;
+        thinkingLevel?: string;
         extraArgs?: string;
       };
 
@@ -283,6 +286,29 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         }
       }
 
+      /**
+       * **A stored thinking level the new agent cannot take is dropped**, on exactly the terms of the
+       * mode above and for a sharper reason: a level is an id in one agent's vocabulary (`off | low |
+       * high | max` for `deepseek-harness`) and means nothing to an agent with no thought-level method
+       * at all. Left in place, every later run of the task would refuse with a sentence about a choice
+       * the user made for the agent they replaced; clearing it leaves the next run at the depth the new
+       * agent decides for itself, which is what "no level chosen" already means.
+       *
+       * The check is the delivery, not a list of values: whether the agent accepts *this* id is the
+       * agent's answer, and the observed list we could compare against describes a model that agent may
+       * no longer be running.
+       */
+      let thinkingLevel = input.thinkingLevel;
+      let clearThinkingLevel = input.thinkingLevel === "";
+      if (thinkingLevel === "") thinkingLevel = undefined;
+      if (input.harness !== undefined) {
+        const kept = thinkingLevel ?? deps.store.findTask(input.id)?.thinkingLevel;
+        if (kept !== undefined && !canApplyThinking(input.harness)) {
+          thinkingLevel = undefined;
+          clearThinkingLevel = true;
+        }
+      }
+
       const task = await deps.store.updateTask({
         ...input,
         ...(cwd !== undefined ? { cwd } : {}),
@@ -292,6 +318,10 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         ...(agentModeId !== undefined ? { agentModeId } : {}),
         ...(clearAgentMode ? { clearAgentMode: true } : {}),
         ...(clearModel ? { clearModel: true } : {}),
+        // The same treatment for the thinking level: `""` is the control's "the agent's own default",
+        // and a stored empty string would be a level called nothing.
+        thinkingLevel,
+        ...(clearThinkingLevel ? { clearThinkingLevel: true } : {}),
       });
       if (!task) throw notFound("task", input.id);
       return { task };
@@ -313,6 +343,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         resume?: boolean;
         agentModeId?: string;
         model?: string;
+        thinkingLevel?: string;
       };
       const runs = requireRuns(deps);
       const run = await runs.start({
@@ -326,6 +357,10 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         // Same division for the model: `RunManager` resolves it against the catalogue and refuses what
         // the agent cannot take, before any process exists.
         ...(input.model !== undefined ? { model: input.model } : {}),
+        // And for the thinking level, where the refusal is about the *agent* rather than the value: an
+        // agent with no thought-level method cannot be told to think less, and pretending otherwise
+        // would start it at a depth nobody chose.
+        ...(input.thinkingLevel !== undefined ? { thinkingLevel: input.thinkingLevel } : {}),
       });
       return { run };
     },
@@ -390,7 +425,11 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     /* ────────────────── agents ────────────────── */
     "coder.listHarnesses": async (params) => {
       parseRpcParams("coder.listHarnesses", params);
-      return { harnesses: ALL_HARNESSES.map((id) => summarize(id, probe)) };
+      return {
+        harnesses: ALL_HARNESSES.map((id) =>
+          summarize(id, probe, deps.store.sessionOptions(id)),
+        ),
+      };
     },
 
     "coder.probeHarness": async (params) => {
@@ -531,9 +570,23 @@ async function defaultIsDirectory(path: string): Promise<boolean> {
 function summarize(
   id: HarnessId,
   probe: (harness: HarnessId) => { available: boolean; binaryPath?: string; reason?: string },
+  /**
+   * What this agent published the last time a session was opened with it, if we ever have.
+   *
+   * Passed in rather than looked up here so `summarize` stays a function of its arguments — and
+   * because the store is the only thing that knows whether a run has happened, which is the fact the
+   * whole "observed, not promised" story turns on.
+   */
+  observed: ObservedSessionOptions | undefined,
 ): HarnessSummary {
   const definition = harnessDefinition(id);
   const result = probe(id);
+  // **The one place the two halves of "what does this agent offer" are joined.** The catalogue knows
+  // what an agent documents; the store knows what an agent actually said in its last session; and for
+  // the model list and the thinking level the second is the better answer while it lasts. See
+  // `sessionFacts` for the precedence rules, including why a session that says nothing about models
+  // does not overwrite a catalogue list.
+  const facts = sessionFacts(id, observed);
   return {
     id,
     label: definition.label,
@@ -547,9 +600,15 @@ function summarize(
     modes: definition.modes,
     // The models this agent publishes — **and what an empty list means**, which is the half a list
     // alone cannot carry. `deepseek-harness` publishes none we can read before a run exists and still
-    // takes one, so its `kind` is `"free-text"`; rendering that as "no model" would be a claim about
-    // somebody else's product. The list and its citations live in `@envoycoder/agent-catalog`.
-    models: harnessModels(id),
+    // takes one, so its `kind` is `"free-text"`; once a run has happened, the list that run reported
+    // replaces it (`observedAt` says when). Rendering an empty list as "no model" would be a claim
+    // about somebody else's product. The rules and their citations live in `@envoycoder/agent-catalog`.
+    models: facts.models,
+    // The thinking level, on the same terms one step further: it is knowable *only* from a session, so
+    // this is `"session"` (we have not seen one), `"listed"` (we have) or `"none"` (the agent offers
+    // none — recorded from its source and verified for `envoy-harness`, or observed for an agent that
+    // opened a session and published no such option).
+    thinking: facts.thinking,
     capabilities: {
       resume: definition.capabilities.resume,
       cancel: definition.capabilities.cancel,
@@ -566,6 +625,10 @@ function summarize(
       // session it just opened, and the third-party entries from nowhere — so the control is enabled on
       // this flag and off, with a reason, everywhere it is false.
       model: canApplyModel(id),
+      // And the third, which turns on a *different* method (`session/set_config_option`) for an agent
+      // that takes one: `deepseek-harness` yes, `envoy-harness` no — its ACP dispatch has no
+      // thought-level method at all, verified against the built peer.
+      thinking: canApplyThinking(id),
     },
     available: result.available,
     ...(definition.install?.hint ? { installHint: definition.install.hint } : {}),

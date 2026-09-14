@@ -44,6 +44,7 @@ import {
 import { en, type MessageKey } from "../src/i18n/messages/en.js";
 import { localize, localNotice, noticeOf, statusKey } from "../src/i18n/notice.js";
 import { createTranslator } from "../src/i18n/translate.js";
+import { formatWhen } from "../src/i18n/when.js";
 
 const ENGLISH_KEYS = Object.keys(en) as MessageKey[];
 
@@ -257,6 +258,36 @@ describe("how much of a translation has been read", () => {
       if (review.status !== "reviewed") continue;
       expect(review.reviewer?.trim(), `${locale} claims a review with nobody named`).toBeTruthy();
     }
+  });
+
+  it("writes an observed timestamp the way a reader of that language writes one", () => {
+    // The one date on the composer's control row — "these are the models it listed when we last opened a
+    // session with it, on …" — and it is rendered by `Intl` rather than by a format string, because
+    // `2026-09-14 05:23` is the shape a *developer* reads and this product's rule is that a user-facing
+    // string is readable. Asserted as properties rather than as literals: the exact output is the
+    // platform's business, and a test that pinned it would fail on an ICU upgrade while the app was
+    // still right.
+    const at = "2026-09-14T05:23:00.000Z";
+    for (const locale of LOCALES) {
+      const rendered = formatWhen(at, locale);
+      expect(rendered, locale).not.toBe("");
+      expect(rendered, locale).toContain("2026");
+      // Never the raw ISO string on a machine that can format: that is the fallback, not the answer.
+      expect(rendered, locale).not.toBe(at);
+      expect(rendered, locale).not.toContain("T05:23:00.000Z");
+    }
+    // Two languages that order a date differently must actually differ, or the locale argument is doing
+    // nothing — which is the failure a test that only checked "non-empty" would miss.
+    expect(formatWhen(at, "de")).not.toBe(formatWhen(at, "en"));
+  });
+
+  it("shows a timestamp it cannot read exactly as the daemon sent it", () => {
+    // A timestamp is data from across a process boundary, and `new Date("nonsense")` does not throw — it
+    // produces an Invalid Date, and `Intl` throws a `RangeError` formatting one. A composer that threw
+    // there would take the whole control row down for a cosmetic line, so the fallback is the string
+    // itself: ugly and true beats blank, and a blank sentence would read as "we do not know when".
+    expect(formatWhen("not a timestamp", "en")).toBe("not a timestamp");
+    expect(formatWhen("", "en")).toBe("");
   });
 
   it("has, in every language, the approval and refusal strings a user acts on", () => {

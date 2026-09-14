@@ -99,22 +99,28 @@ export interface AcpClientOptions {
   agentModeId?: string;
   /**
    * The agent's own session configuration to set once the session exists
-   * (`session/set_config_option { sessionId, configId, value }`).
+   * (`session/set_config_option { sessionId, configId, value }`), **in the order given**.
    *
-   * **Where a model goes when it is not an argument.** `deepseek-harness` has no model flag: it
-   * advertises its models as a standard ACP `select` option on the session it just opened and takes a
-   * change through this method (`../deepseek-harness/packages/acp/acp/README.md:70,76`;
-   * `.../packages/acp/acp/src/index.ts:388`). `envoy-harness`, by contrast, reads `--provider`/`--model`
-   * from argv, so it never uses this.
+   * **Where a model and a thinking level go when they are not arguments.** `deepseek-harness` has no
+   * model flag and no effort flag: it advertises both as standard ACP `select` options on the session
+   * it just opened and takes a change through this method
+   * (`../deepseek-harness/packages/acp/acp/README.md:70,76`; `.../packages/acp/acp/src/index.ts:388`).
+   * `envoy-harness`, by contrast, reads `--provider`/`--model` from argv and has no such method at all,
+   * so it never uses this.
    *
    * The **value is opaque and belongs to the agent** — `configId` and the encoding are decided in
-   * `@envoycoder/agent-catalog` (see `SessionModelConfig` there) and passed through verbatim, for the
-   * same reason a mode id is: a value this client prettified would be one the agent refuses, and the
-   * refusals here are real — an id outside the agent's catalog comes back as `invalid params:
-   * unknown model option: …`. Awaited and **not** best-effort, like `agentModeId`: a model that failed
-   * to apply is invisible in the transcript, and the run would report a model it is not using.
+   * `@envoycoder/agent-catalog` (see `SessionModelConfig` and `HARNESS_THINKING_DELIVERY` there) and
+   * passed through verbatim, for the same reason a mode id is: a value this client prettified would be
+   * one the agent refuses, and the refusals here are real — an id outside the agent's catalog comes back
+   * as `invalid params: unknown model option: …`. Awaited and **not** best-effort, like `agentModeId`: a
+   * model or a thinking level that failed to apply is invisible in the transcript, and the run would
+   * report a posture it is not in.
+   *
+   * **Order is the caller's and it matters.** The thinking options an agent offers are derived from the
+   * model it has resolved (`dsh-acp/lib/index.js:494-508` reads `info.reasoning` for the current route),
+   * so a model must be set before a level is, and `RunManager` sends them in that order.
    */
-  sessionConfig?: { configId: string; value: string };
+  sessionConfigs?: readonly { configId: string; value: string }[];
 }
 
 /** What the agent said it can do. Recorded so the run's capabilities are the agent's, not ours. */
@@ -164,6 +170,14 @@ export class AcpClient {
 
   private agentInfoValue: AcpAgentInfo | undefined;
   private sessionIdValue: string | undefined;
+  /**
+   * The `configOptions` this session has published, **verbatim and most recent**.
+   *
+   * The agent's own shapes, unparsed on purpose: what an option *means* is a fact about an agent's
+   * protocol dialect, and `@envoycoder/agent-catalog` is where that knowledge lives
+   * (`parseSessionConfigOptions`). This client's only job is to not lose what it was told.
+   */
+  private configOptionsValue: unknown[] = [];
 
   private constructor(child: ChildProcessWithoutNullStreams, options: AcpClientOptions) {
     this.child = child;
@@ -229,10 +243,11 @@ export class AcpClient {
       else await client.newSession();
       // **Order matters, and it is the agent's.** The model goes first because it is the more
       // fundamental of the two — the mode changes what the agent may *do*, the model changes what is
-      // doing it — and because the method that carries it exists whether or not the agent has modes.
-      // Neither call is conditional on the other: an agent can accept a model and no mode, which is
-      // exactly `deepseek-harness`.
-      if (options.sessionConfig) await client.setSessionConfig(options.sessionConfig);
+      // doing it, and the thinking levels an agent offers are derived from the model it resolved — and
+      // because the method that carries it exists whether or not the agent has modes. Neither call is
+      // conditional on the other: an agent can accept a model and no mode, which is exactly
+      // `deepseek-harness`.
+      for (const config of options.sessionConfigs ?? []) await client.setSessionConfig(config);
       if (options.agentModeId) await client.setMode(options.agentModeId)
       return client;
     } catch (error) {
@@ -248,6 +263,30 @@ export class AcpClient {
 
   get sessionId(): string | undefined {
     return this.sessionIdValue;
+  }
+
+  /**
+   * The session configuration options the agent has published — the most recent state it has told us,
+   * verbatim.
+   *
+   * Two sources, and the second is not a nicety:
+   *
+   *   * the `session/new` response, where an agent states what it offers
+   *     (`session/new` → `{sessionId, configOptions}`, `dsh-acp/lib/index.js:1170`, `:1248`);
+   *   * the **result of every accepted `session/set_config_option`**, which this protocol defines as
+   *     the *complete* resulting option state rather than an acknowledgement
+   *     (`dsh-acp/lib/index.js:388-409` — `return (await this.state(signal)).options`). That matters
+   *     because an agent builds some options from the model it has resolved: setting a model changes
+   *     which thinking levels exist, so the state after a change is a better answer than the one from
+   *     before it.
+   *
+   * What a caller does with this is the caller's decision, and `RunManager` writes an observation to the
+   * daemon's state **only for a session it opened**: a resume is answered with less than `session/new`
+   * was (both of ours reply with little more than a session id), and a thinner answer must not overwrite
+   * the fuller one a user is looking at.
+   */
+  sessionConfigOptions(): readonly unknown[] {
+    return this.configOptionsValue;
   }
 
   /** Everything the child wrote to stderr, for a failure report a user can act on. */
@@ -287,11 +326,12 @@ export class AcpClient {
       // server was attached would fail later and in a less readable place.
       { cwd: this.options.launch.cwd, mcpServers: [] },
       this.options.handshakeTimeoutMs ?? 30_000,
-    )) as { sessionId?: string };
+    )) as { sessionId?: string; configOptions?: unknown };
     if (typeof result.sessionId !== "string" || result.sessionId === "") {
       throw new Error("The agent opened a session but did not name it, so nothing can be sent to it.");
     }
     this.sessionIdValue = result.sessionId;
+    if (Array.isArray(result.configOptions)) this.configOptionsValue = result.configOptions;
     return result.sessionId;
   }
 
@@ -341,11 +381,15 @@ export class AcpClient {
    */
   private async setSessionConfig(config: { configId: string; value: string }): Promise<void> {
     const sessionId = this.requireSession();
-    await this.request(
+    const result = (await this.request(
       "session/set_config_option",
       { sessionId, configId: config.configId, value: config.value },
       this.options.handshakeTimeoutMs ?? 30_000,
-    );
+    )) as { configOptions?: unknown } | undefined;
+    // The complete state after the change, when the agent answers with one. Recorded rather than
+    // ignored: for an option that depends on the model, this is the only way to learn what the agent
+    // offers *now* — see `sessionConfigOptions`.
+    if (Array.isArray(result?.configOptions)) this.configOptionsValue = result.configOptions;
   }
 
   /**

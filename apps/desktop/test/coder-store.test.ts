@@ -513,3 +513,38 @@ describe("other windows", () => {
     expect(state().mesh.kind).toBe("attached");
   });
 });
+
+describe("what a run learned about an agent", () => {
+  it("refetches the agents, not the tasks, when the daemon says the agent's answer moved", async () => {
+    // **The event that makes the observation visible at all.** A run reports what its agent published
+    // when the session opened, and the composer's pickers are rendered from `coder.listHarnesses` — so a
+    // window that refetched its task list on this event would keep showing the text field it had before
+    // the agent ever ran. The three older kinds still land in the lists, which the test below covers.
+    const { connection } = await store();
+    const harnesses = connection.calls.filter((call) => call.method === "coder.listHarnesses").length;
+    const tasks = connection.calls.filter((call) => call.method === "coder.listTasks").length;
+
+    connection.push("coder:state-changed", { kind: "harnesses", at: "2026-09-14T05:23:00.000Z" });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    expect(connection.calls.filter((call) => call.method === "coder.listHarnesses").length).toBe(harnesses + 1);
+    // Not a task refetch: nothing about the task list changed, and a client that fetched it would be
+    // reading a different question's answer.
+    expect(connection.calls.filter((call) => call.method === "coder.listTasks").length).toBe(tasks);
+  });
+
+  it("starts a run with the thinking level the composer chose, and drops the control's empty value", async () => {
+    // `""` is the control's "the agent's own default" and is **not** a level: it must not travel, because
+    // the daemon's schema requires a non-empty value — the same care the model already takes.
+    const { store: s, connection } = await store();
+    connection.answers.set("coder.startRun", { run: { id: "run-1", taskId: "t1", harness: "deepseek-harness", hostId: "local", startedAt: "x", status: "running" } });
+    connection.answers.set("coder.tailRun", { run: { id: "run-1", taskId: "t1", harness: "deepseek-harness", hostId: "local", startedAt: "x", status: "running" }, events: [], nextSeq: 0, live: true });
+
+    await s.startRun("t1", "go", { thinkingLevel: "max" });
+    expect(connection.calls.find((call) => call.method === "coder.startRun")?.params).toMatchObject({ thinkingLevel: "max" });
+
+    await s.startRun("t1", "go", { thinkingLevel: "" });
+    const starts = connection.calls.filter((call) => call.method === "coder.startRun");
+    expect(Object.prototype.hasOwnProperty.call(starts[1]?.params ?? {}, "thinkingLevel")).toBe(false);
+  });
+});

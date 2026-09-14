@@ -220,6 +220,23 @@ export interface Task {
    * task file that carried a copy of them would show a user last release's wording.
    */
   agentModeId?: string;
+  /**
+   * The agent's own id for how much it should think before it answers.
+   *
+   * The value is the **agent's**: `deepseek-harness` publishes `off | low | high | max` in its session
+   * configuration and validates whatever it is handed, so this is stored as the agent wrote it — the
+   * label on screen and the value on the wire are two different things, and only one of them is a
+   * translation.
+   *
+   * On the task for the same reason `agentModeId` and `model` are: it is part of what the task *is*, so
+   * a run started after a restart — or from the phone — uses the same thinking level without the caller
+   * having to repeat it. Absent means "whatever the agent does by default", which is where a task
+   * starts and where clearing the choice returns it to.
+   *
+   * The agent's own name for the option is `reasoning_effort` (ACP category `thought_level`); ours is
+   * thinking, because that is the word on the pill and the word a user reads.
+   */
+  thinkingLevel?: string;
   extraArgs?: string;
   status: TaskStatus;
   createdAt: string;
@@ -351,6 +368,14 @@ export interface AgentRun {
   taskId: string;
   harness: HarnessId;
   model?: string;
+  /**
+   * The agent's own thinking-level id this run was started with, when one was chosen.
+   *
+   * Recorded beside `model` and for the same reason: the transcript should be able to say what the
+   * agent was actually asked for, and a run whose thinking level had been dropped on the way would
+   * otherwise look identical to one that ran on the agent's own default. Absent means the agent chose.
+   */
+  thinkingLevel?: string;
   /** OS process id of the harness, when it is a child process of the daemon. */
   pid?: number;
   hostId: string;
@@ -396,7 +421,14 @@ export interface RunEventBase {
 }
 
 export type RunEvent =
-  | (RunEventBase & { kind: "run.started"; harness: HarnessId; model?: string; hostId: string })
+  | (RunEventBase & {
+      kind: "run.started";
+      harness: HarnessId;
+      model?: string;
+      /** The thinking level the run was started with, as the agent's own id. See `AgentRun`. */
+      thinkingLevel?: string;
+      hostId: string;
+    })
   | (RunEventBase & {
       kind: "run.session";
       /**

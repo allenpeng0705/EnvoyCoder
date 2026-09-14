@@ -25,6 +25,7 @@
  * | `resume-me` | announces the session id it was given, so a resume is observable |
  * | `mode-me` | announces its collaboration mode, so `session/set_mode` is observable |
  * | `model-me` | announces its session config, so `session/set_config_option` is observable |
+ * | `thinking-me` | announces its thinking level, so the *second* config option is observable too |
  *
  * `FAKE_ACP_NO_SET_MODE=1` makes it refuse `session/set_mode` with `-32601`, the way
  * `deepseek-harness` does. That is how a test proves the honest failure mode: an agent that cannot be
@@ -36,6 +37,19 @@
  * ambiguous with it. That refusal is the property the design leans on: because we build the value
  * instead of picking it from a list the agent published, an id its catalog does not have must fail
  * **loudly**, and this is what proves that it does.
+ *
+ * `FAKE_ACP_PUBLISH_OPTIONS=1` makes `session/new` answer with a `configOptions` array **in the real
+ * agent's shape** — a grouped `model` select and a `thought_level` select with names and descriptions.
+ * Off by default, and that default is the point: a session that publishes nothing is a real case
+ * (`envoy-harness` answers `{sessionId}` alone, verified against the built peer), and it is the only
+ * way to test that "we opened a session and it offered nothing" is recorded as such instead of being
+ * confused with "we have not looked yet".
+ *
+ * `FAKE_ACP_REFUSE_THINKING` is one thinking level this agent refuses, with the real `dsh`'s own
+ * sentence (`unknown reasoning effort for <provider>/<model>: <value>`, `invalid params`) — verified
+ * against the binary. It exists to prove the deliberate limit of our own validation: a level that is
+ * not in the observed list is **not** refused by the daemon (the list is a record of an earlier
+ * session, not a promise), so the agent's own refusal is what a user meets, and it must be loud.
  *
  * The protocol shapes are the ones the real agent emits, taken from
  * `../deepseek-harness/packages/acp/acp/src/updates.ts`. The mode ids and the refusal sentence are
@@ -62,7 +76,102 @@ let collaborationMode = "default";
 const sessionConfig = {};
 /** The one opaque model value this agent refuses, when a test asks it to refuse one. */
 const REFUSED_MODEL = process.env.FAKE_ACP_REFUSE_MODEL;
+/** The one thinking level this agent refuses, when a test asks it to refuse one. */
+const REFUSED_THINKING = process.env.FAKE_ACP_REFUSE_THINKING;
+/** Whether this session publishes its options, and therefore accepts changes to them. */
+const PUBLISH = process.env.FAKE_ACP_PUBLISH_OPTIONS === "1";
 const pendingPrompts = new Map();
+
+/**
+ * The option state this session publishes — verbatim the real agent's shape.
+ *
+ * Copied from a live `dsh --profile acp` response (see the module doc): the model select's values are
+ * opaque JSON pairs grouped by provider, and the thinking select's values carry the agent's own names
+ * and descriptions.
+ *
+ * ## Why the thinking levels depend on the model, which is the fixture's one piece of behaviour
+ *
+ * The real agent builds its `thought_level` option from `info.reasoning` for the route the session
+ * resolved (`dsh-acp/lib/index.js:494-508`), so **which levels exist depends on the model**. That is not
+ * a detail: it is the reason the daemon sets the model *before* the level and the reason the option state
+ * returned by a change is worth recording. A fixture with one fixed list would let a client that set the
+ * level first, or that never read the echo, pass every test here.
+ *
+ * So the stronger model offers a level the fast one does not (`ultra`), and a client that got the order
+ * wrong is answered with the agent's own refusal rather than quietly succeeding.
+ */
+const MODEL_DEFAULT = '["fake","flash"]';
+
+const REASONING_BY_MODEL = {
+  [MODEL_DEFAULT]: [
+    { value: "off", name: "Off", description: "Use for simple tasks." },
+    { value: "low", name: "Low", description: "Routine work." },
+    { value: "high", name: "High", description: "The default balance." },
+    { value: "max", name: "Max", description: "Reserve for the hardest tasks." },
+  ],
+  '["fake","pro"]': [
+    { value: "high", name: "High", description: "The default balance for this model." },
+    { value: "max", name: "Max", description: "Reserve for the hardest tasks." },
+    { value: "ultra", name: "Ultra", description: "This model goes further than the fast one." },
+  ],
+};
+
+const PUBLISHED_OPTIONS = [
+  {
+    id: "model",
+    name: "Model",
+    category: "model",
+    type: "select",
+    currentValue: MODEL_DEFAULT,
+    options: [
+      {
+        group: "fake",
+        name: "Fake",
+        options: [
+          {
+            value: MODEL_DEFAULT,
+            name: "Fake-Flash",
+            description: "Fast, efficient and economical.",
+          },
+          { value: '["fake","pro"]', name: "Fake-Pro", description: "Stronger, and slower." },
+        ],
+      },
+    ],
+  },
+  {
+    id: "reasoning_effort",
+    name: "Reasoning effort",
+    category: "thought_level",
+    type: "select",
+    currentValue: "high",
+    options: REASONING_BY_MODEL[MODEL_DEFAULT],
+  },
+];
+
+/**
+ * The option state with the changes this session has taken applied, as the real method answers.
+ *
+ * `[]` for a session that publishes nothing: a fixture that answered a change with options it never
+ * advertised would let the daemon record a list no session can produce, which is exactly the kind of
+ * quiet inconsistency between the two halves of a protocol that a fixture is supposed to catch.
+ */
+const optionState = () =>
+  PUBLISH
+    ? PUBLISHED_OPTIONS.map((option) => {
+        const current = sessionConfig[option.id];
+        // The thinking option is rebuilt for whichever model the session now resolves — see
+        // `REASONING_BY_MODEL`. This is what makes the echo from a change worth anything.
+        if (option.id === "reasoning_effort") {
+          const model = typeof sessionConfig.model === "string" ? sessionConfig.model : MODEL_DEFAULT;
+          return {
+            ...option,
+            currentValue: current ?? option.currentValue,
+            options: REASONING_BY_MODEL[model] ?? REASONING_BY_MODEL[MODEL_DEFAULT],
+          };
+        }
+        return current === undefined ? option : { ...option, currentValue: current };
+      })
+    : [];
 
 const send = (message) => process.stdout.write(`${JSON.stringify(message)}\n`);
 const ok = (id, result) => send({ jsonrpc: "2.0", id, result });
@@ -156,6 +265,15 @@ function handlePrompt(id, params) {
     return;
   }
 
+  if (text.includes("thinking-me")) {
+    // The thinking level's half of the same proof, and a separate prompt rather than a combined report:
+    // a test that asserted both at once could not tell a level that reached the agent from one that was
+    // dropped while the model arrived. Reported as the raw value, for the same reason as the model.
+    update({ sessionUpdate: "agent_message_chunk", messageId: "m-thinking", content: { type: "text", text: `thinking: ${sessionConfig.reasoning_effort ?? "(none)"}` } });
+    ok(id, { stopReason: "end_turn" });
+    return;
+  }
+
   if (text.includes("think")) {
     update({ sessionUpdate: "agent_thought_chunk", messageId: "m-1", content: { type: "text", text: "let me consider" } });
     update({ sessionUpdate: "agent_message_chunk", messageId: "m-1", content: { type: "text", text: "here is the answer" } });
@@ -203,7 +321,10 @@ function handle(message) {
     case "session/new":
       sessionCounter += 1;
       sessionId = `fake-session-${sessionCounter}`;
-      ok(id, { sessionId, configOptions: [] });
+      // The real answer is `{sessionId, configOptions}`; `FAKE_ACP_PUBLISH_OPTIONS` decides whether this
+      // one publishes anything, because "a session that offered nothing" is a case the daemon records
+      // and a case the window has to render differently from "we have not looked yet".
+      ok(id, PUBLISH ? { sessionId, configOptions: optionState() } : { sessionId, configOptions: [] });
       return;
     case "session/resume":
       sessionId = params?.sessionId ?? null;
@@ -237,29 +358,46 @@ function handle(message) {
       // (`../deepseek-harness/packages/acp/acp/src/model-control.ts:105-111`,
       // `.../src/index.ts:339-342`). A fixture that accepted anything would let a client with a broken
       // value encoding pass, which is the one thing this test exists to prevent.
+      //
+      // The thinking level is validated the same way and with the real sentence, from
+      // `model-control.js`'s `set`: `unknown reasoning effort for <provider>/<model>: <value>`. It is
+      // also refused outright when the session published no `reasoning_effort` option at all —
+      // `unknown session config option: <configId>` — which is the state every agent that has no such
+      // option is in.
       const { configId, value } = params ?? {};
-      if (configId !== "model") {
+      if (configId === "model") {
+        if (REFUSED_MODEL !== undefined && value === REFUSED_MODEL) {
+          fail(id, -32602, `unknown model option: ${String(value)}`);
+          return;
+        }
+      } else if (configId === "reasoning_effort") {
+        if (!PUBLISH) {
+          fail(id, -32602, `unknown session config option: ${String(configId)}`);
+          return;
+        }
+        // Validated against the levels **of the model this session has resolved**, which is exactly what
+        // the real agent does and the reason the daemon sets the model first. A level that belongs only
+        // to the stronger model is refused while the fast one is still selected.
+        const model = typeof sessionConfig.model === "string" ? sessionConfig.model : MODEL_DEFAULT;
+        const allowed = (REASONING_BY_MODEL[model] ?? []).map((level) => level.value);
+        if (REFUSED_THINKING !== undefined && value === REFUSED_THINKING) {
+          fail(id, -32602, `unknown reasoning effort for fake/flash: ${String(value)}`);
+          return;
+        }
+        if (!allowed.includes(value)) {
+          const [provider, name] = JSON.parse(model);
+          fail(id, -32602, `unknown reasoning effort for ${provider}/${name}: ${String(value)}`);
+          return;
+        }
+      } else {
         fail(id, -32602, `unknown session config option: ${String(configId)}`);
         return;
       }
-      if (REFUSED_MODEL !== undefined && value === REFUSED_MODEL) {
-        fail(id, -32602, `unknown model option: ${String(value)}`);
-        return;
-      }
       sessionConfig[configId] = value;
-      // The real method answers with the complete resulting option state, not an acknowledgement.
-      ok(id, {
-        configOptions: [
-          {
-            id: "model",
-            name: "Model",
-            category: "model",
-            type: "select",
-            currentValue: value,
-            options: [{ group: "fake", name: "Fake", options: [{ value, name: String(value) }] }],
-          },
-        ],
-      });
+      // The real method answers with the complete resulting option state, not an acknowledgement —
+      // `model-control.js` returns `(await this.state(signal)).options` — which is also how the daemon
+      // learns that a change altered *which* values exist (they depend on the resolved model).
+      ok(id, { configOptions: optionState() });
       return;
     }
     case "session/prompt":
