@@ -3,7 +3,7 @@
 
   source:      ../EnvoyMesh/docs/envoymesh-multi-product-design.md
   source-repo: EnvoyMesh (github.com/allenpeng0705/EnvoyMesh)
-  source-head: 45b62d4f
+  source-head: 64de5b0d
   copied:      2026-09-13
   body-sha256: 3d8fa77ac8dfdec37e53ad805c66659ce707f452168a30f6495511de308cf566
 

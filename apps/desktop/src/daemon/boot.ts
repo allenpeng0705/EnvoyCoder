@@ -69,7 +69,7 @@ export function decideBoot(facts: CoderHomeFacts): BootDecision {
   if (facts.state === "missing") {
     notes.push(
       "There is no EnvoyMesh profile on this machine yet, so the mesh features are unavailable — " +
-        "EnvoyCoder's own projects and workspaces do not need one.",
+        "EnvoyCoder's own projects and tasks do not need one.",
     );
   }
   if (facts.state === "in-use" && facts.holder) {
@@ -104,7 +104,7 @@ export function serveFailureOutcome(
       exitCode: EXIT_OK,
       headline: `EnvoyCoder is already running on this machine (port ${port}).`,
       detail: [
-        "Only one service runs per machine: two would fight over the same projects and workspaces.",
+        "Only one service runs per machine: two would fight over the same projects and tasks.",
         "Open a window and it will attach to the one that is already there.",
       ],
     };
@@ -115,6 +115,35 @@ export function serveFailureOutcome(
     detail: [
       message,
       "If another program is using that port, set ENVOYCODER_DAEMON_PORT to a free one.",
+    ],
+  };
+}
+
+/**
+ * What to do when the claim file names a daemon that is genuinely running.
+ *
+ * The **same outcome as an occupied port**, deliberately: both mean "a daemon already has this
+ * home", and a user should read one sentence for one situation rather than two sentences that mean
+ * the same thing. Exit 0, because nothing failed — the thing that started this process asked for
+ * something that already exists.
+ *
+ * What differs is what it can *say*. A bind failure only knows a port number; a claim knows who is
+ * running, since when, and on which port — the difference between "something is on 4770" and "the
+ * daemon you started an hour ago is still there".
+ */
+export function alreadyRunningOutcome(descriptor: {
+  pid: number;
+  port: number;
+  startedAt: string;
+  version: string;
+}): { exitCode: number; headline: string; detail: string[] } {
+  return {
+    exitCode: EXIT_OK,
+    headline: "EnvoyCoder is already running on this machine.",
+    detail: [
+      `Daemon pid ${descriptor.pid}, on port ${descriptor.port}, started ${descriptor.startedAt} (version ${descriptor.version}).`,
+      "One daemon serves this machine, so that a task keeps running when you close a window.",
+      "Open a window and it will attach to the daemon that is already there.",
     ],
   };
 }

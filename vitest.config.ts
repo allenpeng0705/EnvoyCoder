@@ -15,7 +15,7 @@ export default defineConfig({
     alias: {
       "@envoycoder/protocol": `${here}packages/protocol/src/index.ts`,
       "@envoycoder/platform": `${here}packages/platform/src/index.ts`,
-      "@envoycoder/workspace-model": `${here}packages/workspace-model/src/index.ts`,
+      "@envoycoder/task-model": `${here}packages/task-model/src/index.ts`,
       "@envoycoder/agent-catalog": `${here}packages/agent-catalog/src/index.ts`,
       "@envoycoder/host-bridge": `${here}packages/host-bridge/src/index.ts`,
     },

@@ -17,30 +17,37 @@
  * (Windows) and WebKitGTK (Linux), which all support this and nothing here needs a build step.
  */
 
+/* Paseo's dark palette ("paseo" variant), mapped onto the names this sheet already uses.
+   Values from `packages/app/src/styles/theme.ts` (v0.8.0, Apache-2.0); the derivation and the full
+   token set are in `docs/design-tokens.md`. Names are deliberately unchanged: a value change is
+   reviewable, a rename is not. */
 :root {
-  --bg: #0e1117;
-  --bg-raised: #141922;
-  --bg-hover: #1b2230;
-  --bg-active: #1f2938;
-  --border: #232c3b;
-  --border-strong: #33415a;
+  --bg: #181b1a;
+  --bg-raised: #1e2120;
+  --bg-hover: #272a29;
+  --bg-active: #434645;
+  --border: #252b2a;
+  --border-strong: #2f3534;
 
-  --text: #e8edf5;
-  --text-muted: #9aa7bd;
-  --text-faint: #6b7789;
+  --text: #fafafa;
+  --text-muted: #a1a5a4;
+  --text-faint: #717574;
+  /* Used by the newer sections; defined here so they stop falling back to the old pre-Paseo hex. */
+  --text-dim: #a1a5a4;
 
   /* One accent. */
-  --accent: #4c8dff;
+  --accent: #20744a;
   --accent-text: #ffffff;
 
-  --ok: #3fb950;
-  --warn: #d29922;
-  --danger: #f85149;
-  --live: #58a6ff;
+  --ok: #6cb17b;
+  --warn: #c09664;
+  --danger: #d8847b;
+  --live: #5caaf6;
 
-  --dot-queued: #8b949e;
-  --dot-quiet: #6b7789;
+  --dot-queued: #a1a5a4;
+  --dot-quiet: #717574;
 
+  /* Paseo's `lg` (8) and `md` (6): the radii this app already used, now on purpose. */
   --radius: 8px;
   --radius-sm: 6px;
   --row-height: 34px;
@@ -188,7 +195,7 @@ body {
 .input:focus-visible,
 .select:focus-visible,
 .button:focus-visible,
-.workspace-row:focus-visible,
+.task-row:focus-visible,
 .project__header:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
@@ -197,8 +204,13 @@ body {
 /* ── sidebar ───────────────────────────────────────────────────────────── */
 
 .sidebar {
-  display: grid;
-  grid-template-rows: auto auto auto 1fr auto;
+  /* **Flex, not a fixed grid.** This was `grid-template-rows: auto auto auto 1fr auto` — five rows for
+     a column that renders four children whenever the attention banner is hidden, so the footer took the
+     `1fr` row and centred itself in the middle of the sidebar. A layout that depends on counting
+     conditional children is a layout that breaks the first time one is added; a flex column with one
+     growing list and a `flex: none` footer cannot. */
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   border-right: 1px solid var(--border);
   background: var(--bg-raised);
@@ -229,6 +241,9 @@ body {
 }
 
 .sidebar__list {
+  /* The one row that grows: everything above it is intrinsic, the footer is pinned. */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   padding-bottom: 8px;
 }
@@ -250,11 +265,49 @@ body {
 }
 
 .sidebar__footer {
+  flex: none;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 4px;
   padding: 6px 8px;
   border-top: 1px solid var(--border);
+}
+
+/* An icon button: the 28px control height from the token sheet, square, quiet until hovered. */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.icon-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* The footer's one wide action keeps its label; the rest are icon-first. */
+.icon-button--wide {
+  flex: 1;
+  justify-content: flex-start;
+}
+
+.icon-button__label {
+  white-space: nowrap;
 }
 
 .sidebar__footer-hint {
@@ -314,14 +367,14 @@ body {
   font-weight: 400;
 }
 
-.project__workspaces-bar {
+.project__tasks-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 2px 8px 2px 22px;
 }
 
-.project__workspaces-title {
+.project__tasks-title {
   color: var(--text-faint);
   font-size: 11px;
   text-transform: uppercase;
@@ -335,9 +388,9 @@ body {
   font-size: 12px;
 }
 
-/* ── workspace row ─────────────────────────────────────────────────────── */
+/* ── task row ─────────────────────────────────────────────────────── */
 
-.workspace-row {
+.task-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -352,35 +405,35 @@ body {
   cursor: pointer;
 }
 
-.workspace-row:hover {
+.task-row:hover {
   background: var(--bg-hover);
 }
 
-.workspace-row--active {
+.task-row--active {
   background: var(--bg-active);
 }
 
-.workspace-row__body {
+.task-row__body {
   display: flex;
   flex-direction: column;
   min-width: 0;
   flex: 1;
 }
 
-.workspace-row__title-line {
+.task-row__title-line {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
 }
 
-.workspace-row__title {
+.task-row__title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.workspace-row__sub {
+.task-row__sub {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -388,7 +441,7 @@ body {
   font-size: 11px;
 }
 
-.workspace-row__branch {
+.task-row__branch {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -633,6 +686,22 @@ body {
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
 }
 
+/* The staged command's header: what it wants, and the button that runs it. Reading the same words in
+   two places is deliberate — the label answers "what?", the button answers "then what?". */
+.palette__stage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 0;
+}
+
+.palette__stage-label {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .palette__input {
   width: 100%;
   height: 38px;
@@ -684,4 +753,291 @@ body {
 
 .statusbar__detail {
   color: var(--text-faint);
+}
+
+/* ────────────────────────────── the palette's newer rows ────────────────────────────── */
+
+/* Groups, because a flat list of eight commands is already hard to scan. The heading is quiet:
+   the rows are what the user is reading. */
+.palette__group {
+  margin-bottom: 8px;
+}
+
+.palette__group-title {
+  margin: 0 0 4px 8px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim, #8b8f98);
+}
+
+.palette__item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+/* Only a `choice` ever carries this, and it is a mark rather than a word: the reference
+   implementation's typed rows exist so state is visible without a second screen. */
+.palette__check {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent, #4c8dff);
+}
+
+.palette__empty,
+.palette__status,
+.palette__stage {
+  margin: 8px;
+  font-size: 12px;
+  color: var(--text-dim, #8b8f98);
+}
+
+/* What an action still needs, said in the box the user is already typing in. */
+.palette__stage {
+  margin-top: 6px;
+  color: var(--text, #e6e8ec);
+}
+
+/* ────────────────────────────── the notice bar ────────────────────────────── */
+
+/* A refusal the user has to read sits between the title bar and the work, not in a toast that
+   disappears before it is understood. Dismissing is explicit. */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: rgba(230, 160, 60, 0.1);
+  border-bottom: 1px solid rgba(230, 160, 60, 0.22);
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-muted, #a8adb8);
+}
+
+.banner span {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ────────────────────────────── settings ────────────────────────────── */
+
+.settings {
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.setting {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border, #2a2d34);
+}
+
+.setting__text {
+  flex: 1;
+}
+
+.setting__title {
+  margin: 0 0 2px;
+  font-weight: 600;
+}
+
+.setting__detail {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim, #8b8f98);
+}
+
+.setting__control {
+  flex: 0 0 auto;
+}
+
+.settings__heading {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim, #8b8f98);
+}
+
+.settings__note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim, #8b8f98);
+}
+
+.settings__agents,
+.settings__notes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings__agent {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.settings__agent-summary {
+  display: block;
+  font-size: 12px;
+  color: var(--text-dim, #8b8f98);
+}
+
+.settings__agent-facts {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.settings__hint {
+  font-size: 11px;
+  color: var(--text-dim, #8b8f98);
+}
+
+.settings__notes {
+  font-size: 12px;
+}
+
+.work__empty .button {
+  margin-top: 8px;
+}
+
+/* ────────────────────────────── the transcript ────────────────────────────── */
+
+/* A list, not a log: rows are ordered, and the numbered list is what makes "the third thing it did"
+   a sentence a user can say. The numbers themselves are not shown — see `.transcript__list`. */
+.transcript__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.row {
+  border-left: 2px solid transparent;
+  padding-left: 10px;
+}
+
+/* The user's own words are set apart by weight and a rule, not by a bubble colour: at ten rows the
+   colour stops meaning anything and the alignment still does. */
+.row--user {
+  border-left-color: var(--accent, #4c8dff);
+}
+
+.row--user .row__text {
+  font-weight: 600;
+}
+
+.row--assistant {
+  border-left-color: var(--border, #2a2d34);
+}
+
+.row--thought {
+  border-left-color: transparent;
+  color: var(--text-dim, #8b8f98);
+}
+
+.row__text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.row__meta {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--text-dim, #8b8f98);
+}
+
+.row--tool {
+  border-left-color: var(--border, #2a2d34);
+}
+
+.row--tool-running {
+  border-left-color: var(--accent, #4c8dff);
+}
+
+.row--tool-failed {
+  border-left-color: var(--danger, #e05c5c);
+}
+
+.row__tool-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Tool input and output, bounded and scrollable: an agent that cats a large file must not push the
+   rest of the transcript off screen. */
+.row__code {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  max-height: 180px;
+  overflow: auto;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.row--note-quiet .row__meta {
+  opacity: 0.75;
+}
+
+.row--note-warn .row__meta {
+  color: var(--warn, #e0a03c);
+}
+
+.row--note-error .row__meta {
+  color: var(--danger, #e05c5c);
+}
+
+/* A gap is a statement about the transcript's completeness, given room so it is not mistaken for a
+   line the agent wrote. */
+.transcript__gap {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: rgba(224, 160, 60, 0.12);
+  font-size: 12px;
+}
+
+/* An answered approval stays where it was, and stops looking like a question. */
+.approval--answered {
+  opacity: 0.7;
+}
+
+.approval__resolved {
+  font-size: 12px;
+  color: var(--text-dim, #8b8f98);
+}
+
+.composer__notice {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--warn, #e0a03c);
 }

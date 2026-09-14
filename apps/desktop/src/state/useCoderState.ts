@@ -1,41 +1,44 @@
 /**
- * Where the UI's data comes from.
+ * The window's data, as React sees it.
  *
- * One seam, deliberately: the components take plain arrays, so the same components render from
- * fixtures today and from the daemon's RPC tomorrow. Everything the app shows is *derived* in
- * `@envoycoder/workspace-model`, so wiring the daemon changes this file and nothing else.
+ * One hook over one store (`coderStore.ts`), which is why the components stayed the same shape while
+ * the data source changed from `data/sample.ts` to a running daemon: they were always given plain
+ * arrays, and where those arrays come from was always somebody else's problem.
  *
- * The daemon is not implemented in this scaffold — `apps/desktop/src/daemon/` holds its entry
- * point and the method list lives in `@envoycoder/protocol`. Until it serves, the UI runs on
- * `data/sample.ts`, which is why the sample set includes every status: a scaffold whose fixture
- * only has "running" rows hides the states that are hardest to render.
+ * `useSyncExternalStore` is React's own primitive for exactly this — an external store with a
+ * `subscribe` and a snapshot — so there is no state library here and no effect that copies the store
+ * into component state (which is how two copies of one list start to disagree).
+ *
+ * ## `start()` happens once per window, and its failure is visible
+ *
+ * A window that cannot reach its daemon must **say so**, not render an empty rail: "no projects yet"
+ * and "I could not ask" are different sentences, and showing the first for the second is how a user
+ * concludes the app lost their work. So the connection state is part of the state the UI renders,
+ * and the components branch on it.
  */
 
-import { useMemo } from "react";
-import type { Project, Workspace } from "@envoycoder/protocol";
-import { SAMPLE_PROJECTS, SAMPLE_WORKSPACES } from "../data/sample.js";
+import { useEffect, useSyncExternalStore } from "react";
 
-/** What the mesh looks like right now. Mirrors `MeshAttachOutcome` in `@envoycoder/host-bridge`. */
-export type MeshAttachment =
-  | { kind: "attached"; scopeKey: string; ownerId: string; peerCount?: number }
-  | { kind: "no-node"; reason: string }
-  | { kind: "refused"; code: string; reason: string };
+import { getCoderStore, type CoderState, type CoderStore } from "./coderStore.js";
 
-export interface CoderState {
-  projects: readonly Project[];
-  workspaces: readonly Workspace[];
-  mesh: MeshAttachment;
-  windowCount: number;
+export type { CoderState, MeshStatus } from "./coderStore.js";
+
+/** The whole state. Consumers re-render on any change — fine at this size, see the store's doc. */
+export function useCoderState(): CoderState {
+  const store = getCoderStore();
+  const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+
+  useEffect(() => {
+    void store.start();
+    // Deliberately no `dispose()` on unmount: this store is a per-window singleton, and a React
+    // strict-mode double-mount would otherwise close the socket it had just opened. The window's
+    // lifetime is the store's lifetime.
+  }, [store]);
+
+  return state;
 }
 
-export function useCoderState(): CoderState {
-  return useMemo(
-    () => ({
-      projects: SAMPLE_PROJECTS,
-      workspaces: SAMPLE_WORKSPACES,
-      mesh: { kind: "no-node", reason: "" },
-      windowCount: 1,
-    }),
-    [],
-  );
+/** The store itself, for components that need to call actions rather than read state. */
+export function useCoderActions(): CoderStore {
+  return getCoderStore();
 }

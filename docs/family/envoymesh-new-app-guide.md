@@ -3,7 +3,7 @@
 
   source:      ../EnvoyMesh/docs/envoymesh-new-app-guide.md
   source-repo: EnvoyMesh (github.com/allenpeng0705/EnvoyMesh)
-  source-head: 45b62d4f
+  source-head: 64de5b0d
   copied:      2026-09-13
   body-sha256: c946109af7b6697307c4c3cb8cd7eb4e5501f6b5a64acaa71dd39a50874be33c
 

@@ -1,46 +1,46 @@
 /**
- * The daemon — EnvoyCoder's own host process.
+ * The daemon's entry point: read the environment, report, then hand over.
  *
- * Every window, and the phone, talks to this process; it is the thing that survives the last window
- * being closed (`docs/envoycoder-networking.md`). It is started by the desktop app, or by hand:
+ * Everything that is not I/O lives in `serve.ts` (`startCoderDaemon`) and `boot.ts` (the
+ * decisions), because this file cannot be tested: it has top-level `await`, it calls
+ * `process.exit`, and it installs signal handlers. What is left here is exactly that, in the order
+ * the boot report reads:
+ *
+ *   1. **Read the shared home** and describe it in the family's words. A damaged profile stops the
+ *      process with exit 4 — never a "repair", because writing into a half-readable profile is how a
+ *      user loses contacts and bonds without being told.
+ *   2. **Stop if a daemon already owns this home.** Read from the published claim rather than
+ *      inferred from a failed bind, so the message can name the daemon that is running instead of
+ *      reporting "address in use" for something that is working correctly.
+ *   3. **Start** — state, handlers, the mesh attach, the socket, the claim.
+ *   4. **Stop cleanly** on `SIGINT`/`SIGTERM`, leaving a running agent alone. Closing the last window
+ *      must not kill a task; that is the whole point of a control plane you can walk away from.
  *
  * ```bash
- * npm run daemon                    # port 4770
+ * npm run daemon                            # port 4770
  * ENVOYCODER_DAEMON_PORT=0 npm run daemon   # let the OS choose
  * ```
  *
- * ## What it does, in order, and why that order
+ * ## The one deliberately unfinished thing
  *
- *   1. **Read the shared home.** `coderPaths()` resolves it the family's way, so `ENVOYMESH_HOME` and
- *      the per-OS default behave as they do for every other app in the group.
- *   2. **Report what is there** — in the family's words, from the family's own discovery. A damaged
- *      profile stops the process with exit 4 (see `boot.ts` for the codes, and which two are not ours
- *      to use).
- *   3. **Attach to the mesh as a product**, if a node is running. A refusal is a *state to report*, not
- *      an error: the owner may simply not have granted this product the `coding` capability yet.
- *   4. **Serve our own surface** on the port, with `coderSessionIdentity()`.
- *
- * ## The one thing that is deliberately unfinished
- *
- * **Remote callers cannot authenticate yet.** A loopback window is trusted, exactly as the family
- * treats its own desktop UI, but a phone or another machine needs a token and there is no session
- * store to resolve one against (roadmap M1). So the resolver answers `null` and the transport refuses
- * them, which is the fail-closed behaviour the family's §8 asks for. It is stated here, printed at
- * boot, and left visible rather than papered over with a token format of our own invention.
+ * **Remote callers cannot authenticate yet.** A loopback window is trusted, as the family treats its
+ * own desktop UI, but a phone needs a token and there is no session store to resolve one against
+ * (roadmap M4). The resolver answers `null` and the transport refuses, which is the fail-closed
+ * behaviour the family's guide §8 asks for. It is printed at boot rather than papered over with a
+ * token format of our own invention.
  */
 
 import process from "node:process";
 
-import { DEFAULT_DAEMON_PATH, DEFAULT_DAEMON_PORT, ENVOYCODER_DAEMON_PORT_ENV } from "@envoycoder/protocol";
-import {
-  attachToMeshNode,
-  coderSessionIdentity,
-  createCoderDaemonHost,
-  createCoderDispatcher,
-  inspectCoderHome,
-} from "@envoycoder/host-bridge";
+import { DEFAULT_DAEMON_PORT, ENVOYCODER_DAEMON_PORT_ENV } from "@envoycoder/protocol";
+import { coderPaths, inspectCoderHome } from "@envoycoder/host-bridge";
 
-import { decideBoot, serveFailureOutcome } from "./boot.js";
+import { alreadyRunningOutcome, decideBoot, serveFailureOutcome } from "./boot.js";
+import { readDaemonClaim } from "./lock.js";
+import { startCoderDaemon } from "./serve.js";
+
+/** Kept in step with `apps/desktop/package.json`: a process cannot read its own version. */
+const VERSION = "0.1.0";
 
 /** The configured port, or the product default. `0` is honoured: the OS then chooses one. */
 function readPort(env: NodeJS.ProcessEnv = process.env): number {
@@ -55,12 +55,14 @@ function say(lines: string[]): void {
 }
 
 const port = readPort();
-const facts = await inspectCoderHome();
+const paths = coderPaths();
+const facts = await inspectCoderHome(paths.home);
 
 say([
   `EnvoyCoder daemon — ${facts.headline}`,
   `  home:     ${facts.home}`,
   `  profile:  ${facts.profileDir} (${facts.state})`,
+  `  state:    ${paths.stateDir}`,
   ...(facts.detail ? [`  ${facts.detail}`] : []),
   ...facts.facts.map((fact) => `  ${fact}`),
 ]);
@@ -70,50 +72,56 @@ if (!decision.serve) {
   say([`\n${decision.headline}`, ...decision.detail.map((line) => `  ${line}`)]);
   process.exit(decision.exitCode);
 }
-
 say(decision.notes.map((note) => `  ${note}`));
 
-// The mesh is optional, and its answer is information either way — "not granted yet" is the state the
-// family's §4.7 expects a product to report rather than retry.
-const attach = await attachToMeshNode(facts.home);
-say([
-  "  mesh:     " +
-    (attach.kind === "attached"
-      ? `attached as ${attach.scopeKey}`
-      : attach.kind === "refused"
-        ? `refused (${attach.code}) — ${attach.reason}`
-        : `not attached — ${attach.reason}`),
-]);
+// Step 2 — one daemon per home. The claim is read, not the port probed; `lock.ts` explains why.
+const existing = await readDaemonClaim(paths);
+if (existing.state === "running") {
+  const outcome = alreadyRunningOutcome(existing.descriptor);
+  say([`\n${outcome.headline}`, ...outcome.detail.map((line) => `  ${line}`)]);
+  process.exit(outcome.exitCode);
+}
+if (existing.state === "stale") {
+  say([`  note:     a claim from pid ${existing.descriptor.pid} was left behind; that process is gone.`]);
+}
+if (existing.state === "unreadable") {
+  say([`  note:     ${paths.daemonFile} could not be read (${existing.reason}); it will be replaced.`]);
+}
 
-const host = createCoderDaemonHost({
-  port,
-  path: DEFAULT_DAEMON_PATH,
-  sessionIdentity: coderSessionIdentity(),
-  dispatch: createCoderDispatcher(),
-});
-
+// Step 3 — start.
+let daemon;
 try {
-  await host.serve();
+  daemon = await startCoderDaemon({ port, paths, version: VERSION });
 } catch (error) {
   const outcome = serveFailureOutcome(port, error);
   say([`\n${outcome.headline}`, ...outcome.detail.map((line) => `  ${line}`)]);
   process.exit(outcome.exitCode);
 }
 
+const mesh = daemon.mesh();
 say([
+  `  projects: ${daemon.store.projects().length}`,
+  `  tasks:    ${daemon.store.tasks().length}`,
+  "  mesh:     " +
+    (mesh.kind === "attached"
+      ? `attached as ${mesh.scopeKey}`
+      : mesh.kind === "refused"
+        ? `refused (${mesh.code}) — ${mesh.reason}`
+        : `not attached — ${mesh.reason}`),
   "",
-  `  serving:  ws://127.0.0.1:${host.port}${host.path}`,
+  `  serving:  ws://127.0.0.1:${daemon.port}${daemon.path}`,
+  `  claim:    ${paths.daemonFile}`,
   "  windows connect without a token (loopback is trusted, as in the rest of the family);",
-  "  remote clients are refused until EnvoyCoder has a session store (roadmap M1).",
+  "  remote clients are refused until EnvoyCoder has a session store (roadmap M4).",
   "  stop with Ctrl+C.",
 ]);
 
 /**
- * Shut down in a way the last window never notices: closing a window must not kill a running agent.
+ * Shut down without disturbing a running agent.
  *
- * `SIGINT` is the one that exists everywhere, including Windows consoles; `SIGTERM` is what a service
- * manager sends on the other two platforms. Neither has a Windows equivalent for an unrelated process
- * to send, which is why the family's platform layer owns process-tree termination rather than this.
+ * `SIGINT` exists everywhere, including Windows consoles; `SIGTERM` is what a service manager sends
+ * on the other two platforms. Neither has a Windows equivalent for an unrelated process to send,
+ * which is why terminating a process *tree* belongs to the family's platform layer rather than here.
  */
 let stopping = false;
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
@@ -121,7 +129,6 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     if (stopping) return;
     stopping = true;
     say(["\nstopping the daemon"]);
-    host.stop();
-    process.exit(0);
+    void daemon.stop().finally(() => process.exit(0));
   });
 }

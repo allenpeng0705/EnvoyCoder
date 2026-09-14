@@ -1,15 +1,15 @@
 # The UI: shell, rail, and the rules behind them
 
-**Code:** `apps/desktop/src` · **Model:** `packages/workspace-model` ·
+**Code:** `apps/desktop/src` · **Model:** `packages/task-model` ·
 **Take from Paseo:** the shell · **Take from EnvoyMesh:** the project tree
 
 ---
 
 ## 1. The one structural decision
 
-**A project is a place; a workspace is a task in that place.** Two levels, never three.
+**A project is a place; a task is a unit of work in that place.** Two levels, never three.
 
-Paseo's sidebar groups workspaces by project as a *heading*. EnvoyMesh's Coding tab, which this
+Paseo's sidebar groups its **workspaces** by project as a *heading* — their word for the unit of work, and the reason ours must not be called the same thing: it reads like a level *above* a project, and it is not. EnvoyMesh's Coding tab, which this
 follows on the owner's instruction, makes the project a *row*: collapsible, configurable, and
 carrying the agent its children inherit. The difference is not cosmetic:
 
@@ -19,7 +19,7 @@ carrying the agent its children inherit. The difference is not cosmetic:
   a picker;
 * **project settings** are reachable from the project, which is where the defaults belong.
 
-Grouping is by **path**, not by directory contents or session id: two workspaces can share one `cwd`
+Grouping is by **path**, not by directory contents or session id: two tasks can share one `cwd`
 (Paseo's own data-model note says so), and grouping by anything unstable makes the tree reshuffle
 while it is being read. `projectIdFor(hostId, path)` is derived, not allocated, so two clients — a
 window and a phone — agree without a handshake.
@@ -37,9 +37,9 @@ window and a phone — agree without a handshake.
 │    you            │   …                                                   │
 │  ▼ envoymesh      │  ┌ approval (inline, never a modal) ──────────────┐   │
 │     Envoy Harness │  │ Run the suite and update 3 snapshots?          │   │
-│    Workspaces +New│  │                          [Deny] [Allow once]   │   │
+│    Tasks +New     │  │                          [Deny] [Allow once]   │   │
 │    • task A   ●   │  └────────────────────────────────────────────────┘   │
-│    • task B   ●   │  composer: [Attach] [agent] … [Queue▾] [Send]         │
+│    • task B   ●   │  composer: [agent] … [Queue▾] [Send]                  │
 │  ▶ payments-api   │                                                       │
 │  Settings    Local│                                                       │
 ├───────────────────┴───────────────────────────────────────────────────────┤
@@ -77,8 +77,10 @@ green finished, grey queued/idle. A colour that means two things means nothing.
 
 `needs-attention` is deliberately **not** part of `running`. An agent blocked on approval is not
 making progress, and folding it into "working" is how a control plane makes users wait on it. The
-count appears in the rail header, the title bar and the phone badge from **one** function
-(`attentionSummary`), because three surfaces showing three numbers teaches users to trust none.
+count is computed by **one** function (`attentionSummary`), because three surfaces showing three
+numbers teaches users to trust none. Today exactly one surface renders it — the rail header. The title
+bar and the phone badge are still to come (the shell shows a window/connection chip instead), so this
+paragraph describes the intent, not the build.
 
 ## 5. The composer
 
@@ -88,7 +90,9 @@ Three controls, all of which exist because their absence causes a specific confu
   that silently chooses is how people conclude the agent ignored their message.
 * **Agent and model pills** on the row and in the toolbar, so "which model wrote this?" never needs
   an archaeology session.
-* **Attach**, with the files a run touched listed in the transcript rather than hidden in a log.
+* **Attach** — not built yet. The composer today is a textarea, a Queue/Steer select and Send; the
+  files a run touched will list in the transcript when the diff surface lands (`run.diff` is declared
+  and rendered but never emitted).
 
 ## 6. Approvals, inline
 
@@ -110,11 +114,47 @@ Inherited from Paseo's design doc because they hold up under load:
    not a PR.
 6. **Empty states teach.** "No projects yet — add a directory you work in" beats a blank panel.
 
-## 8. What the scaffold implements
+## 8. What the window implements
 
-`CoderApp` (shell, Command Center stub), `CoderSidebar` (the project tree, search, attention count),
-`WorkspacePane` (header facts, transcript, inline approval, composer with Queue/Steer),
-`MeshStatusBar` (mesh state in end-user words), and `state/useCoderState.ts` — the single seam the
-daemon will replace. The rail's logic is not in the components: grouping, ordering, counting,
-filtering and the status wording all live in `@envoycoder/workspace-model`, which is pure and tested,
-so "why is this row above that one?" has exactly one answer.
+`CoderApp` (shell, connection state, empty states), `CoderSidebar` (the project tree, search,
+attention count), `TaskPane` (header facts, transcript, inline approval, composer with
+Queue/Steer), `CommandCenter` (typed `action`/`choice` contributions, arguments collected in the
+same box), `SettingsPane` (app-wide defaults, per-agent capability honesty), `MeshStatusBar` (mesh
+state in end-user words), and the store behind them:
+
+```
+daemon ──ws──▶ CoderConnection ──▶ CoderStore ──useSyncExternalStore──▶ components
+                (transport)         (state + actions)
+```
+
+Three decisions in that pipeline are worth stating, because each is a place the naive version is
+wrong:
+
+* **The window never dials what it names.** It asks the shell where the daemon is
+  (`daemon_endpoint`), and the shell decides. The reference implementation validates a
+  renderer-supplied transport path only as a non-empty string and then dials it as a socket
+  (`packages/desktop/src/daemon/local-transport.ts:122-128`); §4 of the inheritance doc says why we
+  do not.
+* **The rail's logic is still not in the components.** Grouping, ordering, counting, filtering and
+  the status wording live in `@envoycoder/task-model` — pure and tested — so "why is this row
+  above that one?" has exactly one answer regardless of where the rows came from.
+* **A window that cannot reach its daemon says so.** "No projects yet" and "I could not ask" are
+  different sentences, and showing the first for the second is how a user concludes the app lost
+  their work. `EmptyWork` branches on the connection, the load and the project count because those
+  are three different situations.
+
+The transcript is real as of M2, and its **folding rules are not in the component**:
+
+```
+run events ──▶ buildTranscript()  ──▶ rows ──▶ TaskPane
+                (state/transcript.ts, pure and tested)
+```
+
+Four rules live there, each of which renders visibly wrong when it breaks: chunks join by `messageId`;
+a tool call is one row built from two events keyed by the agent's `callId`; an approval is rendered
+where the agent paused and is *updated in place* when answered; and a missing `seq` is **reported**,
+because a transcript that silently skips a frame is how a user reads a decision they never saw.
+
+What is still placeholder: the diff panel. `run.diff` renders as a one-line summary (`"3 files
+changed."`) with no way to open the files — that is the next slice, and the reason `run.tool` keeps
+its `input` and `output` rather than only a rendered string.

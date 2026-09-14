@@ -72,15 +72,48 @@ smoke's LAN leg is what holds that honest: a tokenless call from the local netwo
 ## 3. Multi-window
 
 One daemon, many windows, **first window wins**. A second window attaches to the existing daemon
-instead of starting a competing one, discovered through the same `resolveRunningNode` → attach path
-the mesh uses, with EnvoyCoder's own home.
+instead of starting a competing one, discovered through the daemon's own **claim file** — the same
+"one owner at a time" rule the family applies to the node, for the same reason: two processes owning
+one set of tasks is corruption, not sharing. A competing daemon would also mean two agents on
+one file, which is worse.
 
-This is the family's "one owner at a time" rule applied to our own daemon, for the same reason: two
-processes owning one set of workspaces is corruption, not sharing. A competing daemon would also
-mean two agents on one file, which is worse.
+The daemon publishes `<home>/EnvoyCoder/daemon.json` **after** its socket is listening
+(`apps/desktop/src/daemon/lock.ts`), carrying the pid, the bound port, the path and an
+`instanceId`; the shell reads it to decide between attaching and starting, and the daemon reads it
+at boot to notice that a previous run left a claim behind. The port being bound is *not* the
+evidence, and the file alone is not either:
+
+| Question | Who answers it | Why the other half cannot |
+|---|---|---|
+| is a daemon there? | the shell, from the claim file | a file cannot tell you whether the process behind it is still alive, or whether it is *ours* — a stale claim and a squatter's port look identical from disk |
+| is it **our** daemon? | the window, from `coder.hello`'s `instanceId` | only the window speaks the protocol, and the shell has no way to ask |
+
+That split is the second rule of the family's shell, kept rather than skipped: `/health` returning
+`200` proves a server exists, not which one. A claim whose pid is gone is stale and replaced; pid
+reuse is exactly why the identity is verified over the wire as well (`lock.ts` says so, and
+`apps/desktop/src-tauri/src/main.rs` says which half it performs).
 
 The daemon outlives any window. Closing the last window does not kill a running agent — the entire
-point of a control plane is that you can walk away.
+point of a control plane is that you can walk away. The shell stops its daemon on exit **only if it
+started it**; a daemon that was already running belongs to whatever started it, and killing it would
+take every other window's tasks with it.
+
+### The one event mechanism the reusable host does not forward
+
+A product's events are supposed to be registered with the transport as a disposition table
+(`WsServerOptions.eventDispositions`), which `nodeService.on(name, …)` then feeds into a broadcast
+loop. `@envoymesh/reuse-host`'s `createReuseHost` does not forward that option
+(`packages/reuse-host/src/index.ts:242-252`), so a product built on the documented surface gets the
+transport's own 25 event names wired, starts normally, serves every RPC, and silently drops its own
+events. It is worth raising upstream — forwarding `eventDispositions` (and `loopbackOnlyMethods`) is
+a two-line change, and §7.4 of the family guide says contract changes go upstream rather than into a
+workaround.
+
+EnvoyCoder publishes through the port that **is** forwarded: `socketMethods`, whose context hands a
+product method the live connection and a `send(event, data)` for it (`ws-server.ts:1086-1097`).
+`coder.subscribe` registers that connection against the daemon's bus and pushes to it alone — which
+is also the behaviour a phone on metered data wants, since it never receives a desktop's transcript
+traffic. The full reasoning, with citations, is in `packages/protocol/src/rpc.ts`.
 
 ## 4. Pairing, and why ours is not Paseo's
 

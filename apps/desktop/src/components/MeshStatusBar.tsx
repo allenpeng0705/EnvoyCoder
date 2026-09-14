@@ -12,9 +12,9 @@
 
 import type { JSX } from "react";
 
-import type { MeshAttachment } from "../state/useCoderState.js";
+import type { MeshStatus } from "../state/useCoderState.js";
 
-export function MeshStatusBar(props: { mesh: MeshAttachment }): JSX.Element {
+export function MeshStatusBar(props: { mesh: MeshStatus }): JSX.Element {
   const { mesh } = props;
   const tone = mesh.kind === "attached" ? "ok" : mesh.kind === "refused" ? "warn" : "quiet";
   return (
@@ -32,7 +32,7 @@ export function MeshStatusBar(props: { mesh: MeshAttachment }): JSX.Element {
   );
 }
 
-function describe(mesh: MeshAttachment): string {
+function describe(mesh: MeshStatus): string {
   switch (mesh.kind) {
     case "attached":
       return mesh.peerCount && mesh.peerCount > 0
@@ -43,4 +43,6 @@ function describe(mesh: MeshAttachment): string {
     case "refused":
       return mesh.reason;
   }
+  // No `default`: the three cases above are the whole union, so a fourth state added to the protocol
+  // becomes a compile error here rather than a status line that silently says nothing.
 }

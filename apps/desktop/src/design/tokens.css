@@ -1,0 +1,183 @@
+/**
+ * EnvoyCoder design tokens — desktop (React DOM + Tauri).
+ *
+ * ## Where the values come from, and what is *not* copied
+ *
+ * The **design** is Paseo's: same surfaces, same green accent, same two-band status system, same
+ * scales. The values were read from Paseo v0.8.0 (`packages/app/src/styles/theme.ts`, Apache-2.0) and
+ * are recorded in `docs/design-tokens.md` with line citations. **No Paseo code is used**: their UI is
+ * React Native + `react-native-unistyles`, so a "port" of their components is impossible and
+ * unnecessary — a token set is the transferable part, and it is small enough to restate.
+ *
+ * ## The rules that come with them (adopted deliberately, see the doc)
+ *
+ *   * **One focus ring.** Paseo ships two that disagree (a hardcoded green in `index.html` and a themed
+ *     one in `control-geometry.ts`). We have one: `--focus-ring-*`, built from the accent.
+ *   * **One error red.** Their form fields use `palette.red[300]` while settings rows use
+ *     `status-danger` — two reds for one meaning. We use `--status-danger`.
+ *   * **Two status bands, not one.** `--status-*` is for icons, badges and diff stats;
+ *     `--status-dot-*` is the louder, saturated band for the 6px sidebar dots. They are different
+ *     colors on purpose, and a component should pick the band that matches its size.
+ *   * **Selection is a background tint, not an indicator.** Paseo's tab strip has no underline; active
+ *     state is `--surface-2` plus `--foreground`. Copying that keeps tab strips from looking busy.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* Surfaces, back to front. `surface-sidebar` is deliberately darker than surface-0 in dark mode —
+      the rail reads as a separate plane, which is what makes the project tree legible. */
+  --surface-0: #ffffff;      /* page */
+  --surface-1: #fafafa;      /* cards, raised rows */
+  --surface-2: #f4f4f5;      /* inputs, code, chips, selected tab */
+  --surface-3: #e4e4e7;      /* secondary buttons, badges, selected sidebar row */
+  --surface-4: #d4d4d8;
+  --surface-sidebar: #f4f4f5;
+  --surface-sidebar-hover: var(--surface-1);
+  --surface-sidebar-selected: var(--surface-3);
+  --interaction-highlight: rgba(0, 0, 0, 0.06);
+
+  --foreground: #1a1a1e;
+  --foreground-muted: #71717a;
+  --foreground-extra-muted: #a1a1aa;
+
+  --border: #e4e4e7;
+  --border-accent: #ececf1;
+
+  /* Brand. A green, not a blue: it is the one colour a user learns to recognise. */
+  --accent: #20744a;
+  --accent-bright: #239956;
+  --accent-foreground: #ffffff;
+  --destructive: #b04138;
+  --destructive-foreground: #ffffff;
+
+  /* Band 1 — icons, badges, diff stats, usage bars. */
+  --status-success: #3e704a;
+  --status-danger: #9d433b;
+  --status-warning: #7b5d39;
+  --status-merged: #7347af;
+
+  /* Band 2 — the 6px sidebar dots, and the running ring. Louder, because a dot has no label. */
+  --status-dot-success: #299f51;
+  --status-dot-danger: #f12e2f;
+  --status-dot-warning: #b37824;
+  --status-dot-running: #268ae0;
+
+  --diff-addition: #15803d;
+  --diff-deletion: #b91c1c;
+
+  /* Scales. Spacing is a 2/4 rhythm up to 16 then jumps: 24, 32, 48. There is no 5, 7 or 14. */
+  --space-0: 0;   --space-0-5: 2px;  --space-1: 4px;   --space-1-5: 6px;
+  --space-2: 8px; --space-3: 12px;   --space-4: 16px;  --space-6: 24px;
+  --space-8: 32px; --space-12: 48px; --space-16: 64px; --space-24: 96px;
+
+  --radius-sm: 2px; --radius: 4px; --radius-md: 6px; --radius-lg: 8px;
+  --radius-xl: 12px; --radius-2xl: 16px; --radius-full: 9999px;
+
+  /* Type. `--font-size-content` is what chat and rendered markdown use; `code` is the code surface. */
+  --font-size-code: 12px;
+  --font-size-sm: 12px;
+  --font-size-base: 14px;
+  --font-size-content: 15px;
+  --font-size-lg: 16px;
+  --font-size-xl: 18px;
+  --font-size-2xl: 20px;
+  --font-size-3xl: 22px;
+  --font-size-4xl: 26px;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  --font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Control geometry: three heights, and every control derives from them. */
+  --control-tight: 28px;   /* toolbar chips, tabs */
+  --control-compact: 32px; /* small buttons, pills */
+  --control-field: 44px;   /* text fields */
+  --control-header: 26px;  /* the in-header control */
+
+  /* One focus ring. */
+  --focus-ring-color: var(--accent);
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  /* The content measure: chat, composer and forms all stop here. */
+  --content-max-width: 820px;
+
+  /* Motion. Six durations, and reduced motion is honoured globally below. */
+  --motion-fade-fast: 80ms;
+  --motion-fade: 100ms;
+  --motion-pop: 150ms;
+  --motion-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+/* Dark is the product's default, and the palette is Paseo's default ("paseo") variant. */
+:root[data-theme="dark"] {
+  --surface-0: #181b1a;
+  --surface-1: #1e2120;
+  --surface-2: #272a29;
+  --surface-3: #434645;
+  --surface-4: #595b5b;
+  --surface-sidebar: #141716;
+  --surface-sidebar-hover: var(--surface-2);
+  --surface-sidebar-selected: var(--surface-2);
+  --interaction-highlight: rgba(255, 255, 255, 0.06);
+
+  --foreground: #fafafa;
+  --foreground-muted: #a1a5a4;
+  --foreground-extra-muted: #717574;
+
+  --border: #252b2a;
+  --border-accent: #2f3534;
+
+  --accent: #20744a;
+  --accent-bright: #7ccba0;
+  --accent-foreground: #ffffff;
+  --destructive: #c64f43;
+
+  --status-success: #6cb17b;
+  --status-danger: #d8847b;
+  --status-warning: #c09664;
+  --status-merged: #a890d5;
+
+  --status-dot-success: #35c264;
+  --status-dot-danger: #f7796d;
+  --status-dot-warning: #db932e;
+  --status-dot-running: #5caaf6;
+
+  --diff-addition: #4ade80;
+  --diff-deletion: #ef4444;
+}
+
+/* Follow the OS when the user has not chosen a theme. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface-0: #181b1a; --surface-1: #1e2120; --surface-2: #272a29;
+    --surface-3: #434645; --surface-4: #595b5b; --surface-sidebar: #141716;
+    --surface-sidebar-hover: var(--surface-2); --surface-sidebar-selected: var(--surface-2);
+    --foreground: #fafafa; --foreground-muted: #a1a5a4; --foreground-extra-muted: #717574;
+    --border: #252b2a; --border-accent: #2f3534;
+    --accent-bright: #7ccba0; --destructive: #c64f43;
+    --status-success: #6cb17b; --status-danger: #d8847b; --status-warning: #c09664;
+    --status-merged: #a890d5;
+    --status-dot-success: #35c264; --status-dot-danger: #f7796d;
+    --status-dot-warning: #db932e; --status-dot-running: #5caaf6;
+    --diff-addition: #4ade80; --diff-deletion: #ef4444;
+  }
+}
+
+/* The ring, in one place. `:focus-visible` only — a mouse click must not paint it. */
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

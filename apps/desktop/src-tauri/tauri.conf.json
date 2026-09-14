@@ -5,7 +5,7 @@
   "identifier": "sh.envoymesh.envoycoder",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://127.0.0.1:5173",
+    "devUrl": "http://127.0.0.1:6173",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
@@ -24,12 +24,23 @@
     ],
     "security": {
       "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:* ws://localhost:*"
-    }
+    },
+    "withGlobalTauri": true
   },
   "bundle": {
     "active": true,
-    "targets": ["dmg", "app", "msi", "nsis", "appimage", "deb", "rpm"],
-    "icon": ["icons/icon.png"],
+    "targets": [
+      "dmg",
+      "app",
+      "msi",
+      "nsis",
+      "appimage",
+      "deb",
+      "rpm"
+    ],
+    "icon": [
+      "icons/icon.png"
+    ],
     "category": "DeveloperTool",
     "shortDescription": "Run coding agents on your machines",
     "longDescription": "EnvoyCoder drives coding agents across your own machines: a project tree, parallel agents, and the EnvoyMesh network so a task can run where the code and the hardware are.",
@@ -38,7 +49,10 @@
     },
     "linux": {
       "deb": {
-        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0"
+        ]
       }
     },
     "windows": {

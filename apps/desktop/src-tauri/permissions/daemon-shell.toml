@@ -1,0 +1,10 @@
+# Custom commands are not callable until a capability allows them — `invoke_handler!`
+# registration alone is not enough in Tauri v2. Without this, the window's first call to
+# `daemon_endpoint` rejects with a raw ACL message ("… not allowed. Command not found"),
+# which used to fill the top banner with developer jargon.
+#
+# Same pattern as `permissions/pick-folder.toml`.
+[[permission]]
+identifier = "allow-daemon-shell"
+description = "Ask the shell where the coding daemon is, and read shell diagnostics paths."
+commands.allow = ["daemon_endpoint", "daemon_status", "coder_paths"]

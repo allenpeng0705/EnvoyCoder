@@ -18,6 +18,7 @@ import {
   attachToMeshNode,
   checkPairingCode,
   coderPaths,
+  coderSessionIdentity,
   createCoderDaemonHost,
   createCoderDispatcher,
 } from "../src/index.js";
@@ -34,7 +35,7 @@ describe("product state on disk", () => {
   it("keeps this product's state inside the shared home, under its own name", () => {
     const paths = coderPaths("/home/dev/.envoymesh");
     expect(paths.stateDir).toBe("/home/dev/.envoymesh/EnvoyCoder");
-    for (const file of [paths.projectsFile, paths.workspacesFile, paths.settingsFile]) {
+    for (const file of [paths.projectsFile, paths.tasksFile, paths.settingsFile]) {
       expect(file.startsWith(paths.stateDir)).toBe(true);
     }
     // Another product's state must not be reachable through these paths.
@@ -213,7 +214,10 @@ describe("guide alignment (§4.4, §4.5, §4.6, §9)", () => {
   it("passes the shared relay roster through a pairing code unchanged (§9)", () => {
     const host = createCoderDaemonHost({
       port: 0,
-      sessionIdentity: () => undefined,
+      // The real resolver, not a stub: a host whose identity port is a bare `() => undefined` is
+      // the mistake `coderSessionIdentity` exists to prevent, and the type error this test used to
+      // carry went unnoticed only because `packages/*/test` was in no tsconfig.
+      sessionIdentity: coderSessionIdentity(),
       dispatch: async () => undefined,
     });
     try {

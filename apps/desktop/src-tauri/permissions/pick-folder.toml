@@ -1,0 +1,12 @@
+# A custom command is **not callable** until a capability allows it — `invoke_handler!` registration
+# alone is not enough in Tauri v2, and the failure is a rejected promise in the window, which the UI can
+# only report as "no picker here". This file is the missing half; the app's `capabilities/default.json`
+# lists `allow-pick-folder`.
+#
+# Mirrors EnvoyMesh's `permissions/pick-directory.toml` (its Social app uses the same method): the family
+# shares the *approach* to native shell affordances, not the shell code — their Tauri app is not a package
+# we can link.
+[[permission]]
+identifier = "allow-pick-folder"
+description = "Open the operating system's folder chooser, so adding a project is a pick rather than a pasted path."
+commands.allow = ["pick_folder"]

@@ -30,7 +30,7 @@ The owner's instruction was explicit, and it splits cleanly in two:
 
 ## 3. The left rail, and why it is not Paseo's
 
-Paseo's sidebar is a list of workspaces grouped by project. EnvoyMesh's Coding tab is a **tree**:
+Paseo's sidebar is a list of what they call *workspaces* grouped by project (their word; ours is a **task**). EnvoyMesh's Coding tab is a **tree**:
 a project is a row you can collapse and configure, and it names the agent its children inherit.
 
 The owner's instruction was to follow EnvoyMesh here, and the reason holds up:
@@ -68,6 +68,13 @@ daemon serves the phone. A second window attaches to the first daemon rather tha
 competing one — the same "one owner at a time" rule the family applies to the node, for the same
 reason (two processes with one identity is corruption, not sharing).
 
+**State of this decision, honestly:** the *daemon* half is built and tested (many connections, many
+subscribers, each window its own `CoderConnection`), and a second **app instance** attaches to the
+running daemon. What the shell cannot do yet is **create** a second window: `tauri.conf.json` declares
+one, `capabilities/default.json` scopes its permissions to `windows: ["main"]`, and no window-creating
+command exists. Until that lands, the `{n} windows` chip counts *connections*, not windows — which is
+why it is labelled by connection count and not called a window count.
+
 **D5 — The agent catalogue is explicit, and tiered.** Native (`envoy-harness`, `deepseek-harness`)
 versus external CLIs. The tier decides what the UI may promise: an agent we cannot cancel and cannot
 ask on gets a terminal, not a diff panel and an approval dialog. Every entry carries its evidence.
@@ -86,7 +93,7 @@ traffic through anything of ours, and never asks for provider credentials for it
 ## 5. Shape of the system
 
 ```
-        ┌────────────── window 1 ──┐   ┌── window 2 ──┐   ┌── phone ──┐
+        ┌── window 1 (Tauri) ──────┐   ┌─ window 2 ───┐   ┌── phone ──┐
         │   (Tauri webview)        │   │              │   │ (Flutter) │
         └───────────┬──────────────┘   └──────┬───────┘   └─────┬─────┘
                     │  EnvoyCoder protocol (WS JSON-RPC)        │  pairing code,
@@ -94,7 +101,7 @@ traffic through anything of ours, and never asks for provider credentials for it
                                     ▼
                         ┌───────────────────────┐
                         │   EnvoyCoder daemon   │   state: <home>/EnvoyCoder/
-                        │  projects, workspaces │
+                        │  projects, tasks     │
                         │  agents, transcripts  │
                         └───────┬───────────────┘
                                 │  product session (scoped, granted)
@@ -105,9 +112,12 @@ traffic through anything of ours, and never asks for provider credentials for it
                         └───────────────────────┘
 ```
 
-Agents are children of the daemon (or in-process for `envoy-harness`), so their lifetime is the
-daemon's: closing a window does not kill a running task, which is the entire point of a control
-plane you can walk away from.
+Agents are children of the daemon — **spawned, not in-process**, including `envoy-harness`, whose
+argv is `run --acp` and which we speak to over stdio like any other agent. (An earlier draft of this
+document said "or in-process for `envoy-harness`"; the catalogue has never done that, and the uniform
+transport is the reason one adapter serves both first-party harnesses.) Their lifetime is the daemon's:
+closing a window does not kill a running task, which is the entire point of a control plane you can
+walk away from.
 
 ## 6. State on disk
 
@@ -118,9 +128,9 @@ trust, node config), and each product keeps its own state in `<home>/<product>/`
 <home>/                     shared (EnvoyMesh's rule, §5 of its design)
   profile/                  identity, trust, node config, vault index — NOT ours to write
   EnvoyMesh/                the social product's state
-  EnvoyCoder/               ours: projects, workspaces, runs, transcripts, settings
+  EnvoyCoder/               ours: projects, tasks, runs, transcripts, settings
     projects.json
-    workspaces.json
+    tasks.json
     runs/                   one record per run
     transcripts/            event logs, ours to keep or prune
     settings.json

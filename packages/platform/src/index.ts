@@ -501,3 +501,34 @@ export function defaultDataDir(
     appName,
   );
 }
+
+/**
+ * Turn the path a person typed into a path the filesystem understands.
+ *
+ * A folder picker returns a real path; a person pasting one writes `~/work/api`, wraps it in quotes
+ * because it has a space, or leaves the trailing slash they copied from Finder. All three were passed
+ * straight to the daemon's existence check, which is why "Add project" could refuse a directory the user
+ * was looking at — the failure mode was an error about a path that "does not exist" while it plainly does.
+ *
+ * `home` is a parameter rather than a lookup: on the daemon the right home is the daemon's, and a browser
+ * client guessing `$HOME` would be wrong on exactly the machines where it matters.
+ */
+export function normalizeUserPath(input: string, home: string): string {
+  let path = input.trim();
+
+  // Quotes copied along with a path: strip one matching pair, never a lone one (a quote can be a real
+  // character in a filename).
+  if (path.length >= 2 && ((path.startsWith('"') && path.endsWith('"')) || (path.startsWith("'") && path.endsWith("'")))) {
+    path = path.slice(1, -1).trim();
+  }
+
+  if (path === "~") path = home;
+  else if (path.startsWith("~/") || path.startsWith("~\\")) path = `${home}${path.slice(1)}`;
+
+  // A trailing separator is what a copy from Finder carries; keep the root, where it is the whole path.
+  while (path.length > 1 && (path.endsWith("/") || path.endsWith("\\"))) {
+    path = path.slice(0, -1);
+  }
+
+  return path;
+}

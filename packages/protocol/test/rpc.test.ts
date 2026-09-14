@@ -1,0 +1,171 @@
+/**
+ * The wire contract's own tests.
+ *
+ * Three things are worth testing here, and none of them is a getter:
+ *
+ *   1. **The catalogue and the table agree.** A method that exists in `RPC_METHODS` but has no
+ *      spec is a method a client can call and the daemon cannot validate; a spec for a method that
+ *      is not in the catalogue is dead weight that will drift. Both are checked, in both
+ *      directions, because one direction passing is exactly how the other rots.
+ *   2. **The error convention round-trips.** Our codes cannot ride in the transport's `error.code`
+ *      (its catalogue is closed), so the code is a prefix of the message. If `coderError` and
+ *      `coderErrorCode` ever disagree, every failure in the app degrades to prose — with no test
+ *      failing anywhere else.
+ *   3. **The run-event union validates whole.** The window and the phone both parse what they
+ *      render, so a member the schema rejects is a transcript that silently stays empty.
+ */
+
+import { describe, expect, it } from "vitest";
+
+import {
+  CODER_EVENTS,
+  ENVOYCODER_ERRORS,
+  RPC_METHODS,
+  RPC_SPECS,
+  RUN_EVENT_KINDS,
+  RunEventSchema,
+  coderError,
+  coderErrorCode,
+  coderErrorMessage,
+  missingRpcSpecs,
+  orphanRpcSpecs,
+  parseRpcParams,
+} from "@envoycoder/protocol";
+
+describe("the method table", () => {
+  it("covers the catalogue exactly, in both directions", () => {
+    expect(missingRpcSpecs()).toEqual([]);
+    expect(orphanRpcSpecs()).toEqual([]);
+  });
+
+  it("names every method the app actually calls", () => {
+    // The M1 set: a client that can do these has a usable app, so their absence is a regression the
+    // table should catch rather than a reviewer.
+    for (const method of [
+      "coder.hello",
+      "coder.listProjects",
+      "coder.addProject",
+      "coder.listTasks",
+      "coder.createTask",
+      "coder.getSettings",
+      "coder.updateSettings",
+      "coder.meshStatus",
+    ]) {
+      expect(RPC_METHODS).toContain(method);
+    }
+  });
+
+  it("rejects unusable parameters with a code the client can branch on", () => {
+    // `path` is required and must be non-empty; an empty one is the shape a UI bug produces.
+    let thrown: unknown;
+    try {
+      parseRpcParams("coder.addProject", { path: "" });
+    } catch (error) {
+      thrown = error;
+    }
+    const message = thrown instanceof Error ? thrown.message : "";
+    expect(coderErrorCode(message)).toBe(ENVOYCODER_ERRORS.badRequest);
+    // The refusal names the method and the field: "which call, which argument" is the whole value.
+    expect(message).toContain("coder.addProject");
+    expect(message).toContain("path");
+  });
+
+  it("accepts omitted optional parameters, which is what a thin client sends", () => {
+    expect(() => parseRpcParams("coder.listProjects", undefined)).not.toThrow();
+    expect(() => parseRpcParams("coder.listTasks", undefined)).not.toThrow();
+    expect(() => parseRpcParams("coder.getSettings", undefined)).not.toThrow();
+  });
+});
+
+describe("errors on the wire", () => {
+  it("carries a code through the message, because error.code cannot hold one", () => {
+    const error = coderError(ENVOYCODER_ERRORS.taskMissing, "/gone is not a directory");
+    expect(coderErrorCode(error.message)).toBe(ENVOYCODER_ERRORS.taskMissing);
+    expect(coderErrorMessage(error.message)).toBe("/gone is not a directory");
+  });
+
+  it("leaves a foreign message alone rather than guessing at its code", () => {
+    // The transport's own refusals ("Authentication required") arrive through the same channel.
+    const foreign = "Authentication required";
+    expect(coderErrorCode(foreign)).toBeNull();
+    expect(coderErrorMessage(foreign)).toBe(foreign);
+  });
+
+  it("does not mistake a Windows drive letter for one of our codes", () => {
+    const message = "C:\\Users\\dev\\project is gone";
+    expect(coderErrorCode(message)).toBeNull();
+    expect(coderErrorMessage(message)).toBe(message);
+  });
+});
+
+describe("the broadcast vocabulary", () => {
+  it("prefixes every event so it cannot collide with the mesh's own", () => {
+    expect(CODER_EVENTS.length).toBe(3);
+    for (const event of CODER_EVENTS) expect(event.startsWith("coder:")).toBe(true);
+  });
+});
+
+describe("run events", () => {
+  const base = {
+    runId: "r1",
+    taskId: "w1",
+    at: "2026-09-13T10:00:00.000Z",
+    seq: 1,
+  };
+
+  const samples: Record<(typeof RUN_EVENT_KINDS)[number], unknown> = {
+    "run.started": { ...base, kind: "run.started", harness: "envoy-harness", hostId: "local" },
+    "run.session": { ...base, kind: "run.session", sessionId: "s1", resumable: true, resumed: false },
+    "run.output": { ...base, kind: "run.output", stream: "assistant", text: "hello", messageId: "m1" },
+    "run.thought": { ...base, kind: "run.thought", text: "weighing options", messageId: "m1" },
+    "run.message": { ...base, kind: "run.message", text: "do it", mode: "steer", delivered: "steered" },
+    "run.tool": { ...base, kind: "run.tool", callId: "c1", name: "shell", status: "completed", input: { command: "ls" } },
+    "run.approval-requested": {
+      ...base,
+      kind: "run.approval-requested",
+      requestId: "req-1",
+      question: "Run the suite?",
+      options: [{ id: "allow", label: "Allow once" }, { id: "deny", label: "Deny", destructive: true }],
+    },
+    "run.approval-resolved": { ...base, kind: "run.approval-resolved", requestId: "req-1", optionId: "allow", by: "desktop" },
+    "run.diff": { ...base, kind: "run.diff", files: [{ path: "a.ts", added: 3, removed: 1 }] },
+    "run.usage": { ...base, kind: "run.usage", inputTokens: 10, outputTokens: 20, contextUsed: 100, contextSize: 1000 },
+    "run.status": { ...base, kind: "run.status", status: "needs-attention", note: "waiting" },
+    "run.ended": { ...base, kind: "run.ended", exitCode: 0, status: "done" },
+  };
+
+  it("covers every declared kind — a kind with no sample is a kind no client can render", () => {
+    expect(Object.keys(samples).sort()).toEqual([...RUN_EVENT_KINDS].sort());
+  });
+
+  it("validates every kind", () => {
+    for (const [kind, sample] of Object.entries(samples)) {
+      const parsed = RunEventSchema.safeParse(sample);
+      expect(parsed.success, `${kind}: ${parsed.success ? "" : parsed.error.message}`).toBe(true);
+    }
+  });
+
+  it("refuses an event with no sequence number, because a gap must be detectable", () => {
+    expect(RunEventSchema.safeParse({ ...base, seq: undefined, kind: "run.status", status: "running" }).success).toBe(false);
+  });
+});
+
+describe("hello", () => {
+  const spec = RPC_SPECS["coder.hello"];
+
+  it("requires an instance id, which is what tells our daemon from a squatter", () => {
+    const withoutInstance = {
+      product: "EnvoyCoder",
+      version: "0.1.0",
+      home: "/home/dev/.envoymesh",
+      stateDir: "/home/dev/.envoymesh/EnvoyCoder",
+      startedAt: "2026-09-13T10:00:00.000Z",
+      windowCount: 1,
+      methods: [],
+      mesh: { kind: "no-node", reason: "" },
+      notes: [],
+    };
+    expect(spec.result.safeParse(withoutInstance).success).toBe(false);
+    expect(spec.result.safeParse({ ...withoutInstance, instanceId: "abc" }).success).toBe(true);
+  });
+});

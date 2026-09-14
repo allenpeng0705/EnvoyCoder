@@ -47,6 +47,7 @@ import {
 // `requestProductSession` comes from `reuse-host`, which is the product-facing surface the guide
 // points at (§4.5) — it re-exports the attach client so a product depends on one package.
 import {
+  type HostNodeService,
   type HostRpcDispatcher,
   type ProductSessionGrant,
   type SessionIdentityResolver,
@@ -61,6 +62,17 @@ import {
 // `@envoymesh/api/core` — the *reusable* half. The bare `@envoymesh/api` barrel reaches product-bound
 // modules, so importing it from a product is the mistake the guide calls out (§4.2) and the wiring
 // gate in this repo forbids.
+/**
+ * The two ports a product needs in order to build its **own** node surface.
+ *
+ * Re-exported rather than reached for in `@envoymesh/host-connect` directly, for the same reason
+ * `createReuseHost` re-exports them: a product should depend on one package for the host contract.
+ * They are needed here because EnvoyCoder's daemon publishes events from its own bus and serves a
+ * per-connection subscription — see `CODER_EVENTS` in `@envoycoder/protocol` for why the transport's
+ * broadcast table is not the mechanism that works.
+ */
+export type { HostNodeService, SocketMethodPort } from "@envoymesh/reuse-host";
+
 import { ENVOYMESH_VERSION } from "@envoymesh/api/core";
 import { pairingAppMismatch } from "@envoymesh/protocol";
 import {
@@ -81,7 +93,7 @@ import {
  *
  * The family's rule (design §5): a shared home holds **kernel** state that every product reads —
  * identity, trust, node config, the vault index — and each product keeps its own state in
- * `<home>/<product>/`. For EnvoyCoder that means projects, workspaces, run transcripts and
+ * `<home>/<product>/`. For EnvoyCoder that means projects, tasks, run transcripts and
  * per-project settings live in `<home>/EnvoyCoder/` and nowhere else: another product must not be
  * able to read which repositories this user has opened, and EnvoyCoder must not be able to read
  * anyone else's chat transcripts.
@@ -94,13 +106,22 @@ export interface CoderPaths {
   home: string;
   stateDir: string;
   projectsFile: string;
-  workspacesFile: string;
+  tasksFile: string;
   settingsFile: string;
   runsDir: string;
   transcriptsDir: string;
   logsDir: string;
   /** Pairing/daemon secrets — `0600` on POSIX, and see the platform note below. */
   secretsDir: string;
+  /**
+   * The running daemon's claim: pid, port, instance id.
+   *
+   * It lives beside the data rather than in a temp directory because it describes *this* state
+   * directory — two homes are two daemons, and a single shared claim file would make them fight
+   * over it. `apps/desktop/src/daemon/lock.ts` owns its format and explains why a claim file exists
+   * at all when the port is already bound.
+   */
+  daemonFile: string;
 }
 
 /**
@@ -121,12 +142,13 @@ export function coderPaths(home: string = resolveHomeDir()): CoderPaths {
     home,
     stateDir,
     projectsFile: join(stateDir, "projects.json"),
-    workspacesFile: join(stateDir, "workspaces.json"),
+    tasksFile: join(stateDir, "tasks.json"),
     settingsFile: join(stateDir, "settings.json"),
     runsDir: join(stateDir, "runs"),
     transcriptsDir: join(stateDir, "transcripts"),
     logsDir: join(stateDir, "logs"),
     secretsDir: join(stateDir, "secrets"),
+    daemonFile: join(stateDir, "daemon.json"),
   };
 }
 
@@ -372,6 +394,16 @@ export async function attachToMeshNode(
 export interface CoderDaemonHostOptions extends Omit<ReuseHostOptions, "port"> {
   port?: number;
   path?: string;
+  /**
+   * The node surface the transport subscribes to.
+   *
+   * The transport wires one listener per event in the disposition table (including the product's
+   * own, passed as `eventDispositions`), and calls `nodeService.on(name, …)` for each. EnvoyCoder's
+   * events come from a bus rather than from a mesh node, so the daemon passes its own — this is the
+   * seam that lets a product with no mesh publish events at all, and the default
+   * (`createShellHostNodeService()`) is the right answer only for a host that publishes nothing.
+   */
+  nodeService?: HostNodeService;
 }
 
 export interface CoderDaemonHost {
@@ -438,7 +470,7 @@ export function createCoderDaemonHost(
       return host.path;
     },
     async serve() {
-      await host.serve(createShellHostNodeService());
+      await host.serve(options.nodeService ?? createShellHostNodeService());
     },
     pairingUri(input) {
       const wsUrl = `${input.secure ? "wss" : "ws"}://${input.host}:${host.port}${host.path}`;

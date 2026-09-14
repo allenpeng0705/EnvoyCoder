@@ -76,7 +76,7 @@ EnvoyMesh owes us instead is a failure that says what is missing and how to get 
 |---|---|
 | **Shared home** | resolve it with `@envoymesh/node-core`'s `resolveHomeDir` + `profileDirIn`, so `ENVOYMESH_HOME`, the per-OS default and legacy `~/.envoymesh` adoption all behave identically in both apps |
 | **Kernel state** (`profile/`) | **read only, and only through a granted session.** Identity, trust, node config and the vault index belong to the node |
-| **Our state** | `<home>/EnvoyCoder/` — projects, workspaces, runs, transcripts, settings. Built in exactly one place (`coderPaths`) |
+| **Our state** | `<home>/EnvoyCoder/` — projects, tasks, runs, transcripts, settings. Built in exactly one place (`coderPaths`) |
 | **Product attach** | `attachLocalProduct` over loopback, pre-auth by design; we take the token and use only what the owner granted |
 
 Another product must not be able to read which repositories you have opened, and we must not be able
@@ -357,6 +357,15 @@ The daemon's own boot story lives in `docs/envoycoder-networking.md` §2.
 The phone uses the family's **shared Dart contract** (`envoy_thin_client`) via a path dependency to
 the sibling checkout: one parser, one refusal sentence, one place where the format changes. It was
 re-implemented locally at first — the same duplication the guide's §5.2 exists to prevent.
+
+**A second gap found upstream, and a more serious one.** The transport gated RPCs by
+loopback-or-session, but the *push* channel never reached that gate: `on` was answered before it, every
+connecting socket was auto-subscribed to the core event names, and delivery wrote to whoever was
+subscribed. Measured on the real transport by dialling this machine's LAN address, a tokenless client
+received `connected`, `node:status`, `node:ready` and any broadcast — with its first RPC correctly
+refused. Fixed upstream (`host-connect` + the `createReuseHost` option a product needs to declare its own
+events, which was being dropped). Our smoke now guards it from the consumer side: a stranger must be
+refused **and receive nothing**, while a loopback window still subscribes.
 
 **This found a gap upstream.** `PairingPayload.relayWsUrls` existed in the contract
 (`protocol/src/pairing-contract.ts`) and in the compact token codec (`pairing-token.ts`), but the

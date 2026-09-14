@@ -47,7 +47,16 @@ class HostClient {
         onError: (Object error) => _scheduleReconnect('$error'),
         cancelOnError: true,
       );
-      await call('coder.hello', {'client': 'mobile', 'protocol': 1});
+      // The shape the daemon's schema actually accepts (`rpc.ts`, `coder.hello`): an object under
+      // `client`, not a string. The old payload — `{'client': 'mobile', 'protocol': 1}` — was rejected
+      // before authentication with "Expected object, received string", so a phone could open a socket
+      // and never say hello.
+      await call('coder.hello', {
+        'client': {
+          'name': 'envoycoder-mobile',
+          'platform': Platform.operatingSystem,
+        },
+      });
     } catch (error) {
       _scheduleReconnect('$error');
     }

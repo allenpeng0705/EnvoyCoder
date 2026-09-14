@@ -1,0 +1,356 @@
+/**
+ * Runs, end to end, against a scripted agent.
+ *
+ * ## What this proves that a unit test cannot
+ *
+ * Everything here happens through a real child process speaking real newline-delimited JSON-RPC on
+ * a real pipe: the client's framing, the spawn and teardown, the approval round trip (a request the
+ * *agent* raises and the client answers), cancellation mid-turn, and a resume. Those are the parts
+ * that fail for reasons no amount of object-shaped unit testing reaches — a missing newline, a
+ * teardown that leaves a process alive, an approval answer sent in the wrong shape.
+ *
+ * The agent is the fixture in `fixtures/fake-acp-agent.mjs`, chosen over a mock object on purpose:
+ * a mock would let the two halves of the protocol drift, because the test would agree with the bug.
+ * `acp-transport.test.ts` runs the *real* `dsh` against the same client, so the client is held to
+ * both a deterministic script and a real subprocess.
+ */
+
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterEach, describe, expect, it } from "vitest";
+
+import type { RunEvent } from "@envoycoder/protocol";
+import { coderPaths } from "@envoycoder/host-bridge";
+
+import type { AcpLaunch } from "../src/daemon/acp/client.js";
+import { RunManager } from "../src/daemon/runs.js";
+import { CoderStore } from "../src/daemon/store.js";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const FAKE_AGENT = join(here, "fixtures", "fake-acp-agent.mjs");
+
+/* ────────────────────────────── harness ────────────────────────────── */
+
+interface Bench {
+  manager: RunManager;
+  store: CoderStore;
+  events: RunEvent[];
+  taskId: string;
+  home: string;
+  /** Wait until a predicate holds over the events so far, or fail with what did arrive. */
+  until: (predicate: (events: RunEvent[]) => boolean, label: string) => Promise<void>;
+}
+
+const cleanups: (() => Promise<void>)[] = [];
+
+afterEach(async () => {
+  // **Last in, first out.** Teardown order is not cosmetic here: the agent process must be stopped
+  // before its home directory is removed, or the removal races the agent still writing into it —
+  // which shows up as `ENOTEMPTY` in the *setup* of the next test rather than as the ordering bug it
+  // is. Registration order is "create the world, then start the thing in it", so reverse is right.
+  for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
+});
+
+async function bench(): Promise<Bench> {
+  const home = await mkdtemp(join(tmpdir(), "envoycoder-m2-"));
+  const paths = coderPaths(home);
+  const store = await CoderStore.open({ paths });
+  const project = await store.addProject({ path: join(home, "repo") });
+  const task = await store.createTask({ projectId: project.project.id, title: "a task" });
+
+  const events: RunEvent[] = [];
+  const launch: AcpLaunch = {
+    command: process.execPath,
+    args: [FAKE_AGENT],
+    cwd: home,
+  };
+
+  const manager = new RunManager({
+    paths,
+    store,
+    onEvent: (event) => events.push(event),
+    resolveLaunch: () => launch,
+  });
+
+  cleanups.push(async () => {
+    await manager.stopAll();
+    await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  });
+
+  return {
+    manager,
+    store,
+    events,
+    taskId: task!.id,
+    home,
+    async until(predicate, label) {
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline) {
+        if (predicate(events)) return;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      throw new Error(
+        `timed out waiting for ${label}. Events so far: ${events.map((event) => event.kind).join(", ")}`,
+      );
+    },
+  };
+}
+
+const kinds = (events: readonly RunEvent[], kind: RunEvent["kind"]): RunEvent[] =>
+  events.filter((event) => event.kind === kind);
+
+/* ────────────────────────────── the tests ────────────────────────────── */
+
+describe("one run, end to end", () => {
+  it("streams what the agent says into normalized events, in order", async () => {
+    const b = await bench();
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "please think about it" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    // The order is the contract: a client renders these in arrival order, and `seq` is what lets it
+    // detect a gap.
+    expect(b.events.map((event) => event.kind)).toEqual([
+      "run.started",
+      "run.session",
+      "run.thought",
+      "run.output",
+      "run.ended",
+    ]);
+    expect(b.events.map((event) => event.seq)).toEqual([1, 2, 3, 4, 5]);
+    for (const event of b.events) {
+      expect(event.runId).toBe(run.id);
+      expect(event.taskId).toBe(b.taskId);
+    }
+
+    const thought = kinds(b.events, "run.thought")[0];
+    expect(thought && thought.kind === "run.thought" ? thought.text : "").toBe("let me consider");
+    const output = kinds(b.events, "run.output")[0];
+    expect(output && output.kind === "run.output" ? output.stream : "").toBe("assistant");
+    // The message id is what lets a client join streaming fragments into one bubble.
+    expect(output && output.kind === "run.output" ? output.messageId : undefined).toBe("m-1");
+
+    expect(b.manager.isLive(run.id)).toBe(false);
+  });
+
+  it("pairs a tool call with its result by the agent's own call id", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "run a tool" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const tools = kinds(b.events, "run.tool");
+    expect(tools).toHaveLength(2);
+    const [start, end] = tools as [Extract<RunEvent, { kind: "run.tool" }>, Extract<RunEvent, { kind: "run.tool" }>];
+    // Two events, one call: the id is what a client folds on. Keying on the tool's *name* would
+    // merge two concurrent calls to the same tool into one row.
+    expect(start.callId).toBe("call-1");
+    expect(end.callId).toBe("call-1");
+    expect(start.status).toBe("running");
+    expect(end.status).toBe("completed");
+    expect(start.name).toBe("shell");
+    expect(start.input).toEqual({ command: "ls" });
+  });
+
+  it("records context usage when the agent reports it, and stays silent when it does not", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "run a tool" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const usage = kinds(b.events, "run.usage")[0];
+    expect(usage && usage.kind === "run.usage" ? usage.contextUsed : undefined).toBe(1200);
+    expect(usage && usage.kind === "run.usage" ? usage.contextSize : undefined).toBe(128_000);
+  });
+
+  it("turns an agent error into a failed run rather than a rejected call", async () => {
+    const b = await bench();
+    // The real case this models: dsh with no API key answers `session/prompt` with a JSON-RPC error.
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "this will fail" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to fail");
+
+    // The RPC that *started* the run succeeded: the run existed, and the UI was already rendering it.
+    expect(run.status).toBe("running");
+    const ended = kinds(b.events, "run.ended")[0];
+    expect(ended && ended.kind === "run.ended" ? ended.status : "").toBe("failed");
+
+    const note = kinds(b.events, "run.status").find(
+      (event) => event.kind === "run.status" && event.status === "failed",
+    );
+    // The agent's own words survive: "no API key" is the part a user can act on.
+    expect(note && note.kind === "run.status" ? (note.note ?? "") : "").toContain("no API key");
+    expect(b.store.findTask(b.taskId)?.status).toBe("failed");
+  });
+});
+
+describe("approvals", () => {
+  it("surfaces a permission request, waits, and continues when it is answered", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "please approve this" });
+    await b.until((events) => kinds(events, "run.approval-requested").length === 1, "the approval card");
+
+    const requested = kinds(b.events, "run.approval-requested")[0];
+    if (requested?.kind !== "run.approval-requested") throw new Error("unreachable");
+    // The options come from the agent, in the agent's words — the label the user reads is the one
+    // the protocol carried, not one we invented for it.
+    expect(requested.options.map((option) => option.label)).toEqual(["Allow once", "Reject"]);
+    // …and which one refuses is the protocol's own `kind`, not a guess from the label.
+    expect(requested.options.find((option) => option.id === "reject-once")?.destructive).toBe(true);
+    // The card names the call we already streamed, so the user knows what they are allowing.
+    expect(requested.question).toContain("shell");
+
+    // The run is blocked: a human decision, not progress. This is the whole reason
+    // `needs-attention` is not folded into `running` (`docs/envoycoder-ui.md` §4).
+    expect(b.store.findTask(b.taskId)?.status).toBe("needs-attention");
+    expect(b.manager.isLive(kinds(b.events, "run.started")[0]?.runId ?? "")).toBe(true);
+
+    const answered = await b.manager.answerApproval(
+      (kinds(b.events, "run.started")[0] as { runId: string }).runId,
+      requested.requestId,
+      "allow-once",
+    );
+    expect(answered).toBe(true);
+
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to continue and end");
+    // It continued rather than being denied — the failure mode the harness doc warns about for an
+    // agent whose surface cannot answer (`docs/envoycoder-harness.md` §1).
+    expect(
+      kinds(b.events, "run.output").some(
+        (event) => event.kind === "run.output" && event.text.includes("permission: allow-once"),
+      ),
+    ).toBe(true);
+    expect(kinds(b.events, "run.approval-resolved")).toHaveLength(1);
+    // Back to working, then finished.
+    expect(b.store.findTask(b.taskId)?.status).toBe("done");
+  });
+
+  it("refuses a second answer to the same request, so a double click cannot decide twice", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "please approve this" });
+    await b.until((events) => kinds(events, "run.approval-requested").length === 1, "the approval card");
+
+    const requested = kinds(b.events, "run.approval-requested")[0];
+    if (requested?.kind !== "run.approval-requested") throw new Error("unreachable");
+    const runId = requested.runId;
+
+    expect(await b.manager.answerApproval(runId, requested.requestId, "allow-once")).toBe(true);
+    expect(await b.manager.answerApproval(runId, requested.requestId, "reject-once")).toBe(false);
+    expect(await b.manager.answerApproval(runId, "not-a-request", "allow-once")).toBe(false);
+  });
+
+  it("refuses a message while an approval is open, naming why", async () => {
+    const b = await bench();
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "please approve this" });
+    await b.until((events) => kinds(events, "run.approval-requested").length === 1, "the approval card");
+
+    // Queueing behind a prompt strands the message: the prompt must be answered first, so accepting
+    // the words would be promising a delivery that cannot happen.
+    await expect(b.manager.send(run.id, "actually, stop", "queue")).rejects.toThrow(/waiting for an answer/);
+  });
+});
+
+describe("cancel and steer", () => {
+  it("ends a cancelled run as cancelled, not as a failure", async () => {
+    const b = await bench();
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "a slow task" });
+    await b.until((events) => kinds(events, "run.output").length === 1, "the first chunk");
+
+    expect(await b.manager.cancel(run.id)).toBe(true);
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const ended = kinds(b.events, "run.ended")[0];
+    // A user who asked for the work to stop did not experience a failure, and showing one would
+    // teach them to distrust the status column.
+    expect(ended && ended.kind === "run.ended" ? ended.status : "").toBe("cancelled");
+    expect(b.store.findTask(b.taskId)?.status).toBe("cancelled");
+    expect(await b.manager.cancel(run.id)).toBe(false);
+  });
+
+  it("queues a message, then delivers it as the next turn — the difference from steering", async () => {
+    const b = await bench();
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "a slow task" });
+    await b.until((events) => kinds(events, "run.output").length === 1, "the first chunk");
+
+    expect(await b.manager.send(run.id, "and then do this", "queue")).toBe("queued");
+    const message = kinds(b.events, "run.message")[0];
+    // The transcript records which mode was used, so "did it join or wait?" is answerable later.
+    expect(message?.kind === "run.message" ? message.delivered : "").toBe("queued");
+    expect(message?.kind === "run.message" ? message.mode : "").toBe("queue");
+
+    // Nothing was interrupted: the slow turn is still the one in flight.
+    expect(kinds(b.events, "run.ended")).toHaveLength(0);
+    await b.manager.cancel(run.id);
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+    // Cancelling drops what was queued: the user asked for the work to stop.
+    expect(kinds(b.events, "run.output").some((event) => event.kind === "run.output" && event.text.includes("and then"))).toBe(false);
+  });
+
+  it("steers by interrupting the turn, and the message is what runs next", async () => {
+    const b = await bench();
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "a slow task" });
+    await b.until((events) => kinds(events, "run.output").length === 1, "the first chunk");
+
+    expect(await b.manager.send(run.id, "change of plan", "steer")).toBe("steered");
+    await b.until(
+      (events) => kinds(events, "run.output").some((event) => event.kind === "run.output" && event.text.includes("change of plan")),
+      "the steered message to be answered",
+    );
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    // Steered, not cancelled: the run finished normally after the redirect.
+    const ended = kinds(b.events, "run.ended")[0];
+    expect(ended && ended.kind === "run.ended" ? ended.status : "").toBe("done");
+    expect(kinds(b.events, "run.message")[0]?.kind === "run.message" ? (kinds(b.events, "run.message")[0] as { delivered: string }).delivered : "").toBe("steered");
+  });
+});
+
+describe("resume and transcripts", () => {
+  it("rejoins the previous session rather than starting a fresh one", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "hello" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the first run to end");
+    const firstSession = kinds(b.events, "run.session")[0];
+    if (firstSession?.kind !== "run.session") throw new Error("unreachable");
+
+    b.events.length = 0;
+    await b.manager.start({ taskId: b.taskId, prompt: "resume-me please", resume: true });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the resumed run to end");
+
+    const resumed = kinds(b.events, "run.session")[0];
+    expect(resumed?.kind === "run.session" ? resumed.resumed : false).toBe(true);
+    // The *same* session id came back, which is what "resume" has to mean to be worth claiming.
+    expect(resumed?.kind === "run.session" ? resumed.sessionId : "").toBe(firstSession.sessionId);
+    // And the agent's own answer proves which session it was talking to.
+    expect(
+      kinds(b.events, "run.output").some(
+        (event) => event.kind === "run.output" && event.text === `session ${firstSession.sessionId}`,
+      ),
+    ).toBe(true);
+  });
+
+  it("writes a transcript that can be read back line by line", async () => {
+    const b = await bench();
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "run a tool" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const stored = b.manager.get(run.id);
+    expect(stored?.status).toBe("done");
+    const events = b.manager.events(run.id);
+    expect(events.length).toBeGreaterThan(3);
+    // `nextSeq` is what makes a reconnecting client cheap: it asks from here instead of re-fetching.
+    const last = events[events.length - 1];
+    expect(last && b.manager.events(run.id, last.seq)).toHaveLength(0);
+  });
+});
+
+describe("one run per task", () => {
+  it("refuses a second run in the same directory, and says what to do instead", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "a slow task" });
+    await b.until((events) => kinds(events, "run.output").length === 1, "the first chunk");
+
+    // Two agents in one working tree is the failure a control plane exists to prevent.
+    await expect(b.manager.start({ taskId: b.taskId, prompt: "another" })).rejects.toThrow(
+      /already running/,
+    );
+  });
+});

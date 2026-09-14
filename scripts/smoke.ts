@@ -15,7 +15,8 @@
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { networkInterfaces, tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { resolveRunningNode } from "@envoymesh/node-core";
 import { HARNESS_IDS } from "@envoycoder/protocol";
 import { probeHarness } from "@envoycoder/agent-catalog";
@@ -25,6 +26,7 @@ import {
   coderPaths,
   coderSessionIdentity,
   createCoderDaemonHost,
+  createCoderDispatcher,
 } from "@envoycoder/host-bridge";
 
 /**
@@ -88,6 +90,57 @@ async function callFrom(
   });
 }
 
+/**
+ * One call, keeping **every** frame the socket receives — including the ones nobody asked for.
+ *
+ * The RPC helper above resolves on the matching reply and ignores pushes, which is the right shape for
+ * "what did the daemon answer". The question here is the opposite one: *what did it send that nobody
+ * asked for*, which is exactly what a leaked event looks like.
+ */
+async function watchFrom(
+  host: string,
+  port: number,
+  path: string,
+  method: string,
+  params: Record<string, unknown>,
+): Promise<{ reply?: { id?: unknown; result?: unknown; error?: { code?: string; message?: string } }; frames: string[] }> {
+  const { WebSocket } = (await import("ws")) as unknown as {
+    WebSocket: new (url: string) => {
+      on(event: string, listener: (...args: unknown[]) => void): void;
+      send(data: string): void;
+      close(): void;
+    };
+  };
+  const socket = new WebSocket(`ws://${host}:${port}${path}`);
+  const frames: string[] = [];
+  let reply: { id?: unknown; result?: unknown; error?: { code?: string; message?: string } } | undefined;
+  return await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      try {
+        socket.close();
+      } catch {
+        /* ignore */
+      }
+      resolve({ ...(reply ? { reply } : {}), frames });
+    }, 900);
+    socket.on("open", () => socket.send(JSON.stringify({ jsonrpc: "2.0", id: 1, method, params })));
+    socket.on("message", (raw: unknown) => {
+      const text = String(raw);
+      frames.push(text);
+      try {
+        const parsed = JSON.parse(text) as { id?: unknown };
+        if (parsed.id === 1) reply = parsed;
+      } catch {
+        /* a non-JSON frame is a frame all the same */
+      }
+    });
+    socket.on("error", (error: unknown) => {
+      clearTimeout(timer);
+      reject(new Error(`socket error: ${String(error)}`));
+    });
+  });
+}
+
 /** The first non-internal IPv4 address, so the LAN leg dials this machine the way a peer would. */
 function firstLanAddress(): string | null {
   for (const entries of Object.values(networkInterfaces())) {
@@ -97,6 +150,9 @@ function firstLanAddress(): string | null {
   }
   return null;
 }
+
+/** The repository root, so a step can name a build artifact without a relative-path guess. */
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const steps: { name: string; run: () => Promise<string> | string }[] = [];
 const failures: string[] = [];
@@ -135,6 +191,53 @@ step("a pairing code carries this app's name, and another app's is refused", () 
     const refused = checkPairingCode(theirs);
     if (refused.ok) throw new Error("a code from another app was accepted");
     return refused.message;
+  } finally {
+    host.stop();
+  }
+});
+
+/**
+ * The push channel, which is a second way to leak the same data — and it used to be open.
+ *
+ * The family's transport gated RPCs by loopback-or-session and left the event path ungated: `on` was
+ * handled before the gate, every connecting socket was auto-subscribed to the core event names, and
+ * delivery wrote to whoever was subscribed. Measured on the real transport, a tokenless client on the
+ * LAN received the node's handshake, its status and every broadcast — on a socket whose first RPC was
+ * correctly refused. Fixed upstream (`@envoymesh/host-connect`); this leg keeps it fixed from the
+ * consumer's side: an EnvoyCoder window must still subscribe over loopback, and a stranger must get
+ * nothing at all — not a refusal followed by a stream.
+ */
+step("refuses an event subscription from the LAN, and pushes it nothing", async () => {
+  const address = firstLanAddress();
+  if (!address) return "no non-loopback interface on this machine — the push-channel leg could not run";
+
+  const host = createCoderDaemonHost({
+    port: 0,
+    sessionIdentity: coderSessionIdentity(),
+    dispatch: createCoderDispatcher(),
+  });
+  await host.serve();
+  try {
+    const stranger = await watchFrom(address, host.port, host.path, "on", { event: "node:status" });
+    if (stranger.reply?.error?.code !== "UNAUTHORIZED") {
+      throw new Error(
+        `a tokenless client at ${address} got ${JSON.stringify(stranger.reply)} for the "on" method — ` +
+          "subscribing must answer to the same rule as a read",
+      );
+    }
+    const leaked = stranger.frames.filter((frame) => frame.includes('"event"'));
+    if (leaked.length > 0) {
+      throw new Error(
+        `a tokenless client at ${address} was pushed ${leaked.length} event(s) without asking: ${leaked[0]}`,
+      );
+    }
+
+    // …and our own window, on loopback, still subscribes: the fix must not close the door it locks.
+    const window = await watchFrom("127.0.0.1", host.port, host.path, "on", { event: "node:status" });
+    if (window.reply?.error) {
+      throw new Error(`a loopback subscription was refused: ${JSON.stringify(window.reply.error)}`);
+    }
+    return `LAN (${address}) → refused, ${stranger.frames.length} frame(s); loopback → subscribed`;
   } finally {
     host.stop();
   }
@@ -240,6 +343,123 @@ step("refuses a tokenless call from the LAN, while loopback is trusted", async (
     return `LAN (${address}) → ${lanReply.error.code}; loopback → answered`;
   } finally {
     host.stop();
+  }
+});
+
+/**
+ * The daemon as the desktop app actually starts it: the bundle, as a child process.
+ *
+ * The unit suite boots the daemon in-process, which proves the handlers and the store. This proves
+ * what that cannot: that `npm run daemon:build` produces something Node can run, that the claim file
+ * appears only after the socket is listening, that a `coder.hello` over the wire carries the same
+ * instance id, and that stopping the process takes the claim with it. Each of those has been wrong
+ * at least once in this family's history, and each is invisible to a test that shares a process.
+ */
+step("the bundled daemon starts as a child process and answers over its own socket", async () => {
+  const { spawn } = await import("node:child_process");
+  const { readFile, rm } = await import("node:fs/promises");
+  const { existsSync } = await import("node:fs");
+
+  const home = mkdtempSync(join(tmpdir(), "envoycoder-smoke-daemon-"));
+  const entry = join(root, "apps", "desktop", "dist-daemon", "main.mjs");
+  if (!existsSync(entry)) {
+    throw new Error("apps/desktop/dist-daemon/main.mjs is missing — run `npm run daemon:build`");
+  }
+
+  const child = spawn(process.execPath, [entry], {
+    env: { ...process.env, ENVOYMESH_HOME: home, ENVOYCODER_DAEMON_PORT: "0" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let output = "";
+  child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString("utf8")));
+  child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString("utf8")));
+
+  try {
+    // The claim is written after the bind, so waiting for it is waiting for a *reachable* daemon
+    // rather than for a process that exists.
+    const claimPath = join(home, "EnvoyCoder", "daemon.json");
+    const deadline = Date.now() + 20_000;
+    let claim: { port: number; path: string; instanceId: string; pid: number } | undefined;
+    while (Date.now() < deadline && !claim) {
+      if (existsSync(claimPath)) {
+        try {
+          claim = JSON.parse(await readFile(claimPath, "utf8")) as typeof claim;
+        } catch {
+          // Half-written: the write is a rename, so this should not happen, but a smoke test that
+          // crashed on a transient read would be worse than one that retries.
+        }
+      }
+      if (!claim) await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (!claim) throw new Error(`no claim file after 20s. Output:\n${output}`);
+
+    const hello = (await callFrom("127.0.0.1", claim.port, claim.path, "coder.hello")).result as {
+      product?: string;
+      instanceId?: string;
+      stateDir?: string;
+    };
+    if (hello?.product !== "EnvoyCoder") throw new Error(`hello said product=${String(hello?.product)}`);
+    if (hello?.instanceId !== claim.instanceId) {
+      throw new Error("the daemon answered with a different instance id than its claim carries");
+    }
+    if (hello?.stateDir !== join(home, "EnvoyCoder")) {
+      throw new Error(`hello said stateDir=${String(hello?.stateDir)}`);
+    }
+
+    // Stop it the way the shell does, and require the claim to go with it: a stale claim makes the
+    // next window attach to a port nobody is listening on.
+    child.kill("SIGTERM");
+    const stopDeadline = Date.now() + 10_000;
+    while (Date.now() < stopDeadline && existsSync(claimPath)) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (existsSync(claimPath)) throw new Error("the claim file outlived the daemon");
+
+    return `pid ${claim.pid} on port ${claim.port}, hello verified, claim removed on stop`;
+  } finally {
+    child.kill("SIGKILL");
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+step("a second daemon refuses to start while one owns the machine", async () => {
+  const { spawn } = await import("node:child_process");
+  const { rm } = await import("node:fs/promises");
+
+  const home = mkdtempSync(join(tmpdir(), "envoycoder-smoke-second-"));
+  const entry = join(root, "apps", "desktop", "dist-daemon", "main.mjs");
+
+  const first = spawn(process.execPath, [entry], {
+    env: { ...process.env, ENVOYMESH_HOME: home, ENVOYCODER_DAEMON_PORT: "0" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  try {
+    const claimPath = join(home, "EnvoyCoder", "daemon.json");
+    const deadline = Date.now() + 20_000;
+    const { existsSync } = await import("node:fs");
+    while (Date.now() < deadline && !existsSync(claimPath)) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (!existsSync(claimPath)) throw new Error("the first daemon never published a claim");
+
+    const second = spawn(process.execPath, [entry], {
+      env: { ...process.env, ENVOYMESH_HOME: home, ENVOYCODER_DAEMON_PORT: "0" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let text = "";
+    second.stdout?.on("data", (chunk: Buffer) => (text += chunk.toString("utf8")));
+    const code = await new Promise<number | null>((resolve) => second.on("exit", (value) => resolve(value)));
+
+    // Exit 0, not 1: nothing failed. One daemon serves a machine, and the process that asked for a
+    // second one asked for something that already exists.
+    if (code !== 0) throw new Error(`the second daemon exited ${String(code)} instead of 0`);
+    if (!text.includes("already running")) {
+      throw new Error(`the second daemon did not say why it stopped:\n${text}`);
+    }
+    return `second daemon exited 0 and named the first`;
+  } finally {
+    first.kill("SIGTERM");
+    await rm(home, { recursive: true, force: true });
   }
 });
 

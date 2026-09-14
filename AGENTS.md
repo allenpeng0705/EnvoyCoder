@@ -29,7 +29,7 @@ shares the mesh and pairing with the family and keeps its own state separate.
 ```
 apps/desktop/     Tauri shell (Rust) + window UI (React) + the daemon (TS)
 apps/mobile/      Flutter app
-packages/{protocol,platform,workspace-model,agent-catalog,host-bridge}
+packages/{protocol,platform,task-model,agent-catalog,host-bridge}
 scripts/          the gates (peers, wiring, family docs, src-clean, mobile) and the smoke test
 docs/             the design and its reasoning
 docs/family/      copies of the EnvoyMesh documents that govern us — read, never edited

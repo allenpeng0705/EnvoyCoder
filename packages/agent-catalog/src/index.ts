@@ -34,10 +34,29 @@
  * ignorance, because the failure surfaces as "the agent started and then did something odd" on
  * a user's machine rather than as a failing test here. Entries marked `unverified` are the
  * worklist; `test/agent-catalog.test.ts` asserts the flags stay in sync with the ids.
+ *
+ * **What the tests assert about *running* them** lives in `test/drivable.test.ts`: an entry records the
+ * protocol its program speaks (`transport`), and only `"acp"` entries can be launched by the adapter we
+ * have. That test exists because the opposite was true for a while — six entries described one-shot CLIs
+ * and were offered as ready — and because "it is installed" is not the same question as "we can drive it".
  */
 
-import { type HarnessId, EXTERNAL_HARNESSES, NATIVE_HARNESSES } from "@envoycoder/protocol";
+import process from "node:process";
+import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+
+import {
+  type AgentMode,
+  type HarnessId,
+  BUILT_IN_HARNESSES,
+  CATALOGUED_HARNESSES,
+} from "@envoycoder/protocol";
 import { type PlatformId, detectPlatform, findBinary, spawnTreeOptions } from "@envoycoder/platform";
+
+// `require` from inside an ES module, for the two filesystem questions this package asks (does the
+// peer checkout exist? which repository are we in?). Kept to `require` rather than a static import
+// so nothing in the catalogue pulls `node:fs` into a client bundle that only reads the catalogue.
+const require = createRequire(import.meta.url);
 
 /** How the daemon talks to an agent. */
 export type AgentLaunch =
@@ -56,8 +75,50 @@ export type AgentLaunch =
       buildArgs: (input: RunInput) => string[];
       /** How output arrives, which decides how much structure we get. */
       stream: "jsonl" | "text";
+      /**
+       * How the daemon must *speak* to this process — and the field that makes the difference
+       * between a supported agent and a wish.
+       *
+       * `"acp"` means the program implements the Agent Client Protocol over stdio, which is what our
+       * adapter drives (`initialize` / `session/new` / `session/prompt` / `session/request_permission`).
+       * `"cli"` means it is a one-shot command line whose output we would have to parse ourselves: we
+       * can *start* it — argv, environment, prompt — but nothing in this product yet understands what
+       * it prints back.
+       *
+       * Recorded per entry because the two facts are genuinely different: **being installed is not
+       * being drivable.** Before this field existed, the picker offered six agents whose programs do
+       * not speak ACP, and `RunManager` — which builds an `AcpLaunch` for every harness — handed them
+       * an ACP handshake they could not answer.
+       */
+      transport: "acp" | "cli";
       /** Extra argv for resuming a session, when the CLI supports it. */
       resumeArgs?: (sessionId: string) => string[];
+      /**
+       * A built entry point in the **peer checkout**, used when nothing resolves on `PATH`.
+       *
+       * The built-in harness is ours-to-clone, not ours-to-ship (design D4), so "is it installed?"
+       * is the wrong question on a development machine: `../envoy-harness` may be built and ready
+       * with no global command at all. `entry` is absolute, resolved against the repository root, and
+       * launched with the Node that is running the daemon (`resolveHarnessCommand`).
+       *
+       * A **function**, not a string, and that is load-bearing: the catalogue is a module-level
+       * object, so a value here is computed while the module is still initialising — which is how
+       * this first version died with `Cannot access 'cachedRepoRoot' before initialization`. Calling
+       * it at probe time also means a checkout that appears while the app is running is found, which
+       * is the same reason probing is not cached.
+       */
+      devCheckout?: {
+        entry: () => string;
+        /**
+         * The argv for **this** entry, which is not the installed CLI's argv.
+         *
+         * The built checkout ships a dedicated ACP entry (`dist/cli/acp-stdio.js`) that already
+         * implies `--acp` and strips a duplicate flag, so handing it `run --acp` would be two
+         * different launches of the same thing — and the wrong one. Stating it here keeps that
+         * asymmetry in the catalogue, where every other launch fact lives, instead of in the daemon.
+         */
+        args: (input: RunInput) => string[];
+      };
     };
 
 export interface RunInput {
@@ -90,11 +151,20 @@ export interface AgentCapabilities {
 export interface HarnessDefinition {
   id: HarnessId;
   label: string;
-  tier: "native" | "external";
+  tier: "built-in" | "catalogued";
   /** One line a picker can show. */
   summary: string;
   launch: AgentLaunch;
   capabilities: AgentCapabilities;
+  /**
+   * The modes the *agent* offers, for the composer's picker (see `AgentMode` in the protocol).
+   *
+   * Evidence-based, and empty where we genuinely do not know: the lists for the four third-party CLIs
+   * come from Paseo's provider manifest, which drives them every day. Both first-party harnesses are
+   * empty on purpose — they speak ACP, and ACP reports its session modes in the `session/new` response,
+   * so a static list here would be a guess that goes stale.
+   */
+  modes: readonly AgentMode[];
   install?: { hint: string; url?: string };
   /** Where the facts came from. `unverified` means "confirm before relying on it". */
   evidence: string;
@@ -106,20 +176,39 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
   "envoy-harness": {
     id: "envoy-harness",
     label: "Envoy Harness",
-    tier: "native",
+    tier: "built-in",
+    modes: [],
     summary: "EnvoyCoder's built-in agent — structured tools, approvals and sessions.",
     launch: {
-      kind: "in-process",
-      // The one harness EnvoyCoder owns end to end, so it can be linked: this is *our* code, not
-      // somebody else's CLI. It also speaks ACP, which is why the same adapter that drives
-      // DeepSeek Harness can drive it — one integration, two native agents.
-      module: "@envoymesh/envoy-harness",
-      advantages: [
-        "tool calls arrive as events rather than terminal text",
-        "approval prompts can be answered from the UI",
-        "sessions and transcripts are ours to store and resume",
-        "no subprocess: the agent runs in the daemon, so cancel and resume are exact",
-      ],
+      kind: "child-process",
+      // Spawned, like DeepSeek Harness, and driven over the same ACP surface.
+      //
+      // This entry said `in-process` and named `@envoymesh/envoy-harness` as the module to link.
+      // That was wrong on the surface a product may depend on: the package's `exports` map exposes
+      // only `.`, whose entry does not include the ACP server — attaching it means importing
+      // `dist/protocol/acp-server.js` and building a `ProtocolSessionBackend` from the harness's
+      // internals, which is the "depend on the surface, not the internals" mistake the family guide
+      // §4.2 names. The **CLI** offers the same thing as a documented flag: `--acp` serves ACP
+      // JSON-RPC on stdio (`../envoy-harness/packages/envoy-harness/src/cli/argv-help.ts:45`),
+      // reached by the `run` subcommand (`src/cli/run.ts:123-124`).
+      //
+      // Nothing is lost. "In-process" was never what made cancel and approvals exact — speaking a
+      // protocol that *has* `session/cancel` and `session/request_permission` is, and a spawned
+      // agent has that too (`docs/envoycoder-harness.md` §2).
+      binaries: ["envoy-harness", "envoy"],
+      buildArgs: ({ extraArgs }) => ["run", "--acp", ...splitArgs(extraArgs)],
+      stream: "jsonl",
+      transport: "acp",
+      resumeArgs: () => [],
+      // The peer checkout: `agent-catalog` lives at `<repo>/packages/agent-catalog`, and the harness
+      // is cloned beside the repo (`../envoy-harness`). Resolved at probe time against the repository
+      // root, so a machine with the clone but no global install still has a working built-in agent.
+      devCheckout: {
+        entry: () => resolvePeerEntry("envoy-harness", "packages/envoy-harness/dist/cli/acp-stdio.js"),
+        // The entry is already the ACP server: `src/cli/acp-stdio.ts:13-14` runs with `--acp` itself
+        // and filters a duplicate, so only the user's own extra arguments travel.
+        args: ({ extraArgs }) => splitArgs(extraArgs),
+      },
     },
     capabilities: {
       resume: true,
@@ -133,15 +222,20 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
     // Policy: the harness is a **peer** of the family, not a package EnvoyMesh ships
     // (EnvoyMesh design D4). EnvoyCoder clones or copies the harness itself.
     evidence:
-      "EnvoyMesh docs/envoymesh-multi-product-design.md §3 D4 (harness is a peer) and " +
-      "docs/envoymesh-new-app-guide.md §7.5. Package surface: ../envoy-harness (sibling checkout, " +
-      "built by `npm run build:envoy-harness` there).",
+      "Verified from source in ../envoy-harness (peer checkout): the ACP stdio mode is " +
+      "`run --acp` (src/cli/argv-help.ts:45 documents `--acp`; src/cli/run.ts:123-124 dispatches " +
+      "`subcommand === \"run\" && acp` to the ACP server; src/protocol/acp-server.ts implements " +
+      "the dialect). UNVERIFIED at runtime: no `envoy-harness` binary resolves on the machine this " +
+      "was written on, and the package has no exported ACP entry, so a spawn-and-handshake has not " +
+      "been run against it. Peer policy: EnvoyMesh docs/envoymesh-multi-product-design.md §3 D4 and " +
+      "docs/envoymesh-new-app-guide.md §7.5.",
   },
 
   "deepseek-harness": {
     id: "deepseek-harness",
     label: "DeepSeek Harness",
-    tier: "native",
+    tier: "catalogued",
+    modes: [],
     summary: "DeepSeek's harness, driven over ACP — the same adapter as the built-in agent.",
     launch: {
       kind: "child-process",
@@ -158,6 +252,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
         ...splitArgs(extraArgs),
       ],
       stream: "jsonl",
+      transport: "acp",
       resumeArgs: () => [],
     },
     capabilities: {
@@ -189,7 +284,14 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
   claudecode: {
     id: "claudecode",
     label: "Claude Code",
-    tier: "external",
+    tier: "catalogued",
+    modes: [
+      { id: "plan", label: "Plan", description: "Read-only: propose a plan, change nothing.", unattended: false },
+      { id: "default", label: "Always ask" },
+      { id: "acceptEdits", label: "Accept edits", description: "Apply file edits without asking." },
+      { id: "auto", label: "Auto" },
+      { id: "bypassPermissions", label: "Bypass", description: "No prompts at all.", unattended: true },
+    ],
     summary: "Anthropic's Claude Code CLI.",
     launch: {
       kind: "child-process",
@@ -205,6 +307,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
         ...splitArgs(extraArgs),
       ],
       stream: "jsonl",
+      transport: "cli",
       resumeArgs: (sessionId) => ["--resume", sessionId],
     },
     capabilities: {
@@ -226,7 +329,12 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
   codex: {
     id: "codex",
     label: "Codex",
-    tier: "external",
+    tier: "catalogued",
+    modes: [
+      { id: "auto", label: "Default permissions" },
+      { id: "auto-review", label: "Auto-review" },
+      { id: "full-access", label: "Full access", description: "No prompts at all.", unattended: true },
+    ],
     summary: "OpenAI's Codex CLI.",
     launch: {
       kind: "child-process",
@@ -241,6 +349,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
         ...splitArgs(extraArgs),
       ],
       stream: "jsonl",
+      transport: "cli",
     },
     capabilities: {
       resume: false,
@@ -260,13 +369,19 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
   copilot: {
     id: "copilot",
     label: "GitHub Copilot",
-    tier: "external",
+    tier: "catalogued",
+    modes: [
+      { id: "https://agentclientprotocol.com/protocol/session-modes#agent", label: "Agent" },
+      { id: "https://agentclientprotocol.com/protocol/session-modes#plan", label: "Plan", description: "Read-only." },
+      { id: "allow-all", label: "Allow all", unattended: true },
+    ],
     summary: "GitHub Copilot's CLI agent.",
     launch: {
       kind: "child-process",
       binaries: ["copilot"],
       buildArgs: ({ prompt, extraArgs }) => [...splitArgs(extraArgs), "-p", prompt],
       stream: "text",
+      transport: "cli",
     },
     capabilities: {
       resume: false,
@@ -288,7 +403,11 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
   opencode: {
     id: "opencode",
     label: "OpenCode",
-    tier: "external",
+    tier: "catalogued",
+    modes: [
+      { id: "build", label: "Build" },
+      { id: "plan", label: "Plan", description: "Read-only." },
+    ],
     summary: "The open-source OpenCode agent.",
     launch: {
       kind: "child-process",
@@ -300,6 +419,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
         ...splitArgs(extraArgs),
       ],
       stream: "text",
+      transport: "cli",
     },
     capabilities: {
       resume: true,
@@ -320,7 +440,8 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
   cursor: {
     id: "cursor",
     label: "Cursor Agent",
-    tier: "external",
+    tier: "catalogued",
+    modes: [],
     summary: "Cursor's headless agent CLI.",
     launch: {
       kind: "child-process",
@@ -332,6 +453,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
         ...splitArgs(extraArgs),
       ],
       stream: "jsonl",
+      transport: "cli",
     },
     capabilities: {
       resume: false,
@@ -348,16 +470,82 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       "agent-adapter layer; EnvoyCoder needs its own adapter, and this entry is a placeholder for it.",
   },
 
+  /**
+   * **OMP (Oh My Pi)** — a Pi-compatible fork, and the one agent here whose *capabilities* we
+   * deliberately understate.
+   *
+   * What is verified (`paseo/packages/server/src/server/agent/providers/omp/**`, `pi/runtime.ts:119-140`,
+   * `docs/custom-providers.md` §"OMP profiles and Pi-compatible forks"): it is launched as
+   * `<binary> --mode rpc [--model M] [--session S]`, it speaks JSON-RPC over stdio with an initial
+   * `ready` frame (20 s) and a 60 s control-plane deadline, its approvals arrive as `rpc-ui`
+   * permission requests, and its sessions are JSONL under `~/.omp/agent/sessions`.
+   *
+   * What is *not* true yet: our adapter cannot speak that protocol. We spawn a process, pass the prompt
+   * in argv and read a stream; `--mode rpc` needs the prompt written to stdin as JSON-RPC and its
+   * frames mapped. So the capabilities below stay false — not because OMP lacks them (it has cancel,
+   * approvals, structured tools and subagents), but because **we cannot deliver them through the
+   * transport we have**, and a UI that offered an approval dialog for a channel we never read would be
+   * lying to the user.
+   *
+   * "Done" for this entry is one thing: a pi-family RPC transport (`--mode rpc`, write the prompt,
+   * map `ready`/tool/permission frames). That it also fixes `pi` below is the reason it is worth
+   * building rather than special-casing OMP.
+   */
+  omp: {
+    id: "omp",
+    label: "OMP (Oh My Pi)",
+    tier: "catalogued",
+    modes: [
+      { id: "full", label: "Full access", unattended: true },
+      { id: "write", label: "Write approval" },
+      { id: "ask", label: "Always ask" },
+    ],
+    summary: "A Pi-compatible coding agent with multi-provider models, approvals and subagents.",
+    launch: {
+      kind: "child-process",
+      binaries: ["omp"],
+      // The prompt is *not* here: in rpc mode it goes over stdin. Until the transport exists this
+      // argv is what a user would run by hand to see the agent, which is why it is still worth having.
+      buildArgs: ({ extraArgs }) => ["--mode", "rpc", ...splitArgs(extraArgs)],
+      stream: "jsonl",
+      transport: "cli",
+      // `resumeArgs` takes the session id itself (see `AgentLaunch`), which is the JSONL file path
+      // OMP/Pi write under their session directory.
+      resumeArgs: (sessionId) => ["--session", sessionId],
+    },
+    capabilities: {
+      resume: false,
+      cancel: false,
+      approvals: false,
+      structuredTools: false,
+      streaming: true,
+      images: false,
+      worktrees: "external",
+    },
+    install: {
+      hint: "install the OMP (Oh My Pi) CLI so `omp` is on PATH (Paseo ships it as a built-in provider, disabled by default — see their docs/custom-providers.md)",
+    },
+    evidence:
+      "unverified on this machine (no `omp` binary here). Launch/argv, the `ready` handshake, the 60 s " +
+      "control-plane deadline, `rpc-ui` approvals and the `~/.omp/agent/sessions` layout are read from " +
+      "Paseo v0.8.0: server/agent/providers/omp/{runtime,provider-config,rpc-ui-permission-mapper}.ts " +
+      "and providers/pi/runtime.ts:119-140 (`argv.push(\"--mode\", protocolMode)`), plus their " +
+      "docs/custom-providers.md. Capabilities are deliberately conservative: our adapter has no rpc " +
+      "transport, so what OMP *has* and what we can *deliver* are different lists today.",
+  },
+
   pi: {
     id: "pi",
     label: "Pi",
-    tier: "external",
+    tier: "catalogued",
+    modes: [],
     summary: "The Pi coding agent.",
     launch: {
       kind: "child-process",
       binaries: ["pi"],
       buildArgs: ({ prompt, extraArgs }) => [prompt, ...splitArgs(extraArgs)],
       stream: "text",
+      transport: "cli",
     },
     capabilities: {
       resume: false,
@@ -370,22 +558,53 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
     },
     install: { hint: "see pi.dev", url: "https://pi.dev" },
     evidence:
-      "unverified — Paseo lists Pi as supported (README, Prerequisites) and EnvoyMesh runs a Pi " +
-      "runtime in-repo (`packages/harness`), but neither tells us Pi's *CLI* argv. Confirm before use; " +
-      "EnvoyMesh's Pi runtime is a library, so an in-process integration may be the better route here " +
-      "than launching a binary.",
+      "unverified on this machine, and **known to be wrong about the protocol**: Paseo drives Pi as " +
+      "`<binary> --mode rpc [--model M] [--session S]` with JSON-RPC over stdio " +
+      "(providers/pi/runtime.ts:119-140) and `rpc-ui` approvals, while this entry launches it in " +
+      "one-shot text mode and therefore claims no cancel, no approvals and no structured tools. Those " +
+      "claims understate the agent rather than overstate it, which is the safe direction — but the fix " +
+      "is the same pi-family RPC transport the `omp` entry above needs. Until then, treat this entry as " +
+      "\"starts Pi and reads its output\", nothing more.",
   },
 };
 
 /* ────────────────────────────── queries ───────────────────────────── */
 
-export const ALL_HARNESSES: readonly HarnessId[] = [...NATIVE_HARNESSES, ...EXTERNAL_HARNESSES];
+export const ALL_HARNESSES: readonly HarnessId[] = [...BUILT_IN_HARNESSES, ...CATALOGUED_HARNESSES];
 
 export function harnessDefinition(id: HarnessId): HarnessDefinition {
   return HARNESS_CATALOG[id];
 }
 
-export function harnessesByTier(tier: "native" | "external"): HarnessDefinition[] {
+/**
+ * Can the adapter we actually have drive this agent?
+ *
+ * **Being installed is not being drivable**, and conflating the two is how a picker offers six agents
+ * that cannot start. `RunManager` builds an `AcpLaunch` for every harness and hands the process to the
+ * ACP client, so an entry whose program does not speak Agent Client Protocol is not "available but
+ * unverified" — it is a process that will never answer `initialize`.
+ *
+ * This is the honest gate for that: the two harnesses whose argv *is* ACP are drivable today, and each
+ * other entry names what it would need instead (an app-server client, an HTTP bridge, a JSONL-RPC
+ * reader, or a vendor ACP subcommand that this machine's build may not even ship).
+ */
+export function isDrivableByAcpAdapter(id: HarnessId): boolean {
+  const launch = HARNESS_CATALOG[id].launch;
+  return launch.kind === "child-process" && launch.transport === "acp";
+}
+
+/**
+ * What an agent speaks, for a refusal message or a UI that wants to explain the gap.
+ *
+ * `in-process` is a third answer rather than a missing one: a harness mounted as a library inside the
+ * daemon is neither an ACP peer nor a command line, and pretending either would misreport it.
+ */
+export function harnessTransport(id: HarnessId): "acp" | "cli" | "in-process" {
+  const launch = HARNESS_CATALOG[id].launch;
+  return launch.kind === "child-process" ? launch.transport : "in-process";
+}
+
+export function harnessesByTier(tier: "built-in" | "catalogued"): HarnessDefinition[] {
   return ALL_HARNESSES.map(harnessDefinition).filter((entry) => entry.tier === tier);
 }
 
@@ -395,6 +614,16 @@ export interface HarnessProbe {
   available: boolean;
   /** Absolute path we would launch, when it is a child process. */
   binaryPath?: string;
+  /**
+   * How it would be launched.
+   *
+   * `path` is the ordinary case — a binary on `PATH`. `node-script` is the **peer checkout**: the
+   * built-in harness is a peer of the family rather than something EnvoyMesh distributes (design D4,
+   * guide §7.5), so a developer who has cloned it next to this repo can run it without a global
+   * install. The distinction is stated rather than inferred from the extension, because launching
+   * the wrong thing as a script is a failure that reads as "the agent is broken".
+   */
+  via?: "path" | "node-script";
   /** Why it is not available, in end-user language. */
   reason?: string;
 }
@@ -415,6 +644,8 @@ export function probeHarness(
     find?: (name: string) => string | null;
     /** For in-process harnesses: is the module resolvable? */
     moduleAvailable?: (module: string) => boolean;
+    /** Injectable for tests, so probing the peer checkout needs no filesystem. */
+    fileExists?: (path: string) => boolean;
   } = {},
 ): HarnessProbe {
   const platform = options.platform ?? detectPlatform();
@@ -435,15 +666,115 @@ export function probeHarness(
   const find = options.find ?? ((name: string) => findBinary(name, { platform, env: options.env }));
   for (const binary of definition.launch.binaries) {
     const resolved = find(binary);
-    if (resolved) return { id, available: true, binaryPath: resolved };
+    if (resolved) return { id, available: true, binaryPath: resolved, via: "path" };
   }
+
+  // Not on PATH: for a harness we are allowed to run from a clone, look in the peer checkout. This
+  // is what makes `envoy-harness` usable on a development machine without `npm i -g`, and it is the
+  // arrangement the family's guide describes — the product clones the harness itself.
+  const peer = definition.launch.devCheckout;
+  const peerEntry = peer?.entry();
+  if (peerEntry && (options.fileExists ?? defaultFileExists)(peerEntry)) {
+    return { id, available: true, binaryPath: peerEntry, via: "node-script" };
+  }
+
   return {
     id,
     available: false,
     reason:
-      `${definition.label} is not installed (looked for ${definition.launch.binaries.join(", ")} on PATH)` +
+      `${definition.label} is not installed (looked for ${definition.launch.binaries.join(", ")} on PATH` +
+      (peerEntry ? `, and at ${peerEntry}` : "") +
+      ")" +
       (definition.install ? `. ${definition.install.hint}` : ""),
   };
+}
+
+/**
+ * The repository root, found rather than assumed.
+ *
+ * Walking up for the manifest that names *this* workspace is the only honest way to locate a sibling
+ * checkout: a relative path from `import.meta.url` differs between the source tree and `dist/`, and
+ * an environment variable would put the burden on every user. Returns `undefined` when there is no
+ * such manifest — a packaged app has none, and there the peer checkout does not exist either.
+ */
+let cachedRepoRoot: string | null | undefined;
+
+export function repoRoot(): string | null {
+  if (cachedRepoRoot !== undefined) return cachedRepoRoot;
+  const { existsSync, readFileSync } = require("node:fs") as typeof import("node:fs");
+  const { dirname, join } = require("node:path") as typeof import("node:path");
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let depth = 0; depth < 8; depth += 1) {
+    const manifest = join(dir, "package.json");
+    if (existsSync(manifest)) {
+      try {
+        const parsed = JSON.parse(readFileSync(manifest, "utf8")) as { name?: string };
+        if (parsed.name === "envoycoder") {
+          cachedRepoRoot = dir;
+          return dir;
+        }
+      } catch {
+        // A manifest we cannot read is not the one we are looking for.
+      }
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  cachedRepoRoot = null;
+  return null;
+}
+
+/**
+ * Where a peer checkout's file would be, from the repository root.
+ *
+ * `../<peer>/<relative>` — the layout the family guide describes (§7.5: the product clones the
+ * harness beside itself). It returns a path whether or not it exists: `probeHarness` is what checks,
+ * so this stays a pure string function and the probe stays testable without a filesystem.
+ */
+function resolvePeerEntry(peer: string, relative: string): string {
+  const { join, dirname } = require("node:path") as typeof import("node:path");
+  const root = repoRoot() ?? dirname(fileURLToPath(import.meta.url));
+  return join(root, "..", peer, relative);
+}
+
+function defaultFileExists(path: string): boolean {
+  const { existsSync } = require("node:fs") as typeof import("node:fs");
+  return existsSync(path);
+}
+
+/**
+ * Exactly what to run for a harness: the command, and the args *before* the harness's own.
+ *
+ * Separated from `buildHarnessInvocation` because the two answer different questions. That one says
+ * what argv this harness understands; this one says what process to start — which is not the same
+ * answer for a harness living in a peer checkout, where the command is Node and the first argument
+ * is the script.
+ */
+export function resolveHarnessCommand(
+  id: HarnessId,
+  probe: HarnessProbe,
+  input: RunInput,
+): { command: string; args: string[] } {
+  const definition = harnessDefinition(id);
+  if (definition.launch.kind !== "child-process") {
+    throw new Error(`${id} is not a child-process harness, so there is no command to resolve.`);
+  }
+  if (!probe.available || !probe.binaryPath) {
+    throw new Error(
+      probe.reason ?? `${definition.label} is not available on this machine, so it cannot be started.`,
+    );
+  }
+  // `via` comes from the probe, never from the file extension: a harness that happened to end in
+  // `.js` on PATH is still a program to execute directly.
+  if (probe.via === "node-script") {
+    const peer = definition.launch.devCheckout;
+    if (!peer) throw new Error(`${id} was probed as a checkout entry but has none declared.`);
+    // Node runs the entry, and the entry supplies its own mode — so the argv is the *checkout's*,
+    // not the installed CLI's.
+    return { command: process.execPath, args: [probe.binaryPath, ...peer.args(input)] };
+  }
+  return { command: probe.binaryPath, args: definition.launch.buildArgs(input) };
 }
 
 /** The argv to run a task, plus the spawn options that make it killable as a tree. */
@@ -503,3 +834,5 @@ export function splitArgs(raw: string | undefined): string[] {
   if (current) out.push(current);
   return out;
 }
+
+export * from "./acp-catalog.js";

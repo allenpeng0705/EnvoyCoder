@@ -2,7 +2,7 @@
   "name": "envoycoder",
   "private": true,
   "version": "0.1.0",
-  "description": "EnvoyCoder — the control plane for coding agents, in the EnvoyMesh apps group",
+  "description": "EnvoyCoder \u2014 the control plane for coding agents, in the EnvoyMesh apps group",
   "license": "UNLICENSED",
   "type": "module",
   "engines": {
@@ -11,7 +11,7 @@
   "workspaces": [
     "packages/protocol",
     "packages/platform",
-    "packages/workspace-model",
+    "packages/task-model",
     "packages/agent-catalog",
     "packages/host-bridge",
     "apps/desktop"
@@ -31,11 +31,16 @@
     "tauri:build:win": "npm run tauri:build:win -w @envoycoder/desktop",
     "tauri:build:linux": "npm run tauri:build:linux -w @envoycoder/desktop",
     "mobile:check": "node scripts/check-mobile.mjs",
-    "gates": "npm run peers:check && npm run wiring:check && npm run docs:check && node scripts/check-src-clean.mjs && node scripts/check-mobile.mjs && tsc -b && tsc -b tsconfig.unchecked.json && vitest run",
+    "gates": "npm run peers:check && npm run wiring:check && npm run docs:check && node scripts/check-src-clean.mjs && node scripts/check-mobile.mjs && npx tsc -b && npx tsc -b tsconfig.unchecked.json && vitest run && npm run rust:test",
     "wiring:check": "node scripts/check-wiring.mjs",
+    "app:restart": "node scripts/restart-app.mjs",
+    "app:stop": "node scripts/restart-app.mjs --stop-only",
     "docs:check": "node scripts/check-family-docs.mjs",
     "docs:sync": "node scripts/sync-family-docs.mjs",
-    "upgrade:mesh": "node scripts/upgrade-mesh.mjs"
+    "upgrade:mesh": "node scripts/upgrade-mesh.mjs",
+    "daemon:build": "npm run daemon:build -w @envoycoder/desktop",
+    "rust:test": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml",
+    "run": "tsx scripts/run-once.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

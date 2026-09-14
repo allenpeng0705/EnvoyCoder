@@ -9,11 +9,16 @@
 
 | Tier | Members | What it means |
 |---|---|---|
-| **native** | `envoy-harness`, `deepseek-harness` | we own the integration end to end: structured tool calls, approvals, sessions, cancel |
+| **native** | `envoy-harness`, `deepseek-harness` | we own the integration end to end: structured tool calls, approvals, sessions, cancel — both reach us by spawning their CLI in ACP mode |
 | **external** | `claudecode`, `codex`, `copilot`, `opencode`, `cursor`, `pi` | a third-party CLI we launch and interpret. The set mirrors what Paseo supports, because that is the baseline a user arrives with |
 
 The tier is not decoration — it is what the UI is allowed to promise. An agent we cannot cancel and
 cannot ask on gets a terminal and a prompt, not a diff panel and an approval dialog.
+
+Both native harnesses are launched the same way, which is not a coincidence but the whole reason the
+catalogue records a *dialect*: `packages/agent-catalog` holds the argv, `apps/desktop/src/daemon/acp`
+holds the client, and `apps/desktop/src/daemon/runs.ts` holds the normalization. Adding an agent that
+speaks ACP is a catalogue entry.
 
 **The capability that matters most is `approvals`.** An agent whose surface cannot answer a
 permission request will *silently deny* every escalation: DeepSeek Harness's SDK profile does exactly
@@ -34,8 +39,15 @@ catalogue.
 
 ## 3. `envoy-harness` — our built-in agent
 
-* **How:** in-process (`@envoymesh/envoy-harness`). It is *our* code, so it can be linked rather than
-  spawned, which makes cancel and resume exact rather than best-effort.
+* **How:** spawned, and driven over ACP: `envoy-harness run --acp`
+  (`../envoy-harness/packages/envoy-harness/src/cli/argv-help.ts:45`, dispatched at
+  `src/cli/run.ts:123-124`). This said "in-process (`@envoymesh/envoy-harness`)" until M2, and that
+  claim did not survive contact with the package's own surface: `exports` maps only `.`, and the
+  entry point does not include the ACP server, so attaching it means importing
+  `dist/protocol/acp-server.js` and hand-building a `ProtocolSessionBackend` — depending on internals
+  rather than a surface, which the family guide §4.2 forbids. The CLI flag is the public route to the
+  same server, so **one ACP client drives both native harnesses** and a third-party agent that speaks
+  ACP needs no new code at all.
 * **Where it comes from:** a **peer** of the family, not a package EnvoyMesh distributes. EnvoyCoder
   clones or copies it itself (EnvoyMesh design **D4**; guide §7.5). `npm run peers:check` says so in
   the error message when it is missing.
