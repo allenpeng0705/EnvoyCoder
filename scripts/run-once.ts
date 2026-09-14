@@ -225,7 +225,11 @@ try {
 } finally {
   await daemon.stop();
   await rm(home, { recursive: true, force: true });
-  if (!args.workspace) await rm(workDir, { recursive: true, force: true });
+  // Only the directory this script made is removed. `--dir` names a directory of the user's, and the
+  // condition used to read `args.workspace` — a field that does not exist (it was a compile error in
+  // `tsconfig.unchecked`, and at runtime `undefined` every time, so `--dir` deleted the user's
+  // directory on the way out).
+  if (!args.dir) await rm(workDir, { recursive: true, force: true });
 }
 
 process.exit(exitCode);
