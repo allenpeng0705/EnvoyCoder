@@ -107,7 +107,9 @@ body {
      `-webkit-app-region` pair that used to live here is Electron's mechanism: Tauri ignores it, so the
      window could not be moved by this bar, and on the engines that *do* honour it a drag region swallows
      the mouse events of everything inside — which is why the controls here could not be tapped either.
-     Interactive children need no opt-out now: the attribute binds to the element that carries it. */
+     Interactive children need no opt-out now: the attribute binds to the element that carries it — but it
+     only fires for the element actually pressed, which is why the bar's children carry it too and why
+     `client/window-drag.ts` asks for the drag explicitly. */
 }
 
 /* **The macOS traffic lights float over the webview** (`titleBarStyle: "Overlay"`), so a bar that starts

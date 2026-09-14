@@ -29,6 +29,7 @@ import { wiredBindings } from "../input/shortcuts.js";
 import type { Project, Task } from "@envoycoder/protocol";
 import { taskTitleFromPrompt } from "@envoycoder/task-model";
 
+import { startWindowDrag } from "../client/window-drag.js";
 import { useT } from "../i18n/context.js";
 import { localNotice, localize, localizeText, type Notice } from "../i18n/notice.js";
 import { CoderSidebar } from "./CoderSidebar.js";
@@ -381,7 +382,14 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
           mechanism and Tauri ignores it, which is why this bar could not move the window at all — and why
           the same rule swallowed clicks on the controls inside it. The attribute applies to the element it
           is set on, so the buttons in this row stay clickable. */}
-      <header className="titlebar" data-tauri-drag-region>
+      <header
+        className="titlebar"
+        data-tauri-drag-region
+        /* Tauri's attribute only fires when the *pressed element* carries it, and this bar is covered by
+           its children — so the drag is asked for explicitly. A press on a control returns false and the
+           control behaves normally. */
+        onMouseDown={(event) => startWindowDrag(event)}
+      >
         <button
           type="button"
           className="button button--ghost button--icon"
@@ -391,8 +399,8 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
         >
           ▤
         </button>
-        <span className="titlebar__title">{t("app.name")}</span>
-        <span className="titlebar__spacer" />
+        <span className="titlebar__title" data-tauri-drag-region>{t("app.name")}</span>
+        <span className="titlebar__spacer" data-tauri-drag-region />
         <ConnectionChip state={state} />
         <button
           type="button"

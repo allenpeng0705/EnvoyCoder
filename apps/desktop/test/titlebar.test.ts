@@ -14,7 +14,9 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { canDragWindow, startWindowDrag } from "../src/client/window-drag.js";
 
 const root = join(__dirname, "..");
 const css = readFileSync(join(root, "src/styles.css"), "utf8");
@@ -23,7 +25,7 @@ const main = readFileSync(join(root, "src/main.tsx"), "utf8");
 
 describe("the title bar", () => {
   it("is a drag region the way Tauri reads one", () => {
-    expect(app).toMatch(/<header className="titlebar"[^>]*data-tauri-drag-region/);
+    expect(app).toMatch(/<header[\s\S]{0,200}?className="titlebar"[\s\S]{0,200}?data-tauri-drag-region/);
   });
 
   it("never goes back to Electron's mechanism, which Tauri ignores", () => {
@@ -35,5 +37,59 @@ describe("the title bar", () => {
     expect(css).toMatch(/:root\[data-os="macos"\] \.titlebar\s*\{[^}]*padding-left/);
     // …which needs the platform signal to exist at all, or the rule above is dead code that looks alive.
     expect(main).toMatch(/dataset\.os\s*=/);
+  });
+});
+
+describe("moving the window from its own bar", () => {
+  afterEach(() => {
+    delete (globalThis as { __TAURI__?: unknown }).__TAURI__;
+  });
+
+  /** A press target: `hasControl` decides whether it sits inside an interactive element. */
+  function target(hasControl: boolean): EventTarget {
+    return { closest: () => (hasControl ? {} : null) } as unknown as EventTarget;
+  }
+
+  function withShell(): ReturnType<typeof vi.fn> {
+    const startDragging = vi.fn(async () => undefined);
+    (globalThis as { __TAURI__?: unknown }).__TAURI__ = {
+      window: { getCurrentWindow: () => ({ startDragging }) },
+    };
+    return startDragging;
+  }
+
+  it("drags when the press lands on the bar itself", () => {
+    const startDragging = withShell();
+    expect(startWindowDrag({ target: target(false), button: 0 })).toBe(true);
+    expect(startDragging).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a control's click alone", () => {
+    // The reason this is a behaviour rather than an attribute: a bar whose controls are also a drag region
+    // is a bar whose buttons cannot be pressed.
+    const startDragging = withShell();
+    expect(startWindowDrag({ target: target(true), button: 0 })).toBe(false);
+    expect(startDragging).not.toHaveBeenCalled();
+  });
+
+  it("ignores a press that is not the primary button", () => {
+    const startDragging = withShell();
+    expect(startWindowDrag({ target: target(false), button: 2 })).toBe(false);
+    expect(startDragging).not.toHaveBeenCalled();
+  });
+
+  it("is inert in a window that is not our shell", () => {
+    // The browser dev server and the served build have no `__TAURI__`; a handler that threw here would
+    // break every press of the bar in the place this app is developed.
+    expect(canDragWindow()).toBe(false);
+    expect(startWindowDrag({ target: target(false), button: 0 })).toBe(false);
+  });
+
+  it("carries the attribute on the children a press actually lands on", () => {
+    // Tauri's own handler fires only for the pressed element, and this bar is covered by its children —
+    // the bug that made the first fix look right and do nothing.
+    expect(app).toMatch(/className="titlebar__title" data-tauri-drag-region/);
+    expect(app).toMatch(/className="titlebar__spacer" data-tauri-drag-region/);
+    expect(app).toMatch(/onMouseDown=\{\(event\) => startWindowDrag\(event\)\}/);
   });
 });
