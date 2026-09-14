@@ -121,7 +121,8 @@ attention count), `RowMenu` (the `…` on a project row and on a task row: its i
 contract, and the inline question a destructive item asks), `TaskPane` (header facts, transcript,
 inline approval, composer with Queue/Steer), `CommandCenter` (typed `action`/`choice`
 contributions, arguments collected in the same box), `SettingsPane` (app-wide defaults, per-agent
-capability honesty, and the projects list that opens one project's own defaults), `MeshStatusBar` (mesh
+capability honesty, and the three levels of its own navigation: this machine's settings, the projects
+page, and one project's defaults), `MeshStatusBar` (mesh
 state in end-user words), and the store behind them:
 
 ```
@@ -153,9 +154,11 @@ One more, added with the row menus and worth stating because it is a decision ra
   one home is one sentence to keep true. The sentence is `task.remove.*`, unchanged, and the
   destructive colour exists only inside the confirmation (law 3), never on the row and never in the
   menu. `docs/settings-parity.md` §7.3's project scope (built as §8.1 item 2) is reached from the row's
-  menu — one item in it — **and** from the app scope's own projects list, which is the same function
-  behind both (§7.5); the scope names the project in its title and carries a back control labelled with
-  the destination it returns to.
+  menu — one item in it — **and** from the projects page, which is the same function behind both (§7.5);
+  the scope names the project in its title and carries a back control labelled with the destination it
+  returns to (*"Projects"*, not *"All settings"* — the list, which is where it actually lands). The page
+  itself is one level down from the app scope, opened by a single row whose second band is how many
+  projects there are, so the list grows with the projects and the app scope does not.
 
 The transcript is real as of M2, and its **folding rules are not in the component**:
 

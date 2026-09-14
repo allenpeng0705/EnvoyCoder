@@ -25,8 +25,12 @@ green run.
 **The `file:line` citations are the snapshot taken when each entry was written, and they are re-derived
 rather than trusted.** Code moves for reasons that have nothing to do with settings: the row-menu work
 (§8.1 item 2's control became a menu — `components/RowMenu.tsx`) moved lines in `CoderApp.tsx`,
-`CoderSidebar.tsx` and `TaskPane.tsx`, and earlier slices moved others. A citation that no longer lands
-on the call it names is stale, not evidence against the entry; read the line around it.
+`CoderSidebar.tsx` and `TaskPane.tsx`; the three-level navigation of §7.5 moved every citation into
+`SettingsPane.tsx` (so `:382-478` is now `:497-598`, and the rows listed in §7.1 all sit 50–70 lines
+further down) **and split the pane's frame out into `components/SettingsShell.tsx`**, which is where the
+header, the back control, the daemon chips and the notes now live; and earlier slices moved others. A
+citation that no longer lands on the call it names is stale, not evidence against the entry; read the
+line around it.
 
 ---
 
@@ -475,9 +479,12 @@ for {project}"*, and *"Project settings"* is an item inside it that carries the 
 **And this is the section Paseo keeps its projects list in, so it is where ours went.** The app scope
 now carries a **Projects** section: one row per registered project, the label over the path in the same
 two bands every setting row uses, and pressing a row opens *that* project's settings in the same pane
-(`SettingsPane.tsx:297-335`; the row shape is `SettingNavRow`, `SettingsRows.tsx:112-136`). A project's
+(`SettingsPane.tsx:359-377`; the row shape is `SettingNavRow`, `SettingsRows.tsx:112-136`). A project's
 scope carries a back control that names its destination — *"All settings"* — instead of leaving Close as
-the only way out (`SettingsPane.tsx:411-415`, rendered `:619-633`). §7.5 is the whole model, stated once.
+the only way out (`SettingsPane.tsx:559-563`, rendered `SettingsShell.tsx:50-60`). §7.5 is the whole
+model, stated once.
+The list itself is now level 2 (`SettingsPane.tsx:444-493`), with the app scope keeping one row
+(`:359-377`).
 The section is **navigation only**: a project's own rows stay in the project scope, because a control
 that edits a project under the heading *Settings* is a control labelled with a scope it does not have.
 
@@ -702,13 +709,13 @@ below to them.
 
 | field | declared | default | rendered | **read by** | honest? |
 |---|---|---|---|---|---|
-| `language?: CoderLanguage` | `domain.ts:768` | `"system"` (`:775`; list `:722`) | `SettingsPane.tsx:164-188` | `main.tsx:33` — `I18nProvider preference={state.settings.language ?? "system"}`, which re-renders every `t()` in the window | **yes** |
-| `defaults: TaskDefaults` → `harness?` | `domain.ts:743` (`:185-191`) | `"envoy-harness"` (`:772`) | `SettingsPane.tsx:218-243` (app) and `:430-451` (project) | `store.ts:342` → `resolveTaskDefaults` (`packages/task-model/src/index.ts:88-105`): explicit → project → **app default** → fallback (`:98`) | **yes** |
-| `defaults.model?` | `domain.ts:188` | — | `SettingsPane.tsx:249-262` (app) and `:453-463` (project), through the composer's own `ModelChoice` | `task-model/src/index.ts:101` reads it; the controls write it | **yes** — slice 1 closed the gap the old verdict named: the resolver honoured it and now something can set it |
-| `defaults.extraArgs?` | `domain.ts:190` | — | `SettingsPane.tsx:262-273` (app) and `:464-475` (project) | `task-model/src/index.ts:103` reads it; the controls write it | **yes** — as above |
-| `keepTranscripts: boolean` | `domain.ts:759` | `true` (`:774`) | `SettingsPane.tsx:284-295` | `runs.ts:797` — `appendTranscript` returns early when false, so the JSONL record is deliberately not kept | **yes** |
-| `requireApprovalForDestructive: boolean` | `domain.ts:757` | `true` (`:773`) | `SettingsPane.tsx:277-283`, a **disabled-with-reason** row for an agent that cannot be told (`ApprovalRow`, `:562-598`) | `runs.ts:298-301` reads it per run and `resolveApprovalPolicy` (`run-options.ts:231-237`) maps it onto the agent's own session policy: `true` → `session/set_policy {autoRun: "always-confirm"}`, `false` → `{autoRun: "off"}`. `runs.test.ts` proves both positions reach the agent over a real pipe, and that nothing is sent to an agent whose catalogue entry says it cannot be told | **yes** — in the direction the row's wording promises. The row's note says which agent it reaches; "ask before **anything** destructive" is the strict value, and §7.2 says why `safe-only` is deliberately not used for it |
-| `defaultProjectPath?: string` | `domain.ts:741` | — | `SettingsPane.tsx:195-214` | `CoderApp.tsx:224-226` hands it to `buildCommandContributions`, whose `project.add` row seeds its text stage with it (`CommandCenter.tsx:425-435`, entered through `stageInto` `:146-155`). `palette-flow.test.tsx` asserts the seeded field and the empty field | **yes** — it is the folder "Add project…" starts from, which is what its row says |
+| `language?: CoderLanguage` | `domain.ts:768` | `"system"` (`:775`; list `:722`) | `SettingsPane.tsx:226-250` | `main.tsx:33` — `I18nProvider preference={state.settings.language ?? "system"}`, which re-renders every `t()` in the window | **yes** |
+| `defaults: TaskDefaults` → `harness?` | `domain.ts:743` (`:185-191`) | `"envoy-harness"` (`:772`) | `SettingsPane.tsx:280-305` (app) and `:538-569` (project) | `store.ts:342` → `resolveTaskDefaults` (`packages/task-model/src/index.ts:88-105`): explicit → project → **app default** → fallback (`:98`) | **yes** |
+| `defaults.model?` | `domain.ts:188` | — | `SettingsPane.tsx:311-320` (app) and `:571-580` (project), through the composer's own `ModelChoice` | `task-model/src/index.ts:101` reads it; the controls write it | **yes** — slice 1 closed the gap the old verdict named: the resolver honoured it and now something can set it |
+| `defaults.extraArgs?` | `domain.ts:190` | — | `SettingsPane.tsx:324-335` (app) and `:582-593` (project) | `task-model/src/index.ts:103` reads it; the controls write it | **yes** — as above |
+| `keepTranscripts: boolean` | `domain.ts:759` | `true` (`:774`) | `SettingsPane.tsx:346-357` | `runs.ts:797` — `appendTranscript` returns early when false, so the JSONL record is deliberately not kept | **yes** |
+| `requireApprovalForDestructive: boolean` | `domain.ts:757` | `true` (`:773`) | `SettingsPane.tsx:339-344`, a **disabled-with-reason** row for an agent that cannot be told (`ApprovalRow`, `:680-713`) | `runs.ts:298-301` reads it per run and `resolveApprovalPolicy` (`run-options.ts:231-237`) maps it onto the agent's own session policy: `true` → `session/set_policy {autoRun: "always-confirm"}`, `false` → `{autoRun: "off"}`. `runs.test.ts` proves both positions reach the agent over a real pipe, and that nothing is sent to an agent whose catalogue entry says it cannot be told | **yes** — in the direction the row's wording promises. The row's note says which agent it reaches; "ask before **anything** destructive" is the strict value, and §7.2 says why `safe-only` is deliberately not used for it |
+| `defaultProjectPath?: string` | `domain.ts:741` | — | `SettingsPane.tsx:257-276` | `CoderApp.tsx:224-226` hands it to `buildCommandContributions`, whose `project.add` row seeds its text stage with it (`CommandCenter.tsx:425-435`, entered through `stageInto` `:146-155`). `palette-flow.test.tsx` asserts the seeded field and the empty field | **yes** — it is the folder "Add project…" starts from, which is what its row says |
 | ~~`allowRemoteRuns: boolean`~~ | **removed** — was `domain.ts:734` | — | **removed** — was `SettingsPane.tsx:147-158` | — | **gone, not disabled.** Its effect could not exist: there is no remote-run path, and `coder.offerRemoteRun` was a spec with no handler and no caller. A disabled row would have promised a feature on this pane's terms rather than the mesh's; §7.2 records what a returning version needs first. `coder.offerRemoteRun` came out of the catalogue with it (`protocol/src/rpc.ts`), and `RETIRED_SETTINGS_KEYS` (`domain.ts:832`) strips the old key so an upgrading user's settings file is not quarantined over a value nothing read |
 
 **All eight entries are honest now, and the verdicts are not "the pane has a row for it".** Every one of
@@ -829,8 +836,10 @@ against the rest of the app, each with its present state:
    slice in §8.1, which takes it to eleven.
    **Now:** four headings — *General*, *New tasks start with*, *Safety* and *Projects* — plus the two
    read-only groups below them, unchanged. Still not a copied sidebar, and it should not become one
-   until the pane is four times this size. *Projects* is the one group that is not a setting: it is the
-   list that opens each project's own scope (§7.5).
+   until the pane is four times this size. *Projects* is the one group that is not a setting: it is a
+   single row — the count of registered projects as its second band — that opens the list, which is now
+   a level of its own (§7.5). The list outgrew the group: with thirty projects it was thirty rows of
+   other people's folders sitting between *Keep transcripts* and the agent list.
 2. **"Project settings" opens app settings.** `CoderSidebar.tsx` rendered a per-project `⋯` button
    whose accessible name was *"Project settings for {project}"* (`sidebar.project.settings.aria`,
    interpolated with the project label) and whose handler was
@@ -839,18 +848,20 @@ against the rest of the app, each with its present state:
    scope it does not have. (That key is gone: the control is a row menu now, so its trigger is named
    *"Actions for {project}"* and *"Project settings"* is the item inside it —
    `components/RowMenu.tsx`, `CoderSidebar.tsx`.)
-   **Now:** the action carries the project through (`openProjectSettings`, `CoderApp.tsx:163-175`) and
-   the pane renders that project's defaults (`SettingsPane.tsx:382-478`), which is the third scope
+   **Now:** the action carries the project through (`openProjectSettings`, `CoderApp.tsx:175-177`) and
+   the pane renders that project's defaults (`SettingsPane.tsx:497-598`), which is the third scope
    §7.4 said had no screen. `coder.updateProject` gained the defaults patch it needed for it
    (`packages/protocol/src/rpc.ts:1093-1107`, `store.ts:293-308`). The shell holds the project's **id**
    and resolves it against `state.projects` on every render, rather than keeping the object it was
-   handed — `CoderApp.tsx:128-172` says why that is load-bearing, and `test/settings-scope.test.tsx`
+   handed — `CoderApp.tsx:134-177` says why that is load-bearing, and `test/settings-scope.test.tsx`
    fails on a snapshot: because a project's defaults *replace*, a snapshot meant the second edit in a
    session wrote the first one away.
    **And since then, the other half of the same defect:** the scope was reachable *only* from the rail,
    and leaving it was possible only by closing the pane — a scope you can enter once and cannot leave.
-   The app scope now lists the projects and opens each one's scope from inside the pane, and the project
-   scope has a back control. §7.5 is that model.
+   The app scope then grew a Projects section listing every project; **that list is now a level of its
+   own**, reached from one row, because a list that grows with the number of projects does not belong
+   inside a page of settings. Three levels in one pane, each with a back control that names its
+   destination. §7.5 is that model, in one place.
 3. **The daemon's notes are the best thing in the pane, and they are not a setting.** The quarantined
    file list (`store.ts:249-251`, rendered `SettingsPane.tsx:562-575`) is what a settings page should do
    with a problem: say what happened, in the user's language, at the bottom, and do not offer a switch
@@ -871,49 +882,112 @@ Recorded because both are in shipped comments and would be repeated by the next 
   as "two scopes" and our own as three. True, and at the time of writing the third scope (per project)
   had **no screen either** — the same gap as Paseo's `projects` section, and the same live bug as
   §7.3.2. Slice 1 gave it one: the sidebar's per-project `⋯` button now opens the project's own defaults
-  in the same pane (`SettingsPane.tsx:382-478`), written through `coder.updateProject`, and the app
-  scope's *Projects* section opens the same scope with a back control that returns (§7.5).
+  in the same pane (`SettingsPane.tsx:497-598`), written through `coder.updateProject`, and level 1's
+  *Projects* row opens the list, whose rows open the same project scope with a back control that returns
+  (§7.5).
 
-### 7.5 The settings navigation model — two scopes, two ways in, one way back
+### 7.5 The settings navigation model — three levels, one pane, and two back controls that differ
 
 Paseo's app settings hold a **`projects`** section whose rows are the way into each project's own
-settings (`screens/projects-screen.tsx:115` → the separate `project-settings-screen.tsx`), while the app's
-own settings sit where they always did. We build the same model rather than a second one, and this is it
-in one place.
+settings (`screens/projects-screen.tsx:115` → the separate `project-settings-screen.tsx`). We build the
+same model rather than a second one, and this is it in one place.
 
-**The two endpoints.**
+**The list became its own level, and the reason is arithmetic.** With three projects a list at the end of
+the app scope fits; with thirty it is thirty rows of other people's folders between *Keep transcripts*
+and the agent list, and the settings a user came for are somewhere above them. So the block that used to
+be inline is now a page reached from a single row, which is also the shape Paseo's settings actually
+have (a section is a page with a back affordance, not a block of rows on the page you were reading).
+Three levels, one pane:
 
-* **This machine's settings** — the app scope. Entered from the footer's Settings button at the bottom of
-  the rail, or with `⌘,` (both call `openAppSettings`, `CoderApp.tsx:159-162`). It holds the machine's
-  defaults, and its **Projects** section lists every project from `state.projects`: the label, the path
-  as the quieter second line, and nothing else — no project row is editable here.
-* **One project's settings** — the project scope. Its rows are that project's `defaults`, and its title
-  names the project (*"Project settings for api"*).
+| level | title | reached from | back control |
+|---|---|---|---|
+| 1 — this machine's settings | *Settings* | the footer's Settings button, or `⌘,` (both `openAppSettings`, `CoderApp.tsx:165`) | none: it is the root |
+| 2 — the projects page | *Projects* | the **Projects** row at level 1 (`SettingsPane.tsx:359-378`) | *← All settings* (`settings.back`), level 1 |
+| 3 — one project's settings | *Project settings for api* | a row of level 2, or the rail's project `…` menu | *← Projects*, level 2 |
 
-**The two ways in are one function.** The rail's project row `…` → *"Project settings"*
-(`sidebar.project.settings`, `RowMenu.tsx`), and a row in the app scope's Projects list. Both call
-`openProjectSettings` (`CoderApp.tsx:163-175`), so the two routes cannot come to mean different things —
-and the *"Project settings for {project}"* the list row announces as its accessible name is the same key
-the pane's heading uses, because one place has one name. The list's rows are `SettingNavRow`
-(`SettingsRows.tsx:112-136`): the whole row is the control, in the same two bands as every setting above
-it, with a muted `›` at the end so it reads as navigation rather than as text.
+**The scope is data, not a prop plus a flag.** `apps/desktop/src/state/settings-scope.ts` owns it:
+`{ kind: "app" } | { kind: "projects" } | { kind: "project", id }` (`:60-77`), with `APP_SCOPE` and
+`PROJECTS_SCOPE` as shared constants. `CoderApp` holds **one** value of it — `SettingsScope | undefined`,
+where `undefined` is "the pane is closed" (`CoderApp.tsx:164`) — so "which level" and "is it open" are
+one piece of data. The previous shape was a `project?: Project` prop whose *absence* meant the app scope:
+a boolean with a payload welded to it, in which the third level was **not expressible** (a caller that
+wanted the projects page would have rendered the app scope instead), and in which the payload was a
+snapshot of a project whose `defaults` **replace** rather than merge. The pane takes the scope plus
+**one** callback, `onNavigate` (`SettingsPane.tsx:176-195`), rather than a callback per destination: a row
+says *where* it goes, as a value, and the shell stores it.
 
-**One way back, and it says where it goes.** The project scope's header carries a back control labelled
-*"All settings"* — the destination, not the direction, and not a bare chevron — wired to the same
-`openAppSettings` the footer button and `⌘,` call (`SettingsPane.tsx:411-415`, rendered `:619-633`).
-Closing the pane still leaves, as it always did; removing the project *while* its scope is open falls back
-to the app scope (`CoderApp.tsx:203-212`), which is the same live-resolution rule that keeps a snapshot
-from being written back over a project's other defaults.
+**The live resolution survived the restructure, and it is still the load-bearing part.** The scope holds
+an **id**; `scopeProject` (`settings-scope.ts:108-114`) resolves it against `state.projects` on every
+render, which is why a second edit carries the first (`test/settings-scope.test.tsx:274`, verified
+against a deliberate "resolve it once and hold it" mutation). `scopeProjectId` (`:99-106`) is what a write
+is addressed to, so a write can never be aimed at a project that is not there.
 
-**Why the two callbacks are required props, not optional ones.** A caller that renders the list without a
-destination is a list of rows that press into nothing, which is this pane's founding defect
-(`docs/paseo-feature-parity.md` §"The one class of exception"). Required props make that unrepresentable:
-the type checker is the guard, and `settings-language.test.tsx`'s standalone render had to be given
-stubs when its type changed.
+**Two back controls, and they must not say the same thing.** Level 3's returns to the *list*, so it says
+**"Projects"** — and its label is not a new string: it is the level-2 page's **own title**
+(`settings.projects.title`), the same rule the project rows follow for their accessible names, one place
+with one name (`SettingsPane.tsx:530-532`). Level 2's returns to this machine's settings, so it says
+**"All settings"** — the existing `settings.back` pair, which is where it always pointed
+(`SettingsPane.tsx:456-460`). A single control labelled "All settings" that landed on the list would be a
+lie of exactly the kind §7.2 removed. `settings.back.title` lost its stale tail ("and the list of
+projects") in all seven catalogues for the same reason: level 1 does not hold that list any more.
 
-**What this is not.** No breadcrumb chain, no settings sidebar of our own, no per-project *pages*: one
-pane, two scopes, and the list of projects as the only thing between them. That is Paseo's shape at
-Paseo's scale, and this pane is a fraction of it.
+**When the project you are looking at disappears, the pane lands on the projects page.**
+`resolveScope` (`settings-scope.ts:86-89`) is the whole rule, and it is the sentence a user already knows:
+*when the thing you are looking at disappears, the pane does what the back control would have done.* It is
+applied on **every render**, so both cases are covered — removed in another window, or removed from its own
+`…` menu while its settings are open (`CoderApp.tsx:206-216` moves the scope down a level itself, so the
+fallback happens in the same paint as the removal rather than after the daemon's refetch). The rejected
+alternative was the app scope, and the reason is *not* symmetry: the app scope **loses the user's place**
+— it skips a level and leaves them reading this machine's defaults with no list in front of them to pick
+the project they meant, while the projects page is the level that lists the thing that vanished. Falling
+back uniformly rather than by remembering the entry route is deliberate for the same reason the two routes
+into level 3 are one function: an answer that depends on where the user came from is a second piece of
+state, and a second piece of state is a second thing that can disagree with the screen.
+`test/settings-scope.test.tsx:302` and `:344` assert it both ways, and `:637` asserts it without a pane in
+the way.
+
+**The count band tells the truth about a list nobody could read.** A count is a claim about the list, and
+`state.projects` is an empty array for two different reasons — nobody has added a project, or this window
+never managed to read them. So the band is four strings rather than one
+interpolated `{count} projects`: *"40 projects"*, *"1 project"*, *"No projects"*, and *"Could not be
+read"* when the shell's own `projectsUnavailable` says why the list is empty (`CoderApp.tsx:255-263`, the
+value the rail already renders as *"Could not read your projects"*). Level 2 says the same thing in the
+rail's own words — `sidebar.empty.cannotLoadTitle`/`cannotLoadBody` plus the reason — instead of teaching
+what a project is, because *"No projects yet. A project is a folder…"* answers "why is this empty?" and the
+honest answer is "it is not empty, it is unknown". This was found by rendering it, not by reasoning: a
+window with the daemon stopped said **"No projects"** in the pane while the rail beside it said **"Could not
+read your projects"** — one list described two ways in one window. `test/settings-scope.test.tsx` now pins
+the fixed pair, including that the sentence appears *twice* (once per surface) because one value has two
+readers.
+
+**With many projects: the body scrolls and the header stays put, and nothing is windowed.** Level 2 is a
+plain list of `<li>`s in the pane's own scrolling body (`.settings`, `overflow-y: auto`, inside
+`.pane { grid-template-rows: auto 1fr auto }`), so the back control and the pane title stay on screen while
+the list moves under them. No virtual list, no paging, no search — this pane has never needed any, and a
+list of a few hundred folders is where a filter would go, not a windowing library. The **testable** half of
+that is asserted (`test/settings-scope.test.tsx:470`: forty projects, forty rows in the DOM, each with its
+own path); the scrolling half is **measured in a real window** rather than asserted, because jsdom has no
+layout to measure. Measured 2026-09-14 with Chrome over CDP at 1440×900, forty projects: the body's
+`scrollHeight` 4560 vs its `clientHeight` 812 (it scrolls), the header's `top` 0 before and after scrolling
+the body to 3000 (it does not move), and no horizontal overflow at any of the three levels.
+
+**Why `onNavigate` is a required prop, not an optional one.** A caller that renders the Projects row
+without a destination is a control that presses into nothing, which is this pane's founding defect
+(`docs/paseo-feature-parity.md` §"The one class of exception"). Required makes it unrepresentable: the type
+checker is the guard, and `settings-language.test.tsx`'s standalone render had to be given a scope and a
+navigation callback when its type changed — which is how the requirement announced itself in this
+restructure.
+
+**Where the code lives, and why it is three files.** `components/SettingsPane.tsx` is the three levels
+(the `switch` on the scope, and the rows each one holds — 773 lines), `components/SettingsShell.tsx` is the
+frame they all render through (title, back control, daemon chips, the scrolling body, and the daemon's
+notes — 129 lines), and `components/SettingsRows.tsx` is the row shapes they are built from. The split is
+along the line the code already had, and it happened because adding level 2 pushed the pane past this
+repo's own rule (*"past ~800 lines, split it"*, `AGENTS.md`): the frame's five props were being passed
+identically by three levels, which is a component rather than a block of JSX.
+
+**What this is not.** No breadcrumb chain, no settings sidebar of our own, no routes: one pane, three
+levels, one row down and one back control up at each step. That is Paseo's shape at Paseo's scale.
 
 ---
 
@@ -965,14 +1039,14 @@ not, and three more fields were read by the app with no control writing them.
   from `TaskDefaults`. The composer already carries a per-task model (`TaskPane.tsx:102-104`), so the row
   exists — only the app-level default is missing.
   **Outcome — controls, at both scopes.** The app scope gets a model row and an extra-args row beside
-  the default agent (`SettingsPane.tsx:249-273`) and so does the project scope (`:453-475`), sharing
+  the default agent (`SettingsPane.tsx:311-335`) and so does the project scope (`:571-593`), sharing
   `ModelChoice` with the composer so the three model controls cannot come to mean three things. The
   `""`-clears-it sentinel exists because a JSON patch cannot carry an absent key; the store drops it
   (`store.ts:498-502`, `:732-739`).
 * Fix the project `⋯` button (`CoderApp.tsx:294`) so it either opens a project scope or stops
   claiming to.
-  **Outcome — it opens a project scope** (`openProjectSettings`, `CoderApp.tsx:163-175`, rendered
-  `SettingsPane.tsx:382-478`). That is §7.4's third scope, and it needed a write path the daemon did not
+  **Outcome — it opens a project scope** (`openProjectSettings`, `CoderApp.tsx:175-177`, rendered
+  `SettingsPane.tsx:497-598`). That is §7.4's third scope, and it needed a write path the daemon did not
   have: `coder.updateProject`'s defaults patch (`rpc.ts:1093-1107`, `store.ts:293-308`), where the
   defaults **replace** rather than merge, unlike the app's.
 * Add the **section structure** the pane needs before it grows: one heading per group. Not a copied
@@ -1001,9 +1075,13 @@ settings change, which is the point.
 `apps/desktop/test/settings-store.test.ts` (the `""`-clears-it sentinel, merge-versus-replace, the
 retired-key read, and the app defaults reaching a created task),
 `apps/desktop/test/settings-scope.test.tsx` (the project scope's rows, that a write carries the values it
-is not changing, and the navigation of §7.5: the Projects list renders what it was given, a row opens
-*that* project's scope by id, the rail's menu and the list open the same one, the back control returns,
-and an empty list teaches instead of rendering an empty box),
+is not changing, and the three-level navigation of §7.5: the app scope counts the projects and opens the
+page; the page renders what it was given, each row with *its own* path, and all of them with no cap and no
+windowing; a row opens *that* project's scope by id; **each back control returns to its own level** and
+says so, the two labels differing because the two destinations differ; the rail's menu and the page open
+the same scope; an empty list teaches instead of rendering an empty box; and a project that goes away
+falls back to the page. Every one of those was negative-tested — eighteen mutations, each verified to fail
+the test it is aimed at with no other file left changed (§7.5)),
 `apps/desktop/test/palette-flow.test.tsx` (the seeded "Add project" field),
 and four cases in `apps/desktop/test/runs.test.ts` (the approvals policy reaching the agent, both
 positions, not sent to an agent that cannot be told, and a loud failure when the peer refuses anyway).

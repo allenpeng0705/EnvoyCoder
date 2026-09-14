@@ -37,6 +37,13 @@ import { MeshStatusBar } from "./MeshStatusBar.js";
 import { SettingsPane } from "./SettingsPane.js";
 import type { CoderState } from "../state/coderStore.js";
 import type { CoderStore } from "../state/coderStore.js";
+import {
+  APP_SCOPE,
+  PROJECTS_SCOPE,
+  projectScope,
+  scopeProjectId,
+  type SettingsScope,
+} from "../state/settings-scope.js";
 
 export interface CoderAppProps {
   state: CoderState;
@@ -124,9 +131,14 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
     const started = await props.actions.startRun(created.task.id, title);
     if (!started.ok) setNotice(started);
   };
-  const [settingsOpen, setSettingsOpen] = useState(false);
   /**
-   * Which settings the pane is showing: this machine's, or one project's.
+   * Which settings the pane is showing — and whether it is showing at all.
+   *
+   * **One value, not a boolean beside a payload.** `undefined` is "the pane is closed"; anything else is
+   * a level of the pane's own navigation (`settings-scope.ts`): this machine's settings, the list of
+   * projects, or one project's. A `settingsOpen: boolean` beside a `settingsProjectId?: string` could say
+   * "open, and also on no particular project and not on the list either" — three states that the code
+   * would have to keep agreeing about, and the third level's arrival is what made that unaffordable.
    *
    * The project row's menu item says "Project settings" (`sidebar.project.settings`) and carries the
    * project through, so the pane renders that project's defaults (`docs/settings-parity.md` §7.3, §8.1).
@@ -142,35 +154,26 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    * against `state.projects` on every render is what makes the second edit carry the first;
    * `test/settings-scope.test.tsx` fails on the snapshot.
    *
-   * A project that disappears while the pane is open — removed in another window — falls back to the
-   * app scope. That is the honest answer: the pane is titled "Settings", the rows are this machine's,
-   * and nothing claims to be editing a project that no longer exists. Removing one *here* is the same
-   * case reached deliberately, and `removeProjectRow` clears the id so the fallback does not have to
-   * wait for the refetch the daemon's change event triggers.
+   * A project that disappears while its settings are open falls back to **the projects page** — the level
+   * its own back control returns to, and the one place that lists the thing that vanished. `resolveScope`
+   * is that rule and `settings-scope.ts`'s module doc is the argument for it; the pane applies it on every
+   * render, so this shell does not have to catch the case at all. Removing one *here* is the same case
+   * reached deliberately, and `removeProjectRow` moves the scope down a level itself so the fallback does
+   * not have to wait for the refetch the daemon's change event triggers.
    */
-  const [settingsProjectId, setSettingsProjectId] = useState<string | undefined>(undefined);
-  const settingsProject = useMemo(
-    () =>
-      settingsProjectId === undefined
-        ? undefined
-        : props.state.projects.find((project) => project.id === settingsProjectId),
-    [settingsProjectId, props.state.projects],
-  );
-  const openAppSettings = (): void => {
-    setSettingsProjectId(undefined);
-    setSettingsOpen(true);
-  };
+  const [settingsScope, setSettingsScope] = useState<SettingsScope | undefined>(undefined);
+  const openAppSettings = (): void => setSettingsScope(APP_SCOPE);
+  const closeSettings = (): void => setSettingsScope(undefined);
   /**
    * The one way into a project's settings, whoever asks.
    *
-   * Two callers pass the project through: the rail's project `…` menu (*"Project settings"*) and the
-   * Projects section inside the app-scope pane, whose rows are that project's own scope. One function
-   * rather than two is the whole reason the two routes can be described as one model — a project's
-   * scope reached one way cannot behave differently from the same scope reached the other.
+   * Two callers pass the project through: the rail's project `…` menu (*"Project settings"*) and a row of
+   * the pane's own projects page. One function rather than two is the whole reason the two routes can be
+   * described as one model — a project's scope reached one way cannot behave differently from the same
+   * scope reached the other.
    */
   const openProjectSettings = (project: Project): void => {
-    setSettingsProjectId(project.id);
-    setSettingsOpen(true);
+    setSettingsScope(projectScope(project.id));
   };
   const [railOpen, setRailOpen] = useState(true);
   /**
@@ -190,8 +193,8 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    * that project's tasks**, so they leave the rail without a folder, a file or a transcript on disk being
    * touched. What the window has to add is the consequence the daemon cannot see — *which pane is open*.
    *
-   * The id is cleared, and that is not belt-and-braces: `settingsProject` resolves the id against the
-   * live list on every render, so the pane falls back to the app scope either way, but clearing it here
+   * The id is moved down a level, and that is not belt-and-braces: the pane resolves the scope against
+   * the live list on every render, so it would land on the projects page either way, but doing it here
    * means the fallback happens in the same paint as the removal rather than after the refetch the
    * daemon's `coder:state-changed` event triggers. A pane that spent a frame titled "Project settings for
    * api" for a project that no longer exists is the exact thing requirement 5 of the removal work asks
@@ -206,7 +209,9 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
       setNotice(removed);
       return;
     }
-    setSettingsProjectId((current) => (current === projectId ? undefined : current));
+    setSettingsScope((current) =>
+      current?.kind === "project" && current.id === projectId ? PROJECTS_SCOPE : current,
+    );
   };
 
   /** Take one task off the rail — the row menu's Remove, after its own inline confirmation. */
@@ -228,7 +233,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
   };
 
   /**
-   * Why the rail would be empty for a reason other than "there is nothing in it".
+   * Why the list of projects is empty for a reason other than "there is nothing in it".
    *
    * The rail can only draw what the store holds, and the store holds an empty list for two very
    * different reasons: nobody has registered a project yet, or the window never managed to read them.
@@ -236,12 +241,18 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    * says "No projects yet" to a user whose project is on disk — the failure that made "adding a
    * project did nothing" look true when the daemon had already stored it.
    *
+   * **Two readers, one answer.** The rail renders it as its empty state, and the settings pane renders
+   * it twice: as the second band of level 1's *Projects* row and as the failure message on level 2. A
+   * count is a claim about the list, and "No projects" over a list nobody could read is the same lie
+   * the rail was fixed for — which is the reason this value is computed once here and handed to both
+   * surfaces rather than derived again inside the pane.
+   *
    * Both failure shapes are covered, because the window has both: a call that came back refused (the
    * store keeps the last one), and a connection that never opened (the reason lives on the chip).
    * While the window is merely still connecting, this stays undefined — a rail that shouts on the
    * first paint before the first answer arrives would be a new lie, not a fix.
    */
-  const railUnavailable = useMemo(() => {
+  const projectsUnavailable = useMemo(() => {
     if (state.loaded) return undefined;
     const refusal = localize(t, state.error);
     if (refusal !== undefined) return refusal;
@@ -397,33 +408,40 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
             onRemoveTask={(taskId) => void removeTaskRow(taskId)}
             onOpenCommandCenter={() => openPalette()}
             onOpenSettings={openAppSettings}
-            unavailable={railUnavailable}
+            unavailable={projectsUnavailable}
             tasksUnknown={!state.tasksKnown}
           />
         ) : null}
 
         <main className="work">
-          {settingsOpen ? (
+          {settingsScope !== undefined ? (
             <SettingsPane
               state={state}
-              // The project scope when the pane was opened from a project row, and the app scope
-              // otherwise. `settingsProject` is what the `⋯` button carries through, and what makes the
-              // button's accessible name true.
-              {...(settingsProject !== undefined ? { project: settingsProject } : {})}
-              onClose={() => setSettingsOpen(false)}
+              // Which level the pane is on: this machine's settings, the projects page, or one project's.
+              // The pane resolves the scope against the live project list itself, so a project that has
+              // gone cannot leave it rendering rows that write to something that is not there.
+              scope={settingsScope}
+              // The same value the rail renders as "could not read your projects" — see its own doc
+              // above. The pane needs it for the same reason: a count band that reads "No projects" over
+              // a list nobody could read is the failure this shell already fixed once.
+              projectsUnavailable={projectsUnavailable}
+              // The pane's own navigation, and it is this one function or none: the pane names the level a
+              // press goes to (`APP_SCOPE`, `PROJECTS_SCOPE`, `projectScope(id)`) and the shell stores it.
+              // One callback rather than four is what makes "each back control returns to its own level" a
+              // property of the data instead of four handlers that have to agree.
+              onNavigate={setSettingsScope}
+              onClose={closeSettings}
               onUpdate={(patch) => void props.actions.updateSettings(patch)}
-              // The pane's own navigation, and it is these two functions or none: the same
-              // `openProjectSettings` the rail's project menu calls (so the two routes into a project
-              // cannot come to mean different things) and the same `openAppSettings` ⌘, and the footer's
-              // Settings button call (so the scope's back control lands exactly where they do).
-              onOpenProjectSettings={openProjectSettings}
-              onOpenAppSettings={openAppSettings}
               // A project's defaults, written whole because they replace: see `coderStore.updateProject`.
               // The refusal goes to the strip rather than vanishing — a project whose defaults could not
               // be saved must not keep showing the value the user picked.
               onUpdateProject={(defaults) => {
-                if (!settingsProject) return;
-                void props.actions.updateProject({ id: settingsProject.id, defaults }).then((result) => {
+                // The id the scope *resolves* to, not the one it holds: a scope naming a project that has
+                // since gone writes to nothing, and a write to a removed project would fail for a control
+                // the user never pressed.
+                const projectId = scopeProjectId(settingsScope, state.projects);
+                if (projectId === undefined) return;
+                void props.actions.updateProject({ id: projectId, defaults }).then((result) => {
                   if (!result.ok) setNotice(result);
                 });
               }}

@@ -29,7 +29,7 @@
  *     (there is no remote-run path, and `coder.offerRemoteRun` had no handler), and a disabled row would
  *     have been a promise to build one on this pane's terms rather than the mesh's.
  *
- * ## Three scopes, and where each one lives
+ * ## Three scopes and three levels, and what separates them
  *
  * The reference product has two settings scopes; this product has three (`CoderSettings` is the app's,
  * `Project.defaults` is a project's, and a task carries its own resolved copy). The app's are here; a
@@ -37,19 +37,60 @@
  * used to open *app* settings and drop the project on the floor, which is the same defect in the UI
  * layer: a control labelled with a scope it did not have.
  *
- * ## How the two scopes are wired together, which is one model and not two
+ * The levels are the **navigation depth** of that model, and they exist because a list of every project
+ * does not scale inside a page of settings: with thirty projects the app scope becomes thirty rows of
+ * someone else's folders between "Keep transcripts" and the agent list. So the list is its own level —
+ * the same thing Paseo does, where a section is a page with a back affordance rather than a block of
+ * rows on the page you were reading.
  *
- * The app scope is the root: it carries the machine's defaults **and a Projects section listing what is
- * registered**, whose rows open that project's scope in this same pane. A project's scope carries its
- * own rows, and a back control — "All settings", naming where it goes — returns to the root. So the two
- * routes into a project's settings are the rail's project `…` menu (*"Project settings"*) and this
- * list, and both are the **same** function (`CoderApp`'s `openProjectSettings`), which is the only
- * arrangement in which they cannot come to mean different things. Leaving is symmetric: the back control
- * and the Close button both work, and removal of the project falls back to the root (see below).
+ * | level | title | reached from | back control |
+ * |---|---|---|---|
+ * | 1 — this machine's settings | *Settings* | the rail's footer button, or `⌘,` | none: it is the root |
+ * | 2 — the projects page | *Projects* | the **Projects** row at level 1 | *← All settings* (level 1) |
+ * | 3 — one project's settings | *Project settings for api* | a row of level 2, or the rail's `…` menu | *← Projects* (level 2) |
  *
- * The two callbacks are **required** props (`onOpenProjectSettings`, `onOpenAppSettings`). Optional
- * ones would allow a caller to render a list of rows that press into nothing, and this pane's entire
- * history is a list of controls that did not do what they said.
+ * **Each back control names its destination**, and the two differ because their destinations differ: a
+ * back control that said "All settings" while landing on the list of projects would be a lie of exactly
+ * the kind this pane was rebuilt to remove. Level 2's is the existing `settings.back` pair — that *is*
+ * the way back to the app scope, and it is where it always pointed. Level 3's label is not a new string
+ * at all: it is the level-2 page's own title, which is the same rule the project rows use for their
+ * accessible names — one place, one name.
+ *
+ * ## How the levels are wired together, which is one model and not two
+ *
+ * `settings-scope.ts` owns the state, and `CoderApp` holds one value of it: `SettingsScope | undefined`,
+ * where `undefined` is "the pane is closed". So "which level" and "is it open" are one piece of data
+ * rather than a boolean beside a payload, and this pane takes the scope as a prop together with **one**
+ * callback (`onNavigate`) instead of a callback per destination. The pane says where a press goes by
+ * naming the level — `APP_SCOPE`, `PROJECTS_SCOPE`, `projectScope(id)` — and the shell stores it.
+ *
+ * That leaves exactly two routes into a project's settings, the rail's project `…` menu (*"Project
+ * settings"*) and a row of the projects page, both of which are the **same** function
+ * (`CoderApp`'s `openProjectSettings`): the only arrangement in which they cannot come to mean
+ * different things. Leaving is symmetric: the back controls and the Close button all work.
+ *
+ * `onNavigate` is a **required** prop. An optional one would allow a caller to render rows that press
+ * into nothing, and this pane's entire history is a list of controls that did not do what they said.
+ *
+ * ## What happens when the project is gone, and why it is the projects page
+ *
+ * The pane resolves the scope against `state.projects` on **every render**, so a project removed while
+ * its settings are open — in another window, or from its own `…` menu in this one — cannot leave the
+ * pane showing rows that write to something that is not there. It lands on the **projects page**: the
+ * level the project scope's own back control returns to, so the rule is the one sentence a user
+ * already knows ("when the thing you are looking at disappears, the pane does what the back control
+ * would have done"). Not the app scope, which would skip a level and leave the user reading this
+ * machine's defaults with no list in front of them to pick the project they meant.
+ * `settings-scope.ts`'s module doc is the full argument, and `test/settings-scope.test.tsx` asserts it
+ * both ways: removed deliberately from the row menu, and vanished from the list underneath the pane.
+ *
+ * ## What this pane does with many projects
+ *
+ * Nothing clever: level 2 is a plain list, one row per project, in the pane's own scrolling body — no
+ * virtual list, no paging, no search. The body is the part that scrolls and the header stays put, which
+ * is what makes a long list usable and is measured rather than asserted (`docs/settings-parity.md`
+ * §7.5). A window with thirty projects scrolls; a window with three hundred would want a filter, and
+ * that is the day to build one.
  *
  * The resolution order (`explicit → project → app → fallback`) is `resolveTaskDefaults`'s, and it is why
  * a project's rows say "override": a project that names an agent decides for its tasks, and a project
@@ -64,7 +105,7 @@
  * say what happened and offer no switch that pretends to fix it.
  */
 
-import type { JSX, ReactNode } from "react";
+import type { JSX } from "react";
 import { useState } from "react";
 
 import type {
@@ -80,10 +121,19 @@ import { composerControls, modelNote, modelOffReason } from "../composer/control
 import { harnessLabel } from "../composer/harness-label.js";
 import { useI18n } from "../i18n/context.js";
 import { LOCALES, LOCALE_LABELS } from "../i18n/locales.js";
-import { localizeText } from "../i18n/notice.js";
+import type { Translator } from "../i18n/translate.js";
 import { formatWhen } from "../i18n/when.js";
 import type { CoderState } from "../state/coderStore.js";
+import {
+  APP_SCOPE,
+  PROJECTS_SCOPE,
+  projectScope,
+  resolveScope,
+  scopeProject,
+  type SettingsScope,
+} from "../state/settings-scope.js";
 import { ModelChoice } from "./ModelChoice.js";
+import { SettingsShell, StoreNotes, shortPath } from "./SettingsShell.js";
 import { FolderSetting, SettingNavRow, SettingRow, TextSetting } from "./SettingsRows.js";
 
 export interface SettingsPaneProps {
@@ -92,44 +142,71 @@ export interface SettingsPaneProps {
   /** The app-scope patch. Ignored while the pane is open for a project. */
   onUpdate: (patch: Partial<CoderSettings>) => void;
   /**
-   * The project this pane was opened for, if any.
+   * Which level the pane is showing — this machine's settings, the projects page, or one project's.
    *
-   * Set by "Project settings" in a project row's `…` menu (`CoderSidebar`), which is what the bare `⋯`
-   * used to be. The menu's trigger is named *"Actions for {project}"* rather than after this one action,
-   * so the scope is promised by the item the user picks and by the project the row belongs to. Absent
-   * means the app scope — the footer's Settings button and ⌘,.
+   * Held by the shell (`CoderApp`) and resolved **here**, against `state.projects`, on every render.
+   * The id in a `project` scope is what makes a second edit carry the first (`settings-scope.ts`), and
+   * resolving it here rather than in the shell means there is one place that decides what an absent
+   * project shows. A `Project` object in this position could not do either.
    */
-  project?: Project | undefined;
+  scope: SettingsScope;
+  /**
+   * Go to another level of this pane, by naming it.
+   *
+   * One callback rather than one per destination: a row that goes somewhere says *where*, as data, and
+   * this is what stores it. **Required, and not merely present** — an optional callback would let a
+   * caller render the Projects row, or the list of projects, without a destination, which is the defect
+   * this pane was rebuilt to remove: a control that does not do what it says. The shell always knows
+   * where each level is (`settings-scope.ts`), so there is no honest caller without one.
+   */
+  onNavigate: (scope: SettingsScope) => void;
   /**
    * Write a project's defaults. Sent **whole** rather than as a patch, because a project's defaults
    * replace: a patch carrying only a model would leave the agent for that project undefined.
    */
   onUpdateProject?: ((defaults: TaskDefaults) => void) | undefined;
   /**
-   * Open one project's settings in this pane — the Projects section at the app scope.
+   * Why `state.projects` is empty for a reason other than "nobody has added one" — the shell's own
+   * sentence, already in the user's language, or `undefined` when the list really is empty (or is still
+   * arriving).
    *
-   * **Required, and not merely present.** An optional callback would let a caller render the app scope
-   * with a list of project rows that press into nothing, which is the defect this pane was rebuilt to
-   * remove: a control that does not do what it says. The shell always knows where a project's settings
-   * go (`openProjectSettings`), so there is no honest caller without one.
-   */
-  onOpenProjectSettings: (project: Project) => void;
-  /**
-   * Leave a project's scope for this machine's — the pane's own back control.
+   * **Optional, because it is data rather than a destination.** An absent destination is a control that
+   * presses into nothing, which is why `onNavigate` is required; an absent reason simply means there is no
+   * reason to give, and a caller with nothing to say must not have to invent one.
    *
-   * The second half of the same requirement: a scope you can enter and not leave is reachable exactly
-   * once per pane, which is why the back control is a prop of the pane rather than a link the project
-   * scope draws for itself.
+   * It is a prop rather than something this pane derives from `state` on purpose: the rail and this pane
+   * make the same claim about the same list, and two derivations of "why is it empty" are two answers that
+   * can come apart — the rail reading "could not read your projects" beside a count band reading "No
+   * projects". `CoderApp` computes it once and hands it to both (`projectsUnavailable`).
    */
-  onOpenAppSettings: () => void;
+  projectsUnavailable?: string | undefined;
 }
 
+/**
+ * The three levels, chosen by the scope.
+ *
+ * The `switch` is exhaustive on purpose: a fourth level would not compile until it was answered here,
+ * which is the property a boolean could not have.
+ */
 export function SettingsPane(props: SettingsPaneProps): JSX.Element {
-  return props.project ? (
-    <ProjectSettings {...props} project={props.project} />
-  ) : (
-    <AppSettings {...props} />
-  );
+  const resolved = resolveScope(props.scope, props.state.projects);
+  switch (resolved.kind) {
+    case "projects":
+      return <ProjectsSettings {...props} />;
+    case "project": {
+      const project = scopeProject(resolved, props.state.projects);
+      // `resolveScope` answers `project` only for an id the live list holds, so the fallback here is
+      // unreachable — and it falls back the *same way* rather than asserting, so a list that changed
+      // between the two reads cannot crash a window.
+      return project !== undefined ? (
+        <ProjectSettings {...props} project={project} />
+      ) : (
+        <ProjectsSettings {...props} />
+      );
+    }
+    case "app":
+      return <AppSettings {...props} />;
+  }
 }
 
 /* ────────────────────────────── the app scope ────────────────────────────── */
@@ -295,43 +372,29 @@ function AppSettings(props: SettingsPaneProps): JSX.Element {
       </SettingRow>
 
       <h2 className="settings__heading">{t("settings.group.projects")}</h2>
-      {/* **The section that makes the third scope reachable from inside the pane.** The reference
-          product's app settings carry a `projects` list whose rows open that project's own settings, and
-          this is the same model rather than a second one: the rail's project menu and this list both
-          land on the scope below, entered through `openProjectSettings`, and both are one press from
-          where the user already is.
-          It lists and navigates, and nothing else: a project's own controls (folder, agent, model,
-          arguments) live in the project scope, because a control that edits a project while the pane is
-          titled "Settings" is a control labelled with a scope it does not have — the exact defect §7.5
-          of `docs/settings-parity.md` records. */}
-      <p className="settings__note">{t("settings.projects.note")}</p>
-      {props.state.projects.length === 0 ? (
-        // Design law 6, at the one place in this pane a user can arrive at nothing: the section says how
-        // a project gets here instead of rendering an empty box. It names the rail's own control through
-        // that control's label (`sidebar.footer.add`), so renaming or translating the button cannot leave
-        // this sentence pointing at a word that is not on screen.
-        <p className="settings__note">{t("settings.projects.empty", { add: t("sidebar.footer.add") })}</p>
-      ) : (
-        <ul className="settings__projects">
-          {props.state.projects.map((project) => (
-            <li key={project.id}>
-              <SettingNavRow
-                title={project.label}
-                // The second line is the path, abbreviated the way the project scope abbreviates it
-                // (`shortPath`), with the whole path on hover: two projects called `api` are told apart
-                // by where they live, and the tail is the part that differs.
-                detail={shortPath(project.path)}
-                detailTitle={project.path}
-                developerNote={project.id}
-                // The destination's own title, so the row announces where it goes rather than only what
-                // it shows. Same key as the pane heading, which is the point: one name for one place.
-                actionLabel={t("settings.project.title", { project: project.label })}
-                onSelect={() => props.onOpenProjectSettings(project)}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* **The row that gives the projects their own level.** With three projects the list fits here and
+          with thirty it does not: thirty rows of someone else's folders between "Keep transcripts" and
+          the agent list is not a section, it is the page. So level 1 carries one row — its second band
+          is the count, which is the fact a user wants before deciding to go in — and the list itself is
+          level 2 (`ProjectsSettings` below).
+          It says how many and goes there. Nothing else about this scope changed, and the note that used
+          to sit here ("selecting one opens its own") moved to level 2 with the list, because that is
+          where selecting one is what happens.
+          **A count is a claim about the list, which is why this band is four strings and not one
+          interpolated `{count} projects`**: "40 projects", "1 project", "No projects", and — when the
+          window could not read the list at all — "Could not be read", because "No projects" over a list
+          nobody read is the rail's own historical defect wearing a different hat. */}
+      <SettingNavRow
+        title={t("settings.projects.title")}
+        detail={projectsCount(t, props.state.projects.length, props.projectsUnavailable)}
+        // The developer fact: the method whose answer the count is, which is the number a support
+        // question about a missing project turns on.
+        developerNote="coder.listProjects"
+        // The destination's own title — the same key the level-2 heading uses — so the row announces
+        // where it goes rather than only how many things are there.
+        actionLabel={t("settings.projects.title")}
+        onSelect={() => props.onNavigate(PROJECTS_SCOPE)}
+      />
 
       <h2 className="settings__heading">{t("settings.agents.heading")}</h2>
       <p className="settings__note">{t("settings.agents.note")}</p>
@@ -377,6 +440,89 @@ function AppSettings(props: SettingsPaneProps): JSX.Element {
   );
 }
 
+/* ────────────────────────────── the projects page ────────────────────────────── */
+
+/**
+ * Level 2: the list of projects, and nothing else.
+ *
+ * This is the block that used to sit at the end of level 1, moved one level down unchanged — the same
+ * rows, the same two bands, the same accessible names, the same empty state — because its shape was
+ * never the problem. Its *address* was: a list that grows with the number of projects belongs on a page
+ * of its own, not between two settings.
+ *
+ * It is still navigation and only navigation: a project's own controls (folder, agent, model, arguments)
+ * live at level 3, because a control that edits a project while the pane is titled "Projects" is a
+ * control labelled with a scope it does not have.
+ *
+ * **With many projects, the body scrolls.** No virtual list, no paging, no cap: the rows are plain
+ * `<li>`s in the pane's scrolling body (`.settings`, `overflow-y: auto`), which is what keeps the
+ * header — and the back control in it — on screen while the list moves under it. That is measured in a
+ * real window rather than asserted here (§7.5 of `docs/settings-parity.md` has the numbers); the point
+ * at which a plain list stops being enough is a filter, and that is a later decision than this one.
+ */
+function ProjectsSettings(props: SettingsPaneProps): JSX.Element {
+  const { t } = useI18n();
+  const projects = props.state.projects;
+
+  return (
+    <SettingsShell
+      title={t("settings.projects.title")}
+      ariaLabel={t("settings.projects.title")}
+      state={props.state}
+      // The way back to the root, and it names it — "All settings", the destination rather than the
+      // direction. This is the same label and the same pair of keys the project scope used to carry;
+      // what changed is which level owns it, because level 3 now returns *here* and has to say so.
+      back={{
+        label: t("settings.back"),
+        title: t("settings.back.title"),
+        onClick: () => props.onNavigate(APP_SCOPE),
+      }}
+      onClose={props.onClose}
+    >
+      <p className="settings__note">{t("settings.projects.note")}</p>
+      {projects.length === 0 && props.projectsUnavailable !== undefined ? (
+        // **Not the empty state.** The page reached with a list nobody could read must not teach what a
+        // project is — that sentence answers "why is this empty?" and the honest answer is "it is not
+        // empty, it is unknown". The two keys are the rail's (`sidebar.empty.cannotLoad*`) rather than
+        // copies: the rail says this about the same list in the same window, and a second copy would be a
+        // second thing to keep translated and true. A `sidebar.*` key rendered in the pane is the same
+        // reuse `settings.projects.empty` already makes of `sidebar.footer.add`.
+        <>
+          <p className="settings__note">{t("sidebar.empty.cannotLoadTitle")}</p>
+          <p className="settings__note">{t("sidebar.empty.cannotLoadBody")}</p>
+          <p className="settings__note">{props.projectsUnavailable}</p>
+        </>
+      ) : projects.length === 0 ? (
+        // Design law 6, at the one place in this pane a user can arrive at nothing: the page says how a
+        // project gets here instead of rendering an empty box. It names the rail's own control through
+        // that control's label (`sidebar.footer.add`), so renaming or translating the button cannot leave
+        // this sentence pointing at a word that is not on screen.
+        <p className="settings__note">{t("settings.projects.empty", { add: t("sidebar.footer.add") })}</p>
+      ) : (
+        <ul className="settings__projects">
+          {projects.map((project) => (
+            <li key={project.id}>
+              <SettingNavRow
+                title={project.label}
+                // The second line is the path, abbreviated the way the project scope abbreviates it
+                // (`shortPath`), with the whole path on hover: two projects called `api` are told apart
+                // by where they live, and the tail is the part that differs.
+                detail={shortPath(project.path)}
+                detailTitle={project.path}
+                developerNote={project.id}
+                // The destination's own title, so the row announces where it goes rather than only what
+                // it shows. Same key as the level-3 heading, which is the point: one name for one place.
+                actionLabel={t("settings.project.title", { project: project.label })}
+                onSelect={() => props.onNavigate(projectScope(project.id))}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </SettingsShell>
+  );
+}
+
 /* ────────────────────────────── the project scope ────────────────────────────── */
 
 function ProjectSettings(props: SettingsPaneProps & { project: Project }): JSX.Element {
@@ -404,14 +550,17 @@ function ProjectSettings(props: SettingsPaneProps & { project: Project }): JSX.E
       ariaLabel={t("settings.project.title", { project: project.label })}
       state={state}
       // The way back, and the reason it is in the header rather than at the end of the rows: the scope
-      // was entered *from* this machine's settings (the rail's project menu, or the Projects list in that
-      // scope), so leaving it belongs where the pane says where you are. It names its destination — "All
-      // settings", not "Back" and not a bare chevron — because a control named after the direction you are
-      // moving is one a user has to press to find out what it does.
+      // was entered *from* the list of projects (the row that named this project, or the rail's project
+      // menu), so leaving it belongs where the pane says where you are. It names its destination —
+      // **"Projects"**, the level-2 page's own title, not "All settings" and not "Back" — because a
+      // control named after the direction you are moving is one a user has to press to find out what it
+      // does, and because "All settings" here would be a lie: it lands on the list, not on the root.
+      // Reusing the page's title as the label is the same rule the project rows follow for their
+      // accessible names: one place, one name.
       back={{
-        label: t("settings.back"),
-        title: t("settings.back.title"),
-        onClick: props.onOpenAppSettings,
+        label: t("settings.projects.title"),
+        title: t("settings.project.back.title"),
+        onClick: () => props.onNavigate(PROJECTS_SCOPE),
       }}
       onClose={props.onClose}
     >
@@ -594,92 +743,6 @@ function ApprovalRow(props: {
   );
 }
 
-/* ────────────────────────────── the shell and the read-only groups ────────────────────────────── */
-
-function SettingsShell(props: {
-  title: string;
-  ariaLabel: string;
-  state: CoderState;
-  onClose: () => void;
-  /**
-   * Where this pane came from, when it was opened inside another scope: the label names the
-   * destination, so the control reads as the place it goes rather than as a direction.
-   *
-   * Absent at the app scope, which is the root of this navigation and has nothing above it — a back
-   * control that went nowhere would be worse than none.
-   */
-  back?: { label: string; title: string; onClick: () => void } | undefined;
-  children: ReactNode;
-}): JSX.Element {
-  const { t } = useI18n();
-  return (
-    <section className="pane" aria-label={props.ariaLabel}>
-      <header className="pane__header">
-        <div className="pane__title-group">
-          {props.back !== undefined ? (
-            <button
-              type="button"
-              className="button button--ghost button--small settings__back"
-              title={props.back.title}
-              onClick={props.back.onClick}
-            >
-              {/* The arrow is decoration and says nothing a screen reader needs: the name is the
-                  sentence after it. Keyboard reachable like every other control in the header — it is a
-                  `<button>`, so Enter and Space work, and it is first in the header's tab order. */}
-              <span aria-hidden>←</span> {props.back.label}
-            </button>
-          ) : null}
-          <h1 className="pane__title">{props.title}</h1>
-          <div className="pane__meta">
-            <span
-              className="chip chip--quiet"
-              title={props.state.hello?.stateDir ?? t("connection.none")}
-            >
-              {props.state.hello
-                ? t("settings.stateDir", { path: shortPath(props.state.hello.stateDir) })
-                : t("connection.none")}
-            </span>
-            <span className="chip chip--quiet" title={t("settings.daemon.title")}>
-              {props.state.hello
-                ? t("settings.daemon", { version: props.state.hello.version })
-                : t("settings.noDaemon")}
-            </span>
-          </div>
-        </div>
-        <div className="pane__actions">
-          <button type="button" className="button button--secondary" onClick={props.onClose}>
-            {t("settings.close")}
-          </button>
-        </div>
-      </header>
-      <div className="settings">{props.children}</div>
-    </section>
-  );
-}
-
-/**
- * The daemon's own sentences — what it could not read, and what it did about it.
- *
- * Not a setting, and deliberately below every control: it is the one part of this pane that says what
- * happened without offering a switch that pretends to fix it. A note is rendered through its key when
- * the daemon sent one, so a quarantined file is explained in German with the parse error it cited left
- * as it is.
- */
-function StoreNotes(props: { notes: readonly string[] }): JSX.Element | null {
-  const { t } = useI18n();
-  if (props.notes.length === 0) return null;
-  return (
-    <>
-      <h2 className="settings__heading">{t("settings.notes.heading")}</h2>
-      <ul className="settings__notes">
-        {props.notes.map((note) => (
-          <li key={note}>{localizeText(t, note)}</li>
-        ))}
-      </ul>
-    </>
-  );
-}
-
 /* ────────────────────────────── formatting ────────────────────────────── */
 
 function summaryFor(state: CoderState, harness: HarnessId): HarnessSummary | undefined {
@@ -690,8 +753,22 @@ function labelForHarness(harness: HarnessId, state: CoderState): string {
   return summaryFor(state, harness)?.label ?? harnessLabel(harness);
 }
 
-/** Home directories are long and the middle is the interesting part; keep the tail. */
-function shortPath(path: string): string {
-  const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
-  return parts.length <= 2 ? path : `…/${parts.slice(-2).join("/")}`;
+/**
+ * How many projects, in words — the second band of the level-1 row.
+ *
+ * Three keys rather than one interpolated `{count} projects`, because "1 projects" and "0 projects" are
+ * the two forms every language gets wrong and neither is fixable by a formatter the catalogue does not
+ * have: a translator needs "1 project" and "No projects" as sentences of their own, and Japanese and
+ * Korean do not pluralise at all (their forms differ from the English ones, which is the point). The
+ * zero form is a sentence rather than a number with a noun after it for the same reason the empty state
+ * is: "No projects" is what a person says.
+ */
+function projectsCount(t: Translator["t"], count: number, unavailable?: string): string {
+  // The list could not be read: a number is a claim this window cannot make, and the honest band is the
+  // one that says so. (`unavailable` is the shell's own sentence about the same list — this band needs a
+  // short form of it, and the full sentence plus the reason are on level 2.)
+  if (count === 0 && unavailable !== undefined) return t("settings.projects.count.unknown");
+  if (count === 0) return t("settings.projects.count.none");
+  if (count === 1) return t("settings.projects.count.one");
+  return t("settings.projects.count", { count });
 }

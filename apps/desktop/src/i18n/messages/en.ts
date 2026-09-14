@@ -319,11 +319,13 @@ export const en = {
      without me". The headings are sentence case and are not labels — nothing on this pane needs one. */
   "settings.title": "Settings",
   "settings.close": "Close",
-  // The way out of a project's settings, back to the settings for this machine. It names where it goes
-  // rather than saying "Back", because a control labelled after the direction you are moving is a
-  // control a user has to press to find out what it does.
+  // The way out of the **projects page** (level 2), back to the settings for this machine (level 1). It
+  // names where it goes rather than saying "Back", because a control labelled after the direction you
+  // are moving is a control a user has to press to find out what it does. The level *below* has a back
+  // control of its own and it says something different — `settings.project.back.title` — because it
+  // lands somewhere else, on this page's title.
   "settings.back": "All settings",
-  "settings.back.title": "Back to this machine's settings, and the list of projects",
+  "settings.back.title": "Back to this machine's settings",
   "settings.stateDir": "State in {path}",
   "settings.noDaemon": "No daemon",
   "settings.daemon": "Daemon {version}",
@@ -366,6 +368,11 @@ export const en = {
   "settings.project.title": "Project settings for {project}",
   "settings.project.detail":
     "These apply to new tasks in this project and override the settings for this machine. A task you set up yourself still wins.",
+  // Level 3's back control, which lands on the projects page and therefore must not say "All settings":
+  // a control that names the root while returning to a list is a lie. Its visible label is that page's
+  // own title (`settings.projects.title`) rather than a key of its own — one place, one name — so all
+  // this key has to carry is the sentence a hover shows.
+  "settings.project.back.title": "Back to the list of projects",
   "settings.project.folder.title": "Folder",
   "settings.project.folder.detail": "Where agents run for tasks in this project.",
   "settings.project.harness.title": "The agent new tasks here start with",
@@ -374,15 +381,28 @@ export const en = {
   "settings.project.model.detail": "Overrides this machine's model. Empty means the agent decides.",
   "settings.project.extraArgs.detail":
     "Passed to the agent's command line for every task in this project, after the ones EnvoyCoder builds itself.",
-  /* ── the app scope's list of projects: the way *into* a project's settings, and out again ──
-     The section is navigation, not settings: it lists what is registered and opens the scope that owns
-     the per-project rows. Its two sentences are the two states — what selecting a row does, and how a
-     project gets here in the first place. `{add}` is the rail's own Add-project label (`sidebar.footer.add`)
-     rather than the word "Add" repeated here, so the sentence keeps naming the control it means when the
-     control is renamed or translated. */
+  /* ── the projects page (level 2), and the row at level 1 that opens it ──
+     Three levels, one pane: this machine's settings (level 1) carries one row whose second band is how
+     many projects are registered, that row opens the list (level 2), and a row of the list opens that
+     project's own defaults (level 3). The list is navigation, not settings: it shows what is registered
+     and opens the scope that owns the per-project rows.
+     `settings.projects.title` is deliberately one string used three times — the level-1 row's label, the
+     level-2 page title, and level 3's back label — because all three name the same place, and a name
+     that is stored once cannot drift between them.
+     `{add}` is the rail's own Add-project label (`sidebar.footer.add`) rather than the word "Add"
+     repeated here, so the sentence keeps naming the control it means when the control is renamed or
+     translated. */
   "settings.group.projects": "Projects",
+  "settings.projects.title": "Projects",
+  "settings.projects.count": "{count} projects",
+  "settings.projects.count.one": "1 project",
+  "settings.projects.count.none": "No projects",
+  // The third form, and it is not a count at all: the window could not read the list, so it has no number
+  // to give. "No projects" here would be the rail's own historical defect — telling a user their work is
+  // gone when the truth is that nobody asked successfully.
+  "settings.projects.count.unknown": "Could not be read",
   "settings.projects.note":
-    "A project can override the settings on this page. Selecting one opens its own.",
+    "Each project can override this machine's settings. Selecting one opens its own.",
   "settings.projects.empty":
     "No projects yet. A project is a folder on this machine that agents work in — add one with {add} at the bottom of the rail, or from the Command Center.",
   "settings.agents.heading": "Agents on this machine",

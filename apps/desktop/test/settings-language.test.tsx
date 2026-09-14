@@ -22,6 +22,12 @@ import { CoderSidebar } from "../src/components/CoderSidebar.js";
 import { SettingsPane } from "../src/components/SettingsPane.js";
 import { I18nProvider } from "../src/i18n/context.js";
 import type { CoderState } from "../src/state/coderStore.js";
+import {
+  APP_SCOPE,
+  PROJECTS_SCOPE,
+  projectScope,
+  type SettingsScope,
+} from "../src/state/settings-scope.js";
 
 afterEach(cleanup);
 
@@ -64,7 +70,11 @@ function stateWith(over: Partial<CoderState> = {}): CoderState {
   };
 }
 
-function renderPane(over: Partial<CoderState> = {}, preference: "system" | "de" | "ja" = "de") {
+function renderPane(
+  over: Partial<CoderState> = {},
+  preference: "system" | "de" | "ja" = "de",
+  scope: SettingsScope = APP_SCOPE,
+) {
   const onUpdate = vi.fn();
   render(
     <I18nProvider preference={preference} reported={["en-US"]}>
@@ -72,12 +82,14 @@ function renderPane(over: Partial<CoderState> = {}, preference: "system" | "de" 
         state={stateWith(over)}
         onClose={vi.fn()}
         onUpdate={onUpdate}
+        // Which level of the pane: this machine's settings by default, and the parameter is what lets the
+        // level-2 assertions below render the page the row opens.
+        scope={scope}
         // The pane's own navigation, which is required rather than optional: a caller that renders the
-        // Projects section without a destination is a list of rows that press into nothing. This test is
-        // about the language, so the destinations are stubs — `settings-scope.test.tsx` is where they are
+        // Projects row without a destination is a control that presses into nothing. This test is about
+        // the language, so the destination is a stub — `settings-scope.test.tsx` is where the levels are
         // asserted through the shell that owns them.
-        onOpenProjectSettings={vi.fn()}
-        onOpenAppSettings={vi.fn()}
+        onNavigate={vi.fn()}
       />
     </I18nProvider>,
   );
@@ -121,10 +133,45 @@ describe("the rest of the pane, in the same language", () => {
     expect(screen.getByRole("button", { name: "Schließen" })).toBeTruthy();
     // The harness list is empty in this fixture, and even that sentence is translated.
     expect(screen.getByText("Die Agentenliste ist noch nicht angekommen.")).toBeTruthy();
-    // …including the Projects section and its empty state, which is the one piece of this pane that is
-    // a sentence rather than a row: a German user must not read "No projects yet" in German chrome.
+    // …including the Projects group, whose two sentences *moved one level down* in this restructure: the
+    // section is a single row here now (its second band is the count, and this fixture has no projects),
+    // and the sentence that says how a project gets here is on the page the row opens. The heading and the
+    // row are asserted where they are; the sentences that moved are asserted on level 2 below, which is
+    // where they now live — nothing was dropped, and nothing stayed asserting a block that is gone.
     expect(screen.getByRole("heading", { name: "Projekte" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Projekte" })).toBeTruthy();
+    expect(screen.getByText("Keine Projekte")).toBeTruthy();
+  });
+
+  it("is German on the projects page too, back control included", () => {
+    // **The level the restructure added, in the language this file exists for.** Two things are worth more
+    // than the prose: the sentences that moved here from level 1 (the override note and the empty state,
+    // both of them German), and the back control — which must name *its* destination, so it says
+    // "Alle Einstellungen" here and something else at the level below.
+    renderPane({ projects: [] }, "de", PROJECTS_SCOPE);
+    expect(screen.getByRole("heading", { name: "Projekte" })).toBeTruthy();
+    expect(
+      screen.getByText("Jedes Projekt kann die Einstellungen dieses Computers überschreiben. Wenn du eines auswählst, öffnest du seine eigenen."),
+    ).toBeTruthy();
     expect(screen.getByText(/Noch keine Projekte\./)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Alle Einstellungen" })).toBeTruthy();
+    // The rail's own Add-project label is interpolated, translated, so the sentence points at a German word
+    // that is actually on screen.
+    expect(screen.getByText(/unten in der Projektleiste hinzu/)).toBeTruthy();
+
+    cleanup();
+
+    // And level 3, whose back control must **not** say the same thing: it returns to the list, so it is
+    // labelled with the list's own German title, and its hover sentence is German as well.
+    renderPane(
+      { projects: [{ id: "local::/work/api", path: "/work/api", label: "api", hostId: "local", addedAt: "2026-09-01T09:00:00.000Z" }] },
+      "de",
+      projectScope("local::/work/api"),
+    );
+    expect(screen.getByRole("heading", { name: "Projekteinstellungen für api" })).toBeTruthy();
+    const back = screen.getByRole("button", { name: "Projekte" });
+    expect(back.getAttribute("title")).toBe("Zurück zur Projektliste");
+    expect(screen.queryByRole("button", { name: "Alle Einstellungen" })).toBeNull();
   });
 
   it("leaves no English in the rail or the pane either", () => {
