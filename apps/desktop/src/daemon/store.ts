@@ -146,6 +146,18 @@ export class CoderStore {
    */
   private readonly files: StateFiles;
 
+  /**
+   * The file half, for a collection that lives in its own file and is **not** this class's subject.
+   *
+   * `AgentDeliveries` is the one caller: it is a store of its own, and it needs the same read-tolerantly /
+   * write-atomically / quarantine-what-cannot-be-read behaviour. A second `StateFiles` instance would be a second
+   * set of `quarantined` notes for the same directory, and the diagnostics would then depend on which one a
+   * caller happened to hold.
+   */
+  get fileHelper(): StateFiles {
+    return this.files;
+  }
+
   private projectsState: Project[] = [];
   private tasksState: Task[] = [];
   private settingsState: CoderSettings = DEFAULT_CODER_SETTINGS;

@@ -53,6 +53,8 @@ import {
   type HarnessProbe,
   type ProbeFinding,
   type ProviderProbe,
+  bridgePackage,
+  fetchedBridgeRecipe,
 } from "@envoycoder/agent-catalog";
 
 import type { CoderPaths } from "@envoycoder/host-bridge";
@@ -111,6 +113,22 @@ export interface CoderServiceDeps {
    * for a table built without one — the same shape `runs` uses when M1 builds a daemon that cannot run.
    */
   recheckAgents?: () => Promise<void>;
+  /**
+   * **How each agent's connector is delivered** — the user's stored choice.
+   *
+   * Read by the list (so the row says which route is in force), by the `npx` probe below (the program that
+   * starts is `npx`, so that is what is looked for), and by `coder.setAgentDelivery` (which writes it). Absent
+   * means every agent is `installed`, which is what a table built without one must assume.
+   */
+  /**
+   * Tell every window the agent list moved. Wired to the daemon's bus by `serve.ts`; absent in a table built for
+   * a test, which then observes the write directly.
+   */
+  onHarnessesChanged?: () => void;
+  deliveries?: {
+    of: (harness: HarnessId) => "installed" | "npx";
+    set: (harness: HarnessId, delivery: "installed" | "npx") => Promise<void>;
+  };
   /**
    * How a fix is run, injected for the same reason the probes are.
    *
@@ -574,10 +592,27 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     "coder.listHarnesses": async (params) => {
       parseRpcParams("coder.listHarnesses", params);
       return {
-        harnesses: ALL_HARNESSES.map((id) =>
-          summarize(
+        harnesses: ALL_HARNESSES.map((id) => {
+          /**
+           * **The probe follows the delivery**, and that is the whole point of the field.
+           *
+           * With `npx` the program we would start is `npx`, so `npx` is what must be found, and a machine with
+           * no npm cannot take the route — which the row then reports honestly instead of offering a download
+           * nothing can perform. The bridge's package name is not read here: it comes from the catalogue at
+           * launch time, so a catalogue edit is not a migration of anybody's stored choice.
+           */
+          const delivery = deps.deliveries?.of(id) ?? "installed";
+          const recipe = delivery === "npx" ? fetchedBridgeRecipe(id) : undefined;
+          const finding: HarnessProbe =
+            recipe === undefined
+              ? probe(id)
+              : {
+                  ...probeRecipe(recipe, { pathDirs: search.dirs, searchable: search.searchable }),
+                  id,
+                };
+          return summarize(
             id,
-            probe,
+            () => finding,
             deps.store.sessionOptions(id),
             // The auth record — the last fact on this row. **Every field of a summary is something a probe
             // established**; nothing here is read from the settings document, which is what makes a picker
@@ -585,8 +620,46 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
             // of them a picker offers lives in one pure function over them
             // (`apps/desktop/src/composer/agent-for.ts`), not here.
             deps.store.agentAuth(id),
-          ),
-        ),
+            delivery === "npx" && recipe !== undefined
+              ? { kind: "npx", package: bridgePackage(id) ?? "" }
+              : { kind: "installed" },
+          );
+        }),
+      };
+    },
+
+    /**
+     * **Choose how an agent's connector is delivered** — installed, or fetched by `npx`.
+     *
+     * The one method here whose refusal is a *product rule* rather than a validation: an agent whose connector
+     * is not on npm cannot be fetched, and storing that choice would leave a row saying `Runs through npx` about
+     * an agent whose first run would fail. So the refusal is by name, and nothing is written.
+     */
+    "coder.setAgentDelivery": async (params) => {
+      const { harness, delivery } = parseRpcParams("coder.setAgentDelivery", params) as {
+        harness: HarnessId;
+        delivery: "installed" | "npx";
+      };
+      if (delivery === "npx") {
+        const pkg = bridgePackage(harness);
+        if (pkg === undefined) {
+          throw coderError(
+            ENVOYCODER_ERRORS.connectorNotFetchable,
+            `${harnessDefinition(harness).label} has no connector published on npm, so it cannot be fetched.`,
+            ref("error.connectorNotFetchable", { harness: harnessDefinition(harness).label }),
+          );
+        }
+      }
+      await deps.deliveries?.set(harness, delivery);
+      // Every window re-reads on this, and the *runs* read the same store, so a row and the next launch cannot
+      // disagree about which route is in force.
+      deps.onHarnessesChanged?.();
+      return {
+        harness,
+        delivery:
+          delivery === "npx"
+            ? ({ kind: "npx", package: bridgePackage(harness) ?? "" } as const)
+            : ({ kind: "installed" } as const),
       };
     },
 

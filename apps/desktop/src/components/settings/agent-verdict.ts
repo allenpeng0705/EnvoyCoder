@@ -60,7 +60,12 @@
  * state. See `docs/settings-parity.md` §7.17.
  */
 
-import type { HarnessAvailability, HarnessSummary, AgentProviderSummary } from "@envoycoder/protocol";
+import type {
+  AgentDelivery,
+  AgentProviderSummary,
+  HarnessAvailability,
+  HarnessSummary,
+} from "@envoycoder/protocol";
 
 // The one rule about labels, kept where it was: a value **we** wrote carries a catalogue key and is
 // translated, and a value the **agent** wrote is shown as the agent wrote it — a model label has no key in
@@ -435,6 +440,12 @@ export interface FactInput {
   /** The clock to measure "observed …" against. Injectable so the sentence is testable without waiting. */
   now?: number;
   locale: Locale;
+  /**
+   * The delivery in force for this row, from the wire. Absent means `installed` (a daemon older than the field
+   * can only take that route), and only `npx` adds a fact — see `verdictFacts`.
+   */
+  delivery?: AgentDelivery;
+
 }
 
 /**
@@ -472,6 +483,22 @@ export function verdictFacts(input: FactInput, t: Translate): RowFact[] {
 
   if (input.commandLine !== undefined) {
     facts.push({ label: t("settings.agent.fact.runs"), value: input.commandLine });
+  }
+
+  /**
+   * **How the connector is delivered** — and only when the user has chosen the fetched route.
+   *
+   * A `caveat`, for the reason `provisional` is one: it is the fact that changes how much a user should trust the
+   * row's other answers. `Ready (npm, fetched on the first run)` is a different promise from `Ready` about a
+   * program on this machine — the first run downloads something — and the row has to say which one it is making.
+   * The `installed` route is the default and gets no fact: a caveat on every row is a caveat nobody reads.
+   */
+  if (input.delivery?.kind === "npx") {
+    facts.push({
+      label: t("settings.agent.fact.delivery"),
+      value: t("settings.agent.fact.delivery.npx"),
+      caveat: true,
+    });
   }
 
   if (input.install !== undefined) {

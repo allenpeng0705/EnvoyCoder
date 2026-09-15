@@ -334,7 +334,15 @@ export interface HarnessDefinition {
     hint: string;
     url?: string;
     /** The ACP bridge or vendor subcommand's package, for an entry whose `launch.binaries` is not the agent. */
-    bridge?: { hint: string; url?: string };
+    /**
+     * The bridge — **the adapter we drive the agent through**, when the agent's own CLI has no ACP mode.
+     *
+     * `package` is the structured half of `hint`, and it is what makes a *fetched* delivery possible: the launch
+     * for that route is `npx -y <package>`, and a package name parsed back out of an English hint would be one
+     * catalogue edit away from being wrong. Absent means this agent's connector cannot be fetched — which is the
+     * honest answer for the seven agents we ship whose adapter is in this repository.
+     */
+    bridge?: { hint: string; url?: string; package?: string };
   };
   /** Where the facts came from. `unverified` means "confirm before relying on it". */
   evidence: string;
@@ -602,6 +610,8 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       bridge: {
         hint: "npm install -g @agentclientprotocol/claude-agent-acp",
         url: "https://www.npmjs.com/package/@agentclientprotocol/claude-agent-acp",
+        // Published on npm, so this connector can be *fetched* instead of installed: `npx -y <package>`.
+        package: "@agentclientprotocol/claude-agent-acp",
       },
     },
     evidence:
@@ -686,6 +696,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       bridge: {
         hint: "npm install -g @agentclientprotocol/codex-acp",
         url: "https://www.npmjs.com/package/@agentclientprotocol/codex-acp",
+        package: "@agentclientprotocol/codex-acp",
       },
     },
     evidence:
@@ -1086,6 +1097,66 @@ export function harnessRecipe(definition: HarnessDefinition): ProbeRecipe {
   };
 }
 
+
+/**
+ * **The npm package a fetched connector comes from** — or `undefined`, which is the honest answer for every
+ * agent whose adapter cannot be fetched.
+ *
+ * A separate accessor rather than the definition, because the two callers want the *fact* and nothing else: the
+ * daemon's launch needs the argv, and the row needs to say what will be downloaded on the first run.
+ */
+export function bridgePackage(id: HarnessId): string | undefined {
+  return HARNESS_CATALOG[id].install?.bridge?.package;
+}
+
+/**
+ * **The recipe for a connector that is fetched rather than installed** — what the launch probes and runs when a
+ * user has chosen the `npx` delivery.
+ *
+ * ## Why a recipe rather than a branch inside the launch
+ *
+ * Everything downstream of the recipe is the machinery this repository already trusts: `probeRecipe` looks for
+ * `binaries[0]` on the resolved search path and reports the five states, `resolveLaunch` refuses in the two
+ * right ways, and the child gets the `PATH` the probe searched. So the fetched route is expressed as *a
+ * different program to start* — `npx` — and inherits every one of those rules instead of re-implementing them.
+ *
+ * The **agent's own** binary stays on the recipe, because the bridge drives it: `claude-agent-acp` runs
+ * `claude`, and a fetched bridge for an agent that is itself absent would download a package and then fail. The
+ * probe keeps reporting that honestly (`not-installed`, with the agent's own install hint).
+ */
+export function fetchedBridgeRecipe(id: HarnessId): ProbeRecipe | undefined {
+  const definition = HARNESS_CATALOG[id];
+  const pkg = bridgePackage(id);
+  if (pkg === undefined || definition.launch.kind !== "child-process") return undefined;
+  return {
+    label: definition.label,
+    kind: "child-process",
+    // **The program we launch is `npx`**, and that is what the probe looks for: a machine with no `npx` cannot
+    // take this route, and the row must say so rather than offering a download nothing can perform.
+    binaries: ["npx"],
+    transport: definition.launch.transport,
+    ...(definition.launch.agentBinaries ? { agentBinaries: definition.launch.agentBinaries } : {}),
+    // The bridge's own hint, and the page that explains it — this is the thing being fetched, so it is what an
+    // install hint has to be about.
+    install: {
+      hint: definition.install?.bridge?.hint ?? `npx -y ${pkg}`,
+      ...(definition.install?.bridge?.url !== undefined ? { url: definition.install.bridge.url } : {}),
+    },
+  };
+}
+
+/**
+ * The argv a fetched connector runs: `npx -y <package>`, plus the user's own extra arguments.
+ *
+ * `-y` is not optional: `npx` prompts before downloading an uninstalled package, and a prompt inside a spawned
+ * ACP server is a process that never answers `initialize` — the failure would read as "the agent is broken"
+ * rather than "somebody has to type `y`". The user's decision was the press that chose this delivery.
+ */
+export function fetchedBridgeArgs(id: HarnessId, extraArgs: string | undefined): string[] {
+  const pkg = bridgePackage(id);
+  if (pkg === undefined) return [];
+  return ["-y", pkg, ...splitArgs(extraArgs)];
+}
 
 /**
  * **Every program name a probe in this daemon could ask about**, in one list.

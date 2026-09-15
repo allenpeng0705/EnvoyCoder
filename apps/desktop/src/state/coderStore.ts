@@ -49,7 +49,7 @@ import type {
   TaskDefaults,
 } from "@envoycoder/protocol";
 import { DEFAULT_CODER_SETTINGS, missingMethods } from "@envoycoder/protocol";
-import type { FixRunResult as FixRunResultWire } from "@envoycoder/protocol";
+import type { AgentDelivery as AgentDeliveryWire, FixRunResult as FixRunResultWire } from "@envoycoder/protocol";
 
 import { localNotice, noticeFromError, type Notice, type Refusal } from "../i18n/notice.js";
 import { buildTranscript, type Transcript } from "./transcript.js";
@@ -663,6 +663,23 @@ export class CoderStore {
         return { ok: true as const, outcome: result.outcome, detail: result.detail };
       },
     );
+  }
+
+  /**
+   * **Choose how an agent's connector is delivered** — installed here, or fetched by `npx` on first run.
+   *
+   * The one call in this store that changes *what a run starts*. A refusal is possible and expected (a connector
+   * that is not on npm cannot be fetched), and the caller renders it where the control is rather than in a strip
+   * somewhere else.
+   */
+  async setAgentDelivery(
+    harness: HarnessId,
+    delivery: "installed" | "npx",
+  ): Promise<{ ok: true; delivery: AgentDeliveryWire } | Refusal> {
+    return this.mutate("coder.setAgentDelivery", { harness, delivery }, (answer) => {
+      const result = answer as { delivery: AgentDeliveryWire };
+      return { ok: true as const, delivery: result.delivery };
+    });
   }
 
   /**

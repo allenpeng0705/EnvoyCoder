@@ -148,6 +148,13 @@ export interface CoderPaths {
    * reads nor writes.
    */
   agentAuthFile: string;
+  /**
+   * The delivery the user chose per agent — `installed`, or fetched by `npx`.
+   *
+   * Its own file for the reason this interface's doc gives for the others: it is a **collection keyed by an
+   * agent**, and one unusable row in the settings document would quarantine everything else the user had set.
+   */
+  deliveriesFile: string;
   runsDir: string;
   transcriptsDir: string;
   logsDir: string;
@@ -187,6 +194,7 @@ export function coderPaths(home: string = resolveHomeDir()): CoderPaths {
     sessionOptionsFile: join(stateDir, "session-options.json"),
     providersFile: join(stateDir, "providers.json"),
     agentAuthFile: join(stateDir, "agent-auth.json"),
+    deliveriesFile: join(stateDir, "agent-delivery.json"),
     runsDir: join(stateDir, "runs"),
     transcriptsDir: join(stateDir, "transcripts"),
     logsDir: join(stateDir, "logs"),

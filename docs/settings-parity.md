@@ -2900,6 +2900,61 @@ dialog would hide it. **Not verified at all:** a real installation on a real mac
 scripts, and the one press that would run `npm install -g` on the owner's machine is the owner's to make —
 which is the point of the control existing.
 
+### 7.21 Fetched or installed: the user chooses, and the row says which
+
+The last piece of *"resolve it without leaving the app"*, and the one §7.19.2 left open. The decision it needed
+was **silent switch or stored choice**, and it is the stored choice — for the reason this product has refused every
+other silent change to a user's machine: a silent `npx` fallback would **download a package** on the first run of an
+agent whose program the user believed they had installed, and the row would go on saying what it said before.
+
+#### 7.21.1 The shape
+
+| piece | what it is |
+|---|---|
+| `AgentDelivery` | `{ kind: "installed" }` or `{ kind: "npx", package }` — a discriminated union, so a route with no package (a route nothing can take) is unrepresentable |
+| `install.bridge.package` | the npm package, **structured**, beside the English hint that already named it: the launch argv comes from the catalogue, so a catalogue rename is not a migration of every user's stored choice |
+| `agent-delivery.json` | the choice per agent, its own file, read through the same collection helper as the providers — one bad row costs that row, and an unreadable file is quarantined rather than emptied. `installed` is stored as *absence*, so the file cannot grow a line per agent a user ever considered |
+| `fetchedBridgeRecipe` | the fetched route expressed as **a different program to start** (`binaries: ["npx"]`) rather than a branch inside the launch — so the probe, the two availability refusals, the `PATH` handed to the child and the argv all come from the machinery this repository already trusts. The agent's own binary stays on it, because the bridge drives it: an absent `codex` is still reported as an absent agent rather than as a package to download |
+| `coder.setAgentDelivery` | the choice, with a refusal that is a **product rule** rather than a validation: an agent whose connector is not on npm cannot be fetched, and storing that would leave a row saying `Runs through npx` about a run that would fail |
+
+The launch reads the choice at the one place a run is created (`runs.ts`, plus the probe and the sign-in flows),
+through `deliveryOf` — injected, because `launchForHarness` is a pure function of its input by design.
+
+#### 7.21.2 Measured, live, on this machine
+
+```console
+$ …coder.hello            → advertises coder.setAgentDelivery, 32 methods
+$ …coder.listHarnesses    → codex: ready binary=/Users/shileipeng/.npm-global/bin/codex-acp  delivery={"kind":"installed"}
+$ setAgentDelivery(envoy-harness, npx) → refused: envoycoder.connector-not-fetchable
+$ setAgentDelivery(codex, npx)         → {"harness":"codex","delivery":{"kind":"npx","package":"@agentclientprotocol/codex-acp"}}
+$ …coder.listHarnesses    → codex: ready binary=/usr/local/bin/npx                          delivery={"kind":"npx",…}
+$ setAgentDelivery(codex, installed)   → back to …/.npm-global/bin/codex-acp
+```
+
+The middle pair is the whole slice: **the binary the row reports moves from the installed bridge to `npx`**, which
+is the daemon's own answer rather than a claim about it — the probe followed the delivery, and a machine with no npm
+reports the route as missing rather than offering a download nothing can perform. The choice was set back to
+`installed` before this was written, because a review does not leave preferences behind on the owner's machine.
+
+| what the window does | the assertion |
+|---|---|
+| the row says *Runs through npx* and the fact says `Delivered by: npm, fetched on the first run` | *says which route is in force, on the line and as a property* |
+| the press stores the choice in the direction the label promises | *offers the fetched route… and stores the choice* (asserts the args `["codex","npx"]`) |
+| not drawn at all when the daemon does not serve the method | *is not drawn when the daemon does not serve the method* |
+| the refusal is shown where the press was, in the user's language | the daemon sends `error.connectorNotFetchable` as a **key**; the leg reads it off the wire |
+
+Mutations, each reddening the named leg: **the delivery ignored by the launch** (*launches `npx -y <package>`,
+resolved through the search path*), and — from §7.20 — the target and the build-skew gate. Gates: **879 passed /
+7 skipped**, 12 Rust tests.
+
+**What was measured, and what was reasoned about.** Measured: every line of the console block above, taken from the
+running daemon; the argv and the probe target in `launch-search-path.test.ts`; the refusal and the round trip in
+`daemon-rpc.test.ts`; the row's three behaviours in jsdom. Reasoned about rather than measured: that `npx -y` is the
+right form (a prompt inside a spawned ACP server is a process that never answers `initialize`, so the `-y` is not a
+convenience); and that the choice belongs in the row's disclosure rather than in its action column, where it would
+compete with Run. **Not verified:** a real fetched run — `npx -y @agentclientprotocol/codex-acp` downloading and
+opening a session. That is one press on the owner's machine and one download, and it is theirs to make.
+
 ## 8. The slice plan
 
 Ordered, and ordered by *cheapness times usefulness* rather than by Paseo's section order. Each slice

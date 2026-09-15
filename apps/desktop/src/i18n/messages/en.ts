@@ -530,6 +530,27 @@ export const en = {
   "settings.agents.recheck.title":
     "Ask your login shell where your programs are, and re-read every agent's state. Nothing is started and nothing is installed.",
   /**
+   * **The delivery choice, and what it says on the row.**
+   *
+   * The one control in this product that changes *what runs*: `npx` fetches the connector from npm on its first
+   * run instead of using one installed on the machine. Both labels say what they do; the `title`s say the part a
+   * user cannot see — that fetching downloads a package the first time, and that switching back stops it.
+   */
+  "settings.agents.delivery.npx": "Run it through npx",
+  "settings.agents.delivery.npx.title":
+    "Fetches the connector from npm the first time it runs, and starts it from npm's cache afterwards. Nothing is installed on this machine.",
+  "settings.agents.delivery.installed": "Use the installed copy",
+  "settings.agents.delivery.installed.title":
+    "Stops fetching: the launch goes back to the connector installed on this machine.",
+  "settings.agent.fact.delivery": "Delivered by",
+  "settings.agent.fact.delivery.npx": "npm, fetched on the first run",
+  "settings.agent.fact.delivery.installed": "Installed on this machine",
+  /* The row's own line for an agent whose connector is fetched — `Ready`, and how. */
+  "settings.agent.verdict.fetch.line": "Runs through npx",
+  /* The refusal when a connector is not on npm at all: no route to fetch, so nothing is stored. */
+  "error.connectorNotFetchable":
+    "{harness} has no connector published on npm, so EnvoyCoder cannot fetch it. Install it instead.",
+  /**
    * **The press that runs the fix.** The owner's second question, in the words a user sees: *"can we support run
    * the commands in EnvoyCoder?"*
    *

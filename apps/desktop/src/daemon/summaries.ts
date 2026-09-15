@@ -31,6 +31,7 @@ import {
   type HarnessSummary,
   type ObservedSessionOptions,
   unknownAuth,
+  type AgentDelivery,
 } from "@envoycoder/protocol";
 import {
   canApplyModel,
@@ -77,6 +78,15 @@ export function summarize(
    * tolerating an older daemon produce the same three words rather than two similar ones.
    */
   auth: AgentAuthObservation | undefined = undefined,
+  /**
+   * **How this agent's connector is delivered**, as the user chose it.
+   *
+   * On the wire because it is a fact about the *launch*: with `npx` the program that starts is `npx`, and a row
+   * that said `Ready (claude-agent-acp)` about a machine where nothing is installed would be describing the
+   * other route. The window renders it as a property of the row, which is where this page's vocabulary puts
+   * every fact a user might want to check.
+   */
+  delivery: AgentDelivery = { kind: "installed" },
 ): HarnessSummary {
   const definition = harnessDefinition(id);
   const result = probe(id);
@@ -143,6 +153,7 @@ export function summarize(
     // projection and `HarnessAvailabilitySchema` re-checks its five agreement rules on every answer, so a
     // catalogue change that produced a self-contradicting state fails a test rather than reaching a window.
     availability: harnessAvailability(result),
+    delivery,
     // And the third fact: whether it will talk to us, or wants a sign-in first. `authOf` is the one place
     // that turns a record — or the absence of one — into the three-state answer.
     auth: authOf(auth),

@@ -1858,6 +1858,16 @@ body {
    Amber and not the accent: the accent is this app's one action colour (Send, Allow once), and a callout
    wearing it would compete with the primary button on the same screen. Amber and not red: destructive is a
    colour that only appears inside a confirmation, which is a rule this sheet states at the top. */
+/* **The delivery control**, at the bottom of a row's disclosure. Quiet on purpose: it is the one control here
+   that changes what a run starts, and it belongs beside the facts a user reads when they are deciding — not in
+   the row's own action column, where it would compete with Run. */
+.settings__agent-delivery {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .settings__agent-fix {
   display: flex;
   flex-direction: column;

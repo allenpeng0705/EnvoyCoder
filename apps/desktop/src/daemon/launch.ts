@@ -62,6 +62,8 @@ import {
   harnessRecipe,
   probeRecipe,
   providerRecipe,
+  fetchedBridgeArgs,
+  fetchedBridgeRecipe,
   resolveHarnessCommand,
   resolveProviderEnv,
   splitArgs,
@@ -100,6 +102,15 @@ export interface LaunchInput {
    * probe reports as `unknown` rather than as an absence.
    */
   searchDirs?: readonly string[];
+  /**
+   * **How this agent's connector is delivered** — the user's stored choice, and the only thing in this file that
+   * changes *what* is started rather than how.
+   *
+   * Omitted means `installed`, which is what a daemon that has no record of a choice must assume: it is the
+   * route this build has always taken, and assuming `npx` would start downloading packages for users who never
+   * asked for one.
+   */
+  delivery?: "installed" | "npx";
 }
 
 /**
@@ -142,23 +153,43 @@ export interface ProviderLaunchInput {
  * broken".
  */
 export function launchForHarness(input: LaunchInput): AcpLaunch {
-  const { harness, cwd, model, extraArgs } = input;
+  const { harness, cwd, model, extraArgs, delivery } = input;
   const definition = harnessDefinition(harness);
+  /**
+   * **The fetched route is a different program, not a different branch of the same one.**
+   *
+   * With the `npx` delivery the thing that starts is `npx` — so it is `npx` the probe looks for, `npx` the
+   * refusal is about when it is absent, and `npx` the child is spawned as. Everything else in `resolveLaunch`
+   * (the drivability check, the two availability refusals, the `PATH` handed to the child) applies unchanged,
+   * which is the whole reason this is expressed as a *recipe* rather than as a special case inside it.
+   *
+   * `fetchedBridgeRecipe` answers `undefined` for an agent with no npm-published connector, and the fallback is
+   * the installed recipe: that combination can only arrive from a client hand-writing the call, because the
+   * daemon refuses to *store* an unfetchable delivery in the first place.
+   */
+  const fetched = delivery === "npx" ? fetchedBridgeRecipe(harness) : undefined;
   return resolveLaunch(
     {
       label: definition.label,
-      recipe: harnessRecipe(definition),
+      recipe: fetched ?? harnessRecipe(definition),
       /**
        * The argv, resolved from the probe. `via === "node-script"` is the peer checkout, where the command
        * is Node and the first argument is the script — a difference `resolveHarnessCommand` owns.
        */
-      command: (probe) =>
-        resolveHarnessCommand(harness, probe, {
-          prompt: "",
-          cwd,
-          ...(model ? { model } : {}),
-          ...(extraArgs ? { extraArgs } : {}),
-        }),
+      command: fetched
+        ? (probe) => ({
+            // The path the probe resolved rather than the bare name `npx`, on the same rule every other launch
+            // follows: "the probe verified this file" is a different claim from "something answers to this name".
+            command: probe.binaryPath ?? "npx",
+            args: fetchedBridgeArgs(harness, extraArgs),
+          })
+        : (probe) =>
+            resolveHarnessCommand(harness, probe, {
+              prompt: "",
+              cwd,
+              ...(model ? { model } : {}),
+              ...(extraArgs ? { extraArgs } : {}),
+            }),
       // Both of these are **protocol** facts about the agent rather than ways to start it, and they travel
       // on this one channel because this is the only one the daemon and the catalogue share.
       acp: harnessAcpFacts(harness),

@@ -733,6 +733,88 @@ describe("checking this machine again", () => {
   });
 });
 
+/* ────────────────────────── installed, or fetched by npx ────────────────────────── */
+
+/**
+ * **The one control on this page that changes what a run starts.**
+ *
+ * The owner's last piece of *"resolve it without leaving the app"*: an agent whose connector is published on npm
+ * can be run without installing anything, and the route is the user's choice — stored, and rendered as a property
+ * of the row rather than switched silently behind it. These legs assert the three halves that make that honest:
+ * the row **says** which route is in force, the press changes it in the direction the label promises, and the
+ * control is not drawn at all when the daemon cannot honour it.
+ */
+describe("choosing how a connector is delivered", () => {
+  const NPX_READY = {
+    id: "codex" as const,
+    label: "Codex",
+    // What the daemon sends for a fetched delivery: the probe resolved `npx`, so the row is Ready — and the
+    // delivery is the separate fact that says the first run downloads something.
+    availability: { state: "ready" as const, binary: "/usr/local/bin/npx" },
+    delivery: { kind: "npx" as const, package: "@agentclientprotocol/codex-acp" },
+  };
+
+  it("says which route is in force, on the line and as a property", () => {
+    const { container } = show({ harnesses: [harness(NPX_READY)] }, ["coder.setAgentDelivery"]);
+    const row = rowOf(container, "Codex");
+    expect(verdictOf(row)).toBe(READY);
+    // The line says *how* it is ready, because "Ready" about a program that will be downloaded is a different
+    // promise from "Ready" about one on this machine.
+    expect(textOf(row.querySelector(".settings__agent-line"))).toBe(en["settings.agent.verdict.fetch.line"]);
+
+    const panel = openDetails(row);
+    expect(textOf(panel)).toContain(en["settings.agent.fact.delivery"]);
+    expect(textOf(panel)).toContain(en["settings.agent.fact.delivery.npx"]);
+    // And it can be undone: a preference with no way back is a decision a user has to live with.
+    const back = [...panel.querySelectorAll("button")].find(
+      (candidate) => candidate.textContent === en["settings.agents.delivery.installed"],
+    );
+    expect(back).toBeTruthy();
+  });
+
+  it("offers the fetched route on a row whose connector is missing, and stores the choice", async () => {
+    const { container, calls } = show(
+      {
+        harnesses: [
+          harness({
+            id: "codex",
+            label: "Codex",
+            availability: {
+              state: "needs-bridge",
+              agentBinary: "/usr/local/bin/codex",
+              fix: [{ command: ADAPTER }],
+            },
+          }),
+        ],
+      },
+      ["coder.setAgentDelivery"],
+    );
+    const panel = openDetails(rowOf(container, "Codex"));
+    const fetch = [...panel.querySelectorAll("button")].find(
+      (candidate) => candidate.textContent === en["settings.agents.delivery.npx"],
+    );
+    if (!(fetch instanceof HTMLButtonElement)) throw new Error("no npx control");
+    expect(fetch.getAttribute("title")).toBe(en["settings.agents.delivery.npx.title"]);
+
+    fireEvent.click(fetch);
+    await waitFor(() => expect(calls.some((call) => call.name === "setAgentDelivery")).toBe(true));
+    const call = calls.find((entry) => entry.name === "setAgentDelivery");
+    expect(call?.args).toEqual(["codex", "npx"]);
+  });
+
+  it("is not drawn when the daemon does not serve the method", () => {
+    // The build-skew rule, and the reason it matters here more than anywhere: this control changes what runs, so
+    // one whose press would come back "Method not found" is worse than no control at all.
+    const { container } = show({ harnesses: [harness(NPX_READY)] }, []);
+    const panel = openDetails(rowOf(container, "Codex"));
+    for (const label of [en["settings.agents.delivery.npx"], en["settings.agents.delivery.installed"]]) {
+      expect(
+        [...panel.querySelectorAll("button")].some((candidate) => candidate.textContent === label),
+      ).toBe(false);
+    }
+  });
+});
+
 /* ────────────────────────── running the fix, in the block that shows it ────────────────────────── */
 
 /**

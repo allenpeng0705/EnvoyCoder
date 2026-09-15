@@ -97,6 +97,14 @@ export interface RunManagerDeps {
   }) => AcpLaunch;
   /** Which platform's argv and spawn rules to use, so the Windows branch is testable. */
   platform?: PlatformId;
+  /**
+   * **How this agent's connector is delivered** — the user's stored choice, read here rather than inside
+   * `launchForHarness`.
+   *
+   * Injected because the launch is a pure function of its input by design, and because a test that wants to prove
+   * the `npx` argv must not need a state file to do it. Absent means `installed`.
+   */
+  deliveryOf?: (harness: HarnessId) => "installed" | "npx";
   now?: () => Date;
   /** The ACP client constructor. Overridden by tests, which must not spawn real agents. */
   startClient?: typeof AcpClient.start;
@@ -311,6 +319,10 @@ export class RunManager {
           ...(this.deps.platform ? { platform: this.deps.platform } : {}),
           ...(task.extraArgs ? { extraArgs: task.extraArgs } : {}),
           ...(model ? { model } : {}),
+          // **The user's delivery choice, read here rather than inside `launchForHarness`.** The launch is a
+          // pure function of its input on purpose; which route this machine takes is daemon state, and this is
+          // the one place a run is started from.
+          ...(this.deps.deliveryOf ? { delivery: this.deps.deliveryOf(task.harness) } : {}),
         });
 
     const run: AgentRun = {

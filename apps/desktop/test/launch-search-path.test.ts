@@ -28,7 +28,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { probeHarness, probeProvider } from "@envoycoder/agent-catalog";
+import {
+  bridgePackage,
+  fetchedBridgeRecipe,
+  probeHarness,
+  probeProvider,
+} from "@envoycoder/agent-catalog";
 import { ENVOYCODER_ERRORS, coderErrorCode, coderErrorRef, type AgentProviderConfig } from "@envoycoder/protocol";
 import { coderPaths } from "@envoycoder/host-bridge";
 import {
@@ -41,6 +46,16 @@ import {
 } from "@envoycoder/platform";
 
 import { launchForHarness, launchForProvider } from "../src/daemon/launch.js";
+
+/**
+ * **POSIX-only legs, one gate for the whole file.**
+ *
+ * Two mechanisms here are POSIX by design: asking a login shell where a program is, and running a fetched
+ * connector through a script on `PATH` (`packages/platform` says the same about both — Windows' registry `PATH`
+ * already reaches a GUI process, so there is nothing to repair there). The skip prints, because a silent skip is a
+ * green light for something nobody ran.
+ */
+const posixOnly = process.platform === "win32" ? it.skip : it;
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -255,7 +270,6 @@ describe("a program only the user's own shell resolves", () => {
   // POSIX-only: this leg asks a login shell, which is a POSIX mechanism by design (`readLoginShellBinaries`
   // returns `not-posix` on Windows, where the registry `PATH` already reaches a GUI process). It says so rather
   // than passing vacuously.
-  const posixOnly = process.platform === "win32" ? it.skip : it;
   posixOnly("reads as installed, not missing — and the launch runs exactly what the probe found", async () => {
     const dir = await tempDir("envoycoder-shell-only-");
     await bridgeIn(dir, "only-in-my-shell");
@@ -373,5 +387,82 @@ describe("a program only the user's own shell resolves", () => {
       }
       expect(thrown?.message).toContain(command);
     }
+  });
+});
+
+/**
+ * **The fetched delivery: `npx -y <package>` instead of an installed connector.**
+ *
+ * The owner's last piece of *"resolve it without leaving the app"*: an agent whose connector is published on npm
+ * can be run without installing anything, by fetching it into npm's cache on the first run. What these legs pin
+ * is that the route is a *different program* rather than a flag on the same one — `npx` is what the probe looks
+ * for, `npx` is what is spawned, and the bridge's package comes from the catalogue rather than from a stored
+ * preference (so a catalogue rename is not a migration of anybody's setting).
+ *
+ * The fixture is a `npx` **script** in a temporary directory, which is the same shape the installed-route legs
+ * above use for a bridge: the claim is about argv and about which program was probed, and both are answerable
+ * without downloading anything.
+ */
+describe("a connector that is fetched rather than installed", () => {
+  posixOnly("launches `npx -y <package>`, resolved through the search path", async () => {
+    resetSearchPathCacheForTests();
+    resetShellBinaryCacheForTests();
+    const dir = await mkdtemp(join(tmpdir(), "envoycoder-npx-"));
+    cleanups.push(() => rm(dir, { recursive: true, force: true }));
+    // A stand-in for `npx`, and nothing else: what is asserted is the argv, not npm's behaviour.
+    await writeFile(join(dir, "npx"), "#!/bin/sh\nexit 0\n");
+    await chmod(join(dir, "npx"), 0o755);
+
+    const launch = launchForHarness({
+      harness: "codex",
+      cwd: dir,
+      paths: coderPaths(dir),
+      searchDirs: [dir],
+      delivery: "npx",
+    });
+
+    // **The resolved path, not the bare name** — the same rule every other launch follows.
+    expect(launch.command).toBe(join(dir, "npx"));
+    expect(launch.args).toEqual(["-y", "@agentclientprotocol/codex-acp"]);
+
+    resetSearchPathCacheForTests();
+    resetShellBinaryCacheForTests();
+  });
+
+  posixOnly("refuses the route when `npx` is not on the machine, rather than pretending", async () => {
+    // A delivery is a claim about what will run. With no `npx` there is no route, and the refusal is the *missing*
+    // one — the program the probe looked for is absent — not a launch that fails later with a confusing error.
+    resetSearchPathCacheForTests();
+    const dir = await mkdtemp(join(tmpdir(), "envoycoder-no-npx-"));
+    cleanups.push(() => rm(dir, { recursive: true, force: true }));
+
+    // `coderErrorCode` reads the *message*, which is the wire's form of a coded refusal (see its own doc).
+    let message = "";
+    try {
+      launchForHarness({
+        harness: "codex",
+        cwd: dir,
+        paths: coderPaths(dir),
+        searchDirs: [dir],
+        delivery: "npx",
+      });
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(coderErrorCode(message)).toBe(ENVOYCODER_ERRORS.harnessMissing);
+    resetSearchPathCacheForTests();
+  });
+
+  it("leaves the installed route untouched, and has no recipe for an agent with no npm connector", () => {
+    // The default is `installed` — a missing record must not become a download — and an agent whose adapter lives
+    // in this repository has no fetched recipe at all, which is what makes the daemon refuse to store that choice.
+    expect(bridgePackage("codex")).toBe("@agentclientprotocol/codex-acp");
+    expect(bridgePackage("claudecode")).toBe("@agentclientprotocol/claude-agent-acp");
+    expect(bridgePackage("envoy-harness")).toBeUndefined();
+    expect(fetchedBridgeRecipe("envoy-harness")).toBeUndefined();
+    expect(fetchedBridgeRecipe("codex")?.binaries).toEqual(["npx"]);
+    // And the agent's own program stays on the fetched recipe: the bridge drives it, so an absent agent is still
+    // reported as an absent agent rather than as a package to download.
+    expect(fetchedBridgeRecipe("codex")?.agentBinaries).toEqual(["codex"]);
   });
 });

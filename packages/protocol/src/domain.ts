@@ -828,6 +828,16 @@ export const ENVOYCODER_ERRORS = {
    * already there, and the two failures send a user to different places.
    */
   harnessUnsupported: "envoycoder.harness-unsupported",
+  /**
+   * This agent's connector cannot be fetched — there is no npm package for it, so `npx` is not a route it can
+   * take.
+   *
+   * A refusal rather than a stored preference that quietly does nothing: a delivery is a claim about *what will
+   * run*, and keeping a choice the launch cannot honour would leave a row saying `Runs through npx` about an
+   * agent whose first run would fail. The seven agents we ship whose adapters are in this repository are exactly
+   * this case.
+   */
+  connectorNotFetchable: "envoycoder.connector-not-fetchable",
   /** The harness refused to start (bad config, unsupported arg). */
   harnessFailed: "envoycoder.harness-failed",
   /**
@@ -1026,6 +1036,13 @@ export const RPC_METHODS = [
    * owner's report — *"I don't want user to guess, to check if we can do that"* — is why it is gone: a row
    * that has to be asked about one at a time is a chore, and the chore was the design.
    */
+  /**
+   * **Choose how an agent's connector is delivered**: installed, or fetched by `npx` on first run.
+   *
+   * A method rather than a settings field, because a refusal has to be possible — a harness with no
+   * npm-published connector cannot be fetched — and because the answer names the delivery now in force.
+   */
+  "coder.setAgentDelivery",
   /**
    * **Run the fix a row is showing**: the window names a target by id, the daemon resolves the commands
    * through the same probes that drew the row, and runs exactly those.

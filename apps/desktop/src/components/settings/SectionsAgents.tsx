@@ -92,9 +92,10 @@ import type { JSX } from "react";
 
 import { useCallback, useState } from "react";
 
-import type { HarnessAvailability, HarnessSummary } from "@envoycoder/protocol";
+import type { AgentDelivery, HarnessAvailability, HarnessId, HarnessSummary } from "@envoycoder/protocol";
 
 import type { MessageKey } from "../../i18n/messages/en.js";
+import type { Refusal } from "../../i18n/notice.js";
 
 import { availabilityOf } from "../../composer/agent-for.js";
 import { useI18n } from "../../i18n/context.js";
@@ -102,6 +103,7 @@ import { localizeText } from "../../i18n/notice.js";
 import type { SettingsSectionProps } from "./SectionProps.js";
 import { AgentRow } from "./AgentRow.js";
 import { FactsBlock, GuideBlock } from "./RowGuide.js";
+import { DeliveryControl } from "./DeliveryControl.js";
 import type { FixRunAnswer } from "./FixRunner.js";
 import { rowVerdict, verdictFacts } from "./agent-verdict.js";
 import { AGENT_ROW_LINE_BUDGET } from "./density.js";
@@ -139,6 +141,8 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
     recheck: state.hello?.methods.includes("coder.recheckAgents") === true,
     // The press that runs a fix, and the same build-skew rule as every other control on this page.
     runFix: state.hello?.methods.includes("coder.runFix") === true,
+    // Choosing how an agent's connector is delivered. Same rule: no control whose press would be refused by name.
+    delivery: state.hello?.methods.includes("coder.setAgentDelivery") === true,
   };
 
   /**
@@ -217,6 +221,10 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
             onSignIn={onSignIn}
             {...(can.runFix
               ? { onRunFix: () => agents.runFix({ kind: "harness", id: harness.id }) }
+              : {})}
+            {...(harness.delivery !== undefined ? { delivery: harness.delivery } : {})}
+            {...(can.delivery
+              ? { onChooseDelivery: (id: HarnessId, next: "installed" | "npx") => agents.setAgentDelivery(id, next) }
               : {})}
           />
         ))}
@@ -311,6 +319,13 @@ function ShippedAgent(props: {
    * kinds of target it is — and the daemon's method takes an id, never a command.
    */
   onRunFix?: () => Promise<FixRunAnswer>;
+  /**
+   * The delivery this machine will use, from the wire, and the way to change it.
+   *
+   * Absent `onChoose` means the daemon does not serve the method, and `DeliveryControl` then renders nothing.
+   */
+  delivery?: AgentDelivery;
+  onChooseDelivery?: (harness: HarnessId, delivery: "installed" | "npx") => Promise<{ ok: true } | Refusal>;
 }): JSX.Element {
   const { t, locale } = useI18n();
   const { harness } = props;
@@ -336,15 +351,30 @@ function ShippedAgent(props: {
       // What the row says when there is nothing to fix. The tier is the honest answer for an agent that is
       // simply working: there is no action, and "Ships with EnvoyCoder" is a fact rather than a filler — and
       // for a daemon that could not answer, it is the action instead, in four words.
-      readyLine: undeclared
-        ? t("settings.agents.row.restart")
-        : t(harness.tier === "built-in" ? "settings.agent.tier.builtIn" : "settings.agent.tier.catalogued"),
+      // **`Ready` and how.** For an agent whose connector is fetched, the line says so: the tier is a fact about
+      // where the recipe came from, and the delivery is a fact about what will run — and when they differ the
+      // second one is the one a user needs before pressing Run.
+      readyLine:
+        harness.delivery?.kind === "npx"
+          ? t("settings.agent.verdict.fetch.line")
+          : undeclared
+            ? t("settings.agents.row.restart")
+            : t(harness.tier === "built-in" ? "settings.agent.tier.builtIn" : "settings.agent.tier.catalogued"),
     },
     t,
     AGENT_ROW_LINE_BUDGET,
   );
 
-  const facts = verdictFacts({ availability, harness, locale, now: Date.now() }, t);
+  const facts = verdictFacts(
+    {
+      availability,
+      harness,
+      locale,
+      now: Date.now(),
+      ...(harness.delivery !== undefined ? { delivery: harness.delivery } : {}),
+    },
+    t,
+  );
 
   return (
     <AgentRow
@@ -379,6 +409,13 @@ function ShippedAgent(props: {
             <GuideBlock guide={verdict.guide} {...(props.onRunFix !== undefined ? { run: props.onRunFix } : {})} />
           ) : null}
           <FactsBlock facts={facts} />
+          {/* **The one control that changes what a run starts**, at the bottom of the disclosure: the row itself
+              has no room for a fourth column, and a user reading the facts is exactly the user deciding. */}
+          <DeliveryControl
+            harness={harness.id}
+            delivery={harness.delivery}
+            {...(props.onChooseDelivery !== undefined ? { onChoose: props.onChooseDelivery } : {})}
+          />
         </>
       }
     />

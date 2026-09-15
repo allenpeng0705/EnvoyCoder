@@ -69,6 +69,7 @@ import { WARM_STALE_MS, startDeepWarm } from "./deep-warm.js";
 import { SessionSignIn } from "./sign-in.js";
 import { createCoderHandlers } from "./service.js";
 import { CoderStore } from "./store.js";
+import { AgentDeliveries } from "./deliveries.js";
 
 export interface StartCoderDaemonOptions {
   /** `0` lets the OS choose, which is what tests use. */
@@ -158,6 +159,14 @@ export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): P
   let connections = 1;
 
   const store = await CoderStore.open({ paths });
+  /**
+   * **The user's delivery choices**, read at boot beside the store.
+   *
+   * Loaded before anything can start an agent, because a run reads it: a choice that arrived one request late
+   * would start the connector the user just replaced.
+   */
+  const deliveries = new AgentDeliveries(paths, store.fileHelper);
+  await deliveries.load();
   const bus = createCoderEventBus();
 
   // Resolved once, at boot, and reported as a state rather than retried in a loop: the mesh is
@@ -176,6 +185,8 @@ export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): P
   // path by which a transcript reaches a window: the daemon never sends a client a frame it did not
   // ask for (`CODER_EVENTS` in `@envoycoder/protocol` explains why subscription works this way).
   const runs = new RunManager({
+    // The same lookup the list and the launch use: one answer to "how is this agent delivered".
+    deliveryOf: (harness) => deliveries.of(harness),
     paths,
     store,
     onEvent: (event) => bus.emit("coder:run-event", event),
@@ -194,6 +205,8 @@ export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): P
    * needs a list.
    */
   const probeSession = new SessionProbe({
+    // The same lookup the list and the launch use: one answer to "how is this agent delivered".
+    deliveryOf: (harness) => deliveries.of(harness),
     paths,
     store,
     ...(options.startClient ? { startClient: options.startClient } : {}),
@@ -210,6 +223,8 @@ export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): P
    * is the property that keeps a daemon from opening a browser on somebody's desktop by itself.
    */
   const signIn = new SessionSignIn({
+    // The same lookup the list and the launch use: one answer to "how is this agent delivered".
+    deliveryOf: (harness) => deliveries.of(harness),
     paths,
     store,
     ...(options.startClient ? { startClient: options.startClient } : {}),
@@ -291,6 +306,10 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
     probe: harnessProbe,
     // The one method whose subject is the measurement itself: the page's "Check again".
     recheckAgents,
+    // The user's delivery choices: read by the list (so a row says which route is in force), written by
+    // `coder.setAgentDelivery`, and read by every launch (`deliveryOf`, above).
+    deliveries: { of: (harness) => deliveries.of(harness), set: (harness, next) => deliveries.set(harness, next) },
+    onHarnessesChanged: () => bus.emit("coder:state-changed", { kind: "harnesses", at: new Date().toISOString() }),
     ...(options.isDirectory ? { isDirectory: options.isDirectory } : {}),
   });
 

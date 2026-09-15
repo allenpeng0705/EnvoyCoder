@@ -323,6 +323,54 @@ describe("the daemon over a socket", () => {
     expect(tasks.tasks).toHaveLength(1);
   });
 
+  it("refuses to fetch a connector that is not on npm, and accepts one that is", async () => {
+    // **The one refusal here that is a product rule rather than a validation.** A delivery is a claim about *what
+    // will run*: storing `npx` for an agent whose adapter lives in this repository would leave a row saying
+    // `Runs through npx` about an agent whose first run would fail, so nothing is written and the call is refused
+    // by name. The mutation this fails on is accepting the preference and letting the launch fall back silently.
+    const { daemon, home } = await bootDaemon();
+    cleanups.push(async () => {
+      await daemon.stop();
+      await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    });
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+
+    const first = await refusalOfCall(client, "coder.setAgentDelivery", {
+      harness: "envoy-harness",
+      delivery: "npx",
+    });
+    expect(coderErrorCode(first)).toBe(ENVOYCODER_ERRORS.connectorNotFetchable);
+    // And nothing was stored: the list still says this agent is delivered the ordinary way.
+    const before = (await client.call("coder.listHarnesses", {})) as {
+      harnesses: { id: string; delivery?: { kind: string } }[];
+    };
+    expect(before.harnesses.find((h) => h.id === "envoy-harness")?.delivery).toEqual({ kind: "installed" });
+
+    // A connector published on npm: accepted, and the list says which route is now in force.
+    const accepted = (await client.call("coder.setAgentDelivery", {
+      harness: "codex",
+      delivery: "npx",
+    })) as { delivery: { kind: string; package?: string } };
+    expect(accepted.delivery).toEqual({ kind: "npx", package: "@agentclientprotocol/codex-acp" });
+    const after = (await client.call("coder.listHarnesses", {})) as {
+      harnesses: { id: string; delivery?: { kind: string } }[];
+    };
+    // **`codex` is `ready` on this machine either way** — the bridges are installed here — which is exactly why
+    // the delivery has to travel as its own field rather than being inferred from the state.
+    expect(after.harnesses.find((h) => h.id === "codex")?.delivery).toEqual({
+      kind: "npx",
+      package: "@agentclientprotocol/codex-acp",
+    });
+
+    // …and back, because a preference that cannot be undone is a decision a user has to live with.
+    const back = (await client.call("coder.setAgentDelivery", {
+      harness: "codex",
+      delivery: "installed",
+    })) as { delivery: { kind: string } };
+    expect(back.delivery).toEqual({ kind: "installed" });
+  });
+
   it("looks at the machine again when a window asks, and tells every window the answer may have changed", async () => {
     // **The owner's question, as a wire fact:** *"After I run `npm install -g @agentclientprotocol/codex-acp`,
     // how do we let EnvoyCoder know that without restarting?"* The daemon re-measures every row on the read, so

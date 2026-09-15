@@ -930,6 +930,34 @@ export const AvailabilityFixSchema = z
   .strict();
 
 /**
+ * **How this machine gets the program that drives an agent.**
+ *
+ * Two routes, and the difference is where the program lives rather than what runs:
+ *
+ *   * `installed` — the ordinary one: the probe found a program on the user's `PATH` and we launch that path.
+ *   * `npx` — **fetched**: nothing is installed, and the launch is `npx -y <package>`, which downloads the
+ *     connector into npm's cache the first time and runs it from there afterwards.
+ *
+ * ## Why this is a *stored choice* rather than a fallback the daemon picks
+ *
+ * The tempting design is to use `npx` silently whenever the installed connector is missing — no setting, no
+ * control, and the row "just works". It is refused here for the reason this product refuses every other silent
+ * machine change: the first run would **download a package** for an agent whose program the user believed they
+ * had installed, and the row would go on saying what it said before. A delivery is a fact about what will run,
+ * so it is the user's to choose and it is rendered on the row (see `HarnessSummary.delivery`).
+ *
+ * `package` appears **exactly when** the route is `npx`: a delivery claim with no package is a route nothing can
+ * take, and the same "a claim that contradicts another claim is worse than a missing one" rule that governs
+ * `HarnessAvailability` governs this.
+ */
+export const AgentDeliverySchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("installed") }).strict(),
+  z.object({ kind: z.literal("npx"), package: z.string().min(1) }).strict(),
+]);
+
+export type AgentDelivery = z.infer<typeof AgentDeliverySchema>;
+
+/**
  * **What a fix belongs to** — an id, and never a command line.
  *
  * The three tiers the Agents page draws (`HarnessSummary`, `AgentProviderSummary`, `CatalogEntry`), named by
@@ -1148,6 +1176,14 @@ export interface HarnessSummary {
    * and small — and what a user never needs to see.
    */
   evidence: string;
+  /**
+   * **How this agent's connector is delivered on this machine** — the user's choice, rendered on the row.
+   *
+   * Absent from a daemon older than this field, which the window reads as `installed`: that is the route such a
+   * daemon can actually take, and inventing `npx` for it would describe a launch it has no code for.
+   */
+  delivery?: AgentDelivery;
+
 }
 
 export const HarnessSummarySchema = z
@@ -1242,6 +1278,8 @@ export const HarnessSummarySchema = z
      */
     auth: HarnessAuthSchema,
     evidence: z.string(),
+    // The delivery this machine will use, absent from a daemon that predates the field — see the interface.
+    delivery: AgentDeliverySchema.optional(),
   })
   .strict();
 
@@ -1900,6 +1938,21 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
   "coder.listHarnesses": {
     params: EmptyParams,
     result: z.object({ harnesses: z.array(HarnessSummarySchema).readonly() }).strict(),
+  },
+  /**
+   * **Choose how an agent's connector is delivered** — installed, or fetched by `npx`.
+   *
+   * The one setting in this product that changes *what runs* rather than how it is displayed, which is why it
+   * travels as its own method rather than a field on the settings patch: a refusal has to be possible (a harness
+   * with no npm-published connector cannot be fetched, and asking for that must not be stored as a preference
+   * that silently does nothing), and the answer has to say which delivery is now in force.
+   *
+   * The daemon re-reads its agent list on the next read — and emits the change, so every window's rows say what
+   * the run will actually do.
+   */
+  "coder.setAgentDelivery": {
+    params: z.object({ harness: HarnessIdSchema, delivery: z.enum(["installed", "npx"]) }).strict(),
+    result: z.object({ harness: HarnessIdSchema, delivery: AgentDeliverySchema }).strict(),
   },
   /**
    * **Run the fix a row is showing** — the answer to *"can we support run the commands in EnvoyCoder?"*
