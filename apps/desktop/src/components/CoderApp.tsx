@@ -31,7 +31,14 @@ import { taskTitleFromPrompt } from "@envoycoder/task-model";
 
 import { startWindowDrag } from "../client/window-drag.js";
 import { useT } from "../i18n/context.js";
-import { localNotice, localize, localizeText, type Notice } from "../i18n/notice.js";
+import {
+  asFailure,
+  localNotice,
+  localize,
+  localizeText,
+  type Notice,
+  type WriteFailure,
+} from "../i18n/notice.js";
 import { CoderSidebar } from "./CoderSidebar.js";
 import { CommandCenter, buildCommandContributions } from "./CommandCenter.js";
 import { TaskPane } from "./TaskPane.js";
@@ -107,8 +114,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    * both take that path — the difference is only whether the user typed the prompt before the task
    * existed or after.
    */
-  const startNewTask = async (projectId: string, title = ""): Promise<void> => {
-    setNotice(undefined);
+  const startNewTask = async (projectId: string, title = ""): Promise<WriteFailure> => {
     // **The empty chat is a draft, and a draft is reused.** Paseo's helper is called `ensureWorkspace`
     // for the same reason: pressing "+ New" twice because the first press looked like nothing happened
     // should not leave two unnamed rows behind. Only an unnamed task with nothing running counts — a task
@@ -119,20 +125,17 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
       );
       if (draft) {
         setActiveId(draft.id);
-        return;
+        return undefined;
       }
     }
     const created = await props.actions.createTask({ projectId, title });
-    if (!created.ok) {
-      setNotice(created);
-      return;
-    }
+    if (!created.ok) return created;
     // Selected first: the rail shows the new row and the pane shows its chat, in one paint. A task
     // created but not opened would look like the button had done nothing.
     setActiveId(created.task.id);
-    if (title === "") return;
+    if (title === "") return undefined;
     const started = await props.actions.startRun(created.task.id, title);
-    if (!started.ok) setNotice(started);
+    return started.ok ? undefined : started;
   };
   /**
    * Which settings the pane is showing — and whether it is showing at all.
@@ -197,15 +200,29 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
   };
   const [railOpen, setRailOpen] = useState(true);
   /**
-   * The strip's own notice, **as a notice rather than a string**.
+   * **The two failures this shell routes, because it is what holds the press.**
    *
-   * A refusal from the daemon arrives as an English sentence plus the catalogue key for it, and the
-   * decision about which one to show is made here, at render time — so the strip is re-rendered in
-   * German the moment the language setting changes, even for a refusal that arrived before it did.
-   * A string translated once at arrival could not do that.
+   * Every other surface owns its own sink: a settings row renders the answer its `write` was handed, the
+   * catalogue's rows and the fix blocks have theirs, and the palette keeps itself open. These two do not
+   * because the press and the display are in different components — a row in the rail is drawn by
+   * `CoderSidebar` while the callback lives here, and the composer's write callbacks live here while the line
+   * under the composer is drawn by `TaskPane`.
+   *
+   * The rail's is keyed by row id, so a removal that failed says so under the row it was asked for. The
+   * pane's is keyed by task id: a failure about one task must not follow the user into another task's chat,
+   * which is exactly what a single un-keyed slot would do.
    */
-  const [notice, setNotice] = useState<Notice | undefined>(undefined);
-
+  const [railFailure, setRailFailure] = useState<{ rowId: string; notice: Notice } | undefined>(undefined);
+  const [paneFailure, setPaneFailure] = useState<{ taskId: string; notice: Notice } | undefined>(undefined);
+  /** Route a press's answer to the rail row (or the pane) that asked for it. */
+  const toRail = (rowId: string, failure: WriteFailure): WriteFailure => {
+    setRailFailure(failure ? { rowId, notice: failure } : undefined);
+    return failure;
+  };
+  const toPane = (taskId: string, failure: WriteFailure): WriteFailure => {
+    setPaneFailure(failure ? { taskId, notice: failure } : undefined);
+    return failure;
+  };
   /**
    * Take one project off the rail — the row menu's Remove, after its own inline confirmation.
    *
@@ -223,33 +240,29 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    * The open task needs nothing: `active` is derived from `state.tasks`, and the removal archives every
    * task of this project, so the pane empties itself the moment the list arrives.
    */
-  const removeProjectRow = async (projectId: string): Promise<void> => {
+  const removeProjectRow = async (projectId: string): Promise<WriteFailure> => {
     const removed = await props.actions.removeProject(projectId);
-    if (!removed.ok) {
-      setNotice(removed);
-      return;
-    }
+    if (!removed.ok) return removed;
     setSettingsScope((current) =>
       current?.kind === "project" && current.id === projectId ? PROJECTS_SCOPE : current,
     );
+    return undefined;
   };
 
   /** Take one task off the rail — the row menu's Remove, after its own inline confirmation. */
-  const removeTaskRow = async (taskId: string): Promise<void> => {
+  const removeTaskRow = async (taskId: string): Promise<WriteFailure> => {
     // The daemon archives rather than deletes (`coder.archiveTask`), which is why the menu item says
     // "Remove" and the question says the folder and its files are not touched.
     const removed = await props.actions.archiveTask(taskId, true);
-    if (!removed.ok) {
-      setNotice(removed);
-      return;
-    }
+    if (!removed.ok) return removed;
     if (activeId === taskId) setActiveId(undefined);
+    return undefined;
   };
 
   /** Rename a task from its own row. The refusal is shown, on the same rule as every other action. */
-  const renameTaskRow = async (taskId: string, title: string): Promise<void> => {
+  const renameTaskRow = async (taskId: string, title: string): Promise<WriteFailure> => {
     const renamed = await props.actions.updateTask({ id: taskId, title });
-    if (!renamed.ok) setNotice(renamed);
+    return renamed.ok ? undefined : renamed;
   };
 
   /**
@@ -347,29 +360,26 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
           // **A success says nothing.** The banner used to announce "Added EnvoyCoder." across the top of
           // the window, which told the user what they had just watched themselves do and made the strip
           // a thing to dismiss rather than a thing to read. The project appearing in the rail *is* the
-          // confirmation. Only a refusal speaks — and then with the daemon's own words.
-          if (!path) {
-            setNotice(localNotice("palette.addProject.noFolder"));
-            return;
-          }
+          // confirmation. Only a refusal speaks — and it speaks **in the palette**, which stays open with the
+          // field still holding what was typed, so a bad path can be corrected and pressed again.
+          //
+          // An empty path never reaches the daemon: it is the palette's own question, and this is its answer.
+          if (!path) return localNotice("palette.addProject.noFolder");
           const result = await props.actions.addProject(path);
-          setNotice(result.ok ? undefined : result);
+          return result.ok ? undefined : result;
         },
         onNewTask: async (projectId, title) => {
-          if (!title) return;
+          if (!title) return undefined;
           // The title *is* the first prompt: a task with a name and no work is a row that does
           // nothing, and asking for both is the friction that makes a control plane tedious.
           const created = await props.actions.createTask({ projectId, title });
-          if (!created.ok) {
-            setNotice(created);
-            return;
-          }
+          if (!created.ok) return created;
           setActiveId(created.task.id);
           const started = await props.actions.startRun(created.task.id, title);
-          if (!started.ok) setNotice(started);
+          return started.ok ? undefined : started;
         },
         onOpenSettings: openAppSettings,
-        onPairPhone: () => setNotice(localNotice("palette.pairPhone.notYet")),
+        onPairPhone: () => localNotice("palette.pairPhone.notYet"),
         onToggleRail: () => setRailOpen((open) => !open),
         onRevealTask: (taskId) => setActiveId(taskId),
       }),
@@ -412,18 +422,19 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
         </button>
       </header>
 
-      {notice || state.error ? (
+      {state.error ? (
+        // **What the window could not do, and only that.** A read that failed, a daemon this build cannot talk
+        // to. A press that was refused is answered where it was made — the row, the composer, the palette —
+        // because a sentence about one control, shown in a bar above every surface, names nothing, moves the
+        // window, and has to be dismissed before the user can get on with what they were doing.
         <div className="banner" role="status">
-          {/* The daemon's refusal, rendered through its key: German for a German user, and the
-              English sentence it sent whenever this build has no translation for that key. */}
-          <span>{localize(t, notice ?? state.error)}</span>
+          {/* The daemon's sentence, rendered through its key: German for a German user, and the English
+              sentence it sent whenever this build has no translation for that key. */}
+          <span>{localize(t, state.error)}</span>
           <button
             type="button"
             className="button button--ghost button--small"
-            onClick={() => {
-              setNotice(undefined);
-              props.actions.clearError();
-            }}
+            onClick={() => props.actions.clearError()}
           >
             {t("notice.dismiss")}
           </button>
@@ -439,14 +450,16 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
             onSelect={setActiveId}
             onNewTask={(projectId) => {
               // "+ New" on a project header names the project, so there is nothing left to ask: the task
-              // is created and opened, and the composer is the form.
-              void startNewTask(projectId);
+              // is created and opened, and the composer is the form. A refusal answers under that project's
+              // own row — including the one the ⌘N shortcut produces, which has no row of its own to speak in.
+              void startNewTask(projectId).then((failure) => toRail(projectId, failure));
             }}
             onAddProject={() => openPalette({ commandId: "project.add" })}
             onOpenProjectSettings={openProjectSettings}
-            onRemoveProject={(projectId) => void removeProjectRow(projectId)}
-            onRenameTask={(taskId, title) => void renameTaskRow(taskId, title)}
-            onRemoveTask={(taskId) => void removeTaskRow(taskId)}
+            onRemoveProject={(projectId) => void removeProjectRow(projectId).then((f) => toRail(projectId, f))}
+            onRenameTask={(taskId, title) => void renameTaskRow(taskId, title).then((f) => toRail(taskId, f))}
+            onRemoveTask={(taskId) => void removeTaskRow(taskId).then((f) => toRail(taskId, f))}
+            failure={railFailure}
             onOpenCommandCenter={() => openPalette()}
             onOpenSettings={openAppSettings}
             unavailable={projectsUnavailable}
@@ -481,7 +494,10 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               // The agents page's own five calls, handed over as the store itself: `CoderStore` satisfies
               // `AgentActions` structurally, so there is no adapter to drift from the methods it names.
               agents={props.actions}
-              onUpdate={(patch) => void props.actions.updateSettings(patch)}
+              // **The answer, not a `void`.** A settings write that was refused is rendered by the row it was
+              // pressed in (`SettingRow`'s `write`); the window's own strip is for what the *window* could not
+              // do, so nothing here raises it globally.
+              onUpdate={(patch) => props.actions.updateSettings(patch).then(asFailure)}
               // A project's defaults, written whole because they replace: see `coderStore.updateProject`.
               // The refusal goes to the strip rather than vanishing — a project whose defaults could not
               // be saved must not keep showing the value the user picked.
@@ -490,10 +506,8 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
                 // since gone writes to nothing, and a write to a removed project would fail for a control
                 // the user never pressed.
                 const projectId = scopeProjectId(settingsScope, state.projects);
-                if (projectId === undefined) return;
-                void props.actions.updateProject({ id: projectId, defaults }).then((result) => {
-                  if (!result.ok) setNotice(result);
-                });
+                if (projectId === undefined) return Promise.resolve(undefined);
+                return props.actions.updateProject({ id: projectId, defaults }).then(asFailure);
               }}
             />
           ) : active ? (
@@ -517,6 +531,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               onProbeAgent={(harness, options) =>
                 props.actions.probeSessionOptions(harness, options)
               }
+              notice={active && paneFailure?.taskId === active.id ? localize(t, paneFailure.notice) : undefined}
               onStart={async (prompt, agentModeId, model, thinkingLevel) => {
                 const result = await props.actions.startRun(active.id, prompt, {
                   ...(agentModeId !== undefined ? { agentModeId } : {}),
@@ -524,7 +539,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
                   ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
                 });
                 if (!result.ok) {
-                  setNotice(result);
+                  toPane(active.id, result);
                   return;
                 }
                 // The first message names the task, when it has no name yet. Done after the run starts,
@@ -539,44 +554,37 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               // this task *is*, and a choice that vanished with the window would make the picker
               // decorative. The run reads the task's copy, so the two can never disagree.
               onChangeMode={async (agentModeId) => {
-                const result = await props.actions.updateTask({ id: active.id, agentModeId });
-                if (!result.ok) setNotice(result);
+                toPane(active.id, asFailure(await props.actions.updateTask({ id: active.id, agentModeId })));
               }}
               // The model is saved on the task for the same reason the mode is: it is part of what this
               // task *is*, and a run started after a restart must use the same model without the window
               // having to repeat it. `""` travels as-is — it is the control's "the agent's own default",
               // and the daemon is what decides to drop the stored model rather than store an empty one.
               onChangeModel={async (model) => {
-                const result = await props.actions.updateTask({ id: active.id, model });
-                if (!result.ok) setNotice(result);
+                toPane(active.id, asFailure(await props.actions.updateTask({ id: active.id, model })));
               }}
               // And the thinking level, on exactly the model's terms: stored on the task because it is
               // part of what this task *is*, with `""` travelling as the request to clear it. The
               // daemon is what turns that into "drop the key" rather than a level called nothing.
               onChangeThinking={async (thinkingLevel) => {
-                const result = await props.actions.updateTask({ id: active.id, thinkingLevel });
-                if (!result.ok) setNotice(result);
+                toPane(active.id, asFailure(await props.actions.updateTask({ id: active.id, thinkingLevel })));
               }}
               // A refusal here is worth showing: "that is not a folder on this machine" is the one
               // thing the user has to fix before the next run can start.
               onChangeFolder={async (path) => {
-                const result = await props.actions.updateTask({ id: active.id, cwd: path });
-                if (!result.ok) setNotice(result);
+                toPane(active.id, asFailure(await props.actions.updateTask({ id: active.id, cwd: path })));
               }}
               onSend={async (text, mode) => {
                 if (!active.runId) return;
-                const result = await props.actions.sendToRun(active.runId, text, mode);
-                if (!result.ok) setNotice(result);
+                toPane(active.id, asFailure(await props.actions.sendToRun(active.runId, text, mode)));
               }}
               onCancel={async () => {
                 if (!active.runId) return;
-                const result = await props.actions.cancelRun(active.runId);
-                if (!result.ok) setNotice(result);
+                toPane(active.id, asFailure(await props.actions.cancelRun(active.runId)));
               }}
               onAnswer={async (requestId, optionId) => {
                 if (!active.runId) return;
-                const result = await props.actions.answerApproval(active.runId, requestId, optionId);
-                if (!result.ok) setNotice(result);
+                toPane(active.id, asFailure(await props.actions.answerApproval(active.runId, requestId, optionId)));
               }}
             />
           ) : (

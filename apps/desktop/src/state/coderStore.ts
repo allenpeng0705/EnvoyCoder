@@ -119,7 +119,12 @@ export interface CoderState {
   /** True once projects, tasks and settings have arrived at least once. */
   loaded: boolean;
   /**
-   * The last thing that went wrong, in the user's words.
+   * **What the window could not do** — in the user's words, and the only thing the shell's own bar carries.
+   *
+   * A read that failed, a daemon this build cannot talk to. **Never a press that was refused**: a write's
+   * refusal is returned to the caller and rendered where the press was (`mutate` states the rule), because a
+   * sentence about a row, shown in a bar above every surface, names no control, moves the window, and has to
+   * be dismissed before the user can get on with what they were doing.
    *
    * A single slot, not a queue: this app is not a log viewer, and the newest failure is the one the
    * user can act on. Anything worth keeping goes to the audit log instead.
@@ -230,7 +235,9 @@ export class CoderStore {
       this.open(resolved);
     } catch (error) {
       // Connection setup failures belong in the chip / empty work area — not the attention
-      // banner. The banner is for actions the user just took (add project, start run, …).
+      // banner. The banner carries what the **window** could not do (a read that failed, a
+      // daemon that is a build behind); a press that failed is answered where it was made.
+      // See `mutate` for the rule and `failure-placement.test.tsx` for it held surface by surface.
       //
       // The reason is kept **whole** — code and key included — because it is both branched on
       // (`coderErrorCode`) and rendered (`localizeText`, which resolves the key the endpoint failure
@@ -904,13 +911,32 @@ export class CoderStore {
   }
 
   /**
-   * The shared body of every write: refuse early when disconnected, report failures in the user's
-   * words, and let the daemon's broadcast drive the refetch rather than guessing at local state.
+   * The shared body of every write: refuse early when disconnected, answer in the user's words, and let the
+   * daemon's broadcast drive the refetch rather than guessing at local state.
    *
    * A refusal is a `Notice` — the sentence the daemon sent plus the key to re-render it — which is
    * what makes a German window answer a German user even though the daemon wrote English. Nothing
-   * here resolves the language: the strip does that at render time, so switching language re-renders
-   * the refusal that is already on screen.
+   * here resolves the language: whoever renders it does that at render time, so switching language
+   * re-renders the refusal that is already on screen.
+   *
+   * ## It raises nothing, and that is the whole point
+   *
+   * **A write's refusal belongs to the press, not to the window.** Until this changed, every write also
+   * stored the same sentence in `state.error`, which the shell renders in the bar across the top — so a
+   * press that already showed its refusal on the row it came from (the catalogue's *Add*, a fix run, a
+   * sign-in) showed it *twice*: once where the user was looking and once in a strip above everything. The
+   * owner read the second one and said what it was: *"After clicking 'Add', it will show the top bar which
+   * is ugly and useless"*.
+   *
+   * A strip that carries a row's failure is useless because it is in the wrong place: it says nothing about
+   * *which* control failed, it pushes the whole window down, and it has to be dismissed before the user can
+   * get on with the thing they were doing. So the store returns the refusal and the caller — the row, the
+   * composer, the palette — renders it where the press was. `state.error` is now only for what the *window*
+   * could not do: a read that failed, the connection, a daemon that is a build behind.
+   *
+   * **Nothing may go silent because of this.** Every one of these methods returns `T | Refusal`, so a caller
+   * that ignores the answer has to write `void` to do it, and every call site in the window was given a sink
+   * in the same change (`apps/desktop/test/failure-placement.test.tsx` holds each one, surface by surface).
    */
   private async mutate<T>(
     method: string,
@@ -919,18 +945,16 @@ export class CoderStore {
   ): Promise<T | Refusal> {
     const connection = this.connection;
     if (!connection || connection.status.state !== "connected") {
-      const failure = localNotice("error.notConnectedChange");
-      this.set({ error: failure });
-      return { ok: false, ...failure };
+      // **Not raised either.** A press made while the window is disconnected is a press that failed, and the
+      // answer belongs on the control that made it; the connection's own chip already says the socket is
+      // down, so a strip repeating it in different words adds nothing a user can act on.
+      return { ok: false, ...localNotice("error.notConnectedChange") };
     }
     try {
       const result = await connection.call(method, params);
-      this.set({ error: undefined });
       return onSuccess(result);
     } catch (error) {
-      const failure = noticeFromError(error);
-      this.set({ error: failure });
-      return { ok: false, ...failure };
+      return { ok: false, ...noticeFromError(error) };
     }
   }
 

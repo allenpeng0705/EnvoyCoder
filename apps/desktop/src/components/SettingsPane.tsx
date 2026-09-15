@@ -93,6 +93,7 @@ import type { CoderSettings, Project, TaskDefaults } from "@envoycoder/protocol"
 import type { AgentActions } from "../state/agent-actions.js";
 
 import { useI18n } from "../i18n/context.js";
+import type { WriteFailure } from "../i18n/notice.js";
 import type { KeyBinding } from "../input/shortcuts.js";
 import type { CoderState } from "../state/coderStore.js";
 import {
@@ -116,7 +117,7 @@ export interface SettingsPaneProps {
   state: CoderState;
   onClose: () => void;
   /** The app-scope patch. Ignored while the pane is open for a project. */
-  onUpdate: (patch: Partial<CoderSettings>) => void;
+  onUpdate: (patch: Partial<CoderSettings>) => Promise<WriteFailure>;
   /**
    * Which scope the pane is showing — the sections list, one section, the projects page, or one
    * project's settings.
@@ -159,7 +160,7 @@ export interface SettingsPaneProps {
    * Write a project's defaults. Sent **whole** rather than as a patch, because a project's defaults
    * replace: a patch carrying only a model would leave the agent for that project undefined.
    */
-  onUpdateProject?: ((defaults: TaskDefaults) => void) | undefined;
+  onUpdateProject?: ((defaults: TaskDefaults) => Promise<WriteFailure>) | undefined;
   /**
    * Why `state.projects` is empty for a reason other than "nobody has added one" — the shell's own
    * sentence, already in the user's language, or `undefined` when the list really is empty (or is still

@@ -112,6 +112,29 @@ export function noticeFromError(error: unknown): Notice {
 export type Refusal = { ok: false } & Notice;
 
 /**
+ * **What a write answers the UI: `undefined` when it landed, the refusal when it did not.**
+ *
+ * The one shape every write in this window comes back as, and the reason it is a type of its own rather than
+ * `Notice | undefined` spelled out: the *decision* it encodes is where a refusal is read. The store raises
+ * nothing (`CoderStore.mutate` states the rule), so a caller that performs a write owes the user a place to
+ * read the answer — the row it came from, the composer, the palette — and a function whose parameter is
+ * `WriteFailure` says so at the call site. `undefined` for success rather than `{ ok: true }` because there is
+ * nothing to render when a write lands: the value arriving in the row *is* the confirmation.
+ */
+export type WriteFailure = Notice | undefined;
+
+/**
+ * The one adapter between the store's two answers and the shape the UI renders.
+ *
+ * Every write answers `{ ok: true, … } | Refusal`, and every sink takes a `WriteFailure` — so this is where the
+ * discriminator is spent, in one place rather than in a conditional at each of the twenty call sites (each of
+ * which would be a chance to forget the `ok` check, which is the same as a failure nobody sees).
+ */
+export function asFailure(answer: { ok: true } | Refusal): WriteFailure {
+  return answer.ok ? undefined : answer;
+}
+
+/**
  * The text a user sees.
  *
  * `t` falls back to English for a key a language has not translated yet, so this is German for a

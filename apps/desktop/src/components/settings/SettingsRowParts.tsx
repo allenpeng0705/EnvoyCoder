@@ -25,6 +25,7 @@ import { agentFor } from "../../composer/agent-for.js";
 import { composerControls, modelNote, modelOffReason } from "../../composer/controls.js";
 import { harnessLabel } from "../../composer/harness-label.js";
 import { useI18n } from "../../i18n/context.js";
+import type { WriteFailure } from "../../i18n/notice.js";
 import { formatWhen } from "../../i18n/when.js";
 import type { CoderState } from "../../state/coderStore.js";
 import { ModelChoice } from "../ModelChoice.js";
@@ -54,7 +55,12 @@ export function ModelRow(props: {
   title: string;
   detail: string;
   developerNote: string;
-  onChoose: (model: string) => void;
+  /**
+   * Choose a model. **It returns the write's answer**, not nothing: the row is the only place that can show a
+   * refusal, so the section hands the promise through and `SettingRow`'s `write` renders it under the control.
+   * See `SettingRowProps.children` for why the sink is the row.
+   */
+  onChoose: (model: string) => Promise<WriteFailure>;
 }): JSX.Element {
   const { t, locale } = useI18n();
   const agent = agentFor(props.harness, props.summary);
@@ -89,15 +95,17 @@ export function ModelRow(props: {
       titleId={titleId}
       note={note}
     >
-      <ModelChoice
-        labelId={titleId}
-        kind={controls.model.kind}
-        options={controls.model.options}
-        selected={props.value}
-        off={off}
-        title={t("task.composer.model.title")}
-        onChoose={props.onChoose}
-      />
+      {(write) => (
+        <ModelChoice
+          labelId={titleId}
+          kind={controls.model.kind}
+          options={controls.model.options}
+          selected={props.value}
+          off={off}
+          title={t("task.composer.model.title")}
+          onChoose={(model) => write(props.onChoose(model))}
+        />
+      )}
     </SettingRow>
   );
 }
@@ -121,7 +129,8 @@ export function ApprovalRow(props: {
   state: CoderState;
   harness: HarnessId;
   checked: boolean;
-  onToggle: (checked: boolean) => void;
+  /** As `ModelRow`'s `onChoose`: the row shows the refusal, so the answer travels back to it. */
+  onToggle: (checked: boolean) => Promise<WriteFailure>;
 }): JSX.Element {
   const { t } = useI18n();
   const summary = summaryFor(props.state, props.harness);
@@ -141,13 +150,15 @@ export function ApprovalRow(props: {
       titleId="setting-approvals"
       note={note}
     >
-      <input
-        type="checkbox"
-        checked={props.checked}
-        disabled={!supported}
-        onChange={(event) => props.onToggle(event.target.checked)}
-        aria-labelledby="setting-approvals"
-      />
+      {(write) => (
+        <input
+          type="checkbox"
+          checked={props.checked}
+          disabled={!supported}
+          onChange={(event) => write(props.onToggle(event.target.checked))}
+          aria-labelledby="setting-approvals"
+        />
+      )}
     </SettingRow>
   );
 }

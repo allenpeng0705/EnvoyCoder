@@ -37,7 +37,7 @@ import type { JSX } from "react";
 import { GearIcon, HelpIcon, ImportIcon, PlusIcon, ServerIcon } from "./icons.js";
 import { RowMenu } from "./RowMenu.js";
 
-import { useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import {
   type HarnessId,
   type Project,
@@ -53,7 +53,7 @@ import {
 } from "@envoycoder/task-model";
 
 import { useT } from "../i18n/context.js";
-import { statusKey } from "../i18n/notice.js";
+import { localize, statusKey, type Notice } from "../i18n/notice.js";
 
 export interface CoderSidebarProps {
   projects: readonly Project[];
@@ -117,6 +117,15 @@ export interface CoderSidebarProps {
    * group plus a notice that names the reason is honest, and a per-project claim of emptiness is not.
    */
   tasksUnknown?: boolean | undefined;
+  /**
+   * **The refusal from a row's own last press, and which row it is about.**
+   *
+   * A press that fails shows the daemon's sentence *under the row that was pressed* — never in the bar above
+   * the whole window, which names no control and has to be dismissed before the user can carry on. `rowId` is
+   * the project's or the task's own id, so a removal that failed says so where the removal was asked for, and
+   * the sentence leaves with the row if the row does.
+   */
+  failure?: { rowId: string; notice: Notice } | undefined;
 }
 
 /** The agent a project's new tasks will use — the group header's badge. */
@@ -237,14 +246,20 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
           groups
             .flatMap((group) => group.rows)
             .map((row) => (
-              <TaskRow
-                key={row.task.id}
-                row={row}
-                active={row.task.id === props.activeTaskId}
-                onSelect={props.onSelect}
-                onRenameTask={props.onRenameTask}
-                onRemoveTask={props.onRemoveTask}
-              />
+              <Fragment key={row.task.id}>
+                <TaskRow
+                  row={row}
+                  active={row.task.id === props.activeTaskId}
+                  onSelect={props.onSelect}
+                  onRenameTask={props.onRenameTask}
+                  onRemoveTask={props.onRemoveTask}
+                />
+                {props.failure?.rowId === row.task.id ? (
+                  <p className="sidebar__failure" role="status">
+                    {localize(t, props.failure.notice)}
+                  </p>
+                ) : null}
+              </Fragment>
             ))
         ) : (
           groups.map((group) => {
@@ -315,6 +330,14 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                   />
                 </div>
 
+                {props.failure?.rowId === group.project.id ? (
+                  // Under the project's own header, which is the row the press came from — the `…` menu's
+                  // Remove, or the group's "+ New" — so the sentence is read where the action was asked for.
+                  <p className="sidebar__failure" role="status">
+                    {localize(t, props.failure.notice)}
+                  </p>
+                ) : null}
+
                 {isCollapsed ? null : (
                   <>
                     <div className="project__tasks-bar">
@@ -329,14 +352,20 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                       </button>
                     </div>
                     {group.rows.map((row) => (
-                      <TaskRow
-                        key={row.task.id}
-                        row={row}
-                        active={row.task.id === props.activeTaskId}
-                        onSelect={props.onSelect}
-                        onRenameTask={props.onRenameTask}
-                        onRemoveTask={props.onRemoveTask}
-                      />
+                      <Fragment key={row.task.id}>
+                        <TaskRow
+                          row={row}
+                          active={row.task.id === props.activeTaskId}
+                          onSelect={props.onSelect}
+                          onRenameTask={props.onRenameTask}
+                          onRemoveTask={props.onRemoveTask}
+                        />
+                        {props.failure?.rowId === row.task.id ? (
+                          <p className="sidebar__failure" role="status">
+                            {localize(t, props.failure.notice)}
+                          </p>
+                        ) : null}
+                      </Fragment>
                     ))}
                     {group.rows.length === 0 && props.tasksUnknown !== true ? (
                       <p className="project__empty">{t("sidebar.tasks.empty")}</p>

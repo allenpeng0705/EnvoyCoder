@@ -38,6 +38,7 @@ import { SettingNavRow, SettingRow, TextSetting } from "../SettingsRows.js";
 import { shortPath } from "../SettingsShell.js";
 import type { SettingsSectionProps } from "./SectionProps.js";
 import { labelForHarness, ModelRow, summaryFor } from "./SettingsRowParts.js";
+import type { WriteFailure } from "../../i18n/notice.js";
 import { verdictSuffix } from "./agent-verdict.js";
 
 /** What the two project pages need beyond the settings they share: the live list, and the way down. */
@@ -49,8 +50,11 @@ export interface ProjectSectionProps extends SettingsSectionProps {
   /**
    * Write a project's defaults, **whole** rather than as a patch, because a project's defaults replace:
    * a patch carrying only a model would leave that project's agent undefined.
+   *
+   * It answers with the write's outcome, on the same rule as `SettingsSectionProps.onUpdate`: the row that
+   * pressed is the only place the refusal can be read (`SettingRow`'s `write`).
    */
-  onUpdateProject?: ((defaults: TaskDefaults) => void) | undefined;
+  onUpdateProject?: ((defaults: TaskDefaults) => Promise<WriteFailure>) | undefined;
 }
 
 /**
@@ -135,9 +139,10 @@ export function ProjectSection(props: ProjectSectionProps & { project: Project }
    * is what makes each control edit one thing — and the reason this page reads the *live* project
    * (`scopeProject`) rather than the object the row was clicked with.
    */
-  const write = (patch: Partial<TaskDefaults>): void => {
-    props.onUpdateProject?.({ ...defaults, ...patch });
-  };
+  const commit = (patch: Partial<TaskDefaults>): Promise<WriteFailure> =>
+    // A page rendered without the writer — a unit test, mainly — answers "nothing failed" rather than
+    // throwing: the rows are still worth rendering, and `promise` is what `SettingRow`'s `write` takes.
+    props.onUpdateProject?.({ ...defaults, ...patch }) ?? Promise.resolve(undefined);
 
   return (
     <>
@@ -161,28 +166,30 @@ export function ProjectSection(props: ProjectSectionProps & { project: Project }
         detail={t("settings.project.harness.detail")}
         developerNote="project.defaults.harness"
       >
-        <select
-          className="select"
-          value={harness}
-          aria-label={t("settings.project.harness.title")}
-          onChange={(event) => write({ harness: event.target.value as HarnessId })}
-        >
-          {available.every((entry) => entry.id !== harness) ? (
-            // The stored value, when the measurement took it out of the list — see the New-tasks row in
-            // `SectionsControls.tsx` for why a value with no option is a blank control rather than an empty one,
-            // and why the reason travels with it.
-            <option value={harness}>
-              {labelForHarness(harness, state)}
-              {verdictSuffix(summaryFor(state, harness)?.availability, t)}
-            </option>
-          ) : null}
-          {available.map((entry) => (
-            <option key={entry.id} value={entry.id}>
-              {entry.label}
-              {verdictSuffix(entry.availability, t)}
-            </option>
-          ))}
-        </select>
+        {(write) => (
+          <select
+            className="select"
+            value={harness}
+            aria-label={t("settings.project.harness.title")}
+            onChange={(event) => write(commit({ harness: event.target.value as HarnessId }))}
+          >
+            {available.every((entry) => entry.id !== harness) ? (
+              // The stored value, when the measurement took it out of the list — see the New-tasks row in
+              // `SectionsControls.tsx` for why a value with no option is a blank control rather than an empty
+              // one, and why the reason travels with it.
+              <option value={harness}>
+                {labelForHarness(harness, state)}
+                {verdictSuffix(summaryFor(state, harness)?.availability, t)}
+              </option>
+            ) : null}
+            {available.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.label}
+                {verdictSuffix(entry.availability, t)}
+              </option>
+            ))}
+          </select>
+        )}
       </SettingRow>
 
       <ModelRow
@@ -193,7 +200,7 @@ export function ProjectSection(props: ProjectSectionProps & { project: Project }
         title={t("settings.project.model.title")}
         detail={t("settings.project.model.detail")}
         developerNote="project.defaults.model"
-        onChoose={(model) => write({ model })}
+        onChoose={(model) => commit({ model })}
       />
 
       <SettingRow
@@ -201,12 +208,14 @@ export function ProjectSection(props: ProjectSectionProps & { project: Project }
         detail={t("settings.project.extraArgs.detail")}
         developerNote="project.defaults.extraArgs"
       >
-        <TextSetting
-          ariaLabel={t("settings.extraArgs.title")}
-          value={defaults.extraArgs}
-          placeholder={t("settings.extraArgs.placeholder")}
-          onCommit={(value) => write({ extraArgs: value })}
-        />
+        {(write) => (
+          <TextSetting
+            ariaLabel={t("settings.extraArgs.title")}
+            value={defaults.extraArgs}
+            placeholder={t("settings.extraArgs.placeholder")}
+            onCommit={(value) => write(commit({ extraArgs: value }))}
+          />
+        )}
       </SettingRow>
     </>
   );

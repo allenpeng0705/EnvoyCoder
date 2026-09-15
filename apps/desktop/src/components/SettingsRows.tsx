@@ -34,6 +34,7 @@ import type { JSX, ReactNode } from "react";
 import { useEffect, useState } from "react";
 
 import { useI18n } from "../i18n/context.js";
+import { localize, type Notice, type WriteFailure } from "../i18n/notice.js";
 import { hasShellPicker, pickFolder } from "../client/folder-picker.js";
 
 export interface SettingRowProps {
@@ -51,10 +52,50 @@ export interface SettingRowProps {
   titleId?: string;
   /** What is true *now*: a reason, a warning, an observation. Rendered under the control. */
   note?: ReactNode;
-  children: JSX.Element;
+  /**
+   * The control — **or a function that is handed `write`**, when the control writes a setting.
+   *
+   * ## Why a write is a function of the row rather than a callback the row cannot see
+   *
+   * A refusal used to be raised globally: every write also stored its sentence in `state.error`, which the
+   * shell rendered in the bar across the top of the window. The owner read one of those — for the
+   * catalogue's *Add*, which had already said the same thing on the row — and named it: *"it will show the
+   * top bar which is ugly and useless"*. A strip above every surface cannot say **which** control failed and
+   * has to be dismissed before the user can carry on.
+   *
+   * So the store raises nothing (`CoderStore.mutate`) and each press answers where it was made. For a
+   * settings row, "where it was made" is the row — and the only way to get a `write` is from the row that
+   * renders the failure, so a control that writes **cannot** be rendered without one. That is why this is a
+   * function rather than a context: a context has a default, a default is a failure nobody sees, and
+   * `<TextSetting>` dropped outside a row would then swallow its own refusal silently.
+   */
+  children: JSX.Element | ((write: RowWrite) => JSX.Element);
 }
 
+/**
+ * **How a row's control performs a write.** Hand it the promise the write returned; the row renders the
+ * refusal under the control, or clears it when the write lands.
+ *
+ * `Promise<WriteFailure>` and not `Refusal | { ok: true }`: the store methods already answer in that shape,
+ * so a call site reads `write(props.onUpdate({ … }))` and nothing in between can forget the `ok` check.
+ */
+export type RowWrite = (answer: Promise<WriteFailure> | void) => void;
+
 export function SettingRow(props: SettingRowProps): JSX.Element {
+  const { t } = useI18n();
+  /** The refusal from this row's own last write, if it had one. */
+  const [failure, setFailure] = useState<Notice | undefined>(undefined);
+  const write: RowWrite = (answer) => {
+    // A caller that answered **nothing** — a section rendered without a writer, a test double — has no failure
+    // to report, and inventing one would be worse than silence. Everything in this window returns a real
+    // promise; this is the guard that keeps a missing one from crashing the pane instead.
+    if (typeof answer !== "object" || answer === null) return;
+    // A write that lands **clears** the previous refusal: the value on screen is now the stored one, and a
+    // sentence about the attempt before last is a claim about a state the user has already moved past.
+    void answer.then((notice) => setFailure(notice));
+  };
+  const control = typeof props.children === "function" ? props.children(write) : props.children;
+
   return (
     <div className="setting">
       <div className="setting__text">
@@ -66,7 +107,16 @@ export function SettingRow(props: SettingRowProps): JSX.Element {
           <p className="setting__note">{props.note}</p>
         ) : null}
       </div>
-      <div className="setting__control">{props.children}</div>
+      <div className="setting__control">
+        {control}
+        {failure ? (
+          // `role="status"` and not an alert: the write did not land, which the user needs to read — but it is
+          // not an emergency, and the value on screen still shows what they chose.
+          <p className="setting__failure" role="status">
+            {localize(t, failure)}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

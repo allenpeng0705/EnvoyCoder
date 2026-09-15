@@ -13,14 +13,23 @@
 
 import type { CoderSettings } from "@envoycoder/protocol";
 
+import type { WriteFailure } from "../../i18n/notice.js";
 import type { AgentActions } from "../../state/agent-actions.js";
 import type { CoderState } from "../../state/coderStore.js";
 
 export interface SettingsSectionProps {
   /** Everything the window knows: settings, agents, projects, the daemon's own answer. */
   state: CoderState;
-  /** The app-scope patch. Every section page writes through this and nothing else. */
-  onUpdate: (patch: Partial<CoderSettings>) => void;
+  /**
+   * The app-scope patch. Every section page writes through this and nothing else.
+   *
+   * **It answers with the write's outcome** rather than swallowing it. A refusal has to be read where the press
+   * was, and the only place a settings write is pressed is a row — so the page hands this promise to that row's
+   * `write` and the row renders the answer under its own control. Nothing about a failure is raised app-wide
+   * (`CoderStore.mutate` states the rule), so a row that dropped this answer would be a control that silently
+   * does nothing, which is the one thing this pane is built not to ship.
+   */
+  onUpdate: (patch: Partial<CoderSettings>) => Promise<WriteFailure>;
   /**
    * The four calls the **Agents** page is allowed to make.
    *

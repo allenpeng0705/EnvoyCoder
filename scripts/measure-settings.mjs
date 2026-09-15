@@ -46,11 +46,15 @@
  * node scripts/measure-settings.mjs --section general --out /tmp/envoycoder-measure
  * node scripts/measure-settings.mjs --section agents --theme light
  * node scripts/measure-settings.mjs --section tasks --select "The agent new tasks start with"
+ * node scripts/measure-settings.mjs --section general --open "Command Center" --open "Pair a phone"
  * ```
  *
- * `--open "<label>"` presses one more thing before measuring, by the words a user reads. The Agents page needs
- * it: the page as it *opens* and the page with a group unfolded are two different and equally honest numbers,
- * and a tool that could only report one of them would have its output quoted as if it were the other.
+ * `--open "<label>"` presses one more thing before measuring, by the words a user reads, and **may be repeated**:
+ * one value per press, in the order given, so a control that lives inside something else can be reached (the
+ * titlebar's *Command Center*, then a row inside the palette). The Agents page needs the first form: the page as
+ * it *opens* and the page with a group unfolded are two different and equally honest numbers, and a tool that
+ * could only report one of them would have its output quoted as if it were the other. And when the presses leave
+ * the palette open, the palette's own status line is printed — the place a refused command is read.
  *
  * `--select "<aria-label>"` prints one picker's option texts and which option is selected — the words a user
  * reads in a dropdown, which no pixel number and no verdict census can see.
@@ -72,6 +76,15 @@ const flag = (name) => {
   return i >= 0 ? process.argv[i + 1] : undefined;
 };
 const has = (name) => process.argv.includes(`--${name}`);
+
+/** Every value given for a flag that may be **repeated** — `--open A --open B` — in the order given. */
+const flags = (name) => {
+  const values = [];
+  for (let i = 0; i < process.argv.length; i += 1) {
+    if (process.argv[i] === `--${name}` && process.argv[i + 1] !== undefined) values.push(process.argv[i + 1]);
+  }
+  return values;
+};
 
 /** Which settings page to walk into. The sections bar's own labels are what the walk presses. */
 const section = flag("section") ?? "agents";
@@ -365,10 +378,34 @@ console.log(`  daemon child processes: ${childrenBeforePage} before the page, ${
  * the page with a group unfolded (what they see when they came here for that group). A single measurement would
  * have to pick one and would then be quoted as if it were the other.
  */
-const open = flag("open");
-if (open !== undefined) {
-  console.log(`  ${open}: ${await press(open)}`);
+for (const step of flags("open")) {
+  // **Repeatable, in order**, because a control that only exists inside something else needs two presses: the
+  // titlebar's *Command Center*, then a row inside it. One value per press, and each is reported, so a step that
+  // silently missed its target is visible in the output rather than implied by what follows.
+  console.log(`  ${step}: ${await press(step)}`);
   await sleep(1400);
+}
+
+/**
+ * **What a command said, when a press left it saying something.**
+ *
+ * Printed rather than measured: this is the palette's own line, which is where a refused command is read now
+ * (the palette stays open for it). Nothing about it is a number — it is the *existence* of a sink that a pixel
+ * count cannot see, and a run that presses a command which cannot be honoured is how it is checked in a real
+ * window.
+ */
+const paletteStatus = await evaluate(`(() => {
+  const node = document.querySelector(".palette__status");
+  const palette = document.querySelector(".palette");
+  return {
+    text: node ? (node.textContent ?? "") : null,
+    open: palette !== null,
+  };
+})()`);
+if (paletteStatus.open) {
+  console.log(
+    `  palette: still open; status ${paletteStatus.text === null ? "(none)" : JSON.stringify(paletteStatus.text)}`,
+  );
 }
 
 /**
@@ -570,20 +607,36 @@ const report = await evaluate(`(() => {
   const worst = contrast.slice().sort((a, b) => a.ratio - b.ratio).slice(0, 6);
 
   /**
-   * **Every element that draws text, not only the ones this tool used to sample.**
+   * **Every element that draws text — in the whole window, not in the pane.**
    *
-   * The narrower list above (chips, hints, commands, details, notes) reports below45: 0 in the light palette
-   * while the page still has text nobody can read — because the elements with the worst contrast are the ones a
-   * dark-only token sheet takes out: titles, headings, names, labels. Measured rather than argued: this scan walks
-   * the whole page, and a heading at ~1.0:1 shows up here as the row it is.
+   * Two widenings, both forced by what the earlier scans missed. The narrower list above (chips, hints, commands,
+   * details, notes) reported below45: 0 in the light palette while the page still had text nobody could read,
+   * because the elements with the worst contrast are the ones a dark-only token sheet takes out: titles, headings,
+   * names, labels. And the root of this scan was "the settings pane", so the rail, the title bar, the status bar and the
+   * palette had never been measured in either palette at all** — the light theme was judged on one screen out of
+   * five, and the surfaces outside it are the ones the owner looks at while a task runs.
+   *
+   * Each entry carries the surface it was found in, so a failure names *where* rather than only what. surfaceOf
+   * is a closed list, and "other" is the honest answer for anything outside it — a fifth surface added later must
+   * not be silently unattributed.
    */
-  const textOwners = [...body.querySelectorAll("*")].filter(
+  const surfaceOf = (node) => {
+    if (node.closest(".palette-backdrop")) return "palette";
+    if (node.closest(".titlebar")) return "titlebar";
+    if (node.closest(".sidebar")) return "rail";
+    if (node.closest(".statusbar")) return "statusbar";
+    if (node.closest(".composer")) return "composer";
+    if (node.closest(".settings")) return "settings";
+    return "other";
+  };
+  const textOwners = [...document.body.querySelectorAll("*")].filter(
     (node) => node.children.length === 0 && ownText(node).trim().length > 1 && getComputedStyle(node).visibility !== "hidden",
   );
   const contrastAll = textOwners.map((node) => {
     const style = getComputedStyle(node);
     return {
       cls: typeof node.className === "string" ? node.className : "",
+      surface: surfaceOf(node),
       sample: ownText(node).slice(0, 44),
       size: Math.round(parseFloat(style.fontSize) * 10) / 10,
       weight: style.fontWeight,
@@ -826,7 +879,20 @@ const report = await evaluate(`(() => {
     groups,
     contrast: { worst, below45: contrast.filter((c) => c.ratio < 4.5).length, gradients },
     // The whole page, in both palettes — see contrastAll for why the narrower list was not enough.
-    contrastAll: { worst: worstAll, below45: contrastAll.filter((c) => c.ratio < 4.5).length, sampled: contrastAll.length },
+    contrastAll: {
+      worst: worstAll,
+      below45: contrastAll.filter((c) => c.ratio < 4.5).length,
+      sampled: contrastAll.length,
+      // **Where the page was looked at**, so a zero can be read for what it covers: a run on a page with no
+      // task open has no composer, and "the composer is legible" is not something that run established.
+      surfaces: [...new Set(contrastAll.map((c) => c.surface))].sort(),
+      below45BySurface: Object.fromEntries(
+        [...new Set(contrastAll.map((c) => c.surface))]
+          .sort()
+          .map((surface) => [surface, contrastAll.filter((c) => c.surface === surface && c.ratio < 4.5).length])
+          .filter(([, count]) => count > 0),
+      ),
+    },
     fix,
     anatomy,
     verdicts,

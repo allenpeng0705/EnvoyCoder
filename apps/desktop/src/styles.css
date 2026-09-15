@@ -304,6 +304,17 @@ body {
   min-width: 0;
 }
 
+/* **A refused press, under the rail row it came from** — the same rule as `.setting__failure`, in the other
+   surface whose press and display live in different components. */
+.sidebar__failure {
+  margin: 2px 8px 6px;
+  padding-left: 8px;
+  border-left: 2px solid var(--status-danger);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--status-danger);
+}
+
 .sidebar__attention {
   display: flex;
   align-items: center;
@@ -1235,6 +1246,12 @@ body {
   color: var(--text-dim, #8b8f98);
 }
 
+/* The status line is where a command's refusal is read (the palette stays open for it), so it takes the
+   refusal's colour rather than the dim grey it shares with the stage line above it. */
+.palette__status {
+  color: var(--status-danger);
+}
+
 /* What an action still needs, said in the box the user is already typing in. */
 .palette__stage {
   margin-top: 6px;
@@ -1489,6 +1506,19 @@ body {
   font-size: 12px;
   line-height: 1.45;
   color: var(--warn, #c09664);
+}
+
+/* **A refused write, under the control that was pressed.** Not the destructive colour: nothing is being
+   destroyed, a change simply did not land — and `--danger` is reserved for the one place the family's design
+   law allows it (inside a confirmation). The left rule is what makes it read as attached to the control above
+   it rather than as another sentence about the setting. */
+.setting__failure {
+  margin: 6px 0 0;
+  padding-left: 8px;
+  border-left: 2px solid var(--status-danger);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--status-danger);
 }
 
 /* A text field with the system's folder chooser beside it: the field takes the width, the button stays

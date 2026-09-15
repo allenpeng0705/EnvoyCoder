@@ -509,7 +509,12 @@ describe("starting a task from the window", () => {
     // `harness-failed` is stripped to its sentence — a user reads "the task is already running", not
     // a code.
     expect(result.ok === false ? result.message : "").toContain("refused in this test");
-    expect(s.getSnapshot().error).toBeTruthy();
+    // **And it raises nothing app-wide.** This assertion used to be the opposite one — `error` was set to the
+    // same sentence, which the shell rendered in the bar above every surface, so a press that had already
+    // answered on its own row answered twice. The owner read the second copy and called it what it was:
+    // *"it will show the top bar which is ugly and useless"*. A write's refusal is the caller's to render
+    // (`mutate`'s doc states the rule; `failure-placement.test.tsx` holds it surface by surface).
+    expect(s.getSnapshot().error).toBeUndefined();
   });
 
   it("sends the agent's mode with the run, and only when there is one", async () => {
@@ -594,7 +599,9 @@ describe("changing a task's folder or mode from the window", () => {
     // looks like at this seam.
     const result = await s.updateTask({ id: "w1", cwd: "/gone" });
     expect(result.ok).toBe(false);
-    expect(s.getSnapshot().error).toBeTruthy();
+    // The refusal travels back to the caller, which is the pane's own line under the composer. Nothing is
+    // raised in the window's bar: see the sibling case above for why that assertion is now this one.
+    expect(s.getSnapshot().error).toBeUndefined();
   });
 });
 

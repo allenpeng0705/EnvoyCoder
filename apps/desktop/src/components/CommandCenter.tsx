@@ -49,6 +49,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Project } from "@envoycoder/protocol";
 
 import { useT } from "../i18n/context.js";
+import { localize, type WriteFailure } from "../i18n/notice.js";
 import type { Translator } from "../i18n/translate.js";
 
 /** A row a user can run. `selected` only means anything for `choice`. */
@@ -79,15 +80,20 @@ export interface CommandContribution {
    * command can offer the native chooser and still work on a machine that has none.
    */
   pick?: () => Promise<string | null>;
-  run: (value: string) => void | Promise<void>;
+  /**
+   * **Run it, and answer.** `undefined` is "it landed"; a `Notice` is the refusal, and the palette shows it in
+   * its own status line **without closing** — so a user who mistyped a path reads why in the field they typed
+   * it in, and presses again, instead of watching the dialog vanish and a strip appear above the window.
+   *
+   * A command that only navigates returns `undefined` and is done.
+   */
+  run: (value: string) => void | Promise<WriteFailure>;
 }
 
 export interface CommandCenterProps {
   open: boolean;
   onClose: () => void;
   contributions: readonly CommandContribution[];
-  /** Shown at the foot while an action is in flight, and on failure. */
-  status?: string | undefined;
   /**
    * Open *inside* a workflow rather than on the catalogue.
    *
@@ -115,6 +121,15 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
    * catalogue halfway through starting a task.
    */
   const [subset, setSubset] = useState<{ prefix: string } | undefined>(undefined);
+  /**
+   * **What the last command said** — the palette's own line, at its foot.
+   *
+   * A refusal that arrives here is one the palette kept itself open for, so the message and the field it is
+   * about are on screen together. The line used to be a prop the shell never passed (the failure went to the
+   * window's strip instead), which is why `finish` above owns it now: a sink a caller can forget is a sink that
+   * is not there.
+   */
+  const [status, setStatus] = useState<string | undefined>(undefined);
   const inputRef = useRef<HTMLInputElement>(null);
   /** Which intent has already been honoured for this opening — see the effect below. */
   const appliedIntent = useRef<string | undefined>(undefined);
@@ -146,6 +161,25 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
   const stageInto = (command: CommandContribution): void => {
     setStage({ command });
     setQuery(command.needs?.value ?? "");
+  };
+
+  /**
+   * **What happens after a command runs.** One function, so the three ways a command can be started — a click,
+   * the value stage's confirm, Enter on the first row — cannot disagree about what a refusal does.
+   *
+   * A refusal keeps the palette open and shows the daemon's sentence in its own status line: the user is still
+   * holding the field they typed the wrong value into, and closing the dialog to shout from the window's top bar
+   * is what made the owner call that bar *"ugly and useless"*. A command that landed closes the palette, which
+   * is the only confirmation a performed action needs.
+   */
+  const finish = async (command: CommandContribution, value: string): Promise<void> => {
+    const answer = await command.run(value);
+    if (answer) {
+      setStatus(localize(t, answer));
+      return;
+    }
+    setStatus(undefined);
+    props.onClose();
   };
 
   /**
@@ -191,8 +225,7 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
           why = error instanceof Error ? error.message : String(error);
         }
         if (picked !== null) {
-          void row.run(picked);
-          props.onClose();
+          await finish(row, picked);
           return;
         }
         if (row.needs) {
@@ -206,8 +239,7 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
     if (row.needs) {
       stageInto(row);
     } else {
-      void row.run("");
-      props.onClose();
+      void finish(row, "");
     }
   };
 
@@ -274,17 +306,13 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
 
   const submit = (): void => {
     if (stage) {
-      void stage.command.run(query);
-      props.onClose();
+      void finish(stage.command, query);
       return;
     }
     const first = rows[0]?.[1][0];
     if (!first) return;
     if (first.needs) stageInto(first);
-    else {
-      void first.run("");
-      props.onClose();
-    }
+    else void finish(first, "");
   };
 
   return (
@@ -355,7 +383,11 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
             {rows.length === 0 ? <li className="palette__empty">{t("palette.empty")}</li> : null}
           </ul>
         )}
-        {props.status ? <p className="palette__status">{props.status}</p> : null}
+        {status ? (
+          <p className="palette__status" role="status">
+            {status}
+          </p>
+        ) : null}
       </div>
     </div>
   );
@@ -370,11 +402,12 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
  */
 export function buildCommandContributions(input: {
   projects: readonly Project[];
-  onAddProject: (path: string) => void | Promise<void>;
-  onNewTask: (projectId: string, title: string) => void | Promise<void>;
+  /** Both answer with the write's outcome, so the palette can keep itself open on a refusal — see `run`. */
+  onAddProject: (path: string) => Promise<WriteFailure>;
+  onNewTask: (projectId: string, title: string) => Promise<WriteFailure>;
   onNewTaskInFirstProject?: () => void;
   onOpenSettings: () => void;
-  onPairPhone: () => void;
+  onPairPhone: () => WriteFailure;
   onToggleRail: () => void;
   onRevealTask: (taskId: string) => void;
   tasks: readonly { id: string; title: string; projectId: string }[];
@@ -460,7 +493,10 @@ export function buildCommandContributions(input: {
       group: t("palette.group.tasks"),
       kind: "action",
       keywords: ["jump", "go"],
-      run: () => input.onRevealTask(task.id),
+      run: () => {
+        input.onRevealTask(task.id);
+        return undefined;
+      },
     });
   }
 
@@ -472,7 +508,9 @@ export function buildCommandContributions(input: {
       group: t("palette.group.machine"),
       kind: "action",
       keywords: ["qr", "mobile", "device"],
-      run: () => input.onPairPhone(),
+      // Async like the rest, because the answer is what the palette decides on: "Pairing a phone is not built
+      // yet" is a *refusal of the press*, and this is where the user pressed.
+      run: async () => input.onPairPhone(),
     },
     {
       id: "view.rail",
@@ -480,7 +518,10 @@ export function buildCommandContributions(input: {
       group: t("palette.group.machine"),
       kind: "action",
       keywords: ["sidebar", "hide", "show"],
-      run: () => input.onToggleRail(),
+      run: () => {
+        input.onToggleRail();
+        return undefined;
+      },
     },
     {
       id: "settings.open",
@@ -489,7 +530,10 @@ export function buildCommandContributions(input: {
       group: t("palette.group.machine"),
       kind: "action",
       keywords: ["preferences", "config"],
-      run: () => input.onOpenSettings(),
+      run: () => {
+        input.onOpenSettings();
+        return undefined;
+      },
     },
   );
 

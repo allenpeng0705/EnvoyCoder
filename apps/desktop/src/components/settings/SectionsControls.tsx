@@ -62,25 +62,27 @@ export function GeneralSection(props: SettingsSectionProps): JSX.Element {
         detail={t("settings.language.detail")}
         developerNote="settings.language"
       >
-        <select
-          className="select"
-          value={language}
-          aria-label={t("settings.language.aria")}
-          onChange={(event) =>
-            props.onUpdate({ language: event.target.value as CoderSettings["language"] })
-          }
-        >
-          <option value="system">{t("settings.language.system")}</option>
-          {LOCALES.map((option) => (
-            // Endonyms: a language is listed in its own language, so the one a user is looking for
-            // is the one they can read. The row is also the only place the *resolved* locale is
-            // visible, when the setting is "system".
-            <option key={option} value={option}>
-              {LOCALE_LABELS[option]}
-              {option === locale && preference === "system" ? ` — ${t("settings.language.system")}` : ""}
-            </option>
-          ))}
-        </select>
+        {(write) => (
+          <select
+            className="select"
+            value={language}
+            aria-label={t("settings.language.aria")}
+            onChange={(event) =>
+              write(props.onUpdate({ language: event.target.value as CoderSettings["language"] }))
+            }
+          >
+            <option value="system">{t("settings.language.system")}</option>
+            {LOCALES.map((option) => (
+              // Endonyms: a language is listed in its own language, so the one a user is looking for
+              // is the one they can read. The row is also the only place the *resolved* locale is
+              // visible, when the setting is "system".
+              <option key={option} value={option}>
+                {LOCALE_LABELS[option]}
+                {option === locale && preference === "system" ? ` — ${t("settings.language.system")}` : ""}
+              </option>
+            ))}
+          </select>
+        )}
       </SettingRow>
 
       {/* **The one setting that is read by a workflow rather than by the app.**
@@ -94,19 +96,21 @@ export function GeneralSection(props: SettingsSectionProps): JSX.Element {
         developerNote="settings.defaultProjectPath"
         note={folderProblem}
       >
-        <FolderSetting
-          ariaLabel={t("settings.defaultPath.title")}
-          value={settings.defaultProjectPath}
-          placeholder={t("settings.defaultPath.placeholder")}
-          onCommit={(value) => {
-            setFolderProblem(undefined);
-            // `""` is "clear it": a user who nominated a folder must be able to un-nominate one, and a
-            // JSON patch cannot carry an absent key (`daemon/store.ts` records why).
-            props.onUpdate({ defaultProjectPath: value });
-          }}
-          pickPrompt={t("palette.addProject.pickPrompt")}
-          onProblem={setFolderProblem}
-        />
+        {(write) => (
+          <FolderSetting
+            ariaLabel={t("settings.defaultPath.title")}
+            value={settings.defaultProjectPath}
+            placeholder={t("settings.defaultPath.placeholder")}
+            onCommit={(value) => {
+              setFolderProblem(undefined);
+              // `""` is "clear it": a user who nominated a folder must be able to un-nominate one, and a
+              // JSON patch cannot carry an absent key (`daemon/store.ts` records why).
+              write(props.onUpdate({ defaultProjectPath: value }));
+            }}
+            pickPrompt={t("palette.addProject.pickPrompt")}
+            onProblem={setFolderProblem}
+          />
+        )}
       </SettingRow>
     </>
   );
@@ -136,45 +140,50 @@ export function TasksSection(props: SettingsSectionProps): JSX.Element {
         detail={t("settings.defaultHarness.detail")}
         developerNote="settings.defaults.harness"
       >
-        {/* One child, because `SettingRow` renders exactly one control beside its row — so the select and
-            the note under it are wrapped rather than passed as siblings. */}
-        <div className="setting__field-group">
-          <select
-            className="select"
-            value={defaultHarness}
-            aria-label={t("settings.defaultHarness.title")}
-            onChange={(event) => props.onUpdate({ defaults: { harness: event.target.value as HarnessId } })}
-          >
-            {available.some((entry) => entry.id === defaultHarness) ? null : (
-              // **The stored value, when the list does not carry it.**
-              //
-              // `offeredAgents` drops the one state that asserts a program is absent, so a default agent that
-              // was measured `not-installed` is not among the options — and a `<select>` whose value matches no
-              // option is not "empty", it is *blank*: the browser clears the selection and the row stops saying
-              // which agent a new task would start on. Both pickers therefore render the stored value itself,
-              // and — because the reason it is missing from the list is a fact a user needs, not a detail —
-              // with the same measured suffix every other row carries.
-              <option value={defaultHarness}>
-                {labelForHarness(defaultHarness, props.state)}
-                {verdictSuffix(summaryFor(props.state, defaultHarness)?.availability, t)}
-              </option>
-            )}
-            {available.map((harness) => (
-              <option key={harness.id} value={harness.id}>
-                {harness.label}
-                {verdictSuffix(harness.availability, t)}
-              </option>
-            ))}
-          </select>
-          {/* **Where the agents this picker does not offer are, said out loud.** The picker drops the one
-              state that asserts a program is absent, and an unexplained short list is how a user concludes
-              the product does not support their agent — which is precisely the complaint the catalogue screen
-              exists to answer. So the row names that place, where every agent we ship, every agent the user
-              declared and all 38 recipes are listed with the state each one was measured in. */}
-          <p className="settings__note">
-            {t("settings.defaultHarness.catalog", { section: t("settings.section.agents.title") })}
-          </p>
-        </div>
+        {/* One control, because `SettingRow` renders exactly one beside its row — so the select and the note
+            under it are wrapped rather than passed as siblings. The wrapper is *inside* the function because
+            the row's `write` has to reach the select: see `SettingRowProps.children`. */}
+        {(write) => (
+          <div className="setting__field-group">
+            <select
+              className="select"
+              value={defaultHarness}
+              aria-label={t("settings.defaultHarness.title")}
+              onChange={(event) =>
+                write(props.onUpdate({ defaults: { harness: event.target.value as HarnessId } }))
+              }
+            >
+              {available.some((entry) => entry.id === defaultHarness) ? null : (
+                // **The stored value, when the list does not carry it.**
+                //
+                // `offeredAgents` drops the one state that asserts a program is absent, so a default agent that
+                // was measured `not-installed` is not among the options — and a `<select>` whose value matches no
+                // option is not "empty", it is *blank*: the browser clears the selection and the row stops saying
+                // which agent a new task would start on. Both pickers therefore render the stored value itself,
+                // and — because the reason it is missing from the list is a fact a user needs, not a detail —
+                // with the same measured suffix every other row carries.
+                <option value={defaultHarness}>
+                  {labelForHarness(defaultHarness, props.state)}
+                  {verdictSuffix(summaryFor(props.state, defaultHarness)?.availability, t)}
+                </option>
+              )}
+              {available.map((harness) => (
+                  <option key={harness.id} value={harness.id}>
+                    {harness.label}
+                    {verdictSuffix(harness.availability, t)}
+                  </option>
+                ))}
+              </select>
+            {/* **Where the agents this picker does not offer are, said out loud.** The picker drops the one
+                state that asserts a program is absent, and an unexplained short list is how a user concludes
+                the product does not support their agent — which is precisely the complaint the catalogue screen
+                exists to answer. So the row names that place, where every agent we ship, every agent the user
+                declared and all 38 recipes are listed with the state each one was measured in. */}
+            <p className="settings__note">
+              {t("settings.defaultHarness.catalog", { section: t("settings.section.agents.title") })}
+            </p>
+          </div>
+        )}
       </SettingRow>
 
       {/* **Read but unsettable, until slice 1.** `resolveTaskDefaults` has honoured `defaults.model`
@@ -199,12 +208,14 @@ export function TasksSection(props: SettingsSectionProps): JSX.Element {
         detail={t("settings.extraArgs.detail")}
         developerNote="settings.defaults.extraArgs"
       >
-        <TextSetting
-          ariaLabel={t("settings.extraArgs.title")}
-          value={settings.defaults.extraArgs}
-          placeholder={t("settings.extraArgs.placeholder")}
-          onCommit={(value) => props.onUpdate({ defaults: { extraArgs: value } })}
-        />
+        {(write) => (
+          <TextSetting
+            ariaLabel={t("settings.extraArgs.title")}
+            value={settings.defaults.extraArgs}
+            placeholder={t("settings.extraArgs.placeholder")}
+            onCommit={(value) => write(props.onUpdate({ defaults: { extraArgs: value } }))}
+          />
+        )}
       </SettingRow>
     </>
   );
@@ -235,12 +246,14 @@ export function SafetySection(props: SettingsSectionProps): JSX.Element {
         detail={t("settings.transcripts.detail")}
         developerNote="settings.keepTranscripts"
       >
-        <input
-          type="checkbox"
-          checked={settings.keepTranscripts}
-          onChange={(event) => props.onUpdate({ keepTranscripts: event.target.checked })}
-          aria-label={t("settings.transcripts.title")}
-        />
+        {(write) => (
+          <input
+            type="checkbox"
+            checked={settings.keepTranscripts}
+            onChange={(event) => write(props.onUpdate({ keepTranscripts: event.target.checked }))}
+            aria-label={t("settings.transcripts.title")}
+          />
+        )}
       </SettingRow>
     </>
   );

@@ -3459,6 +3459,86 @@ option (2), a fixed word instead of the catalogue's (5), and `unknown` rendered 
 `settings.needsInstalling` key is **deleted** from all seven catalogues (`i18n:gap` 458/458) — the retired key is
 how the old defect would come back. Gates: **897 passed / 8 skipped**, 12 Rust tests.
 
+### 7.27 A failure is read where the press was
+
+The owner, after pressing **Add** in the catalogue:
+
+> *"After clicking 'Add', it will show the top bar which is ugly and usless, show like 'coder.addProvider was given
+> a provider this build cannot store: …'"*
+
+The sentence was right and the place was wrong, and there were **two** places. `CoderStore.mutate` stored every
+write's refusal in `state.error` — which the shell renders in a bar above every surface — *and* returned it to the
+caller, so a press that already answered on its own row answered twice. The copy nobody could use was the one in
+the bar: it names no control, it moves the window, and it has to be dismissed before the user can get on with what
+they were doing.
+
+#### 7.27.1 Three sinks existed and two were never wired
+
+Reading the components for this fix turned up the reason the strip had become the default. `TaskPane` had a
+`notice` prop documented as *"Shown under the composer when a send was refused"* and **nothing in the source passed
+it** (`notice={` appeared nowhere). `CommandCenter` had a `status` prop documented as *"Shown at the foot while an
+action is in flight, and on failure"* — also never passed. Both were drawn, styled, and dead, so every failure they
+were meant to carry fell through to the bar.
+
+#### 7.27.2 The rule, and the two halves of it
+
+* **A write raises nothing.** `mutate` returns the refusal and the caller renders it where the press was. Four
+  surfaces, four sinks: a **settings row** renders the answer its own `write` was handed (the child of `SettingRow`
+  is a function of the row's `write`, so a control that writes *cannot* be rendered without a sink); the **rail**
+  renders it under the row it came from (`failure={{ rowId, notice }}`); the **composer** keeps it under itself,
+  keyed by the task so one task's failure cannot follow the user into another's chat; the **palette** keeps itself
+  open with the sentence in its own status line — a command whose `run` answers with a refusal leaves the field
+  holding what was typed, so a mistyped path can be corrected and pressed again.
+* **A read still does.** `state.error` keeps what the *window* could not do: a list it could not read, a daemon
+  this build cannot talk to, the build-skew advice. Those are not about a control and have no row to live in.
+
+Nothing may go silent because of this, which is why the store's write methods return `T | Refusal`, why
+`asFailure` is the single place the discriminator is spent, and why `failure-placement.test.tsx` walks each surface
+and asserts **both** halves at once: the daemon's sentence is on screen exactly **once** (`timesOnScreen()`), and
+the window's bar is absent for it.
+
+#### 7.27.3 What each surface got, and the two the shell still routes
+
+The shell holds two of them, because it is what owns the press while another component draws the result: a rail
+row's callback lives in `CoderApp` while the row is drawn by `CoderSidebar`, and the composer's write callbacks
+live there while the line under the composer is `TaskPane`'s. Both are keyed — by row id and by task id — and both
+have their own test: a removal that failed says so under the row it was asked for, and a send that failed does not
+appear in a chat the user has since opened.
+
+Two new styles, both the refusal's own: `.setting__failure` (a left rule under the control, so it reads as
+attached to the control rather than as another sentence about the setting) and `.sidebar__failure`. Neither uses
+the destructive colour — nothing is being destroyed, a change simply did not land, and `--danger` stays where
+design law 3 puts it (inside a confirmation).
+
+#### 7.27.4 Measured in a real window, before and after
+
+`scripts/measure-settings.mjs` grew two things for this: `--open` may now be **repeated** (a control that lives
+inside something else needs two presses: the titlebar's *Command Center*, then a row inside it), and when the
+palette is left open the tool prints **its status line**. *Pair a phone* is the handy command for this — it is a
+press the product refuses on purpose (*"arrives with the mobile milestone"*), so it needs no fault injected:
+
+```console
+$ node scripts/measure-settings.mjs --section general --open "Command Center" --open "Pair a phone"
+  Command Center: ok
+  Pair a phone: ok
+  palette: still open; status "Pairing a phone arrives with the mobile milestone: the daemon has no session store yet, so it refuses remote clients on purpose."
+```
+
+The same run against the **old** behaviour — `mutate` raising the refusal and the palette closing on it — prints no
+`palette:` line at all: the dialog was gone and the sentence had gone up to the bar, which is exactly what the
+owner described.
+
+#### 7.27.5 The mutations
+
+Seven, one per leg, each reddening the leg it belongs to and no other: the store raising the refusal app-wide
+again (2 store legs), the rail rendering no row failure, the composer's line never passed, the palette closing on
+a refusal, the settings row rendering no failure, the pane's failure not keyed by task, and the banner no longer
+rendering a read failure.
+
+Two existing store legs had encoded the old rule — `expect(s.getSnapshot().error).toBeTruthy()` after a refused
+write — and were changed rather than deleted: the assertion is now `toBeUndefined()`, with the reason written where
+the old one stood. Gates: **903 passed / 8 skipped**, 12 Rust tests.
+
 ## 8. The slice plan
 
 Ordered, and ordered by *cheapness times usefulness* rather than by Paseo's section order. Each slice
