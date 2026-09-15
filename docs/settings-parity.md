@@ -3288,6 +3288,61 @@ pane's own title — where the 1.0:1 report came from — is app chrome outside 
 fixes it (the same `--text`/`--bg` pair, computed above at 17.35:1 rather than measured in the pane). Extending the
 walk to the pane is a small piece of tooling, not a redesign, and it is the honest way to close that last sentence.
 
+### 7.25 Every Add in the catalogue was refused — a button wired but never pressed
+
+The owner pressed **Add** on the catalogue and the pane showed:
+
+> *coder.addProvider was given a provider this build cannot store: a provider cannot be the catalogue entry it says
+> it came from — the reference would resolve to the provider itself*
+
+That is the store's own rule (`AgentProviderConfigSchema`, rule 4) — and the window's `addInputFor(entry)` sent
+`id: entry.id` **and** `catalogEntryId: entry.id`, so the rule refused **every one of the 38 rows**, always.
+
+#### 7.25.1 Why nothing caught it
+
+* `catalog-rpc.test.ts` built the same input — through `cataloguedProviderInput(entry)`, which has the same
+  self-reference — and then only **inspected its fields** (`expect(add.catalogEntryId).toBe("vtcode")`). A builder
+  whose output is never *stored* is a builder nobody has run.
+* The UI legs use fixtures, where the provider id and the reference are whatever the fixture says.
+* So the button was green in tests and dead in the product, on all 38 rows, from the day the list was drawn.
+
+#### 7.25.2 The fix, and the half it exposed
+
+`addInputFor` now mints an id of its own — `${entry.id}-${entry.transport}` (`goose-acp`, `cline-npx`), readable and
+distinct from the catalogue namespace in one step — while `catalogEntryId` keeps naming the recipe, which is what the
+handler verifies against the entry's own `command`, `args`, `transport` and environment **names**.
+
+That exposed the second half immediately: `addedProviderIds` returned `provider.id`, and the catalogue row's blocker
+compares against **catalogue** ids. With a provider id of its own, the row would have kept offering *Add* for a
+recipe already in the user's list — and let it be added again and again. So `AgentProviderSummary.catalogEntryId`
+now travels (the reference the provider was stored with) and `addedProviderIds` keys on
+`catalogEntryId ?? id` — the reference when there is one, the id for a program a user declared themselves.
+
+#### 7.25.3 The leg that would have caught it, and the live press
+
+`catalog-add.test.ts` stores **every** row in the catalogue, through `coder.addProvider` — the same handler a press
+reaches — and asserts no refusals (listing any that occurred, with the row's id), then that every added provider is
+seen as already-added by the catalogue's own blocker. It takes its rows from `coder.listCatalog` with an injected
+probe, so it is testing the rows a user looks at rather than a second description of the catalogue.
+
+Live on the running daemon, and removed again afterwards:
+
+```console
+add goose → {"id":"goose-acp","label":"goose","command":"goose","args":["acp"],"env":[],"transport":"acp","catalogEntryId":"goose"}
+  accepted: {"id":"goose-acp","catalogEntryId":"goose"}
+  providers now: goose-acp(goose)
+  removed again: 0 provider(s) left
+```
+
+A mutation puts the old `id: entry.id` back and reddens **both** legs — the storage loop and the id-distinctness one.
+Gates: **890 passed / 8 skipped**, 12 Rust tests.
+
+**What this does not change:** the failure was rendered in the pane's notice strip, at the top, which the owner also
+called ugly. That strip is where every `mutate` failure lands, and the reason it looked useless here is that the
+failure should never have happened — the row's own inline notice (`setNotice` in `CatalogRows.tsx`) is where an Add
+that genuinely cannot be stored will say so, and it is a separate question whether the app-wide strip should keep
+carrying action failures at all.
+
 ## 8. The slice plan
 
 Ordered, and ordered by *cheapness times usefulness* rather than by Paseo's section order. Each slice

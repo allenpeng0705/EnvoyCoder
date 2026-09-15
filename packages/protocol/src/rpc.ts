@@ -1511,6 +1511,16 @@ export interface AgentProviderSummary {
    * line. It exists so a bug report can quote what the daemon actually found.
    */
   detail: string;
+  /**
+   * **The catalogue entry this provider is**, when it was added from one.
+   *
+   * It travels because the *catalogue row* has to know: pressing Add on `goose` stores a provider whose own id is
+   * `goose-acp` (a provider may not be the entry it references — the store's rule), so a list that matched on ids
+   * alone would leave the row offering **Add** for a recipe already in the user's list, and let it be added again
+   * and again. `addedProviderIds` keys on this.
+   */
+  catalogEntryId?: string;
+
 }
 
 export const AgentProviderSummarySchema = z
@@ -1523,6 +1533,7 @@ export const AgentProviderSummarySchema = z
     transport: z.enum(["acp", "cli"]),
     availability: HarnessAvailabilitySchema,
     detail: z.string(),
+    catalogEntryId: z.string().min(1).optional(),
   })
   .strict();
 

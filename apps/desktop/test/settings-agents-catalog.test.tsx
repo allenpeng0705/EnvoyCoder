@@ -631,7 +631,9 @@ describe("adding an agent from the catalogue", () => {
     await waitFor(() => expect(calls.added).toHaveLength(1));
     expect(calls.added).toEqual([
       {
-        id: "vtcode",
+        // The provider's own id, distinct from the recipe it references — see the note on `addInputFor`: this
+        // pair being *equal* is what the store refuses, and it is what broke every Add in the catalogue.
+        id: "vtcode-acp",
         label: "VT Code",
         command: "vtcode",
         args: ["acp"],
@@ -917,7 +919,10 @@ describe("the catalogue's own conversions", () => {
     // The whole of `addInputFor`, asserted against the fixture entry rather than through a click, so a failure
     // here says which field drifted rather than which button did not respond.
     expect(addInputFor(catalog[2]!)).toEqual({
-      id: "vtcode",
+      // **An id of its own, and the reference to the recipe.** They may not be equal: the store refuses a provider
+      // that *is* the catalogue entry it says it came from, and sending `entry.id` here is what made every Add in
+      // the catalogue fail on the wire (`catalog-add.test.ts` stores all 38 to keep that from coming back).
+      id: "vtcode-acp",
       label: "VT Code",
       command: "vtcode",
       args: ["acp"],

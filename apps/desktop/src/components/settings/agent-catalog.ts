@@ -87,7 +87,15 @@ export function rowBlocker(
 
 /** The ids a user has already declared, as the set the catalogue rows are filtered against. */
 export function addedProviderIds(providers: readonly AgentProviderSummary[]): ReadonlySet<string> {
-  return new Set(providers.map((provider) => provider.id));
+  /**
+   * **The ids this set is compared against are the *catalogue's*.**
+   *
+   * A provider added from a catalogue row has an id of its own (`goose-acp`) and a `catalogEntryId` naming the
+   * recipe (`goose`) — the store refuses a provider that *is* the entry it references. So the row's "is this
+   * already in my list?" question is answered by the reference when there is one, and by the id for a program the
+   * user declared themselves (which refers to no recipe).
+   */
+  return new Set(providers.map((provider) => provider.catalogEntryId ?? provider.id));
 }
 
 /**
@@ -125,7 +133,17 @@ export function catalogRows(
  */
 export function addInputFor(entry: CatalogEntry): AddProviderInput {
   return {
-    id: entry.id,
+    /**
+     * **The id, and why it is not the catalogue's.**
+     *
+     * `AgentProviderConfigSchema` refuses a provider whose `catalogEntryId` is its own id — *"a provider cannot be
+     * the catalogue entry it says it came from — the reference would resolve to the provider itself"* — so sending
+     * `entry.id` here made **every** Add fail on the wire, with the refusal rendered in the pane's notice strip.
+     * The reference still says which recipe this is; the id says which of the user's agents it is, and naming it
+     * after the recipe's own transport keeps it readable (`goose-acp`, `cline-npx`) and distinct from the catalogue
+     * namespace in one step.
+     */
+    id: `${entry.id}-${entry.transport}`,
     label: entry.title,
     command: entry.command,
     args: [...entry.args],
