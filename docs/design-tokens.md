@@ -42,12 +42,19 @@ default variant ("paseo") rather than their zinc/midnight/claude/ghostty/pureBla
 |---|---|---|
 | `--foreground` | `#1a1a1e` | `#fafafa` |
 | `--foreground-muted` | `#71717a` | `#a1a5a4` |
-| `--foreground-extra-muted` | `#a1a1aa` | `#717574` |
+| `--foreground-extra-muted` | `#6b6b73` | `#909593` |
 | `--border` | `#e4e4e7` | `#252b2a` |
 | `--border-accent` | `#ececf1` | `#2f3534` |
 | `--accent` | `#20744a` | `#20744a` |
 | `--accent-bright` | `#239956` | `#7ccba0` |
 | `--destructive` | `#b04138` | `#c64f43` |
+**The faintest foreground was below the floor in both themes, and it is the pair that moved.** Measured on the
+surfaces it is actually drawn on: `#a1a1aa` is 2.33:1 on `--surface-2` and 2.56:1 on white (light), and `#717574`
+is 3.10:1 on `--surface-2` and 3.48:1 on `--surface-1` (dark) — against the 4.5:1 this family holds small text to.
+The values above are the measured replacements (4.81 / 5.06 light, 4.76 / 5.34 dark), chosen to keep the three-band
+hierarchy the sheet is built on: `--foreground` > `--foreground-muted` (5.82–6.97) > `--foreground-extra-muted`.
+Found by the whole-window contrast scan rather than by eye — `scripts/measure-settings.mjs --section work --seed`.
+
 
 **The accent is a green, not a blue.** It is identical in both schemes — the one colour a user learns to
 recognise — and it is the same green as Paseo's hardcoded focus ring (`index.html:73-82`).

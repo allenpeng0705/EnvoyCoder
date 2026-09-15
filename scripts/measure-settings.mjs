@@ -90,6 +90,28 @@ const flags = (name) => {
 const section = flag("section") ?? "agents";
 
 /**
+ * `--section work` — **do not walk into Settings at all.**
+ *
+ * Every number this tool produces was about one screen, because the walk always pressed *Settings* and then a
+ * section. The rail, the title bar, the status bar, the palette and the composer were therefore never measured
+ * in either palette — and the light palette, which is the newest thing in this sheet, was judged on the settings
+ * pane alone. The work surface is what a user looks at while a task runs, and this is how it gets measured: no
+ * Settings press, the measure root falls back to the pane (see the report below), and `--open "<task title>"`
+ * selects a task so the composer is on screen.
+ */
+const WORK_SURFACE = "work";
+
+/**
+ * `--seed` — put a project and a task in the **isolated** home before the daemon starts.
+ *
+ * Without it the rail has nothing in it and the work surface has no task to open, which is the honest reason the
+ * composer was never measured. Two files, written where the daemon's own store keeps them (`projects.json`,
+ * `tasks.json`), so this is the same state a user's own machine has rather than a fixture the window is told
+ * about: nothing about the app is stubbed, and the daemon reads them exactly as it reads a real home.
+ */
+const seed = has("seed");
+
+/**
  * `--theme light` — measure the **light palette**, which is the one nobody has measured.
  *
  * The app sets `document.documentElement.dataset.theme` at boot (`main.tsx`, currently `"dark"`), and every rule
@@ -155,6 +177,49 @@ const daemonPort = await freePort();
 const vitePort = await freePort();
 const debugPort = await freePort();
 const daemonLog = join(outDir, "daemon.log");
+
+if (seed) {
+  const stateDir = join(home, "EnvoyCoder");
+  mkdirSync(stateDir, { recursive: true });
+  const projectId = "local::/tmp/envoycoder-measure-repo";
+  const at = "2026-09-01T09:00:00.000Z";
+  writeFileSync(
+    join(stateDir, "projects.json"),
+    JSON.stringify(
+      [
+        {
+          id: projectId,
+          path: "/tmp/envoycoder-measure-repo",
+          label: "measure-repo",
+          hostId: "local",
+          addedAt: at,
+          defaults: { harness: "envoy-harness" },
+        },
+      ],
+      null,
+      2,
+    ),
+  );
+  writeFileSync(
+    join(stateDir, "tasks.json"),
+    JSON.stringify(
+      [
+        {
+          id: `${projectId}::task::1`,
+          projectId,
+          cwd: "/tmp/envoycoder-measure-repo",
+          title: "the task the tool measures",
+          harness: "envoy-harness",
+          status: "idle",
+          createdAt: at,
+          updatedAt: at,
+        },
+      ],
+      null,
+      2,
+    ),
+  );
+}
 
 const daemon = track(
   spawn(process.execPath, ["--import", "tsx", DAEMON_ENTRY], {
@@ -299,7 +364,12 @@ async function press(wanted) {
     const hit = matches([...document.querySelectorAll(interactive)])[0]
       ?? matches([...document.querySelectorAll("li")])[0];
     if (!hit) return "NOT FOUND: " + wanted;
-    hit.click();
+    // **A task row is a container, and its control is inside it.** The row class is in the interactive list
+    // because that is what a user aims at, but the element that *does* something is the select button within
+    // it: clicking the container returns "ok" and changes nothing, which is the one outcome a walker must never
+    // report. So the innermost control is what gets pressed.
+    const target = hit.classList?.contains("task-row") ? (hit.querySelector(".task-row__select") ?? hit) : hit;
+    target.click();
     return "ok";
   })()`);
   await sleep(1200);
@@ -363,9 +433,43 @@ if (theme !== "dark") {
   await sleep(300);
 }
 
-console.log(`walk: Settings → ${section}${theme === "dark" ? "" : ` (${theme} palette)`}`);
-console.log(`  Settings: ${await press("Settings")}`);
-console.log(`  ${sectionTitle[section] ?? section}: ${await press(sectionTitle[section] ?? section)}`);
+/**
+ * `--os-theme light|dark` — **the desktop's preference, which is not the app's theme.**
+ *
+ * This app forces its own palette (`main.tsx` sets `data-theme`), so the interesting configuration is the one
+ * where the two disagree — and it is the common one: a light desktop with this app in its dark palette. A form
+ * control that does not inherit `color` takes the *platform's* `buttontext`/`fieldtext` for the platform's
+ * scheme, so on a light desktop every control this sheet forgot to colour would draw near-black text on the
+ * app's dark fill. Emulated rather than assumed, and asserted from the page, because an emulation that silently
+ * did nothing would produce a *dark* measurement labelled light.
+ */
+const osTheme = flag("os-theme");
+if (osTheme !== undefined) {
+  await send("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-color-scheme", value: osTheme }],
+  });
+  await sleep(300);
+  const seen = await evaluate(
+    `(() => (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"))()`,
+  );
+  if (seen !== osTheme) {
+    console.error(`asked for a ${osTheme} desktop and the page reports ${String(seen)} — refusing to measure`);
+    process.exit(2);
+  }
+  console.log(`  desktop preference: ${seen}`);
+}
+
+console.log(
+  `walk: ${section === WORK_SURFACE ? "the work surface" : `Settings → ${section}`}` +
+    `${theme === "dark" ? "" : ` (${theme} palette)`}`,
+);
+if (section === WORK_SURFACE) {
+  // No Settings press at all: the pane and the rail are what is being measured.
+  console.log("  settings: not opened (--section work)");
+} else {
+  console.log(`  Settings: ${await press("Settings")}`);
+  console.log(`  ${sectionTitle[section] ?? section}: ${await press(sectionTitle[section] ?? section)}`);
+}
 await sleep(1200);
 const childrenAfterPage = daemonChildren();
 console.log(`  daemon child processes: ${childrenBeforePage} before the page, ${childrenAfterPage} after`);
@@ -532,8 +636,11 @@ const report = await evaluate(`(() => {
   /** A node's own visible text, with runs of whitespace collapsed — what a reader would count. */
   const ownText = (node) => (node.innerText ?? "").replace(/\\s+/g, " ").trim();
 
-  const body = document.querySelector(".settings");
-  if (!body) return { error: "no settings body on screen — the walk did not land" };
+  // The settings pane when it is up, the work surface otherwise — section "work" is the second case, and the
+  // row-based numbers below are then honest zeros (no settings rows are on screen) while the whole-window
+  // contrast scan, which is the point of that walk, covers the rail, the pane, the composer and the palette.
+  const body = document.querySelector(".settings") ?? document.querySelector("main.work");
+  if (!body) return { error: "neither the settings pane nor the work surface is on screen — the walk did not land" };
 
   const all = [...body.querySelectorAll("*")];
   const rows = [...body.querySelectorAll(${JSON.stringify(ROW_SELECTOR)})];
@@ -634,13 +741,20 @@ const report = await evaluate(`(() => {
   );
   const contrastAll = textOwners.map((node) => {
     const style = getComputedStyle(node);
+    const bg = bgOf(node);
     return {
       cls: typeof node.className === "string" ? node.className : "",
       surface: surfaceOf(node),
       sample: ownText(node).slice(0, 44),
       size: Math.round(parseFloat(style.fontSize) * 10) / 10,
       weight: style.fontWeight,
-      ratio: ratio(style.color, bgOf(node)),
+      // **The pair, not only the number.** A ratio says a reader cannot read something; the two colours say
+      // *why*, and whether the fault is the text token or the fill behind it — which is the difference between a
+      // one-line fix and a hunt. The pair is what turned a 1.04:1 palette row into "the item inherits its colour
+      // from a fill that is not the palette's own".
+      color: style.color,
+      background: bg,
+      ratio: ratio(style.color, bg),
     };
   });
   const worstAll = contrastAll.slice().sort((a, b) => a.ratio - b.ratio).slice(0, 8);

@@ -126,8 +126,12 @@ for (const wanted of [...(click ? [click] : []), ...walk]) {
     const hit = matches([...document.querySelectorAll(interactive)])[0]
       ?? matches([...document.querySelectorAll("li")])[0];
     if (!hit) return "NOT FOUND: " + wanted;
-    hit.click();
-    return "clicked <" + hit.tagName + ">";
+    // **A task row is a container.** The row class is in the list because that is what a user aims at, but the
+    // thing that selects a task is the control inside it — clicking the container reports "clicked <DIV>" and
+    // changes nothing, which is the one outcome a walker must never report as success.
+    const target = hit.classList?.contains("task-row") ? (hit.querySelector(".task-row__select") ?? hit) : hit;
+    target.click();
+    return "clicked <" + target.tagName + ">";
   })()`);
   console.log(`click "${wanted}": ${clicked}`);
   await sleep(900);
@@ -268,8 +272,8 @@ const audit = await evaluate(`(() => {
     const heights = rows.map((row) => Math.round(row.getBoundingClientRect().height)).sort((a, b) => a - b);
     const chips = rows.map((row) => {
       // **By class, not by position.** The state chip is the *last* chip in the row (verdict chips hang
-      // inward from it, so the state column has one constant right edge) — a `:first-child`-shaped
-      // selector would report a verdict chip as the state and quietly read the wrong word.
+      // inward from it, so the state column has one constant right edge) — a positional selector such as
+      // :first-child would report a verdict chip as the state and quietly read the wrong word.
       const chip = row.querySelector(".settings__agent-state");
       if (!chip) return null;
       return {

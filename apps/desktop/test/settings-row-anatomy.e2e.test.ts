@@ -114,7 +114,16 @@ interface Report {
    * samples. It exists because that list reported zero failures in the light palette while the page still had text
    * nobody could read: the worst elements are the ones a dark-only token sheet takes out — titles, headings, names.
    */
-  contrastAll: { below45: number; sampled: number; worst: readonly { cls: string; ratio: number }[] };
+  contrastAll: {
+    below45: number;
+    sampled: number;
+    /**
+     * **Which surfaces were on screen when the scan ran.** A zero has to be read for what it covers: a page with
+     * no task open has no composer, and "the composer is legible" is not something that run established.
+     */
+    surfaces: readonly string[];
+    worst: readonly { cls: string; ratio: number }[];
+  };
   /**
    * **The fix block, measured with the disclosures open.** Empty numbers (`blocks: 0`) when nothing was
    * opened, which is the honest reading for a closed page rather than a zero that looks like a failure.
@@ -148,11 +157,14 @@ interface Report {
  * `extra: []` is the second state — the agents list with every Not-ready row's way-out panel open — and it is the
  * only place the **fix block** exists to be measured at all.
  */
-function measure(extra: readonly string[] = ["--open", "Browse the catalogue"]): Promise<Report> {
+function measure(
+  extra: readonly string[] = ["--open", "Browse the catalogue"],
+  section = "agents",
+): Promise<Report> {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(
       process.execPath,
-      [join(root, "scripts/measure-settings.mjs"), "--section", "agents", ...extra, "--out", outDir],
+      [join(root, "scripts/measure-settings.mjs"), "--section", section, ...extra, "--out", outDir],
       { cwd: root, stdio: ["ignore", "pipe", "pipe"] },
     );
     let stdout = "";
@@ -209,6 +221,26 @@ const fixReport: Report = enabled
  * keeps it fixed.
  */
 const lightReport: Report = enabled ? await measure(["--theme", "light"]) : (undefined as unknown as Report);
+
+/**
+ * **The work surface** — the rail, the title bar, the status bar, the composer and the palette, with a project and
+ * a task seeded into the tool's isolated home so the composer is on screen at all.
+ *
+ * Every number this file produced before this was about one screen, because the walk always pressed *Settings*.
+ * The rail, the chrome and the composer had therefore never been measured in either palette — and the light
+ * palette, the newest thing in the sheet, was judged on the settings pane alone. Widening the scan found the
+ * status bar at 3.48:1 in dark mode and the composer's folder pill at 2.33:1 in light (§7.28); this leg is what
+ * keeps them found.
+ */
+const SEEDED_TASK = "the task the tool measures";
+function measureWork(theme: "dark" | "light"): Promise<Report> {
+  // The task first (so the composer is on screen), then the palette — which is left **open**, so its rows are part
+  // of the scan. They are the elements that measured 1.04:1 in the light palette: white text on a near-white
+  // panel, because the row is a `button` with no `color` of its own and took the platform's `buttontext`.
+  return measure(["--seed", "--theme", theme, "--open", SEEDED_TASK, "--open", "Command Center"], "work");
+}
+const workReport: Report = enabled ? await measureWork("dark") : (undefined as unknown as Report);
+const workLightReport: Report = enabled ? await measureWork("light") : (undefined as unknown as Report);
 
 describeWhen("the agent rows, measured in a real window", () => {
   it("is measured on this machine's real page, with the counts the page claims", () => {
@@ -344,6 +376,39 @@ describeWhen("the agent rows, measured in a real window", () => {
         `${fixReport.fix.copyButtons} Copy control(s) at ${fixReport.fix.copyHeight}px, ` +
         `${fixReport.fix.runButtons} Install press(es), worst contrast ` +
         `${String(fixReport.fix.contrast.worst[0]?.ratio)}:1`,
+    );
+  });
+});
+
+describeWhen("the work surface, measured in a real window", () => {
+  it("actually looked at the rail, the chrome and the composer, in both palettes", () => {
+    // **The assertion that keeps the others honest.** A walk that failed to open the task would measure the empty
+    // work area and report `below45: 0` — a true number about a screen nobody was asking about. Naming the
+    // surfaces is what makes the measurement a claim about the surface it is for.
+    for (const [label, report_] of [
+      ["dark", workReport],
+      ["light", workLightReport],
+    ] as const) {
+      for (const surface of ["rail", "titlebar", "statusbar", "composer", "palette"]) {
+        expect(
+          report_.contrastAll.surfaces,
+          `the ${label} run did not measure the ${surface}: ${report_.contrastAll.surfaces.join(", ")}`,
+        ).toContain(surface);
+      }
+    }
+  });
+
+  it("holds the 4.5:1 floor on every surface outside Settings, in both palettes", () => {
+    // The measured defects this leg exists for: the status bar's detail line at 3.48:1 in dark mode, and the
+    // composer's folder pill at 2.33:1 in light, both invisible to a scan rooted at `.settings`.
+    expect(workReport.contrastAll.below45, JSON.stringify(workReport.contrastAll.worst.slice(0, 3))).toBe(0);
+    expect(
+      workLightReport.contrastAll.below45,
+      JSON.stringify(workLightReport.contrastAll.worst.slice(0, 3)),
+    ).toBe(0);
+    console.log(
+      `· work surface measured: ${workReport.contrastAll.sampled} text elements in dark, ` +
+        `${workLightReport.contrastAll.sampled} in light, across ${workReport.contrastAll.surfaces.join("/")}`,
     );
   });
 });

@@ -3539,6 +3539,72 @@ Two existing store legs had encoded the old rule — `expect(s.getSnapshot().err
 write — and were changed rather than deleted: the assertion is now `toBeUndefined()`, with the reason written where
 the old one stood. Gates: **903 passed / 8 skipped**, 12 Rust tests.
 
+### 7.28 The window outside Settings had never been measured
+
+The light palette was added in §7.24 and judged by a scan that took `.settings` as its root: `contrastAll` walked
+`document.querySelector(".settings")`, and the walk itself always pressed *Settings* and then a section. So the
+rail, the title bar, the status bar, the palette and the composer had **never been measured in either palette** —
+the newest thing in the stylesheet was signed off on one screen out of five.
+
+Two changes made the rest measurable:
+
+* **`--section work`** — do not walk into Settings at all. The measure root falls back to the work surface, and
+  `--seed` writes a project and a task into the *isolated* home before the daemon starts (the same two files the
+  daemon's own store keeps), so the rail has a row and `--open "<task title>"` can open it and put the composer on
+  screen. Nothing about the app is stubbed: the daemon reads that home exactly as it reads a real one.
+* **`contrastAll` now walks `document.body`**, and every entry carries the surface it was found in
+  (`palette`/`titlebar`/`rail`/`statusbar`/`composer`/`settings`/`other`), the two colours, and a `surfaces` list
+  of what was on screen. A zero has to be read for what it covers, and the e2e leg asserts the surfaces rather than
+  trusting the number.
+
+#### 7.28.1 The three defects it found, all of them outside Settings
+
+| where | measured | why nobody saw it |
+|---|---|---|
+| the status bar's detail line, dark | **3.48:1** | the scan was rooted at the settings pane; the rail's own badge and the "TASKS" caption were the same colour and the same 3.48 |
+| the composer's folder pill, light | **2.33:1** | the composer only exists with a task open, which the walk could not reach |
+| every palette row, light | **1.04:1** | white on near-white — and it needed the palette *open* during the scan |
+
+The first two are one token: `--text-faint` (the sheet's own) and `--foreground-extra-muted` (the token sheet's)
+were `#717574` in dark and `#a1a1aa` in light, which are below the family's 4.5:1 floor on **every** fill they are
+drawn on (dark: 3.72 on `--bg`, 3.48 on `--bg-raised`, 3.10 on `--bg-hover`; light: 2.56 on white, 2.33 on
+`--surface-2`). They are now `#909593` and `#6b6b73`, measured (4.76–5.71 and 4.81–5.28), and still a step below
+the muted foreground so the three-band hierarchy survived. The selected row's subtitle takes `--text` on
+`--bg-active`, the same rule the pane's current nav item already recorded — on a mid-grey fill even `--text-muted`
+reads 3.83:1.
+
+The third is a different mechanism, and it is the interesting one: **form controls do not inherit `color`**. The
+platform gives them its own (`buttontext`, `fieldtext`), chosen from the *user agent's* colour scheme rather than
+from this sheet — and `:root { color-scheme: light dark }` means "pick by the desktop's preference" while this
+app's palette comes from `data-theme`. The palette's rows are `<button class="palette__item">` and set no `color`
+at all, so on this machine (a dark desktop) they drew white text — correct in the dark palette, and 1.04:1 in the
+light one. Fixed twice over, and each fix alone clears the measurement: `button, input, select, textarea { color:
+inherit }` makes those controls obey the sheet, and `:root[data-theme="…"] { color-scheme: … }` makes the
+platform's own widgets — scrollbars, `<select>` popups, carets — follow the app's palette too.
+
+#### 7.28.2 A fourth defect, in the instrument itself
+
+`npm run ui:audit` **could not start**. `scripts/audit-ui.mjs` had two backticks in a comment inside an
+`evaluate(\`…\`)` template, which terminates the template, so the file failed to parse before its first
+measurement — committed, and unnoticed because nothing in this repository parses `scripts/*.mjs`: they are outside
+every `tsconfig`, no test imports them, and the failure looks like "that tool is unreliable" rather than "that tool
+cannot run". The same mistake was made twice more in `measure-settings.mjs` during this slice.
+
+So there is a gate now: **`scripts/check-scripts.mjs`** runs `node --check` on every `.mjs` under `scripts/` and
+fails the build listing the file and the parse error. It is the cheapest gate here and it guards the instruments
+every other claim in this document rests on. `audit-ui.mjs` is repaired, and it also carried the third instance of
+the click-the-container trap (`--click "<task title>"` clicked the `.task-row` wrapper, which selects nothing) —
+the same trap that made this slice's first work-surface walk measure the empty pane and report a cheerful zero.
+
+#### 7.28.3 The mutations
+
+Three, each reddening the leg it belongs to: `--text-faint` back to `#717574` (8 elements at 3.48:1 in the dark
+run), `--foreground-extra-muted` back to `#a1a1aa` (the composer's pill at 2.33:1 in the light run), and both
+form-control fixes removed (6 palette rows at 1.04:1). The e2e leg names the surfaces it looked at, so a walk that
+failed to open the task — a real failure mode, and the first thing this leg did — cannot pass by measuring an empty
+pane. Gates: **903 passed / 10 skipped**, 12 Rust tests, and the new `scripts:check` (the two extra skips are this
+leg, which needs `RUN_E2E=1` and a browser like every other pixel measurement here).
+
 ## 8. The slice plan
 
 Ordered, and ordered by *cheapness times usefulness* rather than by Paseo's section order. Each slice

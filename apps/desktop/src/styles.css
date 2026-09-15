@@ -31,7 +31,14 @@
 
   --text: #fafafa;
   --text-muted: #a1a5a4;
-  --text-faint: #717574;
+  /* **Measured, not chosen.** `#717574` is 3.72:1 on `--bg`, **3.48:1 on `--bg-raised`** (the status bar) and
+     3.10:1 on `--bg-hover` — under the 4.5:1 floor this family holds small text to, on every fill it is drawn
+     on. It went unnoticed because the contrast scan only walked the settings pane, so the rail, the status bar
+     and the palette were never measured in this palette: widening the scan to the whole window
+     (`scripts/measure-settings.mjs`'s `contrastAll`) reported the status bar's own detail line at 3.48:1 as the
+     worst text in the window. This value is 5.71 / 5.34 / 4.76 on the same three fills, and still a step below
+     `--text-muted` (6.97 / 6.52 / 5.82), so the three-band hierarchy the sheet draws with survived the fix. */
+  --text-faint: #909593;
   /* Used by the newer sections; defined here so they stop falling back to the old pre-Paseo hex. */
   --text-dim: #a1a5a4;
 
@@ -100,6 +107,28 @@
   --live: #17527f;
 }
 
+/**
+ * **And the platform's widgets follow the app's palette, not the desktop's.**
+ *
+ * The token sheet declares `color-scheme: light dark`, which means "pick by the user's preference" — while this
+ * app's palette is decided by `data-theme` (`main.tsx` forces dark today; the appearance slice will set it).
+ * The two can disagree, and when they do the UA draws its own widgets — scrollbars, `<select>` popups, checkboxes,
+ * the text caret, and every form control the reset above does not cover — for the desktop's scheme rather than
+ * for the one on screen. The measurement that found this is in §7.28: the classes that set no `color` at all
+ * (`.palette__item`, `.palette__input`) came out at **1.04:1** in the light palette, white text on a near-white
+ * panel, because their colour was the platform's `buttontext` and the platform was dark. The reset above fixes
+ * the *text*; this fixes everything else the sheet does not draw, which no text measurement can see.
+ *
+ * When nothing is forced, the media query below leaves the OS in charge, exactly as before.
+ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
 /* Follow the OS when the user has not chosen, exactly as the token sheet does. */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
@@ -123,6 +152,26 @@
 
 * {
   box-sizing: border-box;
+}
+
+/**
+ * **A form control's text is this app's text.**
+ *
+ * `button`, `input`, `select` and `textarea` do **not** inherit `color` — the platform gives them its own
+ * (`buttontext`, `fieldtext`), chosen from the *user agent's* used colour scheme rather than from this sheet.
+ * So a control this sheet forgets to colour is legible exactly when the platform and the app happen to agree:
+ * `.palette__item` and `.palette__input` set no `color`, and a measurement on a dark desktop reported them as
+ * white text (the platform's dark `buttontext`) — which is the *right* answer there and an invisible one on a
+ * light desktop, where the same colour resolves to near-black on this app's dark fill.
+ *
+ * One line, and every control in the window obeys the palette: the rules that want something else
+ * (`.button--primary`'s `--accent-text`, `.input`'s `--text`) are class selectors and still win.
+ */
+button,
+input,
+select,
+textarea {
+  color: inherit;
 }
 
 html,
@@ -557,6 +606,14 @@ body {
   gap: 6px;
   color: var(--text-faint);
   font-size: 11px;
+}
+
+/* **The selected row is a background, not a licence to lose the small print.** `--bg-active` is a mid grey, and
+   on it even `--text-muted` reads 3.83:1 — the number `.settings-nav__item--current .settings-nav__detail` below
+   already records for the same fill. So the subtitle of the row the pane is *on* takes `--text`, exactly as that
+   caption does: the fill says which row is current, and the words on it stay readable. */
+.task-row--active .task-row__sub {
+  color: var(--text);
 }
 
 .task-row__branch {

@@ -39,7 +39,12 @@
 
   --foreground: #1a1a1e;
   --foreground-muted: #71717a;
-  --foreground-extra-muted: #a1a1aa;
+  /* **Measured, not chosen**, and it was 2.33:1 before this: `#a1a1aa` on `--surface-2` is under the 4.5:1 the
+     family holds small text to, in *light* mode — the theme where nothing had been measured. It was found by
+     `.composer__pill` (a disabled pill still has to be *read*: it shows the folder the task runs in), and it
+     failed on every light surface: 2.56 on white, 2.46 on `--surface-1`. This value is 4.81 / 5.06 / 5.28.
+     `docs/design-tokens.md` records the pair and the numbers. */
+  --foreground-extra-muted: #6b6b73;
 
   --border: #e4e4e7;
   --border-accent: #ececf1;
@@ -127,7 +132,10 @@
 
   --foreground: #fafafa;
   --foreground-muted: #a1a5a4;
-  --foreground-extra-muted: #717574;
+  /* The same finding in the dark theme: `#717574` is 3.10:1 on `--surface-2`, 3.48 on `--surface-1` and 3.72 on
+     `--surface-0` — under the floor on every one of them. This value is 4.76 / 5.34 / 5.71, and still a step
+     below `--foreground-muted` (5.82 / 6.52 / 6.97), so the hierarchy survives the fix. */
+  --foreground-extra-muted: #909593;
 
   --border: #252b2a;
   --border-accent: #2f3534;
@@ -157,7 +165,7 @@
     --surface-0: #181b1a; --surface-1: #1e2120; --surface-2: #272a29;
     --surface-3: #434645; --surface-4: #595b5b; --surface-sidebar: #141716;
     --surface-sidebar-hover: var(--surface-2); --surface-sidebar-selected: var(--surface-2);
-    --foreground: #fafafa; --foreground-muted: #a1a5a4; --foreground-extra-muted: #717574;
+    --foreground: #fafafa; --foreground-muted: #a1a5a4; --foreground-extra-muted: #909593;
     --border: #252b2a; --border-accent: #2f3534;
     --accent-bright: #7ccba0; --destructive: #c64f43;
     --status-success: #6cb17b; --status-danger: #d8847b; --status-warning: #c09664;
