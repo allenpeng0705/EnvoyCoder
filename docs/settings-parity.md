@@ -2920,7 +2920,36 @@ agent whose program the user believed they had installed, and the row would go o
 The launch reads the choice at the one place a run is created (`runs.ts`, plus the probe and the sign-in flows),
 through `deliveryOf` — injected, because `launchForHarness` is a pure function of its input by design.
 
-#### 7.21.2 Measured, live, on this machine
+#### 7.21.2 The command text stays, with the button beside it
+
+The owner's requirement, once they saw the first cut: *"we should keep the command text, but also provide the exec
+button. Not to remove the text. The user can install it by himself."*
+
+They were right, and the failure was a consequence of the design rather than an oversight in it: a fetched delivery
+makes the row **`Ready`**, so `availability.fix` is empty — *because there is nothing to fix* — and the block that
+carries the install command is drawn only for a row that has one. Choosing the fetched route therefore **removed the
+instructions for installing it**, which is exactly the user the feature was meant to serve.
+
+So the *other* route's commands travel as their own field, `installFix`, present **exactly** when the delivery in
+force is `npx` — a rule `HarnessSummarySchema` now enforces with a `superRefine`, on the same discipline as
+`HarnessAvailabilitySchema`'s five: a claim that contradicts another claim is worse than a missing one, and an
+`installFix` on an installed row would invite a user to reinstall a program the row just said was working. The
+window renders it through the same `GuideBlock` as any other fix — the sentence, the command, **Copy**, and the
+press — so the text and the button are one answer rather than two.
+
+| who asserts what | where |
+|---|---|
+| the daemon computes and sends it (`needs-bridge` + `npx` → the catalogue's command; either state + `installed` → nothing) | `agent-delivery.test.ts`, with an **injected probe** so the state is arranged rather than hoped for — on this machine the bridges *are* installed, so a socket leg here would have been a test of the developer's machine |
+| the rule cannot be contradicted | `packages/protocol/test/rpc.test.ts`, three parses: fetched-with-command ✅, fetched-without ❌, installed-with-command ❌ |
+| the row shows the text, the Copy control and the Install press | `settings-agent-verdict.test.tsx` (*keeps the install command on a fetched row…*) |
+| dropping it again fails a test | a mutation on the daemon line (`const installFix = undefined`) reddens *keeps the command, so a user can install it themselves* |
+
+**Not demonstrated live**, and it is worth saying why: on this machine both bridges are installed, so the installed
+route has nothing to install and `installFix` is legitimately absent — the live check in §7.21.3 below shows the
+field's *absence* for the right reason rather than its presence. The rendering is asserted in jsdom, the projection
+by the table test, and a machine missing its bridge is where a user meets it.
+
+#### 7.21.3 Measured, live, on this machine
 
 ```console
 $ …coder.hello            → advertises coder.setAgentDelivery, 32 methods

@@ -347,6 +347,7 @@ export const zh: Catalogue = {
   "settings.agents.delivery.npx.title": "首次运行时从 npm 获取连接器，之后从 npm 缓存启动。不会在这台机器上安装任何东西。",
   "settings.agents.delivery.installed": "使用已安装的副本",
   "settings.agents.delivery.installed.title": "停止获取：启动将回到这台机器上已安装的连接器。",
+  "settings.agent.installRoute.lead": "想改为安装在这台机器上（例如停止每次获取）——请运行：",
   "settings.agent.fact.delivery": "提供方式",
   "settings.agent.fact.delivery.npx": "npm，首次运行时获取",
   "settings.agent.fact.delivery.installed": "已安装在这台机器上",

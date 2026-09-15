@@ -347,6 +347,7 @@ export const ko: Catalogue = {
   "settings.agents.delivery.npx.title": "처음 실행할 때 npm에서 커넥터를 받아오고 이후에는 npm 캐시에서 시작합니다. 이 컴퓨터에는 아무것도 설치하지 않습니다.",
   "settings.agents.delivery.installed": "설치된 복사본 사용",
   "settings.agents.delivery.installed.title": "받아오기를 중지합니다. 실행은 이 컴퓨터에 설치된 커넥터로 돌아갑니다.",
+  "settings.agent.installRoute.lead": "대신 이 컴퓨터에 설치하려면(예: 내려받기를 중지하려면) 다음을 실행하세요:",
   "settings.agent.fact.delivery": "제공 방식",
   "settings.agent.fact.delivery.npx": "npm, 첫 실행 시 내려받음",
   "settings.agent.fact.delivery.installed": "이 컴퓨터에 설치됨",

@@ -32,6 +32,7 @@ import {
   type ObservedSessionOptions,
   unknownAuth,
   type AgentDelivery,
+  type AvailabilityFix,
 } from "@envoycoder/protocol";
 import {
   canApplyModel,
@@ -87,6 +88,8 @@ export function summarize(
    * every fact a user might want to check.
    */
   delivery: AgentDelivery = { kind: "installed" },
+  /** The other route's commands — see `HarnessSummary.installFix`; the caller decides when they apply. */
+  installFix?: readonly AvailabilityFix[],
 ): HarnessSummary {
   const definition = harnessDefinition(id);
   const result = probe(id);
@@ -154,6 +157,7 @@ export function summarize(
     // catalogue change that produced a self-contradicting state fails a test rather than reaching a window.
     availability: harnessAvailability(result),
     delivery,
+    ...(installFix !== undefined && installFix.length > 0 ? { installFix } : {}),
     // And the third fact: whether it will talk to us, or wants a sign-in first. `authOf` is the one place
     // that turns a record — or the absence of one — into the three-state answer.
     auth: authOf(auth),

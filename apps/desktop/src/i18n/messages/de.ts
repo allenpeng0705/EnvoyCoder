@@ -347,6 +347,7 @@ export const de: Catalogue = {
   "settings.agents.delivery.npx.title": "Lädt den Connector beim ersten Start von npm und startet ihn danach aus dem npm-Cache. Auf diesem Rechner wird nichts installiert.",
   "settings.agents.delivery.installed": "Die installierte Kopie verwenden",
   "settings.agents.delivery.installed.title": "Beendet das Laden: der Start nutzt wieder den auf diesem Rechner installierten Connector.",
+  "settings.agent.installRoute.lead": "Um ihn stattdessen auf diesem Rechner zu installieren — etwa um das Laden zu beenden — führe dies aus:",
   "settings.agent.fact.delivery": "Bereitgestellt von",
   "settings.agent.fact.delivery.npx": "npm, beim ersten Start geladen",
   "settings.agent.fact.delivery.installed": "Auf diesem Rechner installiert",

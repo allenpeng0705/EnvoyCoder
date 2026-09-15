@@ -1184,6 +1184,23 @@ export interface HarnessSummary {
    */
   delivery?: AgentDelivery;
 
+  /**
+   * **How to install this agent's connector on this machine anyway** — present when the delivery in force is
+   * `npx`, and absent otherwise.
+   *
+   * The owner's requirement, in their words: *"we should keep the command text, but also provide the exec
+   * button. Not to remove the text. The user can install it by himself."* A fetched delivery makes the row
+   * `Ready`, and `availability.fix` is then empty **because there is nothing to fix** — which quietly took the
+   * command off the screen and left a user who would rather install it with nothing to read or copy. So the
+   * commands for the *other* route travel as their own field: the text stays, the Copy control stays, and the
+   * press that runs it stays beside them.
+   *
+   * Its own field rather than a fix on `availability`, because `HarnessAvailability` means *the state of the
+   * route in force* and its agreement rules (fix appears exactly when something must be installed) are what keep
+   * a row from telling a user to install a program it just said was working.
+   */
+  installFix?: readonly AvailabilityFix[];
+
 }
 
 export const HarnessSummarySchema = z
@@ -1280,8 +1297,30 @@ export const HarnessSummarySchema = z
     evidence: z.string(),
     // The delivery this machine will use, absent from a daemon that predates the field — see the interface.
     delivery: AgentDeliverySchema.optional(),
+    // The other route's commands, present **exactly** when the delivery in force is `npx`: with the connector
+    // installed there is nothing to install, and offering the command anyway would be an invitation to reinstall
+    // a program the row just said was working.
+    installFix: z.array(AvailabilityFixSchema).min(1).readonly().optional(),
   })
-  .strict();
+  .strict()
+  /**
+   * **The two claims cannot contradict each other**, which is this schema family's standing rule
+   * (`HarnessAvailabilitySchema` enforces five of them). `installFix` is the *other* route's commands, so it is
+   * present exactly when the route in force is `npx` — an `installFix` on an installed delivery would be a
+   * command for something the row says is already here.
+   */
+  .superRefine((value, ctx) => {
+    const fetching = value.delivery?.kind === "npx";
+    if (fetching !== (value.installFix !== undefined)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["installFix"],
+        message: fetching
+          ? "a fetched delivery must carry the commands that would install it here instead"
+          : "installFix is for a fetched delivery; an installed one has nothing to install",
+      });
+    }
+  });
 
 /**
  * One environment variable a provider declared, and whether **this daemon** has a value for it.

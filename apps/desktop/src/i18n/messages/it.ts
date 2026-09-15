@@ -347,6 +347,7 @@ export const it: Catalogue = {
   "settings.agents.delivery.npx.title": "Scarica il connettore da npm al primo avvio e poi lo avvia dalla cache di npm. Nulla viene installato su questa macchina.",
   "settings.agents.delivery.installed": "Usa la copia installata",
   "settings.agents.delivery.installed.title": "Interrompe il download: l'avvio torna al connettore installato su questa macchina.",
+  "settings.agent.installRoute.lead": "Per installarlo invece su questa macchina — per esempio per smettere di scaricarlo — esegui questo:",
   "settings.agent.fact.delivery": "Fornito da",
   "settings.agent.fact.delivery.npx": "npm, scaricato al primo avvio",
   "settings.agent.fact.delivery.installed": "Installato su questa macchina",

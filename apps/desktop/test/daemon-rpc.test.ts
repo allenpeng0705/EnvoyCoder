@@ -343,7 +343,7 @@ describe("the daemon over a socket", () => {
     expect(coderErrorCode(first)).toBe(ENVOYCODER_ERRORS.connectorNotFetchable);
     // And nothing was stored: the list still says this agent is delivered the ordinary way.
     const before = (await client.call("coder.listHarnesses", {})) as {
-      harnesses: { id: string; delivery?: { kind: string } }[];
+      harnesses: { id: string; delivery?: { kind: string }; installFix?: unknown }[];
     };
     expect(before.harnesses.find((h) => h.id === "envoy-harness")?.delivery).toEqual({ kind: "installed" });
 
@@ -354,14 +354,27 @@ describe("the daemon over a socket", () => {
     })) as { delivery: { kind: string; package?: string } };
     expect(accepted.delivery).toEqual({ kind: "npx", package: "@agentclientprotocol/codex-acp" });
     const after = (await client.call("coder.listHarnesses", {})) as {
-      harnesses: { id: string; delivery?: { kind: string } }[];
+      harnesses: { id: string; delivery?: { kind: string }; installFix?: { command: string }[] }[];
     };
     // **`codex` is `ready` on this machine either way** — the bridges are installed here — which is exactly why
     // the delivery has to travel as its own field rather than being inferred from the state.
-    expect(after.harnesses.find((h) => h.id === "codex")?.delivery).toEqual({
-      kind: "npx",
-      package: "@agentclientprotocol/codex-acp",
-    });
+    const fetched = after.harnesses.find((h) => h.id === "codex");
+    expect(fetched?.delivery).toEqual({ kind: "npx", package: "@agentclientprotocol/codex-acp" });
+    // **And the install command travels with the row when there is one to give.** The owner's requirement:
+    // *"we should keep the command text, but also provide the exec button. Not to remove the text. The user can
+    // install it by himself."* With a fetched delivery `availability.fix` is empty *because there is nothing to
+    // fix*, so the command had gone; it now travels as `installFix`.
+    //
+    // **What this machine can prove, and what it cannot.** The bridges are installed here, so the installed route
+    // has nothing to install and `installFix` is legitimately absent — the *rule* (`installFix` present exactly
+    // when the delivery is `npx`) is asserted in `packages/protocol/test/rpc.test.ts`, and the rendering is
+    // asserted in `settings-agent-verdict.test.tsx` with a row that carries one. What is left for a socket test is
+    // the invariant that holds either way: a fetched row never carries a command for something already installed.
+    const installFix = (fetched as { installFix?: { command: string }[] }).installFix;
+    if (installFix !== undefined) {
+      expect(installFix.map((step) => step.command)).toEqual(["npm install -g @agentclientprotocol/codex-acp"]);
+    }
+    expect(before.harnesses.find((h) => h.id === "envoy-harness")?.installFix).toBeUndefined();
 
     // …and back, because a preference that cannot be undone is a decision a user has to live with.
     const back = (await client.call("coder.setAgentDelivery", {

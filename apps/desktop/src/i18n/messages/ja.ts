@@ -347,6 +347,7 @@ export const ja: Catalogue = {
   "settings.agents.delivery.npx.title": "初回実行時に npm からコネクタを取得し、以降は npm のキャッシュから起動します。このマシンには何もインストールしません。",
   "settings.agents.delivery.installed": "インストール済みのコピーを使う",
   "settings.agents.delivery.installed.title": "取得を停止します。起動はこのマシンにインストールされたコネクタに戻ります。",
+  "settings.agent.installRoute.lead": "代わりにこのマシンへインストールする場合（取得をやめたいときなど）は、次を実行してください:",
   "settings.agent.fact.delivery": "提供元",
   "settings.agent.fact.delivery.npx": "npm（初回実行時に取得）",
   "settings.agent.fact.delivery.installed": "このマシンにインストール済み",

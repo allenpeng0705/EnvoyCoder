@@ -772,6 +772,54 @@ describe("choosing how a connector is delivered", () => {
     expect(back).toBeTruthy();
   });
 
+  it("keeps the install command on a fetched row, with Copy and the press beside it", () => {
+    // **The owner's requirement, asserted where it was broken:** *"we should keep the command text, but also
+    // provide the exec button. Not to remove the text. The user can install it by himself."* A fetched row is
+    // `Ready`, so the fix block is not drawn — and the command that would install the connector here had gone
+    // with it. `installFix` carries it, and the block renders the text, the Copy control and the Install press
+    // exactly as a fix block does.
+    // A clipboard, because `CopyCommand` renders its control only where copying can work — jsdom offers neither
+    // `navigator.clipboard` nor `execCommand`, and a leg that forgot this would assert the absence of a control
+    // that is simply disabled by the environment.
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async () => undefined },
+    });
+    const { container } = show(
+      {
+        harnesses: [
+          harness({
+            ...NPX_READY,
+            installFix: [{ command: ADAPTER }],
+          }),
+        ],
+      },
+      ["coder.runFix", "coder.setAgentDelivery"],
+    );
+    const row = rowOf(container, "Codex");
+    expect(verdictOf(row)).toBe(READY);
+    const panel = openDetails(row);
+
+    // The text is there, verbatim.
+    expect(textOf(panel)).toContain(en["settings.agent.installRoute.lead"]);
+    expect([...panel.querySelectorAll(".settings__agent-steps code")].map((code) => textOf(code))).toEqual([
+      ADAPTER,
+    ]);
+    // The Copy control is there …
+    expect(
+      [...panel.querySelectorAll(".settings__agent-fix button")].some(
+        (candidate) => candidate.textContent === en["settings.agents.fix.copy"],
+      ),
+    ).toBe(true);
+    // … and so is the exec button, which is the difference between reading the command and running it.
+    expect(
+      [...panel.querySelectorAll(".settings__agent-fix button")].some(
+        (candidate) => candidate.textContent === en["settings.agents.fix.run"],
+      ),
+    ).toBe(true);
+    Reflect.deleteProperty(navigator, "clipboard");
+  });
+
   it("offers the fetched route on a row whose connector is missing, and stores the choice", async () => {
     const { container, calls } = show(
       {

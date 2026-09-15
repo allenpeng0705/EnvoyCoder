@@ -542,6 +542,15 @@ export const en = {
   "settings.agents.delivery.installed": "Use the installed copy",
   "settings.agents.delivery.installed.title":
     "Stops fetching: the launch goes back to the connector installed on this machine.",
+  /**
+   * **The other route, still written down.**
+   *
+   * The owner's requirement: *"we should keep the command text, but also provide the exec button. Not to remove
+   * the text. The user can install it by himself."* A fetched delivery makes the row Ready, and `Ready` plus an
+   * empty fix list quietly removed the install command from the screen — so this is the sentence that leads the
+   * block that keeps it, with the Copy control and the press beside it.
+   */
+  "settings.agent.installRoute.lead": "To install it on this machine instead — for example to stop fetching it — run this:",
   "settings.agent.fact.delivery": "Delivered by",
   "settings.agent.fact.delivery.npx": "npm, fetched on the first run",
   "settings.agent.fact.delivery.installed": "Installed on this machine",

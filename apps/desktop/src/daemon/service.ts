@@ -603,13 +603,24 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
            */
           const delivery = deps.deliveries?.of(id) ?? "installed";
           const recipe = delivery === "npx" ? fetchedBridgeRecipe(id) : undefined;
+          const installed = probe(id);
           const finding: HarnessProbe =
             recipe === undefined
-              ? probe(id)
+              ? installed
               : {
                   ...probeRecipe(recipe, { pathDirs: search.dirs, searchable: search.searchable }),
                   id,
                 };
+          /**
+           * **The other route's commands, kept on the row.**
+           *
+           * With a fetched delivery the row is `Ready` and `availability.fix` is empty *because there is nothing
+           * to fix* — which took the install command off the screen entirely, leaving a user who would rather
+           * install it with nothing to read, copy or press. The owner asked for the text to stay and the button
+           * to stay with it, so the installed route's own commands travel in `installFix` and the window renders
+           * them beside the delivery control.
+           */
+          const installFix = recipe === undefined ? undefined : harnessAvailability(installed).fix;
           return summarize(
             id,
             () => finding,
@@ -623,6 +634,10 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
             delivery === "npx" && recipe !== undefined
               ? { kind: "npx", package: bridgePackage(id) ?? "" }
               : { kind: "installed" },
+            // Present exactly when the delivery is `npx` and there is something to install on this machine —
+            // `HarnessSummarySchema` refuses any other combination. (An argument, not a spread: a spread is an
+            // object-literal form, and this is a call.)
+            installFix !== undefined && installFix.length > 0 ? installFix : undefined,
           );
         }),
       };

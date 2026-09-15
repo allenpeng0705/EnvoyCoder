@@ -347,6 +347,7 @@ export const fr: Catalogue = {
   "settings.agents.delivery.npx.title": "Télécharge le connecteur depuis npm au premier lancement, puis le démarre depuis le cache npm. Rien n'est installé sur cette machine.",
   "settings.agents.delivery.installed": "Utiliser la copie installée",
   "settings.agents.delivery.installed.title": "Arrête le téléchargement : le lancement revient au connecteur installé sur cette machine.",
+  "settings.agent.installRoute.lead": "Pour l'installer plutôt sur cette machine — par exemple pour arrêter le téléchargement — exécute ceci :",
   "settings.agent.fact.delivery": "Fourni par",
   "settings.agent.fact.delivery.npx": "npm, téléchargé au premier lancement",
   "settings.agent.fact.delivery.installed": "Installé sur cette machine",

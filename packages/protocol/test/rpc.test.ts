@@ -29,6 +29,7 @@ import {
   RPC_SPECS,
   HarnessAuthSchema,
   HarnessAvailabilitySchema,
+  HarnessSummarySchema,
   RUN_EVENT_KINDS,
   RunEventSchema,
   TaskSchema,
@@ -670,6 +671,61 @@ describe("telling the window and its daemon apart", () => {
     expect(missingMethods(older)).toEqual(["coder.listTasks"]);
     // Order follows this build's catalogue, so the notice names the first method a user would notice.
     expect(missingMethods(["coder.hello"])).toEqual([...RPC_METHODS].filter((m) => m !== "coder.hello"));
+  });
+
+  it("keeps a fetched row's install command and the delivery in agreement", () => {
+    // **The owner's requirement, as a type rule:** *"we should keep the command text, but also provide the exec
+    // button. Not to remove the text."* `installFix` is the *other* route's commands, so it is present exactly
+    // when the delivery in force is `npx` — the same "a claim that contradicts another claim is worse than a
+    // missing one" discipline `HarnessAvailabilitySchema` enforces, one field along. Without this rule a row
+    // could offer an install command for the connector it says it is already running.
+    const base = {
+      id: "codex" as const,
+      label: "Codex",
+      tier: "catalogued" as const,
+      summary: "…",
+      modes: [],
+      models: { kind: "none" as const, options: [], source: "…" },
+      thinking: { kind: "none" as const, options: [], source: "…" },
+      capabilities: {
+        resume: true,
+        cancel: true,
+        approvals: false,
+        structuredTools: true,
+        streaming: true,
+        images: false,
+        agentMode: false,
+        model: false,
+        thinking: false,
+        approvalPolicy: false,
+      },
+      availability: { state: "ready" as const, binary: "/usr/local/bin/npx" },
+      auth: { state: "unknown" as const },
+      evidence: "…",
+    };
+    const install = [{ command: "npm install -g @agentclientprotocol/codex-acp" }];
+
+    // A fetched row carries the command that would install it here instead.
+    expect(
+      HarnessSummarySchema.safeParse({
+        ...base,
+        delivery: { kind: "npx", package: "@agentclientprotocol/codex-acp" },
+        installFix: install,
+      }).success,
+    ).toBe(true);
+    // A fetched row without it is refused: the text cannot be dropped from a row that is fetching.
+    expect(
+      HarnessSummarySchema.safeParse({
+        ...base,
+        delivery: { kind: "npx", package: "@agentclientprotocol/codex-acp" },
+      }).success,
+    ).toBe(false);
+    // And an installed row must not carry it: there is nothing to install.
+    expect(
+      HarnessSummarySchema.safeParse({ ...base, delivery: { kind: "installed" }, installFix: install }).success,
+    ).toBe(false);
+    // A daemon older than the field is unaffected — no delivery, no install commands, and that parses.
+    expect(HarnessSummarySchema.safeParse(base).success).toBe(true);
   });
 
   it("does not turn 'says nothing' into 'has nothing'", () => {

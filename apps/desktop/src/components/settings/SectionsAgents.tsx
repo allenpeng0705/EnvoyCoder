@@ -409,6 +409,24 @@ function ShippedAgent(props: {
             <GuideBlock guide={verdict.guide} {...(props.onRunFix !== undefined ? { run: props.onRunFix } : {})} />
           ) : null}
           <FactsBlock facts={facts} />
+          {/* **The install command stays on a fetched row, with the press beside it.**
+              The owner's requirement: *"we should keep the command text, but also provide the exec button. Not to
+              remove the text. The user can install it by himself."* A row delivered by `npx` is `Ready` — so the
+              fix block is not drawn, because there is nothing to fix — and the command that would install the
+              connector here had therefore gone. It is the *other* route's command, so it travels as
+              `installFix`, and this renders it exactly as a fix block renders one: the sentence, the command, the
+              Copy control and the press. */}
+          {harness.installFix !== undefined && harness.installFix.length > 0 ? (
+            <GuideBlock
+              guide={{
+                kind: "steps",
+                lead: t("settings.agent.installRoute.lead"),
+                steps: harness.installFix,
+                names: [],
+              }}
+              {...(props.onRunFix !== undefined ? { run: props.onRunFix } : {})}
+            />
+          ) : null}
           {/* **The one control that changes what a run starts**, at the bottom of the disclosure: the row itself
               has no room for a fourth column, and a user reading the facts is exactly the user deciding. */}
           <DeliveryControl
