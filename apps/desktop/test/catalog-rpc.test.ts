@@ -27,7 +27,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AcpAgentEntry, ProbeFinding } from "@envoycoder/agent-catalog";
-import { acpAgent, cataloguedRecipe, probeRecipe } from "@envoycoder/agent-catalog";
+import { acpAgent, cataloguedProviderInput, cataloguedRecipe, probeRecipe } from "@envoycoder/agent-catalog";
 import { coderErrorCode, coderErrorMessage, coderErrorRef } from "@envoycoder/protocol";
 
 import { CATALOG_PROBE_STALE_MS, createCatalogHandlers } from "../src/daemon/catalog.js";
@@ -92,7 +92,7 @@ describe("the catalogue, as a list", () => {
         title: string;
         command: string;
         args: readonly string[];
-        env: readonly string[];
+        env: readonly { name: string; value: string }[];
         transport: string;
         install: { kind: string; package?: string; binary?: string };
         installLink: string;
@@ -115,12 +115,24 @@ describe("the catalogue, as a list", () => {
     expect(cline?.command).toBe("npx");
     expect(cline?.install).toEqual({ kind: "npx", package: "cline@3.0.46" });
 
-    // **The four entries whose recipe sets a variable carry the name and not the value.** There is no field
-    // in `AgentProviderConfig` for a value, and this is the wire half of that: what crosses is `VT_ACP_ENABLED`,
-    // never the `"1"` the recipe sets it to.
+    // **The four entries whose recipe sets a variable carry the constant, and the row is where it belongs.**
+    // The recipe is our own reviewed, git-tracked data, so a constant of a command line anybody can read is
+    // not a secret — and it has to travel, because the window has to be able to say which variables the
+    // recipe supplies and which are the user's to set.
     const vtcode = entries.find((entry) => entry.id === "vtcode");
-    expect(vtcode?.env).toEqual(["VT_ACP_ENABLED", "VT_ACP_ZED_ENABLED"]);
-    expect(JSON.stringify(entries)).not.toContain('"1"');
+    expect(vtcode?.env).toEqual([
+      { name: "VT_ACP_ENABLED", value: "1" },
+      { name: "VT_ACP_ZED_ENABLED", value: "1" },
+    ]);
+
+    // …and the *value* stops here. What `coder.addProvider` takes for this entry is the four recipe facts
+    // plus `catalogEntryId`; there is no parameter a value could ride in, which is the wire half of the
+    // names-only rule (`AgentProviderConfig`) — and it is why `providers.json` holds no value at all.
+    expect(Object.keys(goose ?? {})).toContain("env");
+    const add = cataloguedProviderInput(acpAgent("vtcode")!);
+    expect(add.env).toEqual(["VT_ACP_ENABLED", "VT_ACP_ZED_ENABLED"]);
+    expect(add.catalogEntryId).toBe("vtcode");
+    expect(JSON.stringify(add)).not.toContain('"1"');
   });
 
   it("says which entry is also an agent we ship, so no client has to decide the overlap", async () => {

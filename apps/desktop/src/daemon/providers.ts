@@ -51,6 +51,7 @@ import {
   parseRpcParams,
 } from "@envoycoder/protocol";
 import type { ProviderProbe } from "@envoycoder/agent-catalog";
+import { acpAgent, agreesWithEntry } from "@envoycoder/agent-catalog";
 
 import { summarizeProvider } from "./summaries.js";
 
@@ -136,6 +137,7 @@ export function createProviderHandlers(
         args?: readonly string[];
         env?: readonly string[];
         transport: "acp" | "cli";
+        catalogEntryId?: string;
         authMethodId?: string;
         modeParam?: "mode" | "modeId";
       };
@@ -182,6 +184,50 @@ export function createProviderHandlers(
         );
       }
 
+      /**
+       * **The reference is checked against the recipe the caller sent, before it is stored.**
+       *
+       * This is what keeps `catalogEntryId` from being a way to *acquire* a recipe's environment. The
+       * daemon resolves the entry itself and refuses unless `command`, `args`, `transport` and the
+       * environment **names** are all that entry's own — so the only thing the field can ever mean is
+       * *"this provider is that entry"*, which is exactly what the window means when it adds a row.
+       *
+       * A refusal rather than a silent downgrade, and in the user's language: a client that sent one
+       * recipe's argv with another entry's id is a client bug, but the person reading the screen is the one
+       * who needs to know the agent was not added. `error.providerCatalogMismatch` names the entry and asks
+       * for the page to be reopened, which is the one action that fixes it.
+       *
+       * An id that names no entry takes the same path (it cannot agree with anything), and that is
+       * deliberate rather than an omission: `error.catalogAgentMissing` would be a sentence about the
+       * *catalogue*, and at this point the question is about the row the caller is adding.
+       */
+      const catalogEntryId = input.catalogEntryId;
+      if (catalogEntryId !== undefined) {
+        const entry = acpAgent(catalogEntryId);
+        // The **same** comparison the launch uses (`agreesWithEntry`), so a reference the handler accepted
+        // is a reference `providerCatalogueEnv` will honour — one answer to "is this that recipe?", which
+        // is the pair that must never disagree.
+        const agrees =
+          entry !== undefined &&
+          agreesWithEntry(
+            {
+              command: input.command,
+              args: input.args ?? [],
+              transport: input.transport,
+              env: envNames,
+            },
+            entry,
+          );
+        if (!agrees) {
+          throw coderError(
+            ENVOYCODER_ERRORS.badRequest,
+            `"${catalogEntryId}" is a catalogued agent whose recipe is not the one this request describes, ` +
+              `so the agent was not added. Reopen the agents page and add the row again.`,
+            ref("error.providerCatalogMismatch", { entry: catalogEntryId }),
+          );
+        }
+      }
+
       const candidate = {
         id,
         label: input.label,
@@ -189,6 +235,7 @@ export function createProviderHandlers(
         args: [...(input.args ?? [])],
         env: envNames,
         transport: input.transport,
+        ...(catalogEntryId !== undefined ? { catalogEntryId } : {}),
         ...(input.authMethodId !== undefined ? { authMethodId: input.authMethodId } : {}),
         ...(input.modeParam !== undefined ? { modeParam: input.modeParam } : {}),
       };

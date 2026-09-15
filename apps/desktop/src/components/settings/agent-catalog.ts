@@ -59,11 +59,36 @@ export type CatalogRowProbe =
     }
   | { readonly state: "refused"; readonly notice: Notice };
 
-/** The state a row displays: the five measured ones, plus the three that are not measurements. */
-export type AgentRowState = HarnessState | "unchecked" | "checking" | "refused";
+/**
+ * The state a row displays: the five measured ones, plus the three that are not measurements, plus the one
+ * that is a measurement of *less* than it first appears.
+ *
+ * `ready-npx` is the sixth, and it exists for a specific dishonesty rather than for symmetry. The daemon's
+ * `ready` for an `npx -y <pkg> …` recipe means **`npx` resolved** — the probe looks for `npx` rather than
+ * the package, deliberately, because looking for the package would report all 14 of those rows as missing.
+ * So `ready` there is a fact about Node's presence and says nothing about the agent, and 14 rows reading
+ * "Ready" claimed a verification nobody performed. The word a user reads is therefore derived from two
+ * facts — the measurement *and* how the program is obtained — which is why `rowStateOf` takes the entry.
+ */
+export type AgentRowState =
+  | HarnessState
+  | "ready-npx"
+  | "unchecked"
+  | "checking"
+  | "refused";
 
-/** The state of a row, from whatever has happened to it — the one function the row branches on. */
-export function rowStateOf(probe: CatalogRowProbe | undefined): AgentRowState {
+/**
+ * The state of a row, from the entry it belongs to and whatever has happened to it — the one function the
+ * row branches on.
+ *
+ * The `entry` parameter is not optional, and that is the point: a caller that forgot it would get the
+ * over-claiming `ready` back on exactly the rows this state exists for, silently. Requiring it makes the
+ * omission a compile error instead.
+ */
+export function rowStateOf(
+  entry: Pick<CatalogEntry, "install">,
+  probe: CatalogRowProbe | undefined,
+): AgentRowState {
   if (probe === undefined) return "unchecked";
   switch (probe.state) {
     case "unchecked":
@@ -76,20 +101,27 @@ export function rowStateOf(probe: CatalogRowProbe | undefined): AgentRowState {
       // **The only place a measured state is read.** `availability.state` comes from the daemon's own
       // prober under `HarnessAvailabilitySchema`, so there is no path here by which a row could be `ready`
       // without one: the only producer of `ready` is this branch, and it requires a measurement.
-      return probe.availability.state;
+      //
+      // …and for an `npx` recipe it is narrowed, because "the program resolves" there means `npx` resolves.
+      // Nothing has been downloaded, so nothing about the agent has been established — see `AgentRowState`.
+      return probe.availability.state === "ready" && entry.install.kind === "npx"
+        ? "ready-npx"
+        : probe.availability.state;
   }
 }
 
 /**
  * The chip's word, per row state — **one table for both lists.**
  *
- * The shipped agents' five states and the catalogue rows' eight come from the same list, which is the point:
+ * The shipped agents' five states and the catalogue rows' nine come from the same list, which is the point:
  * `settings.agent.ready` must mean the same thing on a row we ship and on a row we catalogued, and a second
- * table is how the two come to disagree about a word a user is going to act on. The three extra states are
- * the ones that exist because a catalogue row starts unmeasured.
+ * table is how the two come to disagree about a word a user is going to act on. The extra states are the
+ * ones that exist because a catalogue row starts unmeasured, and because an `npx` row is measured about
+ * less than it looks.
  */
 export const ROW_STATE_LABEL = {
   ready: "settings.agent.ready",
+  "ready-npx": "settings.agents.row.readyNpx",
   unsupported: "settings.agent.unsupported",
   "needs-bridge": "settings.agent.needsBridge",
   "not-installed": "settings.agent.notInstalled",
@@ -107,9 +139,12 @@ export const ROW_STATE_LABEL = {
  * `unsupported` are warnings — something is wrong and it is not the user's mistake. `unknown` is quiet,
  * deliberately: a state that asserts nothing must not look like an alarm. `unchecked` is quiet for the same
  * reason at its strongest — it asserts *less* than `unknown`, which at least knows a search did not happen.
+ * `ready-npx` is quiet for exactly that reason too: nothing is wrong and nothing is verified, so it is
+ * neither a green light nor a warning.
  */
 export const ROW_STATE_CHIP = {
   ready: "chip--live",
+  "ready-npx": "chip--quiet",
   unsupported: "chip--warn",
   "needs-bridge": "chip--warn",
   "not-installed": "chip--danger",
@@ -189,6 +224,15 @@ export function catalogRows(
  * ignores a field it does not recognise and reports success.
  *
  * `modeParam` and `authMethodId` are absent because the row has no such field — see `CatalogEntry`.
+ *
+ * ## `catalogEntryId`, and the one thing this function still does not send
+ *
+ * `env` is the entry's variable **names**, and `catalogEntryId` is the reference that lets the daemon
+ * resolve the entry's own constants without a value ever crossing this wire. The row *does* carry those
+ * constants (`CatalogEntry.env` is name-and-value, §7.10's correction), and this function deliberately
+ * drops the values: a provider config has no field for one, and the alternative — sending them so the
+ * daemon could store them — is the design this reference exists *instead of*. A test asserts the negative
+ * by putting a real-looking key in the row.
  */
 export function addInputFor(entry: CatalogEntry): AddProviderInput {
   return {
@@ -196,8 +240,9 @@ export function addInputFor(entry: CatalogEntry): AddProviderInput {
     label: entry.title,
     command: entry.command,
     args: [...entry.args],
-    env: [...entry.env],
+    env: entry.env.map((constant) => constant.name),
     transport: entry.transport,
+    catalogEntryId: entry.id,
   };
 }
 

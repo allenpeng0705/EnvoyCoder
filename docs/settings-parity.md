@@ -587,7 +587,7 @@ at all, so **ship the disabled row with the git slice, not before it.**
 | setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
 |---|---|---|---|---|---|
 | **Enable {provider}** (`providers[id].enabled`) | `providers-section.tsx:248-253`, per provider · `settings.providers.enableProvider` "Enable {{name}}" (`en.ts:2651`) | `true` (`:444`; daemon `server/agent/provider-registry.ts:737`) | daemon: only enabled providers get a client; disabled ⇒ `unavailable`, `listModels` throws "Provider X is disabled" (`provider-registry.ts:375-377`,`:752-754`,`:836-837`) | **the preference landed, on both agent lists, and it is deliberately not Paseo's switch.** `coder.setAgentHidden { id, hidden }` stores `CoderSettings.hiddenAgents` — one list of ids, because the two agent id spaces cannot collide (`AgentProviderConfigSchema` refuses a provider id that names a shipped agent) — and every row of `coder.listHarnesses` / `coder.listProviders` now carries `hidden` **beside** its `availability` and its `auth`. The desktop pickers filter on it (`composer/agent-for.ts`'s `pickable`). What was *not* copied is the effect: Paseo's disabled provider reports `unavailable` and its `listModels` throws, so its switch rewrites the **state**; ours moves a row out of the pickers and changes nothing else. A hidden agent that is installed still reports `ready`, still carries its `fix` when it is not, and still runs when a task already names it (§7.10) | **shipped** — and it is deliberately not Paseo's switch. The daemon half was already in place and tested over a real socket (round trip through `coder.setAgentHidden`, a second window hearing `harnesses`, and the list surviving a restart); the control that throws the switch is the **Agents** page, on every row of all three lists (`SectionsAgents.tsx`). What it changes is still only the pickers: a hidden agent reports exactly what the probe found, keeps its install command, and still runs when a task already names it — the two facts sit side by side and neither overwrites the other. A daemon that does not serve `coder.setAgentHidden` gets the switch not at all, rather than one whose press comes back "Method not found" |
-| **Add provider** (`providers[id]` from the ACP catalogue) | `provider-catalog-list.tsx:108-118` · `providerCatalog.actions.add` "Add" (`en.ts:1587`) | — (action) | persists `{providers:{[id]:{extends:"acp",label,description,command,env,params}}}` (`hooks/use-acp-provider-catalog.ts:11-26`) so a third-party ACP CLI becomes runnable | **the plumbing landed; the picker has not.** `AgentProviderConfig` (§7.10) is a provider's shape — id, label, command, args, the **names** of the environment variables it needs, and the dialect it speaks — and `coder.listProviders` / `coder.addProvider` / `coder.removeProvider` store them in `<state>/EnvoyCoder/providers.json` (quarantined rather than emptied when unreadable, replaced rather than merged per id, `providers` broadcast so a second window refetches). Every listed provider is **probed** by the same prober that answers for the nine shipped agents and launched through the same `launchForHarness` body, so its row carries one of the same five `availability` states. What is still absent is the surface: no control adds one, and the 38-entry catalogue is still unreachable from the window | **shipped** — with a divergence that is the whole point. Paseo's Add writes the entry's `env` **values** into `config.json`; ours cannot, because `AgentProviderConfig.env` is a list of variable **names** and the value is read from the daemon's own environment at spawn (§7.10). So the catalogue serves its rows over the wire (`coder.listCatalog`, which measures nothing) and a client adds one by handing back what the entry states: its command, its argv, the names of the variables it needs, and the dialect it declares — `modeParam` and `authMethodId` are *absent* rather than defaulted, because no entry has evidence for either and a guessed `modeParam` is ignored by the peer while the run reports success. The one cost is stated on the row: the four entries whose recipe sets a constant carry the name across, and the variable is then the user's to set. `coder.probeCatalogAgent` measures one row at a time, on the user's press, because 14 of the 38 are `npx` recipes and a screen that checked them all while opening would spend the machine on rows nobody looked at |
+| **Add provider** (`providers[id]` from the ACP catalogue) | `provider-catalog-list.tsx:108-118` · `providerCatalog.actions.add` "Add" (`en.ts:1587`) | — (action) | persists `{providers:{[id]:{extends:"acp",label,description,command,env,params}}}` (`hooks/use-acp-provider-catalog.ts:11-26`) so a third-party ACP CLI becomes runnable | **the plumbing landed; the picker has not.** `AgentProviderConfig` (§7.10) is a provider's shape — id, label, command, args, the **names** of the environment variables it needs, and the dialect it speaks — and `coder.listProviders` / `coder.addProvider` / `coder.removeProvider` store them in `<state>/EnvoyCoder/providers.json` (quarantined rather than emptied when unreadable, replaced rather than merged per id, `providers` broadcast so a second window refetches). Every listed provider is **probed** by the same prober that answers for the nine shipped agents and launched through the same `launchForHarness` body, so its row carries one of the same five `availability` states. What is still absent is the surface: no control adds one, and the 38-entry catalogue is still unreachable from the window | **shipped** — with a divergence that is the whole point. Paseo's Add writes the entry's `env` **values** into `config.json`; ours cannot, because `AgentProviderConfig.env` is a list of variable **names** and the value is read from the daemon's own environment at spawn (§7.10). So the catalogue serves its rows over the wire (`coder.listCatalog`, which measures nothing) and a client adds one by handing back what the entry states: its command, its argv, the names of the variables it needs, and the dialect it declares — `modeParam` and `authMethodId` are *absent* rather than defaulted, because no entry has evidence for either and a guessed `modeParam` is ignored by the peer while the run reports success. The cost that *was* stated on the row is now paid off, and paying it changed the shape: the four entries whose recipe sets a constant used to carry only the **name** across, so the variable was the user's to export even though we had written its value ourselves. `coder.addProvider` now takes `catalogEntryId` — the entry's own id, a **reference** and not a value — and the daemon resolves the recipe's constants from the catalogue it ships, so `providers.json` still holds no value at all, ours or a user's (§7.10). The row says which variables the recipe supplies and that exporting one is how a user overrides it. `coder.probeCatalogAgent` measures one row at a time, on the user's press, because 14 of the 38 are `npx` recipes and a screen that checked them all while opening would spend the machine on rows nobody looked at |
 | **Remove provider** (`removeProviders`) | `providers-section.tsx:155-164` (menu + confirm) · `settings.providers.actions.remove` (`en.ts:2658`) | — (action) | daemon strips the entry, its overrides **and** its `metadataGeneration.providers` entries (`daemon-config-store.ts:101-159`) | `coder.removeProvider` forgets one provider and nothing else — it refuses with `envoycoder.provider-missing` when there is nothing under that id, rather than confirming a removal that did not happen. Nothing refers to a provider today, so unlike `coder.removeProject` there are no rows to archive: a task names a `HarnessId` | **shipped** — every row on the Agents page (a user's provider, and a catalogue entry they already added) carries Remove, and it is the same `coder.removeProvider`: nothing is uninstalled, and nothing a row reports changes except its disappearance from the list. Paseo's version strips the entry, its overrides and its `metadataGeneration.providers` entries, which is what a config-with-overrides shape requires; ours is a flat list of recipes, so there is nothing else to strip |
 | **Add custom model** (`providers[id].additionalModels`) | `provider-diagnostic-sheet.tsx:199-234` (modal form) · `settings.providers.models.addCustomTitle` "Add custom model" (`en.ts:2678`) | `[]` (`provider-registry.ts:735`) | merged on top of discovered models (`provider-registry.ts:383-396`,`:651`): the picker gains ids without replacing the catalogue | our catalogue ships a fixed `models` list per agent (`packages/agent-catalog/src/models.ts`) with no user additions. **Half of this row landed since it was written, and not as a settings control:** the agent is now *asked* what it offers and the answer is recorded, so `deepseek-harness`'s live catalog reaches the picker without a hand-typed id (§7.7). What is still absent is the user's own additions — ids that are not in the agent's catalog at all | **honour-able with work** — needs a per-agent model list on the settings object plus the composer reading it. Small, but it is a **protocol** addition (a `models` array on the agent's stored defaults), so it shares the Add-provider slice's schema change |
 | **Remove model** | `provider-diagnostic-sheet.tsx:114-118` · `settings.providers.models.removeModel` "Remove {{id}}" (`en.ts:2684`) | — (action) | rewrites `additionalModels` without the id (`:651-667`) | absent with the row above | **honour-able with work** — same slice |
@@ -1473,7 +1473,8 @@ user-defined agent here names the environment variables it needs and never their
 **The shape.** `AgentProviderConfig` (`packages/protocol/src/domain.ts`) is the whole contract:
 
 ```ts
-{ id, label, command, args, env: readonly string[], transport: "acp" | "cli", authMethodId?, modeParam? }
+{ id, label, command, args, env: readonly string[], transport: "acp" | "cli",
+  catalogEntryId?, authMethodId?, modeParam? }
 ```
 
 `env` is `readonly string[]` — a list of **names**, each checked against
@@ -1489,8 +1490,57 @@ daemon's **own** environment and merged over the `PATH` the probe searched, and 
 (including set-to-empty, since `FOO=` exports nothing) is a **refusal**, in the user's language, naming
 the provider and the variables — never a silently skipped variable, which would start an agent that
 cannot authenticate and let it fail with its own sentence. The same fact travels to the window *before*
-a run: `AgentProviderSummary.env` is `{ name, set }[]`, so the row can say which variable is missing
-while nothing on the wire or in a log is a value.
+a run: `AgentProviderSummary.env` is `{ name, set, from? }[]`, so the row can say which variable is
+missing while nothing on the wire or in a log is a value.
+
+**`catalogEntryId`: the one reviewed constant a launch may supply, and why it is a reference.** Four of
+the 38 catalogued recipes set six environment variables between them (`AUGMENT_DISABLE_AUTO_UPDATE`,
+`DROID_DISABLE_AUTO_UPDATE`, `FACTORY_DROID_AUTO_UPDATE_ENABLED`, `GJC_ACP_PERMISSION_MODE`,
+`VT_ACP_ENABLED`, `VT_ACP_ZED_ENABLED`), and every one is a constant of a command line *we* publish —
+`1`, `true`, `prompt`. Treating those as if they were credentials made four recipes unusable for no
+safety gain: adding one produced a provider that named a variable nothing would ever set, so the launch
+refused by name about a value we had written ourselves. The honest distinction is **whose data it is**,
+and it cuts in two places:
+
+* **A catalogue entry is our own reviewed, git-tracked data**, so it may declare a non-secret default —
+  its `env` is already `Record<string, string>`, and the row now carries name and value together
+  (`CatalogEnvConstantSchema`) so the screen can say which variables the recipe supplies and which are
+  the user's to set.
+* **A provider config still has no field for a value.** What it may carry is `catalogEntryId`: the
+  *name* of the entry it was added from. The daemon reads the entry's constants out of the catalogue —
+  code we ship, not a file a user writes — at launch and at summary time. So `providers.json` holds no
+  value at all, which is **strictly stronger** than "a user may not write one", and the property this
+  section has claimed from the start survives intact.
+
+Three rules keep the reference from becoming a door, and each is enforced where it can actually fail:
+
+1. **The wire has no field for a value.** `coder.addProvider`'s parameters are `.strict()`, and the only
+   thing about a recipe they accept is `catalogEntryId`. A client that invents `envDefaults` is refused
+   at parse — asserted with a real-looking key, three spellings of it, and `await`ed, because a
+   synchronous `toThrow` on an async handler asserts nothing.
+2. **The reference is *verified*, not trusted.** `agreesWithEntry` (one implementation, two callers)
+   requires the provider's `command`, `args` and `transport` to be the entry's own and its `env` to
+   **include** every name the entry declares. `coder.addProvider` refuses a mismatch by name
+   (`error.providerCatalogMismatch`); `providerCatalogueEnv` returns nothing for one, which puts the
+   provider back in the ordinary names-only case. A hand-edited file therefore cannot claim a recipe it
+   is not, and an id the catalogue no longer has resolves to nothing rather than to invented constants.
+   *A superset rather than an equality* on `env` is deliberate: a user who adds a variable of their own
+   to a catalogued agent must not silently lose the recipe's constants.
+3. **A credential-looking name may not carry a recipe value, loudly.** `CREDENTIAL_ENV_NAME_PATTERN` is
+   segment-anchored (`KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `CREDENTIAL`, `AUTH`, …), so
+   `ANTHROPIC_API_KEY` and `AWS_SECRET_ACCESS_KEY` are refused while `AUGMENT_DISABLE_AUTO_UPDATE`,
+   `VT_ACP_ENABLED` and `MONKEY` are not. `CatalogEnvConstantSchema` refuses one **when the row is
+   built** and `AgentProviderEnvStateSchema` refuses a wire claim that a recipe supplied one — a refusal
+   and not a silent drop, because an entry quietly losing a variable would be a row lying about its own
+   recipe. A *user's* own `env` is untouched: naming a credential there is what the names-only rule is
+   for.
+
+**The launch says where each value came from.** `resolveProviderEnv` is the one body the summary and the
+spawn both read: the user's own export wins over the recipe's constant, the recipe supplies only names
+the provider declares, and a name neither source can supply is still refused by name. The wire carries
+the answer as `from: "catalogue"` on a variable the recipe supplies and *nothing* on an ordinary one, so
+the row reads "supplied by this recipe" instead of telling a user to export something we already
+provide.
 
 **The dialect is reused, not reinvented.** `transport`, `authMethodId` and `modeParam` are the same
 three facts `AgentLaunch` records for the nine catalogue entries, and `providerLaunch()` maps a
@@ -1622,6 +1672,13 @@ happened, of which only "a session opened" is success. A control that reported s
 answers is the defect this whole taxonomy exists to prevent; the page renders the outcome verbatim rather
 than summarising it into a tick.
 
+**And the button is no longer covered by a DOM test alone.** §7.13.1 measures it in a real window against a
+real daemon whose search path holds an agent that really refuses a session: one *Sign in* control renders on
+a row that reads *Needs a sign-in*, the press is the window's own click, the sentence the window renders
+back is *"Claude Code accepted the sign-in and opened a session."*, and the daemon's record moves to `ready`
+— which is what makes "the press did the work" a fact rather than an inference from the button
+disappearing.
+
 ### 7.12 The catalogue on screen: the 38 recipes, and the four decisions that keep it honest
 
 The owner's brief: *"We should do the same thing with paseo, we need user to see them and can enable and use
@@ -1660,6 +1717,16 @@ the same prober the nine shipped agents go through. An `npx` recipe is therefore
 is present, and the download is stated on the row as what happens on the **first run**, once, which is a cost
 the user chose.
 
+**And that is all a green row may claim there — which it did not, until this slice.** The daemon's `ready`
+for an `npx -y <pkg> …` recipe is a fact about **`npx`**, not about the agent: nothing has been downloaded,
+no package resolved, no session opened. Fourteen rows reading "Ready" claimed a verification nobody
+performed, and the sentence beside them ("Nothing to install: … is fetched from npm the first time it runs")
+did not retract it. So the word a user reads is derived from **two** facts — the measurement *and* how the
+program is obtained — and an `npx` row whose probe found `npx` reads **"Not downloaded yet"**
+(`AgentRowState`'s `ready-npx`, `rowStateOf(entry, probe)`), with the sentence naming what was and was not
+checked. `rowStateOf` takes the entry rather than the probe alone for exactly this reason: a caller that
+forgot it would get the over-claiming word back, silently, so the omission is a compile error instead.
+
 **3. The cache is not for everything.** `coder.probeCatalogAgent` remembers `ready`, `needs-bridge` and
 `unsupported` for ten minutes (`CATALOG_PROBE_STALE_MS`, the same window `session-probe.ts` uses) and
 **never** remembers `not-installed` or `unknown`. A negative answer is the one a user is about to change: a
@@ -1678,6 +1745,28 @@ name it does not recognise and reports success. `coder.addProvider`'s `transport
 reason, and the manual form has no default on its radio pair — an enabled *Add* with no dialect chosen is the
 guess moved from the schema into the UI, where nobody can see it.
 
+**5. `needs-bridge` was unreachable for a catalogued row, and now one entry reaches it.** The five-state
+vocabulary has had `needs-bridge` since §7.9 — *the agent is here and the adapter over it is not* — and the
+nine shipped agents reach it through `AgentLaunch.agentBinaries` (`claudecode` → `claude`, `codex` →
+`codex`). The **catalogue had nowhere to say it**, so no catalogued row could: a machine with a wrapper's
+vendor program installed and its adapter missing was told the *agent* was not installed. `AcpAgentEntry.wrappedAgent`
+is that field, `cataloguedRecipe` wires it into `agentBinaries` and `install.bridge`, and exactly **one** of
+the 38 entries declares it — with a citation, and the field's own doc says why an assumption would be worse
+than an omission: a wrong `agentBinaries` turns "the program is missing" into "your agent is installed and
+something else is wrong", which is a less actionable sentence and is unfalsifiable from the row. The
+reference product offers no template for this, and that is checked rather than assumed: its
+`AcpProviderCatalogEntry` has `command`, `env` and `params` and nothing about a second binary, and its
+generic ACP provider resolves exactly one (`defaultBinary: this.command[0]`).
+
+**6. Four recipes set six environment variables between them, and what crosses is a reference.** See §7.10
+for the rule; the part that is this screen's is the row. The four entries' constants travel in
+`CatalogEntry.env` as **name and value** (they are ours, published in a git-tracked file, and a constant of a
+command line anybody can read is not a secret), the row says the recipe supplies them rather than telling a
+user to export them, and `addInputFor` drops the values on the way to `coder.addProvider` — sending the
+entry's `id` as `catalogEntryId` instead. A test asserts the negative by looking for the `1` in the
+parameters, and `CatalogEnvConstantSchema` refuses a credential-looking name **when the row is built**, so
+`ANTHROPIC_API_KEY: "sk-live-…"` can never appear in a recipe.
+
 **What was copied from the reference product, and what was not.** Copied: the information architecture (a row
 per agent with a state chip and a switch; the catalogue as rows a user adds from; a search box over it), and
 the interaction of adding an entry by pressing one button. **Not copied:** its credential handling — the
@@ -1687,14 +1776,16 @@ copied, deliberately:** its per-entry icon set, its "disabled ⇒ `unavailable` 
 effect (§5.8's correction), and its diagnostic sheet, which dumps a raw log — we render the state, the one
 sentence the daemon wrote, and the fix, all of which a user can act on.
 
-**The one real cost of adding a catalogue entry, said out loud rather than discovered.** Four recipes set **six** variables for the agent (`AUGMENT_DISABLE_AUTO_UPDATE`,
-`DROID_DISABLE_AUTO_UPDATE`, `FACTORY_DROID_AUTO_UPDATE_ENABLED`, `GJC_ACP_PERMISSION_MODE`,
-`VT_ACP_ENABLED`, `VT_ACP_ZED_ENABLED`). A
-provider config stores variable **names** and reads the value from the daemon's environment, so what crosses
-is the name; until the user sets it, the row reports it unset and the launch refuses by name rather than
-starting an agent that cannot speak ACP. The form and the row both say so. Closing it properly means a field
-that carries a *reference* to the catalogue entry rather than a value — a change to make against a launch
-that reads it, not a value map sneaked into the provider schema.
+**The one real cost of adding a catalogue entry, and that it is now paid off.** This paragraph used to say
+the cost was unavoidable: four recipes set **six** variables for the agent
+(`AUGMENT_DISABLE_AUTO_UPDATE`, `DROID_DISABLE_AUTO_UPDATE`, `FACTORY_DROID_AUTO_UPDATE_ENABLED`,
+`GJC_ACP_PERMISSION_MODE`, `VT_ACP_ENABLED`, `VT_ACP_ZED_ENABLED`), a provider config stores variable
+**names** and reads the value from the daemon's own environment, and so what crossed was the name — leaving
+the user to export a constant we had written ourselves, or read a refusal naming it. What the paragraph got
+right was the fix's *shape*: **a field carrying a reference to the catalogue entry rather than a value, made
+against a launch that reads it.** That is `catalogEntryId`, and the launch reads it through
+`resolveProviderEnv` (§7.10). A var the entry does not declare is still the user's, and it still refuses by
+name when the daemon's environment lacks it.
 
 **Twelve mutations, named with the test that catches each.** Every `it` in
 `apps/desktop/test/settings-agents-catalog.test.tsx` and `apps/desktop/test/catalog-rpc.test.ts` was checked
@@ -1716,6 +1807,22 @@ once made nine mutations read green while vitest exited 0. The table:
 | every answer is cached, absences included | *never serves an absence from cache — that is the answer a user is about to change* |
 | one probe sweeps the whole catalogue | *measures the entry it was asked about, and only that one* |
 | the recipe's environment **values** cross into the provider config | *carries the command, the args and the environment names, and nothing else* |
+
+**Eight more, for the four limits this slice closed** — same discipline: each applied with the anchor
+asserted *before* the write, each run as a **whole file** (never a filtered `-t`, which once made nine
+mutations read green while vitest exited 0), and each file restored byte-exact afterwards (checked by
+`shasum`, not by eye):
+
+| mutation | the test that went red |
+|---|---|
+| the catalogue reference is trusted instead of verified (`providerCatalogueEnv` drops `agreesWithEntry`) | *ignores a reference whose recipe is not the provider's — the file cannot claim a recipe it is not* and *supplies a recipe value only for a name the provider declares* |
+| the credential-name pattern never fires | *refuses a recipe constant under a credential-looking name, loudly* (`ANTHROPIC_API_KEY must look like a credential: expected false to be true`) |
+| a catalogue entry stops recording its vendor binary | *reports `needs-bridge` for an entry that declares the vendor binary its adapter drives* (`expected 'not-installed' to be 'needs-bridge'`) and *declares a wrapped agent exactly once, and never by assumption* |
+| an `npx` row claims `ready` again (`rowStateOf` drops the narrowing) | *does not let an npx row read as verified, because only `npx` was measured* |
+| the row sends the recipe's **value** where a name belongs | *sends the command, the arguments and the environment names the entry describes* and *produces the parameters `coder.addProvider` takes, from the entry and nothing else* |
+| `coder.addProvider`'s parameters grow an `envDefaults` field | *cannot carry a value even through the wire a client would send* (`promise resolved … instead of rejecting`) |
+| `coder.addProvider` stops checking the reference against the recipe | *cannot carry a value even through the wire a client would send* (`promise resolved … instead of rejecting`) |
+| the multi-window wait loses its kind predicate (the race's own fix) | *does not mistake the boot search-path broadcast for the change the test made* (`expected 'harnesses' to be 'projects'`) |
 
 **And the window itself was driven, not described.** `scripts/audit-ui.mjs` was pointed at the real window
 — a daemon on an isolated home, Vite, headless Chrome over CDP, the target matched **by URL** — and the
@@ -1741,7 +1848,7 @@ test of the vocabulary rather than of a fixture.
 | rows saying the binary sentence | **24** |
 | Add buttons in the list | **36** (= 38 − `cursor`, which is a shipped agent, − the one entry added during the walk) |
 | shipped agents listed | **9** — 3 Ready, 2 "Needs its adapter", 4 "Not installed", with their real install commands (`npm install -g @agentclientprotocol/claude-agent-acp`, `…codex-acp`, `npm install -g @github/copilot`) |
-| sign-in buttons | **0** — and that is the honest answer, not a gap: no agent on this machine reports `needs-signin`, and the control is rendered for that state alone rather than present-but-dead |
+| sign-in buttons | **0** *on that machine* — and that was the honest answer rather than a gap: no agent there reports `needs-signin`, and the control is rendered for that state alone rather than present-but-dead. **Superseded by §7.13.1**, where the state is produced on purpose and the number is 1 |
 
 **After one press of *Check this machine* on the first row:** the chips become `["Ready", "Not checked
 yet" × 37]`. One row measured, thirty-seven untouched — the per-row cost policy, as a number rather than a
@@ -1793,12 +1900,67 @@ the ancestor chain (which is what a reader sees) gives **8.54:1**. The fix is in
 recorded here because a measurer that reports a false alarm is worse than one that reports nothing: the next
 person either "fixes" a contrast that was fine or learns to ignore the column.
 
-**What was reasoned about rather than measured.** The sign-in control: no agent on this machine reports
-`needs-signin`, so no button appeared and the only evidence for it is
-`test/settings-agents-catalog.test.tsx`'s "offers the agent's own sign-in only when it says it needs one"
-and the daemon's five-outcome taxonomy (§7.11). Screenshots are in `/tmp/envoycoder-agents-*.png`
-(`-top`, `-checked`, `-search-cline`, `-added`, `-manual`, `-1000`) for a reader who can see pixels; the
-run above is what a text model can check.
+**What was measured, and what is still reasoned about.** The sign-in control was the entry on this list, and
+it is off it: §7.13.1 produces the `needs-signin` state on purpose — a real daemon with a scripted agent on
+its search path — and measures the button, the press and the sentence in a real window. What remains
+reasoned about rather than measured on this page: the **`npx`** claim. Fourteen rows read "Not downloaded
+yet" and no run has yet watched a first run actually fetch a package, so the sentence says what the probe
+measured (`npx` resolves) and that nothing has been downloaded, and nothing more. Screenshots for a reader
+who can see pixels: `/tmp/envoycoder-agents-*.png` (`-top`, `-checked`, `-search-cline`, `-added`,
+`-manual`, `-1000`) from the run above, and `<tmp>/envoycoder-signin-window/{before,after}-press.png` from
+§7.13.1 — the run above is what a text model can check.
+
+#### 7.13.1 The Sign-in button, measured in a window instead of reasoned about
+
+§7.13's table used to end with the honest **0**: *"no agent on this machine reports `needs-signin`, and the
+control is rendered for that state alone rather than present-but-dead"*. That was a true statement about a
+machine and not a measurement of the feature, and the jsdom test was the only evidence for the control. The
+condition is producible on purpose, so the number is now `1` — measured, in a real window, against a real
+daemon, with an agent that really refuses a session:
+
+```
+npm run signin:window            # 9 checks; screenshots under <tmp>/envoycoder-signin-window
+npm run signin:window -- --audit  # …and ui:audit's numbers for the same page
+```
+
+`scripts/sign-in-window.mjs` boots `apps/desktop/src/daemon/main.ts` as a child on an isolated
+`ENVOYMESH_HOME` and a distinct port, with a directory holding an executable named `claude-agent-acp`
+**prepended to `PATH`** — a four-line shell wrapper that runs
+`apps/desktop/test/fixtures/fake-acp-agent.mjs` with `FAKE_ACP_REQUIRE_AUTH=fake_login` exported. That is the
+whole mechanism and it bends nothing: the daemon finds the program the way it finds any program, the probe
+starts it the way it starts any agent, and the fixture advertises one `authMethods` entry and refuses
+`session/new` with `-32000 Authentication required … methodId 'fake_login'` until it is given one — the
+measured behaviour of `cursor-agent acp`, on demand. `claude-agent-acp` is the name chosen because no real
+install occupies it, unlike `cursor-agent`, which this machine has and which a login-shell search path would
+resolve first. Vite then serves the real UI at `VITE_ENVOYCODER_DAEMON_PORT=<that daemon>`, and headless
+Chrome is driven over CDP with the target matched **by URL**.
+
+| measurement | value |
+|---|---|
+| `coder.probeSessionOptions { harness: "claudecode" }` | reached the fixture; the refusal came back in the agent's own words (`… methodId 'fake_login'`) |
+| `coder.listHarnesses` → `claudecode.auth` | `{ state: "needs-signin", methodId: "fake_login" }` |
+| …and `claudecode.availability` | `ready` at the wrapper's absolute path — the two facts separate, not one |
+| **Sign-in buttons the window drew** | **1** — label `Sign in`, title *"Run Claude Code's own sign-in flow, and say truthfully what happened"*, enabled |
+| the row it sits in | reads `Needs a sign-in`, beside `Ready` |
+| the rendered sentence after the press | **"Claude Code accepted the sign-in and opened a session."** |
+| the button afterwards | **0** — it is gone, because the agent now opens sessions |
+| the daemon's record afterwards | `{ state: "ready" }` — `coder.signInAgent` wrote it, so the click did the work |
+| `ui:audit` on the same page (pre-press) | 38 rows, distinct states `["Not checked yet"]`, `needsSignin: 1`, `signInButtons: 1`, `needsNoInstall: 14`, `installSteps: 24`, `addButtons: 37`, horizontal overflow `0`, 5 rows per viewport |
+
+The press is the **window's** — a real `click()` on the rendered button — and the sentence is read out of the
+`role="status"` element the component renders it in. The daemon is then asked what it recorded, which is what
+makes "the click did the work" a fact rather than an inference from the button's disappearance. Two PNGs are
+left in `<tmp>/envoycoder-signin-window`: `before-press.png` (the button, on a row that says *Needs a
+sign-in*) and `after-press.png` (the outcome sentence). The pictures are for a human — this model cannot read
+them, which is the whole reason they exist.
+
+**What remains unproven, named rather than implied.** The agent is a *scripted* one: the refusal, the
+advertised method and the authentication are the fixture's, driven through the production spawn and handshake
+paths but not by a vendor's binary. `cursor-agent acp`'s own refusal is recorded from a real run in §7.8 and
+`test/sign-in.test.ts` covers the five outcomes against a scripted `ProbedAgent`; what this measurement adds
+is that the **state reaches a rendered window and the press reaches the daemon**, which was the missing link.
+The browser step (`not-completed`) is still not produced by any window run.
+
 
 
 ## 8. The slice plan

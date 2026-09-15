@@ -177,14 +177,31 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
               {provider.env.length > 0 ? (
                 <ul className="settings__agent-env">
                   {provider.env.map((variable) => (
+                    // **Three states, and the third is why this slice exists.** `set` alone could not say
+                    // where a value came from, and for a variable a catalogue recipe supplies, "is set"
+                    // would send a user to export something EnvoyCoder is already providing. `from`
+                    // distinguishes the two sources, and `undefined` is the daemon's own environment —
+                    // which is where every credential still comes from and the only place one ever does.
                     <li
                       key={variable.name}
-                      className={`settings__env${variable.set ? "" : " settings__env--unset"}`}
-                      title={t("settings.agents.mine.env.title", { name: variable.name })}
+                      className={`settings__env${
+                        variable.set
+                          ? variable.from === "catalogue"
+                            ? " settings__env--recipe"
+                            : ""
+                          : " settings__env--unset"
+                      }`}
+                      title={
+                        variable.from === "catalogue"
+                          ? t("settings.agents.mine.env.recipe.title", { name: variable.name })
+                          : t("settings.agents.mine.env.title", { name: variable.name })
+                      }
                     >
-                      {variable.set
-                        ? t("settings.agents.mine.env.set", { name: variable.name })
-                        : t("settings.agents.mine.env.unset", { name: variable.name })}
+                      {variable.from === "catalogue"
+                        ? t("settings.agents.mine.env.recipe", { name: variable.name })
+                        : variable.set
+                          ? t("settings.agents.mine.env.set", { name: variable.name })
+                          : t("settings.agents.mine.env.unset", { name: variable.name })}
                     </li>
                   ))}
                 </ul>

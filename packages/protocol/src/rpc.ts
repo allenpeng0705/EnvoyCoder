@@ -51,6 +51,7 @@ import {
   type EnvoyCoderErrorCode,
   type HarnessId,
   HarnessIdSchema,
+  looksLikeCredentialEnvName,
   ProjectDefaultsPatchSchema,
   RUN_MODES,
   type RunEvent,
@@ -1246,19 +1247,105 @@ export const HarnessSummarySchema = z
   .strict();
 
 /**
- * One environment variable a provider declared, and whether **this daemon** has it.
+ * One environment variable a provider declared, and whether **this daemon** has a value for it.
  *
  * The `set` flag is the whole point, and it is a fact about our process rather than about the agent: a
  * provider whose credential is missing is not ready *here*, and the alternative to saying so is a spawn
  * that fails with the agent's own sentence about a login nobody performed. The **name** travels; the
  * value never does — there is no field for one on this shape either, which is the same enforcement
  * `AgentProviderConfig.env` states.
+ *
+ * ## `from`, and the difference it makes to a user
+ *
+ * `set` alone cannot say *where* a value came from, and that is the whole question this field answers for
+ * the four catalogued recipes that set a constant. `from: "catalogue"` means the value is the recipe's own
+ * — published in our source, not something the daemon's environment happened to hold — so a window can say
+ * so instead of telling a user to export a variable we are already supplying. Absent means the ordinary
+ * case: the daemon's own environment, which is where every credential still comes from and the only place
+ * one ever does.
+ *
+ * Two agreement rules, checked rather than trusted, and each is a claim that would otherwise contradict
+ * itself:
+ *
+ *   1. **`from` requires `set`.** A value cannot come from a recipe and be absent at the same time.
+ *   2. **A value from a recipe may not sit under a credential-looking name**
+ *      (`CREDENTIAL_ENV_NAME_PATTERN`). This is the wire's copy of the rule `CatalogEntrySchema` enforces on
+ *      the catalogue itself: a recipe is our reviewed data, and `ANTHROPIC_API_KEY: "sk-live-…"` in one
+ *      would be a real secret in a git-tracked file whichever layer noticed it first.
  */
 export const AgentProviderEnvStateSchema = z
-  .object({ name: z.string().min(1), set: z.boolean() })
-  .strict();
+  .object({
+    name: z.string().min(1),
+    set: z.boolean(),
+    /** Where the value comes from, when it is not the daemon's own environment. */
+    from: z.enum(["daemon", "catalogue"]).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.from !== undefined && !value.set) {
+      ctx.addIssue({
+        code: "custom",
+        message: `"${value.name}" cannot come from ${value.from} and be unset — a value has one source`,
+        path: ["from"],
+      });
+    }
+    if (value.from === "catalogue" && looksLikeCredentialEnvName(value.name)) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          `"${value.name}" names a credential, so no recipe may supply it — a catalogue entry's ` +
+          `constants are not secrets and this shape must not carry one`,
+        path: ["name"],
+      });
+    }
+  });
 
 export type AgentProviderEnvState = z.infer<typeof AgentProviderEnvStateSchema>;
+
+/**
+ * One constant a catalogued **recipe** sets for the agent, name and value together.
+ *
+ * ## Why the value is here, and what it is not
+ *
+ * Four entries set one (`AUGMENT_DISABLE_AUTO_UPDATE: "1"`, `VT_ACP_ENABLED: "1"`, …) because the recipe is
+ * ours: git-tracked data we reviewed and published (`packages/agent-catalog/src/acp-catalog.ts`), where a
+ * constant of a command line anybody can read is not a secret. Carrying both halves in one object is what
+ * lets a row say which variables the recipe supplies and which are the user's to set, from one list rather
+ * than two that can drift.
+ *
+ * ## The one thing this shape refuses, **loudly**
+ *
+ * A name that looks like a credential may not sit beside a value (`looksLikeCredentialEnvName`). The
+ * distinction this whole slice rests on is *whose data it is*: `ANTHROPIC_API_KEY: "sk-live-…"` in a
+ * git-tracked catalogue is a leaked secret whichever layer notices it, so a recipe may not carry one and
+ * this **refuses** rather than dropping the entry quietly — a silently dropped variable is a row lying
+ * about its own recipe. A *user's* own `AgentProviderConfig.env` is untouched by this rule: naming a
+ * credential is exactly what the names-only design is for (§7.10).
+ *
+ * Declared before `CatalogEntrySchema`, which reads it: these are module-level values, so source order is
+ * initialisation order and a forward reference would be a temporal-dead-zone crash rather than a type error.
+ */
+export const CatalogEnvConstantSchema = z
+  .object({
+    /** The variable's name, as the recipe sets it. */
+    name: z.string().min(1),
+    /** The constant the recipe sets it to. Never a credential — see the rule below. */
+    value: z.string().min(1),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (looksLikeCredentialEnvName(value.name)) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          `"${value.name}" names a credential, so no catalogue recipe may supply it — a recipe's ` +
+          `environment is constants we publish, and a secret has no place in git-tracked data`,
+        path: ["name"],
+      });
+    }
+  });
+
+export type CatalogEnvConstant = z.infer<typeof CatalogEnvConstantSchema>;
 
 /**
  * An agent a **user** declared, as a list needs it.
@@ -1290,10 +1377,13 @@ export interface AgentProviderSummary {
   /** The argv after it, verbatim. */
   args: readonly string[];
   /**
-   * Every variable the provider names, with whether this daemon has it.
+   * Every variable the provider names, with whether this daemon has a value for it and where that value
+   * came from.
    *
    * Required, and empty when the provider names none: a window has to be able to tell "no credential is
-   * needed" from "we have not looked", which is the same rule `models` and `thinking` follow.
+   * needed" from "we have not looked", which is the same rule `models` and `thinking` follow. `from` is
+   * present exactly when the value is **not** the daemon's own environment — see
+   * `AgentProviderEnvStateSchema`, where the two agreement rules on it live.
    */
   env: readonly AgentProviderEnvState[];
   transport: "acp" | "cli";
@@ -1351,13 +1441,27 @@ export const AgentProviderSummarySchema = z
  * `modeParam` and `authMethodId` are **absent, on purpose**, and their absence is a statement: no entry has
  * evidence for either, so no client may invent one.
  *
- * ## `env` is names, and the values are not carried
+ * ## `env` is the recipe's own constants, and the value is part of the row
  *
- * Same rule as `AgentProviderConfig.env`, one tier up: four entries set a constant (`AUGMENT_DISABLE_AUTO_UPDATE`,
- * `VT_ACP_ENABLED`, …) because the recipe is ours, and a provider can only be told the **name** — its value
- * comes from the daemon's own environment, which is what keeps a credential out of the config file. A
- * screen adding one of those entries therefore has to say that the variables are the user's to set, and
- * that until they are, the agent is refused at launch rather than started unable to speak ACP.
+ * Four entries set a constant (`AUGMENT_DISABLE_AUTO_UPDATE: "1"`, `VT_ACP_ENABLED: "1"`, …) because the
+ * recipe is ours: it is git-tracked data we reviewed, published in
+ * `packages/agent-catalog/src/acp-catalog.ts`, and a value that is a constant of a command line anybody can
+ * read is not a secret. So the row carries **name and value together**, and the reason is a user's:
+ * before this, adding one of those four entries produced a provider that named a variable nothing would
+ * ever set, and the launch refused by name for no safety gain. A row that carries the constant can say
+ * which variables the recipe supplies and which are the user's to set, from one list rather than two.
+ *
+ * What a provider config carries is still **only the name of the entry** — see `AgentProviderConfig`.
+ * Nothing a client sends may be a value, which is what keeps this field from becoming the door the
+ * reference exists instead of.
+ *
+ * ## The one thing this shape refuses, loudly
+ *
+ * A name that looks like a credential (`looksLikeCredentialEnvName`) may not sit beside a value here. The
+ * distinction the whole slice rests on is *whose data it is* — and `ANTHROPIC_API_KEY: "sk-live-…"` in a
+ * git-tracked catalogue is a leaked secret whichever layer notices it, so a recipe may not carry one and
+ * this refuses rather than dropping the entry quietly. A user's own `AgentProviderConfig.env` is untouched
+ * by this rule: naming a credential is exactly what the names-only design is for.
  */
 export const CatalogEntrySchema = z
   .object({
@@ -1377,9 +1481,16 @@ export const CatalogEntrySchema = z
     /** How the daemon must speak to it. The entry states it; nothing infers it. */
     transport: z.enum(["acp", "cli"]),
     /**
-     * Every environment variable **name** the recipe sets. Never a value — see the shape's own doc.
+     * Every environment variable the recipe sets, **name and constant together** — see the doc above for
+     * why the value is part of the row and what `CatalogEnvConstantSchema` refuses. Never a credential: a
+     * recipe's environment is constants we publish, and a name that looks like a credential is rejected
+     * when the row is built rather than dropped from it.
+     *
+     * A **provider** still carries names only. Adding this row sends the entry's `id` as
+     * `catalogEntryId`, and the daemon resolves the constants from the catalogue — so no client ever sends a
+     * value, which is the property the reference field exists to preserve.
      */
-    env: z.array(z.string().min(1)).readonly(),
+    env: z.array(CatalogEnvConstantSchema).readonly(),
     /**
      * How the program gets onto a machine, in the two shapes that need different sentences.
      *
@@ -1911,6 +2022,20 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
          * and it is what the store parses before anything is written.
          */
         env: z.array(z.string().min(1)).readonly().optional(),
+        /**
+         * The catalogue entry this provider **is**, when the caller is adding one.
+         *
+         * The only thing about a catalogue recipe's constants that crosses this wire. The daemon looks the
+         * entry up and refuses (`error.providerCatalogMismatch`) unless the `command`, `args`, `transport`
+         * and `env` the caller sent are that entry's own — so the reference can only ever mean "this
+         * provider is that recipe", never "give me that recipe's variables".
+         *
+         * **There is deliberately no `envDefaults` / `envValues` parameter beside it**, and that is the
+         * whole design: the field a value belongs in is exactly the field a user would paste a credential
+         * into, and this schema is `.strict()`, so a client that invented one is refused here rather than
+         * stored. `test/providers.test.ts` asserts the negative with a real key.
+         */
+        catalogEntryId: z.string().min(1).optional(),
         transport: z.enum(["acp", "cli"]),
         authMethodId: z.string().min(1).optional(),
         modeParam: z.enum(["mode", "modeId"]).optional(),

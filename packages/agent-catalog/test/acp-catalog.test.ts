@@ -19,6 +19,7 @@ import {
   acpAgentIds,
   cataloguedCommandLine,
   cataloguedEnvNames,
+  cataloguedEnvValues,
   cataloguedInstall,
   cataloguedProviderInput,
   cataloguedRecipe,
@@ -27,6 +28,7 @@ import {
   resolveAgentEntry,
   ALL_HARNESSES,
 } from "../src/index.js";
+import { CatalogEnvConstantSchema, looksLikeCredentialEnvName } from "@envoycoder/protocol";
 
 describe("the catalogued ACP agents", () => {
   it("carries every entry Paseo ships, and nothing malformed", () => {
@@ -151,8 +153,71 @@ describe("probing a catalogued agent", () => {
     expect(noNpx.reason).toContain("needs no install");
   });
 
-  it("answers `undefined` for an id it does not know, rather than inventing a state for one", () => {
-    // The old shape answered `available: false` with a reason, which read exactly like "we looked for a
+  it("reports `needs-bridge` for an entry that declares the vendor binary its adapter drives", () => {
+    // **The state no catalogued row could reach.** `agentBinaries` had recorded both halves of "installed"
+    // for the nine shipped agents since the "why all of them shown 'Not Installed'" bug, and the catalogue
+    // had nowhere to say it — so a machine with Amp installed and `amp-acp` missing was told the *agent*
+    // was not installed. `wrappedAgent` is that field, and `amp-acp` is the one entry with evidence for it.
+    const probe = probeCatalogAgent("amp-acp", {
+      find: (name) => (name === "amp" ? "/opt/homebrew/bin/amp" : null),
+      fileExists: () => false,
+    })!;
+    expect(probe.state).toBe("needs-bridge");
+    expect(probe.agentBinaryPath).toBe("/opt/homebrew/bin/amp");
+    // What we drive was *not* found, so no path claims it was — the same rule the shipped entries follow.
+    expect(probe.binaryPath).toBeUndefined();
+    // The fix is the **adapter** alone: the vendor's program is already there, and offering to install it
+    // again is the wrong sentence this state exists to avoid.
+    expect(probe.fix?.map((step) => step.command)).toEqual(["npm install -g amp-acp"]);
+    expect(probe.reason).toMatch(/is installed at \/opt\/homebrew\/bin\/amp/);
+    expect(probe.reason).toMatch(/adapter/);
+    // And the word that was wrong never appears **about the agent**. The sentence does contain "not
+    // installed", and it must: it is the *adapter* that is missing. The assertion is precise for that
+    // reason — the bug was "Amp is not installed", not the phrase itself.
+    expect(probe.reason).not.toMatch(/Amp is not installed/);
+    expect(probe.reason).toMatch(/the Agent Client Protocol adapter/);
+
+    // Both halves missing is still `not-installed`, with **both** steps in the order they must be run —
+    // the agent first, then the adapter over it. A state that named one would land the user at the other.
+    const neither = probeCatalogAgent("amp-acp", { find: () => null, fileExists: () => false })!;
+    expect(neither.state).toBe("not-installed");
+    expect(neither.fix?.map((step) => step.command)).toEqual([
+      "install Amp — its own program, which `amp-acp` drives",
+      "npm install -g amp-acp",
+    ]);
+    // The two halves have two different links, and swapping them is the class of wrong sentence the
+    // single-hint version produced: the adapter's page is the entry's own, the vendor's is its own.
+    expect(neither.fix?.[0]?.url).toBe("https://ampcode.com/");
+    expect(neither.fix?.[1]?.url).toBe(acpAgent("amp-acp")!.installLink);
+  });
+
+  it("declares a wrapped agent exactly once, and never by assumption", () => {
+    // The count is the claim. Every entry here came from the reference product's catalogue, which carries
+    // **no** vendor-binary field at all (`AcpProviderCatalogEntry` has `command`, `env`, `params`), so this
+    // cannot be populated by porting — it needs evidence, and a wrong `agentBinaries` turns "the program is
+    // missing" into "your agent is installed and something else is wrong", which is a worse sentence and
+    // unfalsifiable from the row. So the expectation is a list, not a `> 0`.
+    const wrapped = ACP_AGENT_CATALOG.filter((entry) => entry.wrappedAgent !== undefined);
+    expect(wrapped.map((entry) => entry.id)).toEqual(["amp-acp"]);
+    // And every one that declares it produces **both** halves the prober needs: something to look for, and
+    // the adapter's install step. Without the step, `needs-bridge` would carry no fix — which
+    // `HarnessAvailabilitySchema` refuses, so the failure would be a schema error rather than a test.
+    for (const entry of ACP_AGENT_CATALOG) {
+      const recipe = cataloguedRecipe(entry);
+      if (entry.wrappedAgent === undefined) {
+        expect(recipe.agentBinaries, `${entry.id} must not invent a vendor program`).toBeUndefined();
+        expect(recipe.install?.bridge, `${entry.id} must not invent an adapter step`).toBeUndefined();
+        continue;
+      }
+      expect(recipe.agentBinaries, `${entry.id} agentBinaries`).toEqual([...entry.wrappedAgent.binaries]);
+      expect(recipe.install?.bridge?.hint, `${entry.id} bridge hint`).toBe(
+        entry.wrappedAgent.adapterInstall,
+      );
+      expect(recipe.install?.url, `${entry.id} vendor link`).toBe(entry.wrappedAgent.installLink);
+    }
+  });
+
+  it("answers `undefined` for an id it does not know, rather than inventing a state for one", () => {    // The old shape answered `available: false` with a reason, which read exactly like "we looked for a
     // program and it is not here". An id nobody catalogued is a bad *parameter*, and the daemon refuses
     // it by name; there is no program to have an opinion about.
     expect(probeCatalogAgent("does-not-exist", { find: () => "/usr/bin/anything" })).toBeUndefined();
@@ -193,6 +258,10 @@ describe("what an entry states about the dialect it speaks", () => {
         "args",
         "env",
         "transport",
+        // Not a recipe fact and not a value: the **reference** that lets the daemon resolve the entry's own
+        // environment constants without a value crossing this boundary. It is listed here so that a field
+        // added to this projection has to be a deliberate decision rather than a drift.
+        "catalogEntryId",
       ]);
       expect(input.modeParam, `${entry.id} must not invent a modeParam`).toBeUndefined();
       expect(input.authMethodId, `${entry.id} must not invent an authMethodId`).toBeUndefined();
@@ -201,7 +270,7 @@ describe("what an entry states about the dialect it speaks", () => {
     }
   });
 
-  it("carries the command, the args and the environment **names**, and nothing else", () => {
+  it("carries the command, the args and the environment **names**, and no value", () => {
     const goose = acpAgent("goose")!;
     expect(cataloguedProviderInput(goose)).toEqual({
       id: "goose",
@@ -210,15 +279,78 @@ describe("what an entry states about the dialect it speaks", () => {
       args: ["acp"],
       env: [],
       transport: "acp",
+      catalogEntryId: "goose",
     });
 
-    // The four entries whose recipe sets a variable: what crosses is the **name**. There is no field in
-    // `AgentProviderConfig` for a value, which is the security decision that shape states.
+    // The four entries whose recipe sets a variable: what crosses is the **name**, plus the reference to
+    // the entry. There is no field in `AgentProviderConfig` for a value, which is the security decision
+    // that shape states — and the reference is what makes the value unnecessary rather than merely
+    // forbidden.
     expect(cataloguedEnvNames(acpAgent("vtcode")!)).toEqual(["VT_ACP_ENABLED", "VT_ACP_ZED_ENABLED"]);
     const vtcode = cataloguedProviderInput(acpAgent("vtcode")!);
     expect(vtcode.env).toEqual(["VT_ACP_ENABLED", "VT_ACP_ZED_ENABLED"]);
+    expect(vtcode.catalogEntryId).toBe("vtcode");
     expect(JSON.stringify(vtcode)).not.toContain(":1");
     expect(JSON.stringify(vtcode)).not.toContain("\"1\"");
+
+    // The other half of the same rule, one layer out: the **row** does carry the constants, because the
+    // recipe is our own git-tracked data and a row has to be able to say which variables it supplies.
+    // `cataloguedEnvValues` is that projection, and it is a different function on purpose — no caller has
+    // to read `.env` keys itself, and the two lists cannot drift.
+    expect(cataloguedEnvValues(acpAgent("vtcode")!)).toEqual([
+      { name: "VT_ACP_ENABLED", value: "1" },
+      { name: "VT_ACP_ZED_ENABLED", value: "1" },
+    ]);
+    expect(cataloguedEnvValues(acpAgent("goose")!)).toEqual([]);
+  });
+
+  it("refuses a recipe constant under a credential-looking name, loudly", () => {
+    // **The rule that makes "our own reviewed data may carry a value" defensible.** A constant of a command
+    // line anybody can read is not a secret; `ANTHROPIC_API_KEY` names a slot whose whole purpose is to
+    // hold one, and a value there would be a real key in a git-tracked catalogue. This asserts the refusal
+    // is a *failure* rather than a silent drop: an entry quietly losing its variable would be a row lying
+    // about its own recipe.
+    for (const name of [
+      "ANTHROPIC_API_KEY",
+      "GITHUB_TOKEN",
+      "AWS_SECRET_ACCESS_KEY",
+      "DB_PASSWD",
+      "MY_CREDENTIAL",
+      "OPENAI_APIKEY",
+      "AUTH_TOKEN",
+    ]) {
+      expect(looksLikeCredentialEnvName(name), `${name} must look like a credential`).toBe(true);
+      expect(
+        CatalogEnvConstantSchema.safeParse({ name, value: "sk-live-1f4c9ab7" }).success,
+        `${name} must be refused with a value`,
+      ).toBe(false);
+    }
+    // …and the six constants of the four catalogued recipes, plus ordinary flags, must **not** trip it:
+    // a rule that refuses the data it exists to permit is a rule that gets switched off.
+    for (const name of [
+      "AUGMENT_DISABLE_AUTO_UPDATE",
+      "DROID_DISABLE_AUTO_UPDATE",
+      "FACTORY_DROID_AUTO_UPDATE_ENABLED",
+      "GJC_ACP_PERMISSION_MODE",
+      "VT_ACP_ENABLED",
+      "VT_ACP_ZED_ENABLED",
+      "NODE_ENV",
+      "LOG_LEVEL",
+      "MONKEY",
+      "TURKEY",
+      "AUTHOR",
+    ]) {
+      expect(looksLikeCredentialEnvName(name), `${name} must be allowed`).toBe(false);
+    }
+    // And every entry we actually ship passes, which is the guard on the 38 rather than on a fixture.
+    for (const entry of ACP_AGENT_CATALOG) {
+      for (const [name, value] of Object.entries(entry.env ?? {})) {
+        expect(
+          CatalogEnvConstantSchema.safeParse({ name, value }).success,
+          `${entry.id}.${name} must pass the recipe-constant rule`,
+        ).toBe(true);
+      }
+    }
   });
 
   it("tells the two ways of obtaining an agent apart, because they need different sentences", () => {

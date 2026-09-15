@@ -208,7 +208,10 @@ function CatalogRow(props: {
 }): JSX.Element {
   const { t, locale } = useI18n();
   const { entry, probe } = props;
-  const state = rowStateOf(probe);
+  // The entry travels with the probe, because the word a user reads is derived from two facts: what was
+  // measured, and how the program is obtained. For an `npx -y …` recipe "the program resolves" means `npx`
+  // resolved, and the chip says so rather than claiming a verification nobody performed. See `rowStateOf`.
+  const state = rowStateOf(entry, probe);
   // The fix is only ever present on a measurement that asserts an absence, which is the schema's rule rather
   // than this component's: `HarnessAvailability.fix` cannot exist on `ready`.
   const fix = probe?.state === "measured" ? (probe.availability.fix ?? []) : [];
@@ -240,7 +243,10 @@ function CatalogRow(props: {
         <code className="settings__agent-command">{commandLineOf(entry)}</code>
         <span className="settings__hint">
           {entry.install.kind === "npx"
-            ? t("settings.agents.row.needsNoInstall", { package: entry.install.package })
+            ? t("settings.agents.row.needsNoInstall", {
+                package: entry.install.package,
+                agent: entry.title,
+              })
             : t("settings.agents.row.install", {
                 agent: entry.title,
                 command: commandLineOf(entry),
@@ -259,11 +265,17 @@ function CatalogRow(props: {
         ) : null}
       </p>
       {entry.env.length > 0 ? (
-        // *Names*, because a provider config has no field for a value — and the consequence said out loud:
-        // these are variables to set in the environment EnvoyCoder runs in, and until they are set the agent
-        // is refused at launch rather than started unable to speak ACP.
+        // **The recipe's own constants, and the sentence says they are supplied rather than owed.**
+        // This used to read "set these in the environment EnvoyCoder runs in", because a provider config
+        // could carry names only and the value was dropped on the way across. It cannot say that any more:
+        // the entry's constants travel with the reference, so what a user needs to know is which variables
+        // the recipe sets for them — and that exporting one is how they change it. The *values* are
+        // deliberately not printed: they are ours, they are in the catalogue, and a row is not the place to
+        // read a constant that no user action depends on.
         <p className="settings__hint">
-          {t("settings.agents.row.recipeEnv", { names: entry.env.join(", ") })}
+          {t("settings.agents.row.recipeEnv", {
+            names: entry.env.map((constant) => constant.name).join(", "),
+          })}
         </p>
       ) : null}
       {fix.map((step) => (

@@ -1664,6 +1664,16 @@ body {
   color: var(--status-warning, #c09664);
 }
 
+/* A variable the catalogue recipe supplies, rather than one this daemon's environment has.
+   Deliberately the *same* dim tone as the ordinary "is set" case and not a warning colour: nothing is
+   wrong and nothing is missing — the only fact this state adds is that the value is ours rather than the
+   user's, and the row says so in words. Making it look like a problem is the failure mode the three-state
+   split exists to avoid. */
+.settings__env--recipe {
+  color: var(--text-dim, #8b8f98);
+  font-style: italic;
+}
+
 .settings__catalog-search {
   display: flex;
   gap: var(--space-2);

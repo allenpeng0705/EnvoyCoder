@@ -320,6 +320,9 @@ export const fr: Catalogue = {
   "settings.agents.mine.env.title": "Si le démon d’EnvoyCoder a défini {name}",
   "settings.agents.mine.env.set": "{name} est défini",
   "settings.agents.mine.env.unset": "{name} n’est pas défini",
+  "settings.agents.mine.env.recipe": "{name} — fourni par cette recette",
+  "settings.agents.mine.env.recipe.title":
+    "Cette variable est une constante de la recette de catalogue dont cet agent a été ajouté, c’est donc EnvoyCoder qui la fournit — rien n’est défini pour elle dans votre environnement. Exportez {name} vous-même pour remplacer la valeur de la recette.",
   "settings.agents.hide": "Masquer de mes listes",
   "settings.agents.show": "Afficher dans mes listes",
   "settings.agents.hidden": "Masqué",
@@ -345,13 +348,14 @@ export const fr: Catalogue = {
   "settings.agents.row.check.title": "Chercher le programme de cet agent sur cette machine. Rien n’est démarré et rien n’est téléchargé — et la réponse est conservée dix minutes.",
   "settings.agents.row.add": "Ajouter",
   "settings.agents.row.adding": "Ajout…",
-  "settings.agents.row.add.title": "Ajouter {agent} à vos agents. Sa ligne de commande et les noms des variables d’environnement dont il a besoin viennent de cette entrée, exactement tels qu’écrits ci-dessus.",
+  "settings.agents.row.add.title": "Ajouter {agent} à vos agents. Sa ligne de commande et son environnement viennent de cette entrée, exactement tels qu’écrits ci-dessus : les constantes de la recette suivent, et toute variable que la recette ne définit pas reste à votre charge.",
   "settings.agents.row.builtIn": "EnvoyCoder fournit déjà cet agent : il se configure ci-dessus dans « Sur cette machine » plutôt que d’être ajouté une seconde fois.",
-  "settings.agents.row.needsNoInstall": "Rien à installer : {package} est récupéré depuis npm au premier lancement.",
+  "settings.agents.row.needsNoInstall": "Rien à installer : {package} est récupéré depuis npm au premier lancement. La vérification a trouvé `npx` — pas {agent}, qui n’a pas encore été téléchargé.",
   "settings.agents.row.install": "Installez d’abord {agent}",
   "settings.agents.row.installLink": "Où le trouver",
   "settings.agents.row.installLink.title": "La page propre de {agent}",
-  "settings.agents.row.recipeEnv": "Cette recette définit aussi {names} pour l’agent. Un agent que vous ajoutez ne stocke que des noms de variables : définissez-les donc dans l’environnement où EnvoyCoder s’exécute — jusque-là, cet agent est refusé au lancement plutôt que démarré sans pouvoir parler ACP.",
+  "settings.agents.row.recipeEnv": "Cette recette définit {names} pour l’agent. EnvoyCoder les fournit depuis cette entrée, vous n’avez donc rien à définir vous-même — exportez-en une pour remplacer la valeur de la recette.",
+  "settings.agents.row.readyNpx": "Pas encore téléchargé",
   "settings.agents.row.checked": "Vérifié {when} — la recherche a pris {ms} ms.",
   "settings.agents.row.checked.cached": "Vérifié {when}, sans nouvelle mesure depuis : un résultat qui dit que l’agent est là est conservé dix minutes.",
   "settings.agents.manual.heading": "Un agent qui n’est pas dans la liste",
@@ -469,6 +473,8 @@ export const fr: Catalogue = {
     "\"{id}\" est l'identifiant d'un agent qu'EnvoyCoder fournit déjà, donc votre fournisseur n'a pas été ajouté. Donnez-lui un autre nom.",
   "error.providerIdInvalid":
     "\"{name}\" ne peut pas être un identifiant de fournisseur. Un identifiant de fournisseur est composé de lettres minuscules, de chiffres et de tirets, et commence par une lettre ou un chiffre.",
+  "error.providerCatalogMismatch":
+    "« {entry} » est un agent du catalogue, et la recette décrite par cette requête n’est pas celle qu’indique cette entrée — l’agent n’a donc pas été ajouté. Rouvrez la page des agents et ajoutez la ligne à nouveau.",
   "error.agentNotFound":
     "Aucun agent nommé \"{id}\" ici. Il a peut-être été supprimé depuis une autre fenêtre.",
   "error.catalogAgentMissing": "Aucun agent du catalogue ne s’appelle « {id} ». La liste a changé depuis que cette fenêtre l’a lue — rouvrez la page des agents et réessayez.",

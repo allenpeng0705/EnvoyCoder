@@ -45,6 +45,7 @@
     "run": "tsx scripts/run-once.ts",
     "verify:language": "tsx scripts/verify-language.ts",
     "ui:audit": "node scripts/audit-ui.mjs",
+    "signin:window": "node scripts/sign-in-window.mjs",
     "ui:preview": "node scripts/preview-ui.mjs"
   },
   "devDependencies": {

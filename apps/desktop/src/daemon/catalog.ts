@@ -39,6 +39,7 @@ import {
   ACP_AGENT_CATALOG,
   type AcpAgentEntry,
   type ProbeFinding,
+  cataloguedEnvValues,
   cataloguedInstall,
   cataloguedProviderInput,
   acpAgent,
@@ -231,7 +232,10 @@ function rowOf(entry: AcpAgentEntry): CatalogEntry {
     // dialect in particular is passed through and never inferred.
     command: input.command,
     args: [...input.args],
-    env: [...input.env],
+    // The recipe's own constants, **name and value together**, because the row has to be able to say which
+    // variables the recipe supplies and which are the user's to set (§7.10). What a *provider* carries is
+    // still names plus the reference — see `cataloguedProviderInput`.
+    env: cataloguedEnvValues(entry),
     transport: input.transport,
     install: cataloguedInstall(entry),
     // The overlap rule, computed by the half that holds both lists: `cursor` is a shipped agent *and* a
@@ -247,8 +251,17 @@ function rowOf(entry: AcpAgentEntry): CatalogEntry {
  * The window renders the states and their `fix` in the user's language; this is the same deal
  * `HarnessSummary.evidence` and `AgentProviderSummary.detail` make, and it exists so a bug report can quote
  * what the daemon actually found. The one thing it adds over the probe's own `reason` is the `ready` case,
- * where there is no reason and there *is* something worth saying: an `npx` recipe that resolved means the
- * package will be fetched on the first run, and that is a fact a support thread wants.
+ * where there is no reason and there *is* something worth saying.
+ *
+ * ## The `npx` case, and the sentence it must not write
+ *
+ * For an `npx -y <pkg> …` recipe, "the program resolves" means **`npx` is present** — nothing more. The
+ * probe looked for `npx` rather than the package on purpose (looking for the package would report every
+ * one of the 14 as missing), so `ready` here is *not* evidence that the agent works, or that its package
+ * has ever been downloaded. The earlier wording said "Ready to run", which reads as exactly that, and the
+ * word is the defect: `ready` is the probe's `HarnessState` and it is true of `npx`, while the *row's*
+ * state says "Not downloaded yet" (`AgentRowState` in the window) for this shape. This sentence now says
+ * what was measured and names the thing that has not happened.
  */
 function describe(
   entry: AcpAgentEntry,
@@ -261,8 +274,9 @@ function describe(
   const install = cataloguedInstall(entry);
   if (install.kind === "npx") {
     return (
-      `Ready to run: \`npx\` is at ${availability.binary ?? "a resolved path"}, and ` +
-      `${entry.title} (${install.package}) is fetched from npm on the first run.`
+      `Not downloaded yet: \`npx\` resolved at ${availability.binary ?? "a path we could not report"}, and ` +
+      `${entry.title} (${install.package}) is fetched from npm on the first run. Nothing has been ` +
+      `downloaded, so this is a statement about \`npx\`, not about ${entry.title}.`
     );
   }
   return `Ready to run${availability.binary ? ` (${availability.binary})` : ""}.`;

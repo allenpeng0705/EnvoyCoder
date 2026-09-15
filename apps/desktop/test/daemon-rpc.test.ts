@@ -52,9 +52,19 @@ import { startCoderDaemon, type StartedCoderDaemon } from "../src/daemon/serve.j
 
 interface JsonRpcClient {
   call(method: string, params?: Record<string, unknown>): Promise<unknown>;
-  /** Resolve with the next event of this name. */
-  nextEvent(event: string): Promise<unknown>;
-  /** Resolve once an event of this name matches. */
+  /**
+   * Resolve once an event of this name **matches** — and there is deliberately no unfiltered variant.
+   *
+   * `coder:state-changed` is a single event name for five subjects (`projects`, `tasks`, `settings`,
+   * `harnesses`, `providers`), and the daemon publishes one of them at boot: `serve.ts` primes the search
+   * path off the critical path and broadcasts `{kind: "harnesses"}` when the login shell answers. So a wait
+   * that took the *first* `coder:state-changed` it saw was a race, not a test — it passed whenever the
+   * prime resolved before the subscription and caught the boot broadcast when the machine was slow. The
+   * predicate is not decoration; it is the difference between "the daemon told me what I asked about" and
+   * "the daemon told me something". There used to be a `nextEvent(event)` here with no predicate, and the
+   * one call site that used it is the flake this comment replaces: removing it makes the mistake a compile
+   * error rather than a rare red run.
+   */
   waitForEvent(event: string, match: (data: unknown) => boolean): Promise<unknown>;
   /** Record every event of this name into `sink` until the returned function is called. */
   collectEvents(event: string, sink: unknown[]): () => void;
@@ -138,14 +148,6 @@ async function connect(port: number, path = DEFAULT_DAEMON_PATH): Promise<JsonRp
     call,
     subscribe(events) {
       return call("coder.subscribe", events ? { events } : {}) as Promise<{ subscribed: string[] }>;
-    },
-    nextEvent(event) {
-      return new Promise((resolve) => {
-        const off = onEvent(event, (data) => {
-          off();
-          resolve(data);
-        });
-      });
     },
     waitForEvent(event, match) {
       return new Promise((resolve) => {
@@ -481,7 +483,13 @@ describe("the daemon over a socket", () => {
     // Each client subscribes to what it renders; the transport pushes nothing unasked.
     const subscription = await windowTwo.subscribe(["coder:state-changed"]);
     expect(subscription.subscribed).toEqual(["coder:state-changed"]);
-    const pendingEvent = windowTwo.nextEvent("coder:state-changed");
+    // **Filtered by the kind this test triggered.** `coder:state-changed` is one name for five subjects and
+    // the daemon also publishes a `harnesses` change at boot (see `waitForEvent`); an unfiltered wait here
+    // was the intermittent failure this test used to produce under load.
+    const pendingEvent = windowTwo.waitForEvent(
+      "coder:state-changed",
+      (data) => (data as { kind?: string }).kind === "projects",
+    );
 
     await windowOne.call("coder.addProject", { path: join(home, "shared-repo") });
 
@@ -491,6 +499,114 @@ describe("the daemon over a socket", () => {
     // and cannot disagree about ordering.
     expect(typeof event.at).toBe("string");
   });
+
+  /**
+   * **The reported flake, reproduced on purpose rather than waited for.**
+   *
+   * A full-suite run once failed this same multi-window assertion with `expected 'harnesses' to be
+   * 'projects'`, and the mechanism was a race: `serve.ts` primes the search path at boot *off the critical
+   * path* (`primeSearchPath().then(...)`, deliberately not awaited, so a login shell that hangs cannot delay
+   * the daemon) and broadcasts `{kind: "harnesses"}` when the answer lands. The test subscribed and then
+   * took the **first** `coder:state-changed` it saw — so on a machine where the prime landed after the
+   * subscription it caught the boot broadcast. `daemon-rpc.test.ts` already had a test that *depends* on
+   * that broadcast arriving late (the sleeping-`$SHELL` case below), which is why the fix belongs on the
+   * test's side and not in the daemon: making the daemon announce the prime before any client can subscribe
+   * would mean awaiting the login shell in `serve()`, and the other test would then be unable to observe
+   * the correction it exists for.
+   *
+   * This test makes the collision **certain** instead of occasional: `$SHELL` is a script that sleeps, so
+   * the `harnesses` broadcast provably lands after the subscription and before the change we make. Two
+   * assertions, and the second is the one with teeth — the client sees *both* events, and the one it treats
+   * as the answer is the one whose kind matches what it asked for.
+   */
+  it.skipIf(process.platform === "win32")(
+    "does not mistake the boot search-path broadcast for the change the test made",
+    async () => {
+      const dir = await mkdtemp(join(tmpdir(), "envoycoder-race-shell-"));
+      const home = await mkdtemp(join(tmpdir(), "envoycoder-race-home-"));
+      cleanups.push(async () => {
+        await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+      });
+      const slowShell = join(dir, "slow-shell");
+      // A login shell that takes a moment, so the prime cannot land before the subscription below.
+      await writeFile(
+        slowShell,
+        `#!/bin/sh\nsleep 1.5\nexec /bin/sh "$@"\n`,
+      );
+      await chmod(slowShell, 0o755);
+      const previousShell = process.env.SHELL;
+      process.env.SHELL = slowShell;
+      resetSearchPathCacheForTests();
+
+      try {
+        const daemon = await startCoderDaemon({
+          port: 0,
+          home,
+          paths: coderPaths(home),
+          skipMeshAttach: true,
+          isDirectory: async (path) => path.startsWith(home),
+        });
+        cleanups.push(async () => {
+          await daemon.stop();
+          await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+        });
+        const client = await connect(daemon.port);
+        cleanups.push(async () => client.close());
+        await client.subscribe(["coder:state-changed"]);
+
+        // Every packet, so the test can prove the collision happened rather than assume it.
+        const seen: { kind?: string; ids?: readonly string[] }[] = [];
+        const stop = client.collectEvents("coder:state-changed", seen);
+
+        /**
+         * **Registered before the boot broadcast lands, which is what makes this a reproduction.**
+         *
+         * This is where the old helper's unfiltered read sat — a wait taken right after `subscribe`, when
+         * the daemon has not yet answered the login shell. The `harnesses` broadcast then arrives first, so
+         * an unfiltered wait resolves with *it* and the assert below reads `'harnesses'` instead of
+         * `'projects'`: exactly the failure a full-suite run reported. The predicate is the whole fix, and
+         * mutating it back to `() => true` turns this test red with that message.
+         */
+        const asked = client.waitForEvent(
+          "coder:state-changed",
+          (data) => (data as { kind?: string }).kind === "projects",
+        );
+
+        // The boot broadcast, delivered before the change this test makes. Awaited through the daemon's own
+        // accessor (which resolves the promise whose `then` emits it) and then through a *filtered* wait, so
+        // its arrival is a fact rather than a hope about timing: the 1.5 s shell puts it after the
+        // subscription, and awaiting it here puts it before `projects`.
+        const sawHarnesses = client.waitForEvent(
+          "coder:state-changed",
+          (data) => (data as { kind?: string }).kind === "harnesses",
+        );
+        const resolved = await daemon.searchPath();
+        expect(resolved.searchable).toBe(true);
+        expect(((await sawHarnesses) as { kind: string }).kind).toBe("harnesses");
+
+        // Now the change a *test* made, waited for by the kind it triggered.
+        await client.call("coder.addProject", { path: join(home, "during-the-prime") });
+        const answer = (await asked) as { kind: string; ids?: readonly string[] };
+        expect(answer.kind).toBe("projects");
+        expect(answer.ids).toHaveLength(1);
+
+        stop();
+        // **The race, as a number.** Both subjects are in one stream and the boot broadcast is *first* —
+        // which is precisely the ordering that made the unfiltered wait read `harnesses` and fail. The
+        // filter is what makes the answer deterministic, and this is the run that proves the ambiguity was
+        // real rather than theoretical.
+        const kinds = seen.map((change) => change.kind);
+        expect(kinds).toContain("harnesses");
+        expect(kinds).toContain("projects");
+        expect(kinds.indexOf("harnesses")).toBeLessThan(kinds.indexOf("projects"));
+      } finally {
+        if (previousShell === undefined) delete process.env.SHELL;
+        else process.env.SHELL = previousShell;
+        resetSearchPathCacheForTests();
+      }
+    },
+    30_000,
+  );
 
   /**
    * **The quiet half of the PATH fix, and the ordering problem it creates.**

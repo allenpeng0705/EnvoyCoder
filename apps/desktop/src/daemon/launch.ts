@@ -60,10 +60,10 @@ import {
   harnessAcpFacts,
   harnessDefinition,
   harnessRecipe,
-  isSet,
   probeRecipe,
   providerRecipe,
   resolveHarnessCommand,
+  resolveProviderEnv,
   splitArgs,
   type ProbeFinding,
   type ProbeRecipe,
@@ -210,7 +210,7 @@ export function launchForProvider(input: ProviderLaunchInput): AcpLaunch {
        * without its credential fails with *its own* sentence about a login nobody performed, which reads
        * as "this agent is broken" for a fact about our environment.
        */
-      envNames: provider.env,
+      provider,
       unsupportedAdvice:
         `EnvoyCoder drives agents over ACP, and this provider is declared as a command-line program — ` +
         `if it does speak ACP, declare its dialect as ACP and try again.`,
@@ -237,8 +237,16 @@ interface LaunchSubject {
   acp: { authMethodId?: string; modeParam?: "mode" | "modeId" };
   /** Values put into the child's environment beyond `PATH`. */
   env: Record<string, string>;
-  /** Names to copy from the daemon's environment. Unset ones refuse the launch. */
-  envNames?: readonly string[];
+  /**
+   * The provider whose named variables must be resolved, when this subject is one.
+   *
+   * The **config** rather than a list of names, and that is deliberate: a provider's environment is
+   * resolved from two sources (the daemon's own environment, and the constants of the catalogue entry its
+   * reference verifies), so a bare name list is not enough information to answer the question. Handing the
+   * config here keeps one resolver — `resolveProviderEnv` — answering for the launch and for the summary a
+   * window renders.
+   */
+  provider?: AgentProviderConfig;
   /** The second half of the "we cannot drive this" sentence — each tier explains its own gap. */
   unsupportedAdvice: string;
   /**
@@ -344,7 +352,11 @@ function resolveLaunch(subject: LaunchSubject, location: LaunchLocation): AcpLau
       // merges this object *over* the daemon's own environment, so everything else still travels.
       PATH: search.dirs.join(capabilitiesFor(platform).pathDelimiter),
       ...subject.env,
-      ...providerEnv(subject.label, subject.envNames ?? [], location.env ?? process.env),
+      // The provider's own variables, when this subject is one: the daemon's environment first, then the
+      // constants of the catalogue entry its reference verifies — and a name neither can supply refuses.
+      ...(subject.provider
+        ? providerEnv(subject.label, subject.provider, location.env ?? process.env)
+        : {}),
     },
   };
 }
@@ -354,36 +366,36 @@ function resolveLaunch(subject: LaunchSubject, location: LaunchLocation): AcpLau
  *
  * ## What this function may not do, and the test that holds it to it
  *
- * It reads values out of the daemon's own environment and puts them in a `Record` that goes to `spawn`.
- * It must never write one anywhere else: not into the returned launch's other fields, not into the refusal
- * below, not into a log line. The refusal names `provider.label` and the **names** of the missing
- * variables, so a user can act on it, and quotes no value at all — a value that reached an error message
- * would reach a log file, a transcript and a bug report. `test/providers.test.ts` asserts the negative
- * directly: it puts a recognisable secret in the environment, launches a provider that names it, and
- * checks that the string appears nowhere in the refusal that follows when it is removed again.
+ * It puts values into a `Record` that goes to `spawn`. It must never write one anywhere else: not into the
+ * returned launch's other fields, not into the refusal below, not into a log line. The refusal names
+ * `provider.label` and the **names** of the missing variables, so a user can act on it, and quotes no value
+ * at all — a value that reached an error message would reach a log file, a transcript and a bug report.
+ * `test/providers.test.ts` asserts the negative directly: it puts a recognisable secret in the environment,
+ * launches a provider that names it, and checks that the string appears nowhere in the refusal that follows
+ * when it is removed again.
+ *
+ * ## Two sources, and the order between them
+ *
+ * A value comes from the daemon's own environment, or — for a variable a **catalogue entry** declares a
+ * constant for, and only when the provider's reference verifies — from the catalogue. `resolveProviderEnv`
+ * decides that, and this function does not have a second opinion: the summary a window renders
+ * (`AgentProviderSummary.env`) reads the same call, so "the row says set" and "the launch supplies it"
+ * cannot disagree — which is the pair of answers this module's own doc calls the worst possible one to
+ * get wrong. The user's export always wins, so a recipe's default never overrides the one thing they can
+ * control.
  *
  * An **empty** value counts as unset, and the rule is `isSet` from `@envoycoder/agent-catalog` rather
- * than a second copy of it here: the summary a window renders (`AgentProviderSummary.env`) and this
- * launch answer the same question, and two implementations of "does this daemon have it" would be two
- * answers. `FOO=` exports nothing, and passing it on is how an agent authenticates with an empty string
- * while every row says a credential is present.
+ * than a second copy of it here: `FOO=` exports nothing, and passing it on is how an agent authenticates
+ * with an empty string while every row says a credential is present.
  */
 function providerEnv(
   label: string,
-  names: readonly string[],
+  provider: AgentProviderConfig,
   from: NodeJS.ProcessEnv,
 ): Record<string, string> {
-  const out: Record<string, string> = {};
-  const missing: string[] = [];
-  for (const name of names) {
-    const value = from[name];
-    if (!isSet(value)) {
-      missing.push(name);
-      continue;
-    }
-    out[name] = value;
-  }
-  if (missing.length === 0) return out;
+  const resolved = resolveProviderEnv(provider, from);
+  const missing = resolved.missing;
+  if (missing.length === 0) return resolved.values;
 
   // The sentence is written twice — `.one` and `.many` — rather than pluralised by a library, the rule this
   // repository's catalogue states: a language that needs two forms gets two keys. The English here is
@@ -398,7 +410,6 @@ function providerEnv(
     : `${label} needs these environment variables to be set for EnvoyCoder's daemon, and they are not set: ` +
       `${missing.join(", ")}. The run was not started. EnvoyCoder stores the names of the variables an ` +
       `agent needs, never their values — set them where the daemon is started, then restart EnvoyCoder.`;
-
   throw coderError(
     ENVOYCODER_ERRORS.providerEnvUnset,
     sentence,

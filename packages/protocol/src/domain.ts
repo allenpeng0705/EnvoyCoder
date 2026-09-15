@@ -179,6 +179,50 @@ export const PROVIDER_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 export const PROVIDER_ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
+ * An environment variable name that **means the value is somebody's credential** — and the one rule that
+ * lets a reviewed recipe carry a constant without opening a door for a user's secret.
+ *
+ * ## Why a name pattern decides this, and not a length or an entropy heuristic
+ *
+ * A recipe we publish may set `AUGMENT_DISABLE_AUTO_UPDATE: "1"`: the name says *what the flag is for* and
+ * the value is a constant of a command line anybody can read. `ANTHROPIC_API_KEY`, by contrast, names a
+ * slot whose whole purpose is to hold a secret — and it does so whatever value happens to sit in it today.
+ * So the honest test is on the **name**, which is a fact we can check, rather than on the value, where
+ * "does this look random enough" is a guess that both misses real keys and fires on real flags.
+ *
+ * ## The pattern, and why it is anchored to segments
+ *
+ * `NAME` is split by `_` for the purpose of this test, and a credential word must be a **whole segment**:
+ *
+ *   * `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `AWS_SECRET_ACCESS_KEY`, `DB_PASSWD`, `AUTH_TOKEN` → refused;
+ *   * `AUGMENT_DISABLE_AUTO_UPDATE`, `FACTORY_DROID_AUTO_UPDATE_ENABLED`, `GJC_ACP_PERMISSION_MODE`,
+ *     `VT_ACP_ENABLED` → allowed, which is what keeps all four catalogued recipes working.
+ *
+ * The anchoring is the point rather than the decoration: a bare substring test for `KEY` refuses
+ * `MONKEY`, and a bare substring test for `AUTH` refuses `AUTHOR` — which is exactly the class of false
+ * positive that gets a rule switched off instead of fixed. The second alternative catches the
+ * concatenated spelling (`OPENAI_APIKEY`) **without** a `$KEY` free-for-all: only the distinctive words
+ * may end a name, so `MONKEY` and `TURKEY` stay ordinary.
+ *
+ * ## Where it is enforced
+ *
+ *   * a **catalogue entry's** environment values (`CatalogEntrySchema.env`, and
+ *     `agent-catalog`'s own projection): our data, and a credential there is a mistake in this repository
+ *     rather than a user's business, so it is refused loudly;
+ *   * a **wire claim** that a recipe supplied a value (`AgentProviderEnvStateSchema.from`), for the same
+ *     reason one layer out;
+ *   * **not** a user's own `AgentProviderConfig.env` — naming `ANTHROPIC_API_KEY` there is the entire
+ *     point of the names-only rule (§7.10), and the value still never leaves the daemon's environment.
+ */
+export const CREDENTIAL_ENV_NAME_PATTERN =
+  /(?:^|_)(?:KEY|KEYS|APIKEY|API_KEY|TOKEN|TOKENS|SECRET|SECRETS|PASSWORD|PASSWD|PASSPHRASE|CREDENTIAL|CREDENTIALS|AUTH|AUTHORIZATION|AUTHORISATION|BEARER|COOKIE|ACCESS_KEY|PRIVATE_KEY)(?:_|$)|(?:APIKEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|PASSWD)$/i;
+
+/** The predicate form, for the branches that need it — `isHarnessId`/`HarnessIdSchema`'s arrangement. */
+export function looksLikeCredentialEnvName(name: string): boolean {
+  return CREDENTIAL_ENV_NAME_PATTERN.test(name);
+}
+
+/**
  * An agent **the user declared** — the ACP provider config, which is how a program we have never heard of
  * becomes runnable without a release of this product.
  *
@@ -198,8 +242,10 @@ export const PROVIDER_ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
  *   * A name that is present but unset in the daemon's environment is **reported per agent** — in the
  *     summary the window reads, and as a keyed refusal at launch. Silently skipping it would start an
  *     agent that cannot authenticate and blame the agent; defaulting it would be a claim about a
- *     credential we do not have.
- *   * Nothing here is ever logged or echoed. Diagnostics name the variable and say `set` / `not set`.
+ *     credential we do not have. (The one exception is a variable a **catalogue entry** declares a
+ *     constant for, and it is not a default of a credential: see `catalogEntryId` below.)
+ *   * Nothing here is ever logged or echoed. Diagnostics name the variable and say `set` / `not set` —
+ *     and, for a value that came from a recipe, say *that* rather than pretending the daemon had it.
  *
  * ## The dialect, reused rather than reinvented
  *
@@ -216,6 +262,28 @@ export const PROVIDER_ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
  * any capability here would be the user's guess restated as our fact — and the whole point of a probe is
  * that we find out instead. A provider takes a model the only way we can honestly offer one: whatever
  * the user put in `args`, which is theirs and is passed through verbatim.
+ *
+ * ## `catalogEntryId` is a **reference**, and it is how a reviewed recipe's constants reach a launch
+ *
+ * Four catalogued recipes set six environment variables (`AUGMENT_DISABLE_AUTO_UPDATE`,
+ * `DROID_DISABLE_AUTO_UPDATE`, `FACTORY_DROID_AUTO_UPDATE_ENABLED`, `GJC_ACP_PERMISSION_MODE`,
+ * `VT_ACP_ENABLED`, `VT_ACP_ZED_ENABLED`), and every one of them is a constant of a command line
+ * *we* publish — `1`, `true`, `prompt` — not a credential. Refusing to carry them made those four
+ * recipes unusable for no safety gain, and the distinction that fixes it honestly is **whose data it
+ * is**:
+ *
+ *   * a **catalogue entry** is our own reviewed, git-tracked data, so it may declare a non-secret
+ *     default (`AcpAgentEntry.env`, refused if a name looks like a credential —
+ *     `CREDENTIAL_ENV_NAME_PATTERN`);
+ *   * a **provider config** still has **no field for a value**. What it may carry is the *name of the
+ *     entry it was added from*, and the daemon resolves the entry's constants from the catalogue at
+ *     launch and at summary time.
+ *
+ * So `providers.json` cannot hold a value at all — not ours and not a user's — which is a strictly
+ * stronger property than "a user may not write one". A hand-edited file that invents a reference is not
+ * a hole either: the daemon **verifies** that the referenced entry's recipe is the recipe the provider
+ * states (`command`, `args`, `transport` and the environment names must all agree) and refuses by name
+ * when it does not, so the reference can only ever mean "this provider *is* that entry".
  */
 export interface AgentProviderConfig {
   /** Stable id, unique among providers and never one of `HARNESS_IDS`. */
@@ -235,11 +303,21 @@ export interface AgentProviderConfig {
    * Environment variables to give the agent, **by name**.
    *
    * Each is copied from the daemon's own environment at spawn (see the interface doc: a value cannot be
-   * expressed here, which is the point). Empty is a normal answer, not a missing one.
+   * expressed here, which is the point). Empty is a normal answer, not a missing one. For a provider
+   * added from a catalogue entry, a name the entry declares a constant for is supplied from the
+   * catalogue instead — and only when the daemon's own environment does not have it, so a user's own
+   * value always wins.
    */
   env: readonly string[];
   /** How the daemon must speak to this program. `"cli"` is startable but not yet drivable. */
   transport: "acp" | "cli";
+  /**
+   * The **catalogue entry** this provider was added from, when it was — a reference, never a value.
+   *
+   * See the interface doc for why this exists and what the daemon checks before believing it. Absent
+   * means "a command the user typed", which is the case that has no constants to resolve.
+   */
+  catalogEntryId?: string;
   /** The ACP `authenticate` method this agent needs before it will open a session, when it needs one. */
   authMethodId?: string;
   /** Which field name this agent's `session/set_mode` reads. */
@@ -249,7 +327,7 @@ export interface AgentProviderConfig {
 /**
  * The stored and served shape of a user's provider, with its agreements enforced.
  *
- * Three rules, and each is a contradiction the shape would otherwise allow to travel:
+ * Four rules, and each is a contradiction the shape would otherwise allow to travel:
  *
  *   1. **The id is not one of the nine we ship.** `id` is the key a list is searched by and the word every
  *      refusal names, so a provider called `codex` would be a second row with a shipped agent's name — and
@@ -261,6 +339,10 @@ export interface AgentProviderConfig {
  *      ever ask it for — the shape promising a step that cannot happen.
  *   3. **No repeated environment name.** Two identical names are one variable, and a list that says
  *      otherwise makes "which of these is unset" unanswerable.
+ *   4. **A reference names a catalogue entry, and only a catalogue entry can.** `catalogEntryId` is the
+ *      same slug shape as an id, and it may not be the provider's own id — a provider that claimed to be
+ *      the entry it says it came from would be a reference to itself, which resolves to nothing and reads
+ *      as though something had been checked.
  */
 export const AgentProviderConfigSchema = z
   .object({
@@ -281,6 +363,11 @@ export const AgentProviderConfigSchema = z
       )
       .readonly(),
     transport: z.enum(["acp", "cli"]),
+    /**
+     * The catalogue entry this provider was added from. **A name, and the only thing about a value this
+     * shape can carry** — see `AgentProviderConfig` for the resolution and for the daemon's check.
+     */
+    catalogEntryId: z.string().min(1).max(64).regex(PROVIDER_ID_PATTERN, "expected a catalogue entry id").optional(),
     authMethodId: z.string().min(1).optional(),
     modeParam: z.enum(["mode", "modeId"]).optional(),
   })
@@ -306,6 +393,13 @@ export const AgentProviderConfigSchema = z
       if (seen.has(name)) fail(`"${name}" is named twice, and one variable is one variable`, `env.${index}`);
       seen.add(name);
     });
+    if (value.catalogEntryId === value.id) {
+      fail(
+        `a provider cannot be the catalogue entry it says it came from — the reference would resolve to ` +
+          `the provider itself`,
+        "catalogEntryId",
+      );
+    }
   });
 
 /* ────────────────────────────── the domain ───────────────────────────── */

@@ -320,6 +320,9 @@ export const de: Catalogue = {
   "settings.agents.mine.env.title": "Ob der Daemon von EnvoyCoder {name} gesetzt hat",
   "settings.agents.mine.env.set": "{name} ist gesetzt",
   "settings.agents.mine.env.unset": "{name} ist nicht gesetzt",
+  "settings.agents.mine.env.recipe": "{name} — von diesem Rezept bereitgestellt",
+  "settings.agents.mine.env.recipe.title":
+    "Diese Variable ist eine Konstante des Katalogrezepts, aus dem dieser Agent hinzugefügt wurde, deshalb liefert EnvoyCoder sie — in deiner Umgebung ist für sie nichts gesetzt. Exportiere {name} selbst, um den Wert des Rezepts zu überschreiben.",
   "settings.agents.hide": "Aus meinen Listen ausblenden",
   "settings.agents.show": "In meinen Listen zeigen",
   "settings.agents.hidden": "Ausgeblendet",
@@ -345,13 +348,14 @@ export const de: Catalogue = {
   "settings.agents.row.check.title": "Nach dem Programm dieses Agenten auf diesem Rechner suchen. Es wird nichts gestartet und nichts heruntergeladen — und die Antwort wird zehn Minuten lang behalten.",
   "settings.agents.row.add": "Hinzufügen",
   "settings.agents.row.adding": "Wird hinzugefügt…",
-  "settings.agents.row.add.title": "{agent} zu deinen Agenten hinzufügen. Kommandozeile und die Namen der nötigen Umgebungsvariablen stammen aus diesem Eintrag, genau wie oben geschrieben.",
+  "settings.agents.row.add.title": "{agent} zu deinen Agenten hinzufügen. Kommandozeile und Umgebung stammen aus diesem Eintrag, genau wie oben geschrieben — die Konstanten des Rezepts kommen mit, und jede Variable, die das Rezept nicht setzt, bleibt dir überlassen.",
   "settings.agents.row.builtIn": "Dieser Agent ist bereits in EnvoyCoder enthalten und wird deshalb oben unter „Auf diesem Rechner“ eingestellt statt ein zweites Mal hinzugefügt.",
-  "settings.agents.row.needsNoInstall": "Nichts zu installieren: {package} wird beim ersten Start von npm geholt.",
+  "settings.agents.row.needsNoInstall": "Nichts zu installieren: {package} wird beim ersten Start von npm geholt. Die Prüfung fand `npx` — nicht {agent}, das noch nicht geladen wurde.",
   "settings.agents.row.install": "{agent} zuerst installieren",
   "settings.agents.row.installLink": "Wo es ihn gibt",
   "settings.agents.row.installLink.title": "Die eigene Seite von {agent}",
-  "settings.agents.row.recipeEnv": "Dieses Rezept setzt außerdem {names} für den Agenten. Ein von dir hinzugefügter Agent speichert nur Variablennamen — setze sie also in der Umgebung, in der EnvoyCoder läuft. Bis dahin wird dieser Agent beim Start abgelehnt statt gestartet, ohne ACP sprechen zu können.",
+  "settings.agents.row.recipeEnv": "Dieses Rezept setzt {names} für den Agenten. EnvoyCoder liefert sie aus diesem Eintrag, du musst also nichts selbst setzen — exportiere eine, um den Wert des Rezepts zu überschreiben.",
+  "settings.agents.row.readyNpx": "Noch nicht geladen",
   "settings.agents.row.checked": "Geprüft {when} — die Suche dauerte {ms} ms.",
   "settings.agents.row.checked.cached": "Geprüft {when}, seitdem nicht erneut gemessen: ein Ergebnis, das sagt, der Agent sei da, wird zehn Minuten lang behalten.",
   "settings.agents.manual.heading": "Ein Agent, der nicht auf der Liste steht",
@@ -469,6 +473,8 @@ export const de: Catalogue = {
     "\"{id}\" ist die Kennung eines Agenten, den EnvoyCoder bereits mitliefert, deshalb wurde dein Anbieter nicht hinzugefügt. Gib deinem Anbieter einen anderen Namen.",
   "error.providerIdInvalid":
     "\"{name}\" kann keine Kennung für einen Anbieter sein. Eine Anbieter-Kennung besteht aus Kleinbuchstaben, Ziffern und Bindestrichen und beginnt mit einem Buchstaben oder einer Ziffer.",
+  "error.providerCatalogMismatch":
+    "„{entry}“ ist ein katalogisierter Agent, und das Rezept, das diese Anfrage beschreibt, ist nicht das, das dieser Eintrag angibt — deshalb wurde der Agent nicht hinzugefügt. Öffne die Agentenseite neu und füge die Zeile erneut hinzu.",
   "error.agentNotFound":
     "Es gibt hier keinen Agenten namens \"{id}\". Vielleicht wurde er in einem anderen Fenster entfernt.",
   "error.catalogAgentMissing": "Es gibt keinen Agenten namens „{id}“ im Katalog. Die Liste hat sich geändert, seit dieses Fenster sie gelesen hat — öffne die Agentenseite neu und versuche es erneut.",

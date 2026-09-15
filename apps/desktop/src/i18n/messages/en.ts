@@ -482,6 +482,13 @@ export const en = {
   "settings.agents.mine.env.title": "Whether EnvoyCoder's daemon has {name} set",
   "settings.agents.mine.env.set": "{name} is set",
   "settings.agents.mine.env.unset": "{name} is not set",
+  // **The third state, and the one this slice added.** A variable the catalogue entry supplies is *not*
+  // something the daemon's environment has, and saying "set" would leave a user exporting a variable we are
+  // already providing — the same class of wrong sentence as telling somebody to install a program they
+  // have. It is a word of its own so the row can be read without the detail sentence.
+  "settings.agents.mine.env.recipe": "{name} — supplied by this recipe",
+  "settings.agents.mine.env.recipe.title":
+    "This variable is a constant of the catalogue recipe this agent was added from, so EnvoyCoder supplies it — nothing is set in your environment for it. Export {name} yourself to override the recipe's value.",
   "settings.agents.hide": "Hide from my lists",
   "settings.agents.show": "Show in my lists",
   "settings.agents.hidden": "Hidden",
@@ -516,19 +523,45 @@ export const en = {
   "settings.agents.row.add": "Add",
   "settings.agents.row.adding": "Adding…",
   "settings.agents.row.add.title":
-    "Add {agent} to your agents. Its command line and the names of any environment variables it needs are taken from this entry, exactly as they are written above.",
+    "Add {agent} to your agents. Its command line and its environment come from this entry exactly as they are written above — the recipe's own constants travel with it, and any variable the recipe does not set stays yours to set.",
   "settings.agents.row.builtIn":
     "EnvoyCoder already ships this agent, so it is configured in “On this machine” above rather than added a second time.",
+  /**
+   * **The `npx` sentence, and the word it must not use.**
+   *
+   * For an `npx -y <pkg> …` recipe, "the program resolves" means **`npx` is present** — the probe looks
+   * for `npx` rather than the package (looking for the package would report all 14 of these as missing),
+   * so nothing about the agent has been established and nothing has been downloaded. "Nothing to install"
+   * alone read as "it works", which is more than was measured. The sentence now names what *was* checked
+   * and what has not happened, and the chip beside it says "Not downloaded yet" for the same reason.
+   */
   "settings.agents.row.needsNoInstall":
-    "Nothing to install: {package} is fetched from npm the first time it runs.",
+    "Nothing to install: {package} is fetched from npm the first time it runs. Checking this machine found `npx` — not {agent}, which has not been downloaded yet.",
   "settings.agents.row.install": "Install {agent} first",
   "settings.agents.row.installLink": "Where to get it",
   "settings.agents.row.installLink.title": "{agent}'s own page",
+  /**
+   * **The recipe's own constants, described as supplied rather than as the user's to set.**
+   *
+   * This sentence used to tell a user to export all six variables of the four recipes that set one, because
+   * a provider config could carry names only and the value was thrown away on the way across (§7.10). It
+   * cannot say that now: the entry's constants travel with the reference, so what a user needs to know is
+   * which variables the recipe sets for them — and that exporting one is how they *change* it.
+   */
   "settings.agents.row.recipeEnv":
-    "This recipe also sets {names} for the agent. An agent you add stores variable names only, so set these in the environment EnvoyCoder runs in — until they are set, this agent is refused at launch rather than started unable to speak ACP.",
+    "This recipe sets {names} for the agent. EnvoyCoder supplies them from this entry, so there is nothing to set yourself — export one to override the recipe's value.",
   "settings.agents.row.checked": "Checked {when} — the search took {ms} ms.",
   "settings.agents.row.checked.cached":
     "Checked {when}, and not measured again since: a result that says the agent is here is remembered for ten minutes.",
+  /**
+   * **The sixth row state, and the one this slice added for honesty.**
+   *
+   * `ready` is the *probe's* word and it is true of `npx`: the program the probe looked for resolved. It is
+   * not evidence that the agent works, and for an `npx -y <pkg> …` recipe nothing has even been
+   * downloaded yet — so a row that read "Ready" claimed a verification nobody performed, on 14 of the 38
+   * rows. This word says what was measured, and the sentence beside it says what has not happened.
+   */
+  "settings.agents.row.readyNpx": "Not downloaded yet",
   "settings.agents.manual.heading": "An agent that is not on the list",
   "settings.agents.manual.note":
     "If you already have a coding agent that speaks the Agent Client Protocol and it is not in the catalogue above, declare it here. EnvoyCoder will start it and probe it exactly as it does the others.",
@@ -754,6 +787,12 @@ export const en = {
   // — so the sentence states the rule rather than presuming which of the two happened.
   "error.providerIdInvalid":
     "\"{name}\" cannot be an id for a provider. A provider id is lowercase letters, digits and dashes, starting with a letter or a digit.",
+  // **The reference and the recipe disagree.** A catalogue entry named by `catalogEntryId` whose command,
+  // arguments, dialect or environment names are not the ones the request carried: the two cannot both be
+  // true, and the honest outcome is to add nothing and say so. The action is the page, not a field —
+  // which is why the sentence names reopening it rather than asking a user to edit anything.
+  "error.providerCatalogMismatch":
+    "\"{entry}\" is a catalogued agent, and the recipe this request describes is not the one that entry states — so the agent was not added. Reopen the agents page and add the row again.",
   // The union of the two agent lists, which is why it needs its own key: `error.providerNotFound` would
   // name the wrong list when a user mistyped one of the nine we ship.
   "error.agentNotFound":

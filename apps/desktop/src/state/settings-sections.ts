@@ -176,17 +176,20 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
       },
       {
         file: "apps/desktop/src/components/settings/CatalogRows.tsx",
-        needle: "rowStateOf(probe)",
+        needle: "rowStateOf(entry, probe)",
         because:
           "the catalogue's rows take their state from a measurement and from nothing else — a row nobody " +
-          "has checked reads as 'not checked yet', which is the claim this page exists to stop making",
+          "has checked reads as 'not checked yet', which is the claim this page exists to stop making. The " +
+          "entry travels with the probe because the word is derived from two facts: what was measured, and " +
+          "how the program is obtained (`npx` resolving is not the package having been downloaded)",
       },
       {
         file: "apps/desktop/src/components/settings/CatalogRows.tsx",
         needle: "agents.addProvider(addInputFor(entry))",
         because:
-          "and adding one sends the entry's own command, arguments, environment names and dialect, so no " +
-          "screen invents a dialect `coder.addProvider` would then store",
+          "and adding one sends the entry's own command, arguments, environment names, dialect and the " +
+          "catalogue reference, so no screen invents a dialect `coder.addProvider` would then store and no " +
+          "screen sends a *value* — the reference is what the daemon resolves the recipe's constants from",
       },
     ],
   },

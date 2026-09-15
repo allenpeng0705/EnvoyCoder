@@ -24,10 +24,20 @@
  * of — see `probe.ts`'s `notInstalledFix` for what the probe says instead), and no model support: a
  * provider's model is whatever the user put in `args`, because we have no evidence about its flags and
  * inventing `--model` is how an agent is started with an argument it rejects.
+ *
+ * ## What it *does* get, and only by reference
+ *
+ * A provider added from a catalogue entry carries `catalogEntryId`, and that reference is what resolves the
+ * entry's own environment constants — see `providerCatalogueEnv` and `resolveProviderEnv`. The **value is
+ * never in the config**: this module reads the constant out of the catalogue (git-tracked, reviewed data)
+ * at the moment of use, so `providers.json` holds no value at all. That is the narrow, defensible slice of
+ * the reference product's behaviour — its recipes work because they carry values, and ours work because
+ * they carry a *pointer* to values we published.
  */
 
 import type { AgentProviderConfig, AgentProviderEnvState } from "@envoycoder/protocol";
 
+import { acpAgent, cataloguedEnvNames, type AcpAgentEntry } from "./acp-catalog.js";
 import { splitArgs } from "./args.js";
 import { probeRecipe, type ProbeFinding, type ProbeHarnessOptions, type ProbeRecipe } from "./probe.js";
 // Type-only, and therefore erased: this module is re-exported *by* `index.ts` (`export *`), so a value
@@ -106,24 +116,160 @@ export function probeProvider(
 }
 
 /**
- * Every environment variable the provider names, with whether **this daemon** has it.
+ * Every environment variable the provider names, with whether **this daemon** has a value for it and where
+ * that value comes from.
  *
  * ## Why the answer is a list of facts rather than one boolean
  *
  * A provider that needs two variables and has one is in a state no boolean describes, and the window has
  * to say *which* one is missing to be actionable. It is computed here, beside the config, because this is
  * the same question `launchForProvider` answers at spawn time — and the two must agree: a summary that
- * said `set: true` while the launch refused the variable would be the worst possible pair of answers.
+ * said `set: true` while the launch refused the variable would be the worst possible pair of answers. Both
+ * call `resolveProviderEnv`, so they agree by construction rather than by review.
  *
- * The **value never appears**, here or anywhere else. `set` is a boolean and `name` is a name; there is
- * nothing in this return type that could hold a credential, which is the same enforcement
- * `AgentProviderConfig.env` states one layer down.
+ * ## `from`, and the one thing this function may not do
+ *
+ * A value reaches a child from exactly two places: the daemon's own environment, or the catalogue entry the
+ * provider was added from. The second is new (§7.10) and it is why this return type grew a field — a row
+ * that said only "set" about `VT_ACP_ENABLED` would leave a user exporting a variable we are already
+ * supplying, which is the same class of wrong sentence as telling somebody to install a program they have.
+ *
+ * **No value ever appears in the return type.** `name` is a name, `set` is a boolean, `from` is one of two
+ * words; there is nothing here that could hold a credential, which is the same enforcement
+ * `AgentProviderConfig.env` states one layer down — and the type is what makes it true rather than a rule.
  */
 export function providerEnvState(
   provider: AgentProviderConfig,
   env: NodeJS.ProcessEnv = process.env,
 ): AgentProviderEnvState[] {
-  return provider.env.map((name) => ({ name, set: isSet(env[name]) }));
+  const resolved = resolveProviderEnv(provider, env);
+  return provider.env.map((name) => {
+    const from = resolved.from[name];
+    if (from === "catalogue") return { name, set: true, from: "catalogue" as const };
+    return { name, set: isSet(env[name]) };
+  });
+}
+
+/**
+ * The catalogue constants a provider's reference resolves to — **verified, or nothing**.
+ *
+ * ## Why the reference is checked here rather than trusted
+ *
+ * `AgentProviderConfig.catalogEntryId` is written by `coder.addProvider`, and `providers.json` is a file a
+ * user can edit. Believing `catalogEntryId` on its own would mean a hand-edited line could point a
+ * provider at any entry and receive that entry's environment — which is not a security hole (these are
+ * published constants, not secrets) but *is* a lie: the row would claim a recipe it is not. So the
+ * reference is believed only when the provider **is** that entry's recipe — same command, same argv, same
+ * transport, same environment names — and anything else resolves to nothing, which puts the provider back
+ * in the ordinary names-only case where a missing variable refuses by name.
+ *
+ * The check is deliberately *not* a throw. This runs inside the summary and inside the launch, and neither
+ * is the place to raise a refusal about a file: the daemon refuses a mismatched `catalogEntryId` at
+ * `coder.addProvider` with a translated sentence, which is where a user can do something about it. Here
+ * the only honest answer is the conservative one.
+ *
+ * An **unknown** entry id resolves to nothing for the same reason: the catalogue is versioned with the
+ * product, so an id it no longer has is an id whose constants we must not invent.
+ */
+export function providerCatalogueEnv(
+  provider: AgentProviderConfig,
+): Readonly<Record<string, string>> {
+  const entryId = provider.catalogEntryId;
+  if (entryId === undefined) return {};
+  const entry = acpAgent(entryId);
+  if (!entry) return {};
+  if (!agreesWithEntry(provider, entry)) return {};
+  return entry.env ?? {};
+}
+
+/**
+ * Is this recipe **the** recipe that entry states?
+ *
+ * Four comparisons, and each would be a different lie if it were skipped: a different `command` is a
+ * different program, a different `args` is a different invocation, a different `transport` is a different
+ * dialect, and a **missing** environment name is a variable the recipe needs and would no longer receive.
+ *
+ * ## Why the environment rule is a superset and not an equality
+ *
+ * The entry's names must all be **present**; the provider may name others of its own. Equality was the
+ * first shape here and it is wrong in the direction that costs a user something: somebody who adds one
+ * variable of their own to a catalogued agent (`MY_COMPANY_PROXY`, say) would silently lose the recipe's
+ * constants and be refused by name about a variable we had just been supplying — a change nobody asked for,
+ * with no row saying why. A superset keeps the reference honest in the direction that matters (*this
+ * invocation is the entry's, and every variable the entry declares is still named*) while leaving the
+ * user's own additions theirs.
+ *
+ * Order is not compared — a name is a name and `env` is a set — so this is a containment test, not an
+ * equality of arrays, which would also refuse a hand-edited file that merely reordered a list.
+ *
+ * **One implementation, two callers**, and that is the point of exporting it: this decides whether a launch
+ * may use a recipe's constants, and `coder.addProvider` (`apps/desktop/src/daemon/providers.ts`) decides
+ * whether a client may store the reference at all. Two copies of "does this agree" would be two answers to
+ * one question, and the pair that must never disagree is exactly this one — a handler that accepted a
+ * reference the launch then ignored would store a provider whose row claims a recipe it does not run.
+ */
+export function agreesWithEntry(
+  recipe: { command: string; args: readonly string[]; transport: "acp" | "cli"; env: readonly string[] },
+  entry: AcpAgentEntry,
+): boolean {
+  const [command, ...args] = entry.command;
+  if (recipe.command !== command) return false;
+  if (recipe.transport !== entry.transport) return false;
+  if (recipe.args.length !== args.length || recipe.args.some((arg, index) => arg !== args[index])) {
+    return false;
+  }
+  const named = new Set(recipe.env);
+  return cataloguedEnvNames(entry).every((name) => named.has(name));
+}
+
+/**
+ * **What a provider's environment will be, and where each value came from** — the one body both the
+ * summary and the launch read.
+ *
+ * ## The precedence rule, stated once
+ *
+ *   1. **The daemon's own environment wins.** A user who exported `AUGMENT_DISABLE_AUTO_UPDATE=0` to stop
+ *      an agent updating itself meant it, and a recipe's default that overwrote their export would make
+ *      the one thing they can control the one thing they cannot.
+ *   2. **Then the catalogue entry's constant**, and only for a name the entry actually declares: the
+ *      provider's `env` list and the entry's keys are intersected rather than unioned, so a reference can
+ *      never smuggle in a variable the provider does not name.
+ *   3. **Then nothing**, which is a missing name — refused by the launch, reported unset by the summary.
+ *
+ * `missing` is the third case, and it is the one the refusal sentence is built from, which is why it is a
+ * list of *names* here rather than a boolean somewhere else.
+ */
+export function resolveProviderEnv(
+  provider: AgentProviderConfig,
+  env: NodeJS.ProcessEnv = process.env,
+): {
+  /** The values to hand the child, in the order the provider named them. */
+  values: Record<string, string>;
+  /** The names this daemon cannot supply from either source. */
+  missing: string[];
+  /** Where each supplied name's value came from, for the summary and for a log. */
+  from: Record<string, "daemon" | "catalogue">;
+} {
+  const catalogue = providerCatalogueEnv(provider);
+  const values: Record<string, string> = {};
+  const from: Record<string, "daemon" | "catalogue"> = {};
+  const missing: string[] = [];
+  for (const name of provider.env) {
+    const own = env[name];
+    if (isSet(own)) {
+      values[name] = own;
+      from[name] = "daemon";
+      continue;
+    }
+    const declared = catalogue[name];
+    if (isSet(declared)) {
+      values[name] = declared;
+      from[name] = "catalogue";
+      continue;
+    }
+    missing.push(name);
+  }
+  return { values, missing, from };
 }
 
 /**

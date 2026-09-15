@@ -305,6 +305,25 @@ const audit = await evaluate(`(() => {
         return facts !== null && !(facts.textContent || "").includes("Nothing to install");
       }).length,
       addButtons: list.querySelectorAll(".button--primary").length,
+      /**
+       * **The two facts §7.13 could only report as "0, honestly".**
+       *
+       * The sign-in control is rendered for the needs-signin state alone, and on the machine that
+       * measurement was taken on no agent reported it — so the number was a true statement about that
+       * machine and not a measurement of the feature. scripts/sign-in-window.mjs produces the state on
+       * purpose (a real daemon with a scripted agent on its search path that refuses a session until it is
+       * authenticated), and these two fields are what let *this* tool measure it on the same page: how many
+       * rows say "Needs a sign-in", and how many Sign-in buttons the window actually drew.
+       *
+       * Counted by the rendered text, because that is what a user reads — and paired with the button count
+       * so "the state is shown" and "the control exists" cannot be confused for one another. No backticks
+       * in this comment and none in the one above: this whole probe lives inside a template literal, and a
+       * backtick ends it (which is how the sibling note at the top of this evaluate was found).
+       */
+      needsSignin: [...document.querySelectorAll(".settings__agent .chip")]
+        .filter((chip) => (chip.textContent || "").trim() === "Needs a sign-in").length,
+      signInButtons: [...document.querySelectorAll("button")]
+        .filter((button) => (button.textContent || "").trim() === "Sign in").length,
       bodyScroll: body ? { scrollHeight: body.scrollHeight, clientHeight: body.clientHeight } : null,
     };
   };

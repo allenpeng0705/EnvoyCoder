@@ -77,9 +77,11 @@ fallback sentence and the translated one cannot drift into saying different thin
 ## Review status
 
 **Every non-English catalogue is a machine translation that no native speaker has read.** They are
-complete (179/179, and `i18n.test.ts` fails if one falls behind), which is exactly the state that hides
-the problem: a complete machine translation renders as a fluent window, so nothing on screen
-distinguishes it from a reviewed one.
+complete — **423 keys today**, printed by `npm run i18n:gap` rather than quoted here, because a number
+written into prose is a number that rots (this line said 179 long after it stopped being true) and
+`i18n.test.ts` is what actually fails when one language falls behind. That completeness is exactly the
+state that hides the problem: a complete machine translation renders as a fluent window, so nothing on
+screen distinguishes it from a reviewed one.
 
 The state lives in `TRANSLATION_REVIEW` in `apps/desktop/src/i18n/locales.ts`, `npm run i18n:gap` prints
 it, and `i18n.test.ts` enforces two rules: **a language may only claim `reviewed` with a name attached**

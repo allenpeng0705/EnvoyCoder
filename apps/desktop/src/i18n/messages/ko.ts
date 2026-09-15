@@ -320,6 +320,9 @@ export const ko: Catalogue = {
   "settings.agents.mine.env.title": "EnvoyCoder의 데몬에 {name}이(가) 설정되어 있는지",
   "settings.agents.mine.env.set": "{name} 설정됨",
   "settings.agents.mine.env.unset": "{name} 설정되지 않음",
+  "settings.agents.mine.env.recipe": "{name} — 이 레시피가 제공함",
+  "settings.agents.mine.env.recipe.title":
+    "이 변수는 이 에이전트를 추가한 카탈로그 항목의 레시피 상수이므로 EnvoyCoder가 제공합니다 — 사용자 환경에는 아무것도 설정되어 있지 않습니다. 레시피 값을 바꾸려면 {name}을(를) 직접 내보내세요.",
   "settings.agents.hide": "내 목록에서 숨기기",
   "settings.agents.show": "내 목록에 표시",
   "settings.agents.hidden": "숨김",
@@ -345,13 +348,14 @@ export const ko: Catalogue = {
   "settings.agents.row.check.title": "이 컴퓨터에서 이 에이전트의 프로그램을 찾습니다. 아무것도 실행하지 않고 아무것도 내려받지 않습니다 — 결과는 10분 동안 기억됩니다.",
   "settings.agents.row.add": "추가",
   "settings.agents.row.adding": "추가 중…",
-  "settings.agents.row.add.title": "{agent}을(를) 내 에이전트에 추가합니다. 명령줄과 필요한 환경 변수 이름은 위에 적힌 그대로 이 항목에서 가져옵니다.",
+  "settings.agents.row.add.title": "{agent}을(를) 내 에이전트에 추가합니다. 명령줄과 환경은 위에 적힌 그대로 이 항목에서 가져옵니다 — 레시피 자체의 상수도 함께 따라오고, 레시피가 설정하지 않는 변수는 그대로 사용자가 설정합니다.",
   "settings.agents.row.builtIn": "이 에이전트는 EnvoyCoder에 이미 포함되어 있으므로 두 번 추가하지 않고 위의 “이 컴퓨터에서”에서 설정합니다.",
-  "settings.agents.row.needsNoInstall": "설치할 것이 없습니다: {package}은(는) 처음 실행할 때 npm에서 받아옵니다.",
+  "settings.agents.row.needsNoInstall": "설치할 것이 없습니다: {package}은(는) 처음 실행할 때 npm에서 받아옵니다. 이번 확인에서 찾은 것은 `npx`이며 {agent}이(가) 아닙니다 — 아직 내려받지 않았습니다.",
   "settings.agents.row.install": "먼저 {agent}을(를) 설치하세요",
   "settings.agents.row.installLink": "받을 수 있는 곳",
   "settings.agents.row.installLink.title": "{agent}의 공식 페이지",
-  "settings.agents.row.recipeEnv": "이 레시피는 에이전트를 위해 {names}도 설정합니다. 직접 추가한 에이전트는 변수 이름만 저장하므로, EnvoyCoder가 실행되는 환경에서 이것들을 설정하세요 — 설정되기 전까지 이 에이전트는 ACP를 말하지 못한 채 시작되는 대신 실행 시 거부됩니다.",
+  "settings.agents.row.recipeEnv": "이 레시피는 에이전트를 위해 {names}을(를) 설정합니다. EnvoyCoder가 이 항목에서 제공하므로 직접 설정할 필요가 없습니다 — 레시피 값을 바꾸려면 내보내세요.",
+  "settings.agents.row.readyNpx": "아직 내려받지 않음",
   "settings.agents.row.checked": "{when}에 확인 — 검색에 {ms}밀리초가 걸렸습니다.",
   "settings.agents.row.checked.cached": "{when}에 확인했고 이후 다시 측정하지 않았습니다: 에이전트가 있다는 결과는 10분 동안 유지됩니다.",
   "settings.agents.manual.heading": "목록에 없는 에이전트",
@@ -469,6 +473,8 @@ export const ko: Catalogue = {
     "\"{id}\"은(는) EnvoyCoder가 이미 함께 제공하는 에이전트의 ID이므로 공급자가 추가되지 않았습니다. 다른 이름을 사용하세요.",
   "error.providerIdInvalid":
     "\"{name}\"은(는) 공급자 ID가 될 수 없습니다. 공급자 ID는 소문자 영문, 숫자, 하이픈으로 이루어지며 영문자나 숫자로 시작합니다.",
+  "error.providerCatalogMismatch":
+    "\"{entry}\"은(는) 카탈로그에 있는 에이전트이지만, 이 요청이 설명하는 레시피는 그 항목이 밝힌 것과 다릅니다 — 그래서 추가되지 않았습니다. 에이전트 페이지를 다시 열고 그 행을 다시 추가하세요.",
   "error.agentNotFound":
     "여기에 \"{id}\"라는 에이전트가 없습니다. 다른 창에서 제거되었을 수 있습니다.",
   "error.catalogAgentMissing": "카탈로그에 “{id}”라는 에이전트가 없습니다. 이 창이 읽은 뒤 목록이 바뀌었습니다 — 에이전트 페이지를 다시 열고 시도하세요.",

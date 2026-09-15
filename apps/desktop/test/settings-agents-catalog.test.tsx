@@ -119,7 +119,10 @@ const catalog: CatalogEntry[] = [
     installLink: "https://example.test/vtcode",
     command: "vtcode",
     args: ["acp"],
-    env: ["VT_ACP_ENABLED", "VT_ACP_ZED_ENABLED"],
+    env: [
+      { name: "VT_ACP_ENABLED", value: "1" },
+      { name: "VT_ACP_ZED_ENABLED", value: "1" },
+    ],
     transport: "acp",
     install: { kind: "binary", binary: "vtcode" },
     builtIn: false,
@@ -229,7 +232,16 @@ function probe(availability: CatalogProbe["availability"], over: Partial<Catalog
 
 /** What the recording fake was handed, and what it answers with. */
 interface AgentCalls {
-  added: { id: string; label: string; command: string; args: readonly string[]; env: readonly string[]; transport: string }[];
+  added: {
+    id: string;
+    label: string;
+    command: string;
+    args: readonly string[];
+    env: readonly string[];
+    transport: string;
+    /** The catalogue reference, present for a row and absent for the manual form. */
+    catalogEntryId?: string;
+  }[];
   hidden: { id: string; hidden: boolean }[];
   removed: string[];
   probed: { id: string; force: boolean | undefined }[];
@@ -457,10 +469,57 @@ describe("what a catalogue row claims", () => {
     // download page for something that installs itself.
     show();
     const cline = row("Cline");
-    expect(cline.textContent).toContain(en["settings.agents.row.needsNoInstall"].replace("{package}", "cline@3.0.46"));
+    expect(cline.textContent).toContain(
+      en["settings.agents.row.needsNoInstall"]
+        .replace("{package}", "cline@3.0.46")
+        .replace("{agent}", "Cline"),
+    );
     expect(cline.textContent).not.toContain(en["settings.agents.row.install"].split("{")[0]);
     // …and the other shape gets the other sentence.
     expect(row("goose").textContent).toContain(en["settings.agents.row.install"].split("{")[0]);
+  });
+
+  it("does not let an npx row read as verified, because only `npx` was measured", async () => {
+    // **The over-claim this test exists for.** The daemon's `ready` for an `npx -y <pkg> …` recipe means
+    // **`npx` resolved** — the probe looks for `npx` rather than the package, deliberately, because looking
+    // for the package would report all 14 of these rows as missing. So "Ready" on those rows claimed a
+    // verification nobody performed, and nothing has been downloaded. Two assertions, and both matter:
+    //   * the chip word is the narrowed one, not `settings.agent.ready`;
+    //   * the sentence names what was *not* measured, so the narrowed word is explained rather than replaced
+    //     by another unsupported claim.
+    show(
+      {},
+      {
+        probes: {
+          cline: probe({ state: "ready", binary: "/usr/bin/npx" }, { id: "cline" }),
+        },
+      },
+    );
+    // A measurement only exists after the user asks for one — that is the row's whole design, so the chip
+    // starts as "Not checked yet" and this test presses the button rather than assuming a state.
+    press(row("Cline"), en["settings.agents.row.check"]);
+    const chip = await within(row("Cline")).findByText(en["settings.agents.row.readyNpx"]);
+    expect(chip.textContent).toBe(en["settings.agents.row.readyNpx"]);
+    expect(chip.textContent).not.toBe(en["settings.agent.ready"]);
+    expect(row("Cline").textContent).toContain("not been downloaded yet");
+
+    // A fresh render, because `row()` reads the first list in the document and two live trees would make
+    // this second half assert about the wrong one.
+    cleanup();
+
+    // And a row whose program really was found still says Ready: the narrowing is about the *shape* of the
+    // recipe, not a blanket doubt about the probe.
+    show(
+      {},
+      {
+        probes: {
+          goose: probe({ state: "ready", binary: "/usr/local/bin/goose" }),
+        },
+      },
+    );
+    press(row("goose"), en["settings.agents.row.check"]);
+    await within(row("goose")).findByText(en["settings.agent.ready"]);
+    expect(chipText(row("goose"))).toBe(en["settings.agent.ready"]);
   });
 
   it("shows a refused check as the daemon's own sentence, on the row that earned it", async () => {
@@ -523,10 +582,13 @@ describe("adding an agent from the catalogue", () => {
         label: "VT Code",
         command: "vtcode",
         args: ["acp"],
-        // **Names, never values.** The entry's own recipe sets `VT_ACP_ENABLED=1`; a provider has no field for
-        // the `1`, and this is the wire half of the schema that has none.
+        // **Names, plus the reference — and never the value.** The entry's own recipe sets
+        // `VT_ACP_ENABLED=1`; a provider has no field for the `1`, and this is the wire half of the schema
+        // that has none. `catalogEntryId` is what makes the value unnecessary rather than merely forbidden:
+        // the daemon resolves the recipe's constants from the catalogue it ships.
         env: ["VT_ACP_ENABLED", "VT_ACP_ZED_ENABLED"],
         transport: "acp",
+        catalogEntryId: "vtcode",
       },
     ]);
     expect(JSON.stringify(calls.added)).not.toContain('"1"');
@@ -545,6 +607,7 @@ describe("adding an agent from the catalogue", () => {
     // states neither and a plausible guess is worse than an omission.
     expect(Object.keys(calls.added[0] ?? {}).sort()).toEqual([
       "args",
+      "catalogEntryId",
       "command",
       "env",
       "id",
@@ -755,7 +818,14 @@ describe("the catalogue's own conversions", () => {
       args: ["acp"],
       env: ["VT_ACP_ENABLED", "VT_ACP_ZED_ENABLED"],
       transport: "acp",
+      // **The row carries the constants; this function drops them and sends the reference instead.** That
+      // pair is the whole design: `providers.json` holds no value at all, and the daemon resolves the
+      // recipe's constants from the catalogue it ships.
+      catalogEntryId: "vtcode",
     });
+    // The values are on the row and not in the parameters — the negative half, asserted rather than implied.
+    expect(catalog[2]!.env.map((constant) => constant.value)).toEqual(["1", "1"]);
+    expect(JSON.stringify(addInputFor(catalog[2]!))).not.toContain('"1"');
     // A `cli` entry states a different dialect and it travels unchanged.
     expect(addInputFor(catalog[4]!).transport).toBe("cli");
   });

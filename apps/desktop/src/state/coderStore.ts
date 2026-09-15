@@ -167,6 +167,12 @@ export interface AddProviderInput {
   /** Environment variable **names**. A value cannot be expressed — that is the schema, not a rule here. */
   env: readonly string[];
   transport: "acp" | "cli";
+  /**
+   * The catalogue entry this provider **is**, when a catalogue row was added rather than the manual form
+   * filled in. A reference, never a value: the daemon resolves the entry's own constants, and refuses
+   * unless the recipe above is that entry's — see `AgentProviderConfig.catalogEntryId`.
+   */
+  catalogEntryId?: string;
 }
 
 export interface CoderStoreOptions {
@@ -794,6 +800,11 @@ export class CoderStore {
         args: [...input.args],
         env: [...input.env],
         transport: input.transport,
+        // Sent only when there is one: the manual form declares an agent nobody catalogued, and a
+        // `catalogEntryId` of `undefined` on the wire would be a reference to nothing rather than its
+        // absence. The daemon's parameter schema is `.strict()`, so this is the *only* field about a
+        // catalogue recipe that can cross — there is no `envDefaults` to accidentally fill in.
+        ...(input.catalogEntryId !== undefined ? { catalogEntryId: input.catalogEntryId } : {}),
       },
       () => ({ ok: true as const }),
     );

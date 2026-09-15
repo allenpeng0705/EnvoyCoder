@@ -37,10 +37,13 @@ import {
   harnessRecipe,
   isDrivableByAcpAdapter,
   probeProvider,
+  providerCatalogueEnv,
   providerEnvState,
+  resolveProviderEnv,
 } from "@envoycoder/agent-catalog";
 
 import { launchForHarness, launchForProvider } from "../src/daemon/launch.js";
+import { createProviderHandlers } from "../src/daemon/providers.js";
 import { CoderStore } from "../src/daemon/store.js";
 import { CATALOGUES } from "../src/i18n/catalogues.js";
 import { en, isMessageKey } from "../src/i18n/messages/en.js";
@@ -312,6 +315,234 @@ describe("a provider launches through the same path as a catalogue entry", () =>
 });
 
 /* ────────────────────────────── the environment ────────────────────────────── */
+
+/**
+ * **The four recipes that set six variables, and the honest way to carry them.**
+ *
+ * `AUGMENT_DISABLE_AUTO_UPDATE=1` is a constant of a command line we publish, not a credential, and
+ * refusing to carry it made four catalogued recipes unusable for no safety gain. The distinction that
+ * fixes it is **whose data it is**: a catalogue entry is our own reviewed, git-tracked data and may
+ * declare a non-secret default; a provider config still has **no field for a value** and carries only the
+ * *name of the entry it came from*. These tests hold both halves of that, and the three ways it could
+ * quietly stop being true.
+ */
+describe("a recipe's own constants, carried by reference and never by value", () => {
+  it("gives a catalogue-derived provider the entry's constant, without a value in the config", () => {
+    // A real executable under the **entry's own name**, because that is what the row adds: the command off
+    // the row is `vtcode`, not an absolute path a user fixed up afterwards.
+    const dir = tempDir("envoycoder-provider-recipe-");
+    writeFileSync(join(dir, "vtcode"), "#!/bin/sh\nexit 0\n");
+    chmodSync(join(dir, "vtcode"), 0o755);
+
+    // Exactly what `coder.addProvider` stores for the `vtcode` row: the entry's recipe, the entry's
+    // variable **names**, and the reference. There is no `envDefaults` field to fill in, and that is the
+    // schema rather than a convention.
+    const derived = provider({
+      id: "vtcode",
+      label: "VT Code",
+      command: "vtcode",
+      args: ["acp"],
+      env: ["VT_ACP_ENABLED", "VT_ACP_ZED_ENABLED"],
+      catalogEntryId: "vtcode",
+    });
+    expect(JSON.stringify(derived)).not.toContain("VT_ACP_ENABLED\":\"1");
+
+    const launch = launchForProvider({
+      provider: derived,
+      cwd: dir,
+      paths: coderPaths(dir),
+      searchDirs: [dir],
+      // A daemon environment that has **neither** variable: before this slice the launch refused by name.
+      env: { PATH: "/usr/bin" },
+    });
+    expect(launch.env?.VT_ACP_ENABLED).toBe("1");
+    expect(launch.env?.VT_ACP_ZED_ENABLED).toBe("1");
+
+    // And the summary a window renders says the same thing, from the same call — with the source, so a row
+    // can say "supplied by this recipe" instead of telling a user to export something we already provide.
+    expect(providerEnvState(derived, { PATH: "/usr/bin" })).toEqual([
+      { name: "VT_ACP_ENABLED", set: true, from: "catalogue" },
+      { name: "VT_ACP_ZED_ENABLED", set: true, from: "catalogue" },
+    ]);
+  });
+
+  it("lets the user's own export win over the recipe, because that is the one thing they control", () => {
+    const dir = tempDir("envoycoder-provider-recipe-override-");
+    writeFileSync(join(dir, "vtcode"), "#!/bin/sh\nexit 0\n");
+    chmodSync(join(dir, "vtcode"), 0o755);
+    const derived = provider({
+      id: "vtcode",
+      command: "vtcode",
+      args: ["acp"],
+      env: ["VT_ACP_ENABLED"],
+      catalogEntryId: "vtcode",
+    });
+
+    const launch = launchForProvider({
+      provider: derived,
+      cwd: dir,
+      paths: coderPaths(dir),
+      searchDirs: [dir],
+      env: { VT_ACP_ENABLED: "0", PATH: "/usr/bin" },
+    });
+    expect(launch.env?.VT_ACP_ENABLED).toBe("0");
+    // …and the wire says nothing about the source, because "the daemon's own environment" is the ordinary
+    // case — `from` is present exactly when a value is *not* the daemon's. See `AgentProviderEnvStateSchema`.
+    expect(providerEnvState(derived, { VT_ACP_ENABLED: "0" })).toEqual([
+      { name: "VT_ACP_ENABLED", set: true },
+    ]);
+    // The resolver itself does report it, for the log.
+    expect(resolveProviderEnv(derived, { VT_ACP_ENABLED: "0" }).from).toEqual({
+      VT_ACP_ENABLED: "daemon",
+    });
+  });
+
+  it("still refuses, by name, a variable neither the daemon nor the recipe supplies", () => {
+    const dir = tempDir("envoycoder-provider-recipe-unset-");
+    writeFileSync(join(dir, "vtcode"), "#!/bin/sh\nexit 0\n");
+    chmodSync(join(dir, "vtcode"), 0o755);
+    // The reference is real and the recipe sets two variables; the third is the user's, and it is missing.
+    // Naming it *beside* the recipe's own is allowed on purpose — a user adding a variable of their own must
+    // not lose the recipe's constants (see `agreesWithEntry`).
+    const derived = provider({
+      id: "vtcode",
+      command: "vtcode",
+      args: ["acp"],
+      env: ["VT_ACP_ENABLED", "VT_ACP_ZED_ENABLED", "MY_OWN_SETTING"],
+      catalogEntryId: "vtcode",
+    });
+
+    const refusal = refusalOf(() =>
+      launchForProvider({
+        provider: derived,
+        cwd: dir,
+        paths: coderPaths(dir),
+        searchDirs: [dir],
+        env: { PATH: "/usr/bin" },
+      }),
+    );
+    expect(refusal.code).toBe(ENVOYCODER_ERRORS.providerEnvUnset);
+    // The one the recipe supplies is *not* named as missing, and the one it does not supply is.
+    expect(refusal.message).toContain("MY_OWN_SETTING");
+    expect(refusal.message).not.toContain("VT_ACP_ZED_ENABLED");
+  });
+
+  it("ignores a reference whose recipe is not the provider's — the file cannot claim a recipe it is not", () => {
+    const dir = tempDir("envoycoder-provider-recipe-mismatch-");
+    const binary = join(dir, "something-else");
+    writeFileSync(binary, "#!/bin/sh\nexit 0\n");
+    chmodSync(binary, 0o755);
+    // A hand-edited `providers.json`: the `vtcode` reference on a provider that runs something else. The
+    // reference is believed only when the provider **is** that entry's recipe, so this resolves to nothing
+    // and the variable goes back to being the user's — refused by name rather than supplied.
+    const impostor = provider({
+      id: "vtcode",
+      command: binary,
+      args: ["--not-acp"],
+      env: ["VT_ACP_ENABLED"],
+      catalogEntryId: "vtcode",
+    });
+    expect(providerCatalogueEnv(impostor)).toEqual({});
+    expect(providerEnvState(impostor, { PATH: "/usr/bin" })).toEqual([
+      { name: "VT_ACP_ENABLED", set: false },
+    ]);
+    const refusal = refusalOf(() =>
+      launchForProvider({
+        provider: impostor,
+        cwd: dir,
+        paths: coderPaths(dir),
+        searchDirs: [dir],
+        env: { PATH: "/usr/bin" },
+      }),
+    );
+    expect(refusal.code).toBe(ENVOYCODER_ERRORS.providerEnvUnset);
+    expect(refusal.message).toContain("VT_ACP_ENABLED");
+
+    // An id the catalogue no longer has resolves to nothing for the same reason: an id whose constants we
+    // must not invent.
+    expect(providerCatalogueEnv({ ...impostor, catalogEntryId: "not-a-catalogue-entry" })).toEqual({});
+  });
+
+  it("supplies a recipe value only for a name the provider declares", () => {
+    const dir = tempDir("envoycoder-provider-recipe-intersection-");
+    writeFileSync(join(dir, "vtcode"), "#!/bin/sh\nexit 0\n");
+    chmodSync(join(dir, "vtcode"), 0o755);
+    // The provider names the recipe's two **and** one of its own, which is allowed on purpose. What the
+    // reference supplies is the *intersection* — the recipe's constants for the recipe's names — so it is
+    // never a way to acquire a variable the provider did not ask for, and never a source for one the entry
+    // does not declare.
+    const derived = provider({
+      id: "vtcode",
+      command: "vtcode",
+      args: ["acp"],
+      env: ["VT_ACP_ENABLED", "VT_ACP_ZED_ENABLED", "MY_OWN_SETTING"],
+      catalogEntryId: "vtcode",
+    });
+    const launch = launchForProvider({
+      provider: derived,
+      cwd: dir,
+      paths: coderPaths(dir),
+      searchDirs: [dir],
+      env: { MY_OWN_SETTING: "mine", PATH: "/usr/bin" },
+    });
+    expect(launch.env?.VT_ACP_ENABLED).toBe("1");
+    expect(launch.env?.VT_ACP_ZED_ENABLED).toBe("1");
+    expect(launch.env?.MY_OWN_SETTING).toBe("mine");
+    expect(Object.keys(resolveProviderEnv(derived, { MY_OWN_SETTING: "mine" }).from).sort()).toEqual([
+      "MY_OWN_SETTING",
+      "VT_ACP_ENABLED",
+      "VT_ACP_ZED_ENABLED",
+    ]);
+    // A provider that **drops** one of the recipe's own names is not that recipe any more, so nothing is
+    // supplied. The conservative direction on purpose: the alternative is inventing a value for an
+    // invocation we cannot recognise.
+    expect(providerCatalogueEnv({ ...derived, env: ["VT_ACP_ENABLED"] })).toEqual({});
+  });
+
+  it("cannot carry a value even through the wire a client would send", async () => {
+    // **The negative that matters most.** The reference is the *only* thing about a catalogue recipe that
+    // crosses `coder.addProvider`, and its parameter schema is `.strict()`: a client that invented an
+    // `envDefaults` parameter is refused at parse rather than stored. There is no field for a value on the
+    // user's path, which is the property the whole design exists to keep.
+    const home = mkdtempSync(join(tmpdir(), "envoycoder-provider-wire-"));
+    cleanups.push(() => rmSync(home, { recursive: true, force: true, maxRetries: 5 }));
+    const store = await CoderStore.open({ paths: coderPaths(home) });
+    const handlers = createProviderHandlers({
+      store,
+      probe: (input) => ({ id: input.id, state: "ready", binaryPath: "/usr/bin/true" }),
+      env: { PATH: "/usr/bin" },
+    });
+    for (const smuggled of [
+      { envDefaults: { ANTHROPIC_API_KEY: "sk-live-1f4c9ab7" } },
+      { envValues: { ANTHROPIC_API_KEY: "sk-live-1f4c9ab7" } },
+      { env: { ANTHROPIC_API_KEY: "sk-live-1f4c9ab7" } },
+    ]) {
+      // **`await`ed, because the handler is `async`.** A synchronous `toThrow` on a rejected promise
+      // asserts nothing and fails — which is the shape of mistake that once made nine mutations read green,
+      // so it is asserted the way the handler actually fails.
+      await expect(
+        (handlers["coder.addProvider"] as (params: unknown) => Promise<unknown>)({
+          label: "Smuggler",
+          command: "true",
+          transport: "acp",
+          ...smuggled,
+        }),
+        JSON.stringify(smuggled),
+      ).rejects.toThrow(/coder\.addProvider was called with an unusable/);
+    }
+    // And the reference is the one thing that *does* cross: a client that sends only `catalogEntryId` with a
+    // recipe that is not that entry's is refused by name (`error.providerCatalogMismatch`) rather than
+    // stored, which is the other half of what keeps the field meaningful.
+    await expect(
+      (handlers["coder.addProvider"] as (params: unknown) => Promise<unknown>)({
+        label: "Impostor",
+        command: "true",
+        transport: "acp",
+        catalogEntryId: "vtcode",
+      }),
+    ).rejects.toThrow(/envoycoder\.bad-request/);
+  });
+});
 
 describe("the environment a provider is given", () => {
   it("copies the value of a named variable out of the daemon's own environment", () => {

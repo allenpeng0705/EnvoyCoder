@@ -320,6 +320,9 @@ export const it: Catalogue = {
   "settings.agents.mine.env.title": "Se il daemon di EnvoyCoder ha impostato {name}",
   "settings.agents.mine.env.set": "{name} è impostata",
   "settings.agents.mine.env.unset": "{name} non è impostata",
+  "settings.agents.mine.env.recipe": "{name} — fornita da questa ricetta",
+  "settings.agents.mine.env.recipe.title":
+    "Questa variabile è una costante della ricetta di catalogo da cui questo agente è stato aggiunto, quindi la fornisce EnvoyCoder — nel tuo ambiente non è impostato nulla per lei. Esporta {name} tu stesso per sostituire il valore della ricetta.",
   "settings.agents.hide": "Nascondi dai miei elenchi",
   "settings.agents.show": "Mostra nei miei elenchi",
   "settings.agents.hidden": "Nascosto",
@@ -345,13 +348,14 @@ export const it: Catalogue = {
   "settings.agents.row.check.title": "Cerca il programma di questo agente su questa macchina. Non avvia e non scarica nulla — e la risposta viene ricordata per dieci minuti.",
   "settings.agents.row.add": "Aggiungi",
   "settings.agents.row.adding": "Aggiunta…",
-  "settings.agents.row.add.title": "Aggiungi {agent} ai tuoi agenti. La sua riga di comando e i nomi delle variabili d’ambiente che gli servono vengono da questa voce, esattamente come scritti sopra.",
+  "settings.agents.row.add.title": "Aggiungi {agent} ai tuoi agenti. La riga di comando e l’ambiente vengono da questa voce, esattamente come scritti sopra: le costanti della ricetta viaggiano con essa, e ogni variabile che la ricetta non imposta resta a te.",
   "settings.agents.row.builtIn": "EnvoyCoder fornisce già questo agente, quindi si configura sopra in «Su questa macchina» invece di essere aggiunto una seconda volta.",
-  "settings.agents.row.needsNoInstall": "Niente da installare: {package} viene scaricato da npm al primo avvio.",
+  "settings.agents.row.needsNoInstall": "Niente da installare: {package} viene scaricato da npm al primo avvio. Il controllo ha trovato `npx` — non {agent}, che non è ancora stato scaricato.",
   "settings.agents.row.install": "Installa prima {agent}",
   "settings.agents.row.installLink": "Dove trovarlo",
   "settings.agents.row.installLink.title": "La pagina di {agent}",
-  "settings.agents.row.recipeEnv": "Questa ricetta imposta anche {names} per l’agente. Un agente che aggiungi memorizza solo nomi di variabili, quindi impostale nell’ambiente in cui gira EnvoyCoder — finché non lo sono, questo agente viene rifiutato all’avvio invece di partire senza saper parlare ACP.",
+  "settings.agents.row.recipeEnv": "Questa ricetta imposta {names} per l’agente. EnvoyCoder le fornisce da questa voce, quindi non devi impostare nulla tu — esportane una per sostituire il valore della ricetta.",
+  "settings.agents.row.readyNpx": "Non ancora scaricato",
   "settings.agents.row.checked": "Verificato {when} — la ricerca ha impiegato {ms} ms.",
   "settings.agents.row.checked.cached": "Verificato {when}, senza nuove misurazioni da allora: un risultato che dice che l’agente c’è viene conservato dieci minuti.",
   "settings.agents.manual.heading": "Un agente che non è nell’elenco",
@@ -469,6 +473,8 @@ export const it: Catalogue = {
     "\"{id}\" è l'identificativo di un agente che EnvoyCoder fornisce già, quindi il tuo provider non è stato aggiunto. Dagli un altro nome.",
   "error.providerIdInvalid":
     "\"{name}\" non può essere un identificativo di provider. Un identificativo di provider usa lettere minuscole, cifre e trattini e inizia con una lettera o una cifra.",
+  "error.providerCatalogMismatch":
+    "«{entry}» è un agente del catalogo, e la ricetta descritta da questa richiesta non è quella indicata da quella voce — quindi l’agente non è stato aggiunto. Riapri la pagina degli agenti e aggiungi di nuovo la riga.",
   "error.agentNotFound":
     "Qui non c'è nessun agente chiamato \"{id}\". Potrebbe essere stato rimosso da un'altra finestra.",
   "error.catalogAgentMissing": "Non esiste un agente del catalogo chiamato «{id}». L’elenco è cambiato da quando questa finestra l’ha letto — riapri la pagina degli agenti e riprova.",

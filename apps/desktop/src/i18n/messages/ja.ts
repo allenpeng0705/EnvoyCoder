@@ -320,6 +320,9 @@ export const ja: Catalogue = {
   "settings.agents.mine.env.title": "EnvoyCoder のデーモンが {name} を設定しているか",
   "settings.agents.mine.env.set": "{name} は設定済み",
   "settings.agents.mine.env.unset": "{name} は未設定",
+  "settings.agents.mine.env.recipe": "{name} — このレシピが用意します",
+  "settings.agents.mine.env.recipe.title":
+    "この変数は、このエージェントを追加した元のカタログ項目のレシピ定数なので、EnvoyCoder が用意します——あなたの環境には何も設定されていません。レシピの値を変えたい場合は {name} を自分でエクスポートしてください。",
   "settings.agents.hide": "自分の一覧から隠す",
   "settings.agents.show": "自分の一覧に表示",
   "settings.agents.hidden": "非表示",
@@ -345,13 +348,14 @@ export const ja: Catalogue = {
   "settings.agents.row.check.title": "このマシンでこのエージェントのプログラムを探します。何も起動せず、何もダウンロードしません——結果は 10 分間記憶されます。",
   "settings.agents.row.add": "追加",
   "settings.agents.row.adding": "追加中…",
-  "settings.agents.row.add.title": "{agent} をあなたのエージェントに追加します。コマンドラインと必要な環境変数の名前は、この項目に書かれているとおりそのまま使われます。",
+  "settings.agents.row.add.title": "{agent} をあなたのエージェントに追加します。コマンドラインと環境はこの項目に書かれているとおりそのまま使われます——レシピ自身の定数も一緒に引き継がれ、レシピが設定しない変数はあなたが設定するままです。",
   "settings.agents.row.builtIn": "このエージェントは EnvoyCoder に同梱されているため、二重に追加せず、上の「このマシン上」で設定します。",
-  "settings.agents.row.needsNoInstall": "インストール不要: {package} は初回実行時に npm から取得されます。",
+  "settings.agents.row.needsNoInstall": "インストール不要: {package} は初回実行時に npm から取得されます。今回の確認で見つかったのは `npx` であり、{agent} ではありません——まだダウンロードされていません。",
   "settings.agents.row.install": "先に {agent} をインストールしてください",
   "settings.agents.row.installLink": "入手先",
   "settings.agents.row.installLink.title": "{agent} の公式ページ",
-  "settings.agents.row.recipeEnv": "このレシピはエージェント用に {names} も設定します。あなたが追加するエージェントは変数名しか保存しないので、EnvoyCoder が動作している環境でこれらを設定してください——設定されるまで、このエージェントは ACP を話せないまま起動されるのではなく、起動時に拒否されます。",
+  "settings.agents.row.recipeEnv": "このレシピはエージェント用に {names} を設定します。EnvoyCoder がこの項目から用意するので、自分で設定する必要はありません——レシピの値を変えたい場合はエクスポートしてください。",
+  "settings.agents.row.readyNpx": "まだダウンロードされていません",
   "settings.agents.row.checked": "{when} に確認——検索に {ms} ミリ秒かかりました。",
   "settings.agents.row.checked.cached": "{when} に確認、それ以降の再測定はありません: エージェントが存在するという結果は 10 分間保持されます。",
   "settings.agents.manual.heading": "一覧にないエージェント",
@@ -469,6 +473,8 @@ export const ja: Catalogue = {
     "\"{id}\" は EnvoyCoder がすでに同梱しているエージェントの ID です。そのため、あなたのプロバイダーは追加されませんでした。別の名前にしてください。",
   "error.providerIdInvalid":
     "\"{name}\" はプロバイダーの ID にはできません。プロバイダーの ID は小文字の英字・数字・ハイフンで構成し、英字または数字で始めます。",
+  "error.providerCatalogMismatch":
+    "「{entry}」はカタログ済みのエージェントですが、このリクエストが示すレシピはその項目が記載しているものと一致しません——そのため追加されませんでした。エージェントのページを開き直して、もう一度その行を追加してください。",
   "error.agentNotFound":
     "ここに「{id}」というエージェントはありません。別のウィンドウで削除された可能性があります。",
   "error.catalogAgentMissing": "「{id}」というカタログのエージェントはありません。このウィンドウが読んだあとに一覧が変わっています——エージェントのページを開き直して、もう一度お試しください。",

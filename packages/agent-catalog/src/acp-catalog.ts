@@ -46,13 +46,19 @@
  * Three differences between the two tiers are worth stating here, because this file is where a
  * maintainer looks first:
  *
- *   * **An entry's `env` carries values; a provider's carries names only.** That is not an
+ *   * **An entry's `env` carries values; a provider's carries names and a *reference*.** That is not an
  *     inconsistency, it is the security decision: `AUGMENT_DISABLE_AUTO_UPDATE: "1"` is part of a
- *     *recipe we author and publish* and is not a secret, while a user's provider may need a credential
- *     — and a credential a user must supply is never stored, so the schema has no field for one.
- *     `cataloguedProviderInput` is where that shows up as a consequence rather than a shrug: adding one
- *     of the four entries that set a variable carries the **name**, and the row says the variable is one
- *     to set in EnvoyCoder's own environment.
+ *     *recipe we author and publish* and is not a secret, while a user's provider may need a credential —
+ *     and a credential a user must supply is never stored, so the schema has no field for one. For a
+ *     while the two halves did not meet: `cataloguedProviderInput` carried only the **name**, so adding
+ *     one of the four entries that set a variable produced a provider the launch refused by name until
+ *     the user exported something we had written ourselves. `catalogEntryId` closes it the only honest
+ *     way — the provider names the *entry*, and the daemon resolves the constants from this file — so the
+ *     value still never reaches `providers.json`. See `CataloguedProviderInput`.
+ *   * **An entry may declare the vendor program its command is an adapter over** (`wrappedAgent`), which is
+ *     what makes `needs-bridge` a state a catalogued row can actually reach. One entry does, with a
+ *     citation; the other 37 do not, and the field's own doc says why an assumption here is worse than an
+ *     omission.
  *   * **An entry's `params` has no provider equivalent yet.** `supportsMcpServers` describes how a host
  *     should open a session; a provider declares only how to start one. When a user needs to say one, it
  *     becomes a field with a reader, not a key in a bag.
@@ -115,8 +121,57 @@ export interface AcpAgentEntry {
    * and no other dialect fact, and the probe is what tells the truth about whether the program runs.
    */
   transport: "acp" | "cli";
-  /** Environment the agent needs to behave correctly (auto-update off, ACP mode on, …). */
+  /**
+   * Environment the agent needs to behave correctly (auto-update off, ACP mode on, …), as **name →
+   * constant** — the one place a value is allowed to exist.
+   *
+   * These are constants of a command line *we* publish — `AUGMENT_DISABLE_AUTO_UPDATE: "1"`,
+   * `VT_ACP_ENABLED: "1"` — not credentials, and a name that looks like a credential is refused when the
+   * row is built (`CatalogEnvConstantSchema`). Two readers, one source: the **row** carries name and value
+   * so the screen can say which variables the recipe supplies, and the **launch** resolves the same map by
+   * reference (`AgentProviderConfig.catalogEntryId`), so `providers.json` never holds one.
+   */
   env?: Readonly<Record<string, string>>;
+  /**
+   * The **vendor's own program**, when `command` launches an adapter *over* it rather than the agent itself.
+   *
+   * ## Why this field exists, and why almost every entry does not have it
+   *
+   * `agentBinaries` (`AgentLaunch` in `index.ts`) has recorded both halves of "installed" for the nine
+   * agents we ship since the bug report *"I have installed codex and claudecode … why all of them shown
+   * 'Not Installed'"* — and the catalogue could not express it at all, so `needs-bridge` was a state
+   * **no catalogued row could reach**. That is the gap this closes: with the field, a row whose adapter is
+   * missing but whose vendor program is present reports exactly that, with the adapter's install step as
+   * its fix, instead of "Not installed" about a tool the user does have.
+   *
+   * ## One entry declares it, and that is the honest count
+   *
+   * The reference product's catalogue — the source of every entry here — carries **no** such field: its
+   * `AcpProviderCatalogEntry` (`paseo` `packages/app/src/data/acp-provider-catalog.ts:3-13`) has `command`,
+   * `env`, `params` and nothing about a second binary, and its generic ACP provider resolves exactly one
+   * binary (`defaultBinary: this.command[0]`). So this cannot be populated by porting: it needs evidence,
+   * and an assumption here is the specific failure this catalogue is written against — a wrong
+   * `agentBinaries` turns "we cannot find the program" into "your agent is installed and something else is
+   * missing", which is a *worse* sentence, and it is unfalsifiable from the row.
+   *
+   * The evidence that qualifies an entry is that its own recorded description says the command is an
+   * adapter over something else. `amp-acp` says so in as many words. Nothing else in these 38 does, so
+   * nothing else declares this field — and an entry added later declares it only with the same kind of
+   * citation, not because it "looks like" a wrapper.
+   */
+  wrappedAgent?: {
+    /**
+     * The vendor program(s) the probe looks for — **never launched**, exactly as `agentBinaries` is not.
+     *
+     * More than one is allowed for the same reason the shipped entries allow it: a first-party CLI can
+     * ship under two names.
+     */
+    readonly binaries: readonly string[];
+    /** Where a user gets the vendor's own program (the adapter's page is the entry's own `installLink`). */
+    readonly installLink: string;
+    /** How a user installs the **adapter** — the one step a `needs-bridge` row offers. */
+    readonly adapterInstall: string;
+  };
   /**
    * ACP provider parameters.
    *
@@ -152,6 +207,26 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     installLink: "https://github.com/tao12345666333/amp-acp",
     command: ["amp-acp"],
     transport: "acp",
+    /**
+     * **The only entry that declares this, and the evidence is in its own description.**
+     *
+     * `amp-acp` is not Amp — it is *"ACP wrapper for Amp - the frontier coding agent"*, and everything a
+     * recipe would need to say so was already in this file except a place to put it. Verified against the
+     * package itself (2026-09-14, `registry.npmjs.org`): `amp-acp@0.9.0` is described as *"ACP adapter that
+     * bridges Amp Code to Agent Client Protocol"* and declares `bin: { "amp-acp": … }` — so the adapter
+     * ships the program this entry names, and `npm install -g amp-acp` is the step that installs it. Amp's
+     * own CLI is `amp`, from the package that used to be `@sourcegraph/amp` and is now `@ampcode/cli`
+     * (`bin: { "amp": … }`, homepage `https://ampcode.com/`).
+     *
+     * Two consequences, both of which are the point of the field: a machine with `amp` and no `amp-acp`
+     * now reports **`needs-bridge`** rather than "not installed", and the row's fix is the *adapter's* one
+     * step instead of a page about the agent the user already has.
+     */
+    wrappedAgent: {
+      binaries: ["amp"],
+      installLink: "https://ampcode.com/",
+      adapterInstall: "npm install -g amp-acp",
+    },
   },
   {
     id: "auggie",
@@ -624,6 +699,22 @@ export function cataloguedCommandLine(entry: AcpAgentEntry): string {
  */
 export function cataloguedRecipe(entry: AcpAgentEntry): ProbeRecipe {
   const [binary] = entry.command;
+  const wrapped = entry.wrappedAgent;
+  const commandLine = cataloguedCommandLine(entry);
+  /**
+   * Two shapes, and the second is why `wrappedAgent` exists.
+   *
+   * * **The command is the agent.** Then the hint is the entry's own tool and its link, exactly as before:
+   *   `install Goose — then it runs as: goose acp`.
+   * * **The command is an adapter over something the user installs separately.** Then the *agent* step and
+   *   the *adapter* step are two facts with two links — the entry's `installLink` is the adapter's page,
+   *   and `wrappedAgent.installLink` is the vendor's. Handing the adapter's link to the agent step (what
+   *   the single-hint version did) is the same class of wrong sentence the shipped catalogue was fixed
+   *   for: it tells a user to go and install the thing that is already there.
+   *
+   * The `npx` sentence stays as it is, and deliberately: there, `npx` itself is what is missing and the
+   * hint says so rather than naming a package that installs itself.
+   */
   const install: HarnessInstallHints = isNpxBinary(binary)
     ? {
         hint:
@@ -631,7 +722,18 @@ export function cataloguedRecipe(entry: AcpAgentEntry): ProbeRecipe {
           `it is fetched from npm on the first run`,
         url: "https://nodejs.org/en/download",
       }
-    : { hint: `install ${entry.title} — then it runs as: ${cataloguedCommandLine(entry)}`, url: entry.installLink };
+    : wrapped
+      ? {
+          hint: `install ${entry.title} — its own program, which \`${binary}\` drives`,
+          url: wrapped.installLink,
+          bridge: {
+            hint: wrapped.adapterInstall,
+            // The adapter's page, which is also the entry's own link — stated here so the two steps never
+            // disagree about which link belongs to which half.
+            url: entry.installLink,
+          },
+        }
+      : { hint: `install ${entry.title} — then it runs as: ${commandLine}`, url: entry.installLink };
   return {
     label: entry.title,
     kind: "child-process",
@@ -640,10 +742,14 @@ export function cataloguedRecipe(entry: AcpAgentEntry): ProbeRecipe {
     // report every npx recipe as missing.
     binaries: [binary],
     transport: entry.transport,
+    // The vendor's program, when the command is an adapter over it — the field that makes `needs-bridge`
+    // reachable for a catalogued row at all. Absent for the other 37, which is a statement rather than a
+    // gap: no evidence, no claim. See `AcpAgentEntry.wrappedAgent`.
+    ...(wrapped ? { agentBinaries: wrapped.binaries } : {}),
     install,
     // The user's own command line, for `notInstalledFix`: it is the one command in the world that
     // describes what this row would run.
-    commandLine: cataloguedCommandLine(entry),
+    commandLine,
   };
 }
 
@@ -703,16 +809,20 @@ export function probeCatalogAgent(
  *   * **`modeParam` and `authMethodId` are not set**, because no entry states either. See
  *     `AcpAgentEntry.transport` for why writing a plausible one is worse than writing nothing.
  *
- * ## `env` is names only, and this is the honest cost of it
+ * ## `env` is names, and `catalogEntryId` is what carries the recipe's constants
  *
  * The entry's own `env` carries **values** — `AUGMENT_DISABLE_AUTO_UPDATE: "1"`, `VT_ACP_ENABLED: "1"` —
- * because those are constants of a recipe *we* publish. A provider config cannot carry a value: its
- * `env` is a list of names read from the daemon's own environment at spawn, which is the security
- * decision `AgentProviderConfig` states. So what crosses is the **names**, and a screen that adds one of
- * these entries has to say so — the variables are the ones to set in EnvoyCoder's own environment, and
- * until they are, the row reports them unset and the launch refuses by name rather than starting an
- * agent that cannot speak ACP. `cataloguedEnvNames` is that list, so a caller never reads `.env` keys
- * itself.
+ * because those are constants of a recipe *we* publish. A provider config cannot carry a value (its `env`
+ * is a list of names read from the daemon's own environment at spawn, which is the security decision
+ * `AgentProviderConfig` states), and refusing to carry them at all made those four recipes unusable for no
+ * safety gain. So what crosses is the **names** *and* the reference: `catalogEntryId` names the entry, and
+ * the daemon resolves the constants from this same catalogue at launch and at summary time.
+ *
+ * The consequence is worth stating plainly, because it is the improvement: `providers.json` now holds **no
+ * value at all** — not ours and not a user's — and a var the entry does not declare a constant for is still
+ * refused by name when the daemon's environment lacks it. `cataloguedEnvNames` is the name list and
+ * `cataloguedEnvValues` is the name-and-value list the *row* renders, so a caller never reads `.env` keys
+ * itself and the two cannot disagree.
  */
 export interface CataloguedProviderInput {
   readonly id: string;
@@ -721,11 +831,30 @@ export interface CataloguedProviderInput {
   readonly args: readonly string[];
   readonly env: readonly string[];
   readonly transport: "acp" | "cli";
+  /**
+   * The entry's own id, as `coder.addProvider`'s `catalogEntryId`.
+   *
+   * Always present — a caller assembling these parameters *is* adding a catalogue entry, and the reference
+   * is what lets the launch resolve the entry's constants without a value ever crossing the wire.
+   */
+  readonly catalogEntryId: string;
 }
 
 /** The environment variable **names** an entry's recipe sets. Never the values — see above. */
 export function cataloguedEnvNames(entry: AcpAgentEntry): string[] {
   return Object.keys(entry.env ?? {});
+}
+
+/**
+ * The same list with the constants, in declaration order — **what the row renders**.
+ *
+ * One function so a row and a launch cannot disagree about which variables a recipe supplies: the row
+ * draws this, and `resolveProviderEnv` (in `./providers.js`) resolves the same `entry.env` for the spawn.
+ * The credential rule is not re-checked here because it is enforced where the data enters the wire
+ * (`CatalogEnvConstantSchema`) and asserted over all 38 entries in `test/acp-catalog.test.ts`.
+ */
+export function cataloguedEnvValues(entry: AcpAgentEntry): { name: string; value: string }[] {
+  return Object.entries(entry.env ?? {}).map(([name, value]) => ({ name, value }));
 }
 
 /** The `coder.addProvider` parameters for one entry. See `CataloguedProviderInput` for every choice. */
@@ -738,5 +867,6 @@ export function cataloguedProviderInput(entry: AcpAgentEntry): CataloguedProvide
     args,
     env: cataloguedEnvNames(entry),
     transport: entry.transport,
+    catalogEntryId: entry.id,
   };
 }
