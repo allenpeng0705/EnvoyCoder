@@ -3228,6 +3228,66 @@ delivery control describes.
 owner's question when the package could not be resolved locally. A leg that cannot fail — here, a cold read that was
 not cold — is the failure mode §7.20.4 and §7.21.2 already record twice.
 
+### 7.24 The light palette, which had never been measured
+
+The bug had been recorded in prose for a while: `data-theme="light"` renders text at about **1.0:1**. The reason is
+the shape of the two stylesheets — `design/tokens.css` switches its own families (`--surface-*`, `--foreground-*`,
+`--border*`, `--status-*`) on `data-theme`, while `styles.css` defines a **second set of names** (`--bg`, `--bg-raised`,
+`--text`, `--text-muted`, `--text-dim`, `--text-faint`, `--ok/--warn/--danger/--live`) **once, dark**. So the light
+theme was half-applied from the day it was written: surfaces turned white, the text over them kept dark-mode greys, and
+everything drawn with `--foreground` on a `--bg` background landed near 1:1.
+
+#### 7.24.1 Instrument first, because the tool could not see it
+
+`scripts/measure-settings.mjs` had a `contrast` list — chips, hints, commands, details, notes — and that list reported
+**zero** failures in the light palette while the page had unreadable text in it. The elements with the worst contrast
+are exactly the ones a dark-only token sheet takes out: titles, headings, names. So the tool gained two things:
+
+* **`--theme light`** — sets `document.documentElement.dataset.theme` before the walk, which is the same line
+  `main.tsx` sets at boot, and **asserts the page reports the palette back** rather than trusting the flag (a flag
+  that silently did nothing would produce a dark measurement labelled light);
+* **`contrastAll`** — every element on the page that draws text, worst-first, so a heading at 1.0:1 cannot hide
+  behind a selector list.
+
+The report now carries `theme` as well, because a measurement that does not say which palette it describes is one
+that gets quoted as the other.
+
+#### 7.24.2 The fix, and the values were computed rather than chosen
+
+The light block in `styles.css` maps those aliases to the token sheet's light values — a second palette that disagrees
+about what "muted" means is two palettes, and the token sheet is where the family's palette is derived from Paseo.
+
+**One family is deliberately not verbatim.** The four status colours are *also chip text*: `.chip--live` and
+`.chip--danger` draw `color: var(--live|--danger)` on a **16% tint of the same colour**, and the token sheet's light
+`--live` (`#268ae0`) measures **3.04:1** on that tint. The measured values used instead:
+
+| pair | ratio |
+|---|---|
+| pane title, light (`--foreground` on `--bg`) | **17.35:1** (was ~1.0 before the aliases were themed) |
+| `--text-dim` on the page | 7.73:1 |
+| `--text-faint` on the raised surface | 4.63:1 |
+| `--live: #17527f` on its 16% tint | **6.91:1** (the token value: 3.04:1) |
+| `--danger: #9d433b` on its 16% tint | 5.05:1 |
+
+#### 7.24.3 What is asserted now
+
+`settings-row-anatomy.e2e.test.ts` measures the page **twice**, and the second measurement is the light palette:
+
+```console
+· anatomy measured:  name 15px/600, chip right spread 0px, actions right spread 0px, 3229 visible chars, 7 rows above the fold of 48
+· light palette measured: 41 text elements, worst 5.24:1, 735 visible chars
+```
+
+Its legs: `contrastAll.below45 === 0` and `contrast.below45 === 0` in **light**, plus the same column invariants dark
+mode has (chip-right and action-right spread ≤ 1px, name ≥ 15px) — because a palette is not a cascade accident, and
+"light works" has to mean the page still lines up. Dark is unchanged: same worst pair (5.11:1), same 735 visible
+characters in both palettes, so the fix moved colour and nothing else.
+
+**Not covered by this measurement, and named rather than implied:** the tool walks the **Settings** pages. The task
+pane's own title — where the 1.0:1 report came from — is app chrome outside that walk, and the alias mapping is what
+fixes it (the same `--text`/`--bg` pair, computed above at 17.35:1 rather than measured in the pane). Extending the
+walk to the pane is a small piece of tooling, not a redesign, and it is the honest way to close that last sentence.
+
 ## 8. The slice plan
 
 Ordered, and ordered by *cheapness times usefulness* rather than by Paseo's section order. Each slice

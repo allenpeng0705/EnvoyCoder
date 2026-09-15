@@ -107,6 +107,14 @@ interface Report {
   rowCount: number;
   anatomy: Anatomy;
   contrast: { below45: number; worst: readonly { cls: string; ratio: number }[] };
+  /** Which palette these numbers describe — `--theme`. */
+  theme: string;
+  /**
+   * **Every text-bearing element on the page**, not only the chips and small print the narrower `contrast` list
+   * samples. It exists because that list reported zero failures in the light palette while the page still had text
+   * nobody could read: the worst elements are the ones a dark-only token sheet takes out — titles, headings, names.
+   */
+  contrastAll: { below45: number; sampled: number; worst: readonly { cls: string; ratio: number }[] };
   /**
    * **The fix block, measured with the disclosures open.** Empty numbers (`blocks: 0`) when nothing was
    * opened, which is the honest reading for a closed page rather than a zero that looks like a failure.
@@ -121,6 +129,14 @@ interface Report {
     copyHeight: number;
     copySqueezed: number;
     contrast: { below45: number; worst: readonly { cls: string; ratio: number }[] };
+  /** Which palette these numbers describe — `--theme`. */
+  theme: string;
+  /**
+   * **Every text-bearing element on the page**, not only the chips and small print the narrower `contrast` list
+   * samples. It exists because that list reported zero failures in the light palette while the page still had text
+   * nobody could read: the worst elements are the ones a dark-only token sheet takes out — titles, headings, names.
+   */
+  contrastAll: { below45: number; sampled: number; worst: readonly { cls: string; ratio: number }[] };
   };
 }
 
@@ -182,6 +198,17 @@ const report: Report = enabled ? await measure() : (undefined as unknown as Repo
 const fixReport: Report = enabled
   ? await measure(["--open-aria", "Not ready —"])
   : (undefined as unknown as Report);
+
+/**
+ * The same page in the **light** palette — the one nobody had measured.
+ *
+ * `styles.css` owns a second set of colour names (`--bg`, `--text*`, `--ok/--warn/--danger/--live`) beside the token
+ * sheet's families, and it defined them once, dark. So the light theme was half-applied: surfaces turned white while
+ * the text over them kept dark-mode greys, and the elements drawn with `--foreground` on a `--bg` background landed
+ * near 1:1. This measurement is what turned that from a sentence in a doc into a number, and the leg below is what
+ * keeps it fixed.
+ */
+const lightReport: Report = enabled ? await measure(["--theme", "light"]) : (undefined as unknown as Report);
 
 describeWhen("the agent rows, measured in a real window", () => {
   it("is measured on this machine's real page, with the counts the page claims", () => {
@@ -246,6 +273,29 @@ describeWhen("the agent rows, measured in a real window", () => {
     expect(report.horizontalOverflow).toBe(false);
     // Contrast: the family's 4.5:1 floor, on every chip and piece of small print the row draws.
     expect(report.contrast.below45, JSON.stringify(report.contrast.worst.slice(0, 3))).toBe(0);
+  });
+
+  it("is legible in the light palette too, which is the half that had never been measured", () => {
+    // **The reported bug, as a number.** `data-theme="light"` half-applied the palette: `tokens.css` switched its
+    // surfaces while `styles.css` kept `--text` (near-white) for text drawn over them, so a pane title measured
+    // about 1.0:1. Both palettes are now measured, on every element that draws text.
+    expect(lightReport.theme).toBe("light");
+    expect(lightReport.contrastAll.sampled).toBeGreaterThanOrEqual(40);
+    expect(
+      lightReport.contrastAll.below45,
+      JSON.stringify(lightReport.contrastAll.worst.slice(0, 3)),
+    ).toBe(0);
+    // The same floor on the narrower list of chips and small print, which is what dark mode asserts.
+    expect(lightReport.contrast.below45, JSON.stringify(lightReport.contrast.worst.slice(0, 3))).toBe(0);
+    // And the light palette is a *palette*, not a cascade accident: the columns still line up and every row still
+    // carries the anatomy the dark measurement pins.
+    expect(lightReport.anatomy.name?.fontSize).toBeGreaterThanOrEqual(15);
+    expect(lightReport.anatomy.chipRight?.spread, "the chips do not line up in light").toBeLessThanOrEqual(1);
+    expect(lightReport.anatomy.actionRight?.spread, "the controls do not line up in light").toBeLessThanOrEqual(1);
+    console.log(
+      `· light palette measured: ${lightReport.contrastAll.sampled} text elements, worst ` +
+        `${String(lightReport.contrastAll.worst[0]?.ratio)}:1, ${lightReport.visibleChars} visible chars`,
+    );
   });
 
   it("sets the fix apart, legibly, in the one place a user goes to resolve a Not-ready row", () => {

@@ -44,6 +44,7 @@
  * node scripts/measure-settings.mjs --section agents
  * node scripts/measure-settings.mjs --section agents --open "Browse the catalogue"
  * node scripts/measure-settings.mjs --section general --out /tmp/envoycoder-measure
+ * node scripts/measure-settings.mjs --section agents --theme light
  * ```
  *
  * `--open "<label>"` presses one more thing before measuring, by the words a user reads. The Agents page needs
@@ -70,6 +71,16 @@ const has = (name) => process.argv.includes(`--${name}`);
 
 /** Which settings page to walk into. The sections bar's own labels are what the walk presses. */
 const section = flag("section") ?? "agents";
+
+/**
+ * `--theme light` — measure the **light palette**, which is the one nobody has measured.
+ *
+ * The app sets `document.documentElement.dataset.theme` at boot (`main.tsx`, currently `"dark"`), and every rule
+ * that changes with the palette is keyed on that attribute. Setting it here is therefore the same thing the app
+ * does, one line earlier — and without this flag the light theme could only ever be *looked* at, which is how it
+ * came to render text at a contrast of about 1.0 in places while every dark-mode number stayed green.
+ */
+const theme = flag("theme") ?? "dark";
 /** The window the picture and the numbers are taken in. */
 const size = flag("size") ?? "1440,900";
 const keep = has("keep");
@@ -317,7 +328,25 @@ function daemonChildren() {
 }
 const childrenBeforePage = daemonChildren();
 
-console.log(`walk: Settings → ${section}`);
+/**
+ * **The theme, applied before anything is pressed.**
+ *
+ * The walk into Settings does not reload the page, so one assignment is enough — and it is asserted from the page
+ * rather than assumed, because a flag that silently did nothing would produce a *dark* measurement labelled light.
+ */
+if (theme !== "dark") {
+  const applied = await evaluate(`(() => {
+    document.documentElement.dataset.theme = ${JSON.stringify(theme)};
+    return document.documentElement.dataset.theme;
+  })()`);
+  if (applied !== theme) {
+    console.error(`asked for the ${theme} palette and the page reports ${String(applied)} — refusing to measure`);
+    process.exit(2);
+  }
+  await sleep(300);
+}
+
+console.log(`walk: Settings → ${section}${theme === "dark" ? "" : ` (${theme} palette)`}`);
 console.log(`  Settings: ${await press("Settings")}`);
 console.log(`  ${sectionTitle[section] ?? section}: ${await press(sectionTitle[section] ?? section)}`);
 await sleep(1200);
@@ -482,6 +511,29 @@ const report = await evaluate(`(() => {
     };
   });
   const worst = contrast.slice().sort((a, b) => a.ratio - b.ratio).slice(0, 6);
+
+  /**
+   * **Every element that draws text, not only the ones this tool used to sample.**
+   *
+   * The narrower list above (chips, hints, commands, details, notes) reports below45: 0 in the light palette
+   * while the page still has text nobody can read — because the elements with the worst contrast are the ones a
+   * dark-only token sheet takes out: titles, headings, names, labels. Measured rather than argued: this scan walks
+   * the whole page, and a heading at ~1.0:1 shows up here as the row it is.
+   */
+  const textOwners = [...body.querySelectorAll("*")].filter(
+    (node) => node.children.length === 0 && ownText(node).trim().length > 1 && getComputedStyle(node).visibility !== "hidden",
+  );
+  const contrastAll = textOwners.map((node) => {
+    const style = getComputedStyle(node);
+    return {
+      cls: typeof node.className === "string" ? node.className : "",
+      sample: ownText(node).slice(0, 44),
+      size: Math.round(parseFloat(style.fontSize) * 10) / 10,
+      weight: style.fontWeight,
+      ratio: ratio(style.color, bgOf(node)),
+    };
+  });
+  const worstAll = contrastAll.slice().sort((a, b) => a.ratio - b.ratio).slice(0, 8);
   const gradients = all.filter((n) => getComputedStyle(n).backgroundImage !== "none").length;
 
   /**
@@ -716,6 +768,8 @@ const report = await evaluate(`(() => {
     headings: headings.map((h) => ownText(h)),
     groups,
     contrast: { worst, below45: contrast.filter((c) => c.ratio < 4.5).length, gradients },
+    // The whole page, in both palettes — see contrastAll for why the narrower list was not enough.
+    contrastAll: { worst: worstAll, below45: contrastAll.filter((c) => c.ratio < 4.5).length, sampled: contrastAll.length },
     fix,
     anatomy,
     verdicts,
@@ -745,6 +799,8 @@ await evaluate(`(() => { const b = document.querySelector(".settings"); if (b) b
 
 const summary = {
   section,
+  // Which palette these numbers describe — a measurement that does not say is one that gets quoted as the other.
+  theme,
   viewport: size,
   url: uiUrl,
   outDir,

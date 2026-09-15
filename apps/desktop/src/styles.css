@@ -57,6 +57,70 @@
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
+/**
+ * **The light palette — the aliases this sheet owns, given values for it.**
+ *
+ * `design/tokens.css` already switches its own families (`--surface-*`, `--foreground-*`, `--border*`, `--status-*`)
+ * on `data-theme`, and this sheet defines a **second set of names** — `--bg`, `--bg-raised`, `--text`,
+ * `--text-muted`, `--text-dim`, `--text-faint`, `--ok`, `--warn`, `--danger`, `--live` — once, dark, at the top of
+ * this file. So the light theme was half-applied: surfaces from the token sheet turned white while the text drawn
+ * over them kept dark-mode greys, and the elements that use `--foreground` *on* a `--bg` background landed at a
+ * contrast of about 1.0 — the pane title being the one that was reported.
+ *
+ * The aliases are mapped to the token sheet's light values rather than re-invented, because two palettes that
+ * disagree about what "muted" is are two palettes, and the token sheet is where the family's palette is derived
+ * from Paseo and documented (`docs/design-tokens.md`).
+ */
+:root[data-theme="light"] {
+  --bg: #ffffff;
+  --bg-raised: #fafafa;
+  --bg-hover: #f4f4f5;
+  --bg-active: #e4e4e7;
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+
+  --text: #1a1a1e;
+  --text-muted: #52525b;
+  /* Deliberately **not** `#a1a1aa`: `--text-faint` is used for the smallest print this sheet has, and the light
+     value that reads at the same weight as the dark one is a step darker. Measured, not chosen by eye — the
+     whole-page scan (`scripts/measure-settings.mjs --theme light`) is the assertion. */
+  --text-faint: #71717a;
+  --text-dim: #52525b;
+
+  /**
+   * **These four are chip text as well as status colour**, and that is why they are not the token sheet's light
+   * values verbatim: `.chip--live` and `.chip--danger` draw `color: var(--live|--danger)` on a **16% tint of the
+   * same colour**, so the value that reads as a status colour on a page can be unreadable on its own tint. Measured:
+   * the token sheet's `#268ae0` gives 3.04:1 there against a 4.5 floor, while the values below give 6.9:1 and 5.1:1
+   * — and `--ok`/`--warn` are darkened with them so the four keep the relationship they have in dark mode.
+   */
+  --ok: #2f6139;
+  --warn: #6b4f2c;
+  --danger: #9d433b;
+  --live: #17527f;
+}
+
+/* Follow the OS when the user has not chosen, exactly as the token sheet does. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #ffffff;
+    --bg-raised: #fafafa;
+    --bg-hover: #f4f4f5;
+    --bg-active: #e4e4e7;
+    --border: #e4e4e7;
+    --border-strong: #d4d4d8;
+    --text: #1a1a1e;
+    --text-muted: #52525b;
+    --text-faint: #71717a;
+    --text-dim: #52525b;
+    /* The same four values as the explicit light block above, and for the reason given there. */
+    --ok: #2f6139;
+    --warn: #6b4f2c;
+    --danger: #9d433b;
+    --live: #17527f;
+  }
+}
+
 * {
   box-sizing: border-box;
 }
