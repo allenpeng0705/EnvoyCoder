@@ -54,25 +54,74 @@ const STOP_GRACE: Duration = Duration::from_secs(5);
 
 /* ────────────────────────────── the shared home ───────────────────────────── */
 
-/// The shared home, resolved the way every EnvoyMesh-family app resolves it.
+/// The marker file a home carries, and the two things an older home carried instead.
 ///
-/// Order: `ENVOYMESH_HOME` (resolved, and honoured even when it does not exist so a script may point
-/// anywhere) → the per-OS default → legacy `~/.envoymesh` when that is where an existing install
-/// lives. Adoption matters: an existing user must not silently get a second identity.
+/// These three names are `@envoymesh/node-core`'s `looksLikeHome` verbatim. They are duplicated rather
+/// than linked because one side of this rule is Rust and the other is TypeScript, and **the two must
+/// agree** — see `resolve_home_with` for what disagreeing cost.
+const HOME_MARKER_FILE: &str = "envoymesh.json";
+const HOME_PROFILE_DIR: &str = "profile";
+const HOME_LEGACY_PROFILE_FILE: &str = "profile.json";
+/// The pre-common-root location (`~/.envoymesh`).
+const LEGACY_HOME_DIRNAME: &str = ".envoymesh";
+
+/// True when a directory holds something that identifies it as an EnvoyMesh home.
+///
+/// **The test is what is inside, not whether the directory exists.** A directory that exists and holds
+/// no home is not a home: the default root receives a shared `runtime/`, and this app itself creates
+/// `<home>/EnvoyCoder/logs/`, so "the directory is there" is a question whose answer changes because
+/// of something that has nothing to do with which home the user's install lives in.
+fn looks_like_home(dir: &Path) -> bool {
+    [HOME_MARKER_FILE, HOME_PROFILE_DIR, HOME_LEGACY_PROFILE_FILE]
+        .iter()
+        .any(|name| dir.join(name).exists())
+}
+
+/// The shared home, resolved **exactly as the daemon resolves it**.
+///
+/// Order: `ENVOYMESH_HOME` (honoured even when it does not exist, so a script may point anywhere) →
+/// the per-OS default *when it already holds a home* → legacy `~/.envoymesh` when it holds one →
+/// the per-OS default. Adoption matters: an existing user must not silently get a second identity.
 fn resolve_shared_home() -> PathBuf {
-    if let Ok(raw) = std::env::var("ENVOYMESH_HOME") {
+    let override_home = std::env::var("ENVOYMESH_HOME").ok();
+    resolve_home_with(
+        override_home.as_deref(),
+        &default_home_dir(),
+        &home_dir().join(LEGACY_HOME_DIRNAME),
+    )
+}
+
+/// The rule itself, with its inputs passed in so the adoption cases can be tested without a home.
+///
+/// **Why the shape of this matters more than it looks.** The daemon resolves the home with
+/// `@envoymesh/node-core`'s `resolveHomeDir` — the family's one implementation — and this shell used
+/// to resolve it with a rule of its own that treated *existence* as the test. The moment a directory
+/// appeared at the per-OS default (on this machine, 2026-09-15, one minute's worth of a shared
+/// `runtime/` install), the shell switched homes and the daemon did not:
+///
+///   * the daemon published its claim in the adopted home (`~/.envoymesh/EnvoyCoder/daemon.json`),
+///   * the shell looked for that claim in the default home, where it never appears,
+///   * `daemon_endpoint` therefore spawned a daemon that saw the live claim, printed "EnvoyCoder is
+///     already running on this machine" and exited 0 — and the shell reported that exit as a failure
+///     ("the daemon exited immediately") while a healthy daemon was serving on the port.
+///
+/// Restarting could never fix it: the two processes disagreed about a path, not about a process. A
+/// rule that is only *nearly* the same as the daemon's is worse than no rule at all.
+fn resolve_home_with(override_home: Option<&str>, default: &Path, legacy: &Path) -> PathBuf {
+    if let Some(raw) = override_home {
         let trimmed = raw.trim();
         if !trimmed.is_empty() {
             return PathBuf::from(trimmed);
         }
     }
 
-    let default = default_home_dir();
-    let legacy = home_dir().join(".envoymesh");
-    if !default.exists() && legacy.exists() {
-        return legacy;
+    if looks_like_home(default) {
+        return default.to_path_buf();
     }
-    default
+    if looks_like_home(legacy) {
+        return legacy.to_path_buf();
+    }
+    default.to_path_buf()
 }
 
 #[cfg(target_os = "macos")]
@@ -311,6 +360,14 @@ fn spawn_daemon(port: u16) -> Result<DaemonClaim, String> {
     command
         .arg(&entry)
         .env("ENVOYCODER_DAEMON_PORT", port.to_string())
+        // The home this shell resolved, handed to the child rather than resolved a second time.
+        //
+        // The claim this function is about to wait for is the claim the child writes, so the two must
+        // not be able to disagree about which home that is. Passing it makes the shell's answer the
+        // one that counts: the shell is what the user launched, it is what looks for the claim, and a
+        // child that resolved the same rule independently could still be run under a different
+        // environment (`HOME`, `LOCALAPPDATA`, even `ENVOYMESH_HOME` set for one of the two).
+        .env("ENVOYMESH_HOME", resolve_shared_home())
         .stdin(Stdio::null())
         .stdout(log.map(Stdio::from).unwrap_or_else(Stdio::null))
         .stderr(log_err.map(Stdio::from).unwrap_or_else(Stdio::null));
@@ -733,6 +790,78 @@ mod tests {
         assert!(dir.contains("EnvoyMesh"));
         #[cfg(target_os = "windows")]
         assert!(!dir.contains("Roaming"));
+    }
+
+    /// A directory of its own per test — the home rule is about what is *inside* a directory, and two
+    /// tests sharing one would see each other's markers.
+    fn temp_home(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("envoycoder-home-{}-{}", std::process::id(), name));
+        let _ = std::fs::remove_dir_all(&dir);
+        create_dir_all(&dir).expect("create temp home");
+        dir
+    }
+
+    #[test]
+    fn a_directory_at_the_default_root_without_a_home_inside_is_not_a_home() {
+        // The failure this rule was rewritten for, on the machine it was rewritten on: the per-OS
+        // default existed and held a shared `runtime/` and this app's own `logs/`, while the actual
+        // install — profile and all — lived in the legacy home. Existence is not a home.
+        let default = temp_home("default-empty");
+        create_dir_all(default.join("runtime")).expect("create runtime");
+        create_dir_all(default.join("EnvoyCoder").join("logs")).expect("create product logs");
+        let legacy = temp_home("legacy-real");
+        create_dir_all(legacy.join("profile")).expect("create profile");
+
+        assert_eq!(resolve_home_with(None, &default, &legacy), legacy);
+    }
+
+    #[test]
+    fn a_home_at_the_default_root_wins_over_an_install_in_the_legacy_home() {
+        // The family's precedence, unchanged: a real home at the conventional root is the home.
+        let default = temp_home("default-real");
+        std::fs::File::create(default.join(HOME_MARKER_FILE)).expect("marker");
+        let legacy = temp_home("legacy-also-real");
+        create_dir_all(legacy.join("profile")).expect("profile");
+
+        assert_eq!(resolve_home_with(None, &default, &legacy), default);
+    }
+
+    #[test]
+    fn the_legacy_home_is_adopted_when_it_is_the_only_install() {
+        let default = temp_home("default-absent").join("does-not-exist");
+        let legacy = temp_home("legacy-only");
+        std::fs::File::create(legacy.join(HOME_LEGACY_PROFILE_FILE)).expect("profile.json");
+
+        assert_eq!(resolve_home_with(None, &default, &legacy), legacy);
+    }
+
+    #[test]
+    fn with_no_install_anywhere_the_default_root_is_chosen_and_creating_state_does_not_change_it() {
+        // A first run must be able to create its own state without changing the answer: this shell
+        // creates `<home>/EnvoyCoder` at startup, and if that made the default root "look like a
+        // home", the next launch could resolve somewhere else than the first one did.
+        let default = temp_home("first-run").join("EnvoyMesh");
+        let legacy = temp_home("first-run-legacy").join(LEGACY_HOME_DIRNAME);
+        assert_eq!(resolve_home_with(None, &default, &legacy), default);
+
+        create_dir_all(default.join(PRODUCT_NAME)).expect("create product state");
+        assert_eq!(resolve_home_with(None, &default, &legacy), default);
+    }
+
+    #[test]
+    fn the_env_override_is_never_second_guessed() {
+        // Honoured even when it does not exist, and even when both other candidates are real homes.
+        let default = temp_home("override-default");
+        create_dir_all(default.join("profile")).expect("profile");
+        let legacy = temp_home("override-legacy");
+        create_dir_all(legacy.join("profile")).expect("profile");
+
+        assert_eq!(
+            resolve_home_with(Some("/tmp/envoycoder-pointed-elsewhere"), &default, &legacy),
+            PathBuf::from("/tmp/envoycoder-pointed-elsewhere")
+        );
+        // An empty or blank value is not an override — the family's rule trims before it decides.
+        assert_eq!(resolve_home_with(Some("   "), &default, &legacy), default);
     }
 
     #[test]

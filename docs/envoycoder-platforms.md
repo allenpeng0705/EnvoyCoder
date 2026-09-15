@@ -126,8 +126,29 @@ What the shell owns, and why (`apps/desktop/src-tauri/src/main.rs`):
    supervisor kills another app's process.
 2. **A health check must identify the node.** `{"ok":true}` proves a server exists, not that it is
    ours — two products sharing one transport is the family's normal situation.
-3. **The shared home is resolved, never guessed** — `ENVOYMESH_HOME` → per-OS default → legacy
-   adoption, so both apps agree where state lives.
+3. **The shared home is resolved, never guessed** — `ENVOYMESH_HOME` → per-OS default **when it holds a
+   home** → legacy `~/.envoymesh` when it holds one → per-OS default. The test is *what is inside*
+   (`envoymesh.json`, `profile/`, `profile.json` — `@envoymesh/node-core`'s `looksLikeHome`), **never
+   whether the directory exists**: the default root can hold a shared `runtime/` and this app's own
+   `logs/` while the actual install lives in the legacy home. And the shell resolves it **once**, then
+   passes the answer to the daemon it spawns (`ENVOYMESH_HOME`), because the claim it waits for is the
+   claim the daemon writes and the two must not be able to disagree.
+
+   Recorded because it cost a wrong diagnosis first (2026-09-15): the shell's rule used mere existence,
+   a shared `runtime/` created the default root, and from then on the daemon published its claim in
+   `~/.envoymesh/EnvoyCoder/daemon.json` while the shell looked for it in
+   `~/Library/Application Support/EnvoyMesh/EnvoyCoder/daemon.json`. Every window then reported a daemon
+   that "exited immediately" — that was the second daemon `daemon_endpoint` spawned, printing "EnvoyCoder
+   is already running on this machine" and exiting 0 — while a healthy daemon served on 4770. Restarting
+   cannot fix a disagreement about a *path*, which is why `scripts/restart-app.mjs` stops a daemon whose
+   claim it finds in **any** home the rule can choose and prints the home it resolves.
+4. **Restarting is a script, not a ritual** — `npm run app:restart` / `npm run app:stop`
+   (`scripts/restart-app.mjs`). It stops this checkout's processes by **absolute path** (never by port,
+   never by a bare name, so a sibling product's daemon or dev server cannot match), confirms each one is
+   *gone* (SIGTERM → wait → SIGKILL → report), removes only claims whose pid is dead, and refuses to start
+   while 6173 or 4770 is still held — then exits with `tauri:dev`'s own status. A leftover daemon holding
+   4770 and a stale claim naming a dead pid are the two failures that read as "the app didn't start", and
+   a script that printed "stopped" the moment it sent a signal was reporting its intent, not the machine.
 
 Linux needs `libwebkit2gtk-4.1-0` and a FUSE provider for the AppImage; the bundle config declares the
 first, and the second is a packaging check the roadmap owes (Paseo never validates it in CI, and its

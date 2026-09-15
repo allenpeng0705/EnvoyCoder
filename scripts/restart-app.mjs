@@ -3,7 +3,7 @@
  *
  * ## Why this exists
  *
- * Restarting by hand fails in three ways that look like bugs in the app:
+ * Restarting by hand fails in four ways that look like bugs in the app:
  *
  *   1. **A leftover Vite holds the UI port.** Tauri's `beforeDevCommand` starts its own Vite on the exact
  *      port in `devUrl` (6173 for us — deliberately not Vite's 5173 default, which EnvoyMesh's Social app
@@ -13,12 +13,23 @@
  *      window then has no host.
  *   3. **A claim file naming a dead pid.** `<home>/EnvoyCoder/daemon.json` is how the window finds its
  *      daemon; a claim from a crashed run makes the shell think a host exists when none does.
+ *   4. **A daemon whose claim the shell cannot see.** The shell (Rust) and the daemon (TypeScript) each
+ *      resolve the shared home, and the day those two answers differ the daemon publishes its claim in
+ *      one home while the shell looks for it in the other. The window then reports a failure
+ *      ("the daemon exited immediately") while a healthy daemon serves on 4770: restarting cannot fix a
+ *      disagreement about a *path*, which is why this script stops a daemon whose claim it finds in
+ *      **any** home the family's rule can choose, and prints the home the app itself resolves.
  *
  * ## What it will not do
  *
- * It will not delete a **live** claim, and it will not kill a process it cannot identify as this app's.
- * "One owner at a time" is the family rule for a reason: silently stealing a running daemon's claim is
- * how two products end up with one identity.
+ * It will not delete a **live** claim, and it will not kill a process it cannot identify as this app's:
+ * every pattern below is an absolute path **inside this checkout**, so a sibling product's daemon or dev
+ * server can never match (the family's rule: never by port, never by a bare name). A packaged app's
+ * *window* is not touched either — its daemon is, and that is the process that owns the state.
+ *
+ * It also will not call a process stopped because a signal was sent. SIGTERM, then wait, then SIGKILL,
+ * then say so if it is still there — and if this app's own processes still hold 6173 or 4770, it refuses
+ * to start rather than handing the next run the state that reads as "the app did not start".
  *
  * Usage:
  *   npm run app:restart          stop everything, then run `tauri:dev` in the foreground
@@ -26,7 +37,7 @@
  *   node scripts/restart-app.mjs --stop-only
  */
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import * as path from "node:path";
@@ -37,15 +48,62 @@ const root = path.resolve(here, "..");
 const stopOnly = process.argv.includes("--stop-only");
 const isWindows = process.platform === "win32";
 
-/** The home the app uses, resolved the way the shell does: `ENVOYMESH_HOME`, else `~/.envoymesh`. */
-function sharedHome() {
-  const fromEnv = process.env.ENVOYMESH_HOME?.trim();
-  if (fromEnv) return fromEnv;
-  const legacy = path.join(homedir(), ".envoymesh");
-  return legacy;
+const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+
+/* ── the homes this app can be using ────────────────────────────────────────────────────────────── */
+
+/**
+ * The marker names `@envoymesh/node-core`'s `looksLikeHome` accepts.
+ *
+ * Copied from the family's implementation rather than guessed, because this is the rule that decides
+ * *which home* is the app's. A directory that exists is not a home: the per-OS default can hold a shared
+ * `runtime/` and this app's own `logs/` while the install — profile and all — lives in `~/.envoymesh`,
+ * and a script (or a shell) that treated existence as the test would look for the claim in the wrong
+ * place and report a healthy daemon as missing.
+ */
+const HOME_MARKERS = ["envoymesh.json", "profile", "profile.json"];
+const LEGACY_HOME_DIRNAME = ".envoymesh";
+const PRODUCT = "EnvoyCoder";
+
+/** The conventional root for this OS, exactly as `node-core`'s `defaultHomeDir` computes it. */
+function defaultHome(home) {
+  if (isWindows) {
+    const local = process.env.LOCALAPPDATA?.trim();
+    return path.join(
+      local && local.length > 0 ? local : path.join(home, "AppData", "Local"),
+      "EnvoyMesh",
+    );
+  }
+  if (process.platform === "darwin") {
+    return path.join(home, "Library", "Application Support", "EnvoyMesh");
+  }
+  const xdg = process.env.XDG_DATA_HOME?.trim();
+  return path.join(xdg && xdg.length > 0 ? xdg : path.join(home, ".local", "share"), "EnvoyMesh");
 }
 
-const claimPath = path.join(sharedHome(), "EnvoyCoder", "daemon.json");
+function looksLikeHome(dir) {
+  return HOME_MARKERS.some((name) => existsSync(path.join(dir, name)));
+}
+
+/**
+ * The home the app itself resolves: `ENVOYMESH_HOME` → the per-OS default *when it holds a home* →
+ * legacy `~/.envoymesh` when it holds one → the per-OS default.
+ */
+function resolvedHome() {
+  const override = process.env.ENVOYMESH_HOME?.trim();
+  if (override) return override;
+  const preferred = defaultHome(homedir());
+  if (looksLikeHome(preferred)) return preferred;
+  const legacy = path.join(homedir(), LEGACY_HOME_DIRNAME);
+  return looksLikeHome(legacy) ? legacy : preferred;
+}
+
+/** Every home a claim could be sitting in — the one the app resolves, plus both candidates. */
+function candidateHomes() {
+  return [...new Set([resolvedHome(), defaultHome(homedir()), path.join(homedir(), LEGACY_HOME_DIRNAME)])];
+}
+
+/* ── processes ──────────────────────────────────────────────────────────────────────────────────── */
 
 function pidsMatching(pattern) {
   if (isWindows) return [];
@@ -59,17 +117,6 @@ function pidsMatching(pattern) {
   }
 }
 
-function kill(pid, label) {
-  try {
-    process.kill(pid, "SIGTERM");
-    console.log(`  stopped ${label} (pid ${pid})`);
-    return true;
-  } catch (error) {
-    console.log(`  could not stop ${label} (pid ${pid}): ${error.message}`);
-    return false;
-  }
-}
-
 /** Is the pid alive? `kill(pid, 0)` asks without signalling. */
 function isAlive(pid) {
   try {
@@ -80,8 +127,84 @@ function isAlive(pid) {
   }
 }
 
-/* ── 1. the window and the shell it spawned ─────────────────────────────────────────────── */
+async function waitForDeath(pid, ms) {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    if (!isAlive(pid)) return true;
+    await sleep(100);
+  }
+  return !isAlive(pid);
+}
+
+/** The daemon's own shutdown is bounded; a process that needs longer than this is not shutting down. */
+const TERM_GRACE_MS = 6_000;
+const KILL_GRACE_MS = 2_000;
+
+/** What could not be stopped — label and pid. Reported at the end, and the reason a start is refused. */
+const stuck = [];
+
+/**
+ * Stop a process, **and find out whether it stopped.**
+ *
+ * The whole point of the two waits: `process.kill` returning is not the process being gone, and a script
+ * that printed "stopped the daemon" the moment the signal was sent was reporting its own intent rather
+ * than the machine's state — which is how a leftover daemon holds 4770 through a restart nobody can
+ * explain.
+ */
+async function stopProcess(pid, label) {
+  if (!isAlive(pid)) return true;
+
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch (error) {
+    if (!isAlive(pid)) {
+      console.log(`  ${label} (pid ${pid}) was already gone`);
+      return true;
+    }
+    console.log(`  could not signal ${label} (pid ${pid}): ${error.message}`);
+    stuck.push({ label, pid });
+    return false;
+  }
+
+  if (await waitForDeath(pid, TERM_GRACE_MS)) {
+    console.log(`  stopped ${label} (pid ${pid})`);
+    return true;
+  }
+
+  console.log(`  ${label} (pid ${pid}) did not stop when asked — killing it`);
+  try {
+    process.kill(pid, "SIGKILL");
+  } catch {
+    /* it may have exited between the check and the signal, which the wait below reports */
+  }
+  if (await waitForDeath(pid, KILL_GRACE_MS)) {
+    console.log(`  killed ${label} (pid ${pid})`);
+    return true;
+  }
+
+  console.log(`  ** ${label} (pid ${pid}) is still running **`);
+  stuck.push({ label, pid });
+  return false;
+}
+
+function readClaim(file) {
+  try {
+    const claim = JSON.parse(readFileSync(file, "utf8"));
+    return claim && typeof claim === "object" ? claim : null;
+  } catch {
+    return null;
+  }
+}
+
+/* ── 1. the window and the shell it spawned ─────────────────────────────────────────────────────── */
+
+const home = resolvedHome();
 console.log("Stopping EnvoyCoder…");
+console.log(
+  `  home: ${home}` +
+    (looksLikeHome(home) ? "" : ` (no install there yet — the app will create it)`),
+);
+
 if (isWindows) {
   // The shells we own, by image name; `taskkill /T` takes the daemon with the shell.
   for (const image of ["envoycoder.exe"]) {
@@ -93,60 +216,101 @@ if (isWindows) {
     }
   }
 } else {
-  for (const pid of pidsMatching("target/debug/envoycoder")) kill(pid, "the window");
-}
-
-/* ── 2. the daemon ──────────────────────────────────────────────────────────────────────── */
-const claim = (() => {
-  try {
-    return JSON.parse(readFileSync(claimPath, "utf8"));
-  } catch {
-    return null;
+  // Absolute paths inside this checkout, never a bare name: `target/debug/envoycoder` would also match a
+  // sibling product's dev build if it happened to use the same layout.
+  for (const binary of ["target/debug/envoycoder", "target/release/envoycoder"]) {
+    for (const pid of pidsMatching(path.join(root, "apps/desktop/src-tauri", binary))) {
+      await stopProcess(pid, "the window");
+    }
   }
-})();
-
-if (claim?.pid && Number.isInteger(claim.pid)) {
-  if (isAlive(claim.pid)) kill(claim.pid, "the daemon (from its claim)");
-  else console.log(`  the daemon's claim names pid ${claim.pid}, which is already gone`);
 }
 
-// Anything else running this app's daemon: the shell may have started it from the bundle.
-if (!isWindows) {
-  for (const pid of pidsMatching("dist-daemon/main.mjs")) kill(pid, "a daemon from the bundle");
-  for (const pid of pidsMatching("apps/desktop/src/daemon/main.ts")) kill(pid, "a dev daemon");
-}
+/* ── 2. the daemon, wherever its claim says it is ───────────────────────────────────────────────── */
 
-/* ── 3. the claim file, only when it is stale ───────────────────────────────────────────── */
-if (existsSync(claimPath)) {
-  const alive = claim?.pid ? isAlive(claim.pid) : false;
-  if (alive) {
-    console.log("  leaving the claim file alone: its process is still alive (one owner at a time)");
+for (const candidate of candidateHomes()) {
+  const file = path.join(candidate, PRODUCT, "daemon.json");
+  const claim = readClaim(file);
+  // An unreadable claim is reported once, in the claim pass below: the daemon replaces it either way.
+  if (!claim) continue;
+  if (claim.product !== PRODUCT) {
+    console.log(`  ignoring ${file}: it belongs to ${claim.product ?? "another product"}`);
+    continue;
+  }
+  if (!Number.isInteger(claim.pid) || claim.pid <= 0) continue;
+  if (isAlive(claim.pid)) {
+    await stopProcess(claim.pid, `the daemon on port ${claim.port ?? "?"} (claim ${file})`);
   } else {
-    rmSync(claimPath, { force: true });
-    console.log("  removed the stale claim file, so the shell starts a fresh daemon");
+    console.log(`  the claim at ${file} names pid ${claim.pid}, which is already gone`);
   }
 }
 
-/* ── 4. the dev server ──────────────────────────────────────────────────────────────────── */
+// Anything else running this app's daemon: the shell may have started it from the bundle, and a daemon
+// started outside this checkout publishes a claim this sweep already handled above.
 if (!isWindows) {
-  for (const pid of pidsMatching("node_modules/.bin/vite")) kill(pid, "the dev server");
-  for (const pid of pidsMatching("vite")) kill(pid, "a vite process");
+  for (const entry of [
+    "apps/desktop/dist-daemon/main.mjs",
+    "apps/desktop/src/daemon/main.ts",
+    "node_modules/@tauri-apps/cli",
+    "node_modules/.bin/tauri",
+    "node_modules/vite/bin/vite.js",
+  ]) {
+    for (const pid of pidsMatching(path.join(root, entry))) {
+      await stopProcess(pid, `a leftover process (${entry})`);
+    }
+  }
 }
 
-/* ── 5. say what the ports look like now, then start (or not) ───────────────────────────── */
-const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
-await sleep(600);
+/* ── 3. the claim files, only when they are stale ───────────────────────────────────────────────── */
 
-for (const port of [6173, 4770]) {
-  let holder = null;
-  try {
-    holder = execFileSync("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" })
-      .split("\n")[1]
-      ?.trim();
-  } catch {
-    /* nothing listening, which is what we want */
+for (const candidate of candidateHomes()) {
+  const file = path.join(candidate, PRODUCT, "daemon.json");
+  if (!existsSync(file)) continue;
+  const claim = readClaim(file);
+  if (claim && claim.product !== PRODUCT) continue;
+  // A file we cannot read is not one we can identify as this product's, so it is left alone — the
+  // daemon already handles it (`main.ts`: "could not be read … it will be replaced"), and deleting a
+  // claim that a *packaged* app's daemon might be living behind is how two daemons end up on one home.
+  if (!claim) {
+    console.log(`  leaving ${file} alone: it is unreadable, so the daemon decides`);
+    continue;
   }
-  console.log(holder ? `  note: port ${port} is still held by: ${holder.split(/\s+/)[0]}` : `  port ${port} is free`);
+  if (Number.isInteger(claim.pid) && isAlive(claim.pid)) {
+    console.log(`  leaving ${file} alone: its process is still alive (one owner at a time)`);
+    continue;
+  }
+  rmSync(file, { force: true });
+  console.log(`  removed the stale claim ${file}, so the shell starts a fresh daemon`);
+}
+
+/* ── 4. the ports, before anything is started on them ───────────────────────────────────────────── */
+
+function portHolder(port) {
+  try {
+    return (
+      execFileSync("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" })
+        .split("\n")[1]
+        ?.trim() ?? null
+    );
+  } catch {
+    return null; // nothing listening, which is what we want
+  }
+}
+
+const PORTS = [6173, 4770];
+let held = [];
+for (let attempt = 0; attempt < 10; attempt += 1) {
+  held = PORTS.map((port) => [port, portHolder(port)]).filter(([, holder]) => holder !== null);
+  if (held.length === 0) break;
+  await sleep(300);
+}
+
+if (held.length === 0) {
+  console.log(`  ports ${PORTS.join(" and ")} are free`);
+} else {
+  for (const [port, holder] of held) {
+    const [command, pid] = holder.split(/\s+/);
+    console.log(`  port ${port} is still held by ${command} (pid ${pid})`);
+  }
 }
 
 if (stopOnly) {
@@ -154,6 +318,25 @@ if (stopOnly) {
   process.exit(0);
 }
 
+// Refusing rather than starting anyway: `tauri:dev` would fail before compiling, or the shell's daemon
+// would fail to bind and the window would report a daemon that "exited immediately" — the two states
+// this script exists to prevent. Nothing here is guessable from the app's own error message.
+if (held.length > 0 || stuck.length > 0) {
+  console.error("\nNot starting:");
+  for (const { label, pid } of stuck) console.error(`  ${label} (pid ${pid}) did not stop`);
+  for (const [port, holder] of held) console.error(`  port ${port} is held by ${holder}`);
+  if (stuck.length > 0) {
+    console.error(`\nNothing of this app should be running once you stop them: kill -9 ${stuck.map((it) => it.pid).join(" ")}`);
+  } else {
+    console.error("\nFree that port (it is not this app's process) and try again.");
+  }
+  process.exit(1);
+}
+
 console.log("\nStarting: npm run tauri:dev  (Ctrl+C stops it)\n");
-const started = execFileSync("npm", ["run", "tauri:dev"], { cwd: root, stdio: "inherit" });
-process.exit(started === null ? 0 : 0);
+const npm = isWindows ? "npm.cmd" : "npm";
+const started = spawnSync(npm, ["run", "tauri:dev"], { cwd: root, stdio: "inherit" });
+// The exit status is the app's, not this script's: a `tauri:dev` that failed used to leave `app:restart`
+// exiting 0, which is the same "it says it worked" failure in a different place.
+if (started.signal) process.exit(started.signal === "SIGINT" ? 130 : 1);
+process.exit(started.status ?? 1);
