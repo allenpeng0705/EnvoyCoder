@@ -183,13 +183,20 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
   const modelOff = props.modelOff;
   const thinkingOff = props.thinkingOff;
 
-  // `folderProblem` is a message from the platform (a dialog that would not open), so it is a value and
-  // not a key; the sentence around it is ours and is translated.
-  const folderReason = props.folderProblem
+  /**
+   * **A press that failed is news; a state that never changes is a description.**
+   *
+   * `folderProblem` is a dialog that would not open — something the user just did, and §7.27's rule says a
+   * refusal is read where the press was, so it keeps the visible line. "This window has no folder chooser" is
+   * a permanent property of the window, and it becomes the pill's own description instead.
+   *
+   * `folderProblem` is a message from the platform, so it is a value and not a key; the sentence around it is
+   * ours and is translated.
+   */
+  const folderFailure = props.folderProblem
     ? t("palette.pickerFailed", { detail: props.folderProblem })
-    : props.canChooseFolder
-      ? undefined
-      : t("task.composer.folder.noPicker");
+    : undefined;
+  const folderUnavailable = props.canChooseFolder ? undefined : t("task.composer.folder.noPicker");
   const selectedMode = props.modes.find((mode) => mode.id === props.selectedModeId);
   const selectedModel = props.models.find((model) => model.id === props.selectedModelId);
   const selectedThinking = props.thinkingOptions.find(
@@ -234,6 +241,28 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
   );
 
   /**
+   * **Each control's own reason**, for its `title` and its `aria-describedby` — never a paragraph.
+   *
+   * A reason is a *refusal* (the control works and is disabled because the agent or the daemon cannot honour a
+   * choice) or an *observation* (this list came from a session, at a time). Both answer "what is this control,
+   * and why should I trust it", which is the question a user has while reaching for the control — so both belong
+   * on it. See the notes rule at the foot of this component for why.
+   */
+  const modeReason = modeOff === undefined ? undefined : t(modeOff.key, modeOff.values);
+  const modelReason =
+    modelOff !== undefined
+      ? t(modelOff.key, modelOff.values)
+      : modelObservedNote !== undefined
+        ? t(modelObservedNote, { agent: props.agentLabel, at: observedAt(props.modelObservedAt) ?? "" })
+        : undefined;
+  const thinkingReason =
+    thinkingOff !== undefined
+      ? t(thinkingOff.key, thinkingOff.values)
+      : thinkingObservedNote !== undefined
+        ? t(thinkingObservedNote, { agent: props.agentLabel, at: observedAt(props.thinkingObservedAt) ?? "" })
+        : undefined;
+
+  /**
    * The free-text draft moved into `ModelChoice`, along with the commit rule — a field's state belongs
    * with the field, and the settings pane's model row needs exactly the same behaviour (see that file).
    */
@@ -246,15 +275,23 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
             type="button"
             className="composer__pill"
             // Truncated on the pill, whole in the title: a path is worth reading at the end, and a user
-            // who needs the beginning can hover or copy it. The *reason* a chooser is unavailable is not
-            // put here — it is the line below, visible without a hover and legible to a screen reader.
-            title={cwd}
+            // who needs the beginning can hover or copy it. When there is no chooser the reason takes the
+            // title, and the hidden paragraph beside it carries the same sentence to a screen reader.
+            // The path stays in the title even when there is no chooser — it is the fact a user hovers for — and
+            // the reason is appended rather than substituted, because both answers are wanted from the same hover.
+            title={folderUnavailable === undefined ? cwd : `${cwd} — ${folderUnavailable}`}
             aria-label={t("task.composer.folder.aria")}
+            {...(folderUnavailable !== undefined ? { "aria-describedby": "composer-folder-reason" } : {})}
             disabled={!props.canChooseFolder}
             onClick={props.onChooseFolder}
           >
             {shortenFolder(cwd, props.projectPath)}
           </button>
+          {folderUnavailable === undefined ? null : (
+            <p className="visually-hidden" id="composer-folder-reason">
+              {folderUnavailable}
+            </p>
+          )}
         </div>
 
         <div className="composer__control">
@@ -269,7 +306,8 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
             // exists to avoid.
             disabled={modeOff !== undefined}
             aria-labelledby="composer-agent-mode-label"
-            title={modeDescription(selectedMode, t) ?? t("task.composer.agentMode.title")}
+            {...(modeReason !== undefined ? { "aria-describedby": "composer-mode-reason" } : {})}
+            title={modeReason ?? modeDescription(selectedMode, t) ?? t("task.composer.agentMode.title")}
             value={props.selectedModeId ?? ""}
             onChange={(event) => props.onChooseMode(event.target.value)}
           >
@@ -284,6 +322,11 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
               </option>
             ))}
           </select>
+          {modeReason === undefined ? null : (
+            <p className="visually-hidden" id="composer-mode-reason">
+              {modeReason}
+            </p>
+          )}
         </div>
 
         <div className="composer__control">
@@ -303,10 +346,16 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
             options={props.models}
             selected={props.selectedModelId}
             off={modelOff}
-            title={selectedModel?.description ?? t("task.composer.model.title")}
+            {...(modelReason !== undefined ? { descriptionId: "composer-model-reason" } : {})}
+            title={modelReason ?? selectedModel?.description ?? t("task.composer.model.title")}
             onChoose={props.onChooseModel}
             inputClassName="input composer__model-input"
           />
+          {modelReason === undefined ? null : (
+            <p className="visually-hidden" id="composer-model-reason">
+              {modelReason}
+            </p>
+          )}
         </div>
 
         <div className="composer__control">
@@ -322,7 +371,8 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
             className="select"
             disabled={thinkingOff !== undefined}
             aria-labelledby="composer-thinking-label"
-            title={optionDescription(selectedThinking, t) ?? t("task.composer.thinking.title")}
+            {...(thinkingReason !== undefined ? { "aria-describedby": "composer-thinking-reason" } : {})}
+            title={thinkingReason ?? optionDescription(selectedThinking, t) ?? t("task.composer.thinking.title")}
             value={props.selectedThinkingLevel ?? ""}
             onChange={(event) => props.onChooseThinking(event.target.value)}
           >
@@ -333,50 +383,36 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
               </option>
             ))}
           </select>
+          {thinkingReason === undefined ? null : (
+            <p className="visually-hidden" id="composer-thinking-reason">
+              {thinkingReason}
+            </p>
+          )}
         </div>
       </div>
 
-      {/* The reasons, and the "next run" notes. Separate lines because they are separate facts, and each
-          control owns its own. */}
-      {folderReason !== undefined ? (
-        <p className="composer__control-note">{folderReason}</p>
-      ) : running ? (
-        <p className="composer__control-note">{t("task.composer.folder.nextRun", { path: cwd })}</p>
-      ) : null}
-      {modeOff !== undefined ? (
-        <p className="composer__control-note">{t(modeOff.key, modeOff.values)}</p>
-      ) : running ? (
-        <p className="composer__control-note">{t("task.composer.agentMode.nextRun")}</p>
-      ) : null}
-      {/* The model's own note — **one sentence, chosen by `modelNote`**, and never more than one. That
-          is deliberate: the free-text instruction and the "these came from a session" sentence answer
-          the same question (what is this list, and why should I trust it), and drawing both would put two
-          paragraphs under one pill. Only one of them can apply — a list we observed is `"listed"` — and
-          the `at` value is carried for both, because a template ignores values it does not declare. */}
-      {modelOff !== undefined ? (
-        <p className="composer__control-note">{t(modelOff.key, modelOff.values)}</p>
-      ) : (
-        <>
-          {modelObservedNote !== undefined ? (
-            <p className="composer__control-note">
-              {t(modelObservedNote, {
-                agent: props.agentLabel,
-                at: observedAt(props.modelObservedAt) ?? "",
-              })}
-            </p>
-          ) : null}
-          {running ? (
-            <p className="composer__control-note">{t("task.composer.model.nextRun")}</p>
-          ) : null}
-        </>
-      )}
-      {/* **The probe's line, and it is worth saying where it sits.** It is drawn last, once, because it
-          answers a question about *both* option-bearing controls at the same time: the model list and the
-          thinking levels are published in one `session/new` response, so a button under each would be two
-          controls doing one thing. Its two states are the two the pills cannot express — "we are asking
-          right now" (which is why the list is still empty) and "we asked, and this is what came back"
-          (which is a fact about the agent, or about us, either way not a list). */}
-      {props.probeNote === undefined && props.probeAction === undefined ? null : (
+      {/* **One line, and only when the user needs it now.**
+          This was a stack of up to five paragraphs — one per control saying "your choice applies to the next
+          run", plus a reason under each disabled control — and the owner's report was exact: *"These texts are
+          useless, but make the chats inputting messy."* Four of those sentences were the *same* fact told four
+          times, and the rest were reasons for controls the user had not reached for.
+
+          So the rule is now about **where** a fact belongs rather than whether it is true:
+
+            * a control that cannot be used carries its own reason **on itself** — a `title` for a pointer and
+              `aria-describedby` for a screen reader (see the reasons below). It is still drawn and still
+              disabled, and nothing is hidden: the explanation simply arrives at the control instead of sitting
+              permanently above the field;
+            * the fact all four controls share — that a choice made while a turn is running applies to the
+              **next** run — is said **once**, and only while a turn is running;
+            * and a line the user must act on (a chooser that would not open; the probe that is the only way to
+              learn what the agent offers) takes the line instead.
+
+          One line at the most, in that order. Measured: `composer-notes.test.tsx` counts them. */}
+      {folderFailure !== undefined ? (
+        <p className="composer__control-note">{folderFailure}</p>
+      ) : (probeText !== undefined && probeText !== "") ||
+        (props.probeAction !== undefined && props.onProbeAgent !== undefined) ? (
         <p className="composer__control-note">
           {probeText === undefined ? null : <span>{probeText}</span>}
           {props.probeAction === undefined || props.onProbeAgent === undefined ? null : (
@@ -393,27 +429,9 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
             </>
           )}
         </p>
-      )}
-      {/* The thinking level's own notes, on the model's terms — and its observed sentence carries one
-          more fact than the model's does: the levels are listed for the model the session resolved, so
-          a user who changes the model may be looking at a list the agent no longer accepts. */}
-      {thinkingOff !== undefined ? (
-        <p className="composer__control-note">{t(thinkingOff.key, thinkingOff.values)}</p>
-      ) : (
-        <>
-          {thinkingObservedNote !== undefined ? (
-            <p className="composer__control-note">
-              {t(thinkingObservedNote, {
-                agent: props.agentLabel,
-                at: observedAt(props.thinkingObservedAt) ?? "",
-              })}
-            </p>
-          ) : null}
-          {running ? (
-            <p className="composer__control-note">{t("task.composer.thinking.nextRun")}</p>
-          ) : null}
-        </>
-      )}
+      ) : running ? (
+        <p className="composer__control-note">{t("task.composer.appliesNextRun")}</p>
+      ) : null}
     </>
   );
 }

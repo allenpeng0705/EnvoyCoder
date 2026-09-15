@@ -3733,6 +3733,75 @@ exist, the capability not granting it, and the command defined under a name othe
 instrument for *that* is the owner's own click on a Copy control in the shipped window. Recorded as a limit rather
 than implied by a passing suite.
 
+### 7.30 The composer said the same thing four times, above the field
+
+The owner, with a turn running:
+
+> *"There are too many texts like 'The agent is still working in /Users/…/EnvoyMesh. A new folder applies to the next
+> run.' / 'The agent keeps the mode it started with. Your choice applies to the next run.' / 'The agent keeps the
+> model it started on. Your choice applies to the next run.' / 'Envoy Harness does not offer a thinking level.' These
+> texts are usless, but make the chats inputting messy."*
+
+Four paragraphs, and three of them were **one fact told once per control** — that a choice made while a turn is
+running applies to the *next* run. The reasoning that produced them is in `en.ts`'s own comment (*"a user who changed
+only the folder should not be told about a mode they did not touch"*), but the sentences were never shown on
+interaction: they appeared whenever a turn was **running**, so all three arrived at once, directly above the field
+the user was typing into. The fourth was a reason for a control the user had not reached for.
+
+Measured before and after, in a real window, with a counter added to `measure-settings.mjs` for exactly this question
+(`composer.notes` — a character count for the whole pane cannot see paragraphs appearing above the field):
+
+```console
+before: composer notes 2 | chars 126
+   - This window has no folder chooser, so this task's folder cannot be changed here.
+   - Envoy Harness does not offer a thinking level.
+after:  composer notes 0 | chars 0
+```
+
+(Two rather than the owner's four, because the seeded page has no live run; the mechanism is the same, and the
+composer legs cover the running case.)
+
+#### 7.30.1 The rule, which is about **where** a fact belongs
+
+* **A control that cannot be used carries its reason on itself** — its `title` for a pointer, and a
+  `visually-hidden` paragraph named by `aria-describedby` for a screen reader. The control is still drawn and still
+  disabled: nothing is hidden, the explanation simply arrives at the control instead of sitting permanently above the
+  field. This is a change to a documented law (*"a control we cannot honour is disabled, with the reason on screen"*),
+  and the half that matters is kept: the reason is still reachable, and still says which of the three different
+  refusals it is.
+* **A fact all the controls share is said once**, and only while it is true — one line, `Applies to the next run.`,
+  while a turn is running.
+* **A failure the user just caused, or an action they may need, takes the line instead**: a folder chooser that would
+  not open (§7.27's rule — a refusal is read where the press was), and the probe that is the only way to learn what
+  an agent offers.
+
+The settings pane keeps its own on-screen notes, and that is not an inconsistency: a settings page is *read*, and the
+composer is *used*. The test for "is this note earning its space" is whether the user is looking at the surface to
+find something out or to type into it.
+
+#### 7.30.2 What was retired
+
+Four keys per locale — `task.composer.{folder,agentMode,model,thinking}.nextRun` — replaced by one,
+`task.composer.appliesNextRun`, in all seven catalogues (`i18n:gap` 455/455 complete). Every other sentence stays:
+it is now the control's description rather than a paragraph, so nothing was deleted from the product's vocabulary.
+
+#### 7.30.3 What is asserted, and the mutations
+
+`composer-notes.test.tsx` renders the control row itself and counts `.composer__control-note`: **at most one, in
+every state** — asserted as a property over seven states rather than one at a time, so a fifth branch added later
+has to keep it. Six mutations, one per leg: a per-control sentence put back (3 legs red), a disabled control losing
+its `title`, losing its description paragraph, the folder pill losing its reason, the shared line drawn when nothing
+is running (3 legs), and the probe line dropped.
+
+Five legs in `task-pane.test.tsx` had encoded the old sentences, and were rewritten rather than deleted — each now
+asserts the *new* behaviour for that control (one line, the reason on the control, the description reachable). The
+real-window leg asserts the count on a page the tool boots itself, so "no prose above the field" is measured and not
+just unit-tested.
+
+While doing this, the `Report` interface in that e2e file turned out to have a **duplicated block** — `theme` and
+`contrastAll` were declared twice, the second copy nested inside `fix`. It type-checked (the extra members were
+legal) and meant `fix` claimed two fields it does not have. Removed.
+
 ## 8. The slice plan
 
 Ordered, and ordered by *cheapness times usefulness* rather than by Paseo's section order. Each slice

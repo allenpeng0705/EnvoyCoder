@@ -47,6 +47,15 @@ export interface ModelChoiceProps {
   off: ModelOffReason | undefined;
   /** The control's tooltip, which says *which* model this is when it is not a refusal. */
   title: string;
+  /**
+   * The id of a paragraph that explains **why this control is off**, when it is.
+   *
+   * `aria-describedby` rather than a second sentence on screen: the composer draws the reason as
+   * `visually-hidden` text so a screen reader reaches it, and the tooltip carries the same sentence for a
+   * pointer. See `ComposerControls`' notes rule for why the reason is attached to the control instead of
+   * sitting under the row — the settings pane, which is read rather than used, still puts it on the page.
+   */
+  descriptionId?: string;
   /** Where `""` travels: "the agent's own default", on the same terms as the composer's control. */
   onChoose: (id: string) => void;
   /** Only the input's own class differs between surfaces; the shape does not. */
@@ -83,6 +92,7 @@ export function ModelChoice(props: ModelChoiceProps): JSX.Element {
         // rather than a second `aria-label`, so the name a screen reader announces and the one on screen
         // cannot drift apart.
         aria-labelledby={props.labelId}
+        {...(props.descriptionId !== undefined ? { "aria-describedby": props.descriptionId } : {})}
         disabled={props.off !== undefined}
         placeholder={t("task.composer.model.placeholder")}
         title={props.title}
@@ -107,6 +117,7 @@ export function ModelChoice(props: ModelChoiceProps): JSX.Element {
       // on the next line.
       disabled={props.off !== undefined}
       aria-labelledby={props.labelId}
+      {...(props.descriptionId !== undefined ? { "aria-describedby": props.descriptionId } : {})}
       title={props.title}
       value={props.selected ?? ""}
       onChange={(event) => props.onChoose(event.target.value)}

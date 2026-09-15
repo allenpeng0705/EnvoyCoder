@@ -403,9 +403,11 @@ describe("the new chat, which is where a session starts", () => {
  *   2. **The picker's enabled state comes off the wire.** `capabilities.agentMode` is the only thing
  *      that turns it on; an agent with modes it cannot be *set* into gets a disabled picker and a
  *      sentence saying so, and an agent we have not been told about gets a *different* sentence.
- *   3. **Both say "next run" while one is running.** The agent is launched with `task.cwd` and put into
- *      its mode right after `session/new`, so neither control can move or re-mode a run already going —
- *      and pretending otherwise is how a user concludes the app ignored them.
+ *   3. **A live run is said once, not once per control.** The agent is launched with `task.cwd` and put
+ *      into its mode right after `session/new`, so no control can move or re-mode a run already going —
+ *      and pretending otherwise is how a user concludes the app ignored them. That fact is now one line
+ *      under the row (`composer-notes.test.tsx` holds the count); what each control carries here is its
+ *      **own** reason, on itself, when it cannot be used.
  */
 describe("the folder control", () => {
   const nested = { ...task, cwd: "/repo/packages/api" };
@@ -415,17 +417,29 @@ describe("the folder control", () => {
     const pill = screen.getByLabelText("Change this task's folder");
     // Relative, because that is the shape a user recognises: the project is already named in the header.
     expect(pill.textContent).toBe("packages/api");
-    // Nothing is hidden: the full path is one hover away.
-    expect(pill.getAttribute("title")).toBe("/repo/packages/api");
+    // Nothing is hidden: the full path is one hover away. (The title *contains* it rather than being it, because
+    // a window with no chooser appends the reason to the same hover — see the leg below.)
+    expect(pill.getAttribute("title")).toContain("/repo/packages/api");
   });
 
-  it("is disabled with the reason shown when this window has no chooser", () => {
-    // A browser dev server, or Linux without zenity. A button that silently does nothing is worse than
-    // one that says why it cannot.
+  it("is disabled with the reason on itself when this window has no chooser", () => {
+    // A browser dev server, or Linux without zenity. A button that silently does nothing is worse than one that
+    // says why it cannot — and "why" now travels **on the pill**: its tooltip for a pointer, and a
+    // `visually-hidden` paragraph its `aria-describedby` names for a screen reader. It is not a paragraph under
+    // the row, because a permanent property of the window is not news (§7.30).
     renderPane([], { task: nested, onChangeFolder: vi.fn() });
     const pill = screen.getByLabelText("Change this task's folder") as HTMLButtonElement;
     expect(pill.disabled).toBe(true);
-    expect(screen.getByText(/no folder chooser/i)).toBeTruthy();
+    expect(pill.title).toContain("no folder chooser");
+    // The path is still in the title too: both answers come from the same hover.
+    expect(pill.title).toContain("/repo/packages/api");
+    const describedBy = pill.getAttribute("aria-describedby");
+    expect(document.getElementById(describedBy as string)?.textContent).toMatch(/no folder chooser/i);
+    // Nothing visible was added for it: the reason is attached to the pill. The only line the composer has
+    // here is the run's own — `renderPane` renders a live run by default, so that line is expected, and the
+    // point is that the *reason* is not a second one.
+    const notes = [...document.querySelectorAll(".composer__control-note")];
+    expect(notes.map((node) => node.textContent)).toEqual(["Applies to the next run."]);
   });
 
   it("changes the folder through the shell's picker when there is one", async () => {
@@ -453,12 +467,15 @@ describe("the folder control", () => {
     expect(screen.queryByText(/could not open/i)).toBeNull();
   });
 
-  it("tells the user the change applies to the next run while one is live", () => {
+  it("says a live run keeps its settings, once, without naming the folder it is in", () => {
     lendShell(async () => null);
     renderPane([], { task: nested, runLive: true, onChangeFolder: vi.fn() });
-    // Not a disabled control: the choice is real and will be used. It is the *running* agent that keeps
-    // the directory it started in, and the sentence has to say so.
-    expect(screen.getByText(/still working in \/repo\/packages\/api/)).toBeTruthy();
+    // Not a disabled control: the choice is real and will be used. It is the *running* agent that keeps the
+    // directory it started in — and the path is already on the pill, so the old sentence said it twice.
+    const notes = [...document.querySelectorAll(".composer__control-note")];
+    expect(notes).toHaveLength(1);
+    expect(notes[0]?.textContent).toBe("Applies to the next run.");
+    expect(screen.queryByText(/still working in/)).toBeNull();
   });
 });
 
@@ -555,11 +572,12 @@ describe("the agent's mode control", () => {
     );
   });
 
-  it("tells the user the mode applies to the next run while one is live", () => {
+  it("says a live run keeps its settings once, and does not put a sentence under each control", () => {
     renderPane([], { task: envoyTask, runLive: true, harnesses: [harnessFor("envoy-harness")] });
-    expect(screen.getByText(/keeps the mode it started with/)).toBeTruthy();
-    // The folder's sentence is its own, and this is a mode-only change: one control's note must not
-    // be stretched to cover the other, or a user reads a warning about something they never touched.
+    // The three per-control "your choice applies to the next run" sentences were the same fact three times over,
+    // above the field the user was typing into. One line now, and each control carries only its *own* reason.
+    expect(document.querySelectorAll(".composer__control-note")).toHaveLength(1);
+    expect(screen.queryByText(/keeps the mode it started with/)).toBeNull();
     expect(screen.queryByText(/still working in/)).toBeNull();
   });
 });
@@ -616,10 +634,15 @@ describe("the model control", () => {
     expect(field.tagName).toBe("INPUT");
     expect(field.disabled).toBe(false);
     expect(field.placeholder).toBe("provider/model");
-    expect(screen.getByText(/publishes its models only inside a running session/)).toBeTruthy();
-    // Both facts at once, because they are not alternatives: the instruction is about the value's
-    // shape, the note below it about when the choice takes effect.
-    expect(screen.getByText(/keeps the model it started on/)).toBeTruthy();
+    // The instruction about the value's shape travels **with the field** — its tooltip, and the paragraph its
+    // `aria-describedby` names — instead of as a paragraph under the row.
+    expect(field.title).toMatch(/publishes its models only inside a running session/);
+    const describedBy = field.getAttribute("aria-describedby");
+    expect(document.getElementById(describedBy as string)?.textContent).toMatch(
+      /publishes its models only inside a running session/,
+    );
+    // And a live run is one line about the run, not a sentence per control.
+    expect(document.querySelectorAll(".composer__control-note")).toHaveLength(1);
     // Not the refusal sentences: nothing here is being refused.
     expect(screen.queryByText(/does not take a model/)).toBeNull();
     expect(screen.queryByText(/not wired up yet/)).toBeNull();
@@ -865,11 +888,10 @@ describe("the thinking control", () => {
       harnesses: [harnessFor("deepseek-harness", { thinking: LEVELS })],
       runLive: true,
     });
-    expect(screen.getByText(/keeps the thinking level it started with/)).toBeTruthy();
-    // Its own line, not one line shared with the model: the model is also live here and says *its* own
-    // sentence, while the folder — which this user never touched — says nothing at all.
-    expect(screen.getByText(/keeps the model it started on/)).toBeTruthy();
-    expect(screen.queryByText(/still working in/)).toBeNull();
+    expect(screen.queryByText(/keeps the thinking level it started with/)).toBeNull();
+    expect(screen.queryByText(/keeps the model it started on/)).toBeNull();
+    // One line for the run — which is what those two sentences were both saying.
+    expect(document.querySelectorAll(".composer__control-note")).toHaveLength(1);
   });
 });
 

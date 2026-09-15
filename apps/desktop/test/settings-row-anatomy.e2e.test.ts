@@ -110,6 +110,11 @@ interface Report {
   /** Which palette these numbers describe — `--theme`. */
   theme: string;
   /**
+   * **The composer's prose, as the lines it draws** — the thing the owner complained about, in numbers:
+   * *"These texts are usless, but make the chats inputting messy."* Zero lines for a task with nothing running.
+   */
+  composer: { present: boolean; notes: readonly string[] };
+  /**
    * **Every text-bearing element on the page**, not only the chips and small print the narrower `contrast` list
    * samples. It exists because that list reported zero failures in the light palette while the page still had text
    * nobody could read: the worst elements are the ones a dark-only token sheet takes out — titles, headings, names.
@@ -138,14 +143,6 @@ interface Report {
     copyHeight: number;
     copySqueezed: number;
     contrast: { below45: number; worst: readonly { cls: string; ratio: number }[] };
-  /** Which palette these numbers describe — `--theme`. */
-  theme: string;
-  /**
-   * **Every text-bearing element on the page**, not only the chips and small print the narrower `contrast` list
-   * samples. It exists because that list reported zero failures in the light palette while the page still had text
-   * nobody could read: the worst elements are the ones a dark-only token sheet takes out — titles, headings, names.
-   */
-  contrastAll: { below45: number; sampled: number; worst: readonly { cls: string; ratio: number }[] };
   };
 }
 
@@ -409,6 +406,21 @@ describeWhen("the work surface, measured in a real window", () => {
     console.log(
       `· work surface measured: ${workReport.contrastAll.sampled} text elements in dark, ` +
         `${workLightReport.contrastAll.sampled} in light, across ${workReport.contrastAll.surfaces.join("/")}`,
+    );
+  });
+});
+
+describeWhen("the composer, measured in a real window", () => {
+  it("draws no line of prose above the field for a task with nothing running", () => {
+    // The measurement boots its own daemon with a seeded project and task, opens it, and counts the lines the
+    // composer draws under its controls. Before §7.30 this page had two — a window with no folder chooser, and Envoy
+    // Harness's missing thinking level, 126 characters in all — and the owner's own window had four while a turn was
+    // running, one per control, each saying the same thing.
+    expect(workReport.composer.present).toBe(true);
+    expect(workReport.composer.notes).toEqual([]);
+    console.log(
+      `· composer measured: ${String(workReport.composer.notes.length)} note line(s) above the field, ` +
+        `${String(workReport.composer.notes.reduce((n, line) => n + line.length, 0))} characters`,
     );
   });
 });

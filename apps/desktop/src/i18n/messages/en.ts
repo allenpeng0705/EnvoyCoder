@@ -183,16 +183,18 @@ export const en = {
   "task.composer.start": "Start",
   "task.composer.submit.blocked": "Answer the request above first",
 
-  /* ── the two controls above the field: the folder, and the agent's own mode ──
-     Both are about *this task*, both applied to the **next run**, and that shared property is why
-     each carries its own "next run" sentence instead of one shared note: a user who changed only the
-     folder should not be told about a mode they did not touch. */
+  /* ── the four controls above the field: the folder, the agent's mode, its model, how it thinks ──
+     All four share one property: a choice made while a turn is running applies to the **next** run. That
+     is said **once**, under the row, and only while a turn is running. It used to be a sentence per
+     control — four near-identical paragraphs above the field the user was typing into — and the owner's
+     report was exact: *"These texts are useless, but make the chats inputting messy."* A control that
+     cannot be used still says why: **on itself**, as its tooltip and its `aria-describedby`, rather than
+     as a paragraph about it (`docs/settings-parity.md` §7.30). */
+  "task.composer.appliesNextRun": "Applies to the next run.",
   "task.composer.folder.label": "Folder",
   "task.composer.folder.aria": "Change this task's folder",
   "task.composer.folder.noPicker":
     "This window has no folder chooser, so this task's folder cannot be changed here.",
-  "task.composer.folder.nextRun":
-    "The agent is still working in {path}. A new folder applies to the next run.",
   "task.composer.agentMode.label": "Mode",
   "task.composer.agentMode.title": "What the agent is allowed to do in this task",
   // What the picker shows in place of a mode, in the two states where there is none to show. The
@@ -206,8 +208,6 @@ export const en = {
   // A third, and the one that is easiest to mistake for the first: nothing has told us yet.
   "task.composer.agentMode.unknown":
     "EnvoyCoder has not been told which modes {agent} offers yet, so the picker is off for now.",
-  "task.composer.agentMode.nextRun":
-    "The agent keeps the mode it started with. Your choice applies to the next run.",
 
   /* ── the model the task runs on ──
      The third control, and the one with the most ways to be wrong, so its states are spelled out.
@@ -236,8 +236,6 @@ export const en = {
     // binary, where it is `deepseek-official` and not `deepseek`. An example would teach the wrong name
     // and every copy of it would go stale with somebody else's catalog.
     "{agent} publishes its models only inside a running session, so there is no list to choose from here. Type one as provider/model, using the provider name {agent} itself uses — and if it does not have that model the run stops with the agent's own words, rather than quietly using another one.",
-  "task.composer.model.nextRun":
-    "The agent keeps the model it started on. Your choice applies to the next run.",
   // …and the one note that is not a refusal *or* an instruction: the list on screen came from a real
   // session, at a real time, and is therefore a record rather than a promise. Printed instead of a
   // "where the list came from" line, because the answer to that question is what changes the user's
@@ -273,8 +271,6 @@ export const en = {
   // When it refuses one, the run stops with the agent's own sentence rather than continuing quietly.
   "task.composer.thinking.observed":
     "These are the thinking levels {agent} offered when EnvoyCoder last opened a session with it, on {at}. They were listed for the model it was running then, so they can change.",
-  "task.composer.thinking.nextRun":
-    "The agent keeps the thinking level it started with. Your choice applies to the next run.",
 
   /* ── asking the agent what it offers, before the first run ──
      The model list and the thinking levels of both native harnesses exist only *inside a session*, so

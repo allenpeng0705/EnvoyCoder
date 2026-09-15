@@ -992,6 +992,18 @@ const report = await evaluate(`(() => {
     headings: headings.map((h) => ownText(h)),
     groups,
     contrast: { worst, below45: contrast.filter((c) => c.ratio < 4.5).length, gradients },
+    /**
+     * **The composer's prose, counted** — because that is the thing the owner complained about, in numbers.
+     *
+     * *"There are too many texts like … These texts are usless, but make the chats inputting messy."* A character
+     * count for the whole pane cannot see four paragraphs appear above the field, so this counts the lines the
+     * composer draws under its controls and the characters in them. Zero is the healthy number for a task with
+     * nothing running; one is the most a live run is allowed (§7.30).
+     */
+    composer: {
+      present: document.querySelector(".composer") !== null,
+      notes: [...document.querySelectorAll(".composer__control-note")].map((node) => ownText(node)),
+    },
     // The whole page, in both palettes — see contrastAll for why the narrower list was not enough.
     contrastAll: {
       worst: worstAll,
