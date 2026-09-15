@@ -41,7 +41,21 @@ import {
   createCoderDaemonHost,
   createCoderDispatcher,
 } from "@envoycoder/host-bridge";
-import { primeSearchPath, type SearchPath } from "@envoycoder/platform";
+import {
+  currentSearchPath,
+  primeSearchPath,
+  primeShellBinaries,
+  type SearchPath,
+} from "@envoycoder/platform";
+import {
+  ALL_HARNESSES,
+  acpAgent,
+  cataloguedInstall,
+  harnessAvailability,
+  probeHarness,
+  probeableBinaryNames,
+  type HarnessProbe,
+} from "@envoycoder/agent-catalog";
 
 import type { AcpLaunch } from "./acp/client.js";
 import { AcpClient } from "./acp/client.js";
@@ -49,6 +63,7 @@ import { createCoderEventBus, createCoderSocketMethods, createNodeService } from
 import { clearDaemonClaim, writeDaemonClaim } from "./lock.js";
 import { RunManager } from "./runs.js";
 import { SessionProbe } from "./session-probe.js";
+import { WARM_STALE_MS, startDeepWarm } from "./deep-warm.js";
 import { SessionSignIn } from "./sign-in.js";
 import { createCoderHandlers } from "./service.js";
 import { CoderStore } from "./store.js";
@@ -76,6 +91,19 @@ export interface StartCoderDaemonOptions {
    * what a test proves about the handshake is what a user gets.
    */
   startClient?: typeof AcpClient.start;
+  /**
+   * **Look at what the ready agents publish, in the background, one at a time.**
+   *
+   * Defaults to **false**, and the two callers are the argument for that: the production entry point
+   * (`daemon/main.ts`) passes `true`, and every test plus `scripts/smoke.ts` leaves it out. A warmer that ran
+   * by default would spawn the developer's own coding agents on every test run, and it would make this
+   * slice's own headline property — *loading the agents page spawns nothing* — unprovable.
+   *
+   * What it does when it is on: `deep-warm.ts` carries the four bounds. In one sentence, it asks each agent
+   * that is `ready` **and is not fetched on first run** what it publishes, sequentially, so the row's
+   * `Verified` property has a time without anybody pressing a button.
+   */
+  warm?: boolean;
   resolveLaunch?: (input: {
     harness: import("@envoycoder/protocol").HarnessId;
     cwd: string;
@@ -103,6 +131,21 @@ export interface StartedCoderDaemon {
    * absent, slow or hostile is not a daemon failure, it is the fallback answer.
    */
   searchPath(): Promise<SearchPath>;
+  /**
+   * The programs the login shell resolved **by name**, once that ask has landed.
+   *
+   * The same seam as `searchPath()`, for the second question the shell is asked. A test awaits this to know
+   * the prime is finished rather than sleeping; production never waits, because `currentSearchPath()` reads
+   * whatever has landed (`./launch.ts` explains why the probe and the spawn must read one list).
+   */
+  shellBinaries(): Promise<ReadonlyMap<string, string>>;
+  /**
+   * The background warm-up's report, when this daemon was asked to warm (`warm: true`).
+   *
+   * `undefined` when it was not — and that is the honest answer rather than an empty report, because "we did
+   * not look" and "we looked at nothing" are different facts and only one of them is about the agents.
+   */
+  warm(): Promise<import("./deep-warm.js").WarmReport> | undefined;
   stop(): Promise<void>;
 }
 
@@ -172,6 +215,41 @@ export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): P
     ...(options.platform ? { platform: options.platform } : {}),
   });
 
+  /**
+   * **The one prober for the nine agents we ship** — built here rather than left to `service.ts`'s own default,
+   * because the background warm-up below needs the *same* answer to decide which agents it may start.
+   *
+   * Two constructions of `probeHarness` over two search-path reads would be two answers to "what can this
+   * machine do", and the one that drifts is always the one nobody is looking at: the row would say `ready`
+   * about an agent the warmer refused to start, or the reverse. The read happens **per call** rather than once
+   * at construction so that the login shell's answers — which land a moment after the daemon starts
+   * listening — are included, which is the whole reason `primeSearchPath()` exists.
+   */
+  const harnessProbe = (harness: import("@envoycoder/protocol").HarnessId): HarnessProbe => {
+    const search = currentSearchPath();
+    return probeHarness(harness, {
+      pathDirs: search.dirs,
+      searchable: search.searchable,
+      ...(options.platform ? { platform: options.platform } : {}),
+    });
+  };
+
+/**
+ * Has this agent been looked at recently enough that a background pass may skip it?
+ *
+ * A pure function of a timestamp and a clock, and separate from the plan for the reason every clock in this
+ * repo is injected: a missing observation is **not** recent (there is nothing to skip), a timestamp that is not
+ * a date is not recent (we cannot tell), and a clock that went backwards is not evidence of freshness — the
+ * same rule `catalog.ts` learned when a laptop woke from sleep.
+ */
+function isFreshObservation(observedAt: string | undefined, now: number): boolean {
+  if (observedAt === undefined) return false;
+  const then = Date.parse(observedAt);
+  if (Number.isNaN(then)) return false;
+  const age = now - then;
+  return age >= 0 && age < WARM_STALE_MS;
+}
+
   const handlers = createCoderHandlers({
     store,
     paths,
@@ -180,6 +258,8 @@ export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): P
     signIn,
     instance: { instanceId, version, startedAt: new Date().toISOString(), connectionCount: () => connections },
     mesh: () => mesh,
+    // The same function the warm-up reads, so the list and the background pass cannot disagree.
+    probe: harnessProbe,
     ...(options.isDirectory ? { isDirectory: options.isDirectory } : {}),
   });
 
@@ -247,11 +327,79 @@ export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): P
     process.stderr.write(
       `[envoycoder] agent search path from ${resolved.source}: ${resolved.dirs.length} director` +
         `${resolved.dirs.length === 1 ? "y" : "ies"}` +
-        `${resolved.added.length > 0 ? `, ${resolved.added.length} added from the well-known list` : ""}\n`,
+        `${resolved.added.length > 0 ? `, ${resolved.added.length} added from the well-known list` : ""}` +
+        `${resolved.cached.length > 0 ? `, ${resolved.cached.length} from a tool cache` : ""}\n`,
     );
     bus.emit("coder:state-changed", { kind: "harnesses", at: new Date().toISOString() });
     return resolved;
   });
+
+  /**
+   * **The second question the login shell is asked: where would you find *this* name?**
+   *
+   * A `$PATH` answer is a variable and a `command -v` answer is a lookup, and on the machine this was written
+   * on the two disagree about `dsh`: the login shell's own `PATH`, asked from a clean environment, holds 26
+   * directories and none of them has it, while `command -v dsh` names an `npx` cache directory that no `PATH`
+   * this process inherits mentions. That is why the row read "not installed" for an agent its owner uses every
+   * day, and asking about the names is half of what closes it (the other half is `cacheBinDirs`).
+   *
+   * The names come from the catalogue itself (`probeableBinaryNames`) plus the commands this daemon's stored
+   * providers declare — **one** shell invocation for all of them, cached per name for the life of the process.
+   * Shaped like the `PATH` prime above and for the same three reasons: not awaited (the daemon is already
+   * listening), broadcast when it lands (a row painted a moment ago may now be a different state), and a
+   * failure is a log line rather than a claim about anybody's machine.
+   */
+  const binariesPrimed = primeShellBinaries(
+    probeableBinaryNames(store.providers().map((provider) => provider.command)),
+  ).then((answers) => {
+    if (answers.size > 0) {
+      process.stderr.write(
+        `[envoycoder] the login shell resolved ${answers.size} program` +
+          `${answers.size === 1 ? "" : "s"} by name — a lookup, which can differ from its own PATH answer\n`,
+      );
+      bus.emit("coder:state-changed", { kind: "harnesses", at: new Date().toISOString() });
+    }
+    return answers;
+  });
+
+  /**
+   * **The deep facts, looked at in the background — one agent at a time, and never something that must be
+   * downloaded first.**
+   *
+   * `deep-warm.ts` carries the reasoning; what belongs here is how the candidates are built, because that is
+   * where the one prohibition is decided. A candidate is eligible when this daemon measured it `ready` **and**
+   * starting it is not a fetch — and the second half is *derived from the catalogue* rather than written down:
+   * an entry whose `install.kind` is `npx` is fetched from npm on the first run, so a background pass that
+   * started one would **download a package because a user opened an app**. `acpAgent(id)` answers for the
+   * catalogued entries (including `cursor`, which is also a built-in), and `undefined` for the built-in
+   * harnesses that are not recipes at all — which is exactly the set where "will this download?" is `false`
+   * for a real reason rather than by assertion.
+   */
+  const warm = options.warm === true
+    ? startDeepWarm({
+        candidates: () =>
+          ALL_HARNESSES.map((id) => {
+            const entry = acpAgent(id);
+            const install = entry === undefined ? undefined : cataloguedInstall(entry);
+            return {
+              id,
+              availability: harnessAvailability(harnessProbe(id)),
+              fetchedOnFirstRun: install?.kind === "npx",
+              // **The cross-session bound**, and the reason a second launch of the app starts nothing: the
+              // store's observation survives a restart, `SessionProbe`'s cache does not, so this is the field
+              // that makes the pass free on a machine that has already been looked at recently. Read from the
+              // two records a deep probe writes — the options it published, and the auth it wanted.
+              observedRecently: isFreshObservation(
+                store.sessionOptions(id)?.observedAt ?? store.agentAuth(id)?.observedAt,
+                Date.now(),
+              ),
+            };
+          }),
+        ask: (id) => probeSession.probe(id),
+        onAnswer: () => bus.emit("coder:state-changed", { kind: "harnesses", at: new Date().toISOString() }),
+        note: (line) => process.stderr.write(line),
+      })
+    : undefined;
 
   return {
     instanceId,
@@ -265,8 +413,20 @@ export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): P
     connectionCount: () => connections,
     /** What the resolver landed on, for a test and for a shutdown that wants to know it finished. */
     searchPath: () => searchPathPrimed,
+    /** What the shell resolved by name, on the same terms. */
+    shellBinaries: () => binariesPrimed,
+    /**
+     * The background warm-up, once it has finished — or `undefined` when this daemon was not asked to warm.
+     *
+     * Exposed for the same reason `searchPath()` is: a test that wants to watch the pass complete must be able
+     * to await it rather than sleep. Production never waits, because nothing depends on the pass finishing.
+     */
+    warm: () => warm?.done(),
     async stop() {
       unsubscribe();
+      // Before the agents: the pass asks agents to start, and one that began a moment ago must not leave a
+      // child behind a daemon that is exiting — the property `agent-teardown.ts` exists for.
+      warm?.stop();
       // Runs and probes first: an agent is a child process, and a daemon that exits before its children
       // leaves agents writing to a user's working tree with nobody watching them. A probe's agent is a
       // child process too — short-lived, but a daemon that exited out from under one would leave it

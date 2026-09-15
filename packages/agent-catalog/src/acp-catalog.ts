@@ -41,10 +41,11 @@
  * `coder.addProvider` / `coder.removeProvider`, probed by the same prober as the entries below
  * (`./probe.ts`, through `./providers.ts`) and launched by the same body
  * (`apps/desktop/src/daemon/launch.ts`'s `launchForProvider`). The list below reaches a user through
- * `coder.listCatalog` / `coder.probeCatalogAgent` (`apps/desktop/src/daemon/catalog.ts`), which serve
- * *this* file rather than a copy of it, so the phone and the desktop window read the same entries.
- * Three differences between the two tiers are worth stating here, because this file is where a
- * maintainer looks first:
+ * `coder.listCatalog` (`apps/desktop/src/daemon/catalog.ts`), which serves one row per entry **with what this
+ * machine can do with it**, resolved when the list is served — the cheap facts, from filesystem and environment
+ * reads, for all 38 rows at once. There is no per-row probe method any more: §7.17 of `docs/settings-parity.md`
+ * records the report that removed it, and the test beside it counts child processes across a whole read and
+ * requires zero. That is why the catalogue is *not* desktop-only knowledge
  *
  *   * **An entry's `env` carries values; a provider's carries names and a *reference*.** That is not an
  *     inconsistency, it is the security decision: `AUGMENT_DISABLE_AUTO_UPDATE: "1"` is part of a
@@ -753,39 +754,17 @@ export function cataloguedRecipe(entry: AcpAgentEntry): ProbeRecipe {
   };
 }
 
-/** A probe about a catalogued entry: the same finding as any other, under the entry's own id. */
-export interface CataloguedAgentProbe extends ProbeFinding {
-  id: string;
-}
-
 /**
- * Can this machine run one catalogued entry?
+ * **The catalogue's projection of one entry is `probeRecipe(cataloguedRecipe(entry))`, and nothing wraps it.**
  *
- * ## What this costs, which is the whole reason it is per-entry
- *
- * **One search of the resolved search path per call** — the same `findBinary` the nine shipped agents go
- * through, and *nothing else*: no process is started, no package is fetched, no session is opened. That
- * matters more here than anywhere else in the catalogue, because 14 of these entries are `npx -y …`
- * recipes and a probe that *ran* them would download fourteen packages onto a user's machine for asking
- * a question. (The download is real, and it is stated on the row instead: it happens on the first run,
- * once, which is a cost the user chose.)
- *
- * Even so it is not free — 38 searches is 38 sweeps of a directory list, and a screen that did it while
- * opening would spend that on rows nobody has looked at. So the caller probes **one row, when the user
- * asks for that row**, caches the answer, and says when it was taken. `coder.probeCatalogAgent` is where
- * that policy lives; nothing in this module decides how often to ask.
- *
- * `undefined` when no entry has that id, which is a different thing from `unknown`: nothing was asked
- * about a program that does not exist. The daemon turns it into a refusal by name.
+ * There used to be a `probeCatalogAgent(id)` here beside a `CataloguedAgentProbe` — the entry point for the
+ * per-row method a user had to press (`coder.probeCatalogAgent`, deleted in §7.17 of `docs/settings-parity.md`).
+ * It measured one entry per call, and once the daemon began resolving **every** row when it serves the list it
+ * had no caller left outside this package's own test. A function whose only remaining reader is the test that
+ * asserts it is an implementation of nothing, so both are gone and the assertions that were here now drive
+ * `probeRecipe` over `cataloguedRecipe` directly — which is exactly what `apps/desktop/src/daemon/catalog.ts`
+ * composes for the rows it serves.
  */
-export function probeCatalogAgent(
-  id: string,
-  options: ProbeHarnessOptions = {},
-): CataloguedAgentProbe | undefined {
-  const entry = acpAgent(id);
-  if (!entry) return undefined;
-  return { id, ...probeRecipe(cataloguedRecipe(entry), options) };
-}
 
 /**
  * What `coder.addProvider` is handed for one entry — **and the dialect is the entry's, not ours**.

@@ -52,6 +52,7 @@ import {
 } from "@envoycoder/protocol";
 import type { ProviderProbe } from "@envoycoder/agent-catalog";
 import { acpAgent, agreesWithEntry } from "@envoycoder/agent-catalog";
+import { primeShellBinaries } from "@envoycoder/platform";
 
 import { summarizeProvider } from "./summaries.js";
 
@@ -196,8 +197,8 @@ export function createProviderHandlers(
        * for the page to be reopened, which is the one action that fixes it.
        *
        * An id that names no entry takes the same path (it cannot agree with anything), and that is
-       * deliberate rather than an omission: `error.catalogAgentMissing` would be a sentence about the
-       * *catalogue*, and at this point the question is about the row the caller is adding.
+       * deliberate rather than an omission: a sentence about a *missing catalogue entry* would be an answer
+       * to a question nobody asked, and at this point the question is about the row the caller is adding.
        */
       const catalogEntryId = input.catalogEntryId;
       if (catalogEntryId !== undefined) {
@@ -250,6 +251,15 @@ export function createProviderHandlers(
         );
       }
       const { provider } = await deps.store.addProvider(parsed.data);
+      /**
+       * **Ask the user's shell about this command too**, because a provider added a minute ago was not in the
+       * list the boot prime asked about. Fire-and-forget and bounded like every other shell ask in this
+       * daemon: the answer joins the search path when it lands, and a shell that is absent or slow leaves the
+       * ordinary search to decide. A provider whose command is not a plain name (an absolute path, say) is
+       * skipped by `@envoycoder/platform` rather than quoted into a script — the rule for user-controlled
+       * strings, and the reason this call needs no escaping here.
+       */
+      void primeShellBinaries([provider.command]);
       return { provider };
     },
 

@@ -1,14 +1,13 @@
 /**
  * The catalogue over the wire: **what EnvoyCoder knows how to drive, and what this machine can actually
- * do with one of them.**
+ * do with one of them — on the row, the moment the list is read.**
  *
  * ## Why the catalogue is served at all
  *
  * `coder.listHarnesses` answers for the nine agents we ship and `coder.listProviders` for the ones a user
  * typed. Between them they left the 38 catalogued ACP agents — Gemini CLI, Cline, Goose, Cursor's own
  * recipe — reachable from nowhere: the data was in `@envoycoder/agent-catalog` and no surface read it. A
- * user with one of those CLIs installed had a product that supported it and no way to find that out. That
- * is the gap these two methods close.
+ * user with one of those CLIs installed had a product that supported it and no way to find that out.
  *
  * It is served rather than imported into the window for two reasons:
  *
@@ -16,23 +15,37 @@
  *     A window that carried its own copy would be a second answer to "what does this run", free to drift
  *     from the one `launchForProvider` uses — the class of defect this repository keeps paying for.
  *   * **The phone.** The catalogue is not a desktop feature. A thin client that lists agents, or lets a
- *     user add one, reads these same two methods and gets the same entries and the same dialect facts. The
- *     package they come from is browser-hostile on purpose (`@envoycoder/platform` imports `node:fs`), so
- *     the daemon is the only half that *can* hold it — which turns "do not put catalogue knowledge in
- *     desktop-only code" into a fact about the architecture rather than a rule to remember.
+ *     user add one, reads this same method and gets the same entries, the same dialect facts and the same
+ *     verdicts. The package they come from is browser-hostile on purpose (`@envoycoder/platform` imports
+ *     `node:fs`), so the daemon is the only half that *can* hold it — which turns "do not put catalogue
+ *     knowledge in desktop-only code" into a fact about the architecture rather than a rule to remember.
  *
- * ## Two methods, and the difference between them is the whole cost story
+ * ## What changed, and the report it came from
  *
- *   * `coder.listCatalog` **measures nothing.** It projects the static list: no search path, no process,
- *     no package. That is why it is safe to call on open, and why 38 rows can render immediately.
- *   * `coder.probeCatalogAgent` measures **one entry, when the user asks about that row**, and caches the
- *     answer. See `probeOne` for what is cached and — more importantly — what is deliberately not.
+ * A row used to carry **no** claim about this machine: the client rendered *"Not checked yet"* on all 38 and
+ * offered a *Check* button on each, and `coder.probeCatalogAgent` measured one entry when it was pressed and
+ * cached the answer. Every row was therefore a chore — press, wait, read, thirty-eight times — and the owner
+ * said what that is worth: *"I don't want user to guess, to check if we can do that. And If the agent cannot be
+ * used - 'Not Ready', we should clearly know what the problem is and guide user to resolve it if he want to use
+ * this coding agent."*
  *
- * Never a sweep, and the reason is money and bandwidth rather than taste: 14 of the entries are `npx -y …`
- * recipes, so a screen that probed them all while opening would be a screen that downloads fourteen npm
- * packages because a user clicked *Settings*. The probe here does not fetch anything (it looks for `npx`
- * rather than the package), which makes the sweep merely wasteful rather than expensive — and wasteful on
- * behalf of rows nobody looked at is still enough to say no.
+ * The design that produced the chore had one good reason behind it and one mistake in front of it. The good
+ * reason: **starting** fourteen of these recipes would download fourteen npm packages because somebody opened
+ * Settings, so nothing here may start anything. The mistake: an availability answer does not need to start
+ * anything, and the two were not separated. So they are separated now —
+ *
+ *   * `coder.listCatalog` answers each row from four **filesystem and environment reads**: does the program
+ *     resolve, does the agent's own program resolve when the recipe is a bridge over one, is the program
+ *     fetched on first run (`npx`/`uvx`, where there is nothing to install), and are the variables the launch
+ *     needs present. No process, no package, no network, and no cache: the list is recomputed per read, so a
+ *     program installed while the window is open is real the next time the list is read.
+ *   * Nothing in this file ever starts an agent. The one method that did measure by *running* something is
+ *     `coder.probeSessionOptions`, and what it learns — what the agent publishes, whether it wants a sign-in —
+ *     travels as a **property with the time it was observed**, not as a state a row waits on. See
+ *     `apps/desktop/src/components/settings/agent-verdict.ts` for the two-verdict projection a client renders.
+ *
+ * The assertion that this stayed cheap is not a comment: `test/catalog-rpc.test.ts` counts child processes
+ * across a full read of the list and requires zero.
  */
 
 import {
@@ -42,166 +55,59 @@ import {
   cataloguedEnvValues,
   cataloguedInstall,
   cataloguedProviderInput,
-  acpAgent,
   harnessAvailability,
 } from "@envoycoder/agent-catalog";
 import {
   type CatalogEntry,
-  type CatalogProbe,
   type HarnessAvailability,
   type RpcMethod,
-  ENVOYCODER_ERRORS,
-  coderError,
   isHarnessId,
   parseRpcParams,
 } from "@envoycoder/protocol";
 
-import { ref } from "./messages.js";
 import type { CoderHandler } from "./service.js";
-
-/**
- * How long a measurement stands before the daemon measures again.
- *
- * The same ten minutes `session-probe.ts` uses, and for a less dramatic version of the same reason: an
- * agent can be installed while the window is open, and "I just installed it and it still says missing" is
- * a support ticket. This is the *automatic* half of that fix; `force` is the half the user controls.
- */
-export const CATALOG_PROBE_STALE_MS = 10 * 60_000;
 
 /** What these handlers need: the one prober, over the daemon's resolved search path. */
 export interface CatalogHandlerDeps {
   /**
-   * Measure one entry, over the list the launch will search.
+   * Measure one entry, over the list the launch will search. **Reads only; never spawns.**
    *
    * Injected rather than called directly, on exactly the terms `CoderServiceDeps.probe` is: a test that has
    * to know what a row says must not depend on what this machine happens to have installed. The caller
    * builds it from `probeRecipe(cataloguedRecipe(entry))` and the same `search` object it hands the spawn,
-   * which is what keeps the answer and the launch about the same directory list.
+   * which is what keeps the answer and the launch about the same directory list — the defect this repository
+   * keeps paying for is a row that says "missing" while the launch works.
    */
   probe: (entry: AcpAgentEntry) => ProbeFinding;
-  /** Injectable clock, so a test can watch the staleness window without waiting ten minutes. */
-  now?: () => number;
-  /** The staleness window. */
-  staleMs?: number;
-}
-
-/** One cached measurement. */
-interface Measurement {
-  availability: HarnessAvailability;
-  detail: string;
-  /** What the measurement itself cost, in milliseconds — reported so a row can say so. */
-  costMs: number;
-  /** When it was taken, as an ISO string. */
-  observedAt: string;
 }
 
 /**
- * Which states are worth keeping.
+ * The one handler, ready to spread into the daemon's table.
  *
- * ## The rule, and the defect it prevents
- *
- * `session-probe.ts` caches only successful outcomes, and this is the same rule one step wider: **a
- * negative answer is the one a user is about to change.** Caching `not-installed` would mean a user who
- * installs Goose, comes back and presses *Check again* is shown the answer we took before they did it —
- * and the row they are looking at is the row they just acted on. `unknown` is excluded for the plainer
- * reason that we did not measure anything: there is nothing to keep.
- *
- * So `ready`, `needs-bridge` and `unsupported` are cached (they are facts about an installation, and
- * re-walking a search path to re-learn them is pure waste), and the two states that assert *absence* are
- * measured every time they are asked about. That costs one search per press on a missing row, which is
- * the cheapest possible price for the answer being true.
- */
-const CACHEABLE: ReadonlySet<HarnessAvailability["state"]> = new Set([
-  "ready",
-  "needs-bridge",
-  "unsupported",
-]);
-
-/**
- * The two handlers, ready to spread into the daemon's table.
- *
- * Both parse their parameters first, exactly as every method in `service.ts` does, so a bad call is refused
- * by the same code with the same shape wherever it lands.
+ * It parses its parameters first, exactly as every method in `service.ts` does, so a bad call is refused by
+ * the same code with the same shape wherever it lands.
  */
 export function createCatalogHandlers(
   deps: CatalogHandlerDeps,
 ): Partial<Record<RpcMethod, CoderHandler>> {
-  const now = deps.now ?? (() => Date.now());
-  const staleMs = deps.staleMs ?? CATALOG_PROBE_STALE_MS;
-  /**
-   * The measurements, in memory, dying with the daemon.
-   *
-   * Deliberate rather than unfinished, on the same terms `session-probe.ts` states: this answers "what is
-   * on this machine right now", and a persisted answer would survive the install that invalidates it. It
-   * also has to be *global* rather than per-connection, because a second window asking about the same row a
-   * minute later should not make the daemon walk the search path again.
-   */
-  const cache = new Map<string, Measurement>();
-
-  /** A cached measurement, when there is one and it is young enough. */
-  const fresh = (id: string): Measurement | undefined => {
-    const entry = cache.get(id);
-    if (!entry) return undefined;
-    const age = now() - Date.parse(entry.observedAt);
-    // A clock that went backwards (a laptop waking from sleep, an NTP correction) makes the age negative;
-    // that is not evidence of freshness, so only a genuinely young reading is served.
-    return age >= 0 && age < staleMs ? entry : undefined;
-  };
-
   return {
     /**
-     * Every catalogued entry, **with nothing measured about it**.
+     * Every catalogued entry, **each with what this machine can do with it**.
      *
-     * The rows carry the recipe (command, argv, the dialect the entry states, the environment variable
-     * *names* it sets, and how the program is obtained) and one computed flag — whether the id also names
-     * an agent we ship, because `cursor` is both a built-in and a recipe, and the window must not be the
-     * place that decides which wins.
+     * The rows carry the recipe (command, argv, the dialect the entry states, the environment variable names
+     * it sets, and how the program is obtained), one computed flag — whether the id also names an agent we
+     * ship, because `cursor` is both a built-in and a recipe, and the window must not be the place that
+     * decides which wins — and the availability this daemon just resolved.
+     *
+     * Not cached, deliberately, and it is a decision rather than an omission: the measurement is a handful of
+     * `stat` calls per row, and a cache here would be the mechanism by which "I installed it and it still says
+     * missing" comes back — the support ticket the old ten-minute staleness window was papering over. A cache
+     * would buy nothing anybody can feel, because the work is filesystem metadata, and it would cost the one
+     * property the screen is for: that a row is about *now*.
      */
     "coder.listCatalog": async (params) => {
       parseRpcParams("coder.listCatalog", params);
-      return { entries: catalogEntries() };
-    },
-
-    /**
-     * One entry, measured — or answered from a recent measurement, and told which it was.
-     *
-     * The refusals are the parameter's fault and are reported as such: an id that names no catalogued entry
-     * is `envoycoder.bad-request` with a sentence naming it. Answering `unknown` there was the other option
-     * and it is worse — `unknown` means "we could not look", and saying it about a program that does not
-     * exist turns a typo into a state a user can act on.
-     */
-    "coder.probeCatalogAgent": async (params) => {
-      const input = parseRpcParams("coder.probeCatalogAgent", params) as {
-        id: string;
-        force?: boolean;
-      };
-      const entry = acpAgent(input.id);
-      if (!entry) {
-        throw coderError(
-          ENVOYCODER_ERRORS.badRequest,
-          `There is no catalogued agent called "${input.id}". The list changed since this window read it — reopen the agents page and try again.`,
-          ref("error.catalogAgentMissing", { id: input.id }),
-        );
-      }
-
-      if (input.force !== true) {
-        const cached = fresh(input.id);
-        if (cached) return { id: input.id, ...cached, cached: true } satisfies CatalogProbe;
-      }
-
-      const started = now();
-      const finding = deps.probe(entry);
-      const costMs = Math.max(0, now() - started);
-      const availability = harnessAvailability(finding);
-      const measured: Measurement = {
-        availability,
-        detail: describe(entry, finding, availability),
-        costMs,
-        observedAt: new Date(now()).toISOString(),
-      };
-      if (CACHEABLE.has(availability.state)) cache.set(input.id, measured);
-      else cache.delete(input.id);
-      return { id: input.id, ...measured, cached: false } satisfies CatalogProbe;
+      return { entries: catalogEntries(deps.probe) };
     },
   };
 }
@@ -213,14 +119,20 @@ export function createCatalogHandlers(
  * Exported because the test that pins the wire shape should build it from the same function the daemon
  * serves rather than from a hand-written fixture: a fixture is a second answer to "what does a row look
  * like", and the one that drifts is always the fixture.
+ *
+ * The prober is a parameter rather than a module import so that the daemon's own search path — and a test's
+ * injected one — decide the answer. `harnessAvailability` does the projection, and
+ * `HarnessAvailabilitySchema` re-checks its five agreement rules on every answer, so a catalogue change that
+ * produced a self-contradicting row fails a test rather than reaching a window.
  */
-export function catalogEntries(): CatalogEntry[] {
-  return ACP_AGENT_CATALOG.map(rowOf);
+export function catalogEntries(probe: (entry: AcpAgentEntry) => ProbeFinding): CatalogEntry[] {
+  return ACP_AGENT_CATALOG.map((entry) => rowOf(entry, probe(entry)));
 }
 
 /** One entry, as the wire wants it. See `CatalogEntry` for every field and why it is there. */
-function rowOf(entry: AcpAgentEntry): CatalogEntry {
+function rowOf(entry: AcpAgentEntry, finding: ProbeFinding): CatalogEntry {
   const input = cataloguedProviderInput(entry);
+  const availability: HarnessAvailability = harnessAvailability(finding);
   return {
     id: entry.id,
     title: entry.title,
@@ -242,42 +154,10 @@ function rowOf(entry: AcpAgentEntry): CatalogEntry {
     // recipe, and a built-in wins (`resolveAgentEntry`). A row that is both is shown in the shipped list
     // and is not offered as something to add.
     builtIn: isHarnessId(entry.id),
+    // The verdict's own input, resolved on the read. A bridged entry whose CLI is present and whose adapter
+    // is not arrives as `needs-bridge` with `agentBinary` naming what *was* found, which is the fact the row
+    // leads with; an `npx -y …` entry arrives as `ready` because `npx` resolved, and the window says on the
+    // row that its package is fetched on the first run rather than presenting that as a problem.
+    availability,
   };
-}
-
-/**
- * The one English sentence about a measurement — for the log and for the tests, never for the screen.
- *
- * The window renders the states and their `fix` in the user's language; this is the same deal
- * `HarnessSummary.evidence` and `AgentProviderSummary.detail` make, and it exists so a bug report can quote
- * what the daemon actually found. The one thing it adds over the probe's own `reason` is the `ready` case,
- * where there is no reason and there *is* something worth saying.
- *
- * ## The `npx` case, and the sentence it must not write
- *
- * For an `npx -y <pkg> …` recipe, "the program resolves" means **`npx` is present** — nothing more. The
- * probe looked for `npx` rather than the package on purpose (looking for the package would report every
- * one of the 14 as missing), so `ready` here is *not* evidence that the agent works, or that its package
- * has ever been downloaded. The earlier wording said "Ready to run", which reads as exactly that, and the
- * word is the defect: `ready` is the probe's `HarnessState` and it is true of `npx`, while the *row's*
- * state says "Not downloaded yet" (`AgentRowState` in the window) for this shape. This sentence now says
- * what was measured and names the thing that has not happened.
- */
-function describe(
-  entry: AcpAgentEntry,
-  finding: ProbeFinding,
-  availability: HarnessAvailability,
-): string {
-  if (availability.state !== "ready") {
-    return finding.reason ?? `${entry.title} is not available on this machine.`;
-  }
-  const install = cataloguedInstall(entry);
-  if (install.kind === "npx") {
-    return (
-      `Not downloaded yet: \`npx\` resolved at ${availability.binary ?? "a path we could not report"}, and ` +
-      `${entry.title} (${install.package}) is fetched from npm on the first run. Nothing has been ` +
-      `downloaded, so this is a statement about \`npx\`, not about ${entry.title}.`
-    );
-  }
-  return `Ready to run${availability.binary ? ` (${availability.binary})` : ""}.`;
 }

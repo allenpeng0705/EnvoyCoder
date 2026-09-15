@@ -51,6 +51,26 @@ import { alreadyRunningOutcome, decideBoot, serveFailureOutcome } from "./boot.j
 import { readDaemonClaim } from "./lock.js";
 import { startCoderDaemon } from "./serve.js";
 
+/**
+ * **The one switch that turns the background warm-up off, and why it is an environment variable.**
+ *
+ * `warm: true` is the production behaviour: the deep facts about what each installed agent publishes arrive
+ * without anybody pressing anything (`deep-warm.ts` carries the bounds). But *testing* that production
+ * behaviour means starting a daemon on a developer's machine, and a tool that did that would spawn the
+ * owner's own coding agents every time it ran — the pixel measurement (`scripts/measure-settings.mjs`) is
+ * exactly that case, and it drives this entry point.
+ *
+ * So the switch exists, it is read here and nowhere else, and the tool that needs it says so in its own
+ * documentation. `0` is the only value that disables it: an unset variable, an empty one, or anything else a
+ * shell might hand a GUI-launched process all mean **on**, which is the safe direction for a *product* default.
+ */
+const WARM_ENV = "ENVOYCODER_WARM_AGENTS";
+
+/** Whether this process should look at what the ready agents publish. See `WARM_ENV`. */
+function warmAgents(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[WARM_ENV]?.trim() !== "0";
+}
+
 /** Kept in step with `apps/desktop/package.json`: a process cannot read its own version. */
 const VERSION = "0.1.0";
 
@@ -103,7 +123,22 @@ if (existing.state === "unreadable") {
 // Step 3 — start.
 let daemon;
 try {
-  daemon = await startCoderDaemon({ port, paths, version: VERSION });
+  /**
+   * `warm: true` — **the one place the background pass is turned on.**
+   *
+   * This is the production entry point, and the deep facts about the agents this machine can run (what each
+   * publishes, whether it wants a sign-in) arrive on the Agents page as properties with a time. Nothing else
+   * asks for them: `coder.probeSessionOptions` needs a press and a run needs a task, so without this pass a
+   * user's first sight of those facts would be the moment they went looking for them. `deep-warm.ts` carries
+   * the four bounds; the one that matters at this call site is that a pass never starts anything which would
+   * have to be **downloaded** first.
+   *
+   * Every other caller deliberately leaves it out — the test suite, and `scripts/smoke.ts`, which starts a
+   * real daemon on a developer's machine. A suite that spawns somebody's coding agents on every run is a suite
+   * that makes a machine unusable, and this slice's own headline property is that *loading the agents page
+   * spawns nothing*, which a warming daemon would quietly falsify.
+   */
+  daemon = await startCoderDaemon({ port, paths, version: VERSION, warm: warmAgents(process.env) });
 } catch (error) {
   const outcome = serveFailureOutcome(port, error);
   say([`\n${outcome.headline}`, ...outcome.detail.map((line) => `  ${line}`)]);

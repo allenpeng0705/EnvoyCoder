@@ -1011,38 +1011,22 @@ export const RPC_METHODS = [
    * exactly the entries the desktop window sees, including the dialect each entry states. Nothing here is
    * desktop-only knowledge.
    *
-   * ## What it costs: nothing
+   * ## What the call costs, and what it answers
    *
-   * Unlike every other agent method, this one **measures nothing** — no search path is walked, no process
-   * started, no package fetched. It is a projection of a static list, so a window may call it on open and a
-   * phone on every reconnect. An entry's *state* is a different question, asked one row at a time by
-   * `coder.probeCatalogAgent`, which costs something and says so.
+   * It walks no search path and starts nothing, and it still answers **every row's state** — the two are not
+   * in tension, and believing they were is what produced this method's own history. A row's cheap facts (does
+   * the program resolve, does the connector resolve, is it fetched on first run, are the variables the launch
+   * needs present) are filesystem and environment reads, so 38 of them cost less than drawing the rows. What
+   * *is* expensive — starting an agent, which for 14 of these recipes downloads a package — is a different
+   * question and travels on `coder.probeSessionOptions`, as a property with the time it was observed.
+   *
+   * That is why there is no per-entry companion method here any more. There used to be one
+   * (`coder.probeCatalogAgent`), it took **one id**, it cached its answer for ten minutes, and its existence
+   * was the reason the window rendered all 38 rows as *"Not checked yet"* with a *Check* button on each. The
+   * owner's report — *"I don't want user to guess, to check if we can do that"* — is why it is gone: a row
+   * that has to be asked about one at a time is a chore, and the chore was the design.
    */
   "coder.listCatalog",
-  /**
-   * **One catalogued entry's state on this machine** — a method of its own because of what a probe costs.
-   *
-   * ## Why it is per-entry, and never a sweep
-   *
-   * 14 of the 38 entries are `npx -y …` recipes: the program is fetched from npm the first time it runs. A
-   * window that probed all of them while opening would spend the user's network and disk on a question
-   * nobody asked — and the quieter version of the same objection holds for the other 24, where it is 38
-   * walks of a search path done on behalf of rows a user may never look at. So this takes **one id**, the
-   * daemon caches the answer, and the answer carries `observedAt` so a window can say when it was taken and
-   * offer to take it again.
-   *
-   * ## What it actually does, stated exactly
-   *
-   * It looks for the entry's program on the daemon's **resolved search path** — the same list the launch
-   * hands to `spawn`, through the same prober the nine shipped agents go through. It does **not** start the
-   * program, open a session with it, or fetch anything. An `npx` recipe is measured by whether `npx` is
-   * present; the fact that the package arrives on the first run is entry data (`CatalogEntry.install`), not
-   * something a probe could learn without downloading it.
-   *
-   * The five states are the same five, with the same agreement rules. `unknown` means what it means
-   * everywhere else: we could not look, so nothing on this answer is a statement about the agent.
-   */
-  "coder.probeCatalogAgent",
   "coder.meshStatus",
   "coder.listPeers",
   // **`coder.offerRemoteRun` used to sit here, and it is gone on purpose.** It was a spec with no

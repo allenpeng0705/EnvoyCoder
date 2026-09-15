@@ -885,7 +885,10 @@ export const ProbeOutcomeSchema = z.enum(PROBE_OUTCOMES);
  * written on resolves out of `~/.npm/_npx/<hash>/node_modules/.bin`, a directory belonging to somebody
  * else's `npx` invocation. It **counts as installed** — it resolves and it runs, verified against the real
  * binary — and it is *marked*, because an installation that `npm cache clean` removes is worth one
- * sentence rather than silence. See `provisionalCacheOf` in `@envoycoder/platform`.
+ * sentence rather than silence. **Decided by the path, never by how the program was found**: a `dsh` the
+ * user's own login shell names *and* that lives in an `npx` cache is still `provisional`, because what the
+ * warning is about is that the directory has a hash in it and `npm cache clean` removes it — not who
+ * asked. See `provisionalCacheOf` in `@envoycoder/platform`.
  */
 export const HARNESS_STATES = [
   "ready",
@@ -1396,8 +1399,12 @@ export const AgentProviderSummarySchema = z
  * A `HarnessSummary` answers "what can this agent do", and every field of it is something we verified by
  * running the agent: its modes, its models, its thinking levels, its capabilities. For a catalogued entry
  * **we have run nothing** — all we hold is a recipe we catalogued from the vendor's documentation plus the
- * reference product's list. So this carries the recipe, and the only claim about *this machine* is on
- * `coder.probeCatalogAgent`, taken when the user asks for it. A capability field here would be a guess
+ * reference product's list. So this carries the recipe, and the one claim about *this machine* is
+ * `availability`: the cheap facts — does the program resolve, does the connector resolve, is it fetched on the
+ * first run, does the daemon have the variables the launch needs — resolved for every row when the list is
+ * served, with nothing started. A capability field here would be a guess restated as our fact, which is the
+ * same reason `AgentProviderSummary` has none; the deep facts (what it publishes, whether it wants a sign-in)
+ * travel on `coder.probeSessionOptions` as properties carrying the time they were observed. A capability field here would be a guess
  * restated as our fact, which is the same reason `AgentProviderSummary` has none.
  *
  * ## The four fields that are also `coder.addProvider`'s parameters
@@ -1481,37 +1488,41 @@ export const CatalogEntrySchema = z
      * something to add, and the window must not be the place that decides so.
      */
     builtIn: z.boolean(),
+    /**
+     * **What this machine can do with this recipe right now** — resolved when the list is served, not when a
+     * user asks about a row.
+     *
+     * This field is the whole "nobody has to press anything to learn a state" rule, and the reasoning is worth
+     * keeping because the opposite shape shipped first and was wrong in a way no reader of the code could
+     * see: the row carried **no** claim about this machine, the window rendered *"Not checked yet"*
+     * (`settings.agent.unchecked`), and a button beside it asked the daemon about one entry at a time. So a
+     * user opening the page met thirty-eight rows that knew nothing plus a chore — press, wait, read, times
+     * thirty-eight. The owner's report was *"I don't want user to guess, to check if we can do that"*, and the
+     * chore was the defect rather than the wording.
+     *
+     * Why the old design believed it had to be that way, and why it did not: a sweep was rejected as expensive
+     * because 14 of these recipes are `npx -y …`. That is true of *starting* one, and a cheap availability
+     * answer starts nothing. It answers four questions about this machine and no others — does the program the
+     * recipe names resolve (on the search path, in a tool cache, or as the user's own login shell resolves it),
+     * does the **agent's own** program resolve when the recipe is a bridge over one, is the recipe an
+     * `npx`/`uvx` shape (there is then nothing to install at all), and does the daemon have the variables the
+     * launch needs. All four are filesystem and environment reads: see `apps/desktop/src/daemon/catalog.ts`,
+     * and the test that counts child processes across a whole list read and requires zero.
+     *
+     * **Ignorance stays representable.** When the daemon could not search at all this carries
+     * `state: "unknown"`, and the window says so in its own words rather than "not installed" — the single
+     * rule `HarnessState` exists for.
+     *
+     * The **deep** facts are deliberately not here and cannot be: whether an agent speaks ACP, what it
+     * publishes and whether it wants a sign-in are learned by starting it. They travel on
+     * `coder.probeSessionOptions` for the rows the daemon may start, and a client renders them as properties
+     * carrying the time they were observed — never as a row state the user has to trigger in order to learn.
+     */
+    availability: HarnessAvailabilitySchema,
   })
   .strict();
 
 export type CatalogEntry = z.infer<typeof CatalogEntrySchema>;
-
-/**
- * What one entry measured on this machine, and **when**.
- *
- * `observedAt` is required and `cached` is required, because the one thing this answer must never be is a
- * state with no provenance: a row is a claim about a program, and a claim a user cannot date is a claim
- * they cannot check. `cached` says the daemon answered from a recent observation rather than walking the
- * search path again, so a window can offer to take the measurement again knowing what it costs.
- *
- * `detail` is one English sentence for the log and the tests, the same as `AgentProviderSummary.detail`: the
- * states and their `fix` are what a window renders.
- */
-export const CatalogProbeSchema = z
-  .object({
-    id: z.string().min(1),
-    availability: HarnessAvailabilitySchema,
-    /** How many milliseconds the measurement itself took, so a row can say what it cost. */
-    costMs: z.number().int().nonnegative(),
-    /** When it was taken — the probe's own, not the moment the answer was assembled. */
-    observedAt: z.string(),
-    /** True when the daemon answered from a recent observation instead of measuring again. */
-    cached: z.boolean(),
-    detail: z.string(),
-  })
-  .strict();
-
-export type CatalogProbe = z.infer<typeof CatalogProbeSchema>;
 
 /** What a run looks like to a client: the record, plus the events it may render. */
 export const RunSnapshotSchema = z
@@ -1867,37 +1878,23 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
     result: z.object({ harnesses: z.array(HarnessSummarySchema).readonly() }).strict(),
   },
   /**
-   * The whole catalogue, and **nothing measured** — see the method's entry in `RPC_METHODS` for why this is
-   * a projection of a static list rather than a probe. One consequence worth repeating here because it is
-   * what a client does with the answer: every row is a *recipe*, so a window may render all 38 immediately
-   * and must render every state as "not checked yet" until `coder.probeCatalogAgent` says otherwise. A row
-   * that read as ready because it is in this list would be the exact claim this product refuses to make.
+   * The whole catalogue, **with the cheap verdict on every row** — and still nothing started.
+   *
+   * It used to serve "nothing measured" and leave each row's state to a second call the user had to make,
+   * one entry at a time (`coder.probeCatalogAgent`, now deleted). The consequence a client had to render was
+   * *"Not checked yet"* on thirty-eight rows and a button on each; the consequence of *this* shape is that a
+   * window draws all 38 rows with a verdict in the time it takes to draw them, because the answer was
+   * computed before the request was served.
+   *
+   * **What "cheap" buys, stated so it is not mistaken for a promise about cost.** Every row's state comes
+   * from filesystem and environment reads — no process, no package, no network — so serving 38 of them is
+   * safe to do on every read of the list rather than once per user press. What it cannot answer is anything
+   * that requires starting the agent: those facts are `coder.probeSessionOptions`'s, and they are properties
+   * with a time rather than a state a row waits on.
    */
   "coder.listCatalog": {
     params: EmptyParams,
     result: z.object({ entries: z.array(CatalogEntrySchema).readonly() }).strict(),
-  },
-  /**
-   * One entry's state, one at a time, cached — and the refusals it carries.
-   *
-   * An `id` that names no catalogued entry is refused with `envoycoder.bad-request` and a sentence naming
-   * it, because that is a bad parameter and not a fact about a program. (The other honest shape — answering
-   * `unknown` — would say "we could not look" about something that does not exist, which is how a typo turns
-   * into a state.)
-   *
-   * `force` is the same flag `coder.probeSessionOptions` takes and means the same thing: a user who presses
-   * *Check again* means it, so the cache is bypassed. Without it the daemon answers from an observation
-   * younger than its staleness window and says so with `cached: true`.
-   */
-  "coder.probeCatalogAgent": {
-    params: z
-      .object({
-        id: z.string().min(1),
-        /** Ask again rather than answering from a recent observation. Optional: absent means "your notes are fine". */
-        force: z.boolean().optional(),
-      })
-      .strict(),
-    result: CatalogProbeSchema,
   },
   "coder.probeHarness": {
     params: z.object({ harness: HarnessIdSchema }).strict(),

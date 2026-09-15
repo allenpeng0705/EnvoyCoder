@@ -23,16 +23,24 @@
  */
 
 import { spawn } from "node:child_process";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { probeHarness } from "@envoycoder/agent-catalog";
-import { ENVOYCODER_ERRORS, coderErrorCode, coderErrorRef } from "@envoycoder/protocol";
+import { probeHarness, probeProvider } from "@envoycoder/agent-catalog";
+import { ENVOYCODER_ERRORS, coderErrorCode, coderErrorRef, type AgentProviderConfig } from "@envoycoder/protocol";
 import { coderPaths } from "@envoycoder/host-bridge";
+import {
+  composeSearchPath,
+  LOGIN_SHELL_BINARY_MARKER,
+  primeShellBinaries,
+  provisionalCacheOf,
+  resetSearchPathCacheForTests,
+  resetShellBinaryCacheForTests,
+} from "@envoycoder/platform";
 
-import { launchForHarness } from "../src/daemon/launch.js";
+import { launchForHarness, launchForProvider } from "../src/daemon/launch.js";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -55,6 +63,12 @@ async function bridgeIn(dir: string, name = "claude-agent-acp"): Promise<void> {
   const path = join(dir, name);
   await writeFile(path, `#!/bin/sh\nprintf '%s' "$PATH" > '${join(dir, "child-path.txt")}'\n`);
   await chmod(path, 0o755);
+}
+
+
+/** `mkdir -p` for a fixture path, so the npx-cache layout can be built without a package manager. */
+async function mkdirRecursive(dir: string): Promise<void> {
+  await mkdir(dir, { recursive: true });
 }
 
 /** Spawn the launch the way `AcpClient` does, and hand back what the child wrote. */
@@ -211,5 +225,153 @@ describe("probing and spawning use the same PATH", () => {
     const probe = probeHarness("claudecode", { pathDirs: [empty], env: process.env });
     expect(probe.state).not.toBe("ready");
     expect(probe.binaryPath).toBeUndefined();
+  });
+});
+
+/**
+ * **The two states the owner reported**, and the invariant that keeps them honest.
+ *
+ * The report was *"Some agents I have installed, but still show need to install or need adapter. Eg, codex,
+ * claudecode, deepseek-harness."* The tests below are the two halves of that:
+ *
+ *   * `deepseek-harness` read as **not installed** although its owner runs it every day, because `dsh` lives in
+ *     npm's `npx` cache — a directory that is on no `PATH` a daemon can reconstruct (`cacheBinDirs`,
+ *     `packages/platform/test/shell-binaries.test.ts` carries the measurement). Here it is the same fact end to
+ *     end: the probe says `ready`, it says *where*, and the launch starts **that** file.
+ *   * `codex` and `claudecode` were measured **correctly** (`needs-bridge`: the agent is there and its adapter
+ *     is not) and read wrongly, which is a view problem and is fixed in `settings/AgentRow.tsx`. What this file
+ *     asserts about it is the half a view can break: the state and the fix stay what they were.
+ *
+ * And the invariant both rest on, stated once and asserted here rather than assumed: **the program the probe
+ * resolved is the program the launch runs.** A row that says "missing" while the launch works is the same bug
+ * one step further along.
+ */
+describe("a program only the user's own shell resolves", () => {
+  afterEach(() => {
+    resetShellBinaryCacheForTests();
+    resetSearchPathCacheForTests();
+  });
+
+  // POSIX-only: this leg asks a login shell, which is a POSIX mechanism by design (`readLoginShellBinaries`
+  // returns `not-posix` on Windows, where the registry `PATH` already reaches a GUI process). It says so rather
+  // than passing vacuously.
+  const posixOnly = process.platform === "win32" ? it.skip : it;
+  posixOnly("reads as installed, not missing — and the launch runs exactly what the probe found", async () => {
+    const dir = await tempDir("envoycoder-shell-only-");
+    await bridgeIn(dir, "only-in-my-shell");
+    const cwd = await tempDir("envoycoder-shell-cwd-");
+    const home = await tempDir("envoycoder-shell-home-");
+
+    // A shell that names a program nothing else on this machine can find: not on the daemon's `PATH`, not in a
+    // well-known directory, not in a tool cache. `command -v` is the only thing that knows about it, which is
+    // the case the per-name ask exists for.
+    resetShellBinaryCacheForTests();
+    resetSearchPathCacheForTests();
+    await primeShellBinaries(["only-in-my-shell"], {
+      command: {
+        command: "/bin/sh",
+        args: [
+          "-c",
+          `printf '%b' '${LOGIN_SHELL_BINARY_MARKER}only-in-my-shell\\t${join(dir, "only-in-my-shell")}\\n'`,
+        ],
+      },
+    });
+
+    const search = composeSearchPath();
+    expect(search.shellBinaries.map((entry) => entry.name)).toEqual(["only-in-my-shell"]);
+    expect(search.dirs[0]).toBe(dir);
+
+    const provider: AgentProviderConfig = {
+      id: "mine",
+      label: "A Program Only My Shell Knows",
+      command: "only-in-my-shell",
+      args: [],
+      env: [],
+      transport: "acp",
+    };
+    const probe = probeProvider(provider, {
+      pathDirs: search.dirs,
+      searchable: search.searchable,
+    });
+    // **Installed.** Before this slice the same machine answered `not-installed` for a program its shell
+    // resolves, which is the report verbatim.
+    expect(probe.state).toBe("ready");
+    expect(probe.binaryPath).toBe(join(dir, "only-in-my-shell"));
+
+    const launch = launchForProvider({
+      provider,
+      cwd,
+      paths: coderPaths(home),
+      searchDirs: search.dirs,
+    });
+    // **The invariant: one resolution, two callers.** The launch names the path the probe resolved, and the
+    // child's `PATH` contains the directory the answer contributed — so a bridge that spawns the CLI it wraps
+    // finds it for the same reason the probe did.
+    expect(launch.command).toBe(probe.binaryPath);
+    expect(launch.env?.PATH?.split(":")[0]).toBe(dir);
+  });
+
+  it("reads `deepseek-harness` as ready from npm's npx cache, and the launch runs that copy", async () => {
+    // **The reported row.** The fixture is the real layout — `<home>/.npm/_npx/<hash>/node_modules/.bin/dsh` —
+    // and the search list is composed from a home in which that is the *only* place `dsh` exists. The probe
+    // reports `ready` with the provenance the window renders as its warning chip, and the launch runs the file.
+    const home = await tempDir("envoycoder-npx-home-");
+    const binDir = join(home, ".npm", "_npx", "1e7f6d9597241db0", "node_modules", ".bin");
+    await mkdirRecursive(binDir);
+    await bridgeIn(binDir, "dsh");
+    const cwd = await tempDir("envoycoder-npx-cwd-");
+
+    resetShellBinaryCacheForTests();
+    resetSearchPathCacheForTests();
+    const search = composeSearchPath({ home, processPath: "/usr/bin:/bin", loginShell: undefined });
+    expect(search.cached).toEqual([binDir]);
+
+    const probe = probeHarness("deepseek-harness", {
+      pathDirs: search.dirs,
+      searchable: search.searchable,
+    });
+    expect(probe.state).toBe("ready");
+    expect(probe.binaryPath).toBe(join(binDir, "dsh"));
+    // A hit in another tool's cache is still reported as one: it works, and it can vanish.
+    expect(provisionalCacheOf(probe.binaryPath!)).toBe("npx");
+
+    const launch = launchForHarness({
+      harness: "deepseek-harness",
+      cwd,
+      paths: coderPaths(home),
+      searchDirs: search.dirs,
+    });
+    expect(launch.command).toBe(probe.binaryPath);
+  });
+
+  it("keeps `codex` and `claudecode` at needs-bridge, with the adapter's own command", async () => {
+    // The other two rows of the report: measured correctly, and they must stay that way. The agent's CLI is
+    // present and its ACP adapter is not, so the state names the missing *half* — and the fix is the adapter's
+    // install step, never the agent's (which would tell a user to install what they already have).
+    const dir = await tempDir("envoycoder-needsbridge-");
+    await bridgeIn(dir, "codex");
+    await bridgeIn(dir, "claude");
+    const cwd = await tempDir("envoycoder-needsbridge-cwd-");
+    const home = await tempDir("envoycoder-needsbridge-home-");
+
+    resetShellBinaryCacheForTests();
+    resetSearchPathCacheForTests();
+    for (const [harness, agentBinary, command] of [
+      ["codex", "codex", "npm install -g @agentclientprotocol/codex-acp"],
+      ["claudecode", "claude", "npm install -g @agentclientprotocol/claude-agent-acp"],
+    ] as const) {
+      const probe = probeHarness(harness, { pathDirs: [dir] });
+      expect(probe.state, harness).toBe("needs-bridge");
+      expect(probe.agentBinaryPath).toBe(join(dir, agentBinary));
+      expect(probe.fix?.map((step) => step.command)).toEqual([command]);
+      // And the launch refuses with that same sentence rather than resolving an agent it cannot drive.
+      let thrown: Error | undefined;
+      try {
+        launchForHarness({ harness, cwd, paths: coderPaths(home), searchDirs: [dir] });
+      } catch (error) {
+        thrown = error instanceof Error ? error : new Error(String(error));
+      }
+      expect(thrown?.message).toContain(command);
+    }
   });
 });

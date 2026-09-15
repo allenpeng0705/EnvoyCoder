@@ -632,35 +632,6 @@ describe("what a run learned about an agent", () => {
     });
   });
 
-  it("measures one catalogued row, forwards `force`, and reports a refusal as one", async () => {
-    const { store: s, connection } = await store();
-    connection.answers.set("coder.probeCatalogAgent", {
-      id: "goose",
-      availability: { state: "not-installed", fix: [{ command: "goose acp" }] },
-      costMs: 4,
-      observedAt: "2026-09-15T10:00:00.000Z",
-      cached: false,
-      detail: "…",
-    });
-
-    const measured = await s.probeCatalogAgent("goose", { force: true });
-    expect(measured.ok).toBe(true);
-    expect(connection.calls.find((call) => call.method === "coder.probeCatalogAgent")?.params).toEqual({
-      id: "goose",
-      force: true,
-    });
-    // **One row, one call.** `loadAll` already asked for the catalogue once (it is a projection, so it costs
-    // nothing); what must not happen is a *second* kind of call — a sweep — which is why the count is of the
-    // probe and not of the list.
-    expect(connection.calls.filter((call) => call.method === "coder.probeCatalogAgent")).toHaveLength(1);
-
-    // An older daemon refuses the method by name, and that arrives as a refusal rather than a throw: the row
-    // renders the sentence, which is the same deal every other write in this store makes.
-    connection.refusals.set("coder.probeCatalogAgent", "Method not found: coder.probeCatalogAgent");
-    const refused = await s.probeCatalogAgent("goose");
-    expect(refused.ok).toBe(false);
-  });
-
   it("loads the catalogue with the other lists, and stays quiet when the daemon has none", async () => {
     // **Silence is deliberate here and reported nowhere else.** `coder.listCatalog` is a method this build
     // added, so a daemon one build behind refuses it — and an empty catalogue is not a lie about anything,

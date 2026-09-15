@@ -29,7 +29,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
   CatalogEntry,
-  CatalogProbe,
   HarnessAvailability,
   HarnessSummary,
 } from "@envoycoder/protocol";
@@ -38,6 +37,10 @@ import { ALL_HARNESSES, harnessDefinition } from "@envoycoder/agent-catalog";
 import { SettingsPane } from "../src/components/SettingsPane.js";
 import { addInputFor } from "../src/components/settings/agent-catalog.js";
 import { catalogEntries } from "../src/daemon/catalog.js";
+
+/** The two verdicts, as a user reads them — never spelled out in a test, so a wording change is one edit. */
+const READY = en["settings.agent.verdict.ready"];
+const NOT_READY = en["settings.agent.verdict.notReady"];
 import { en } from "../src/i18n/messages/en.js";
 import { I18nProvider } from "../src/i18n/context.js";
 import type { Refusal } from "../src/i18n/notice.js";
@@ -103,6 +106,11 @@ const catalog: CatalogEntry[] = [
     transport: "acp",
     install: { kind: "binary", binary: "goose" },
     builtIn: false,
+    // The daemon resolved this row's cheap facts when it served the list — no press, no probe call.
+    availability: {
+      state: "not-installed",
+      fix: [{ command: "brew install goose", url: "https://block.github.io/goose/" }],
+    },
   },
   {
     id: "cline",
@@ -116,6 +124,8 @@ const catalog: CatalogEntry[] = [
     transport: "acp",
     install: { kind: "npx", package: "cline@3.0.46" },
     builtIn: false,
+    // `npx` resolved, so the row is **Ready**: the package is fetched on the first run, which is not a problem.
+    availability: { state: "ready", binary: "/usr/bin/npx" },
   },
   {
     id: "vtcode",
@@ -132,6 +142,7 @@ const catalog: CatalogEntry[] = [
     transport: "acp",
     install: { kind: "binary", binary: "vtcode" },
     builtIn: false,
+    availability: { state: "ready", binary: "/usr/local/bin/vtcode" },
   },
   {
     id: "cursor",
@@ -145,6 +156,7 @@ const catalog: CatalogEntry[] = [
     transport: "acp",
     install: { kind: "binary", binary: "cursor-agent" },
     builtIn: true,
+    availability: { state: "ready", binary: "/usr/local/bin/cursor-agent" },
   },
   {
     id: "legacy-cli",
@@ -158,6 +170,9 @@ const catalog: CatalogEntry[] = [
     transport: "cli",
     install: { kind: "binary", binary: "legacy" },
     builtIn: false,
+    // The entry declares a plain command line, so this build has no adapter for the way it speaks: our gap,
+    // and the case `settings-agent-verdict.test.tsx` asserts offers no install step.
+    availability: { state: "unsupported", binary: "/usr/local/bin/legacy" },
   },
 ];
 
@@ -179,7 +194,6 @@ const state: CoderState = {
       "coder.listHarnesses",
       "coder.listProviders",
       "coder.listCatalog",
-      "coder.probeCatalogAgent",
       "coder.signInAgent",
     ],
     mesh: { kind: "no-node", reason: "not attached in this test" },
@@ -221,19 +235,6 @@ const state: CoderState = {
   notes: [],
 };
 
-/** A measurement, as the daemon answers one. */
-function probe(availability: CatalogProbe["availability"], over: Partial<CatalogProbe> = {}): CatalogProbe {
-  return {
-    id: "goose",
-    availability,
-    costMs: 3,
-    observedAt: "2026-09-15T10:00:00.000Z",
-    cached: false,
-    detail: "…",
-    ...over,
-  };
-}
-
 /** What the recording fake was handed, and what it answers with. */
 interface AgentCalls {
   added: {
@@ -247,7 +248,6 @@ interface AgentCalls {
     catalogEntryId?: string;
   }[];
   removed: string[];
-  probed: { id: string; force: boolean | undefined }[];
   signedIn: string[];
 }
 
@@ -257,11 +257,11 @@ interface AgentCalls {
  * Deliberately not a `vi.fn()` per method with a shared `mockResolvedValue`: the interesting assertions are on
  * *arguments* (the whole config an Add sends), and a recorder makes those readable at the point of the claim.
  */
-function agentActions(options: {
-  probes?: Record<string, CatalogProbe | Refusal>;
-  addRefusal?: Refusal;
-} = {}): { actions: Record<string, unknown>; calls: AgentCalls } {
-  const calls: AgentCalls = { added: [], removed: [], probed: [], signedIn: [] };
+function agentActions(options: { addRefusal?: Refusal } = {}): {
+  actions: Record<string, unknown>;
+  calls: AgentCalls;
+} {
+  const calls: AgentCalls = { added: [], removed: [], signedIn: [] };
   const actions = {
     addProvider: async (input: AgentCalls["added"][number]) => {
       calls.added.push({ ...input, args: [...input.args], env: [...input.env] });
@@ -271,15 +271,6 @@ function agentActions(options: {
     removeProvider: async (id: string) => {
       calls.removed.push(id);
       return { ok: true as const, removed: id };
-    },
-    probeCatalogAgent: async (id: string, probeOptions: { force?: boolean } = {}) => {
-      calls.probed.push({ id, force: probeOptions.force });
-      const answer = options.probes?.[id];
-      // **Loud on purpose.** A missing arrangement used to answer with a refusal, which rendered as a plausible
-      // sentence and made a broken test look like a working one. There is no honest default for "what did the
-      // daemon measure", so the fake says so by throwing.
-      if (answer === undefined) throw new Error(`this test did not arrange a measurement for ${id}`);
-      return "ok" in answer ? answer : { ok: true as const, probe: answer };
     },
     signInAgent: async (id: string) => {
       calls.signedIn.push(id);
@@ -401,9 +392,16 @@ function rowFor(label: string): HTMLElement {
   return found;
 }
 
-/** The state chip of a row — the first chip in its head, which is where the state is rendered. */
+/**
+ * The state chip of a row — **by class, not by position**.
+ *
+ * It used to be "the first chip in the head", which was true when the chip came before the name. The row now
+ * leads with the name and puts the state chip *last* in its own column (so the state column's right edge is
+ * constant), and a positional lookup would silently start returning a verdict chip — `No approvals` where the
+ * test meant `Ready`.
+ */
 const chipText = (element: HTMLElement): string =>
-  element.querySelector(".settings__agent-head .chip")?.textContent ?? "";
+  element.querySelector(".settings__agent-state")?.textContent ?? "";
 
 /** Press a button by its label, inside one row. */
 function press(scope: HTMLElement, label: string): void {
@@ -438,7 +436,9 @@ describe("the agents screen", () => {
     //
     // **The mutation it fails on:** any filter, cap or "show more" over a list on this page — including a
     // `hidden`-style predicate reintroduced in the render, which would take the shipped count from 9 to 8.
-    const entries = catalogEntries();
+    // The real catalogue, projected by the daemon's own function over a stub prober: what is under test here
+    // is the *list* — every entry, in one place, with nothing shortening it — not this machine's programs.
+    const entries = catalogEntries(() => ({ state: "ready", binaryPath: "/usr/local/bin/stub", via: "path" }));
     // **The nine, in all five states between them** — because a fixture where every agent is `ready` cannot
     // tell "lists everything" from "lists everything that works", and it was that gap that let this case stay
     // green under a `state === "ready"` filter while the weaker cases next door went red. Every state the
@@ -502,264 +502,124 @@ describe("the agents screen", () => {
   });
 });
 
-/* ────────────────────── the state, which is measured or absent ────────────────────── */
+/* ────────────────────── the verdict, which is resolved before the list is served ────────────────────── */
 
-describe("what a catalogue row claims", () => {
-  it("claims nothing at all until somebody measures it", () => {
-    // **The mutation this fails on:** defaulting an unmeasured row to `ready` (or reading the daemon's
-    // `unknown` for it). A recipe is a command line and a link; "it is in the catalogue" is not evidence that
-    // this machine can run it, and that sentence is the reason this screen was rebuilt.
+/**
+ * **The row's state used to be a thing a user had to ask for.** All 38 rows rendered *"Not checked yet"* and
+ * offered a *Check* button; `coder.probeCatalogAgent` measured one entry per press and cached the answer.
+ *
+ * That is gone, and this block is what replaced it: every row arrives with the daemon's own cheap measurement
+ * on it (`CatalogEntry.availability`), rendered as **Ready** or **Not ready**. The tests below are about the
+ * two ways that could go quietly wrong — a row reading as anything other than those two words, and a row
+ * offering an install step for a gap that is ours.
+ *
+ * The wording and the layout of each of the five Not-ready cases, at the level of the row's line and the
+ * guide its disclosure leads with, is `settings-agent-verdict.test.tsx`'s job; what is asserted here is the
+ * *list's* half, which is which entry ends up in which verdict.
+ */
+describe("what a catalogue row's verdict is", () => {
+  it("gives every row one of the two verdicts, resolved before anything was pressed", () => {
+    // **The mutation this fails on:** any row rendering `settings.agent.unchecked` — or rendering no chip —
+    // which is what a row whose state came from a per-row probe looks like when nobody pressed it. The fixture
+    // covers all four shapes a row can be in (installed, fetched on first run, missing, and a plain command
+    // line this build cannot drive), so a state falling out of the projection shows up here.
     show();
     for (const entry of catalog) {
-      expect(chipText(row(entry.title)), entry.id).toBe(en["settings.agent.unchecked"]);
+      expect([READY, NOT_READY], `${entry.id}: ${chipText(row(entry.title))}`).toContain(
+        chipText(row(entry.title)),
+      );
     }
-    expect(catalogList().textContent).not.toContain(en["settings.agent.ready"]);
-    expect(catalogList().textContent).not.toContain(en["settings.agent.notInstalled"]);
+    // The one entry that resolves is the one that reads Ready, and the unresolvable ones read Not ready.
+    expect(chipText(row("Cline"))).toBe(READY);
+    expect(chipText(row("VT Code"))).toBe(READY);
+    expect(chipText(row("goose"))).toBe(NOT_READY);
+    expect(chipText(row("Legacy CLI"))).toBe(NOT_READY);
   });
 
-  it("renders ready only after a measurement that said so, and not-installed only after one that did", async () => {
-    // **The mutation this fails on:** a chip taken from anything but the probe's answer. Two rows, two
-    // different answers, and neither may borrow the other's word.
-    const calls = show(
-      {},
-      {
-        probes: {
-          goose: probe({ state: "ready", binary: "/usr/local/bin/goose" }),
-          cline: probe({ state: "not-installed", fix: [{ command: "npx -y cline@3.0.46 --acp" }] }, { id: "cline" }),
-        },
-      },
-    );
-
-    press(row("goose"), en["settings.agents.row.check"]);
-    await waitFor(() => expect(chipText(row("goose"))).toBe(en["settings.agent.ready"]));
-    // And the row it was *not* measured about is still unmeasured, in both words.
-    expect(chipText(row("Cline"))).toBe(en["settings.agent.unchecked"]);
-
-    press(row("Cline"), en["settings.agents.row.check"]);
-    await waitFor(() => expect(chipText(row("Cline"))).toBe(en["settings.agent.notInstalled"]));
-    expect(chipText(row("goose"))).toBe(en["settings.agent.ready"]);
-
-    // One press, one row: no sweep, which is what keeps 38 rows from costing 38 walks of the search path.
-    expect(calls.probed).toEqual([
-      { id: "goose", force: false },
-      { id: "cline", force: false },
-    ]);
+  it("has no control on it that exists to find out a state", () => {
+    // *"the product must not ask the user to press something to learn a state."* The two buttons a catalogue
+    // row may carry are the two things a user can **do** — add it, or forget one they declared — and the old
+    // pair (*Check this machine* / *Check again*) is gone from the page and from the catalogue of strings.
+    show();
+    const labels = [...catalogList().querySelectorAll("button")].map((button) => button.textContent ?? "");
+    expect(labels.some((label) => /check/i.test(label))).toBe(false);
+    // And the strings themselves do not exist any more, so a translation cannot bring one back.
+    for (const key of ["settings.agents.row.check", "settings.agents.row.checkAgain"] as const) {
+      expect(Object.keys(en), key).not.toContain(key);
+    }
   });
 
-  it("asks for a fresh measurement on the second press, because that is what the second press means", async () => {
-    // A user who has just installed the program presses again. The daemon refuses to cache a negative answer
-    // for exactly this reason, and `force` is the window's half of it.
-    const calls = show(
-      {},
-      { probes: { goose: probe({ state: "not-installed", fix: [{ command: "goose acp" }] }) } },
-    );
-    press(row("goose"), en["settings.agents.row.check"]);
-    await waitFor(() => expect(chipText(row("goose"))).toBe(en["settings.agent.notInstalled"]));
-    press(row("goose"), en["settings.agents.row.checkAgain"]);
-    await waitFor(() => expect(calls.probed).toHaveLength(2));
-    expect(calls.probed).toEqual([
-      { id: "goose", force: false },
-      { id: "goose", force: true },
-    ]);
+  it("offers no install step for the entry whose gap is ours", () => {
+    // **The mandate's distinction, at the list level.** `legacy-cli` resolves and runs, and this build has no
+    // adapter for the way it speaks: nothing is missing from the user's machine, so nothing may be offered.
+    const container = show() && catalogList();
+    void container;
+    const legacy = row("Legacy CLI");
+    expect(chipText(legacy)).toBe(NOT_READY);
+    expect(legacy.textContent).not.toMatch(/npm install/);
+    details(legacy);
+    const panel = legacy.querySelector(".settings__agent-details");
+    expect(panel?.querySelectorAll(".settings__agent-steps")).toHaveLength(0);
+    expect(panel?.querySelectorAll("a")).toHaveLength(0);
+    expect(panel?.textContent).not.toMatch(/npm install/);
   });
 
-  it("shows the install link and the exact command when the program is missing", async () => {
-    // **The mutation this fails on:** rendering the state without the fix. A row that says what is absent and
-    // not what to do is the sentence `AvailabilityFix` replaced — and the whole point of the catalogue is
-    // that a user can get from "not installed" to "running" without leaving it.
-    show(
-      {},
-      {
-        probes: {
-          goose: probe({
-            state: "not-installed",
-            fix: [{ command: "install goose — then it runs as: goose acp", url: "https://block.github.io/goose/" }],
-          }),
-        },
-      },
-    );
+  it("shows the entry's own install step and link for the row that really is missing", () => {
+    // The other side of the branch: `goose` did not resolve, so the row says so and the disclosure leads with
+    // the command and the vendor's page. A projection that gave every Not-ready row the same shape would pass
+    // the test above and fail this one.
+    show();
     const goose = row("goose");
-    // The link is entry data, so it is disclosed whether or not anything was measured.
+    expect(chipText(goose)).toBe(NOT_READY);
     details(goose);
-    expect(within(goose).getByRole("link").getAttribute("href")).toBe("https://block.github.io/goose/");
-    expect(goose.textContent).toContain("goose acp");
-
-    press(goose, en["settings.agents.row.check"]);
-    // **And a fix that is a sentence is not printed on the row.** `AvailabilityFix.command` is shown verbatim
-    // *when it is a command*; this fixture's fix is 40 characters of English that begins with "install", which
-    // fits the budget and is therefore shown — the long one is the case below, and the two are deliberately
-    // different fixtures so that the branch is asserted from both sides.
-    await screen.findByText(/then it runs as: goose acp/);
-  });
-
-  it("replaces a fix that is a sentence with a short phrase, and keeps the sentence one press away", async () => {
-    // **The branch, from the other side.** Two of the catalogue's own hints are 127 and 136 characters of
-    // English prose in a field named `command` (`install Node.js so that \`npx\` is on PATH — Factory Droid
-    // itself needs no install, …`). A row may not carry a sentence, and dropping the text would be worse than
-    // either — so the line says what to do in three words and the whole of it is in the `title` and the
-    // disclosure.
-    //
-    // **The mutation this fails on:** removing the length branch in `fixOrPhrase`, which puts the 127-character
-    // sentence back on the row. `settings-density.test.tsx` fails on the same mutation from the budget side;
-    // this case is what says the *phrasing* is still reachable and correct.
-    // A *binary* entry, so the short phrase is the other one (`Install Cline first` rather than `Nothing to
-    // install`): the branch and the phrase are two facts and this fixture holds the one that differs.
-    const sentence =
-      "install Node.js so that `npx` is on PATH — Cline itself needs no install, it is fetched from npm on the first run";
-    show({}, { probes: { goose: probe({ state: "not-installed", fix: [{ command: sentence }] }) } });
-    press(row("goose"), en["settings.agents.row.check"]);
-    await waitFor(() => expect(chipText(row("goose"))).toBe(en["settings.agent.notInstalled"]));
-
-    const goose = row("goose");
-    expect(goose.querySelector(".settings__agent-line")?.textContent).toBe(
-      en["settings.agents.row.install"].replace("{agent}", "goose"),
+    const steps = [...goose.querySelectorAll(".settings__agent-steps code")].map((code) => code.textContent);
+    expect(steps).toEqual(["brew install goose"]);
+    expect(goose.querySelector(".settings__agent-guide a")?.getAttribute("href")).toBe(
+      "https://block.github.io/goose/",
     );
-    expect(goose.textContent).not.toContain("install Node.js");
-    expect(goose.querySelector(".settings__agent-line")?.getAttribute("title")).toBe(sentence);
-    details(goose);
-    expect(goose.textContent).toContain(sentence);
   });
 
-  it("says plainly that an npx recipe needs no install, and names what the first run fetches", () => {
-    // **The mutation this fails on:** one "install it" sentence for both shapes. Half the catalogue is fetched
-    // from npm on first run and has no installer at all, and telling a user to install it sends them to a
-    // download page for something that installs itself.
+  it("says an npx recipe is fetched on the first run instead of treating the download as a fault", () => {
+    // **The mandate's fifth bullet:** *"an `npx` recipe → it is not a problem: the program is fetched on first
+    // run, and say so."* The mutation: the deleted `ready-npx` state, whose chip read *"Not downloaded yet"* on
+    // 14 working rows.
     show();
     const cline = row("Cline");
-    // The row's line: three words, which is all a scanning reader needs.
-    expect(cline.querySelector(".settings__agent-line")?.textContent).toBe(
-      en["settings.agents.row.nothingToInstall"],
-    );
-    // And the sentence that says *why* is one press in, not gone.
+    expect(chipText(cline)).toBe(READY);
+    expect(cline.textContent).not.toMatch(/not downloaded/i);
+    expect(cline.textContent).not.toMatch(/npm install/);
     details(cline);
     expect(cline.textContent).toContain(
-      en["settings.agents.row.needsNoInstall"]
-        .replace("{package}", "cline@3.0.46")
-        .replace("{agent}", "Cline"),
-    );
-    expect(cline.textContent).not.toContain(en["settings.agents.row.install"].split("{")[0]);
-    // …and the other shape gets the other line.
-    expect(row("goose").querySelector(".settings__agent-line")?.textContent).toContain(
-      en["settings.agents.row.install"].split("{")[0],
+      en["settings.agent.fact.obtained.npx"].replace("{package}", "cline@3.0.46"),
     );
   });
 
-  it("does not let an npx row read as verified, because only `npx` was measured", async () => {
-    // **The over-claim this test exists for.** The daemon's `ready` for an `npx -y <pkg> …` recipe means
-    // **`npx` resolved** — the probe looks for `npx` rather than the package, deliberately, because looking
-    // for the package would report all 14 of these rows as missing. So "Ready" on those rows claimed a
-    // verification nobody performed, and nothing has been downloaded. Two assertions, and both matter:
-    //   * the chip word is the narrowed one, not `settings.agent.ready`;
-    //   * the sentence names what was *not* measured, so the narrowed word is explained rather than replaced
-    //     by another unsupported claim.
-    show(
-      {},
-      {
-        probes: {
-          cline: probe({ state: "ready", binary: "/usr/bin/npx" }, { id: "cline" }),
-        },
-      },
-    );
-    // A measurement only exists after the user asks for one — that is the row's whole design, so the chip
-    // starts as "Not checked yet" and this test presses the button rather than assuming a state.
-    press(row("Cline"), en["settings.agents.row.check"]);
-    const chip = await within(row("Cline")).findByText(en["settings.agents.row.readyNpx"]);
-    expect(chip.textContent).toBe(en["settings.agents.row.readyNpx"]);
-    expect(chip.textContent).not.toBe(en["settings.agent.ready"]);
-    details(row("Cline"));
-    expect(row("Cline").textContent).toContain("not been downloaded yet");
-
-    // A fresh render, because `row()` reads the first list in the document and two live trees would make
-    // this second half assert about the wrong one.
-    cleanup();
-
-    // And a row whose program really was found still says Ready: the narrowing is about the *shape* of the
-    // recipe, not a blanket doubt about the probe.
-    show(
-      {},
-      {
-        probes: {
-          goose: probe({ state: "ready", binary: "/usr/local/bin/goose" }),
-        },
-      },
-    );
-    press(row("goose"), en["settings.agents.row.check"]);
-    await within(row("goose")).findByText(en["settings.agent.ready"]);
-    expect(chipText(row("goose"))).toBe(en["settings.agent.ready"]);
+  it("carries the recipe's own constants as facts rather than as something the user owes", () => {
+    // `§7.10`'s rule, kept: the entry's constants travel with the reference, so a row says which variables the
+    // recipe supplies. A row that asked the user to export them would send them to set something EnvoyCoder is
+    // already providing.
+    show();
+    const vtcode = row("VT Code");
+    details(vtcode);
+    const panel = vtcode.querySelector(".settings__agent-details");
+    expect(panel?.textContent).toContain("VT_ACP_ENABLED");
+    expect(panel?.textContent).toContain(en["settings.agent.fact.env.recipe"]);
   });
 
-  it("shows a refused check as the daemon's own sentence, on the row that earned it", async () => {
-    show(
-      {},
-      {
-        probes: {
-          goose: {
-            ok: false,
-            message: "The daemon is an older build.",
-            key: "error.daemonTooOld",
-            values: { method: "coder.probeCatalogAgent" },
-          } as unknown as Refusal,
-        },
-      },
+  it("leaves a row with no measurement at all saying the daemon is a build behind", () => {
+    // **The legacy wire.** A daemon that does not send `availability` cannot be read as "not installed", and
+    // the row says whose gap it is and what the one action is. The mutation: defaulting an absent field to a
+    // state — `not-installed` would blame the user's machine, `ready` would invent a measurement.
+    show({ catalog: catalog.map(({ availability: _dropped, ...rest }) => rest as (typeof catalog)[number]) });
+    const goose = row("goose");
+    expect(chipText(goose)).toBe(NOT_READY);
+    expect(goose.textContent).toContain(en["settings.agent.verdict.legacy.line"]);
+    details(goose);
+    expect(goose.querySelector(".settings__agent-details")?.textContent).toContain(
+      en["settings.agent.verdict.app.restart"],
     );
-    press(row("goose"), en["settings.agents.row.check"]);
-    await waitFor(() => expect(chipText(row("goose"))).toBe(en["settings.agent.refused"]));
-    details(row("goose"));
-    await within(row("goose")).findByText(/older build/);
-    // The row nobody asked about is untouched: a failure is about the row that was measured.
-    expect(chipText(row("Cline"))).toBe(en["settings.agent.unchecked"]);
-  });
-
-  it("says so when an older daemon has no catalogue, instead of throwing the pane away", async () => {
-    // **The mutation this fails on:** reading `hello.methods` and calling anyway, or assuming `state.catalog`
-    // is non-empty. A daemon from the previous build refuses both methods, and a page that asked regardless
-    // would answer a German user with "Method not found" four times — or, worse, render an empty catalogue as
-    // "there are no agents", which is a claim about the product rather than about the build.
-    show(
-      {
-        hello: { ...state.hello!, methods: ["coder.hello", "coder.listHarnesses"] },
-        catalog: [],
-        providers: [],
-      },
-      {},
-      { closed: true },
-    );
-    expect(screen.getAllByText(en["settings.agents.olderDaemon"]).length).toBeGreaterThan(0);
-    // The shipped agents still render from the method this daemon *does* serve.
-    expect(within(shippedList()).getByText("Envoy Harness")).toBeTruthy();
-    // **And the catalogue's own surface is not offered at all.** This is the assertion with teeth, and the
-    // reason the case is rendered with `{ closed: true }`: the sentence above is also printed for the "Your
-    // agents" group, and since the slice that put the catalogue behind a *Browse* button, `.settings__catalog`
-    // is null on an untouched page anyway — so asserting on the list alone would pass on a page that offered a
-    // button opening nothing, which is the vacuous version of this test. What must not exist is the **entry
-    // point**: a *Browse the catalogue* button over no catalogue is a control that does nothing, and a user who
-    // pressed it would be told "there are no agents" — a claim about the product rather than about the build.
-    //
-    // Rendered closed *and* re-rendered open, so the two halves cannot be satisfied by the same accident: the
-    // press is attempted by name and must fail.
-    expect(screen.queryByRole("button", { name: en["settings.agents.catalog.browse"] })).toBeNull();
-    expect(document.querySelector(".settings__catalog-search")).toBeNull();
-    expect(document.querySelector(".settings__catalog")).toBeNull();
-    cleanup();
-    // …and on the daemon that *does* serve it, the same page offers both — so this test fails if the button
-    // is gated on the wrong thing (a hard-coded `false`, or a method name no build serves). Rendered
-    // **closed**, because that is the state in which the button reads *Browse*: `show()` opens the catalogue
-    // by default, and the label toggles to *Hide* once it has — so a case that pressed *Browse* and then
-    // asserted *Browse* was asserting the opposite of what it had just done.
-    show({}, {}, { closed: true });
-    const browse = screen.getByRole("button", { name: en["settings.agents.catalog.browse"] });
-    expect(browse.getAttribute("aria-expanded")).toBe("false");
-    expect(document.querySelector(".settings__catalog")).toBeNull();
-    // **The press is what is asserted, not the button.** `aria-expanded` false→true and a list that appears
-    // are two facts, and the failure this whole case exists for is a control that looks right and opens
-    // nothing.
-    press(document.body, en["settings.agents.catalog.browse"]);
-    expect(browse.getAttribute("aria-expanded")).toBe("true");
-    expect(document.querySelectorAll(".settings__catalog-row")).toHaveLength(catalog.length);
   });
 });
-
-/* ────────────────────────────── adding, hiding, signing in ────────────────────────────── */
 
 describe("adding an agent from the catalogue", () => {
   it("sends the command, the arguments and the environment names the entry describes", async () => {
@@ -915,8 +775,12 @@ describe("nothing on this page can take an agent out of a list", () => {
     // choice is made, and the catalogue is where the product is visible.
     show();
     const codex = rowFor("Codex");
-    expect(chipText(codex)).toBe(en["settings.agent.notInstalled"]);
-    expect(codex.textContent).toContain("npm install -g @openai/codex");
+    // The verdict is one of two words, and *why* is on the row's own line — which is the half that must not be
+    // softened. The mutation: rendering the agent as absent-from-a-list rather than as a row with a fix.
+    expect(chipText(codex)).toBe(en["settings.agent.verdict.notReady"]);
+    expect(codex.querySelector(".settings__agent-line")?.textContent).toContain(
+      "npm install -g @openai/codex",
+    );
   });
 
   it("offers the agent's own sign-in only when it says it needs one", () => {

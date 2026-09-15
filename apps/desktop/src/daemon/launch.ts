@@ -191,11 +191,23 @@ export function launchForProvider(input: ProviderLaunchInput): AcpLaunch {
     {
       label: provider.label,
       recipe: providerRecipe(provider),
-      // The user's own extra arguments for *this task* are appended through the same splitter the
-      // catalogue's entries use (`splitArgs`, quoted paths and all) — one answer to "what did they mean by
-      // this string" for both tiers.
-      command: () => ({
-        command: provider.command,
+      /**
+       * **The path the probe resolved, not the name the user typed** — the same rule the catalogue's entries
+       * follow, and the reason `LaunchSubject.command` is handed the finding at all.
+       *
+       * The `PATH` handed to the child would make the bare name work today (it is the list the probe searched),
+       * so this is not a bug fix for a failure anybody has seen: it is the difference between *"the probe
+       * verified this file"* and *"something on that list probably answers to this name"*, and it is what keeps
+       * the two tiers from being two answers to one question. The first divergence would be a fact about an
+       * agent that is false — "EnvoyCoder says my agent is at one path and starts another" — and it is asserted
+       * in `test/launch-search-path.test.ts` for exactly that reason.
+       *
+       * The user's own extra arguments for *this task* are still appended through the same splitter the
+       * catalogue's entries use (`splitArgs`, quoted paths and all) — one answer to "what did they mean by this
+       * string" for both tiers.
+       */
+      command: (probe) => ({
+        command: probe.binaryPath ?? provider.command,
         args: [...provider.args, ...splitArgs(input.extraArgs)],
       }),
       acp: {

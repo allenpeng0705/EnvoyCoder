@@ -72,6 +72,54 @@ A settings row follows the same anatomy: **a name, a state, and at most one shor
 explanation belongs in the title's `title`, in a `Details` disclosure, or in these documents. It does
 not belong on the page.
 
+**The Agents row is three columns, and the name leads.** Report §7.16 of `docs/settings-parity.md` is
+the measurement; the anatomy it settled on is:
+
+```
+  Name (15px/600)                                    [Ready]              [action] [Details]
+  the one secondary line (12px, muted)               [Not ready]          └─── controls ───┘
+    └─────────────── one shared left edge ─────────┘   └─ the verdict ─┘
+```
+
+Four things about it are decisions rather than styling:
+
+* **The name is the row's title**: `--font-size-content` (15px) and `--font-weight-semibold` (600) — one full
+  step above the 13px body text, the 12px line and the 13px group headings, and one weight step above the
+  labels (nav items, buttons) that use `--font-weight-medium`. The verdict comes *after* the name, because the
+  chip used to lead the row and read as the row's subject.
+* **One verdict, not a status vocabulary.** A row carries exactly one chip and it is **Ready** or **Not
+  ready** — projected from the five states the daemon measures, in one pure function
+  (`components/settings/agent-verdict.ts`), so nothing downstream branches on a measured state. A Not-ready
+  chip is a **button** (`aria-expanded`, `aria-controls`) that opens the row's disclosure, because *clicking
+  Not ready reveals how to resolve it* is the point of the word; a Ready chip is a plain `<span>`, because it
+  has nothing to reveal. This replaced five chips — `Ready`, `Not downloaded yet`, `Cannot be driven yet`,
+  `Needs its adapter`, `Not installed`, `Could not check` — under which the one question a user has ("can I use
+  this coding agent here, and if not what do I do") had to be reassembled from a chip and a loose command line.
+* **Caveats and actions are properties, and they are not chips.** `No approvals`, `Cannot be cancelled`,
+  `Needs a sign-in` and `Temporary copy` were chips beside the state, which is how nine rows came to carry
+  eighteen of them. They live in the disclosure now, as a label and a value. `AgentRow` has **no prop through
+  which one could reach a row's face**, so "at most one chip, and it is one of two verdicts" is structural
+  rather than a convention: `settings-agent-verdict.test.tsx` counts it on every row of all three lists.
+* **The columns are fixed so the chips line up.** A chip that is right-aligned inside its own row does **not**
+  line up down a page — its right edge is `row right − controls − gap` — so the controls column is a fixed
+  track. It was 256px ("the measured widest pair", which was *Check this machine* + *Add*) and is now **144px**,
+  because the Check button is gone: at 110px 37 of the 47 rows wrap their controls and at 60px 38 do, so 144 is
+  bracketed rather than rounded. `scripts/measure-settings.mjs`'s `anatomy` block reports the spread of each
+  column's edge (0 on every column, over 47 rows) and its `verdicts` block reports the census; the E2E test
+  asserts them in a real browser.
+* **An agent that is here without its adapter says so.** `needs-bridge` means the user's own CLI resolved and
+  the ACP adapter did not, so the line leads with what is present — `Installed — needs its connector
+  npm install -g …` — and the command follows in its own face. **The fallback keeps that half**: when the
+  command cannot share the 80-character line it moves to the `title` and the disclosure, and the phrase stays.
+  The row that made this necessary is quoted in §7.16.1 of `docs/settings-parity.md`: a correct measurement
+  (*the adapter is missing*) read as *the agent is not installed* because the only sentence on the row was an
+  install command. §7.17 carries this round's whole account, including the measured census.
+
+**And the size is not a breach of design law 1 below.** *"Hierarchy by weight and colour, not size"* is about
+scaling type **per row**, which makes a long list look like a ransom note; a row's title set from the sheet's
+own content token, identically on every row of every list, is the everyday case of a list item with a title and
+a caption. The law stays: nothing in a row varies its size with its content.
+
 The row it was written for: the Agents page measured **15,139 visible characters over 12.97 screens**
 with a single row of **575**, and 71% of it was thirty-eight recipes rendered expanded
 (`docs/settings-parity.md` §7.14–§7.15 carries the before-and-after numbers, the three budgets and the
@@ -155,8 +203,9 @@ contract, and the inline question a destructive item asks), `TaskPane` (header f
 inline approval, composer with Queue/Steer), `CommandCenter` (typed `action`/`choice`
 contributions, arguments collected in the same box), `SettingsPane` (app-wide defaults, per-agent
 capability honesty, and the three levels of its own navigation: this machine's settings, the projects
-page, and one project's defaults), `settings/AgentRow` (the one row anatomy every agent list shares:
-name, state chips, one actionable line, and a `Details` disclosure for everything else — see §3.1),
+page, and one project's defaults), `settings/AgentRow` (the one row anatomy every agent list shares: a name
+that leads, one verdict chip in its own column, one actionable line, the row's controls in a fixed track, and a
+`Details` disclosure for everything else — see §3.1),
 `MeshStatusBar` (mesh
 state in end-user words), and the store behind them:
 

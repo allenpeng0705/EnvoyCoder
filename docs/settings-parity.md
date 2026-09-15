@@ -1391,9 +1391,11 @@ missing). The order is documented there; the short version:
 
 | # | source | why it is in this position |
 |---|---|---|
-| 1 | `$SHELL -ilc 'printf …"%s" "$PATH"'`, `LOGIN_SHELL_TIMEOUT_MS` = **2500 ms** | the only source that includes what the user's rc files add, which is what "installed" means to them |
+| 0 | **the programs the login shell names, one `command -v` at a time** (`shell-binaries.ts`, same 2500 ms bound) — each answer's directory joins the list **first**, and only while the file is really there | a `$PATH` answer is a *variable* and a `command -v` answer is a *lookup*, and they are not the same list. Measured on this machine: the login shell asked for `$PATH` from a clean environment prints 26 directories with **no `_npx` in any of them**, while `command -v dsh` in the owner's own shell resolves `/Users/…/.npm/_npx/1e7f6d9597241db0/node_modules/.bin/dsh`. It is also the only source that can describe a shim a toolchain manager computes per invocation. Names that are not plain command names (`[A-Za-z0-9][A-Za-z0-9._+-]*`) are skipped rather than quoted: a provider's command is user-controlled data |
+| 1 | `$SHELL -ilc 'printf …"%s" "$PATH"'`, `LOGIN_SHELL_TIMEOUT_MS` = **2500 ms** | the only *list* source that includes what the user's rc files add, which is what "installed" means to them |
 | 2 | the daemon's own `PATH` | honest by definition, kept even when (1) answered, because a profile that *replaces* `PATH` would otherwise make the daemon forget where it was launched from |
 | 3 | `wellKnownBinDirs()`: `~/.local/bin`, `~/.npm-global/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `~/.cargo/bin`, `~/.bun/bin`, each only if it exists | what rescues a GUI launch, where there is no terminal to ask. Nothing on Windows: the registry `PATH` reaches a GUI process there, so there is nothing to repair |
+| 4 | **npm's `npx` cache** — the `node_modules/.bin` of every tree under `~/.npm/_npx/`, sorted, `cacheBinDirs()` | searched **last**, because a cache is the least like an installation, and present at all because without it `dsh` reads as *not installed* while its owner runs it (§7.16). `~/.bun/install/cache` and pnpm's `dlx` store are deliberately **not** enumerated: their layouts have not been read on a machine that has them, and a glob written from memory is how a search list acquires a directory that never exists. `provisionalCacheOf` still recognises both, so a hit that arrives through a `PATH` is still reported as provisional |
 
 Bounded in three ways rather than one. The timeout kills a shell that hangs; `LOGIN_SHELL_MAX_OUTPUT` (64 KiB)
 drops one that floods; and the output is read **by marker** rather than by "the last line", which is not
@@ -1413,7 +1415,7 @@ five states, each naming what is absent, and the schema refuses an availability 
 |---|---|---|---|
 | `ready` | "Ready" | the program we drive resolved and this build speaks its protocol | nothing to install |
 | `unsupported` | "Cannot be driven yet" | the program is there; no adapter exists for the protocol it speaks (`transport: "cli"`) | nothing — the gap is ours, so offering an install command would be a lie about the user's machine |
-| `needs-bridge` | "Needs its adapter" | **the agent's own CLI resolved and the adapter did not** — the reported bug, named | the adapter's `npm install -g …`, from the entry |
+| `needs-bridge` | "Needs its adapter" | **the agent's own CLI resolved and the adapter did not** — the reported bug, named | the adapter's `npm install -g …`, from the entry, and the line leads with what is present: *`Installed — npm install -g …`* (§7.16) |
 | `not-installed` | "Not installed" | neither resolved, over a search that ran | the agent's install command **then** the adapter's, in order |
 | `unknown` | "Not checked" | we could not run the search (`SearchPath.searchable` is false) | **no install command**, and the row must never read as "not installed" |
 
@@ -1431,6 +1433,10 @@ Three further decisions worth recording, because each could have gone the other 
   it can vanish. It is `ready` with `provisional: "npx"`, one warn chip, and the entry's install hint still
   points at a real installation (`npm install -g @deepseek-ai/dsh`). A toolchain manager's directory
   (`~/.volta`, `~/.asdf`) is deliberately not in that list: those are installations the user chose.
+  **Provenance is decided by the path, never by how it was found** — a `dsh` the login shell names *and* that
+  lives in an `npx` cache is still `provisional`, because what the warning is about is that the directory has a
+  hash in it and `npm cache clean` removes it. Making it depend on the asking shell would make one product
+  answer differently depending on who launched it, which is the class of bug the resolver exists to remove.
 * **A picker drops only `not-installed`.** `knownMissing()` is the translated rule for
   `harness.available !== false`; the other four states stay in the list, because hiding an agent a user has
   configured — one whose adapter is missing, or one nobody has checked — is a worse failure than offering one
@@ -2222,6 +2228,394 @@ short and uniform, and whether it is pleasant is the owner's eyes on the PNGs `s
 leaves in its output directory, which is exactly why it leaves them. Also reasoned about: that the
 character count is a good proxy for "crowded". It is a proxy, and it is the one that can be checked; a page
 can be short and still badly arranged, and no script here would notice.
+
+
+### 7.16 The row the owner could not read, and the agent it said was missing
+
+Two reports, verbatim:
+
+> *"Some agents I have installed, but still show need to install or need adapter. Eg, codex, claudecode,
+> deepseek-harness. actually I am using deepseek-harness."*
+>
+> *"The UI for agents are worse than before, can we give more space to each agent and emphasize the Agent name,
+> the status or actions are just properties, Align the texts."*
+
+They are two independent defects, and the second is the price of §7.15: that round cut the page by 94% of its
+characters and made it *worse to read*, because **a character count is a proxy for "crowded", and the round
+optimised the proxy**. Rows dropped to 60px, the state chip came *before* the name, and the name was set at
+13px/500 — the same size and weight as every other label on the page. This section is what replaced it.
+
+#### 7.16.1 The three agents, measured rather than assumed
+
+Everything below is a command that was run on this machine on 2026-09-15, with its output. `$SHELL` is
+`/bin/zsh`.
+
+| question | answer |
+|---|---|
+| `$SHELL -ilc 'command -v dsh'` | `/Users/shileipeng/.npm/_npx/1e7f6d9597241db0/node_modules/.bin/dsh` |
+| `$SHELL -ilc 'command -v codex'` | `/Users/shileipeng/.npm-global/bin/codex` |
+| `$SHELL -ilc 'command -v claude'` | `/Users/shileipeng/.local/bin/claude` |
+| **the same login shell asked for `$PATH`, from a clean environment** (`env -i HOME=… SHELL=/bin/zsh /bin/zsh -ilc 'printf %s "$PATH"'`) | **26 directories, and none of them contains `_npx`.** `for d in ${(s.:.)PATH}; do [ -x "$d/dsh" ] && echo FOUND; done` prints nothing |
+| the running daemon's own inherited `PATH` (`ps eww -p <daemon pid>`) | **48 entries, no `_npx` in any of them** |
+| the daemon's log at boot (`~/.envoymesh/EnvoyCoder/logs/daemon.log`) | `[envoycoder] agent search path from login-shell: 33 directories` |
+| the live daemon's answer (`coder.listHarnesses` on `ws://127.0.0.1:4770/ws`) | `deepseek-harness` → **`not-installed`**, fix `npm install -g @deepseek-ai/dsh (developer preview: expect breaking changes)`; `claudecode` → `needs-bridge`, `agentBinary: /Users/shileipeng/.local/bin/claude`; `codex` → `needs-bridge`, `agentBinary: /Users/shileipeng/.npm-global/bin/codex` |
+
+**Three different causes, and only one of them was a wording problem.**
+
+* **`deepseek-harness` was genuinely misreported, and the `_npx` clue in §7.9's provisional rule was the
+  reason nobody noticed.** The program lives in npm's per-invocation cache, which is on **no `PATH` this
+  process can reconstruct**: not the login shell's (26 entries), not the daemon's (48), not the well-known
+  list. So the probe searched, found nothing, and said `not-installed` — and the row's line was the entry's own
+  76-character install command, which fits `AGENT_ROW_LINE_BUDGET`, so the row read as *"Not installed —
+  `npm install -g @deepseek-ai/dsh`"*. The previous round had written the `provisional: "npx"` rule *for this
+  path* and could never reach it: a rule whose input cannot occur is not a fix. **The answer was wrong, and it
+  was wrong about a program that runs** — `acp-transport.test.ts` drives the same binary in this suite.
+* **`codex` and `claudecode` were measured correctly and read wrongly.** `codex-acp` and `claude-agent-acp` are
+  really not installed (`findBinary` → `null` for both), so `needs-bridge` is the true state: the agent the user
+  installed is *there*, and the one missing piece is an adapter package they have never heard of. The row said
+  "Needs its adapter" above a bare `npm install -g @agentclientprotocol/codex-acp`, which is a sentence whose
+  only content is an install command. A reader concludes "not installed" — and is half wrong. **This is a view
+  defect, and it is fixed in the view.**
+* **A stale daemon, a cached absence and an unreachable catalogue entry were all checked and are all absent.**
+  The daemon's log shows it *did* take the login shell's answer (33 directories, source `login-shell`), the
+  probe caches nothing (`probe.ts` says so and the row re-measures), and all three agents are in
+  `coder.listHarnesses`.
+
+**What changed, and why each change is the honest one.**
+
+1. **`shell-binaries.ts` asks the login shell about the names, one `command -v` at a time.** This is a
+   *different question* from "what is your `$PATH`": a shell asked for a variable reports a list, and a shell
+   asked for a name performs the lookup it would perform for the user — a hash entry, a directory an `npx`/
+   `bunx` child inherited, a shim a toolchain manager computes. It is bounded the same way the `PATH` read is
+   (one invocation for every name, a 2500 ms deadline, a 64 KiB output cap, read **by marker**, cached per
+   name for the life of the process, never on the daemon's critical path) and it is **not** a second answer:
+   each answer's directory joins the same list the probe searches and the spawn hands to the child, so the two
+   cannot disagree. Names are validated against a closed character set rather than quoted, because a provider's
+   command is user-controlled data.
+2. **`cacheBinDirs()` searches npm's `npx` cache, last.** This is what actually fixes the reported row: the
+   program is there, this finds it, and `provisionalCacheOf` still marks it — so the row reads **Ready** with
+   the *Temporary copy* warning the previous round wrote for exactly this case. Bun's and pnpm's caches are
+   deliberately **not** enumerated (no measured layout), which is stated rather than papered over.
+3. **The row leads with what is present.** `installedLine` composes `Installed — ` + the command for
+   `needs-bridge`, so the two rows the owner quoted read *"Codex / Installed — `npm install -g
+   @agentclientprotocol/codex-acp` / [Needs its adapter]"*. Nothing is softened: the chip still names the one
+   missing piece, `not-installed` still says *Not installed* with the agent's own install step first, and the
+   branch that moves the command to the `title` when the two will not share a line is asserted from both sides.
+4. **`launchForProvider` now spawns the path the probe resolved**, which is what the catalogue tier already
+   did. Not a bug anybody had hit (the child's `PATH` was right), but *"the probe verified this file"* and
+   *"something on that list probably answers to this name"* are different claims, and a test now asserts the
+   invariant for both tiers.
+
+#### 7.16.2 The layout, measured in a real window
+
+The same instrument as §7.15 (`scripts/measure-settings.mjs`, extended with an `anatomy` block): an isolated
+home, a real daemon, Vite against it, headless Chrome over CDP with the target matched **by URL**, at
+1440×813, with `--open "Browse the catalogue"` so the measurement is of 48 rows and not 10.
+
+| measurement | before | after |
+|---|---|---|
+| **name font size / weight** | 13px / **500** | **15px / 600** (`--font-size-content` / `--font-weight-semibold`) |
+| the row's secondary line | 12px, `--text-muted` | unchanged — the *layout* changed, not how much is written |
+| **row height, shipped agents** | 70px | **80px** |
+| **row height, catalogue** | 60px | **80px** |
+| row heights: min / max / spread / sd | 17 / 70 / 53 / 7.3 | 17 / 80 / 63 / 9 (the 17px row is the *empty state*, which is not a row) |
+| **name left edge — spread across 47 rows** | **65.1px** (587 → 652.2) | **0px** (532) |
+| line left edge — spread | 0px (532) | 0px (532) |
+| **worst gap between a name's left edge and its own line's** | **120.2px** | **0px** |
+| **state chip right edge — spread** | **372.6px** (579 → 951.7) | **0px** (1152) |
+| controls right edge — spread | 0px (1424) | 0px (1424) |
+| the controls column | sized by each row's own content | **fixed track, 256px** — the measured widest natural width (`Check this machine` + `Add`) |
+| rows whose buttons wrapped / were squeezed | — | **0 / 0** |
+| **visible characters on the page** | 3,927 | **3,951** (+24: `Installed — ` on two rows) |
+| page height / screens | 3,303px / 5.11 | **4,161px / 6.43** |
+| **rows above the fold** | 8 of 48 | **7 of 48** |
+| longest row (characters) | 124 | 124 |
+| rows overflowing / horizontal overflow | 0 / false | 0 / false |
+| contrast below 4.5:1 | 0 (worst 4.93, `chip--warn`) | 0 (worst 4.93) |
+
+**The four decisions behind those numbers, and the reason for each.**
+
+* **80px per row.** The two text bands measure 19.5px (name at 15px/1.3) + 2px + 17.4px (line at 12px/1.45)
+  ≈ 39px, so the row carries ~20px of air above and below — against ~9px for a 60px catalogue row. It is also
+  on the 2/4 spacing rhythm the rest of the sheet uses, so an 80px row does not break the page's vertical
+  rhythm. **This is the number that costs the page a screen and a half of scrolling, and it is the number the
+  owner asked for**: *"give more space to each agent"*.
+* **15px/600 for the name.** The body text is 13px, the secondary line 12px, the group headings 13px caps, and
+  ordinary UI labels (nav items, buttons) use `--font-weight-medium`. `--font-size-content` is one full step
+  above all of them and `--font-weight-semibold` is one weight step above the labels, so the name is the only
+  15px/600 text inside a row. §7 of `docs/envoycoder-ui.md` says hierarchy should be by weight and colour
+  rather than size, lest a list look like a ransom note — the law is about *per-row* scaling, and a row title
+  set from the sheet's own content token, identically on every row, is not that; the doc now says so.
+* **Three columns, and the controls column is a fixed track.** A chip that is right-aligned *inside its own
+  row* does not line up down a page: its right edge is `row right − controls − gap`, so the controls have to be
+  the same width on every row. `--settings-agent-actions` is 256px because that is the measured widest pair
+  (`Check this machine` + `Add`); the first attempt used 176px, which stacked the two buttons on all 38
+  catalogue rows, and the second 192px, which did the same — both are visible in the run's own
+  `rowsWithWrappedButtons` and `squeezedButtons` counts, which is why the tool reports them.
+* **The state chip is the last chip in its column.** Verdict chips (`No approvals`, `Temporary copy`) hang
+  inward from it, so the *state* column owns one constant right edge and the eye can run down one word per row.
+
+**What stayed off the row.** Nothing new went on it: the summaries, the published modes/models/thinking, the
+recipe command lines, the versions, the install links and the last-checked time are all still behind `Details`,
+the groups still carry their counts, and the catalogue still opens on demand. `AGENT_ROW_LINE_BUDGET` (80),
+`AGENT_ROW_BUDGET` (140), `SETTING_DETAIL_BUDGET` (80) and `SETTING_NOTE_BUDGET` (180) are **unchanged**: the
+layout bought the space, and the +24 characters on the whole page are the two `Installed — ` leads. The four
+budgets are still enforced by `settings-density.test.tsx`, and the rendered page is now also checked against
+`AGENT_ROW_BUDGET` from the browser (below).
+
+#### 7.16.3 The mutations each new assertion fails on
+
+Twelve mutations, applied one at a time to the real source, each run against **whole test files** (never a
+`-t` filter), with the file restored byte-exact afterwards and the restore verified by comparison:
+
+| # | mutation | test that goes red |
+|---|---|---|
+| M1 | `launchForProvider` spawns the name the user typed again, not `probe.binaryPath` | `launch-search-path.test.ts` → *reads as installed, not missing — and the launch runs exactly what the probe found* |
+| M2 | `composeSearchPath` stops contributing the directory a shell answer named | `shell-binaries.test.ts` → *puts the answered program's directory first* |
+| M3 | npm's `npx` cache is not searched at all | `shell-binaries.test.ts` → *is the difference between `dsh` reading as installed and reading as missing* |
+| M4 | a hit in `~/.npm/_npx/` is no longer recognised as provisional | `shell-binaries.test.ts` → the same test (its `provisionalCacheOf` assertion) |
+| M5 | the per-name answer is read as the last line rather than by marker | `shell-binaries.test.ts` → *reads the answers by marker…* |
+| M6 | any string may be asked of the shell (the closed character set removed) | `shell-binaries.test.ts` → *refuses a name that is not a plain command name…* |
+| M7 | a `needs-bridge` row shows the command alone, with no statement of what is present | `settings-agent-row.test.tsx` → *leads with what is present…* |
+| M8 | every fix line leads with `Installed`, including a real absence | `settings-agent-row.test.tsx` → *never says `Installed` about an agent that is absent* |
+| M9 | the row's name goes back to `--font-size-sm` / `--font-weight-medium` | `settings-agent-row.test.tsx` → *is set one full step larger…* |
+| M10 | the controls column is sized by content (`max-content`) instead of the fixed track | `settings-row-anatomy.e2e.test.ts` → *lines up every column…* (measured spread ≠ 0) |
+| M11 | the state chip is rendered first in its column instead of last | `settings-agent-row.test.tsx` → *gives every row of every list the same three columns…* |
+| M12 | the row goes back to `--settings-agent-row: 60px` | `settings-row-anatomy.e2e.test.ts` → *gives every row the same height…* |
+
+**The pixel assertions live in an E2E-gated file, and that is stated rather than hidden.**
+`apps/desktop/test/settings-row-anatomy.e2e.test.ts` drives `scripts/measure-settings.mjs` as a child process
+(one measurement implementation, not two that can disagree) and asserts the spreads, the rendered font size and
+weight, the row height, the wrap/squeeze counts and the contrast on the real page. jsdom has no layout engine —
+`getBoundingClientRect()` there is all zeros — so a DOM test claiming these numbers would be a green light for
+something nobody looked at. The file is therefore **skipped** in the ordinary suite and prints why; M10 and M12
+were run with `RUN_E2E=1`.
+
+**What was measured, and what is still reasoned about.** Measured: every number in the two tables, taken from
+the rendered DOM of a real window; the twelve mutations and the test each one reddens; the three agents'
+resolution by four different mechanisms (the owner's shell, a clean-environment login shell, the daemon's own
+environment, and the live daemon over its socket). Reasoned about rather than measured: that an 80px row with a
+15px name *reads* better — the numbers say it is uniform, aligned and larger, and whether it is pleasant is the
+owner's eyes on the PNGs, which is why `scripts/measure-settings.mjs` leaves them in its output directory. Also
+reasoned about: that 256px is the right width for the controls track rather than a compromise with the name's
+604px — the measurement pins what *fits*, and nothing here pins what looks balanced.
+
+
+### 7.17 Not ready, and the way out: one verdict per row, and nothing to press
+
+The owner's brief for this slice, verbatim: *"I don't want user to guess, to check if we can do that. And If the
+agent cannot be used - 'Not Ready', we should clearly know what the problem is and guide user to resolve it if
+he want to use this coding agent. That's the target."* Plus the vocabulary from the two messages before it: one
+verdict per row — **Ready / Not ready** — caveats as *properties* rather than chips, and **"Not checked" must
+essentially disappear**.
+
+#### 7.17.1 What the page did, and why it was a chore
+
+The Agents page opened with the nine agents we ship carrying one of five measured states, and the 38 catalogue
+recipes carrying **no state at all**: `settings.agent.unchecked`, rendered *"Not checked yet"*, with a *Check
+this machine* button on every row calling `coder.probeCatalogAgent` one entry at a time. So a user who wanted to
+know whether the CLI they already had would work here had to press a button and read a chip, thirty-eight times,
+and the page's opening state was thirty-eight admissions that it did not know.
+
+The design behind that had one good reason and one mistake in front of it. The good reason: **starting** 14 of
+those recipes would download 14 npm packages because somebody opened Settings, so nothing on that page may start
+anything. The mistake: an *availability* answer does not need to start anything, and the two were not separated.
+They are separated now.
+
+#### 7.17.2 Every row resolves itself, and the resolution starts nothing
+
+`coder.listCatalog` now serves each entry **with `CatalogEntry.availability`** — the same five states, from the
+same `harnessAvailability` projection the nine shipped agents go through — resolved when the list is served. The
+four questions it answers are all filesystem and environment reads: does the program resolve (on the search
+path, in a tool cache, or as the user's own login shell resolves it — §7.16), does the **agent's own** program
+resolve when the recipe is a bridge over one, is the recipe an `npx`/`uvx` shape (nothing to install at all),
+and does the daemon have the variables the launch needs. No process, no package, no network, and **no cache**:
+the rows are recomputed per read, which is what makes "I installed it while the window was open" true the next
+time the list is read rather than ten minutes later.
+
+`coder.probeCatalogAgent` is **deleted** — method, params, `CatalogProbeSchema`, the window's per-row probe
+state, `rowStateOf`, `checkForces`, the `unchecked`/`checking`/`refused` states, the *Check* buttons and the six
+message keys they used. Its measurement was exactly what the list now carries, so keeping it would have been two
+answers to one question.
+
+What that leaves on a row is **one chip, and it is one of exactly two verdicts**:
+
+| the daemon measured | the row reads | the row's line | the disclosure leads with |
+|---|---|---|---|
+| `ready` | Ready | the tier, or *Installed — add it to use it* | (nothing to resolve) |
+| `ready` and an `npx` recipe | **Ready** | *Nothing to install* | *Obtained: fetched from npm on the first run (pkg)* |
+| `needs-bridge` | Not ready | *Installed — needs its connector* + the command | *"**Codex is installed.** EnvoyCoder needs its connector to drive it:"* then the exact command |
+| `not-installed` | Not ready | the entry's first install step, verbatim | the steps **in the order to run them**, then the entry's link |
+| `ready` + an unset variable the launch names | Not ready | *"NAME is not set"* | the name(s), and that the value can only come from the user |
+| `unsupported` | Not ready | *EnvoyCoder cannot drive this agent yet* | **that this is our gap and there is nothing to install** |
+| `unknown` | Not ready | *EnvoyCoder could not check this machine* | the same, plus the one action that re-measures |
+| *(field absent — older daemon)* | Not ready | *EnvoyCoder is a build behind* | the same, in the words of a build skew |
+
+Two of those rows are worth their own note.
+
+**The `needs-bridge` line is the reported bug, fixed in the words rather than in the measurement.** The owner
+wrote *"Some agents I have installed, but still show need to install or need adapter. Eg, codex, claudecode,
+deepseek-harness."* For Codex and Claude Code the measurement was **right** — `codex-acp` and
+`claude-agent-acp` really are not installed — and the *row* misled: a warn chip saying *Needs its adapter* above
+a bare `npm install -g @agentclientprotocol/codex-acp`, so the only sentence on the row was an install command
+for a package the user had never heard of, while the CLI they use every day sat present and unnamed. So the line
+now leads with what is present. **And the fallback keeps that half**: when the command will not share the
+80-character line (the `claude-agent-acp` command is 51 characters against a 31-character lead, so 83), the
+command moves to the `title` and the disclosure and the phrase stays. The first draft had a shorter fallback —
+*"Needs its connector"* — and it was the same defect wearing the other hat, because the half a user needs first
+is *Installed*.
+
+**`npx` is not a problem, and the row says so instead of warning about it.** The deleted `ready-npx` state
+(`settings.agents.row.readyNpx`, *"Not downloaded yet"*) existed because `ready` for an `npx -y …` recipe is a
+fact about `npx` rather than about the agent, and 14 rows reading *Ready* would claim a verification nobody
+performed. That instinct was right and the remedy was wrong: it made a working row look broken, on fourteen
+rows, for something that happens by itself on the first run. The honesty moved to the **property** —
+`Obtained: fetched from npm on the first run (pkg)` — where it is a fact about how the program arrives rather
+than a warning about something having gone wrong.
+
+**`our-gap` and `nothing-you-can-do` are different kinds, in the layout and not only in the words.** The
+mandate asks for that distinction explicitly, and it is `guide.kind`: `steps` and `environment` are things to
+do, `app` is a restart, and `nothing` renders **no list, no command and no link at all**. An `unsupported`
+catalogue entry carries an `installLink` (the vendor's page, which is true and useful for *reading*), and
+rendering it under *"we cannot drive this yet"* is the failure the distinction exists to prevent:
+`settings-agents-catalog.test.tsx` asserts the panel has no `<a>` and no `npm install` in that case.
+
+#### 7.17.3 The deep facts: properties with a time, never a state to press for
+
+Three facts about an agent cannot be known without **starting** it — whether it speaks ACP, what it publishes
+(models, modes, thinking levels) and whether it wants a sign-in — so none of them is a verdict. They are
+properties in the disclosure, and the property that makes them honest is **`Verified`**: a relative time in the
+user's own language from `Intl.RelativeTimeFormat` (*4 minutes ago*, pluralised and localised in all seven)
+followed by the absolute timestamp. When nothing has been observed the value says **why** — *"Not yet —
+EnvoyCoder starts an agent to learn this, so it arrives when a task runs rather than when this page opens"* —
+rather than leaving a blank that invites a hunt for a button.
+
+They arrive three ways. Two already existed: `coder.probeSessionOptions` (the composer's *Ask again*) and a run,
+which records what the session published. The third is this slice's addition and the one that removes the last
+press: **`deep-warm.ts`**, a background pass at daemon boot that asks each agent that is `ready` what it
+publishes. Its bounds are the design, and three of them are prohibitions:
+
+* **one at a time**, in sequence, with a 3-second gap (`WARM_GAP_MS`) — two agents starting together is two
+  processes and two handshakes' worth of CPU on a machine somebody is working on;
+* **only `ready` rows** — nothing else has a program this build can start;
+* **never a program that would be fetched first** — an `npx -y <pkg> …` recipe is *downloaded* on the first
+  run, so a background pass over one of those is a pass that spends a user's network and disk because they
+  opened an app. The flag is derived from the catalogue (`cataloguedInstall(entry).kind === "npx"`), not
+  asserted, so an entry that changes shape is covered without anybody remembering;
+* **not at all if the store already holds a recent observation** (`WARM_STALE_MS`, six hours) — the store
+  survives a restart and `SessionProbe`'s in-memory cache does not, so this is what makes a second launch of the
+  app start nothing;
+* **off unless asked for**: `startCoderDaemon` defaults `warm` to false, `daemon/main.ts` passes `true`, and
+  every test and `scripts/smoke.ts` leaves it out. `scripts/measure-settings.mjs` passes
+  `ENVOYCODER_WARM_AGENTS=0`, because a *measurement* must not start the owner's own coding agents.
+
+**The honest note about that pass, recorded here rather than discovered later.** It starts the user's installed
+agents — that is what it is for, and it is bounded and cached rather than unbounded, but it is a real side
+effect of launching the app and an owner may reasonably decide the trade is not worth it. The switch to turn it
+off entirely is the `warmAgents()` call in `apps/desktop/src/daemon/main.ts`, and the facts it gathers are also
+gathered by the two presses that existed before it, so switching it off degrades the page to *"Verified: not yet
+— this arrives when a task runs"* rather than to a wrong answer. **It was not exercised against this machine's
+real agents**: starting somebody's Codex and Claude Code sessions is not a thing a review should do, so every
+assertion about it is against a recording fake (`deep-warm.test.ts`) and the production default is stated here
+instead.
+
+#### 7.17.4 Measured in a real window
+
+`scripts/measure-settings.mjs` grew a **verdict census** (`verdicts`) and a **child-process count**
+(`daemonChildren`) for exactly this slice. The census is taken from the rendered DOM of the real page in headless
+Chrome over CDP, target matched by URL, against a daemon on an isolated home:
+
+| | page as it opens | with the catalogue open |
+|---|---|---|
+| agent rows | 9 | **47** (9 shipped + 38 recipes) |
+| rows carrying a verdict | **9** | **47** |
+| rows with **no** chip | **0** | **0** |
+| Ready / Not ready | 3 / 6 | 22 / 25 |
+| any **third** word on a row | **none** | **none** |
+| rows with more than one chip | **0** | **0** |
+| buttons asking the user to find out a state | **none** | **none** |
+| daemon child processes, before → after the page | **0 → 0** | **0 → 0** |
+| visible characters / screens | 771 / 1.58 | 3,265 / 6.43 |
+| row height | 80px (empty state 17px) | 80px |
+| name / line font size and weight | 15px/600, 12px | 15px/600, 12px |
+| name-left spread · name-vs-line gap | 0 · 0 | 0 · 0 |
+| chip-right spread · controls-right spread | 0 · 0 | 0 · 0 |
+| rows wrapping their controls | 0 | 0 |
+| contrast below 4.5:1 | 0 | 0 |
+
+**"Loading the page spawns no process" is measured, not asserted-by-intention.** `daemonChildren` counts
+`pgrep -P <daemon pid>` **before the page makes its first request and again after it has settled**, so the
+number is a difference rather than a snapshot: a daemon that had already started something would show it in
+*both*, and a page that started something would show it in the second. Both are zero. The second instrument is
+`catalog-rpc.test.ts`, which patches the **builtin `node:child_process` module object** — the one place an ESM
+import and a CJS `require` meet — and requires zero calls across a full read of all 38 rows.
+
+**The controls track was re-sized, and the old justification had outlived its control.** `--settings-agent-actions`
+was 256px, "the measured widest pair the page renders — *Check this machine* + *Add*". This slice deleted the
+*Check* button, so the track was holding 119px for nothing on all 47 rows, in the column the name needs most.
+144px is bracketed rather than rounded: at **110px** 37 rows wrap their controls and at **60px** 38 do; at 144px
+**none** does (`rowsWithWrappedButtons`), and the widest controls pair the page renders measures **115px**
+(`actionsNaturalWidth`).
+
+**Finding that number was itself a defect, and the E2E test found it rather than a reader.**
+`actionsNaturalWidth` is "the sum of the buttons in the row's head", and this slice turned the **Not-ready chip
+into a `<button>`** — which lives in the head. So the metric silently began counting the verdict chip as one of
+the row's *controls*: it reported 191px against a 144px track, `settings-row-anatomy.e2e.test.ts` failed on
+`natural ≤ track`, and the first reading of that failure is "the track is too narrow". It was not. The selector
+is now `.settings__agent-actions button` and the number is 115. A metric that quietly starts measuring a
+different column is worse than no metric, and the reason it was caught is that the assertion existed before the
+change did.
+
+`squeezedButtons` is still reported as **unproven**: forcing the track to 60px makes the wrapping detector fire
+(38 rows) and leaves the squeeze detector at 0, so its zero is evidence about nothing. The bracket above is what
+justifies the number.
+
+#### 7.17.5 The mutations each new assertion fails on
+
+Eight mutations, applied one at a time to the real source, each run against **whole test files** (never a
+`-t` filter), with the file restored byte-exact afterwards and the restore verified by SHA-256:
+
+| # | mutation | test that goes red |
+|---|---|---|
+| M1 | the catalogue stops resolving its rows (`availability: undefined`) | `settings-agents-catalog.test.tsx` → *gives every row one of the two verdicts, resolved before anything was pressed* |
+| M2 | the prober shells out once per row | `catalog-rpc.test.ts` → *spawns no process to resolve all 38 rows* |
+| M3 | the disclosure renders the facts **before** the guide | `settings-agent-verdict.test.tsx` → *leads a connector-missing row with what IS installed, before the command* |
+| M4 | the `our-gap` guide offers the vendor's install link | `settings-agents-catalog.test.tsx` → *offers no install step for the entry whose gap is ours* |
+| M5 | the `needs-bridge` line becomes the command alone | `settings-agent-row.test.tsx` → *leads with what is present, names the one missing piece, and still shows the command* |
+| M6 | a caveat chip is rendered beside the verdict | `settings-agent-verdict.test.tsx` → *renders at most one chip per row, and it is one of the two verdicts* |
+| M7 | the deleted `ready-npx` state comes back for `npx` recipes | `settings-agent-verdict.test.tsx` → *treats an npx recipe as Ready, and says it is fetched on the first run* |
+| M8 | the deep facts lose the time they were observed | `settings-agent-verdict.test.tsx` → *carries the deep facts as properties with the time they were observed* |
+
+**Two of those eight were found by the mutation run rather than by review, and both were faults in the tests.**
+
+* **M2 passed on the first run.** The spawn counter was a `vi.mock("node:child_process", …)`, which replaces the
+  *import* of the module and does not intercept a `require` — so a prober that shelled out via `require` walked
+  past an assertion that reported a comfortable zero. The instrument now patches the properties of the builtin
+  module object, where an ESM import and a `require` meet, and its liveness test goes through `require`
+  deliberately: **an instrument that reports zero for every question asked of it is worse than no instrument**,
+  and the only defence is a negative test of the instrument itself.
+* **M3 passed on the first run.** The assertion meant to prove "the disclosure leads with the fix" checked that
+  the lead paragraph sits before the command list — which is the guide's *internal* order and stays true when the
+  whole guide is moved below the facts. It now asserts the panel's **first element child** is the guide, which is
+  the property the mandate actually asks for and the one the mutation moves.
+
+**What was measured, and what was reasoned about.** Measured: every number in §7.17.4, taken from the rendered
+DOM of a real window and from the daemon's own child list; the eight mutations and the named test each one
+reddens; the track bracket at 60/110/144px. Reasoned about rather than measured: that *"Installed — needs its
+connector"* is the clearest available phrasing (the budget and the branch are measured; the wording is a
+judgement); that six hours is the right bound for a stored observation (what it bounds — an agent's published
+models and its sign-in state — is a fact that changes on an upgrade or an expiry, and nothing here measures how
+often either happens on the owner's machine); and that the background pass is worth its side effect, which is
+**the one thing in this slice an owner might reasonably reverse**, with the call site named above. Not verified
+at all: any of it against a real agent's ACP surface — starting the owner's own sessions is not a review's to
+do, so `acp-agent-support.test.ts` and the smoke gate remain the only evidence about real agents, and they are
+unchanged by this slice.
+
+**Pixels are the owner's to judge, and this slice's screenshots are in `/tmp`.** The model that wrote this could
+not read the PNGs (`/tmp/envoycoder-agents/agents-0*.png`, `/tmp/envoycoder-catalog/agents-0*.png`): the geometry
+above is numeric and therefore stronger than an eyeball for alignment, and *nothing* here claims to know whether
+the page reads well, whether 144px looks balanced, or whether the two verdicts are the right words to put in
+front of a person. Those are the owner's, and the pictures are there for them.
 
 
 ## 8. The slice plan

@@ -19,10 +19,14 @@
  * | **rows above the fold** | whether a user meets the content or the preamble |
  * | **longest row** (characters *and* pixels) | the one row that makes the rest look ragged, and whether anything overflows its column |
  * | **contrast** | the family's 4.5:1 floor on every chip and piece of small print on the page |
+ * | **verdict census** (`verdicts`) | whether every row resolved itself — rows, how many carry one of the two verdicts, the Ready/Not-ready split, any *third* word a row is using, rows carrying more than one chip, and any button on the page that asks the user to find out a state. It exists because the page used to open with thirty-eight rows reading "Not checked yet" and a *Check* button on each, and that is a property no pixel number can see |
+ * | **row anatomy** (`anatomy`) | the agent row's own geometry — the name's size and weight, the left edge it shares with its line, and the **spread** of the chip column's right edge and the controls column's right edge across every row. It exists because the round before this one optimised a *character count* and made the page worse to read: "the name leads" and "the chips line up" are claims about pixels, and a character budget cannot falsify either |
  *
  * A row is defined as an element carrying one of the row classes this pane draws — see `ROW_SELECTOR`.
  * "Above the fold" counts rows whose *top* is inside the scrolling body's viewport, which is the honest
- * reading of "a user sees this without scrolling".
+ * reading of "a user sees this without scrolling". `anatomy` measures the agent rows specifically (the
+ * `settings__agent` class, which every row of all three lists carries) and reports the columns as a spread,
+ * because an average would hide the one row that is out of line.
  *
  * ## What this script cannot see, printed rather than hidden
  *
@@ -46,7 +50,7 @@
  * it: the page as it *opens* and the page with a group unfolded are two different and equally honest numbers,
  * and a tool that could only report one of them would have its output quoted as if it were the other.
  */
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -127,7 +131,19 @@ const daemonLog = join(outDir, "daemon.log");
 const daemon = track(
   spawn(process.execPath, ["--import", "tsx", DAEMON_ENTRY], {
     cwd: root,
-    env: { ...process.env, ENVOYMESH_HOME: home, ENVOYCODER_DAEMON_PORT: String(daemonPort) },
+    // **`ENVOYCODER_WARM_AGENTS=0`: the instrument must not pull the trigger.**
+    //
+    // This tool drives the *production* entry point, which by default looks at what each ready agent publishes
+    // in the background — a pass that starts the owner's own coding agents, one at a time, and is right for a
+    // product and wrong for a measurement. Measuring pixels must not launch anybody's CLI, and the roster this
+    // page renders is complete either way: the deep facts are *properties* with a time, not the verdicts this
+    // tool counts. The switch and its reasoning are `warmAgents()` in `apps/desktop/src/daemon/main.ts`.
+    env: {
+      ...process.env,
+      ENVOYMESH_HOME: home,
+      ENVOYCODER_DAEMON_PORT: String(daemonPort),
+      ENVOYCODER_WARM_AGENTS: "0",
+    },
     stdio: ["ignore", "pipe", "pipe"],
   }),
 );
@@ -272,10 +288,41 @@ const sectionTitle = {
   about: "About",
 };
 
+/**
+ * **How many processes the daemon has as children, right now** — the measurement of *"loading the page spawns
+ * nothing"*, taken on the real thing rather than in a test double.
+ *
+ * The daemon is the process that would start an agent: `spawn` for a launch, `execFile` for a login shell, and
+ * an ACP session either way. So its child list is the honest instrument, and it is read twice — once before a
+ * single request has been made for this page, and once after the page has settled — so the answer is a
+ * *difference* rather than a snapshot that some unrelated earlier work could satisfy.
+ *
+ * `pgrep -P` rather than `ps`: it is one call, it exits non-zero when there are none (which is the answer we
+ * want), and it needs no parsing of a table whose columns differ between platforms.
+ *
+ * **What this cannot see, printed rather than implied:** the daemon is started with `ENVOYCODER_WARM_AGENTS=0`
+ * (see the spawn above), because this tool drives the production entry point and the production entry point
+ * looks at what every ready agent publishes in the background. That pass starts real agents on the owner's
+ * machine, one at a time, on purpose — and a *measurement* must not pull that trigger. So what this number
+ * measures is the page's own behaviour: the requests it makes on load, and what they cost.
+ */
+function daemonChildren() {
+  try {
+    const out = execFileSync("pgrep", ["-P", String(daemon.pid)], { encoding: "utf8" });
+    return out.split("\n").filter((line) => line.trim() !== "").length;
+  } catch {
+    // `pgrep` exits 1 when nothing matched, which is the common and correct case.
+    return 0;
+  }
+}
+const childrenBeforePage = daemonChildren();
+
 console.log(`walk: Settings → ${section}`);
 console.log(`  Settings: ${await press("Settings")}`);
 console.log(`  ${sectionTitle[section] ?? section}: ${await press(sectionTitle[section] ?? section)}`);
 await sleep(1200);
+const childrenAfterPage = daemonChildren();
+console.log(`  daemon child processes: ${childrenBeforePage} before the page, ${childrenAfterPage} after`);
 
 /**
  * `--open "Browse the catalogue"` — press one more thing before measuring, by the words a user reads.
@@ -416,6 +463,164 @@ const report = await evaluate(`(() => {
   const worst = contrast.slice().sort((a, b) => a.ratio - b.ratio).slice(0, 6);
   const gradients = all.filter((n) => getComputedStyle(n).backgroundImage !== "none").length;
 
+  /**
+   * **The row's anatomy, as geometry.** The fifth number this tool did not have, and the reason it exists:
+   * "the chips line up down the page" and "the name leads" are claims about *pixels*, and the previous round
+   * of this page was judged on a character count — which is a proxy for "crowded" that made the page it
+   * proxied worse. So the columns are measured rather than described:
+   *
+   *   * **the name's left edge against its line's** — they must share one, or the row is not a block;
+   *   * **the chips' right edge and the controls' right edge, as a spread across rows** — a chip that is
+   *     right-aligned inside its own row only lines up if every row's controls column is the same width, so
+   *     this number is what proves the fixed track in the stylesheet is doing its job;
+   *   * **the name's own font size and weight**, because "the name leads" is nothing else;
+   *   * **wrapping, squeezed buttons and the controls' natural width** — a controls column that is too narrow
+   *     for a row's buttons does not overflow, it either stacks them or squeezes a label inside a 24px box,
+   *     and both are invisible in a row height.
+   *
+   * The unit is a CSS pixel of a real layout, and the row list is the settings__agent class — the one class every row
+   * of every list on this page carries.
+   */
+  const agentRows = [...body.querySelectorAll(".settings__agent")];
+  const round1 = (v) => Math.round(v * 10) / 10;
+  /** min / max / spread / standard deviation of a list of numbers. Null when there is nothing to measure. */
+  const spreadOf = (values) => {
+    if (values.length === 0) return null;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+    const sd = Math.sqrt(values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length);
+    return { n: values.length, min: round1(min), max: round1(max), spread: round1(max - min), sd: round1(sd) };
+  };
+  // Boxes, one per row: null where a row has no such element (an empty state has no name). Filtering the nulls
+  // out *inside* the rows array would shift every later row's geometry onto the wrong row — a measurement bug
+  // that reads as an alignment finding.
+  const boxesOf = (els) => els.map((el) => (el ? el.getBoundingClientRect() : null));
+  const some = (boxes) => boxes.filter(Boolean);
+  const edges = (boxes, side) => spreadOf(some(boxes).map((b) => b[side]));
+  const nameEls = agentRows.map((r) => r.querySelector(".settings__agent-name"));
+  const lineEls = agentRows.map((r) => r.querySelector(".settings__agent-line"));
+  // The chip column's edge is the **last** chip of the row: the state chip is rendered last, so verdict chips
+  // hang inward from it and the state column owns one constant right edge.
+  const chipEls = agentRows.map((r) => {
+    const chips = [...r.querySelectorAll(".chip")];
+    return chips[chips.length - 1] ?? null;
+  });
+  const actEls = agentRows.map((r) => r.querySelector(".settings__agent-actions"));
+  const nameBoxes = boxesOf(nameEls);
+  const lineBoxes = boxesOf(lineEls);
+  const chipBoxes = boxesOf(chipEls);
+  const actBoxes = boxesOf(actEls);
+  const nameStyleOf = nameEls.find(Boolean);
+  const lineStyleOf = lineEls.find(Boolean);
+  const heightsOf = (boxes) => some(boxes).map((b) => Math.round(b.height));
+  const tallerThanOneLine = (hs) => hs.filter((h) => h > 28).length;
+  /**
+   * The buttons of the **controls column** — and the selector is '.settings__agent-actions button' rather than
+   * '.settings__agent-head button', which is what it was.
+   *
+   * The difference is one control and it is not cosmetic: a **Not-ready chip is a '<button>'** (it opens the
+   * row's disclosure), and it lives inside the head, so the old selector counted the verdict chip as one of the
+   * row's controls. 'actionsNaturalWidth' was therefore the chip plus the buttons — measured at 191px against a
+   * 144px track, which reads as "the controls do not fit" and is not true. The E2E test
+   * ('settings-row-anatomy.e2e.test.ts') failed on that number, which is how it was found: a metric that
+   * silently started measuring a different column.
+   */
+  const buttonsOf = (row) => [...row.querySelectorAll(".settings__agent-actions button")];
+  const anatomy = {
+    name: nameStyleOf
+      ? {
+          fontSize: round1(parseFloat(getComputedStyle(nameStyleOf).fontSize)),
+          fontWeight: getComputedStyle(nameStyleOf).fontWeight,
+        }
+      : null,
+    line: lineStyleOf ? { fontSize: round1(parseFloat(getComputedStyle(lineStyleOf).fontSize)) } : null,
+    nameLeft: edges(nameBoxes, "left"),
+    lineLeft: edges(lineBoxes, "left"),
+    /** The largest gap between a name's left edge and its own line's — 0 is the property the page claims. */
+    nameVsLine: nameBoxes.length === 0
+      ? null
+      : round1(Math.max(...nameBoxes.map((b, i) => (b && lineBoxes[i] ? Math.abs(b.left - lineBoxes[i].left) : 0)))),
+    chipRight: edges(chipBoxes, "right"),
+    actionRight: edges(actBoxes, "right"),
+    propsHeight: Math.max(...heightsOf(boxesOf(agentRows.map((r) => r.querySelector(".settings__agent-props")))), 0),
+    actionsHeight: Math.max(...heightsOf(actBoxes), 0),
+    rowsWithWrappedChips: tallerThanOneLine(
+      heightsOf(boxesOf(agentRows.map((r) => r.querySelector(".settings__agent-props")))),
+    ),
+    rowsWithWrappedButtons: tallerThanOneLine(heightsOf(actBoxes)),
+    squeezedButtons: agentRows.reduce(
+      (sum, r) => sum + buttonsOf(r).filter((b) => b.scrollWidth > b.clientWidth + 1 || b.getBoundingClientRect().height > 26).length,
+      0,
+    ),
+    /** The controls column's widest natural width: what the fixed track has to be, measured rather than guessed. */
+    actionsNaturalWidth: agentRows.length === 0
+      ? null
+      : Math.max(...agentRows.map((r) => {
+          const bs = buttonsOf(r);
+          return bs.reduce((sum, b) => sum + Math.round(b.getBoundingClientRect().width), 0) + Math.max(0, bs.length - 1) * 8;
+        })),
+    perRow: agentRows.map((r, i) => ({
+      cls: r.className.split(" ").filter((c) => c.startsWith("setting")).join(".") || r.tagName,
+      h: Math.round(r.getBoundingClientRect().height),
+      chars: ownChars(r).length,
+      nameLeft: nameBoxes[i] ? round1(nameBoxes[i].left) : null,
+      lineLeft: lineBoxes[i] ? round1(lineBoxes[i].left) : null,
+      chipRight: chipBoxes[i] ? round1(chipBoxes[i].right) : null,
+      actionRight: actBoxes[i] ? round1(actBoxes[i].right) : null,
+      text: ownChars(r).slice(0, 90),
+    })),
+  };
+
+  /**
+   * **The verdict census** — the number that answers the owner's report directly.
+   *
+   * *"I don't want user to guess, to check if we can do that."* The page used to open with thirty-eight rows
+   * reading *"Not checked yet"* and a *Check* button on each, and whether a row knew its own state was
+   * therefore not a property any measurement could report. It is one now, and these are its terms:
+   *
+   *   * 'rows' / 'withChip' / 'withoutChip' — **every row must carry a verdict the moment the page opens**,
+   *     with nothing pressed. 'withoutChip' is the number that must be zero, and it is the one a regression
+   *     would move first;
+   *   * 'ready' / 'notReady' — the two words, counted. The pair is the vocabulary: any third word shows up in
+   *     'otherWords' rather than hiding;
+   *   * 'multipleChips' — the mandate's *"a row renders at most one chip"*, counted on the page rather than
+   *     asserted in a test that might be looking at a different row;
+   *   * 'checkControls' — buttons whose label asks the user to find out a state. The old page had one per
+   *     catalogue row; the number that must be zero is this one.
+   */
+  const verdictWords = ["Ready", "Not ready"];
+  const chipsOf = (row) => [...row.querySelectorAll(".chip")];
+  /**
+   * **A row, not a receptacle.** 'settings__agent' is the class every row of all three lists carries *and* the
+   * class the two empty states carry, and an empty state has no name, no chip and nothing to have a verdict
+   * about. Counting them in 'withoutChip' would make the headline number report a failure every time a user
+   * has not declared an agent yet — a proxy metric that got *worse* as the measurement got more honest, which
+   * is the exact lesson this file's own header records. So the two are separated, and the empty states are
+   * still reported: they are content on the page, and they are not rows.
+   */
+  const verdictRows = agentRows.filter((r) => r.querySelector(".settings__agent-head"));
+  const emptyStates = agentRows.length - verdictRows.length;
+  const verdicts = {
+    rows: verdictRows.length,
+    withChip: verdictRows.filter((r) => r.querySelector(".settings__agent-state")).length,
+    withoutChip: verdictRows.filter((r) => !r.querySelector(".settings__agent-state")).length,
+    ready: verdictRows.filter((r) => r.querySelector(".settings__agent-state")?.textContent === verdictWords[0]).length,
+    notReady: verdictRows.filter((r) => r.querySelector(".settings__agent-state")?.textContent === verdictWords[1]).length,
+    otherWords: [...new Set(
+      verdictRows
+        .map((r) => r.querySelector(".settings__agent-state")?.textContent ?? "")
+        .filter((word) => word !== "" && !verdictWords.includes(word)),
+    )],
+    multipleChips: verdictRows.filter((r) => chipsOf(r).length > 1).length,
+    // Empty states, counted for completeness rather than folded into the row count. Their presence is why
+    // 'rows + emptyStates ===' the number of 'settings__agent' elements, which is a check a reader can do.
+    emptyStates,
+    checkControls: [...body.querySelectorAll("button")]
+      .filter((b) => /check/i.test(b.textContent ?? ""))
+      .map((b) => (b.textContent ?? "").trim()),
+  };
+
   return {
     viewport: { w: innerWidth, h: innerHeight },
     bodyViewportHeight: Math.round(body.clientHeight),
@@ -436,6 +641,8 @@ const report = await evaluate(`(() => {
     headings: headings.map((h) => ownText(h)),
     groups,
     contrast: { worst, below45: contrast.filter((c) => c.ratio < 4.5).length, gradients },
+    anatomy,
+    verdicts,
   };
 })()`);
 
@@ -460,7 +667,17 @@ for (let n = 1; n < Math.min(screens, 8); n += 1) {
 }
 await evaluate(`(() => { const b = document.querySelector(".settings"); if (b) b.scrollTop = 0; return true; })()`);
 
-const summary = { section, viewport: size, url: uiUrl, outDir, ...report };
+const summary = {
+  section,
+  viewport: size,
+  url: uiUrl,
+  outDir,
+  // The page's own cost, as a difference: what the daemon was running before this page asked for anything,
+  // and what it was running once the page had settled. Both zero is the property; the *pair* is what makes it
+  // a measurement rather than a coincidence.
+  daemonChildren: { before: childrenBeforePage, after: childrenAfterPage },
+  ...report,
+};
 console.log("\n" + JSON.stringify(summary, null, 2));
 console.log(`\npictures: ${outDir}/${section}-00.png … (${Math.min(screens, 8)} screenfuls of ${screens})`);
 if (!keep) stopAll();

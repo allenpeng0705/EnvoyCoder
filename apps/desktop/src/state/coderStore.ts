@@ -36,7 +36,6 @@ import type {
   AgentProviderSummary,
   AgentRun,
   CatalogEntry,
-  CatalogProbe,
   CoderSettings,
   HarnessId,
   HarnessSummary,
@@ -95,14 +94,15 @@ export interface CoderState {
    */
   providers: readonly AgentProviderSummary[];
   /**
-   * The catalogued agents — **the recipes, with nothing measured about them**.
+   * The catalogued agents — **the 38 recipes, each with what this machine can do with it**.
    *
-   * `coder.listCatalog` walks no search path and starts no process, so this list may be loaded with every
-   * other list at connect time. What it deliberately does **not** carry is a state: an entry is a recipe,
-   * and whether this machine can run it is a fact somebody has to measure. Each row's measurement lives
-   * beside it in the settings screen's own state, taken one row at a time when the user asks for that row
-   * (`probeCatalogAgent`), because 14 of the entries are `npx` recipes and a sweep would be a window that
-   * fetches packages for asking a question nobody asked.
+   * `coder.listCatalog` starts no process and downloads nothing, so this list loads with every other list at
+   * connect time — and it arrives complete, because each row carries the availability the daemon resolved when
+   * it served the list (`CatalogEntry.availability`). So there is no second call to make and no per-row state
+   * for this store to hold: what a consumer renders is a verdict. The only reason a user used to have to ask
+   * about a row one at a time is that the answer was believed to be expensive; it is not — the four facts
+   * behind it are filesystem and environment reads — and the 14 `npx` recipes that made a sweep *look* costly
+   * are only costly to **start**, which nothing here does.
    */
   catalog: readonly CatalogEntry[];
   mesh: MeshStatus;
@@ -536,26 +536,6 @@ export class CoderStore {
       // Nothing to report: see the doc above. The screen renders an empty catalogue as "not offered by
       // this daemon", never as "there are no agents".
     }
-  }
-
-  /**
-   * One catalogued entry, measured — the row a user asked about, and only that row.
-   *
-   * The result is returned rather than stored, on the same arrangement `probeSessionOptions` uses and for a
-   * sharper version of the same reason: the measurement belongs to the row the user pressed, the caller is
-   * the thing rendering that row, and a copy in this store would be a second place a state could live. What
-   * the *daemon* keeps is the cache, which is where it belongs — it is globally true, and a second window
-   * asking a minute later must not make the daemon walk the search path again.
-   */
-  async probeCatalogAgent(
-    id: string,
-    options: { force?: boolean } = {},
-  ): Promise<{ ok: true; probe: CatalogProbe } | Refusal> {
-    return this.mutate(
-      "coder.probeCatalogAgent",
-      { id, ...(options.force !== undefined ? { force: options.force } : {}) },
-      (answer) => ({ ok: true as const, probe: answer as CatalogProbe }),
-    );
   }
 
   async loadMesh(): Promise<void> {

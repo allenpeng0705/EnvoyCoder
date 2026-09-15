@@ -166,22 +166,28 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     content: [
       {
         file: "apps/desktop/src/components/settings/SectionsAgents.tsx",
-        needle: "harness.capabilities",
-        because: "each agent's own capabilities decide which warnings it carries",
+        needle: "rowVerdict(",
+        because:
+          "each agent's row carries one verdict — Ready or Not ready — projected from the measurement the " +
+          "daemon had already taken, so a user learns a state without pressing anything. The five measured " +
+          "states stay on the wire as evidence and are turned into words in exactly one place " +
+          "(`agent-verdict.ts`), which is what keeps a row from growing a status vocabulary again",
       },
       {
         file: "apps/desktop/src/components/settings/SectionsAgents.tsx",
-        needle: "<DeclaredFacts harness={harness} />",
-        because: "and the modes, models and thinking levels it published for itself",
+        needle: "<FactsBlock facts={facts} />",
+        because:
+          "and everything that is a *property* rather than a verdict — its capabilities, the modes, models " +
+          "and thinking levels it published, and when EnvoyCoder last verified them — lives in the " +
+          "disclosure as plain facts, with a time, instead of as a chip on the row's face",
       },
       {
         file: "apps/desktop/src/components/settings/CatalogRows.tsx",
-        needle: "rowStateOf(entry, probe)",
+        needle: "availability: entry.availability",
         because:
-          "the catalogue's rows take their state from a measurement and from nothing else — a row nobody " +
-          "has checked reads as 'not checked yet', which is the claim this page exists to stop making. The " +
-          "entry travels with the probe because the word is derived from two facts: what was measured, and " +
-          "how the program is obtained (`npx` resolving is not the package having been downloaded)",
+          "the catalogue's rows take their verdict from the daemon's own measurement — resolved for every " +
+          "row when the list is served, with nothing started and nothing downloaded, which is why there is " +
+          "no *Check* button on this page and no 'not checked yet' state for a row to be in",
       },
       {
         file: "apps/desktop/src/components/settings/CatalogRows.tsx",

@@ -187,9 +187,10 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     // own module because the list handler, the refusals that are the user's to fix and the credential
     // decision are one subject — and because this file is a table.
     ...providerHandlers,
-    // The catalogue: the 38 ACP agents we can drive and have not measured on this machine. Two methods, one
-    // of which measures nothing at all — `catalog.ts` carries why that split is the whole cost story, and
-    // why the probe in the other one is per-row rather than a sweep.
+    // The catalogue: the 38 ACP agents we can drive, each with what this machine can do with it resolved on
+    // the read. One method, and `catalog.ts` carries why the old two-method split (a list that knew nothing
+    // plus a per-row probe the user had to press) was the defect the owner reported rather than the cost
+    // saving it looked like.
     ...createCatalogHandlers({
       probe:
         deps.probeCatalogEntry ??

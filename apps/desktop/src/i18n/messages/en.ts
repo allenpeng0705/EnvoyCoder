@@ -469,29 +469,9 @@ export const en = {
   "settings.agents.mine.command": "Runs as: {command}",
   "settings.agents.mine.remove": "Remove",
   "settings.agents.mine.remove.title": "Forget {agent}. Nothing is uninstalled, and nothing else is touched.",
-  "settings.agents.mine.env.title": "Whether EnvoyCoder's daemon has {name} set",
-  "settings.agents.mine.env.set": "{name} is set",
-  "settings.agents.mine.env.unset": "{name} is not set",
-  // **The third state, and the one this slice added.** A variable the catalogue entry supplies is *not*
-  // something the daemon's environment has, and saying "set" would leave a user exporting a variable we are
-  // already providing — the same class of wrong sentence as telling somebody to install a program they
-  // have. It is a word of its own so the row can be read without the detail sentence.
-  "settings.agents.mine.env.recipe": "{name} — supplied by this recipe",
-  "settings.agents.mine.env.recipe.title":
-    "This variable is a constant of the catalogue recipe this agent was added from, so EnvoyCoder supplies it — nothing is set in your environment for it. Export {name} yourself to override the recipe's value.",
-  "settings.agents.auth.title":
-    "Whether this agent will open a session here, which is a different question from whether its program is installed.",
-  "settings.agents.auth.needsSignin": "Needs a sign-in",
-  "settings.agents.auth.ready": "Will talk to us",
   "settings.agents.signIn": "Sign in",
   "settings.agents.signIn.working": "Signing in…",
   "settings.agents.signIn.title": "Run {agent}'s own sign-in flow, and say truthfully what happened",
-  /* The three states a **catalogue** row has that the daemon's five do not: a row nobody has measured, a
-     measurement in flight, and a measurement that failed. The daemon's `unknown` is a fourth thing again,
-     and its wording is deliberately different — see the note above. */
-  "settings.agent.unchecked": "Not checked yet",
-  "settings.agent.checking": "Checking…",
-  "settings.agent.refused": "Check failed",
   "settings.agents.olderDaemon":
     "The daemon this window is talking to is an older build and does not have this part of the agent list, so it cannot be shown here. Restart EnvoyCoder so the window and its daemon are the same build.",
   /**
@@ -523,22 +503,9 @@ export const en = {
    */
   "settings.agents.row.details": "Details",
   "settings.agents.row.details.aria": "Details for {agent}",
-  /**
-   * **The two short phrases a fix can be replaced by**, and the reason there are two rather than one.
-   *
-   * `AvailabilityFix.command` is shown verbatim when it is a command, which is the rule for that field — but
-   * two of the catalogue's own hints are 127 and 136 characters of English prose. A row may not carry a
-   * sentence (`AGENT_ROW_LINE_BUDGET`), so when the fix is one, the row says what to do in four words and the
-   * whole text goes to the `title` and the disclosure.
-   */
-  "settings.agents.row.install": "Install {agent} first",
   "settings.agents.row.nothingToInstall": "Nothing to install",
   /** The row's line when the daemon is a build behind: the action, in four words, not the essay. */
   "settings.agents.row.restart": "Restart EnvoyCoder",
-  "settings.agents.row.check": "Check this machine",
-  "settings.agents.row.checkAgain": "Check again",
-  "settings.agents.row.check.title":
-    "Look for this agent's program on this machine. It starts nothing and downloads nothing — and the answer is remembered for ten minutes.",
   "settings.agents.row.add": "Add",
   "settings.agents.row.adding": "Adding…",
   "settings.agents.row.add.title":
@@ -546,43 +513,8 @@ export const en = {
   "settings.agents.row.builtIn.short": "Built in",
   "settings.agents.row.builtIn":
     "EnvoyCoder already ships this agent, so it is configured in “On this machine” above rather than added a second time.",
-  /**
-   * **The `npx` sentence, and the word it must not use.**
-   *
-   * For an `npx -y <pkg> …` recipe, "the program resolves" means **`npx` is present** — the probe looks
-   * for `npx` rather than the package (looking for the package would report all 14 of these as missing),
-   * so nothing about the agent has been established and nothing has been downloaded. "Nothing to install"
-   * alone read as "it works", which is more than was measured. The sentence now names what *was* checked
-   * and what has not happened, and the chip beside it says "Not downloaded yet" for the same reason.
-   */
-  "settings.agents.row.needsNoInstall":
-    "Nothing to install: {package} is fetched from npm the first time it runs. Checking this machine found `npx` — not {agent}, which has not been downloaded yet.",
-  "settings.agents.row.needsInstall":
-    "Install {agent} — then it runs as the command above. EnvoyCoder starts the program; it does not install it for you.",
   "settings.agents.row.installLink": "Where to get it",
   "settings.agents.row.installLink.title": "{agent}'s own page",
-  /**
-   * **The recipe's own constants, described as supplied rather than as the user's to set.**
-   *
-   * This sentence used to tell a user to export all six variables of the four recipes that set one, because
-   * a provider config could carry names only and the value was thrown away on the way across (§7.10). It
-   * cannot say that now: the entry's constants travel with the reference, so what a user needs to know is
-   * which variables the recipe sets for them — and that exporting one is how they *change* it.
-   */
-  "settings.agents.row.recipeEnv":
-    "This recipe sets {names} for the agent. EnvoyCoder supplies them from this entry, so there is nothing to set yourself — export one to override the recipe's value.",
-  "settings.agents.row.checked": "Checked {when} — the search took {ms} ms.",
-  "settings.agents.row.checked.cached":
-    "Checked {when}, and not measured again since: a result that says the agent is here is remembered for ten minutes.",
-  /**
-   * **The sixth row state, and the one this slice added for honesty.**
-   *
-   * `ready` is the *probe's* word and it is true of `npx`: the program the probe looked for resolved. It is
-   * not evidence that the agent works, and for an `npx -y <pkg> …` recipe nothing has even been
-   * downloaded yet — so a row that read "Ready" claimed a verification nobody performed, on 14 of the 38
-   * rows. This word says what was measured, and the sentence beside it says what has not happened.
-   */
-  "settings.agents.row.readyNpx": "Not downloaded yet",
   "settings.agents.manual.open": "Add a program of my own",
   "settings.agents.manual.open.title":
     "If you already have a coding agent that speaks the Agent Client Protocol and it is not in the catalogue, declare it here. EnvoyCoder will start it and probe it exactly as it does the others.",
@@ -597,44 +529,118 @@ export const en = {
   "settings.agents.manual.transport.acp": "Agent Client Protocol (can be run and driven)",
   "settings.agents.manual.transport.cli": "A plain command line (startable, not yet drivable)",
   "settings.agents.manual.submit": "Add this agent",
-  /* ── the five availability states, and the bug they were written for ──
-     A user with Claude Code, Codex and DeepSeek Harness all installed read **"Not installed"** for every
-     one of them, because the chip had two words for five situations: an agent is not a binary, it is a
-     binary *plus the adapter we drive it through*, and the adapter is a package the user was never told to
-     install. The words below name what is actually missing, so the row can be acted on.
-     `settings.agent.unknown` carries the one rule the state exists for: it must never read as
-     "not installed", because it means *we could not look* and not *it is not there*. */
-  "settings.agent.notInstalled": "Not installed",
-  // **The daemon's `unknown`, and deliberately not the catalogue row's "Not checked yet".** This one is an
-  // answer: we tried to look and had nothing to search (`SearchPath.searchable` is false). The other is the
-  // absence of a question. Two situations, two sentences — see the catalogue block below.
-  "settings.agent.unknown": "Could not check",
-  "settings.agent.ready": "Ready",
-  // Installed, and we have no adapter for the protocol it speaks. A different sentence from "not installed",
-  // and a different action (there is none for the user to take — it is ours to write).
-  "settings.agent.unsupported": "Cannot be driven yet",
-  // The state the whole change exists for: the agent is here, the ACP bridge over it is not. The install
-  // command is rendered beside this chip, in the entry's own words and untranslated.
-  "settings.agent.needsBridge": "Needs its adapter",
-  // One warn chip when the program we drive resolved out of another tool's cache rather than an installation
-  // of the user's own. It works — which is why it is not reported as absent — and it can vanish, which is why
-  // it is reported at all. The title names what removes it, per cache.
-  "settings.agent.provisional": "Temporary copy",
+  /**
+   * **The verdict: two words, and the five ways a row can be Not ready.**
+   *
+   * The mandate, verbatim: *"I don't want user to guess, to check if we can do that. And If the agent cannot be
+   * used - 'Not Ready', we should clearly know what the problem is and guide user to resolve it if he want to
+   * use this coding agent."* Plus the vocabulary from the two messages before it: one verdict per row —
+   * **Ready / Not ready** — with caveats as properties rather than chips, and "Not checked" gone entirely.
+   *
+   * So the row's chip is one of these two and nothing else, and everything below is either the **line** that
+   * names the specific problem or the **guide** the disclosure leads with. Each guide's `why` is written to be
+   * read *first*, before the facts, which is why they are sentences about this row rather than headings: the
+   * user has already decided to look, and what they need is the sentence that tells them what to do.
+   *
+   * The distinction the whole block turns on is that `gap.why` and `unlooked.why` describe **our** shortfall
+   * and offer nothing to install, while `connector.why`, `absent.why` and `env.why` describe something the
+   * user can do. An install command under a sentence about our missing adapter is the exact failure the
+   * mandate names.
+   */
+  "settings.agent.verdict.ready": "Ready",
+  "settings.agent.verdict.notReady": "Not ready",
+  "settings.agent.verdict.notReady.aria": "Not ready — see how to resolve this for {agent}",
+  // A daemon from an older build cannot answer the question at all, which is a fact about the app's two
+  // halves rather than about the machine. The line names it; the guide names the action, which is not an
+  // install — nothing is missing from the user's machine and telling them to install something would be the
+  // lie this whole slice exists to avoid.
+  "settings.agent.verdict.legacy.line": "EnvoyCoder is a build behind",
+  "settings.agent.verdict.legacy.why":
+    "This window is talking to an older EnvoyCoder daemon, so it cannot say what this machine can do with {agent}. Nothing is missing from your machine — the app's own two halves are different builds.",
+  "settings.agent.verdict.unlooked.line": "EnvoyCoder could not check this machine",
+  "settings.agent.verdict.unlooked.why":
+    "This is our gap and not a verdict about {agent}: EnvoyCoder could not read this machine's program folders, so it knows nothing about whether the agent is installed. There is nothing for you to install on the strength of this row.",
+  "settings.agent.verdict.app.restart": "Restart EnvoyCoder",
+  // **The reported bug, fixed in the words.** The owner wrote *"Some agents I have installed, but still show
+  // need to install or need adapter. Eg, codex, claudecode, deepseek-harness."* For Codex and Claude Code the
+  // measurement was right and the row misled: the state is "the agent's own CLI resolved and our adapter did
+  // not", and the old row's only sentence was the adapter's install command. So this leads with **what is
+  // present** — the thing the user is looking at and believes the app has not noticed — and the command
+  // follows on the same line, in its own face, verbatim.
+  "settings.agent.verdict.connector.lead": "Installed — needs its connector",
+  "settings.agent.verdict.connector.why":
+    "{agent} is installed. EnvoyCoder needs its connector to drive it, and that is the one piece that is missing:",
+  // Nothing resolved over a search that actually ran. The only Not-ready case allowed to lead with an install
+  // command, and the only one whose sentence asserts an absence.
+  "settings.agent.verdict.absent.short": "Not installed",
+  "settings.agent.verdict.absent.why": "{agent} is not installed on this machine. Run these in the order they are listed:",
+  // **Our gap, said as ours.** A catalogue entry tagged `transport: "cli"` or a provider a user declared as a
+  // plain command line resolves and runs — and this build has no adapter for the way it speaks. There is
+  // nothing to install, no page to read, and the value of saying so plainly is that a user stops hunting.
+  "settings.agent.verdict.gap.line": "EnvoyCoder cannot drive this agent yet",
+  "settings.agent.verdict.gap.why":
+    "This is EnvoyCoder's gap, not a missing program: {agent} is reached over a kind of interface this build has no adapter for, and installing it again would change nothing. Nothing is wrong with your machine.",
+  // The program is present and the daemon cannot start it, because a variable the launch needs is not set. The
+  // variable is **named on the row** — the mandate's instruction — and the second half of this sentence says
+  // where a value can come from, which is the question naming it raises.
+  "settings.agent.verdict.env.line": "{name} is not set",
+  "settings.agent.verdict.env.line.more": "{name} is not set, and {count} more",
+  "settings.agent.verdict.env.why":
+    "{agent} is installed. Set {names} in the environment EnvoyCoder's daemon was started in — a value can only come from you, because EnvoyCoder never writes a credential down.",
+  /**
+   * **The properties: what used to be chips.**
+   *
+   * The owner's vocabulary is that caveats (`no approvals`, `cannot be cancelled`, `temporary copy`) are
+   * properties rather than chips, and the shape they asked for is a plain sentence —
+   * `Asks before acting: no · Can be stopped: no · Temporary copy (npm cache)`. These are its labels and
+   * values: a definition list, so a screen reader reads "Asks before acting, no" and a sighted user reads a
+   * label and a value.
+   *
+   * `verified` is the deep facts' **time**, and it is the answer to the mandate's third rule — that whether an
+   * agent speaks ACP, what it publishes and whether it wants a sign-in are learned by starting it, so they
+   * must never be a state a user has to press something to learn. The value is a relative time from
+   * `formatAgo` (`4 minutes ago`, in all seven languages, from the platform's own formatter) followed by the
+   * absolute timestamp. `verified.never` says **why** it is not there rather than leaving a blank, because a
+   * blank invites exactly the hunt this design removes.
+   */
+  "settings.agent.fact.provenance": "Provenance",
+  "settings.agent.fact.obtained": "Obtained",
+  "settings.agent.fact.obtained.npx": "Fetched from npm on the first run ({package})",
+  "settings.agent.fact.obtained.path": "Installed at {path}",
+  "settings.agent.fact.runs": "Runs as",
+  "settings.agent.fact.asksBefore": "Asks before acting",
+  "settings.agent.fact.canBeStopped": "Can be stopped",
+  "settings.agent.fact.yes": "Yes",
+  "settings.agent.fact.no": "No",
+  "settings.agent.fact.signIn": "Will talk to us",
+  "settings.agent.fact.signIn.needed": "Not yet — it needs a sign-in first",
+  "settings.agent.fact.signIn.done": "Yes",
+  "settings.agent.fact.signIn.unknown": "Not established yet",
+  "settings.agent.fact.verified": "Verified",
+  "settings.agent.fact.verified.never":
+    "Not yet — EnvoyCoder starts an agent to learn this, so it arrives when a task runs rather than when this page opens",
+  "settings.agent.fact.publishes": "What it publishes",
+  "settings.agent.fact.env.recipe": "Supplied by this recipe",
+  "settings.agent.fact.env.set": "Set in EnvoyCoder's environment",
+  "settings.agent.fact.env.unset": "Not set",
+  /** The row's line for a catalogued program that is here and ready, where the next step is the Add button. */
+  "settings.agents.row.readyCatalogued": "Installed — add it to use it",
+
+  /* ── the five measured states, and where their words went ──
+     A user with Claude Code, Codex and DeepSeek Harness all installed read **"Not installed"** for every one
+     of them, because the chip had two words for five situations: an agent is not a binary, it is a binary
+     *plus the adapter we drive it through*, and the adapter is a package the user was never told to install.
+     Those five states are still what the daemon measures, and the words that name them are still needed —
+     they are now the **guides** in `settings.agent.verdict.*` above rather than five chips, because the owner's
+     instruction was that a row carries one verdict and that a row which is not ready says what to do about
+     it. `settings.agent.provisional.*` survives as a **property** value: provenance is a caveat rather than a
+     verdict, and the property says what removes the copy. */
   "settings.agent.provisional.npx":
     "Found in npm's npx cache, which `npm cache clean` removes. It works, but install the agent properly to keep it.",
   "settings.agent.provisional.bun-cache":
     "Found in Bun's package cache, which can be cleared at any time. It works, but install the agent properly to keep it.",
   "settings.agent.provisional.pnpm-dlx":
     "Found in pnpm dlx's throwaway store. It works, but install the agent properly to keep it.",
-  // Shown when the daemon predates this field and answered with a plain boolean. That answer was about *the
-  // program the old daemon drove*, which for a bridged agent was the adapter — so the window refuses to
-  // repeat it as a claim about the agent, and names the action that actually fixes the mismatch instead.
-  "settings.agent.olderDaemon":
-    "Your daemon is a build behind and cannot say which part is missing. Restart EnvoyCoder to use the current one.",
-  "settings.agent.noApprovals": "No approvals",
-  "settings.agent.noApprovals.title": "This agent never asks before acting",
-  "settings.agent.noCancel": "Cannot be cancelled",
-  "settings.agent.noCancel.title": "The only way to stop this agent is to end its process",
   /* ── what an agent says about itself, on the Agents page ──
      Read from `HarnessSummary`: the daemon's own answer, not our opinion. Two rules decide the wording.
      A value **we** wrote carries a catalogue key and is translated (`modeLabel`); a value the **agent**
@@ -808,11 +814,6 @@ export const en = {
   // which is why the sentence names reopening it rather than asking a user to edit anything.
   "error.providerCatalogMismatch":
     "\"{entry}\" is a catalogued agent, and the recipe this request describes is not the one that entry states — so the agent was not added. Reopen the agents page and add the row again.",
-  // An id that names no catalogued entry: a bad parameter rather than a fact about a program. Answering
-  // `unknown` instead would say "we could not look" about something that does not exist, which is how a typo
-  // becomes a state a user can act on.
-  "error.catalogAgentMissing":
-    "There is no catalogued agent called \"{id}\". The list changed since this window read it — reopen the agents page and try again.",
   // **The five answers to "sign in to this agent".** The sentence a client renders after the button, and
   // the only one of the five that means it worked is `signIn.signedIn`: the others exist because a step
   // that *returns* is not a step that *worked* — a browser-login method answers immediately and the session

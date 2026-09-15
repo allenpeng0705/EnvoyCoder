@@ -114,8 +114,7 @@ function renderPane(
   const noAgentActions: AgentActions = {
     addProvider: vi.fn(),
     removeProvider: vi.fn(),
-    probeCatalogAgent: vi.fn(),
-    signInAgent: vi.fn(),
+      signInAgent: vi.fn(),
   } as unknown as AgentActions;
   render(
     <I18nProvider preference={preference} reported={["en-US"]}>

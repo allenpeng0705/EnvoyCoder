@@ -267,7 +267,10 @@ const audit = await evaluate(`(() => {
     const rows = [...list.querySelectorAll(".settings__catalog-row")];
     const heights = rows.map((row) => Math.round(row.getBoundingClientRect().height)).sort((a, b) => a - b);
     const chips = rows.map((row) => {
-      const chip = row.querySelector(".settings__agent-head .chip");
+      // **By class, not by position.** The state chip is the *last* chip in the row (verdict chips hang
+      // inward from it, so the state column has one constant right edge) — a `:first-child`-shaped
+      // selector would report a verdict chip as the state and quietly read the wrong word.
+      const chip = row.querySelector(".settings__agent-state");
       if (!chip) return null;
       return {
         text: (chip.textContent || "").trim(),

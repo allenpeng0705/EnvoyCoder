@@ -18,18 +18,30 @@
  *
  * ## What this module decides, and in what order
  *
- * The rule is **prefer what a login shell would see, then widen to the well-known directories**, because
- * "the user's tools are where their terminal finds them" is the honest definition of installed, and the
- * well-known list is what rescues a *GUI* launch, where there is no terminal to ask:
+ * The rule is **prefer what a login shell would see, then widen to the well-known directories, then to the
+ * caches another tool left behind**, because "the user's tools are where their terminal finds them" is the
+ * honest definition of installed, and each later source is what rescues a launch the earlier ones cannot
+ * describe:
  *
- *   1. **The login shell's own answer** — `$SHELL -ilc 'printf …'`, with a timeout. The only source that
- *      includes what the user's rc files add.
+ *   0. **The directories of the programs the login shell named for us, one name at a time** —
+ *      `./shell-binaries.js` asks `$SHELL -ilc 'command -v NAME'` about the names the catalogue cares about,
+ *      and each answer that is really there contributes its own directory **first**. This is a *different*
+ *      fact from step 1 rather than a refinement of it, and the receipt is on this machine: with a clean
+ *      environment the login shell's `PATH` has 26 entries and **none of them contains `dsh`**, while
+ *      `command -v dsh` in the same shell names `/Users/…/.npm/_npx/<hash>/node_modules/.bin/dsh`. A shell
+ *      asked for `$PATH` reports a variable; a shell asked for a name reports *the lookup it performs*.
+ *   1. **The login shell's own answer** — `$SHELL -ilc 'printf …'`, with a timeout. The only *list* source
+ *      that includes what the user's rc files add.
  *   2. **The daemon's own `PATH`** — what the asking process actually inherited. Honest by definition, and
  *      the only POSIX source on Windows, where the registry `PATH` *is* delivered to GUI processes, so
  *      there is nothing to repair and `wellKnownBinDirs` returns nothing.
  *   3. **The well-known directories that exist on this machine** — see `wellKnownBinDirs`.
+ *   4. **npm's `npx` cache** — see `cacheBinDirs`. Last, because it is the least like an installation, and
+ *      present at all because without it `dsh` on this machine reads as *not installed* while the owner is
+ *      running it: the directory is created by somebody's `npx` invocation, so it is in no `PATH` this
+ *      process can reconstruct, and a program that is genuinely runnable is not absent.
  *
- * The result is a **deduplicated union in that order**, so the login shell always wins a name collision
+ * The result is a **deduplicated union in that order**, so the user's own answer always wins a name collision
  * and later sources can only *add* candidates. Step 2's directories are kept even when step 1 answered: a
  * profile that *replaces* `PATH` instead of extending it would otherwise make the daemon forget where it
  * was launched from.
@@ -70,10 +82,11 @@
  */
 
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import * as path from "node:path";
 
 import { capabilitiesFor, detectPlatform, isPosix, type PlatformId } from "./index.js";
+import { shellBinariesGeneration, shellResolvedBinaries } from "./shell-binaries.js";
 
 /** How long a login shell may take before we stop waiting for it. */
 export const LOGIN_SHELL_TIMEOUT_MS = 2500;
@@ -91,7 +104,7 @@ export const LOGIN_SHELL_MAX_OUTPUT = 64 * 1024;
 export const LOGIN_SHELL_PATH_MARKER = "__ENVOYCODER_LOGIN_PATH__=";
 
 /** Where the answer came from. The first thing a bug report needs. */
-export type SearchPathSource = "login-shell" | "process-env" | "well-known" | "none";
+export type SearchPathSource = "login-shell" | "process-env" | "well-known" | "cache" | "none";
 
 export interface SearchPath {
   /**
@@ -114,9 +127,31 @@ export interface SearchPath {
   searchable: boolean;
   /** The directories the well-known list actually contributed, in order (each must exist to be added). */
   added: readonly string[];
-  /** True when a login shell answered. */
+  /** True when a login shell answered — for its `PATH`, for one of the names below, or for both. */
   fromLoginShell: boolean;
+  /**
+   * The programs the user's own login shell named, one `command -v` at a time (`./shell-binaries.js`).
+   *
+   * On the list rather than in a lookup table because of the invariant this whole module is built around:
+   * **the probe and the spawn read the same list**, so a program the shell resolves is found by the walk and
+   * is on the child's `PATH` for the same reason. `dir` is the directory that was contributed to `dirs`, and
+   * it is recorded so a bug report can say *why* a directory nobody configured is in the list.
+   */
+  shellBinaries: readonly ShellBinaryAnswer[];
+  /** The directories another tool's cache contributed, in order (see `cacheBinDirs`). */
+  cached: readonly string[];
 }
+
+/** One program the user's own login shell resolved, and the directory that joined the search list for it. */
+export interface ShellBinaryAnswer {
+  /** The name the shell was asked about. */
+  name: string;
+  /** The absolute path it answered. */
+  path: string;
+  /** The directory of that path — what `dirs` gained. */
+  dir: string;
+}
+
 
 export interface SearchPathOptions {
   platform?: PlatformId;
@@ -178,6 +213,61 @@ export function wellKnownBinDirs(options: SearchPathOptions = {}): string[] {
     path.join(home, ".cargo", "bin"),
     path.join(home, ".bun", "bin"),
   ];
+}
+
+/**
+ * **npm's `npx` cache**: the `node_modules/.bin` of every package tree `npx` has unpacked.
+ *
+ * ## Why a cache is searched at all, since it is not an installation
+ *
+ * Because the alternative is a lie the owner caught. `dsh` on the machine this was written on lives at
+ * `~/.npm/_npx/<hash>/node_modules/.bin/dsh`, and **nothing else on that machine names that directory**: a
+ * clean-environment login shell answers 26 `PATH` entries without it, the daemon's own `PATH` has 48 without
+ * it, and it is on no well-known list — it exists only in the environment an `npx` invocation gives its own
+ * children. So DeepSeek Harness read as **not installed** in a window owned by somebody who uses it every day,
+ * which is the report this closes. The program is really there and really runs (`acp-transport.test.ts` drives
+ * it), so "absent" was the wrong word about a fact.
+ *
+ * What it is *not* is a promise: the directory has a random hash in its name and `npm cache clean` removes it.
+ * So a hit here is still classified by `provisionalCacheOf` and still carries the window's warning chip — the
+ * distinction the previous round got right and simply never reached, because the hit it was written for could
+ * not happen.
+ *
+ * ## Ordering, and why the hash is not sorted into meaning
+ *
+ * Newest-first by directory mtime would be a guess; `readdir` order is a filesystem accident. Entries are
+ * therefore **sorted by name**, and the whole list is appended *after* every source that is a user's own
+ * install — so with a proper `dsh` on `PATH` this changes nothing, and with only the cache there the answer
+ * is the cache's copy rather than nothing.
+ *
+ * `~/.bun/install/cache` and pnpm's `dlx` store are **deliberately not enumerated**: their layouts have not
+ * been read on a machine that has them, and a glob written from memory is how a search list acquires a
+ * directory that never exists. `provisionalCacheOf` still recognises both, so a hit that arrives through a
+ * `PATH` is still reported as provisional.
+ */
+export function cacheBinDirs(
+  options: SearchPathOptions & { readDir?: (dir: string) => readonly string[] } = {},
+): string[] {
+  const platform = options.platform ?? detectPlatform();
+  if (!isPosix(platform)) return [];
+  const env = options.env ?? process.env;
+  const home = (options.home ?? env.HOME ?? "").trim();
+  if (!home) return [];
+  const root = path.join(home, ".npm", "_npx");
+  const readDir =
+    options.readDir ??
+    ((dir: string) => {
+      try {
+        return readdirSync(dir);
+      } catch {
+        // No `_npx` directory at all is the ordinary case for a user who has never run `npx`.
+        return [];
+      }
+    });
+  return [...readDir(root)]
+    .filter((entry) => entry !== "" && !entry.startsWith("."))
+    .sort()
+    .map((entry) => path.join(root, entry, "node_modules", ".bin"));
 }
 
 /**
@@ -349,19 +439,32 @@ export async function readLoginShellPath(
   return { path: value };
 }
 
+/** The empty answer table, shared so the "no shell answers for this world" case allocates nothing. */
+const EMPTY_BINARIES: ReadonlyMap<string, string> = new Map();
+
 /** Everything `composeSearchPath` needs. Pure: no environment, clock or filesystem of its own. */
 export interface ComposeSearchPathInput extends SearchPathOptions {
   /** The login shell's answer, when one arrived. */
   loginShell?: string | undefined;
   /** The process's own `PATH`. Read from `env` when omitted. */
   processPath?: string;
+  /**
+   * What the login shell answered for individual names, when the caller would rather not read the cache.
+   *
+   * Defaults to `shellResolvedBinaries()` — the module state `primeShellBinaries` fills. A test that wants to
+   * assert the ordering rule without priming a shell passes its own table, which is the same arrangement
+   * `loginShell` already has.
+   */
+  shellBinaries?: ReadonlyMap<string, string>;
+  /** Injectable for a test that wants to decide what is in a tool cache without a filesystem. */
+  readDir?: (dir: string) => readonly string[];
 }
 
 /**
- * Assemble the search list from the three sources, in the documented order.
+ * Assemble the search list from the four sources, in the documented order.
  *
- * Exported and pure so the ordering rule — "the login shell wins a collision, and nothing a later source
- * adds can shadow an earlier one" — is asserted directly rather than inferred from a spawn.
+ * Exported and pure so the ordering rule — "what the user's own shell said wins a collision, and nothing a
+ * later source adds can shadow an earlier one" — is asserted directly rather than inferred from a spawn.
  */
 export function composeSearchPath(input: ComposeSearchPathInput = {}): SearchPath {
   const platform = input.platform ?? detectPlatform();
@@ -377,9 +480,30 @@ export function composeSearchPath(input: ComposeSearchPathInput = {}): SearchPat
     dirs.push(entry);
   };
 
+  /**
+   * **Step 0: the names the user's own shell resolved.** Each answer is believed only when the program is
+   * really there — a shell answer is a *fact about a lookup*, and a lookup whose file has since been removed
+   * is a fact that has expired. The directory goes in **first**, because this is the one source that says
+   * "this is the file my terminal would run", and anything later could only be a worse guess at the same
+   * question.
+   */
+  const shellBinaries: ShellBinaryAnswer[] = [];
+  // The module's answers describe **this** machine, so a call that names its own world (`env`, `home`,
+  // `platform`, `exists`) is not served them — the same ownership rule `namesItsOwnWorld` applies to the
+  // snapshot, applied here because a test asking about another machine must not inherit this one's lookups. The
+  // explicit `shellBinaries` input is the way to say "these are the answers for the world I am describing".
+  const known = input.shellBinaries ?? (namesItsOwnWorld(input) ? EMPTY_BINARIES : shellResolvedBinaries());
+  for (const [name, file] of known) {
+    if (!exists(file)) continue;
+    const dir = path.dirname(file);
+    shellBinaries.push({ name, path: file, dir });
+    push(dir);
+  }
+
   const loginShell = input.loginShell;
-  const fromLoginShell = loginShell !== undefined && looksLikePath(loginShell, platform);
-  if (fromLoginShell) for (const entry of splitPathEntries(loginShell, input)) push(entry);
+  const loginShellAnswered = loginShell !== undefined && looksLikePath(loginShell, platform);
+  if (loginShellAnswered) for (const entry of splitPathEntries(loginShell, input)) push(entry);
+  const fromLoginShell = loginShellAnswered || shellBinaries.length > 0;
   const processDirs = splitPathEntries(processPath, input);
   for (const entry of processDirs) push(entry);
 
@@ -390,13 +514,23 @@ export function composeSearchPath(input: ComposeSearchPathInput = {}): SearchPat
     push(candidate);
   }
 
+  // Step 4, and last on purpose: a cache is the least like an installation, so a real one always wins.
+  const cached: string[] = [];
+  for (const candidate of cacheBinDirs(input)) {
+    if (seen.has(candidate) || !exists(candidate)) continue;
+    cached.push(candidate);
+    push(candidate);
+  }
+
   const source: SearchPathSource = fromLoginShell
     ? "login-shell"
     : processDirs.length > 0
       ? "process-env"
       : added.length > 0
         ? "well-known"
-        : "none";
+        : cached.length > 0
+          ? "cache"
+          : "none";
 
   return {
     path: dirs.join(capabilitiesFor(platform).pathDelimiter),
@@ -405,6 +539,8 @@ export function composeSearchPath(input: ComposeSearchPathInput = {}): SearchPat
     searchable: dirs.length > 0,
     added,
     fromLoginShell,
+    shellBinaries,
+    cached,
   };
 }
 
@@ -423,19 +559,29 @@ let snapshot: SearchPath | undefined;
 let inFlight: Promise<SearchPath> | undefined;
 /** Bumped by the test hook, so an answer in flight cannot leak into the next case. */
 let generation = 0;
+/** Which `shell-binaries` generation `snapshot` was composed from. */
+let snapshotShellGeneration = -1;
 
 /**
  * The list to search **right now**, without waiting for anything.
  *
- * Answers from the login-shell answer if it has already landed, and from the process environment plus the
- * well-known directories if it has not. This is the function both `findBinary` and the spawn path use, and
+ * Answers from the login-shell answers if they have already landed, and from the process environment plus the
+ * well-known directories if they have not. This is the function both `findBinary` and the spawn path use, and
  * that is the point of it: a daemon must not probe with one list and launch with another, or a program
  * that showed as installed can fail to start — which is worse than reporting it missing.
+ *
+ * **Two answers arrive at different times**, which is why a snapshot alone is not enough: the `PATH` prime and
+ * the per-name prime are separate invocations of a shell, and the second usually lands seconds after the
+ * first. So the snapshot is keyed to the generation of the per-name answers (`shellBinariesGeneration`) and
+ * recomposed when they change. Reading a number is cheap; recomposing on every call would put a `readdir` of
+ * the npm cache on the launch path.
  */
 export function currentSearchPath(options: SearchPathOptions = {}): SearchPath {
   if (namesItsOwnWorld(options)) return composeSearchPath(options);
-  if (snapshot === undefined) {
+  const shellGeneration = shellBinariesGeneration();
+  if (snapshot === undefined || snapshotShellGeneration !== shellGeneration) {
     snapshot = composeSearchPath(loginShellAnswer ? { loginShell: loginShellAnswer } : {});
+    snapshotShellGeneration = shellGeneration;
   }
   return snapshot;
 }
@@ -502,6 +648,7 @@ export function resetSearchPathCacheForTests(): void {
   generation += 1;
   loginShellAnswer = undefined;
   snapshot = undefined;
+  snapshotShellGeneration = -1;
   inFlight = undefined;
 }
 

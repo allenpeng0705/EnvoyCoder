@@ -1465,37 +1465,102 @@ body {
 }
 
 /* **One agent, and the anatomy every list on the page shares.**
-   `[state chip] Name … [action] [Details]` over the one actionable line, with everything else behind the
-   disclosure. A column of two bands, because the line belongs under the name rather than beside it: a name is
-   what a reader scans down, and a line that starts at a different x per row is not a column.
+ *
+ * ```
+ *   Name (15/600)                                  [verdicts] [state]   [action] [Details]
+ *   the one secondary line (12, muted)             └──── chips ────┘    └─── controls ───┘
+ *     └────────────── shared left edge ──────────┘
+ * ```
+ *
+ * Three columns, and each one is a *column* on the page rather than a row-local arrangement:
+ *
+ *   * the **name block** takes the space that is left (`minmax(0, 1fr)`) and holds the name over its line, so
+ *     the two share a left edge that is the same on every row;
+ *   * the **properties** are `max-content` and right-aligned inside themselves, so the state word of every
+ *     row ends at the same x;
+ *   * the **controls** are a fixed track (`--settings-agent-actions`), because a chip's right edge is
+ *     `row right − controls − gap`: right-aligning chips inside a row that sizes its controls to its own
+ *     content is how a column of chips comes out ragged. `scripts/measure-settings.mjs` reports the per-column
+ *     edge variance, so "they line up" is a number rather than a claim.
+ *
+ * The row's height is a token for the same reason every other dimension here is one: it is the number the
+ * owner's "give more space to each agent" is judged by, and `measure-settings.mjs` reports it.
+ *
+ * The budget each band is held to is `settings/density.ts`, and the test that enforces it is
+ * `test/settings-density.test.tsx`. Nothing here clamps: a clamp would make the budget unfalsifiable. */
+.settings {
+  /* A row of the Agents page: **80px**, and the arithmetic behind it rather than a character count. The two
+     text bands measure 19.5px (the name at 15px/1.3) + 2px + 17.4px (the line at 12px/1.45) ≈ 39px, and the
+     controls are 24px buttons — so 80px leaves ~20px of air above and below the block, against ~12px in the
+     60px row this replaces. 80 is also on the 2/4 spacing rhythm the rest of this sheet uses, so the page's
+     vertical rhythm (18px between groups) is not broken by an odd row. */
+  --settings-agent-row: 80px;
+  /* The controls column, and **the number is measured rather than guessed**: at 1440×813 the widest pair the
+     page renders is a provider's *Remove* + *Details*, which need **137px** on one line
+     (`anatomy.actionsNaturalWidth` in `scripts/measure-settings.mjs`, which prints it for exactly this
+     reason). 144 is that number rounded up to the sheet's own 2/4 rhythm. A narrower track does not overflow —
+     it squeezes a label inside a 24px button, or stacks the two, and the same tool counts both
+     (`squeezedButtons`, `rowsWithWrappedButtons`). The benefit is that both right-hand columns have one edge
+     per column on every row, because a chip's right edge is `row right − controls − gap`.
+     **This was 256px, and the 119px it gives back is not a style choice**: that number was measured when every
+     catalogue row carried a *Check this machine* button beside *Add*, and this slice deleted the *Check*
+     button — so the justification had outlived the control and the track was holding space for nothing, on
+     every one of the 47 rows, in the column the name needs most. */
+  --settings-agent-actions: 144px;
+}
 
-   The budget each band is held to is `settings/density.ts`, and the test that enforces it is
-   `test/settings-density.test.tsx`. Nothing here clamps: a clamp would make the budget unfalsifiable. */
 .settings__agent {
   display: flex;
   flex-direction: column;
+  /* Centred, so a row's block sits in the middle of its 80px rather than being pinned under the previous
+     divider. */
+  justify-content: center;
   gap: var(--space-1);
+  min-height: var(--settings-agent-row);
+}
+
+/* The list's own `:first-child`/`:last-child` padding trimming (`padding-block`, further up this sheet) exists
+   so a list gains no phantom edges — with a *fixed* row height it would instead make the first and last rows'
+   text sit 6px higher than every other row's. The height carries the space here, so the rows drop the padding
+   and every row's block lands on one line down the page. */
+.settings__agents > li.settings__agent {
+  padding-block: 0;
+}
+
+/* An empty state is not a row: it has no name, no state and no line, and 80px of air around one sentence would
+   read as a missing agent rather than as an empty list. */
+.settings__agent--empty {
+  min-height: 0;
+  justify-content: flex-start;
 }
 
 .settings__agent-head {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-2);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content var(--settings-agent-actions);
+  align-items: center;
+  column-gap: var(--space-4);
   min-width: 0;
 }
 
-/* The name is the anchor: one weight above the row, and never allowed to break mid-word. */
-.settings__agent-name {
-  font-weight: var(--font-weight-medium, 500);
-  overflow-wrap: anywhere;
+/* The name and its line, as one block: a name is what a reader scans down, and a line that starts at a
+   different x is not a column. */
+.settings__agent-id {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  min-width: 0;
 }
 
-/* The spacer is what puts the controls at the end of the head. `margin-left: auto` on it rather than
-   `justify-content` on the head, so a narrow window wraps the *controls* under the name instead of
-   squeezing the name into three characters. */
-.settings__agent-spacer {
-  flex: 1 1 auto;
+/* **The row's title.** 15px/600, chosen against the tokens rather than by feel: the body text is 13px
+   (`--font-size-base` is 14px but this sheet sets 13px on `body`), the secondary line is 12px, and the group
+   headings are 13px caps — so `--font-size-content` is one full step above everything else in the row, and
+   `--font-weight-semibold` is one step above the `--font-weight-medium` that every ordinary UI label on this
+   page uses (nav items, buttons). It is the only 15px/600 text inside a row, which is what makes it lead. */
+.settings__agent-name {
+  font-size: var(--font-size-content);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 /* **The one line, and the whole of what a row may say.** 12px and muted rather than 14px: it is the second
@@ -1505,6 +1570,7 @@ body {
 .settings__agent-line {
   margin: 0;
   font-size: var(--font-size-sm);
+  line-height: 1.45;
   color: var(--text-muted, #a1a5a4);
   overflow-wrap: anywhere;
 }
@@ -1515,6 +1581,37 @@ body {
   font-family: var(--font-mono);
   color: var(--text);
   user-select: text;
+}
+
+/* A command that follows prose on the *same* line (`Installed — npm install -g …`). Mono so it reads as a
+   command, sized to the code scale so the mixed line does not jump in size mid-sentence. */
+.settings__agent-cmd {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-code);
+  color: var(--text);
+  user-select: text;
+}
+
+/* **The properties column.** Right-aligned for the reason the table above gives, and the state chip is the
+   last chip in the DOM so *it* owns the column's edge: verdict chips hang inward from it. */
+.settings__agent-props {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  justify-self: end;
+  gap: var(--space-1) var(--space-2);
+}
+
+/* **The controls column**, fixed width and right-aligned. Wrapping rather than overflowing: a narrow window
+   puts the second button under the first instead of pushing the chip column left. */
+.settings__agent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  justify-self: end;
+  gap: var(--space-2);
 }
 
 /* What `Details` reveals — indented under the name so an open row reads as belonging to it, and separated
@@ -1678,7 +1775,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-0-5);
-  padding: var(--space-2) 0;
+  /* No padding of its own: the row is `.settings__agent`, and its height comes from
+     `--settings-agent-row` so that a catalogue row and a shipped agent's row are the same 80px and their
+     columns line up with each other as well as within each list. */
+  padding: 0;
   border-top: 1px solid var(--border-strong, #2f3534);
 }
 

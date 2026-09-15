@@ -554,3 +554,13 @@ export function normalizeUserPath(input: string, home: string): string {
  * must never do. See its header for the measurement this exists for.
  */
 export * from "./path-discovery.js";
+
+/**
+ * The programs the user's own login shell resolves, asked one name at a time.
+ *
+ * Separate from the `PATH` probe for a reason that is measured rather than taxonomic: a shell asked for
+ * `$PATH` reports a variable, and a shell asked for a name reports the lookup it performs — and on this
+ * machine those two answers differ for `dsh`, which is why it read as "not installed" while its owner ran it.
+ * `composeSearchPath` puts each answer's directory at the head of the list, so the probe and the spawn see it.
+ */
+export * from "./shell-binaries.js";

@@ -6,10 +6,17 @@
  *
  * The product's claim is that EnvoyCoder is the control plane for coding agents, and this is the screen
  * that has to make that true: the nine agents we ship, the ones a user declared, and the 38 recipes in the
- * catalogue — **in one place, searchable**, each row carrying the state a probe measured rather than a
+ * catalogue — **in one place, searchable**, each row carrying a **verdict** that was measured rather than a
  * state a list implies. Before this page the catalogue existed in `@envoycoder/agent-catalog` and no
  * surface read it, so a user with Gemini CLI installed had a product that supported it and no way to find
  * out.
+ *
+ * **Every row resolves itself.** There is no button on this page whose purpose is to find out a state: the
+ * daemon resolves what this machine can do with each of the 48 rows before it serves them (`availability`
+ * on `HarnessSummary`, `AgentProviderSummary` and `CatalogEntry`), and `rowVerdict` turns that into one of
+ * two words. What a user has to *do* — sign in, add, remove, install — is offered as an action; what a user
+ * would have to *press to learn* is gone, and `docs/settings-parity.md` §7.17 records the report that
+ * removed it.
  *
  * ## It has to be *scanned*, not read — which is a measurement, not an opinion
  *
@@ -38,15 +45,17 @@
  *
  * | group | what it is | where its state comes from |
  * |---|---|---|
- * | **On this machine** | the nine agents we ship | `coder.listHarnesses` — probed, with the capabilities we verified |
- * | **Your agents** | the ones a user declared | `coder.listProviders` — probed by the same prober |
- * | **Catalogue** | the 38 recipes | **nothing, until the user asks about a row** |
+ * | **On this machine** | the nine agents we ship | `coder.listHarnesses` — measured, with the capabilities we verified |
+ * | **Your agents** | the ones a user declared | `coder.listProviders` — measured by the same prober |
+ * | **Catalogue** | the 38 recipes | `coder.listCatalog` — measured on the read, per row, nothing started |
  *
  * The third group is the one that could lie, and the whole design of it is about not doing so. A catalogue
- * entry is a *recipe*: a command line and a link. Whether this machine can run it is a fact somebody has to
- * measure, so the row starts as **"Not checked yet"** and offers the action that finds out — one row, on the
- * user's press, because 14 of the 38 are `npx` recipes and a screen that probed them all while opening would
- * be a screen that downloads fourteen npm packages because somebody clicked *Settings*.
+ * entry is a *recipe*: a command line and a link, and whether this machine can run it is a fact somebody has
+ * to measure. The measurement is cheap — a program that resolves, a connector that resolves, an `npx` shape,
+ * and the variables the launch needs: filesystem and environment reads, no process and no package — so it is
+ * taken for all 38 rows when the list is served, and a row is a verdict before a user has touched anything.
+ * What is **not** cheap is anything learned by *starting* an agent, which for 14 of these recipes means
+ * downloading a package; none of it is a verdict, and `agent-verdict.ts` carries where it goes instead.
  *
  * ## This page lists everything, and there is no control on it that can shorten it
  *
@@ -90,10 +99,10 @@ import type { MessageKey } from "../../i18n/messages/en.js";
 import { availabilityOf } from "../../composer/agent-for.js";
 import { useI18n } from "../../i18n/context.js";
 import { localizeText } from "../../i18n/notice.js";
-import { modeLabel, optionLabel } from "../../composer/controls.js";
 import type { SettingsSectionProps } from "./SectionProps.js";
-import { ROW_STATE_CHIP, ROW_STATE_LABEL, authChipKeys } from "./agent-catalog.js";
-import { AgentRow, fixOrPhrase } from "./AgentRow.js";
+import { AgentRow } from "./AgentRow.js";
+import { FactsBlock, GuideBlock } from "./RowGuide.js";
+import { rowVerdict, verdictFacts } from "./agent-verdict.js";
 import { AGENT_ROW_LINE_BUDGET } from "./density.js";
 import { CatalogList } from "./CatalogRows.js";
 
@@ -178,7 +187,7 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
         {state.harnesses.length === 0 ? (
           // An empty state teaches, and this one is the daemon saying it has not answered yet rather than a
           // claim that we ship no agents — which is the distinction the sentence is written for.
-          <li className="settings__agent">
+          <li className="settings__agent settings__agent--empty">
             <p className="settings__note">{t("settings.agents.empty")}</p>
           </li>
         ) : null}
@@ -209,7 +218,7 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
             // The empty state, and it is the one place on this page allowed to be a paragraph: with nothing to
             // scan there is nothing to scan *past*, so the sentence that says where agents come from is the
             // most useful thing that can be on a row here.
-            <li className="settings__agent">
+            <li className="settings__agent settings__agent--empty">
               <p className="settings__note">{t("settings.agents.mine.empty")}</p>
             </li>
           ) : null}
@@ -231,13 +240,27 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
 }
 
 /**
- * One of the nine agents we ship: its state, the one line that says what to do, and its own declared facts
- * behind `Details`.
+ * One of the nine agents we ship: its **verdict**, the one line behind it, and its own facts as properties.
  *
- * The one control a user has on it is an **action on the agent** — trigger its own sign-in, offered only for
- * the state the daemon measured a sign-in requirement in. There is deliberately **no** control here that takes
- * the agent out of a list: a shipped agent is what this product is, and the pickers' contents are derived from
- * the state chip beside it rather than from anything the user can set (see the module doc).
+ * ## The two things this row no longer does
+ *
+ * It no longer renders a state vocabulary — five chips with five words, one of which (`Ready`) meant "the
+ * program resolves" and another (`Not downloaded yet`) meant "we looked at `npx` and not at the agent". It
+ * renders `rowVerdict`'s single verdict and, when that verdict is *not ready*, the way out of it, and the
+ * mapping from the daemon's five measured states to those two words lives in exactly one file.
+ *
+ * And it no longer carries **caveat chips**. `No approvals`, `Cannot be cancelled`, `Temporary copy` and
+ * `Needs a sign-in` were chips beside the state, which is how nine rows carried eighteen chips and how the
+ * one word a user needs had to be picked out of them. They are properties now (`verdictFacts`), rendered
+ * inside the disclosure with the rest — including the time EnvoyCoder last looked, which is the half of the
+ * deep facts that makes them observations rather than promises.
+ *
+ * ## The one control, and why this row has exactly one
+ *
+ * `Sign in`, and it is the only row action because it is the only thing a user must *do*: the program is
+ * installed and drivable, and the agent will not open a session until its own login has been through once.
+ * That is why a sign-in requirement is a **fact and not the verdict** — the verdict answers "can this machine
+ * run this agent", and the answer is yes.
  */
 function ShippedAgent(props: {
   harness: HarnessSummary;
@@ -245,72 +268,51 @@ function ShippedAgent(props: {
   signingIn: boolean;
   onSignIn: (harness: HarnessSummary) => Promise<void>;
 }): JSX.Element {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { harness } = props;
-  const availability = availabilityOf(props.harness);
-  // The wire generation is decided **once per row**, here, and not inside the chip: an older daemon sends a
-  // boolean and no `availability`, and the same fact has to reach the chip, the fix and the sentence that
-  // explains the daemon is a build behind.
+  // The wire generation is decided **once per row**, here, and not inside the verdict: an older daemon sends
+  // a boolean and no `availability`, and the same fact has to reach the chip, the line and the sentence that
+  // explains the daemon is a build behind. `availabilityOf` maps a legacy answer to a state *without inventing
+  // one*; `undefined` is passed through so the row can say "the daemon is behind" rather than "we could not
+  // look", which are different sentences about different halves of this product.
+  const availability = availabilityOf(harness);
   const legacyDaemon = harness.availability === undefined;
-  const auth = authChipKeys(harness.auth);
-
   /**
-   * **The one line.** Four sources, in the order a user would act on them.
-   *
-   * The fix first, because a row whose program is missing is the one row with something to do. Then the two
-   * daemon-skew cases, whose action is the same and is named in four words rather than a sentence. Then the
-   * tier, which is the honest answer for an agent that is simply working: there is no action, and "Ships with
-   * EnvoyCoder" is a fact rather than a filler.
+   * A daemon that cannot report what an agent publishes is **still a daemon whose verdict is usable**: the
+   * program is installed and drivable, so the row's chip says Ready. What must not be lost is the *action* —
+   * which is why the line says so in four words, and why this is decided here rather than inside the verdict:
+   * a build skew is not a reason to tell a user their agent is not ready.
    */
-  const fix = availability.fix ?? [];
-  const line = fixOrPhrase(
-    fix,
-    legacyDaemon || harness.models === undefined || harness.thinking === undefined
-      ? t("settings.agents.row.restart")
-      : t(harness.tier === "built-in" ? "settings.agent.tier.builtIn" : "settings.agent.tier.catalogued"),
+  const undeclared = harness.models === undefined || harness.thinking === undefined;
+
+  const verdict = rowVerdict(
+    {
+      label: harness.label,
+      availability: legacyDaemon ? undefined : availability,
+      // What the row says when there is nothing to fix. The tier is the honest answer for an agent that is
+      // simply working: there is no action, and "Ships with EnvoyCoder" is a fact rather than a filler — and
+      // for a daemon that could not answer, it is the action instead, in four words.
+      readyLine: undeclared
+        ? t("settings.agents.row.restart")
+        : t(harness.tier === "built-in" ? "settings.agent.tier.builtIn" : "settings.agent.tier.catalogued"),
+    },
+    t,
     AGENT_ROW_LINE_BUDGET,
   );
 
+  const facts = verdictFacts({ availability, harness, locale, now: Date.now() }, t);
+
   return (
     <AgentRow
-      stateLabel={t(ROW_STATE_LABEL[availability.state])}
-      stateChip={ROW_STATE_CHIP[availability.state]}
+      verdictLabel={t(verdict.chipKey)}
+      verdictChip={verdict.chipClass}
+      verdictAction={verdict.verdict === "not-ready"}
       name={harness.label}
       about={harness.summary}
-      line={line.line}
-      lineIsCommand={line.isCommand}
-      {...(line.title !== undefined ? { lineTitle: line.title } : {})}
-      chips={
-        <>
-          {auth !== undefined ? (
-            <span className={`chip ${auth.chip}`} title={t("settings.agents.auth.title")}>
-              {t(auth.key)}
-            </span>
-          ) : null}
-          {harness.capabilities.approvals ? null : (
-            <span className="chip chip--warn" title={t("settings.agent.noApprovals.title")}>
-              {t("settings.agent.noApprovals")}
-            </span>
-          )}
-          {harness.capabilities.cancel ? null : (
-            <span className="chip chip--warn" title={t("settings.agent.noCancel.title")}>
-              {t("settings.agent.noCancel")}
-            </span>
-          )}
-          {/* **The provenance of a program found in somebody else's cache.** `dsh` can resolve out of
-              `~/.npm/_npx/<hash>/node_modules/.bin` — it is a real program and it really runs, so calling it
-              absent would be false, but it disappears with `npm cache clean`, so saying nothing would be the
-              other half of the same lie. One warn chip, and one sentence per cache naming what removes it. */}
-          {availability.provisional !== undefined ? (
-            <span
-              className="chip chip--warn"
-              title={t(`settings.agent.provisional.${availability.provisional}`)}
-            >
-              {t("settings.agent.provisional")}
-            </span>
-          ) : null}
-        </>
-      }
+      line={verdict.line}
+      {...(verdict.command !== undefined ? { command: verdict.command } : {})}
+      lineIsCommand={verdict.lineIsCommand}
+      {...(verdict.lineTitle !== undefined ? { lineTitle: verdict.lineTitle } : {})}
       actions={
         props.canSignIn && harness.auth?.state === "needs-signin" ? (
           <button
@@ -324,17 +326,33 @@ function ShippedAgent(props: {
           </button>
         ) : null
       }
-      details={<DeclaredFacts harness={harness} />}
+      details={
+        <>
+          {/* **The way out first, then the facts.** The order is the mandate's: a row that is not ready says
+              what to do before it says what it is, and `GuideBlock` renders no list at all when there is
+              nothing to do — the layout half of "our gap is not your missing install". */}
+          {verdict.guide !== undefined ? <GuideBlock guide={verdict.guide} /> : null}
+          <FactsBlock facts={facts} />
+        </>
+      }
     />
   );
 }
 
 /**
- * One provider the **user** declared: its state, the command it runs, and its environment names.
+ * One provider the **user** declared: its verdict, the command it runs, and its environment names as facts.
  *
- * The declared facts block is darker here than on a shipped agent, and not for symmetry: the row's own state
- * rests on an environment this daemon may not have, so the environment *names* are the first thing a user
- * needs when the row says `not-installed` — see `settings.agents.mine.env.*`.
+ * ## The case this row exists to get right, and did not
+ *
+ * A provider names environment variables, and the old row reported two *separate* things: `availability` from
+ * the prober (which looks only for the program) and, inside the disclosure, which of those names the daemon
+ * has. So a program that resolved beside a variable that was never set read **Ready** with a footnote — two
+ * facts a user had to join themselves, in the one situation where pressing Run produces a credential failure
+ * that looks like a bug in the app. `rowVerdict` takes the unset names as an argument and makes it *Not ready*,
+ * naming the variable on the row's own line, because that is what a user has to act on.
+ *
+ * A recipe's own constants can never do this: `AgentProviderEnvState.from === "catalogue"` means EnvoyCoder
+ * supplies the value, so such a name is excluded from the missing list and rendered as a plain fact.
  */
 function ProviderRow(props: {
   provider: SettingsSectionProps["state"]["providers"][number];
@@ -342,31 +360,59 @@ function ProviderRow(props: {
    * The label for the provider's command line, passed in as a **key** rather than as a string.
    *
    * `MessageKey` and not `string`, because this row renders it in two places — the line's `title` and the
-   * disclosure's first entry — and a caller that handed it pre-translated text would be able to pass anything.
+   * disclosure's own fact — and a caller that handed it pre-translated text would be able to pass anything.
    * Typing it as the catalogue's own key type is what makes a typo a compile error rather than a French window
    * with an English fragment in it.
    */
   commandLabel: MessageKey;
   onRemove: () => void;
 }): JSX.Element {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { provider } = props;
-  const fix = provider.availability.fix ?? [];
   const command = [provider.command, ...provider.args].join(" ");
-  // The fix first, for the same reason as a shipped agent's row; and the command line second, because for a
-  // provider that is *working* the command is the actionable fact — it is what the user would run by hand to
-  // see what the daemon sees. The label goes to the `title` when the two are the same text twice.
-  const line = fixOrPhrase(fix, command, AGENT_ROW_LINE_BUDGET);
+  // A name the daemon does not have, and that the recipe does not supply. The two exclusions are the whole
+  // difference between a fix and a false alarm: `set` is whether the daemon's environment has it, and
+  // `from === "catalogue"` means our own recipe sets it for the user.
+  const missingEnv = provider.env
+    .filter((variable) => !variable.set && variable.from !== "catalogue")
+    .map((variable) => variable.name);
+
+  const verdict = rowVerdict(
+    {
+      label: provider.label,
+      availability: provider.availability,
+      missingEnv,
+      // The command line is what a user would run by hand to see what the daemon sees, so it is the row's own
+      // next step when there is nothing wrong — the same place `Runs as:` has in the disclosure.
+      readyLine: command,
+      readyLineIsCommand: true,
+    },
+    t,
+    AGENT_ROW_LINE_BUDGET,
+  );
+
+  const facts = verdictFacts(
+    {
+      availability: provider.availability,
+      env: provider.env,
+      commandLine: command,
+      locale,
+      now: Date.now(),
+    },
+    t,
+  );
 
   return (
     <AgentRow
-      stateLabel={t(ROW_STATE_LABEL[provider.availability.state])}
-      stateChip={ROW_STATE_CHIP[provider.availability.state]}
+      verdictLabel={t(verdict.chipKey)}
+      verdictChip={verdict.chipClass}
+      verdictAction={verdict.verdict === "not-ready"}
       name={provider.label}
       about={provider.detail}
-      line={line.line}
-      lineIsCommand={line.isCommand || fix.length === 0}
-      lineTitle={line.title ?? t(props.commandLabel, { command })}
+      line={verdict.line}
+      {...(verdict.command !== undefined ? { command: verdict.command } : {})}
+      lineIsCommand={verdict.lineIsCommand}
+      lineTitle={verdict.lineTitle ?? t(props.commandLabel, { command })}
       actions={
         /* **Remove, and it is not a hide.** This forgets a provider the *user declared* — an undo of their own
            action, which is why it exists only on this list and on no shipped agent — and its title says what it
@@ -381,120 +427,11 @@ function ProviderRow(props: {
         </button>
       }
       details={
-        <ul className="settings__agent-more">
-          <li>{t(props.commandLabel, { command })}</li>
-          {provider.env.map((variable) => (
-            // **Three states, and the third is why this exists.** `set` alone could not say where a value came
-            // from, and for a variable a catalogue recipe supplies, "is set" would send a user to export
-            // something EnvoyCoder is already providing. `from` distinguishes the two sources, and the third is
-            // the daemon's own environment — which is where every credential still comes from and the only place
-            // one ever does.
-            <li
-              key={variable.name}
-              className={`settings__env${
-                variable.set
-                  ? variable.from === "catalogue"
-                    ? " settings__env--recipe"
-                    : ""
-                  : " settings__env--unset"
-              }`}
-              title={
-                variable.from === "catalogue"
-                  ? t("settings.agents.mine.env.recipe.title", { name: variable.name })
-                  : t("settings.agents.mine.env.title", { name: variable.name })
-              }
-            >
-              {variable.from === "catalogue"
-                ? t("settings.agents.mine.env.recipe", { name: variable.name })
-                : variable.set
-                  ? t("settings.agents.mine.env.set", { name: variable.name })
-                  : t("settings.agents.mine.env.unset", { name: variable.name })}
-            </li>
-          ))}
-        </ul>
+        <>
+          {verdict.guide !== undefined ? <GuideBlock guide={verdict.guide} /> : null}
+          <FactsBlock facts={facts} />
+        </>
       }
     />
-  );
-}
-
-/**
- * What one agent published about itself — the four facts a user needs to understand the controls it appears
- * beside.
- *
- * **Two rules, and both are about not lying.** First, a value that is *ours* is translated and a value that
- * is the *agent's* is shown as the agent wrote it: a mode we labelled (`ModeKind`) carries a catalogue key and
- * goes through `modeLabel`, a model label has no key in the protocol at all and is the agent's own word.
- * Second, the three states of `AgentThinking` are kept apart — `listed` (here are the levels), `session` (the
- * agent only publishes them inside a session, and we have not seen one) and `none` (it offers none) — because
- * collapsing the middle one into "none" is the exact sentence the protocol's own doc says must never be told
- * to a user.
- *
- * **Only ever rendered inside a disclosure**, which is what makes it a definition list rather than a band: 36
- * lines of an agent's own answers is what a user looks at when something is wrong, and it is not what the nine
- * rows are for.
- */
-function DeclaredFacts(props: { harness: HarnessSummary }): JSX.Element {
-  const { t } = useI18n();
-  const { harness } = props;
-
-  /**
-   * **A daemon that did not answer is not a crash, and this was found by driving the window.**
-   *
-   * `models` and `thinking` are required by `HarnessSummary` — a daemon that follows this protocol always
-   * sends them — but a daemon from an **older build** does not, and the window accepts its answer. A settings
-   * page must not take the application down because the daemon is a build behind, which is a state this
-   * document already records on the wire (§7.2). So the disclosure says what happened instead: one sentence,
-   * in the user's language, naming the cause and the one action that fixes it — and the row's own line says
-   * the same action in four words, so a user who never opens `Details` still knows what to do.
-   */
-  if (harness.models === undefined || harness.thinking === undefined) {
-    return <p className="settings__agent-fact">{t("settings.agent.notDeclared", { agent: harness.label })}</p>;
-  }
-
-  // The one non-negotiable rule of the labels: translate what we wrote, show what the agent wrote.
-  const modes = harness.modes.map((mode) => modeLabel(mode, t));
-  const levels = harness.thinking.options.map((option) => optionLabel(option, t));
-  // A model label carries no key in the protocol (`AgentModel`), so every one of these is the agent's own word
-  // for itself and is shown exactly as it arrived.
-  const models = harness.models.options.map((option) => option.label);
-
-  return (
-    <dl className="settings__agent-declared">
-      <div>
-        <dt>{t("settings.agent.tier.title")}</dt>
-        <dd>
-          {harness.tier === "built-in"
-            ? t("settings.agent.tier.builtIn")
-            : t("settings.agent.tier.catalogued")}
-        </dd>
-      </div>
-      <div>
-        <dt>{t("settings.agent.modes.title")}</dt>
-        <dd>{modes.length === 0 ? t("settings.agent.noneDeclared") : modes.join(", ")}</dd>
-      </div>
-      <div>
-        <dt>{t("settings.agent.models.title")}</dt>
-        <dd>
-          {/* Three states, kept apart — the protocol makes `models` required for exactly this reason:
-              "free text" is not "none", and reading one as the other would tell a user their agent has no
-              models when it takes any they type. */}
-          {harness.models.kind === "free-text"
-            ? t("settings.agent.modelsFreeText")
-            : models.length === 0
-              ? t("settings.agent.noneDeclared")
-              : models.join(", ")}
-        </dd>
-      </div>
-      <div>
-        <dt>{t("settings.agent.thinking.title")}</dt>
-        <dd>
-          {harness.thinking.kind === "session"
-            ? t("settings.agent.thinkingSession")
-            : levels.length === 0
-              ? t("settings.agent.noneDeclared")
-              : levels.join(", ")}
-        </dd>
-      </div>
-    </dl>
   );
 }

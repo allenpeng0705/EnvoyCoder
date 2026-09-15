@@ -57,6 +57,7 @@ import {
 import { type PlatformId, detectPlatform, spawnTreeOptions } from "@envoycoder/platform";
 
 import { modelArgs, modelIdOf } from "./models.js";
+import { ACP_AGENT_CATALOG, cataloguedRecipe } from "./acp-catalog.js";
 import { probeRecipe, type ProbeFinding, type ProbeHarnessOptions, type ProbeRecipe } from "./probe.js";
 import { splitArgs } from "./args.js";
 
@@ -1085,6 +1086,41 @@ export function harnessRecipe(definition: HarnessDefinition): ProbeRecipe {
   };
 }
 
+
+/**
+ * **Every program name a probe in this daemon could ask about**, in one list.
+ *
+ * The caller is the daemon's boot prime (`apps/desktop/src/daemon/serve.ts`), and it exists because the
+ * question "where does the user's shell find this name" costs one login shell per *invocation* rather than one
+ * per name: the names have to be known up front, and the authority on which names matter is the catalogue
+ * itself rather than a second list somebody maintains beside it.
+ *
+ * Built from the **recipes**, not from the catalogue's own fields, so it cannot drift: a recipe is what a probe
+ * actually looks for, and an entry that gains an `agentBinaries` (a bridge over a vendor CLI) has that name
+ * asked about without anyone remembering to add it here. Both tiers are included — the nine agents we ship and
+ * all 38 recipes — because a user may check any row of the catalogue, and `extra` carries the one thing the
+ * catalogue cannot know: the commands **the user declared**.
+ *
+ * Deliberately unfiltered: which names a shell may be asked about is `@envoycoder/platform`'s rule (a closed
+ * character set, because a provider's command is user-controlled data), and a second copy of that rule here
+ * would be the copy that went stale.
+ */
+export function probeableBinaryNames(extra: readonly string[] = []): string[] {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  const add = (recipe: ProbeRecipe): void => {
+    for (const name of [...recipe.binaries, ...(recipe.agentBinaries ?? [])]) {
+      const trimmed = name.trim();
+      if (trimmed === "" || seen.has(trimmed)) continue;
+      seen.add(trimmed);
+      names.push(trimmed);
+    }
+  };
+  for (const definition of Object.values(HARNESS_CATALOG)) add(harnessRecipe(definition));
+  for (const entry of ACP_AGENT_CATALOG) add(cataloguedRecipe(entry));
+  for (const name of extra) add({ label: "", kind: "child-process", binaries: [name], transport: "acp" });
+  return names;
+}
 
 /**
  * A probe, projected onto the **wire**.

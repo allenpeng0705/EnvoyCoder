@@ -24,7 +24,7 @@ import {
   cataloguedProviderInput,
   cataloguedRecipe,
   overlappingAgentIds,
-  probeCatalogAgent,
+  probeRecipe,
   resolveAgentEntry,
   ALL_HARNESSES,
 } from "../src/index.js";
@@ -115,6 +115,20 @@ describe("an id that exists in both tiers", () => {
     expect(overlappingAgentIds(ALL_HARNESSES)).toEqual(["cursor"]);
   });
 });
+
+/**
+ * One catalogued entry, projected exactly as the daemon projects it for `coder.listCatalog`'s rows.
+ *
+ * This used to be `probeCatalogAgent(id, options)` from the package — a helper with no caller left once the
+ * per-row method was deleted. Re-pointed rather than deleted so that what these tests are *about* (a bridged
+ * entry, an `npx` recipe, an unsearchable machine) is still asserted against the same two functions production
+ * composes.
+ */
+function probeCatalogAgent(id: string, options: Parameters<typeof probeRecipe>[1] = {}) {
+  const entry = acpAgent(id);
+  if (!entry) return undefined;
+  return { id, ...probeRecipe(cataloguedRecipe(entry), options) };
+}
 
 describe("probing a catalogued agent", () => {
   it("reports an installed agent with the path we resolved", () => {

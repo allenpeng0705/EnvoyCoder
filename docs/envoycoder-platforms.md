@@ -87,7 +87,13 @@ watch per directory on Linux, and a native recursive watcher on macOS/Windows.
 
 **Login-shell environment.** Inheriting a login shell's environment is a POSIX idea; Paseo's
 implementation throws on Windows and keeps Electron's inherited env there. Our daemon inherits its
-environment and reads configuration from files, which sidesteps the whole class.
+environment and reads configuration from files, which sidesteps the whole class — **except for the
+question "where are the user's agent programs"**, which no file can answer and a GUI launch's
+environment answers wrongly. That one question is resolved at boot, out of band and POSIX-only:
+`packages/platform/src/path-discovery.ts` asks a login shell for its `PATH` and `shell-binaries.ts`
+asks it about individual names, both bounded and both off the critical path. On Windows neither runs,
+and deliberately: the registry `PATH` reaches a GUI process there, so there is nothing to repair —
+`docs/settings-parity.md` §7.9 has the ordering and §7.16 the measurement behind the per-name ask.
 
 ## 4. DeepSeek Harness, per platform
 

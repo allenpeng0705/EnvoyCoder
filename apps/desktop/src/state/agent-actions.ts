@@ -17,11 +17,14 @@
  *     `ok: true`**. The agent refused, or accepted without finishing, or named no method we may send; those
  *     are things this call found out, not failures of it. Collapsing them into `ok: false` would tell a user
  *     the request was broken when in fact the agent answered.
- *   * **`probeCatalogAgent`'s measurement** — always an answer, never a claim beyond what it measured, and it
- *     carries `costMs` and `observedAt` so the row can say what the measurement was and when it was taken.
+ *   * **Nothing, any more.** There used to be a third shape — `probeCatalogAgent`'s measurement, one
+ *     catalogued row at a time on the user's press — and it is gone with the method. The daemon resolves every
+ *     row's cheap facts before it serves the list (`CatalogEntry.availability`), so no action on this page
+ *     exists in order to *find out* a state; what a user can do here is what a user can **do**: declare an
+ *     agent, forget one they declared, or run an agent's own sign-in.
  */
 
-import type { CatalogProbe, HarnessId, SignInOutcome } from "@envoycoder/protocol";
+import type { HarnessId, SignInOutcome } from "@envoycoder/protocol";
 
 import type { Refusal } from "../i18n/notice.js";
 import type { AddProviderInput } from "./coderStore.js";
@@ -37,18 +40,6 @@ export interface AgentActions {
 
   /** Forget a provider. The daemon answers the id it removed, or refuses because there is nothing there. */
   removeProvider(id: string): Promise<{ ok: true; removed: string } | Refusal>;
-
-  /**
-   * Measure **one** catalogued entry, on the user's press.
-   *
-   * `force` is the difference between "tell me what you know" and "measure it now": the daemon refuses to
-   * cache a negative answer precisely because a user is about to change it, and a second press after they
-   * have is asking for a new measurement.
-   */
-  probeCatalogAgent(
-    id: string,
-    options?: { force?: boolean },
-  ): Promise<{ ok: true; probe: CatalogProbe } | Refusal>;
 
   /** Trigger the agent's own sign-in flow. See the module doc for why all five outcomes are `ok: true`. */
   signInAgent(

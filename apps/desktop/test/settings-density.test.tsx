@@ -34,7 +34,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CatalogEntry, HarnessSummary } from "@envoycoder/protocol";
 
 import { SettingsPane } from "../src/components/SettingsPane.js";
-import { fixOrPhrase } from "../src/components/settings/AgentRow.js";
+import { rowVerdict } from "../src/components/settings/agent-verdict.js";
 import {
   AGENT_ROW_BUDGET,
   AGENT_ROW_LINE_BUDGET,
@@ -43,9 +43,14 @@ import {
 } from "../src/components/settings/density.js";
 import { en } from "../src/i18n/messages/en.js";
 import { I18nProvider } from "../src/i18n/context.js";
+import { SOURCE_LOCALE } from "../src/i18n/locales.js";
+import { createTranslator } from "../src/i18n/translate.js";
 import { wiredBindings } from "../src/input/shortcuts.js";
 import { appScope, type SettingsScope } from "../src/state/settings-scope.js";
 import type { CoderState } from "../src/state/coderStore.js";
+
+/** The source translator, so a pure-function assertion reads the same English a row renders. */
+const { t: tEn } = createTranslator(SOURCE_LOCALE);
 import { SETTINGS_SECTIONS } from "../src/state/settings-sections.js";
 
 afterEach(cleanup);
@@ -101,6 +106,10 @@ function entry(over: Partial<CatalogEntry> & { id: string; title: string }): Cat
     transport: "acp",
     install: { kind: "npx", package: "an-agent@0.179.0" },
     builtIn: false,
+    // `npx` resolved, so this row is **Ready** and the only thing left to say about it is how it is obtained.
+    // A fixture without this field is the *legacy daemon* case, which is a different row entirely — and the
+    // test below spent one run reading `EnvoyCoder is a build behind` because of exactly that.
+    availability: { state: "ready", binary: "/usr/bin/npx" },
     ...over,
   };
 }
@@ -167,7 +176,6 @@ const state: CoderState = {
 const noActions = {
   addProvider: vi.fn(),
   removeProvider: vi.fn(),
-  probeCatalogAgent: vi.fn(),
   signInAgent: vi.fn(),
 } as never;
 
@@ -315,7 +323,7 @@ describe("an agent row: one line, and not much else", () => {
     // **The case the length budget cannot fail on by itself.** A row that printed a 127-character fix verbatim
     // would break the budget — but a row that printed a *short* sentence as its line would not, and this is the
     // fixture that pins which of the two things happens: the sentence names what to do in three words, and the
-    // whole text is in the `title` and the disclosure. Removing the branch in `fixOrPhrase` puts the sentence
+    // whole text is in the `title` and the disclosure. Removing the branch in `rowVerdict` puts the sentence
     // on the line and takes both assertions below red.
     const prose =
       "install Node.js so that \`npx\` is on PATH — this agent itself needs no install, it is fetched from npm on the first run";
@@ -325,23 +333,40 @@ describe("an agent row: one line, and not much else", () => {
     fireEvent.click(screen.getByRole("button", { name: en["settings.agents.catalog.browse"] }));
     const row = [...container.querySelectorAll(".settings__catalog-row")][0];
     if (row === undefined) throw new Error("no catalogue row was rendered");
-    // Unmeasured, so the line is the "nothing to install" phrase and the prose is not reachable from the page
-    // at all — which is the first half of the property.
+    // An `npx` recipe with `npx` present is Ready, so the line is the "nothing to install" phrase and the
+    // prose is not reachable from the page at all — which is the first half of the property.
     expect(row.querySelector(".settings__agent-line")?.textContent).toBe(
       en["settings.agents.row.nothingToInstall"],
     );
     expect(row.textContent).not.toContain("install Node.js");
-    // And the shape the branch is *for*, asserted through the helper rather than through a render: a fix whose
-    // text fits is the line, a fix that is a sentence is not.
-    expect(fixOrPhrase([{ command: "npm install -g a-thing" }], "phrase", AGENT_ROW_LINE_BUDGET)).toEqual({
-      line: "npm install -g a-thing",
-      isCommand: true,
-    });
-    expect(fixOrPhrase([{ command: prose }], "phrase", AGENT_ROW_LINE_BUDGET)).toEqual({
-      line: "phrase",
-      title: prose,
-      isCommand: false,
-    });
+    // And the shape the branch is *for*, asserted through the one function that now owns it: a fix whose text
+    // is a command becomes the line, and a fix that is a **sentence** does not — it moves to the `title` and to
+    // the disclosure. Removing that branch puts a 127-character sentence on the row and takes both assertions
+    // below red, which is the point: the budget alone cannot fail on a short sentence.
+    const sentence = rowVerdict(
+      {
+        label: "Goose",
+        availability: { state: "not-installed", fix: [{ command: prose }] },
+        readyLine: "Ships with EnvoyCoder",
+      },
+      tEn,
+      AGENT_ROW_LINE_BUDGET,
+    );
+    expect(sentence.line).toBe(en["settings.agent.verdict.absent.short"]);
+    expect(sentence.lineTitle).toBe(prose);
+    expect(sentence.lineIsCommand).toBe(false);
+
+    const command = rowVerdict(
+      {
+        label: "Goose",
+        availability: { state: "not-installed", fix: [{ command: "npm install -g a-thing" }] },
+        readyLine: "Ships with EnvoyCoder",
+      },
+      tEn,
+      AGENT_ROW_LINE_BUDGET,
+    );
+    expect(command.line).toBe("npm install -g a-thing");
+    expect(command.lineIsCommand).toBe(true);
   });
 
   it("keeps every closed row's own text within the budget, with nothing on it but a name, a state and a line", () => {

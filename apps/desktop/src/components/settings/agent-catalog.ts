@@ -4,155 +4,44 @@
  *
  * ## Why this is a module and not `if`s in the component
  *
- * The catalogue makes exactly one claim that could be wrong in a way nobody notices: *what state is this
- * row in?* Everything else on the screen is either data off the wire or a press. That claim is spread
- * across four questions, and each of them has a wrong answer that looks like a right one:
+ * Three claims on this screen could be wrong in a way nobody notices, and each of them has a wrong answer
+ * that looks like a right one:
  *
- *   1. **What does a row that nobody has measured say?** If an entry reads `ready` because it exists in a
- *      list, the product has made a claim it did not measure — the whole reason `coder.probeCatalogAgent`
- *      is a separate call. So "not checked yet" is a state of its own here (`rowStateOf`), and it is not
- *      the same value as any of the five the daemon can send.
- *   2. **Which rows may be offered as something to add?** The catalogue overlaps the shipped list
+ *   1. **Which rows may be offered as something to add?** The catalogue overlaps the shipped list
  *      (`cursor` is both), and a row that is already declared must not be added twice. Both are rules with
  *      a name behind them (`resolveAgentEntry`, `coder.addProvider`'s replace semantics), so neither is
  *      decided inline in JSX.
- *   3. **What does adding a row send?** Every field comes off the row — including `transport`, which is
+ *   2. **What does adding a row send?** Every field comes off the row — including `transport`, which is
  *      the entry's own statement and the one field that produces *silent* wrongness when guessed.
- *   4. **What does the row say about installing?** An `npx` recipe needs no install at all, and a binary
+ *   3. **What does the row say about installing?** An `npx` recipe needs no install at all, and a binary
  *      that is missing does; a screen that blurred them would send a user to a download page for something
  *      that installs itself, or leave them with a row that never becomes ready.
  *
- * All four are `tsc`-checked here and asserted in `test/settings-agents-catalog.test.tsx`, and the
- * component below is left with the things a test cannot check: layout, wording and focus.
+ * All three are `tsc`-checked here and asserted in `test/settings-agents-catalog.test.tsx`, and the
+ * components are left with the things a test cannot check: layout, wording and focus.
+ *
+ * ## What used to be the first claim here, and is now nobody's
+ *
+ * *"What does a row that nobody has measured say?"* was question one, and the answer was a ninth state of
+ * its own — `unchecked`, rendered as **"Not checked yet"** on all 38 rows, with a *Check* button on each and
+ * a `checkForces` rule for whether a press meant "tell me what you know" or "measure it now". That whole
+ * apparatus is deleted, because the state it existed to render is not a state a user should ever meet: the
+ * daemon now resolves every row's cheap facts before it serves the list (`CatalogEntry.availability`), so
+ * there is nothing to press and nothing to guess. The verdict itself is `agent-verdict.ts`'s
+ * `rowVerdict` — one function over those facts, in one place, for all three lists.
  */
 
 import type {
   CatalogEntry,
-  HarnessAvailability,
-  HarnessState,
   HarnessSummary,
   AgentProviderSummary,
 } from "@envoycoder/protocol";
 
 import type { AddProviderInput } from "../../state/coderStore.js";
 import type { MessageKey } from "../../i18n/messages/en.js";
-import type { Notice } from "../../i18n/notice.js";
 
-/**
- * What one catalogue row's *Check* has produced so far.
- *
- * `unchecked` is the state a row is in when the screen opens, and it is deliberately not a `HarnessState`:
- * the five the daemon can send are all answers, and a screen that started a row in one of them would be
- * answering a question nobody asked. `refused` is the fourth member for the same reason one step on — the
- * call failed, so we have no answer either, and the daemon's own sentence is what the row shows.
- */
-export type CatalogRowProbe =
-  | { readonly state: "unchecked" }
-  | { readonly state: "checking" }
-  | {
-      readonly state: "measured";
-      readonly availability: HarnessAvailability;
-      readonly observedAt: string;
-      /** What the measurement cost the daemon, in milliseconds. Shown so the row says what it did. */
-      readonly costMs: number;
-      readonly cached: boolean;
-    }
-  | { readonly state: "refused"; readonly notice: Notice };
 
-/**
- * The state a row displays: the five measured ones, plus the three that are not measurements, plus the one
- * that is a measurement of *less* than it first appears.
- *
- * `ready-npx` is the sixth, and it exists for a specific dishonesty rather than for symmetry. The daemon's
- * `ready` for an `npx -y <pkg> …` recipe means **`npx` resolved** — the probe looks for `npx` rather than
- * the package, deliberately, because looking for the package would report all 14 of those rows as missing.
- * So `ready` there is a fact about Node's presence and says nothing about the agent, and 14 rows reading
- * "Ready" claimed a verification nobody performed. The word a user reads is therefore derived from two
- * facts — the measurement *and* how the program is obtained — which is why `rowStateOf` takes the entry.
- */
-export type AgentRowState =
-  | HarnessState
-  | "ready-npx"
-  | "unchecked"
-  | "checking"
-  | "refused";
 
-/**
- * The state of a row, from the entry it belongs to and whatever has happened to it — the one function the
- * row branches on.
- *
- * The `entry` parameter is not optional, and that is the point: a caller that forgot it would get the
- * over-claiming `ready` back on exactly the rows this state exists for, silently. Requiring it makes the
- * omission a compile error instead.
- */
-export function rowStateOf(
-  entry: Pick<CatalogEntry, "install">,
-  probe: CatalogRowProbe | undefined,
-): AgentRowState {
-  if (probe === undefined) return "unchecked";
-  switch (probe.state) {
-    case "unchecked":
-      return "unchecked";
-    case "checking":
-      return "checking";
-    case "refused":
-      return "refused";
-    case "measured":
-      // **The only place a measured state is read.** `availability.state` comes from the daemon's own
-      // prober under `HarnessAvailabilitySchema`, so there is no path here by which a row could be `ready`
-      // without one: the only producer of `ready` is this branch, and it requires a measurement.
-      //
-      // …and for an `npx` recipe it is narrowed, because "the program resolves" there means `npx` resolves.
-      // Nothing has been downloaded, so nothing about the agent has been established — see `AgentRowState`.
-      return probe.availability.state === "ready" && entry.install.kind === "npx"
-        ? "ready-npx"
-        : probe.availability.state;
-  }
-}
-
-/**
- * The chip's word, per row state — **one table for both lists.**
- *
- * The shipped agents' five states and the catalogue rows' nine come from the same list, which is the point:
- * `settings.agent.ready` must mean the same thing on a row we ship and on a row we catalogued, and a second
- * table is how the two come to disagree about a word a user is going to act on. The extra states are the
- * ones that exist because a catalogue row starts unmeasured, and because an `npx` row is measured about
- * less than it looks.
- */
-export const ROW_STATE_LABEL = {
-  ready: "settings.agent.ready",
-  "ready-npx": "settings.agents.row.readyNpx",
-  unsupported: "settings.agent.unsupported",
-  "needs-bridge": "settings.agent.needsBridge",
-  "not-installed": "settings.agent.notInstalled",
-  unknown: "settings.agent.unknown",
-  unchecked: "settings.agent.unchecked",
-  checking: "settings.agent.checking",
-  refused: "settings.agent.refused",
-} as const satisfies Record<AgentRowState, MessageKey>;
-
-/**
- * The chip's colour, per state — one table each, so a state can never get one and not the other.
- *
- * The colours carry the same distinction the words do: `not-installed` is the only `danger`, because it is
- * the only state that asserts a program the user was told to install is not there. `needs-bridge` and
- * `unsupported` are warnings — something is wrong and it is not the user's mistake. `unknown` is quiet,
- * deliberately: a state that asserts nothing must not look like an alarm. `unchecked` is quiet for the same
- * reason at its strongest — it asserts *less* than `unknown`, which at least knows a search did not happen.
- * `ready-npx` is quiet for exactly that reason too: nothing is wrong and nothing is verified, so it is
- * neither a green light nor a warning.
- */
-export const ROW_STATE_CHIP = {
-  ready: "chip--live",
-  "ready-npx": "chip--quiet",
-  unsupported: "chip--warn",
-  "needs-bridge": "chip--warn",
-  "not-installed": "chip--danger",
-  unknown: "chip--quiet",
-  unchecked: "chip--quiet",
-  checking: "chip--quiet",
-  refused: "chip--warn",
-} as const satisfies Record<AgentRowState, string>;
 
 /**
  * Does this catalogue row match what the user typed?
@@ -328,46 +217,6 @@ export function providerIdFrom(label: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-/**
- * Whether the *Check* button should ask the daemon to measure again rather than accept its cache.
- *
- * **True after the first answer**, and that is the user's own act being honoured: the daemon refuses to
- * cache a `not-installed` answer precisely because a user is about to change it, and a user who presses a
- * button labelled *Check again* after installing something means "measure it now". The first press of a row
- * says the other thing — "tell me what you know" — and a second window that asked a minute ago is an answer.
- */
-export function checkForces(probe: CatalogRowProbe | undefined): boolean {
-  return probe !== undefined && probe.state !== "unchecked";
-}
 
-/**
- * A `HarnessSummary`'s auth, as the three words a chip can carry — beside the state, never inside it.
- *
- * `needs-signin` is a fact about *whether the agent will talk to us*, which is a different question from
- * whether its program is installed: `cursor-agent` on a fresh install is `ready` and `needs-signin` at the
- * same time, and collapsing the two would either hide an installed agent or promise a session that will not
- * open. `unknown` means nothing has looked, which is why it gets its own phrasing rather than silence.
- *
- * ## `undefined` is `unknown`, and that is not defensiveness
- *
- * `HarnessSummary.auth` is required by the schema, but the window attaches to whichever daemon owns the port
- * and a daemon from an **older build** does not send it at all — the same asymmetry that has already cost
- * this pane one crash (`models`/`thinking`, §7.2 of `docs/settings-parity.md`). So absence is read the way
- * `authOf` reads a missing record: *nothing has measured this*, which is exactly what `unknown` means. It is
- * emphatically **not** "no sign-in is needed", and the chip for it is silence rather than a claim.
- */
-export function authChipKeys(
-  auth: HarnessSummary["auth"] | undefined,
-): { key: MessageKey; chip: string } | undefined {
-  switch (auth?.state) {
-    case "needs-signin":
-      return { key: "settings.agents.auth.needsSignin", chip: "chip--warn" };
-    case "ready":
-      return { key: "settings.agents.auth.ready", chip: "chip--quiet" };
-    default:
-      // Nothing has measured it, and a chip saying "we have not looked" on every row of a nine-row list is
-      // noise rather than information — the sign-in button is what a user reaches for, and it is shown for
-      // the one state that has an action. Absence here is not "signed in".
-      return undefined;
-  }
-}
+
+

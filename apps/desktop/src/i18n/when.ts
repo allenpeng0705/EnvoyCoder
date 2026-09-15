@@ -51,3 +51,60 @@ export function formatWhen(at: string, locale: Locale): string {
     return at;
   }
 }
+
+/** The staircase `formatAgo` walks, from the smallest unit to the largest it will name. */
+const AGO_STEPS = [
+  { unit: "second", ms: 1000 },
+  { unit: "minute", ms: 60_000 },
+  { unit: "hour", ms: 3_600_000 },
+  { unit: "day", ms: 86_400_000 },
+] as const;
+
+/** Beyond this, "N days ago" stops being a useful reading and a date is the better answer. */
+const AGO_MAX_DAYS = 7;
+
+/**
+ * **How long ago something was observed** — `4 minutes ago`, in the user's own language.
+ *
+ * ## Why this is `Intl.RelativeTimeFormat` and not a translated template
+ *
+ * The agent pane now says *"Verified 4 minutes ago"* on a row, which is the sentence the mandate asks for:
+ * a deep fact that arrives as a property **with its time**, so the user learns when EnvoyCoder last looked
+ * without having to press something. Seven languages times a unit times a plural is exactly the kind of
+ * template a hand-written catalogue gets wrong — `1 minutes ago` reads as a bug in every one of them — and
+ * the platform already owns the pluralisation and the wording in all seven (`mins ago`, `vor 4 Minuten`,
+ * `4分钟前`). So the only thing this module decides is **which unit**, and that is a ladder:
+ *
+ *   * under a minute → `second`, rounded down, so "just now" is `0 seconds ago` and is never a claim that
+ *     something was measured in the future;
+ *   * then minutes, hours, and days, each rounded to nearest;
+ *   * past `AGO_MAX_DAYS` → `formatWhen`'s date **and** clock, because "9 days ago" is a worse answer than the
+ *     date, and this pane already has one tested formatter for that.
+ *
+ * ## The two fallbacks, and why they are the same rule as `formatWhen`'s
+ *
+ * A timestamp that is not a date is returned **verbatim**, and a runtime without `Intl.RelativeTimeFormat` —
+ * or one that throws for a locale — gets `formatWhen`, which has its own fallback to the same verbatim
+ * string. A property reading `2026-09-14T13:23:00.000Z` is ugly and true; a blank or a crash is neither.
+ *
+ * `now` is a parameter rather than a `Date.now()` read for the reason every clock in this repo is injected:
+ * a test that has to wait five minutes to watch the sentence change is a test nobody runs.
+ */
+export function formatAgo(at: string, locale: Locale, now: number): string {
+  const then = new Date(at).getTime();
+  if (Number.isNaN(then)) return at;
+  const elapsed = now - then;
+  // A clock that went backwards (a laptop waking, an NTP correction) is not evidence that something was
+  // observed in the future, and `-3 minutes ago` is not a sentence. It reads as the smallest unit instead.
+  const forward = Math.max(0, elapsed);
+  if (forward >= AGO_MAX_DAYS * 86_400_000) return formatWhen(at, locale);
+  // The largest unit that fits, which is the one a reader wants: 90 minutes is "2 hours ago", not "90
+  // minutes ago", and the ladder is walked from the top rather than from the bottom for that reason.
+  const step = [...AGO_STEPS].reverse().find((candidate) => forward >= candidate.ms) ?? AGO_STEPS[0];
+  const value = -Math.round(forward / step.ms);
+  try {
+    return new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(value, step.unit);
+  } catch {
+    return formatWhen(at, locale);
+  }
+}
