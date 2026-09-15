@@ -289,10 +289,19 @@ function agentActions(options: {
   return { actions, calls };
 }
 
-/** Render the Agents page, with the actions and state a case needs. */
+/**
+ * Render the Agents page, with the actions and state a case needs.
+ *
+ * **The catalogue is opened by default, and that default is the point.** The list moved behind a *Browse the
+ * catalogue* button (`docs/settings-parity.md` §7.14: 38 expanded rows were 71% of the page), so every claim
+ * about a row has to be made *after* the press a user would make. A case that wants the closed state — the
+ * page as it first appears — passes `{ closed: true }`, and `settings-density.test.tsx` owns the assertions
+ * about what is on screen before anything is pressed.
+ */
 function show(
   over: Partial<CoderState> = {},
   options: Parameters<typeof agentActions>[0] = {},
+  view: { closed?: boolean } = {},
 ): AgentCalls {
   const { actions, calls } = agentActions(options);
   render(
@@ -309,7 +318,48 @@ function show(
       />
     </I18nProvider>,
   );
+  if (view.closed !== true) {
+    // By the words a user reads, at the top level of the page rather than inside a row.
+    fireEvent.click(
+      screen.getByRole("button", { name: en["settings.agents.catalog.browse"] }),
+    );
+  }
   return calls;
+}
+
+/**
+ * The manual form, opened the way a user opens it.
+ *
+ * The form is behind its own button now, and the opening is a named helper rather than an inline press for the
+ * same reason `details()` is: it makes "the form is not on the page" an assertion a case can make *before*
+ * calling this, which is the half of the change that could otherwise go unchecked.
+ */
+function manualForm(): HTMLElement {
+  press(document.body, en["settings.agents.manual.open"]);
+  const form = document.querySelector(".settings__manual");
+  if (!(form instanceof HTMLElement)) throw new Error("the manual form was not rendered");
+  return form;
+}
+
+/**
+ * Open one row's disclosure — the third place an explanation is allowed to live.
+ *
+ * Every claim about what a *recipe* says (its command, its version, its link, why an `npx` row needs no
+ * install) is a claim about disclosed text now, and this is the press that reveals it. Keeping it a named
+ * helper rather than an inline `fireEvent.click` is what makes "the row does not show this" and "the row
+ * shows this only after a press" two different assertions instead of one ambiguous one.
+ */
+function details(scope: HTMLElement): void {
+  // **By the visible label, not by the accessible name.** The button carries `aria-label="Details for Cursor"`
+  // so that eight of them are distinguishable to a screen reader; a lookup by accessible name would have to
+  // reconstruct that string, while the *visible* label is what every one of them shows and what a pointer
+  // presses. `getByRole` cannot be used for the visible one, because in the accessibility tree it is not the
+  // name — hence the DOM query.
+  const button = [...scope.querySelectorAll("button")].find(
+    (candidate) => candidate.textContent === en["settings.agents.row.details"],
+  );
+  if (button === undefined) throw new Error("no Details button in that row");
+  fireEvent.click(button);
 }
 
 /** The catalogue list, as a region of its own so a claim about it cannot be satisfied by another part. */
@@ -319,10 +369,20 @@ const catalogList = (): HTMLElement => {
   return list;
 };
 
-/** One catalogue row, by the entry's own title — never by index, which would pass on a reordered list. */
+/**
+ * One catalogue row, by the entry's own title — never by index, which would pass on a reordered list.
+ *
+ * **Matched on the row's *name*, not on its whole text**, and that is a change this slice forced rather than a
+ * tidy-up. The lookup used to search `textContent`, which happened to work because every row rendered its own
+ * command line — so `row("Cline")` found the `Cline` row through `npx -y cline@3.0.46 --acp`. With the command
+ * line behind the disclosure that stopped working, and the honest reading is that it never should have: a
+ * lookup that depends on disclosed text passes or fails for a reason nobody wrote down.
+ */
 function row(title: string): HTMLElement {
   const rows = [...catalogList().querySelectorAll(".settings__catalog-row")];
-  const found = rows.find((candidate) => candidate.textContent?.includes(title));
+  const found = rows.find(
+    (candidate) => candidate.querySelector(".settings__agent-name")?.textContent === title,
+  );
   if (!(found instanceof HTMLElement)) throw new Error(`no catalogue row for ${title}`);
   return found;
 }
@@ -425,9 +485,16 @@ describe("the agents screen", () => {
     }
   });
 
-  it("shows each catalogue row's command, version and where to get it", () => {
+  it("shows each catalogue row's command, version and where to get it — one press in", () => {
+    // **The mutation this fails on:** deleting the disclosed half, which would take the recipe's own command
+    // line, its version and its install link off the product entirely. The rule this page follows is
+    // *explanations move to a title, a disclosure or the docs* — not that they stop existing, and a row whose
+    // details were simply dropped is the `hiddenAgents` mistake wearing a disclosure's clothes.
     show();
     const goose = row("goose");
+    // Not on the closed row: a command line per row is what made this list thirty-eight cards tall.
+    expect(goose.textContent).not.toContain("goose acp");
+    details(goose);
     expect(within(goose).getByText("goose acp")).toBeTruthy();
     expect(within(goose).getByText(en["settings.agents.row.version"].replace("{version}", "1.33.1"))).toBeTruthy();
     const link = within(goose).getByRole("link");
@@ -466,10 +533,10 @@ describe("what a catalogue row claims", () => {
     press(row("goose"), en["settings.agents.row.check"]);
     await waitFor(() => expect(chipText(row("goose"))).toBe(en["settings.agent.ready"]));
     // And the row it was *not* measured about is still unmeasured, in both words.
-    expect(chipText(row("cline"))).toBe(en["settings.agent.unchecked"]);
+    expect(chipText(row("Cline"))).toBe(en["settings.agent.unchecked"]);
 
-    press(row("cline"), en["settings.agents.row.check"]);
-    await waitFor(() => expect(chipText(row("cline"))).toBe(en["settings.agent.notInstalled"]));
+    press(row("Cline"), en["settings.agents.row.check"]);
+    await waitFor(() => expect(chipText(row("Cline"))).toBe(en["settings.agent.notInstalled"]));
     expect(chipText(row("goose"))).toBe(en["settings.agent.ready"]);
 
     // One press, one row: no sweep, which is what keeps 38 rows from costing 38 walks of the search path.
@@ -512,12 +579,45 @@ describe("what a catalogue row claims", () => {
       },
     );
     const goose = row("goose");
-    // The link is entry data, so it is shown whether or not anything was measured.
+    // The link is entry data, so it is disclosed whether or not anything was measured.
+    details(goose);
     expect(within(goose).getByRole("link").getAttribute("href")).toBe("https://block.github.io/goose/");
     expect(goose.textContent).toContain("goose acp");
 
     press(goose, en["settings.agents.row.check"]);
+    // **And a fix that is a sentence is not printed on the row.** `AvailabilityFix.command` is shown verbatim
+    // *when it is a command*; this fixture's fix is 40 characters of English that begins with "install", which
+    // fits the budget and is therefore shown — the long one is the case below, and the two are deliberately
+    // different fixtures so that the branch is asserted from both sides.
     await screen.findByText(/then it runs as: goose acp/);
+  });
+
+  it("replaces a fix that is a sentence with a short phrase, and keeps the sentence one press away", async () => {
+    // **The branch, from the other side.** Two of the catalogue's own hints are 127 and 136 characters of
+    // English prose in a field named `command` (`install Node.js so that \`npx\` is on PATH — Factory Droid
+    // itself needs no install, …`). A row may not carry a sentence, and dropping the text would be worse than
+    // either — so the line says what to do in three words and the whole of it is in the `title` and the
+    // disclosure.
+    //
+    // **The mutation this fails on:** removing the length branch in `fixOrPhrase`, which puts the 127-character
+    // sentence back on the row. `settings-density.test.tsx` fails on the same mutation from the budget side;
+    // this case is what says the *phrasing* is still reachable and correct.
+    // A *binary* entry, so the short phrase is the other one (`Install Cline first` rather than `Nothing to
+    // install`): the branch and the phrase are two facts and this fixture holds the one that differs.
+    const sentence =
+      "install Node.js so that `npx` is on PATH — Cline itself needs no install, it is fetched from npm on the first run";
+    show({}, { probes: { goose: probe({ state: "not-installed", fix: [{ command: sentence }] }) } });
+    press(row("goose"), en["settings.agents.row.check"]);
+    await waitFor(() => expect(chipText(row("goose"))).toBe(en["settings.agent.notInstalled"]));
+
+    const goose = row("goose");
+    expect(goose.querySelector(".settings__agent-line")?.textContent).toBe(
+      en["settings.agents.row.install"].replace("{agent}", "goose"),
+    );
+    expect(goose.textContent).not.toContain("install Node.js");
+    expect(goose.querySelector(".settings__agent-line")?.getAttribute("title")).toBe(sentence);
+    details(goose);
+    expect(goose.textContent).toContain(sentence);
   });
 
   it("says plainly that an npx recipe needs no install, and names what the first run fetches", () => {
@@ -526,14 +626,22 @@ describe("what a catalogue row claims", () => {
     // download page for something that installs itself.
     show();
     const cline = row("Cline");
+    // The row's line: three words, which is all a scanning reader needs.
+    expect(cline.querySelector(".settings__agent-line")?.textContent).toBe(
+      en["settings.agents.row.nothingToInstall"],
+    );
+    // And the sentence that says *why* is one press in, not gone.
+    details(cline);
     expect(cline.textContent).toContain(
       en["settings.agents.row.needsNoInstall"]
         .replace("{package}", "cline@3.0.46")
         .replace("{agent}", "Cline"),
     );
     expect(cline.textContent).not.toContain(en["settings.agents.row.install"].split("{")[0]);
-    // …and the other shape gets the other sentence.
-    expect(row("goose").textContent).toContain(en["settings.agents.row.install"].split("{")[0]);
+    // …and the other shape gets the other line.
+    expect(row("goose").querySelector(".settings__agent-line")?.textContent).toContain(
+      en["settings.agents.row.install"].split("{")[0],
+    );
   });
 
   it("does not let an npx row read as verified, because only `npx` was measured", async () => {
@@ -558,6 +666,7 @@ describe("what a catalogue row claims", () => {
     const chip = await within(row("Cline")).findByText(en["settings.agents.row.readyNpx"]);
     expect(chip.textContent).toBe(en["settings.agents.row.readyNpx"]);
     expect(chip.textContent).not.toBe(en["settings.agent.ready"]);
+    details(row("Cline"));
     expect(row("Cline").textContent).toContain("not been downloaded yet");
 
     // A fresh render, because `row()` reads the first list in the document and two live trees would make
@@ -594,8 +703,9 @@ describe("what a catalogue row claims", () => {
       },
     );
     press(row("goose"), en["settings.agents.row.check"]);
+    await waitFor(() => expect(chipText(row("goose"))).toBe(en["settings.agent.refused"]));
+    details(row("goose"));
     await within(row("goose")).findByText(/older build/);
-    expect(chipText(row("goose"))).toBe(en["settings.agent.refused"]);
     // The row nobody asked about is untouched: a failure is about the row that was measured.
     expect(chipText(row("Cline"))).toBe(en["settings.agent.unchecked"]);
   });
@@ -605,21 +715,47 @@ describe("what a catalogue row claims", () => {
     // is non-empty. A daemon from the previous build refuses both methods, and a page that asked regardless
     // would answer a German user with "Method not found" four times — or, worse, render an empty catalogue as
     // "there are no agents", which is a claim about the product rather than about the build.
-    show({
-      hello: { ...state.hello!, methods: ["coder.hello", "coder.listHarnesses"] },
-      catalog: [],
-      providers: [],
-    });
+    show(
+      {
+        hello: { ...state.hello!, methods: ["coder.hello", "coder.listHarnesses"] },
+        catalog: [],
+        providers: [],
+      },
+      {},
+      { closed: true },
+    );
     expect(screen.getAllByText(en["settings.agents.olderDaemon"]).length).toBeGreaterThan(0);
     // The shipped agents still render from the method this daemon *does* serve.
     expect(within(shippedList()).getByText("Envoy Harness")).toBeTruthy();
-    // **And the catalogue's own surface is not rendered at all.** This is the assertion with teeth: the
-    // sentence above is also printed for the "Your agents" group, so a page that rendered the catalogue
-    // anyway would still satisfy it. What must not exist is the *search box over an empty list* — a user
-    // reading that concludes "there are no agents", which is a claim about the product rather than about the
-    // build this window is talking to.
+    // **And the catalogue's own surface is not offered at all.** This is the assertion with teeth, and the
+    // reason the case is rendered with `{ closed: true }`: the sentence above is also printed for the "Your
+    // agents" group, and since the slice that put the catalogue behind a *Browse* button, `.settings__catalog`
+    // is null on an untouched page anyway — so asserting on the list alone would pass on a page that offered a
+    // button opening nothing, which is the vacuous version of this test. What must not exist is the **entry
+    // point**: a *Browse the catalogue* button over no catalogue is a control that does nothing, and a user who
+    // pressed it would be told "there are no agents" — a claim about the product rather than about the build.
+    //
+    // Rendered closed *and* re-rendered open, so the two halves cannot be satisfied by the same accident: the
+    // press is attempted by name and must fail.
+    expect(screen.queryByRole("button", { name: en["settings.agents.catalog.browse"] })).toBeNull();
     expect(document.querySelector(".settings__catalog-search")).toBeNull();
     expect(document.querySelector(".settings__catalog")).toBeNull();
+    cleanup();
+    // …and on the daemon that *does* serve it, the same page offers both — so this test fails if the button
+    // is gated on the wrong thing (a hard-coded `false`, or a method name no build serves). Rendered
+    // **closed**, because that is the state in which the button reads *Browse*: `show()` opens the catalogue
+    // by default, and the label toggles to *Hide* once it has — so a case that pressed *Browse* and then
+    // asserted *Browse* was asserting the opposite of what it had just done.
+    show({}, {}, { closed: true });
+    const browse = screen.getByRole("button", { name: en["settings.agents.catalog.browse"] });
+    expect(browse.getAttribute("aria-expanded")).toBe("false");
+    expect(document.querySelector(".settings__catalog")).toBeNull();
+    // **The press is what is asserted, not the button.** `aria-expanded` false→true and a list that appears
+    // are two facts, and the failure this whole case exists for is a control that looks right and opens
+    // nothing.
+    press(document.body, en["settings.agents.catalog.browse"]);
+    expect(browse.getAttribute("aria-expanded")).toBe("true");
+    expect(document.querySelectorAll(".settings__catalog-row")).toHaveLength(catalog.length);
   });
 });
 
@@ -693,7 +829,10 @@ describe("adding an agent from the catalogue", () => {
     show();
     const cursor = row("Cursor");
     expect(within(cursor).queryByRole("button", { name: en["settings.agents.row.add"] })).toBeNull();
-    expect(cursor.textContent).toContain(en["settings.agents.row.builtIn"]);
+    // The label on the row is two words; the sentence it stands for is the `title`, which is where an
+    // explanation goes when the row may not carry one (`settings/density.ts`).
+    const label = within(cursor).getByText(en["settings.agents.row.builtIn.short"]);
+    expect(label.getAttribute("title")).toBe(en["settings.agents.row.builtIn"]);
   });
 });
 
@@ -729,9 +868,17 @@ describe("nothing on this page can take an agent out of a list", () => {
     for (const stale of ["Hide from my lists", "Show in my lists", "Hidden"]) {
       expect(document.body.textContent, `the page still says "${stale}"`).not.toContain(stale);
     }
-    // And a shipped agent's row carries exactly one button — its own sign-in, and only when the daemon says
-    // it wants one. Nothing beside it is a control over the *list* the agent appears in.
-    expect(within(rowFor("Envoy Harness")).queryAllByRole("button")).toEqual([]);
+    // And a shipped agent's row carries no button that acts on the *list*: the only controls an agent we ship
+    // has are its own sign-in (absent here — this fixture has not said it needs one) and the disclosure that
+    // unfolds its own facts. The assertion is on the **names**, not on the count, and that is a change this
+    // slice made deliberately: `queryAllByRole("button")).toEqual([])` was true when a row carried nothing but
+    // a Sign-in, and it would now fail on `Details` — a button that opens the row it belongs to and can no more
+    // shorten a list than a tooltip can.
+    expect(
+      within(rowFor("Envoy Harness"))
+        .queryAllByRole("button")
+        .map((button) => button.textContent ?? ""),
+    ).toEqual([en["settings.agents.row.details"]]);
   });
 
   it("removes an agent the user declared, in words that are not 'hide'", async () => {
@@ -787,8 +934,11 @@ describe("declaring an agent that is not in the catalogue", () => {
     // because choosing on the user's behalf is the one thing that field exists to prevent — and a form with a
     // default would move that guess from the schema into the UI, where it is invisible.
     const calls = show();
-    const form = document.querySelector(".settings__manual");
-    if (!(form instanceof HTMLElement)) throw new Error("the manual form was not rendered");
+    // **The form is behind its own button now**, and the absence is asserted rather than assumed: a form of
+    // five fields is the second-largest thing this page used to render, and it is one press from the
+    // count-carrying heading. `manualForm()` performs that press.
+    expect(document.querySelector(".settings__manual")).toBeNull();
+    const form = manualForm();
     fireEvent.change(within(form).getByLabelText(en["settings.agents.manual.label"]), {
       target: { value: "My Own Agent" },
     });
@@ -819,8 +969,7 @@ describe("declaring an agent that is not in the catalogue", () => {
     // bundled; `agent-catalog.ts` names that duplication and this is where it is held in step with a case that
     // a naive `.split(" ")` gets wrong.
     const calls = show();
-    const form = document.querySelector(".settings__manual");
-    if (!(form instanceof HTMLElement)) throw new Error("the manual form was not rendered");
+    const form = manualForm();
     fireEvent.change(within(form).getByLabelText(en["settings.agents.manual.label"]), {
       target: { value: "Spaced Agent" },
     });
@@ -869,8 +1018,7 @@ describe("declaring an agent that is not in the catalogue", () => {
         />
       </I18nProvider>,
     );
-    const form = document.querySelector(".settings__manual");
-    if (!(form instanceof HTMLElement)) throw new Error("the manual form was not rendered");
+    const form = manualForm();
     fireEvent.change(within(form).getByLabelText(en["settings.agents.manual.label"]), {
       target: { value: "Kes Agent" },
     });
@@ -892,8 +1040,7 @@ describe("declaring an agent that is not in the catalogue", () => {
 
   it("states the rule the schema enforces, before the press", () => {
     show();
-    const form = document.querySelector(".settings__manual");
-    if (!(form instanceof HTMLElement)) throw new Error("the manual form was not rendered");
+    const form = manualForm();
     expect(within(form).getByText(en["settings.agents.manual.env.detail"])).toBeTruthy();
     expect(within(form).getByText(en["settings.agents.manual.transport.detail"])).toBeTruthy();
   });

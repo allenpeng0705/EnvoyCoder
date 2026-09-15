@@ -43,7 +43,7 @@ import {
   ProjectSchema,
   type Task,
   TaskSchema,
-  withoutRetiredSettingsKeys,
+  readCoderSettingsDocument,
 } from "@envoycoder/protocol";
 import type { CoderPaths } from "@envoycoder/host-bridge";
 import { projectIdFor, resolveTaskDefaults, taskIdFor } from "@envoycoder/task-model";
@@ -319,28 +319,72 @@ export class CoderStore {
 
   /* ────────────────────────────── reading ────────────────────────────── */
 
-/**
- * The user's settings, with the keys this build has retired dropped before the schema sees them.
- *
- * The `.strict()` schema plus the quarantine below is the right treatment for a file we cannot
- * understand — but it is the wrong treatment for a file we understand *perfectly* and have simply
- * stopped using. Two keys are that case. `allowRemoteRuns` was removed by settings slice 1 because
- * nothing read it. `hiddenAgents` was **deleted** because the feature it fed should not exist — a stored
- * filter that could take an agent we ship out of the product's own lists — and that difference does not
- * change the migration: the old file is understood perfectly, its `hiddenAgents` list is simply ignored
- * (nothing reads lists of agents out of settings any more), and without this strip an upgrading user's
- * whole settings file would be quarantined, taking their language, their default agent and their
- * nominated folder with it. See `RETIRED_SETTINGS_KEYS` in the protocol, which carries the reasoning
- * behind the deletion.
- */
-private async readSettings(): Promise<CoderSettings> {
-  const raw = await this.files.readJson(this.paths.settingsFile);
-  if (raw === undefined) return DEFAULT_CODER_SETTINGS;
-  const parsed = CoderSettingsSchema.safeParse(withoutRetiredSettingsKeys(raw));
-  if (parsed.success) return parsed.data;
-  await this.files.quarantine(this.paths.settingsFile, `settings did not match the schema: ${parsed.error.message}`);
-  return DEFAULT_CODER_SETTINGS;
-}
+  /**
+   * The user's settings: **read tolerantly by construction, quarantined only when there is nothing to
+   * keep.**
+   *
+   * ## The failure mode this replaces, in the words of the report that found it
+   *
+   * *"`hiddenAgents` had to go into `RETIRED_SETTINGS_KEYS`, or the strict schema would have quarantined
+   * an upgrading user's entire settings file (language, folder, default agent) over a list nothing reads."*
+   * That is true, and it is the wrong shape of rule. A settings file is **the user's data**; one
+   * unrecognised key must never cost them the other four, and it must never need a maintainer to remember
+   * a list *before* deleting a field. Both halves of that sentence are defects: the first is what
+   * happened, the second is what would have happened next time.
+   *
+   * ## Three outcomes, and the line between them
+   *
+   * | what is on disk | what happens | why |
+   * |---|---|---|
+   * | a document with a key this build does not have — retired or never shipped | **the key is dropped and noted; every other setting is kept** | we understand the document perfectly apart from a field nothing here reads. Losing a language, a folder and a default agent to it is not caution, it is destruction |
+   * | bytes that are not JSON, or JSON that is not one object | **quarantined** | there is no document here to keep anything *from*. The bytes are moved aside, not overwritten, so a user can still read them |
+   * | a document whose *values* we refuse — the right key with the wrong type | **quarantined** | the same. `keepTranscripts: "yes"` has no reading we could honestly pick, and guessing at a control plane's own configuration is worse than the defaults plus a sentence saying so |
+   *
+   * The distinction the middle rows share is the one the first row exists for: **prune keys, refuse
+   * values.** A key we do not have is not an unreadable file.
+   *
+   * ## Why the file is not rewritten when a key is dropped
+   *
+   * The collection reader rewrites a list after skipping a bad row, so the warning appears once instead of
+   * on every launch. Deliberately **not** copied here, because the situations are not the same shape. A
+   * skipped row is a row this build cannot represent, and keeping it in the file means keeping something
+   * that will never load. An unknown *settings* key is far more often a key from a **newer** build —
+   * the user ran a newer EnvoyCoder, then an older one — and rewriting the file would delete that
+   * setting permanently, from a version that does read it. So the bytes are left exactly as they are,
+   * the note is repeated until the user's next settings write (which necessarily drops the key, because
+   * what is written is the parsed object), and nothing is destroyed behind their back.
+   *
+   * ## Why the note is a note rather than a refusal
+   *
+   * `notes()` is the mechanism the window already shows, and the reason it is the right one here is that
+   * there is nothing for the user to *do*: the drop is correct, the rest of their settings are in force,
+   * and the only action available would be to re-add a key this build has no reader for.
+   */
+  private async readSettings(): Promise<CoderSettings> {
+    const raw = await this.files.readJson(this.paths.settingsFile);
+    if (raw === undefined) return DEFAULT_CODER_SETTINGS;
+
+    const read = readCoderSettingsDocument(raw);
+    switch (read.kind) {
+      case "ok":
+        if (read.dropped.length > 0) {
+          this.files.noteDroppedSettingsKeys(this.paths.settingsFile, read.dropped);
+        }
+        return read.settings;
+      case "not-a-document":
+        await this.files.quarantine(
+          this.paths.settingsFile,
+          `settings: expected one object of settings, found ${read.found}`,
+        );
+        return DEFAULT_CODER_SETTINGS;
+      case "refused":
+        await this.files.quarantine(
+          this.paths.settingsFile,
+          `settings did not match the schema: ${read.issues}`,
+        );
+        return DEFAULT_CODER_SETTINGS;
+    }
+  }
 
   /* ────────────────────────────── mutations ────────────────────────────── */
 

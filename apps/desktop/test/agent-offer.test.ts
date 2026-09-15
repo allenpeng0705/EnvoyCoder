@@ -24,9 +24,9 @@
  *      not. A picker that dropped it would decide on the user's behalf about an agent they configured.
  *   3. **The order is by how usable the answer says the agent is**, `ready` first, and the incoming order is
  *      preserved inside a rank so the catalogue's own ordering survives.
- *   4. **The setting that used to drive it is retired, not merely unread** — the old key is stripped before the
- *      strict schema sees it, so an upgrading user's settings file is not quarantined over a list nothing
- *      consults. Without that, the deletion itself would cost a user their language and their default agent.
+ *   4. **The setting that used to drive it is retired, not merely unread** — the old key is dropped by the
+ *      tolerant settings read, so an upgrading user's settings file keeps its language and its default
+ *      agent. Without that, the deletion itself would have cost them their settings.
  */
 
 import { describe, expect, it } from "vitest";
@@ -34,7 +34,7 @@ import { describe, expect, it } from "vitest";
 import {
   CoderSettingsSchema,
   RETIRED_SETTINGS_KEYS,
-  withoutRetiredSettingsKeys,
+  readCoderSettingsDocument,
 } from "@envoycoder/protocol";
 import type { HarnessAvailability, HarnessState, HarnessSummary } from "@envoycoder/protocol";
 
@@ -147,12 +147,11 @@ describe("what a picker offers is derived, and nothing stored can shorten it", (
 });
 
 describe("the preference is retired rather than left unread", () => {
-  it("strips the old key, so an upgrading settings file keeps everything else", () => {
+  it("drops the old key, so an upgrading settings file keeps everything else", () => {
     // **The half of a deletion that is easy to get wrong.** `CoderSettingsSchema` is `.strict()` and a file it
     // rejects is *quarantined* — moved aside and replaced by the defaults — so removing the field from the
-    // schema without retiring the key would silently cost an upgrading user their language, their default
-    // agent and their folder the first time the new build read the old file. A deletion is not an excuse to
-    // lose somebody's settings, and this is the assertion that says so.
+    // schema used to cost an upgrading user their language, their default agent and their folder the first
+    // time the new build read the old file. A deletion is not an excuse to lose somebody's settings.
     expect(RETIRED_SETTINGS_KEYS).toContain("hiddenAgents");
 
     // The shape an old file has: the fields this build keeps, plus the list it no longer has.
@@ -163,17 +162,21 @@ describe("the preference is retired rather than left unread", () => {
       language: "de",
       hiddenAgents: ["codex", "cursor"],
     };
-    // Rejected on its own — which is exactly why the strip exists.
+    // The strict schema still refuses the document on its own — which is *why* the tolerant read exists,
+    // and why "the schema is strict" and "the read is lenient" are not in conflict: the pruning happens
+    // before the parse, and the parse is what stays uncompromising about **values**.
     expect(CoderSettingsSchema.safeParse(old).success).toBe(false);
 
-    // And the key is stripped for *any* value, including the malformed one the old build quarantined: the
+    // And the key is dropped for *any* value, including the malformed one the old build quarantined: the
     // field is gone from this build, so a value under it is not a file we cannot understand, it is a value
-    // nothing reads. `domain.ts` carries that argument where the list lives.
+    // nothing reads. `domain.ts` carries that argument where the reader lives.
     for (const value of [["codex"], "codex", [], 42, null]) {
-      const parsed = CoderSettingsSchema.safeParse(
-        withoutRetiredSettingsKeys({ ...old, hiddenAgents: value }),
-      );
-      expect(parsed.success, `hiddenAgents: ${JSON.stringify(value)} quarantined the file`).toBe(true);
+      const read = readCoderSettingsDocument({ ...old, hiddenAgents: value });
+      expect(read.kind, `hiddenAgents: ${JSON.stringify(value)} quarantined the file`).toBe("ok");
+      if (read.kind !== "ok") continue;
+      expect(read.settings.language).toBe("de");
+      expect(read.settings.defaults.harness).toBe("deepseek-harness");
+      expect(read.dropped).toEqual([{ path: "hiddenAgents", retired: true }]);
     }
   });
 });

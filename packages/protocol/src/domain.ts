@@ -1206,12 +1206,26 @@ export const CoderSettingsSchema = z
 /**
  * Settings keys this build used to store and no longer has.
  *
- * **Read-side migration, and it is not optional.** `CoderSettingsSchema` is `.strict()`, and a
- * settings file that fails to parse is *quarantined* — moved aside and replaced by the defaults
- * (`daemon/store.ts`). So dropping a field from the schema without this list would silently cost an
- * upgrading user their language, their default agent and their folder the first time the new daemon
- * read the old file. A retired key is stripped before the schema sees it, which is the honest
- * treatment: the value was never read by anything, so there is nothing to migrate it into.
+ * ## This list is explanatory, and it is deliberately not load-bearing
+ *
+ * It used to be load-bearing: `CoderSettingsSchema` is `.strict()` and a settings file that fails to
+ * parse was *quarantined*, so a field dropped from the schema without an entry here would have cost an
+ * upgrading user their language, their default agent and their nominated folder — the whole document
+ * — over one dead key. That is the wrong failure mode for a file that is **the user's data**, and it
+ * put a maintainer's memory in the critical path of every future deletion: forget the list, lose
+ * somebody's settings.
+ *
+ * It is not how the read works any more. `readCoderSettingsDocument` below drops **any** key the schema
+ * does not have — retired or never shipped by us — and keeps every key it does, so an absent entry here
+ * costs a slightly less specific sentence in the startup note and nothing else. What remains is a
+ * *vocabulary*: membership turns "this build does not recognise `hiddenAgents`" into the more useful
+ * "this build used to have `hiddenAgents` and does not any more", which is a different sentence for the
+ * user because it names a deletion rather than an unrecognised key.
+ *
+ * **The honest test of "not load-bearing" is that deleting this constant would break no behaviour** —
+ * only the wording of two notes. `apps/desktop/test/settings-store.test.ts` asserts exactly that, with
+ * the retired-key case and the never-heard-of-it case producing the same *kept settings* and different
+ * sentences.
  *
  * `allowRemoteRuns` is the first entry, removed by settings slice 1: the switch promised to share this
  * machine's agents with the user's other machines, nothing read it, and `coder.offerRemoteRun` had no
@@ -1232,14 +1246,160 @@ export const CoderSettingsSchema = z
  */
 export const RETIRED_SETTINGS_KEYS: readonly string[] = ["allowRemoteRuns", "hiddenAgents"];
 
-/** Drop retired keys, so an older settings file still parses. */
-export function withoutRetiredSettingsKeys(value: unknown): unknown {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
-  const out: Record<string, unknown> = { ...(value as Record<string, unknown>) };
-  for (const key of RETIRED_SETTINGS_KEYS) delete out[key];
-  return out;
+/** One key a settings document carried that this build does not have. */
+export interface DroppedSettingsKey {
+  /** The key's path inside the document: `hiddenAgents`, or `defaults.somethingNew`. */
+  readonly path: string;
+  /**
+   * True when this build *used to* have the key (it is in `RETIRED_SETTINGS_KEYS`), false when no build
+   * of EnvoyCoder ever shipped it. Two causes, two sentences — see the constant's doc.
+   */
+  readonly retired: boolean;
 }
 
+/**
+ * What reading a settings document produced.
+ *
+ * **Two ways to be unusable, and they are deliberately different events.** A file that is not a settings
+ * *document* at all (a list, a string, `null` — or bytes that are not JSON, which the caller detects
+ * before this) is unreadable, and there is nothing to salvage: that is the quarantine case. A document
+ * whose *values* this build refuses (the right key, the wrong type) is the other one, and it is refused
+ * for the same reason: nothing here can guess what `keepTranscripts: "yes"` was meant to mean, and
+ * guessing on a control plane's own configuration is worse than saying so.
+ *
+ * Neither is the case this exists for. A key we simply do not have is **not** an unreadable file: the
+ * document is perfectly understood apart from a field nothing here reads, and one such key must never
+ * cost the user the rest of their settings.
+ */
+export type CoderSettingsRead =
+  | {
+      readonly kind: "ok";
+      readonly settings: CoderSettings;
+      /** Empty in the ordinary case; the keys that were dropped, in document order, when it is not. */
+      readonly dropped: readonly DroppedSettingsKey[];
+    }
+  | { readonly kind: "not-a-document"; readonly found: string }
+  | { readonly kind: "refused"; readonly issues: string };
+
+/**
+ * Read a settings document **tolerantly by construction**: unknown keys are dropped, known ones are kept.
+ *
+ * ## Why this is a function in the protocol rather than a line in the daemon
+ *
+ * The rule it keeps is a rule about the *shape*, and the shape is here. Writing it in the daemon would
+ * mean either a hand-written list of settings keys (which is the same "remember to update it" failure
+ * the retired list just stopped being) or the daemon reaching into Zod internals itself. Deriving the
+ * known keys from `CoderSettingsSchema` means a field added to the schema is readable the day it is
+ * added, and a field removed **from** the schema is droppable the day it is removed, with no list to
+ * edit in either direction.
+ *
+ * ## Why the schema keeps `.strict()`
+ *
+ * Reading is tolerant; *producing* is not. The schema is also the wire shape of `coder.getSettings`'s
+ * result, and a stored document this build writes must still be one whose every key the schema knows —
+ * otherwise the read path's tolerance would become a licence for the daemon to write anything. So the
+ * pruning happens here, on the way in, and the parse after it stays strict: every key in `pruned` is
+ * one the schema has, so `.strict()` can only fail on a *value*, which is exactly the second case above.
+ *
+ * Nine lines below this comment spell out the difference the whole change is about:
+ * `{language: "de", keepTranscripts: true, hiddenAgents: [...]}` **parses**, with `hiddenAgents`
+ * dropped and `language` kept. It used to be rejected whole, and rejection means quarantine.
+ */
+export function readCoderSettingsDocument(value: unknown): CoderSettingsRead {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return { kind: "not-a-document", found: describeFound(value) };
+  }
+  const pruned = pruneUnknownSettingsKeys(CoderSettingsSchema, value, "");
+  const parsed = CoderSettingsSchema.safeParse(pruned.value);
+  if (!parsed.success) {
+    return {
+      kind: "refused",
+      issues: parsed.error.issues
+        .map((issue) => `${issue.path.join(".") || "(the document)"}: ${issue.message}`)
+        .join("; "),
+    };
+  }
+  return { kind: "ok", settings: parsed.data, dropped: pruned.dropped };
+}
+
+/** How a value that is not a settings document is described in a note, in end-user words. */
+function describeFound(value: unknown): string {
+  if (value === null) return "null"
+  if (Array.isArray(value)) return "a list"
+  return `a ${typeof value}`
+}
+
+/**
+ * Drop every key the schema does not have, at every level the schema reaches.
+ *
+ * Recursion is the point rather than a flourish: `defaults` is an object with a `.strict()` schema of
+ * its own, so a key that no build ever shipped *inside* it would have refused the whole document in
+ * exactly the way a top-level unknown key did. Making one level tolerant and leaving the next strict
+ * would be a fix that moves the catastrophe one object deeper.
+ *
+ * A key inside a value that is not an object is left alone: `defaults: "broken"` is a wrong *value*,
+ * not an unknown key, and the parse after this refuses it. That division is the whole contract — prune
+ * *keys*, refuse *values*.
+ */
+function pruneUnknownSettingsKeys(
+  schema: z.ZodTypeAny,
+  value: unknown,
+  prefix: string,
+): { value: unknown; dropped: DroppedSettingsKey[] } {
+  const shape = objectShapeOf(schema);
+  if (shape === undefined || value === null || typeof value !== "object" || Array.isArray(value)) {
+    return { value, dropped: [] };
+  }
+  const kept: Record<string, unknown> = {};
+  const dropped: DroppedSettingsKey[] = [];
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    const path = prefix === "" ? key : `${prefix}.${key}`;
+    const field = shape[key];
+    if (field === undefined) {
+      // **Reported with the path it had, and whether we used to have it.** `prefix === ""` is what makes
+      // the retired list apply only to top-level keys, which is where every entry is: a nested path that
+      // happened to spell `hiddenAgents` is not the field that was deleted.
+      dropped.push({ path, retired: prefix === "" && RETIRED_SETTINGS_KEYS.includes(key) });
+      continue;
+    }
+    const nested = pruneUnknownSettingsKeys(field, entry, path);
+    kept[key] = nested.value;
+    dropped.push(...nested.dropped);
+  }
+  return { value: kept, dropped };
+}
+
+/**
+ * The shape of an object schema, seen through the wrappers that do not change what it is.
+ *
+ * `defaultProjectPath: z.string().min(1).optional()` is an optional *string*, and `language` is an
+ * optional enum: neither is an object, so neither has keys to prune, and the unwrapping stops there.
+ * The chain exists so that `defaults` — a required object with a `.strict()` schema of its own — is
+ * found whether a later edit wraps it in `.optional()` or gives it a default.
+ */
+function objectShapeOf(schema: z.ZodTypeAny): Record<string, z.ZodTypeAny> | undefined {
+  let current: z.ZodTypeAny = schema;
+  for (let depth = 0; depth < 8; depth += 1) {
+    if (current instanceof z.ZodOptional || current instanceof z.ZodNullable) {
+      current = current.unwrap();
+      continue;
+    }
+    if (current instanceof z.ZodDefault) {
+      current = current.removeDefault();
+      continue;
+    }
+    break;
+  }
+  return current instanceof z.ZodObject ? (current.shape as Record<string, z.ZodTypeAny>) : undefined;
+}
+
+/**
+ * The parse a writer uses, which stays strict.
+ *
+ * Kept beside the tolerant reader so the pair reads as one decision: **what we write must be a shape we
+ * understand; what we read only has to contain one.** A caller that used this on a document read from
+ * disk would get the old, catastrophic behaviour back.
+ */
 export function parseCoderSettings(value: unknown): CoderSettings {
   return CoderSettingsSchema.parse(value);
 }

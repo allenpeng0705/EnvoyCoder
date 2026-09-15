@@ -65,6 +65,39 @@ unreadable exactly when it matters most — ten agents running.
 Status → colour is fixed and semantic: blue working, amber needs you, red stopped with an error,
 green finished, grey queued/idle. A colour that means two things means nothing.
 
+### 3.1 The same law on the settings pages, and it was not being kept
+
+A settings row follows the same anatomy: **a name, a state, and at most one short line** — the
+*actionable* fact, which is the command to run, the fix, or the three words that name what to do. An
+explanation belongs in the title's `title`, in a `Details` disclosure, or in these documents. It does
+not belong on the page.
+
+The row it was written for: the Agents page measured **15,139 visible characters over 12.97 screens**
+with a single row of **575**, and 71% of it was thirty-eight recipes rendered expanded
+(`docs/settings-parity.md` §7.14–§7.15 carries the before-and-after numbers, the three budgets and the
+script that produces them). The budgets are enforced by `apps/desktop/test/settings-density.test.tsx`
+rather than by review, and that is the part worth copying: *"too much text"* is a judgement no reviewer
+catches one sentence at a time, and a number is.
+
+One consequence generalises past settings: **a third-party string is not exempt from the rule.** The
+catalogue's own `AvailabilityFix.command` fields are sometimes 127 characters of English prose in a
+field named `command`, so a row that shows a fix *branches* on whether it is a command — printing one
+verbatim and replacing the other with a short phrase whose whole text is one press away. Dropping the
+string would be worse; a clamp would make the budget unfalsifiable.
+
+**What was taken from the reference product, and the one place this departs from it.** Paseo's agent
+rows (`packages/app/src/agent-profiles/settings/agent-profile-row.tsx`, read-only reference) already
+have the shape this slice copied — and copying the *shape* rather than the code is what the family guide
+asks for:
+
+| their decision | ours |
+|---|---|
+| a row is a **one-line title plus a muted summary on the same line** | the same anatomy, with the line under the name so a column of names stays a column |
+| the summary is **derived tags** — provider · model · mode · thinking — not a sentence written per row | the same: the line is a fact the row already holds (the tier, the fix, "nothing to install"), never prose |
+| notes are a **separate block** from the title line, clamped to two lines, with an icon marking what they are | a `Details` disclosure instead, because this pane's rows already carry a disclosure and a second visual vocabulary for "there is more" is a second thing to learn |
+| row actions are **ghost icon buttons with an `accessibilityLabel` naming the row** | the same: `Details for Cursor`, `Remove` with `Forget {agent}` in its title |
+| **`numberOfLines={1}`** clamps the summary so a long string cannot grow the row | **deliberately not copied.** We branch and budget instead, for one reason: a clamp makes the rule unfalsifiable — a 300-character summary would render as a tidy one-liner and no test could tell. Paseo is a React Native app where a clamp is a layout guarantee; here the whole complaint was that text creeps back one sentence at a time, so the length has to be a *failure* and not a crop |
+
 ## 4. Status buckets
 
 | Bucket | Meaning | Rail wording |
@@ -122,7 +155,9 @@ contract, and the inline question a destructive item asks), `TaskPane` (header f
 inline approval, composer with Queue/Steer), `CommandCenter` (typed `action`/`choice`
 contributions, arguments collected in the same box), `SettingsPane` (app-wide defaults, per-agent
 capability honesty, and the three levels of its own navigation: this machine's settings, the projects
-page, and one project's defaults), `MeshStatusBar` (mesh
+page, and one project's defaults), `settings/AgentRow` (the one row anatomy every agent list shares:
+name, state chips, one actionable line, and a `Details` disclosure for everything else — see §3.1),
+`MeshStatusBar` (mesh
 state in end-user words), and the store behind them:
 
 ```

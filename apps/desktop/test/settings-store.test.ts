@@ -16,9 +16,13 @@
  *      directions fail differently: a merged project default would leave the agent undefined when the
  *      user only changed the model, and a replaced app default would wipe a model chosen in another
  *      window. Both are asserted, because a comment cannot hold a rule that a spread operator obeys.
- *   3. **A retired key does not cost the user their settings file.** `CoderSettingsSchema` is
- *      `.strict()` and an unreadable file is quarantined, so removing a field without a read-side
- *      strip would take an upgrading user's language, agent and nominated folder with it.
+ *   3. **A key this build does not have does not cost the user their settings file.** The read is
+ *      tolerant by construction: an unknown or retired key is dropped and noted, every other setting is
+ *      kept, and quarantine is left for the two cases that really are unreadable — bytes that are not a
+ *      settings document, and a known key holding a value we refuse. The old rule here was the opposite
+ *      (one unknown key quarantined the whole file) and it needed a maintainer to remember a list before
+ *      deleting a field; the tests below pin both halves of that correction, and assert that the list is
+ *      no longer load-bearing at all.
  *   4. **The app defaults actually reach a created task.** This is the wiring the pane's controls
  *      promise, asserted where it happens — `createTask` → `resolveTaskDefaults` — rather than where
  *      it is rendered.
@@ -172,55 +176,200 @@ describe("where a new task's defaults come from", () => {
   });
 });
 
-describe("a settings file written by an older build", () => {
-  it("is read, not quarantined, when the only thing wrong with it is a key we retired", async () => {
-    // `allowRemoteRuns` was removed by settings slice 1 because nothing read it. The file it left behind
-    // is one this build understands *perfectly* apart from that key, so `withoutRetiredSettingsKeys`
-    // strips it before the strict schema sees it. Without that, the quarantine path would take the
-    // user's language, their default agent and their nominated folder to discard one dead value.
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-retired-"));
+describe("a settings file this build does not fully recognise", () => {
+  /**
+   * Open a store over a throwaway home whose `settings.json` is exactly `document` — as **bytes**, so a
+   * test can hand it something that is not JSON at all as easily as it can hand it a document.
+   *
+   * The file is written through `writeFile` rather than through the store on purpose: the defect these
+   * tests are about is what a *previous* build left on disk, and a store that wrote the file would write
+   * the shape it currently understands, which is the one thing the test must not supply.
+   */
+  async function reopened(document: string): Promise<{
+    store: CoderStore;
+    settingsFile: () => Promise<string>;
+  }> {
+    const home = await mkdtemp(join(tmpdir(), "envoycoder-tolerant-"));
     const paths = coderPaths(home);
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     await CoderStore.open({ paths });
-    await writeFile(
-      paths.settingsFile,
-      JSON.stringify({
-        defaultProjectPath: "/Users/you/work",
-        defaults: { harness: "deepseek-harness" },
-        requireApprovalForDestructive: false,
-        allowRemoteRuns: false,
-        keepTranscripts: true,
-        language: "ko",
-      }),
-      "utf8",
-    );
-
+    await writeFile(paths.settingsFile, document, "utf8");
     const store = await CoderStore.open({ paths });
+    return { store, settingsFile: () => readFile(paths.settingsFile, "utf8") };
+  }
+
+  /** A file with every setting this build honours set to a non-default value, so "kept" is provable. */
+  const KNOWN_AND_SET = {
+    defaultProjectPath: "/Users/you/work",
+    defaults: { harness: "deepseek-harness" },
+    requireApprovalForDestructive: false,
+    keepTranscripts: false,
+    language: "ko",
+  } as const;
+
+  /** What a user must still have after a key we do not know is dropped. Asserted in four places. */
+  const KEPT: readonly [string, (store: CoderStore) => unknown, unknown][] = [
+    ["language", (store) => store.settings().language, "ko"],
+    ["defaultProjectPath", (store) => store.settings().defaultProjectPath, "/Users/you/work"],
+    ["defaults.harness", (store) => store.settings().defaults.harness, "deepseek-harness"],
+    [
+      "requireApprovalForDestructive",
+      (store) => store.settings().requireApprovalForDestructive,
+      false,
+    ],
+    ["keepTranscripts", (store) => store.settings().keepTranscripts, false],
+  ];
+
+  it("keeps every setting it knows and notes the key it dropped", async () => {
+    // **The defect, in the words of the report that found it:** *"`hiddenAgents` had to go into
+    // `RETIRED_SETTINGS_KEYS`, or the strict schema would have quarantined an upgrading user's entire
+    // settings file (language, folder, default agent) over a list nothing reads."*
+    //
+    // **The mutation this fails on:** putting `.strict()` back in the read path without the prune — i.e.
+    // `CoderSettingsSchema.safeParse(raw)` instead of `readCoderSettingsDocument(raw)`. The file below is
+    // then rejected whole, `quarantined` is non-empty, and every one of the five assertions goes red. The
+    // second mutation it fails on is a prune that reports the drop but does not *keep* the rest, which is
+    // the same catastrophe with a nicer note.
+    const { store } = await reopened(JSON.stringify({ ...KNOWN_AND_SET, zzNotAField: 1 }));
+
     expect(store.notes().quarantined).toEqual([]);
-    expect(store.settings().language).toBe("ko");
-    expect(store.settings().defaultProjectPath).toBe("/Users/you/work");
-    expect(store.settings().defaults.harness).toBe("deepseek-harness");
-    expect(store.settings().requireApprovalForDestructive).toBe(false);
-    // And the key itself is not resurrected anywhere the window could render it.
-    expect(Object.keys(store.settings())).not.toContain("allowRemoteRuns");
+    for (const [what, read, expected] of KEPT) {
+      expect(read(store), `${what} was lost to one unknown key`).toEqual(expected);
+    }
+    // The dropped key is not resurrected anywhere the window could render it — and it is *named*, so the
+    // user can see which line of their file is doing nothing.
+    expect(Object.keys(store.settings())).not.toContain("zzNotAField");
+    expect(store.notes().droppedKeys).toEqual([
+      { file: "settings.json", keys: [{ path: "zzNotAField", retired: false }] },
+    ]);
   });
 
-  it("is still quarantined when it holds something this build genuinely cannot read", async () => {
-    // The rule the strip must not weaken: a key we know about is dropped, and a key we do not is still
-    // the reason to move the bytes aside rather than overwrite them.
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-unknown-"));
-    const paths = coderPaths(home);
-    cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
-    await CoderStore.open({ paths });
-    await writeFile(
-      paths.settingsFile,
-      JSON.stringify({ ...DEFAULT_CODER_SETTINGS, somethingNobodyDefined: true }),
-      "utf8",
+  it("keeps every setting it knows and notes a key this build retired as a deletion", async () => {
+    // A retired key and a key we have never heard of are dropped by the *same* mechanism — that is the
+    // whole point of the change, and the only thing `RETIRED_SETTINGS_KEYS` adds is the sentence. So the
+    // assertions here are deliberately the same set as above, with one difference at the end.
+    const { store } = await reopened(
+      JSON.stringify({ ...KNOWN_AND_SET, allowRemoteRuns: false, hiddenAgents: ["codex"] }),
     );
 
-    const store = await CoderStore.open({ paths });
+    expect(store.notes().quarantined).toEqual([]);
+    for (const [what, read, expected] of KEPT) {
+      expect(read(store), `${what} was lost to two retired keys`).toEqual(expected);
+    }
+    expect(store.notes().droppedKeys).toEqual([
+      {
+        file: "settings.json",
+        keys: [
+          { path: "allowRemoteRuns", retired: true },
+          { path: "hiddenAgents", retired: true },
+        ],
+      },
+    ]);
+  });
+
+  it("drops an unknown key **inside** a nested object too, rather than refusing the document", async () => {
+    // **The mutation this fails on:** pruning only the top level of the document — a `for` loop over
+    // `Object.keys(raw)` with a hard-coded settings-key list, which is the obvious wrong implementation.
+    // `defaults` has a `.strict()` schema of its own, so a single unknown key inside it refuses the whole
+    // file in exactly the way a top-level one did. A fix that moves the catastrophe one object deeper is
+    // not a fix.
+    const { store } = await reopened(
+      JSON.stringify({
+        ...KNOWN_AND_SET,
+        defaults: { harness: "deepseek-harness", zzNotAField: "x" },
+      }),
+    );
+
+    expect(store.notes().quarantined).toEqual([]);
+    expect(store.settings().defaults).toEqual({ harness: "deepseek-harness" });
+    expect(store.settings().language).toBe("ko");
+    expect(store.notes().droppedKeys).toEqual([
+      { file: "settings.json", keys: [{ path: "defaults.zzNotAField", retired: false }] },
+    ]);
+  });
+
+  it("leaves the dropped key on disk, because a newer build is likelier than garbage", async () => {
+    // **The mutation this fails on:** copying `readCollection`'s rewrite-after-skip. The list reader
+    // rewrites so a warning is not repeated every launch, and copying that here would delete a setting a
+    // *newer* EnvoyCoder reads — a user who runs a newer build in another window, or who downgrades and
+    // upgrades again, would find the value gone. So the note repeats, and the bytes stay.
+    const document = JSON.stringify({ ...KNOWN_AND_SET, zzNotAField: 1 });
+    const { store, settingsFile } = await reopened(document);
+
+    expect(store.notes().droppedKeys).toHaveLength(1);
+    expect(await settingsFile()).toBe(document);
+  });
+
+  it("is still quarantined when the bytes are not JSON at all", async () => {
+    // **Unreadable is a different event from unrecognised, and it keeps the old treatment.** There is no
+    // document here to keep anything *from*, so the bytes are moved aside — not overwritten — and the
+    // daemon carries on with the defaults and says so.
+    //
+    // **The mutation this fails on:** making the tolerant read swallow a parse failure and return the
+    // defaults, which would silently discard a file a user could otherwise recover by hand.
+    const { store } = await reopened("{ this is not JSON");
     const [note] = store.notes().quarantined;
+
     expect(note?.file).toContain("settings.json");
-    expect(store.settings().language).toBe(DEFAULT_CODER_SETTINGS.language);
+    expect(note?.movedTo).not.toBe("");
+    expect(store.settings()).toEqual(DEFAULT_CODER_SETTINGS);
+  });
+
+  it("is still quarantined when the JSON is not one object of settings", async () => {
+    // A list of settings is not a settings document. Dropping keys out of an array would be "tolerance"
+    // that invents a reading nobody wrote, so this is the second unreadable case rather than a third kind
+    // of tolerance.
+    const { store } = await reopened(JSON.stringify([KNOWN_AND_SET]));
+
+    expect(store.notes().quarantined).toHaveLength(1);
+    expect(store.notes().droppedKeys).toEqual([]);
+    expect(store.settings()).toEqual(DEFAULT_CODER_SETTINGS);
+  });
+
+  it("is still quarantined when a key it knows holds a value it cannot read", async () => {
+    // **The rule the tolerance must not weaken, and the line it is drawn on: prune keys, refuse values.**
+    // `keepTranscripts` is a key this build has; `"yes"` is not a boolean and there is no honest reading
+    // of it. Guessing at a control plane's own configuration is worse than the defaults plus a sentence.
+    //
+    // **The mutation this fails on:** making the prune also coerce or strip *invalid* known keys — e.g.
+    // deleting every key whose schema validation fails, or `z.coerce.boolean()`. Either would take this
+    // file's four good settings, keep them, and silently reinterpret the fifth.
+    const { store } = await reopened(JSON.stringify({ ...KNOWN_AND_SET, keepTranscripts: "yes" }));
+    const [note] = store.notes().quarantined;
+
+    expect(note?.file).toContain("settings.json");
+    expect(store.settings()).toEqual(DEFAULT_CODER_SETTINGS);
+  });
+
+  it("is still quarantined when a required key is missing entirely", async () => {
+    // The other half of "wrong-shaped": the document is not a settings document because the things every
+    // settings document has are not in it. There is nothing to fall back to field by field, and inventing
+    // a value for `defaults` would be the pane's own defect (`docs/settings-parity.md` §7.1) in a new
+    // place. The mutation this fails on is defaulting missing object fields instead of refusing them.
+    const { store } = await reopened(
+      JSON.stringify({ requireApprovalForDestructive: true, keepTranscripts: true }),
+    );
+
+    expect(store.notes().quarantined).toHaveLength(1);
+    expect(store.settings()).toEqual(DEFAULT_CODER_SETTINGS);
+  });
+
+  it("is not rescued by adding a key to `RETIRED_SETTINGS_KEYS`, because nothing depends on the list", async () => {
+    // **The property the report asked for, asserted directly:** the list must stop being load-bearing. A
+    // key that is *not* on it is dropped and everything else kept, in exactly the same way a listed key
+    // is. The only difference is the sentence, and that difference is asserted by name in
+    // `settings-notes.test.ts` — so if a future slice deletes the constant entirely, every line of this
+    // test still passes and only the wording changes.
+    //
+    // **The mutation this fails on:** restoring any dependence on membership — a `if (!RETIRED.has(key))
+    // return refuse()` guard, or a prune that only removes keys the list names. Both leave
+    // `zzNeverShippedByUs` in the document and, with the schema still `.strict()`, quarantine the file.
+    const { store } = await reopened(JSON.stringify({ ...KNOWN_AND_SET, zzNeverShippedByUs: [1] }));
+
+    expect(store.notes().quarantined).toEqual([]);
+    expect(store.settings().language).toBe("ko");
+    expect(store.notes().droppedKeys[0]?.keys).toEqual([
+      { path: "zzNeverShippedByUs", retired: false },
+    ]);
   });
 });

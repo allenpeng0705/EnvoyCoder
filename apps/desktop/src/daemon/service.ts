@@ -772,6 +772,10 @@ async function defaultIsDirectory(path: string): Promise<boolean> {
 export function describeStoreNotes(notes: {
   quarantined: readonly { file: string; movedTo: string; reason: string }[];
   skipped: readonly { file: string; reason: string }[];
+  droppedKeys: readonly {
+    file: string;
+    keys: readonly { path: string; retired: boolean }[];
+  }[];
 }): string[] {
   const lines: string[] = [];
   for (const entry of notes.quarantined) {
@@ -789,6 +793,34 @@ export function describeStoreNotes(notes: {
             { name, reason: entry.reason },
           ),
     );
+  }
+  for (const entry of notes.droppedKeys) {
+    /**
+     * **One sentence per key, and the difference between the two is a deletion rather than a typo.**
+     *
+     * A key this build used to have is worth a word of its own: "we removed this" is a fact about
+     * EnvoyCoder, and it tells a user the value is not coming back and there is nothing to re-add. A key
+     * no build of ours ever shipped — a typo, a hand-edit, another program's file — is not ours to
+     * explain, and the sentence says only what happened.
+     *
+     * Per key rather than one sentence listing them, so that a translation never has to decide between
+     * "it" and "them": a language that inflects for number gets one key per sentence and no agreement
+     * problem to solve.
+     *
+     * Both sentences end the same way, and that half is the whole change: **everything else was kept.**
+     * The user needs to know that, because the failure this replaced was the opposite one.
+     */
+    for (const dropped of entry.keys) {
+      lines.push(
+        keyed(
+          dropped.retired ? "note.settings.retired" : "note.settings.unknown",
+          dropped.retired
+            ? `${entry.file} had ${dropped.path}, which this build no longer has. EnvoyCoder dropped it and kept every other setting.`
+            : `${entry.file} had ${dropped.path}, which this build does not recognise. EnvoyCoder dropped it and kept every other setting.`,
+          { file: entry.file, key: dropped.path },
+        ),
+      );
+    }
   }
   for (const entry of notes.skipped) {
     // The file and the reason are named as they are on disk — this line is a diagnostic, and the

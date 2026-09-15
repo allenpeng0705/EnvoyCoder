@@ -1464,19 +1464,113 @@ body {
   gap: 10px;
 }
 
-/* One agent, as two bands: who it is (with its chips), and what it says about itself. A column rather
-   than a row, because the second band is a definition list rather than a single chip and would push the
-   first one off the card's width if the two shared a line. */
+/* **One agent, and the anatomy every list on the page shares.**
+   `[state chip] Name … [action] [Details]` over the one actionable line, with everything else behind the
+   disclosure. A column of two bands, because the line belongs under the name rather than beside it: a name is
+   what a reader scans down, and a line that starts at a different x per row is not a column.
+
+   The budget each band is held to is `settings/density.ts`, and the test that enforces it is
+   `test/settings-density.test.tsx`. Nothing here clamps: a clamp would make the budget unfalsifiable. */
 .settings__agent {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-1);
 }
 
 .settings__agent-head {
   display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+}
+
+/* The name is the anchor: one weight above the row, and never allowed to break mid-word. */
+.settings__agent-name {
+  font-weight: var(--font-weight-medium, 500);
+  overflow-wrap: anywhere;
+}
+
+/* The spacer is what puts the controls at the end of the head. `margin-left: auto` on it rather than
+   `justify-content` on the head, so a narrow window wraps the *controls* under the name instead of
+   squeezing the name into three characters. */
+.settings__agent-spacer {
+  flex: 1 1 auto;
+}
+
+/* **The one line, and the whole of what a row may say.** 12px and muted rather than 14px: it is the second
+   thing a reader scans and the first thing they should be able to skip. No `nowrap`/`ellipsis` here — the
+   budget guarantees it is short enough to fit, and hiding the overflow would hide a budget failure from the
+   very measurement that exists to catch it. */
+.settings__agent-line {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted, #a1a5a4);
+  overflow-wrap: anywhere;
+}
+
+/* A line that *is* the command: mono, and selectable, because the reason to show a command is that a user
+   copies it. */
+.settings__agent-line--command {
+  font-family: var(--font-mono);
+  color: var(--text);
+  user-select: text;
+}
+
+/* What `Details` reveals — indented under the name so an open row reads as belonging to it, and separated
+   from the line by a hairline so the disclosure's contents never read as the row's own text. */
+.settings__agent-details {
+  margin-top: var(--space-1);
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.settings__agent-fact {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-dim, #8b8f98);
+  overflow-wrap: anywhere;
+}
+
+/* The disclosed facts of a *provider*: a plain list, because each entry is a sentence rather than a pair. */
+.settings__agent-more {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
   flex-direction: column;
   gap: var(--space-0-5);
+  font-size: var(--font-size-sm);
+  color: var(--text-dim, #8b8f98);
+}
+
+/* A group heading's count, and the reason the heading exists: `Catalogue · 38` lets a user decide whether to
+   look before they scroll. Tabular figures so a list of counts does not shift as they change.
+
+   **The separator is text in the markup, not a `::before`.** It was a pseudo-element for one draft, and that
+   is a defect rather than a detail: a generated `content` is not part of an element's `textContent`, so the
+   heading read as "Catalogue38" to anything that walks the DOM. A separator a reader needs is content, and
+   putting it in the markup is also what makes the rendered text and the accessible name agree. */
+.settings__agent-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim, #8b8f98);
+}
+
+/* The catalogue's two entry points, on one line under its counted heading. */
+.settings__agent-entry {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* A terse word inside a row's head — `Built in` — where the sentence it stands for is the `title`. Dimmer
+   than a chip and not filled: it is neither a state nor a control. */
+.settings__agent-note {
+  font-size: var(--font-size-sm);
+  color: var(--text-dim, #8b8f98);
 }
 
 /* The facts the agent published, label over value. `display: contents` on the wrapper is what lets the
@@ -1607,28 +1701,10 @@ body {
   margin: 0;
 }
 
-/* **A catalogue row's head is one line: chip, name, version.** The shipped agents stack theirs (the name, then
-   a sentence about what the agent is) because there are nine of them and each is worth the room; a catalogue
-   row has thirty-eight siblings, and stacking its three short facts measured 58px of a 165px row — three
-   lines where one belongs. Measured before and after: see §7.13. */
-.settings__catalog-row .settings__agent-head {
-  flex-direction: row;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-2);
-}
-
-/* One line per catalogue row's description, with the whole sentence in the `title`.
-   Measured: unclamped, one row is 220px and thirty-eight of them are eighteen screens of scrolling for a
-   list the catalogue's own documentation says is read by searching. Clamped, the row is 132px and the list
-   is legible as a list. Nothing is lost — the text is still in the document, so a screen reader reads all of
-   it, and a pointer gets it on hover. Scoped to the catalogue because a shipped agent's summary is one short
-   sentence that has room to wrap. */
-.settings__catalog-row .settings__agent-summary {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* **The description is no longer on the row at all**, so the clamp that used to be here is gone with it: the
+   sentence is now the row's `title` and the first line of its disclosure, and a `-webkit-line-clamp` on text
+   that is not rendered would be a rule about nothing. Measured before and after: `docs/settings-parity.md`
+   §7.14. */
 
 /* The command line, monospaced and selectable: a user copies this into a terminal to see the failure
    themselves, which is the whole point of showing it verbatim. */

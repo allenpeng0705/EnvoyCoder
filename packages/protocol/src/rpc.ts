@@ -1535,6 +1535,47 @@ export type RunSnapshot = z.infer<typeof RunSnapshotSchema>;
  * The **catalogue** (`RPC_METHODS` in `domain.ts`) is complete, so a client's typed stub is
  * complete; the schemas tighten as each method lands. Both a declared method with no spec and a
  * spec for a method that is not in the catalogue fail `test/rpc.test.ts`, so the two cannot drift.
+ *
+ * ## Version skew, stated rather than discovered
+ *
+ * This product is two artifacts — a window and a daemon — and the family's rule D2 means starting the
+ * app does not replace a daemon already holding the port, so **"the window and its daemon are
+ * different builds" is a routine state after an upgrade, not an exceptional one.** Three combinations
+ * exist, and only one of them is actually handled by the schemas below:
+ *
+ * | direction | what happens | handled? |
+ * |---|---|---|
+ * | a newer **daemon** sends a field an older window does not know | nothing at all. **No client parses a result** — `RPC_SPECS[method].result` is a *specification* asserted in `packages/protocol/test/`, not a runtime gate, and the window's store reads results with `result as { … }` casts (`state/coderStore.ts`). An extra field is simply never read | ✅ by construction — and this is why the `.strict()` on a result schema is **not** a compatibility hazard |
+ * | a window calls a method an older **daemon** does not have | `-32601`, plus the connect-time notice `missingMethods` derives from `coder.hello`'s `methods` | ✅ deliberately: the notice names the one action that fixes it |
+ * | an older **daemon** omits a field a newer window's types call **required** | the window reads `undefined` where its type says an object. Nothing refuses it, because nothing parses results | ⚠️ **by guard, at each reader** — not by this file |
+ *
+ * The third row is the real one, and its history is why it is written down rather than left implied:
+ * `HarnessSummary.models` and `.thinking` are required here, an older daemon did not send them, and a
+ * settings page that dereferenced them took the whole pane down. The fix was a guard in the reader
+ * (`DeclaredFacts` in `components/settings/SectionsAgents.tsx`), and choosing *that* fix over "parse
+ * every result against the spec and fail the call" was deliberate:
+ *
+ *   * parsing results in the client converts "one row degrades to a sentence" into "the whole call
+ *     fails" — which is strictly worse for a user, since one agent missing a field would empty the
+ *     list of nine;
+ *   * and it would make **adding** a field to a result a breaking change for old windows, which is the
+ *     opposite of what the first row says is true today.
+ *
+ * So the position is: **adding a field to a result is compatible; removing one is not, and the reader
+ * that would notice is the one that owes the guard.** `coder.hello`'s version and `methods` pair is
+ * what tells a user *why* they are looking at a degraded row; `docs/settings-parity.md` §7.2 carries
+ * the same table from the daemon's side.
+ *
+ * ## Params are the other question, and they stay strict
+ *
+ * `parseRpcParams` refuses an unknown key in a request. That looks like the same asymmetry and is not:
+ * a request is written by **our own** client, which is typechecked against this same catalogue, so a
+ * key the daemon does not have is a *bug in us* rather than a build difference — and the failure a
+ * lenient params schema would hide is the one this product keeps deleting features over: a control
+ * that silently does nothing. The one reachable skew case (a newer window's brand-new settings
+ * control, an older daemon) is confined to that single control, because the window sends only the
+ * fields the user actually changed, and it arrives as a loud refusal beside the "different builds"
+ * sentence — which is the honest outcome rather than a worse one.
  */
 export interface RpcMethodSpec {
   params: z.ZodTypeAny;

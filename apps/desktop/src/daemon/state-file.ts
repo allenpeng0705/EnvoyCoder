@@ -28,12 +28,27 @@
 
 import { readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import type { DroppedSettingsKey } from "@envoycoder/protocol";
 import type { z } from "zod";
 
 /** What a read could not use, in end-user words. Reported at `coder.hello`. */
 export interface FileNotes {
   readonly quarantined: readonly { file: string; movedTo: string; reason: string }[];
   readonly skipped: readonly { file: string; reason: string }[];
+  /**
+   * Keys a settings document carried that this build does not have, and that it therefore dropped.
+   *
+   * **A category of its own rather than more `skipped` entries, and the difference is the point.** A
+   * skipped row is a *diagnostic*: an entry this build cannot represent, reported with a schema
+   * validator's own message because there is no sentence that would help. These are the opposite —
+   * the read succeeded, the document is in force, and the only thing the user might want to know is
+   * that a key they can see in the file is not doing anything. That is a sentence in their language,
+   * which is why it is its own channel with its own keys instead of a line of validator prose.
+   */
+  readonly droppedKeys: readonly {
+    file: string;
+    keys: readonly DroppedSettingsKey[];
+  }[];
 }
 
 export interface StateFilesOptions {
@@ -60,6 +75,7 @@ export class StateFiles {
   private readonly now: () => Date;
   private readonly quarantined: { file: string; movedTo: string; reason: string }[] = [];
   private readonly skipped: { file: string; reason: string }[] = [];
+  private readonly droppedKeys: { file: string; keys: DroppedSettingsKey[] }[] = [];
 
   constructor(options: StateFilesOptions = {}) {
     this.now = options.now ?? (() => new Date());
@@ -68,7 +84,22 @@ export class StateFiles {
 
   /** What could not be read, for `coder.hello` to report. */
   notes(): FileNotes {
-    return { quarantined: this.quarantined, skipped: this.skipped };
+    return { quarantined: this.quarantined, skipped: this.skipped, droppedKeys: this.droppedKeys };
+  }
+
+  /**
+   * Record keys a settings document carried that this build has no field for.
+   *
+   * **Nothing is written here, and that is deliberate.** `readCollection`'s caller rewrites a list after
+   * skipping a row, so the warning is not repeated every launch. This does not, because an unknown
+   * settings key is far more often a newer build's setting than garbage — see `CoderStore.readSettings`
+   * for the whole argument — and deleting it from disk would be destroying a value a build the user also
+   * runs does read. The note is therefore repeated until the user's next settings write, which is
+   * harmless: it is one line under *Things worth knowing*, and it is true every time it appears.
+   */
+  noteDroppedSettingsKeys(file: string, keys: readonly DroppedSettingsKey[]): void {
+    if (keys.length === 0) return;
+    this.droppedKeys.push({ file: basename(file), keys: [...keys] });
   }
 
   /**

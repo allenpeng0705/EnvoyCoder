@@ -31,6 +31,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CoderSettings } from "@envoycoder/protocol";
 
 import { CoderSidebar } from "../src/components/CoderSidebar.js";
+import { describeStoreNotes } from "../src/daemon/service.js";
 import { SettingsPane } from "../src/components/SettingsPane.js";
 import type { AgentActions } from "../src/state/agent-actions.js";
 import { I18nProvider } from "../src/i18n/context.js";
@@ -360,6 +361,33 @@ describe("the rest of the pane, in the same language", () => {
     expect(screen.getByText("Wissenswertes")).toBeTruthy();
     expect(screen.getByText(/projects\.json/)).toBeTruthy();
     expect(screen.getByText(/bad json/)).toBeTruthy();
+    expect(screen.queryByText(/\[envoycoder\.key\]/)).toBeNull();
+  });
+
+  it("says a dropped settings key in the user's language, not in the daemon's English", () => {
+    // **The other kind of note, and the reason it is a *key* rather than a diagnostic line.** When the daemon
+    // reads a settings file with a key this build does not have it drops the key and reports it — and that
+    // report is the only thing standing between a user and a line in their own file that does nothing. So it
+    // has to be readable, which the quarantine lines above deliberately are not (their reason is a schema
+    // validator's message, and translating one would produce a German sentence wrapped around English
+    // identifiers).
+    //
+    // **The note is built by the daemon's own function**, not written out here. That is the whole point of
+    // this case: a hand-written note string tests `localizeText`, which the case above it already covers, and
+    // it would stay green if `describeStoreNotes` stopped attaching a key — which is the failure being guarded
+    // against. Verified by mutation: replacing the `keyed(...)` wrapper with a bare string leaves this case
+    // green when the note is written by hand, and takes it red when the note comes from `describeStoreNotes`.
+    const [note] = describeStoreNotes({
+      quarantined: [],
+      skipped: [],
+      droppedKeys: [{ file: "settings.json", keys: [{ path: "hiddenAgents", retired: true }] }],
+    });
+    renderPane({ notes: note === undefined ? [] : [note] });
+    expect(screen.getByText("Wissenswertes")).toBeTruthy();
+    // German, named, and saying the half that matters: nothing else was lost.
+    expect(screen.getByText(/diese Einstellung gibt es in diesem Build nicht mehr/)).toBeTruthy();
+    expect(screen.getByText(/jede andere Einstellung behalten/)).toBeTruthy();
+    expect(screen.queryByText(/no longer has/)).toBeNull();
     expect(screen.queryByText(/\[envoycoder\.key\]/)).toBeNull();
   });
 });

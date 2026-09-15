@@ -364,8 +364,7 @@ export const en = {
      it was already one string used three times, and a second key for the same place is a second thing to
      keep translated and true. */
   "settings.nav.aria": "Settings sections",
-  "settings.sections.note":
-    "This window's settings, section by section. Every section has something to read or change inside it.",
+  "settings.sections.note": "This window's settings, section by section.",
   "settings.section.general.title": "General",
   "settings.section.general.detail":
     "The language this window speaks, and the folder a new project starts from.",
@@ -388,30 +387,24 @@ export const en = {
   "settings.section.about.detail":
     "Which build this window is, and which build the daemon is.",
   "settings.language.title": "Language",
-  "settings.language.detail":
-    "The language of this window — every label, notice and error, including the ones the daemon sends back. Saved with your settings on this machine, so it follows you to your other windows and to the phone.",
+  "settings.language.detail": "Every label, notice and error, including the daemon's.",
   "settings.language.aria": "Language",
   "settings.language.system": "Same as this computer",
   "settings.folder.choose": "Choose…",
   "settings.defaultPath.title": "The folder Add project starts in",
-  "settings.defaultPath.detail":
-    "Adding a project asks for a folder. Naming it here means the field is already filled in with the place you keep your work, and you can still type another one.",
+  "settings.defaultPath.detail": "Pre-filled when you add a project.",
   "settings.defaultPath.placeholder": "/Users/you/work",
   "settings.defaultHarness.title": "The agent new tasks start with",
   "settings.defaultHarness.detail": "A project can override this; this is the answer when it does not.",
-  "settings.defaultHarness.catalog":
-    "Every agent EnvoyCoder supports is on the {section} page — including the ones that are not installed here, each with the command that fixes it.",
+  "settings.defaultHarness.catalog": "Not installed here? See {section}.",
   "settings.needsInstalling": "(needs installing)",
   "settings.defaultModel.title": "The model new tasks start on",
-  "settings.defaultModel.detail":
-    "Left empty, each new task runs on whatever the agent picks for itself. A project can override this too.",
+  "settings.defaultModel.detail": "Empty means the agent chooses.",
   "settings.extraArgs.title": "Extra arguments for the agent",
-  "settings.extraArgs.detail":
-    "Passed to the agent's command line exactly as you type them, after the ones EnvoyCoder builds itself. Leave it empty unless the agent's own documentation names a flag you want on every task.",
+  "settings.extraArgs.detail": "Added to the agent's command line for every task.",
   "settings.extraArgs.placeholder": "--verbose",
   "settings.approvals.title": "Ask before anything destructive",
-  "settings.approvals.detail":
-    "Agents stop and wait for you before every step they take, instead of overwriting files on their own. Turning this off means a task can change your working tree without asking.",
+  "settings.approvals.detail": "Stop and ask before anything destructive.",
   "settings.approvals.reaches":
     "Handed to {agent} as its own policy for every run, so the asking happens where the work does.",
   "settings.approvals.unsupported":
@@ -419,11 +412,9 @@ export const en = {
   "settings.approvals.unknown":
     "EnvoyCoder has not been told what {agent} accepts yet, so this stays off rather than storing a choice nothing reads.",
   "settings.transcripts.title": "Keep transcripts after a task ends",
-  "settings.transcripts.detail":
-    "The record of what an agent did, kept on this machine. Turning it off saves space and makes 'what did it change?' unanswerable later.",
+  "settings.transcripts.detail": "Keep the record of what the agent did.",
   "settings.project.title": "Project settings for {project}",
-  "settings.project.detail":
-    "These apply to new tasks in this project and override the settings for this machine. A task you set up yourself still wins.",
+  "settings.project.detail": "These override this machine's settings.",
   // Level 3's back control, which lands on the projects page and therefore must not say "All settings":
   // a control that names the root while returning to a list is a lie. Its visible label is that page's
   // own title (`settings.projects.title`) rather than a key of its own — one place, one name — so all
@@ -435,8 +426,7 @@ export const en = {
   "settings.project.harness.detail": "Overrides the agent chosen for this machine.",
   "settings.project.model.title": "The model new tasks here start on",
   "settings.project.model.detail": "Overrides this machine's model. Empty means the agent decides.",
-  "settings.project.extraArgs.detail":
-    "Passed to the agent's command line for every task in this project, after the ones EnvoyCoder builds itself.",
+  "settings.project.extraArgs.detail": "Added to the agent's command line for this project.",
   /* ── the projects page (level 2), and the row at level 1 that opens it ──
      Three levels, one pane: this machine's settings (level 1) carries one row whose second band is how
      many projects are registered, that row opens the list (level 2), and a row of the list opens that
@@ -460,8 +450,6 @@ export const en = {
     "Each project can override this machine's settings. Selecting one opens its own.",
   "settings.projects.empty":
     "No projects yet. A project is a folder on this machine that agents work in — add one with {add} at the bottom of the rail, or from the Command Center.",
-  "settings.agents.note":
-    "What each agent can actually do decides what EnvoyCoder offers. An agent that cannot be asked for permission is not given an approval dialog it would ignore.",
   "settings.agents.empty": "The agent list has not arrived yet.",
 
   /* ── the catalogue: the 38 recipes, the two extra ways to get an agent, and the words that keep the
@@ -506,13 +494,47 @@ export const en = {
   "settings.agent.refused": "Check failed",
   "settings.agents.olderDaemon":
     "The daemon this window is talking to is an older build and does not have this part of the agent list, so it cannot be shown here. Restart EnvoyCoder so the window and its daemon are the same build.",
-  "settings.agents.add.heading": "Add an agent",
-  "settings.agents.add.note":
-    "These are recipes EnvoyCoder knows how to drive. Whether this machine can run one is a fact somebody has to measure, so nothing here is checked until you ask — one row at a time, because checking walks this machine's program folders and a page that did it for all of them while opening would spend your machine on agents you never looked at.",
+  /**
+   * **The catalogue is a group with a count and two ways in, not thirty-eight expanded rows.**
+   *
+   * Measured before this slice: the group held **10,817 visible characters and 38 rows** — 71% of the Agents
+   * page and 5,835px of its 8,391 (`docs/settings-parity.md` §7.14). A user who opened *Settings* to change
+   * their language scrolled past every recipe in the catalogue to find out they were on the wrong page.
+   *
+   * The long sentence that used to sit above the list is now the browse button's `title`. It is a real
+   * explanation — why nothing is checked until you ask, and why checking is one row at a time — and it belongs
+   * where a user who wonders finds it rather than in the path of a user who does not.
+   */
+  "settings.agents.catalog.heading": "Catalogue",
+  "settings.agents.catalog.browse": "Browse the catalogue",
+  "settings.agents.catalog.hide": "Hide the catalogue",
+  "settings.agents.catalog.browse.title":
+    "Recipes EnvoyCoder knows how to drive. Whether this machine can run one is a fact somebody has to measure, so nothing is checked until you ask — one row at a time, because checking walks this machine's program folders.",
   "settings.agents.search.label": "Search the catalogue",
   "settings.agents.search.placeholder": "Name, id or description",
   "settings.agents.add.noMatches": "No catalogued agent matches “{query}”.",
   "settings.agents.row.version": "Version {version}",
+  /**
+   * **The row's own disclosure**, and the label a screen reader gets for it.
+   *
+   * Eight buttons called *Details* is a list a screen-reader user cannot navigate, so the accessible name
+   * carries the agent's name and the visible label does not (the name is already on the row, three words to
+   * the left).
+   */
+  "settings.agents.row.details": "Details",
+  "settings.agents.row.details.aria": "Details for {agent}",
+  /**
+   * **The two short phrases a fix can be replaced by**, and the reason there are two rather than one.
+   *
+   * `AvailabilityFix.command` is shown verbatim when it is a command, which is the rule for that field — but
+   * two of the catalogue's own hints are 127 and 136 characters of English prose. A row may not carry a
+   * sentence (`AGENT_ROW_LINE_BUDGET`), so when the fix is one, the row says what to do in four words and the
+   * whole text goes to the `title` and the disclosure.
+   */
+  "settings.agents.row.install": "Install {agent} first",
+  "settings.agents.row.nothingToInstall": "Nothing to install",
+  /** The row's line when the daemon is a build behind: the action, in four words, not the essay. */
+  "settings.agents.row.restart": "Restart EnvoyCoder",
   "settings.agents.row.check": "Check this machine",
   "settings.agents.row.checkAgain": "Check again",
   "settings.agents.row.check.title":
@@ -521,6 +543,7 @@ export const en = {
   "settings.agents.row.adding": "Adding…",
   "settings.agents.row.add.title":
     "Add {agent} to your agents. Its command line and its environment come from this entry exactly as they are written above — the recipe's own constants travel with it, and any variable the recipe does not set stays yours to set.",
+  "settings.agents.row.builtIn.short": "Built in",
   "settings.agents.row.builtIn":
     "EnvoyCoder already ships this agent, so it is configured in “On this machine” above rather than added a second time.",
   /**
@@ -534,7 +557,8 @@ export const en = {
    */
   "settings.agents.row.needsNoInstall":
     "Nothing to install: {package} is fetched from npm the first time it runs. Checking this machine found `npx` — not {agent}, which has not been downloaded yet.",
-  "settings.agents.row.install": "Install {agent} first",
+  "settings.agents.row.needsInstall":
+    "Install {agent} — then it runs as the command above. EnvoyCoder starts the program; it does not install it for you.",
   "settings.agents.row.installLink": "Where to get it",
   "settings.agents.row.installLink.title": "{agent}'s own page",
   /**
@@ -559,18 +583,17 @@ export const en = {
    * rows. This word says what was measured, and the sentence beside it says what has not happened.
    */
   "settings.agents.row.readyNpx": "Not downloaded yet",
-  "settings.agents.manual.heading": "An agent that is not on the list",
-  "settings.agents.manual.note":
-    "If you already have a coding agent that speaks the Agent Client Protocol and it is not in the catalogue above, declare it here. EnvoyCoder will start it and probe it exactly as it does the others.",
+  "settings.agents.manual.open": "Add a program of my own",
+  "settings.agents.manual.open.title":
+    "If you already have a coding agent that speaks the Agent Client Protocol and it is not in the catalogue, declare it here. EnvoyCoder will start it and probe it exactly as it does the others.",
+  "settings.agents.manual.heading": "Programs you declare",
   "settings.agents.manual.label": "What to call it",
   "settings.agents.manual.command": "Program",
   "settings.agents.manual.args": "Arguments",
   "settings.agents.manual.env": "Environment variable names",
-  "settings.agents.manual.env.detail":
-    "Names only, separated by commas or new lines — never the values. EnvoyCoder reads each value from the environment its daemon runs in, so a credential is never written to disk.",
+  "settings.agents.manual.env.detail": "Names only, never values.",
   "settings.agents.manual.transport": "How EnvoyCoder must speak to it",
-  "settings.agents.manual.transport.detail":
-    "There is no default here on purpose: guessing sends an Agent Client Protocol handshake to a program that will never answer it, or reports a working agent as unsupported. Only you can see which one it is.",
+  "settings.agents.manual.transport.detail": "No default: a wrong guess fails silently.",
   "settings.agents.manual.transport.acp": "Agent Client Protocol (can be run and driven)",
   "settings.agents.manual.transport.cli": "A plain command line (startable, not yet drivable)",
   "settings.agents.manual.submit": "Add this agent",
@@ -640,8 +663,7 @@ export const en = {
      `settings.shortcuts.note` says the one thing a reader has to know: a key that is not on this page
      does nothing in this build — three of the eight declared bindings have no action mounted, and a page
      that listed them would be advertising keys that do nothing. */
-  "settings.shortcuts.note":
-    "Every key this window is listening for, read from the same table the keyboard layer reads. A key that is not on this list does nothing in this build.",
+  "settings.shortcuts.note": "Keys this window listens for. One not listed here does nothing.",
   "settings.shortcuts.empty": "This build listens for no keyboard shortcuts.",
   "settings.shortcuts.group.general": "General",
   "settings.shortcuts.group.projects": "Projects and tasks",
@@ -660,19 +682,16 @@ export const en = {
      All of it is `coder.hello`'s own answer. The build and the state folder are also chips in the pane's
      header on every page — deliberately: a chip answers "which daemon am I talking to" while a user is
      reading something else, and this page is where the facts that do not fit in a chip live. */
-  "settings.machine.note":
-    "Everything on this page is what the daemon itself said when this window attached to it.",
+  "settings.machine.note": "All of this is the daemon's own answer.",
   "settings.machine.noDaemon":
     "No daemon has answered this window yet, so there is nothing to report about one.",
   "settings.machine.version.title": "The daemon's build",
   "settings.machine.version.detail":
     "The version of the program that stores your settings and runs your agents.",
   "settings.machine.stateDir.title": "Settings and transcripts live in",
-  "settings.machine.stateDir.detail":
-    "One folder on this machine, holding your settings, the project list, and the transcripts a task keeps.",
+  "settings.machine.stateDir.detail": "Settings, projects and transcripts, in one folder.",
   "settings.machine.home.title": "The folder it treats as home",
-  "settings.machine.home.detail":
-    "A path you type as ~ means this folder. Nothing else is read from it, and nothing is written to it by this window.",
+  "settings.machine.home.detail": "Where ~ points for the agent's own commands.",
   "settings.machine.started.title": "Started at",
   "settings.machine.started.detail": "When this daemon process started.",
   "settings.machine.windows.title": "Windows attached",
@@ -685,8 +704,7 @@ export const en = {
      and a daemon a build behind can refuse settings this window writes, which `docs/settings-parity.md`
      §7.2 records on the wire. The window's own version is a build constant (`app-version.ts`); when
      nothing inlined one, this page says so instead of printing a placeholder that looks like a number. */
-  "settings.about.note":
-    "EnvoyCoder is two halves — this window, and the daemon that stores your settings and runs your agents — and they are built together, so their versions should match.",
+  "settings.about.note": "Both halves are built together, so their versions should match.",
   "settings.about.window.title": "This window",
   "settings.about.window.detail": "The build this window's own files came from.",
   "settings.about.daemon.title": "The daemon",
@@ -837,6 +855,17 @@ export const en = {
   "note.quarantined.left":
     "EnvoyCoder could not read {name} and could not move it aside, so it left it untouched and started that list empty. ({reason})",
   "note.skipped": "{file}: {reason}",
+  /* ── a settings key this build does not have, which cost the user **nothing else** ──
+     Two keys rather than one because there are two causes, and only one of them is a fact about us. A key
+     we used to ship and removed is a deletion the user should hear named; a key no build of ours ever had
+     is a typo or somebody else's file, and claiming to have removed it would be a lie.
+     Both end by saying the rest was kept, and that half is not decoration: the defect these replaced was a
+     settings file quarantined whole over one unknown key, so "everything else is still in force" is the
+     sentence the user actually needs. */
+  "note.settings.retired":
+    "{file} had {key}, which this build no longer has. EnvoyCoder dropped it and kept every other setting.",
+  "note.settings.unknown":
+    "{file} had {key}, which this build does not recognise. EnvoyCoder dropped it and kept every other setting.",
 
   /* ── an approval, in the daemon's own words ── */
   "approval.question.tool": "Allow the agent to run “{tool}”?",

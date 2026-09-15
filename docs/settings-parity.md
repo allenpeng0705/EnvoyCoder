@@ -737,7 +737,8 @@ direction", so the two tables below are separated on that basis: what is honest,
 The type is `packages/protocol/src/domain.ts:733-769`; defaults `:771-776`; schema `:806-819`; the
 patch shape `updateSettings` accepts — where `""` means **clear it** — `:789-796`. It is persisted by the
 daemon as one JSON document beside projects and tasks (`apps/desktop/src/daemon/store.ts:560-567` read,
-through `withoutRetiredSettingsKeys` first (`domain.ts:832-840`); `:493-506` update; path from
+through `readCoderSettingsDocument` (`domain.ts`, §7.14 — unknown keys are dropped and **noted**, and every
+known one is kept); `:493-506` update; path from
 `coderPaths` in `packages/host-bridge/src/index.ts:105`,`:144`), reaches the window through
 `coder.getSettings` (`daemon/service.ts:463-466`) and is written back through `coder.updateSettings`
 (`:468-489`, wire schema `packages/protocol/src/rpc.ts:1323-1345`), and is rendered by
@@ -758,8 +759,8 @@ below to them.
 | `keepTranscripts: boolean` | `domain.ts:759` | `true` (`:774`) | `SettingsPane.tsx:346-357` | `runs.ts:797` — `appendTranscript` returns early when false, so the JSONL record is deliberately not kept | **yes** |
 | `requireApprovalForDestructive: boolean` | `domain.ts:757` | `true` (`:773`) | `SettingsPane.tsx:339-344`, a **disabled-with-reason** row for an agent that cannot be told (`ApprovalRow`, `:680-713`) | `runs.ts:298-301` reads it per run and `resolveApprovalPolicy` (`run-options.ts:231-237`) maps it onto the agent's own session policy: `true` → `session/set_policy {autoRun: "always-confirm"}`, `false` → `{autoRun: "off"}`. `runs.test.ts` proves both positions reach the agent over a real pipe, and that nothing is sent to an agent whose catalogue entry says it cannot be told | **yes** — in the direction the row's wording promises. The row's note says which agent it reaches; "ask before **anything** destructive" is the strict value, and §7.2 says why `safe-only` is deliberately not used for it |
 | `defaultProjectPath?: string` | `domain.ts:741` | — | `SettingsPane.tsx:257-276` | `CoderApp.tsx:224-226` hands it to `buildCommandContributions`, whose `project.add` row seeds its text stage with it (`CommandCenter.tsx:425-435`, entered through `stageInto` `:146-155`). `palette-flow.test.tsx` asserts the seeded field and the empty field | **yes** — it is the folder "Add project…" starts from, which is what its row says |
-| ~~`allowRemoteRuns: boolean`~~ | **removed** — was `domain.ts:734` | — | **removed** — was `SettingsPane.tsx:147-158` | — | **gone, not disabled.** Its effect could not exist: there is no remote-run path, and `coder.offerRemoteRun` was a spec with no handler and no caller. A disabled row would have promised a feature on this pane's terms rather than the mesh's; §7.2 records what a returning version needs first. `coder.offerRemoteRun` came out of the catalogue with it (`protocol/src/rpc.ts`), and `RETIRED_SETTINGS_KEYS` (`domain.ts:832`) strips the old key so an upgrading user's settings file is not quarantined over a value nothing read |
-| ~~`hiddenAgents: readonly string[]`~~ | **removed** — was on `CoderSettings` and in `CoderSettingsSchema` | — | **removed** — was `SectionsAgents.tsx` (a *Hide from my lists* switch on every row of all three lists, plus a *Hidden* chip) | — | **gone, and refused rather than deferred.** It was stored, served as a `hidden` flag on `HarnessSummary` and `AgentProviderSummary` beside `availability`, and read by one filter over the two agent pickers — so this column's own question ("does a workflow consume it?") answered *yes*, and the field was still wrong. A preference that can shorten the product's own list of agents is the one control that can make an agent we ship invisible, which is the failure this product's owner named; §5.8 carries the two wrong rulings and the correction. `RETIRED_SETTINGS_KEYS` strips the key so an upgrading file is not quarantined over it, and what a picker offers is now derived from probed facts (`composer/agent-for.ts`) rather than stored |
+| ~~`allowRemoteRuns: boolean`~~ | **removed** — was `domain.ts:734` | — | **removed** — was `SettingsPane.tsx:147-158` | — | **gone, not disabled.** Its effect could not exist: there is no remote-run path, and `coder.offerRemoteRun` was a spec with no handler and no caller. A disabled row would have promised a feature on this pane's terms rather than the mesh's; §7.2 records what a returning version needs first. `coder.offerRemoteRun` came out of the catalogue with it (`protocol/src/rpc.ts`), and the read drops the old key and notes it (the constant names it, `readCoderSettingsDocument` is what acts) so an upgrading user's settings file keeps everything else — §7.14 |
+| ~~`hiddenAgents: readonly string[]`~~ | **removed** — was on `CoderSettings` and in `CoderSettingsSchema` | — | **removed** — was `SectionsAgents.tsx` (a *Hide from my lists* switch on every row of all three lists, plus a *Hidden* chip) | — | **gone, and refused rather than deferred.** It was stored, served as a `hidden` flag on `HarnessSummary` and `AgentProviderSummary` beside `availability`, and read by one filter over the two agent pickers — so this column's own question ("does a workflow consume it?") answered *yes*, and the field was still wrong. A preference that can shorten the product's own list of agents is the one control that can make an agent we ship invisible, which is the failure this product's owner named; §5.8 carries the two wrong rulings and the correction. the read drops the key and notes it (§7.14), and what a picker offers is now derived from probed facts (`composer/agent-for.ts`) rather than stored |
 
 **All nine entries are honest now, and the verdicts are not "the pane has a row for it".** Every one of
 the seven remaining fields has a reader outside `SettingsPane.tsx` — that exclusion is the whole point of
@@ -837,22 +838,22 @@ already tried here and rejected.
 
   **What would bring it back**, in the order the work actually goes: the peer directory, then the
   session store that makes a remote run reachable, then the broker decision — and then the method, its
-  params and the row are written together, against a handler. `RETIRED_SETTINGS_KEYS` (`domain.ts:832`)
-  is what lets an upgrading user's settings file keep its language, its default agent and its nominated
-  folder while the dead key is dropped.
+  params and the row are written together, against a handler. The tolerant settings read (§7.14) is what
+  lets an upgrading user's settings file keep its language, its default agent and its nominated folder
+  while the dead key is dropped — and it does so for **any** key this build does not have, which is the
+  property the constant that used to do this job could not have.
 
-  **Left open, and named here rather than left to be rediscovered: the same key on the *wire*.** The
-  strip protects a settings *file* written by an older build of this product. It does not protect a
-  window talking to a daemon from an older build — and `coder.getSettings`'s result is
-  `z.object({settings: CoderSettingsSchema}).strict()`, so that daemon's answer is refused. Verified:
-  parsing the previous build's answer (`…, allowRemoteRuns: false, …`) against
-  `RPC_SPECS["coder.getSettings"].result` fails with
-  `settings: Unrecognized key(s) in object: 'allowRemoteRuns'`. The failure is loud rather than silent —
-  `loadSettings` reports it and the pane shows a refusal instead of a half-filled document — and the
-  window and daemon normally ship in one bundle, which is why this slice left it alone. It is still an
-  asymmetry worth a decision: either `withoutRetiredSettingsKeys` is applied to that result schema too
-  (one function, both directions), or the docs say out loud that a window one build ahead of its daemon
-  cannot read settings. **Not decided here, because wire compatibility is not a settings row.**
+  **The same key on the *wire* was left open here, and §7.14 closes it — with a correction to what this
+  paragraph used to claim.** It said a window one build ahead of its daemon "cannot read settings",
+  because `coder.getSettings`'s result is `z.object({settings: CoderSettingsSchema}).strict()` and the
+  older daemon's answer carries `allowRemoteRuns`. The *schema* does refuse that answer; **nothing refuses
+  it in practice.** `RPC_SPECS[…].result` is a specification asserted in `packages/protocol/test/`, not a
+  runtime gate — `CoderStore.loadSettings` reads its answer with
+  `connection.callTyped<{ settings: CoderSettings }>`, an unchecked cast, so an extra field on a result is
+  simply never read and that direction of skew is harmless by construction. The risk that is real runs the
+  other way: an older daemon **omitting** a field a newer window's types call required, which is why
+  `DeclaredFacts` has its `models`/`thinking` guard. The full table, with the argument for choosing
+  guards over parsing results on the client, is on `RpcMethodSpec` in `packages/protocol/src/rpc.ts`.
   **One later change is on the safe side of it, and it is recorded here so the distinction is not
   blurred:** the pre-flight probe (§7.7) added a *method* (`coder.probeSessionOptions`) and no field to
   any existing result, so no answer an older daemon gives changes shape. A window talking to that daemon
@@ -2055,6 +2056,174 @@ rather than by this walk — the walk's isolated home has no provider in it.
 
 
 
+### 7.14 A settings file is the user's data: the read is tolerant by construction
+
+**The failure this replaces, in the words of the report that found it.** *"`hiddenAgents` had to go into
+`RETIRED_SETTINGS_KEYS`, or the strict schema would have quarantined an upgrading user's entire settings
+file (language, folder, default agent) over a list nothing reads."* Both halves of that sentence are
+defects. The first is what happened: one unknown key cost the user four known ones. The second is what
+would have happened next time — a maintainer who deletes a field without remembering a list takes
+somebody's settings with it, and nothing in the build says so.
+
+**What the read does now** (`readCoderSettingsDocument`, `packages/protocol/src/domain.ts`). Four
+outcomes, and the line between them is the whole design:
+
+| what is on disk | what happens | why |
+|---|---|---|
+| a document with a key this build does not have — retired **or** never shipped by us | the key is **dropped and noted**; every other setting is kept | we understand the document perfectly apart from a field nothing here reads. Losing a language, a folder and a default agent to it is not caution, it is destruction |
+| bytes that are not JSON, or JSON that is not one object | **quarantined** — moved aside, not overwritten | there is no document here to keep anything *from*. A different event from the row above, and it keeps its old treatment |
+| a document whose *values* we refuse (the right key, the wrong type) | **quarantined** | `keepTranscripts: "yes"` has no reading we could honestly pick, and guessing at a control plane's own configuration is worse than the defaults plus a sentence |
+| a document missing a key the schema requires | **quarantined** | the same: this is not a settings document |
+
+So the rule is one line: **prune keys, refuse values.** A key we do not have is not an unreadable file.
+
+**`RETIRED_SETTINGS_KEYS` is no longer load-bearing, and its doc says so.** It survives as a
+*vocabulary*: membership turns "this build does not recognise `hiddenAgents`" into "this build used to
+have it and does not any more", which is a different sentence for a user because it names a deletion. The
+honest test of "not load-bearing" is that deleting the constant would break no behaviour — only the
+wording of two notes — and `test/settings-store.test.ts` asserts exactly that, with the retired-key case
+and the never-heard-of-it case producing the **same kept settings** and different sentences.
+
+**The file is deliberately not rewritten when a key is dropped.** The collection reader rewrites a list
+after skipping a bad row so the warning appears once; that is not copied here. An unknown *settings* key
+is far more often a key from a **newer** build — the user ran a newer EnvoyCoder, then an older one — and
+rewriting the file would delete that setting permanently, from a version that does read it. The note
+repeats until the user's next settings write, and nothing is destroyed behind their back.
+
+**The same question one layer out, answered rather than left implied.** `RpcMethodSpec`
+(`packages/protocol/src/rpc.ts`) carries the table: an extra field from a newer daemon is **harmless by
+construction** because no client parses a result (this document's own claim in §7.2 that `loadSettings`
+would refuse one was wrong — it casts); a window calling a method an older daemon lacks is handled at
+connect time by `missingMethods` and per-call by `-32601`; and an older daemon **omitting** a required
+field is handled by a guard at the reader. Nothing was changed on the wire, and that is a decision rather
+than an omission: parsing results on the client would convert "one row degrades to a sentence" into "the
+whole call fails", and would make *adding* a result field a breaking change for old windows — the exact
+opposite of the property that makes the first row true today.
+
+**The tests, and what each one fails on** (`apps/desktop/test/settings-store.test.ts`,
+`apps/desktop/test/settings-notes.test.ts`):
+
+| case | the mutation it goes red on |
+|---|---|
+| an unknown key keeps every known field and is noted | putting `.strict()` back in the read path without the prune |
+| a retired key does the same, and is noted as a *deletion* | collapsing the two note sentences into one |
+| a key unknown **inside** `defaults` is dropped too | pruning only the top level — the obvious wrong implementation, which moves the catastrophe one object deeper |
+| the dropped key is still on disk afterwards | copying `readCollection`'s rewrite-after-skip |
+| bytes that are not JSON are still quarantined | making the tolerant read swallow a parse failure |
+| JSON that is not one object is still quarantined | treating tolerance as "try harder to find settings in anything" |
+| a known key with the wrong type is still refused | making the prune drop *invalid* keys as well as unknown ones |
+| the list is not consulted to decide whether to keep the rest | any `if (!RETIRED.has(key)) refuse()` guard |
+
+Each was run against its mutation, with the file restored byte-exact after: **8 mutations, 8 named tests
+red, 0 stayed green.** The commands and the raw output are in the slice report.
+
+### 7.15 The Agents page, re-measured: 15,139 characters to 926
+
+**The brief.** *"Each page has too many texts and the section is not so clear, feel crowded and don't want
+to read so many texts."* A judgement like that is easy to agree with and impossible to keep, so it was
+turned into five numbers and a script — `scripts/measure-settings.mjs`, which boots a daemon on an
+isolated home, Vite against it, and headless Chrome over CDP with the target matched **by URL**.
+
+**Where the text was.** The page total was **15,139 characters over 8,391px (12.97 screens)**, and the
+per-group split says where it came from — which is not where a reader would guess:
+
+| group | characters | rows | height |
+|---|---|---|---|
+| *On this machine* | 3,115 | 9 | 1,509px |
+| *Your agents* | 124 | 1 | 17px |
+| **the catalogue** | **10,817** | **38** | **5,835px** |
+
+Seventy-one per cent of the page was the catalogue — thirty-eight recipes rendered expanded inside a page
+that also has to hold the nine agents we ship. A user who opened *Settings* to change their language
+scrolled past all of them to find out they were on the wrong page.
+
+**The four rules, and what each one changed.**
+
+1. **A row is a name, a state, and at most one short line.** The line is the *actionable* fact — the
+   command to run, or the short phrase naming what to do. Everything else moved: the agent's own summary
+   to the name's `title`; its published modes, models and thinking levels, its recipe's command line, its
+   install link, its last-checked time and any fix sentence to a `Details` disclosure; the page's teaching
+   paragraphs to those `title`s and to this document. The budgets are `AGENT_ROW_LINE_BUDGET` (80),
+   `AGENT_ROW_BUDGET` (140) and `SETTING_DETAIL_BUDGET` (80) in
+   `apps/desktop/src/components/settings/density.ts`, and `apps/desktop/test/settings-density.test.tsx`
+   renders every settings page and fails when one is exceeded.
+   **The one branch worth naming:** `AvailabilityFix.command` is shown verbatim *when it is a command* —
+   and it is not always one. Two of the catalogue's own hints are 127 and 136 characters of English prose
+   in a field named `command`. The row branches on length: a command is printed copyable, a sentence is
+   replaced by a three-word phrase with the whole of it in the `title` **and** the disclosure. A clamp
+   would have enforced the budget by construction and made it unfalsifiable, which is why it is a branch
+   and why both sides are asserted.
+2. **Group headers carry counts.** `On this machine · 9`, `Your agents · 0`, `Catalogue · 38`. The
+   separator is text in the markup rather than a `::before` — a generated `content` is not part of an
+   element's `textContent`, so a pseudo-element had the heading reading as "Catalogue38" to anything that
+   walks the DOM.
+3. **The catalogue opens on demand, and nothing becomes invisible.** The count is in the heading and both
+   entry points (*Browse the catalogue*, *Add a program of my own*) are on screen, always. This repository
+   deleted a *hide* feature (§5.8) and the distinction is kept straight: a **filter** moves an agent out of
+   a list the user is looking at and can do it to one we ship; a **disclosure** collapses a group, states
+   its size, and unfolds on one press. `settings-density.test.tsx` asserts both halves — zero rows on
+   open, count and entry point present — because either half alone is a defect.
+4. **No teaching paragraph inside a row.** `settings.agents.note` (157 characters), `…add.note` (341) and
+   `…manual.note` (196) are deleted as page furniture; their substance is in the three `title`s and in this
+   document. A fourth budget, `SETTING_NOTE_BUDGET` (180), catches the shape a paragraph takes when it
+   moves into a row — it is set above the approval row's *reason* (169 characters with a real agent name in
+   it, which the pane's oldest law requires) and below the 140-character teaching note that was deleted
+   from *New tasks*.
+
+**Before and after, measured the same way in the same window.** `--open "Browse the catalogue"` measures
+the page with the group unfolded, because a single number would have to pick one and would then be quoted
+as if it were the other:
+
+| measurement | before | after, as it opens | after, catalogue open |
+|---|---|---|---|
+| **total visible characters** | 15,139 | **926** (−94%) | 3,927 (−74%) |
+| **page height** | 8,391px | **908px** | 3,303px |
+| screens (body height ÷ viewport) | 12.97 | **1.40** | 5.11 |
+| **rows above the fold** | 4 | **8** of 10 | **8** of 48 |
+| **longest row** | **575** characters | 124 | 124 |
+| catalogue row height | 127 / 127 / **240** (min/median/max) | — | **60 / 60 / 60** |
+| widest row | 892px | 892px | 892px |
+| rows overflowing their column | 0 | 0 | 0 |
+| horizontal page overflow | false | false | false |
+| **lowest contrast** on the page | 4.93:1 (`chip--warn`) | **4.93:1**, 0 below 4.5 | 4.93:1, 0 below 4.5 |
+| elements with a background gradient | 0 | 0 | 0 |
+
+Contrast is computed the way WCAG computes it, **compositing the ancestor chain** rather than taking the
+first non-transparent background — the rule `scripts/audit-ui.mjs` already recorded after a chip at 16%
+alpha reported 1.03:1 against its own text. No chip or piece of small print changed colour in this slice,
+and the number is reported because "we changed some chips" is the kind of claim that ought to come with
+one.
+
+**The other pages, and how their numbers were obtained — which is not the same way.** The four numbers
+above are *rendered*, before and after, in a real window. For the other sections the "before" is the
+**source** length of the strings that were trimmed (exact, read from the catalogue) and the "after" is
+rendered, because reverting the tree to measure seven more pages would have cost more than it bought:
+
+| page | longest `.setting__detail` before | after | longest `.setting__note` after | rendered characters after |
+|---|---|---|---|---|
+| General | 202 | **54** | — | 222 |
+| New tasks | 190 | **49** | 30 (was 140) | 511 |
+| Safety | 175 | **41** | 94 (the approval reason, uncapped by design) | 247 |
+| Projects | 123 | 39 | — | — |
+| This machine | 114 | 49 | — | — |
+
+Twelve `.setting__detail` strings were over the budget and all twelve are now under it; the longest left in
+the window is **74** (`settings.machine.version.detail`, *"The version of the program that stores your
+settings and runs your agents."*), measured on the rendered page. `settings-density.test.tsx` asserts the
+budget on every section, so the number is a gate rather than a sample. The pages were already one screen
+each, so their *height* did not change — what changed is that a reader meets a short sentence instead of a
+paragraph, which is the whole of the brief.
+
+**What was measured, and what is still reasoned about.** Measured: every number in the two tables above,
+taken from the rendered DOM in a real window; the three budgets, enforced by a test that fails on content;
+the counts, the collapsed catalogue and the disclosed facts, asserted in `settings-density.test.tsx`.
+Reasoned about rather than measured: that a 60px catalogue row is *readable* — the measurement says it is
+short and uniform, and whether it is pleasant is the owner's eyes on the PNGs `scripts/measure-settings.mjs`
+leaves in its output directory, which is exactly why it leaves them. Also reasoned about: that the
+character count is a good proxy for "crowded". It is a proxy, and it is the one that can be checked; a page
+can be short and still badly arranged, and no script here would notice.
+
+
 ## 8. The slice plan
 
 Ordered, and ordered by *cheapness times usefulness* rather than by Paseo's section order. Each slice
@@ -2088,7 +2257,8 @@ not, and three more fields were read by the app with no control writing them.
   **Outcome — deleted instead, control and field together.** This is the plan revised rather than
   followed, and §7.2 gives the reasoning: a disabled row promises a feature whose prerequisites are not
   settings work, and `coder.offerRemoteRun` — the method that would have served it — was itself a spec
-  with no handler, so it went too. `RETIRED_SETTINGS_KEYS` keeps an upgrading user from losing the rest
+  with no handler, so it went too. The tolerant settings read (§7.14) keeps an upgrading user's other
+  settings
   of their settings file to the removed key.
 * `defaultProjectPath`: give it the control it deserves (it is the folder a new task starts in, and
   the folder picker already exists in `apps/desktop/src/client/folder-picker.ts`), or delete it from
@@ -2158,7 +2328,7 @@ positions, not sent to an agent that cannot be told, and a loud failure when the
 
 **Also in this slice, and not in the plan above:** `HarnessSummary.capabilities.approvalPolicy` (a
 fourth delivery flag beside `agentMode`/`model`/`thinking`, `packages/agent-catalog/src/index.ts:186-210`)
-and `RETIRED_SETTINGS_KEYS`/`withoutRetiredSettingsKeys` (`domain.ts:832-840`). Neither is a setting a
+and `RETIRED_SETTINGS_KEYS` / `readCoderSettingsDocument` (`domain.ts`, §7.14). Neither is a setting a
 user sees; both are what make the two rows above honest rather than approximately honest.
 
 ### 8.2 Slice 2 — `Appearance`: theme, and the two text sizes

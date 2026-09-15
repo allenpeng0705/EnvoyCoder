@@ -637,9 +637,18 @@ describe("the pages the bar opens", () => {
       return rest as unknown as (typeof harnesses)[number];
     });
     showPane(appScope("agents"), "wide", { harnesses: older });
-    // The window is still a window: the pane, its title, the bar, and one sentence per agent.
+    // The window is still a window: the pane, its title, the bar, and — for each agent — the four words the row
+    // can still say.
     expect(screen.getByRole("heading", { name: "Agents" })).toBeTruthy();
     expect(screen.getByRole("navigation", { name: en["settings.nav.aria"] })).toBeTruthy();
+    // **The whole sentence is one press in, and the row's own line carries the action.** That split is this
+    // slice's change: the sentence was four lines of prose per row on the page, and the fact a user acts on is
+    // "restart EnvoyCoder". Both are asserted, because asserting only the disclosed half would pass on a page
+    // that told a user nothing until they opened a disclosure they had no reason to open.
+    expect(screen.getAllByText(en["settings.agents.row.restart"])).toHaveLength(older.length);
+    for (const name of screen.getAllByRole("button", { name: /^Details for / })) {
+      fireEvent.click(name);
+    }
     expect(
       screen.getAllByText(/did not send what .* publishes about itself/),
     ).toHaveLength(older.length);

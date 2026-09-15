@@ -11,13 +11,36 @@
  * surface read it, so a user with Gemini CLI installed had a product that supported it and no way to find
  * out.
  *
+ * ## It has to be *scanned*, not read — which is a measurement, not an opinion
+ *
+ * The page as it shipped was measured in a real window before this slice (`scripts/measure-settings.mjs`;
+ * the numbers are in `docs/settings-parity.md` §7.14): **15,139 visible characters**, **8,391px of body**,
+ * **12.97 screens**, four rows above the fold, and one row of **575** characters. The owner's brief was
+ * *"too many texts … don't want to read so many texts"*, and the measurement says where: **10,817 of those
+ * characters — 71% — were the catalogue**, which rendered all 38 rows expanded inside a page that also had
+ * to hold the nine agents we ship.
+ *
+ * Three changes come out of that, and each is a rule rather than an edit:
+ *
+ *   1. **A row is a name, a state, and at most one short line.** The line is the *actionable* fact. What the
+ *      agent is, what it published about itself, where its recipe came from and what the whole of a fix
+ *      sentence says all move to a `title` or to the row's disclosure — never to the page. The budget is
+ *      `AGENT_ROW_LINE_BUDGET`, and `apps/desktop/test/settings-density.test.tsx` fails when a row exceeds it.
+ *   2. **The groups carry their counts** (`On this machine · 9`), because a group header's job is to be
+ *      countable at a glance. A user who cannot see that there are thirty-eight recipes below cannot decide
+ *      whether to look.
+ *   3. **The catalogue opens on demand**, and *nothing becomes invisible*: the count is in the heading and
+ *      the entry point is a button on screen, always. This repository deleted a *hide* feature for exactly
+ *      that reason (`docs/settings-parity.md` §5.8) and the distinction is worth keeping straight — a filter
+ *      that can remove an agent from a list is not the same act as a disclosure that one press unfolds.
+ *
  * ## The three groups, and why they are three and not one
  *
  * | group | what it is | where its state comes from |
  * |---|---|---|
  * | **On this machine** | the nine agents we ship | `coder.listHarnesses` — probed, with the capabilities we verified |
  * | **Your agents** | the ones a user declared | `coder.listProviders` — probed by the same prober |
- * | **Add an agent** | the catalogue's recipes | **nothing, until the user asks about a row** |
+ * | **Catalogue** | the 38 recipes | **nothing, until the user asks about a row** |
  *
  * The third group is the one that could lie, and the whole design of it is about not doing so. A catalogue
  * entry is a *recipe*: a command line and a link. Whether this machine can run it is a fact somebody has to
@@ -38,8 +61,7 @@
  * What a picker offers is instead **derived** from what a probe measured (`composer/agent-for.ts`'s
  * `offeredAgents`), so nothing a user stores can shorten a list — and this page is the other half of that
  * bargain: **every agent we ship, every agent the user declared and all 38 catalogue entries are here**, with
- * the state each was measured in and the command that fixes it. A picker may drop an agent we established is
- * absent; the page never does, and its note under *New tasks* says so.
+ * the state each was measured in. A picker may drop an agent we established is absent; the page never does.
  *
  * ## The one action that does remove a row, and why it is not the same thing
  *
@@ -48,12 +70,13 @@
  * difference between remove and hide. There is no remove control on a shipped agent, because there is
  * nothing of the user's to undo: the nine are what the product is.
  *
- * ## What is deliberately still read-only
+ * ## What the disclosed facts are, and why they are disclosed rather than shown
  *
- * The **declared facts** — modes, models, thinking levels, and the capability warnings — are the agent's own
- * answers from its last handshake, and there is nothing here to change about them. That is why they are a
- * definition list rather than rows of controls: a page whose whole value is "this is what the agent said
- * about itself" must not look like it could be edited.
+ * The **declared facts** — modes, models, thinking levels, where the agent comes from — are the agent's own
+ * answers from its last handshake, and there is nothing here to change about them. They are what a user needs
+ * when something is *wrong*, and nine rows of four facts each is 36 lines nobody reads on the way to the one
+ * row that matters. So they are behind `Details`, in a definition list rather than rows of controls: a block
+ * whose whole value is "this is what the agent said about itself" must not look like it could be edited.
  */
 
 import type { JSX } from "react";
@@ -62,23 +85,26 @@ import { useCallback, useState } from "react";
 
 import type { HarnessAvailability, HarnessSummary } from "@envoycoder/protocol";
 
+import type { MessageKey } from "../../i18n/messages/en.js";
+
 import { availabilityOf } from "../../composer/agent-for.js";
 import { useI18n } from "../../i18n/context.js";
 import { localizeText } from "../../i18n/notice.js";
-import type { Translator } from "../../i18n/translate.js";
 import { modeLabel, optionLabel } from "../../composer/controls.js";
 import type { SettingsSectionProps } from "./SectionProps.js";
 import { ROW_STATE_CHIP, ROW_STATE_LABEL, authChipKeys } from "./agent-catalog.js";
+import { AgentRow, fixOrPhrase } from "./AgentRow.js";
+import { AGENT_ROW_LINE_BUDGET } from "./density.js";
 import { CatalogList } from "./CatalogRows.js";
 
 /**
  * The section, as the pane renders it.
  *
- * One component holding four groups is deliberate rather than lazy: the search box, the probe results and
- * the "adding…" flags are shared state between the catalogue list and the manual form, and a component split
- * for its own sake would have been three `useState`s lifted into a fourth place. What *is* split is the
- * rendering: the shipped and provider rows are here, the catalogue rows and the manual form are in
- * `CatalogRows.tsx`.
+ * One component holding three groups is deliberate rather than lazy: the sign-in result and the "signing in"
+ * flag are shared state between the shipped list and the catalogue's own actions, and a component split for
+ * its own sake would have been two `useState`s lifted into a third place. What *is* split is the rendering:
+ * a row is `AgentRow.tsx`, the catalogue and the manual form are `CatalogRows.tsx`, and the decisions that
+ * can silently lie are pure functions in `agent-catalog.ts`.
  */
 export function AgentsSection(props: SettingsSectionProps): JSX.Element {
   const { t } = useI18n();
@@ -132,9 +158,13 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
 
   return (
     <>
-      <p className="settings__note">{t("settings.agents.note")}</p>
-
-      <h2 className="settings__heading">{t("settings.agents.shipped.heading")}</h2>
+      {/* **The heading carries the count, and the count is the point.** Three groups with their sizes on them
+          are three facts; three groups with names only are three invitations to scroll and find out. */}
+      <h2 className="settings__heading">
+        {t("settings.agents.shipped.heading")}
+        {" · "}
+        <span className="settings__agent-count">{state.harnesses.length}</span>
+      </h2>
       <ul className="settings__agents">
         {state.harnesses.map((harness) => (
           <ShippedAgent
@@ -146,8 +176,10 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
           />
         ))}
         {state.harnesses.length === 0 ? (
+          // An empty state teaches, and this one is the daemon saying it has not answered yet rather than a
+          // claim that we ship no agents — which is the distinction the sentence is written for.
           <li className="settings__agent">
-            <span className="settings__agent-summary">{t("settings.agents.empty")}</span>
+            <p className="settings__note">{t("settings.agents.empty")}</p>
           </li>
         ) : null}
       </ul>
@@ -158,74 +190,27 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
         </p>
       ) : null}
 
-      <h2 className="settings__heading">{t("settings.agents.mine.heading")}</h2>
+      <h2 className="settings__heading">
+        {t("settings.agents.mine.heading")}
+        {" · "}
+        <span className="settings__agent-count">{state.providers.length}</span>
+      </h2>
       {can.providers ? (
         <ul className="settings__agents">
           {state.providers.map((provider) => (
-            <li key={provider.id} className="settings__agent">
-              <div className="settings__agent-head">
-                <strong>{provider.label}</strong>
-                <span className="settings__agent-summary">{provider.detail}</span>
-                <span className={`chip ${ROW_STATE_CHIP[provider.availability.state]}`}>
-                  {t(ROW_STATE_LABEL[provider.availability.state])}
-                </span>
-                {(provider.availability.fix ?? []).map((step) => (
-                  <span key={step.command} className="settings__hint" title={step.url}>
-                    {step.command}
-                  </span>
-                ))}
-              </div>
-              <p className="settings__agent-command">{commandText(t, provider.command, provider.args)}</p>
-              {provider.env.length > 0 ? (
-                <ul className="settings__agent-env">
-                  {provider.env.map((variable) => (
-                    // **Three states, and the third is why this slice exists.** `set` alone could not say
-                    // where a value came from, and for a variable a catalogue recipe supplies, "is set"
-                    // would send a user to export something EnvoyCoder is already providing. `from`
-                    // distinguishes the two sources, and `undefined` is the daemon's own environment —
-                    // which is where every credential still comes from and the only place one ever does.
-                    <li
-                      key={variable.name}
-                      className={`settings__env${
-                        variable.set
-                          ? variable.from === "catalogue"
-                            ? " settings__env--recipe"
-                            : ""
-                          : " settings__env--unset"
-                      }`}
-                      title={
-                        variable.from === "catalogue"
-                          ? t("settings.agents.mine.env.recipe.title", { name: variable.name })
-                          : t("settings.agents.mine.env.title", { name: variable.name })
-                      }
-                    >
-                      {variable.from === "catalogue"
-                        ? t("settings.agents.mine.env.recipe", { name: variable.name })
-                        : variable.set
-                          ? t("settings.agents.mine.env.set", { name: variable.name })
-                          : t("settings.agents.mine.env.unset", { name: variable.name })}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              <div className="settings__agent-facts">
-                {/* **Remove, and it is not a hide.** This forgets a provider the *user declared* — an undo
-                    of their own action, which is why it exists only on this list and on no shipped agent —
-                    and its title says what it does and does not touch. Nothing is uninstalled. */}
-                <button
-                  type="button"
-                  className="button button--ghost button--small"
-                  title={t("settings.agents.mine.remove.title", { agent: provider.label })}
-                  onClick={() => void agents.removeProvider(provider.id)}
-                >
-                  {t("settings.agents.mine.remove")}
-                </button>
-              </div>
-            </li>
+            <ProviderRow
+              key={provider.id}
+              provider={provider}
+              commandLabel="settings.agents.mine.command"
+              onRemove={() => void agents.removeProvider(provider.id)}
+            />
           ))}
           {state.providers.length === 0 ? (
+            // The empty state, and it is the one place on this page allowed to be a paragraph: with nothing to
+            // scan there is nothing to scan *past*, so the sentence that says where agents come from is the
+            // most useful thing that can be on a row here.
             <li className="settings__agent">
-              <span className="settings__agent-summary">{t("settings.agents.mine.empty")}</span>
+              <p className="settings__note">{t("settings.agents.mine.empty")}</p>
             </li>
           ) : null}
         </ul>
@@ -233,7 +218,6 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
         <p className="settings__note">{t("settings.agents.olderDaemon")}</p>
       )}
 
-      <h2 className="settings__heading">{t("settings.agents.add.heading")}</h2>
       {can.catalog ? (
         <CatalogList state={state} agents={agents} />
       ) : (
@@ -246,18 +230,14 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
   );
 }
 
-/** The command line of a provider, as one readable string. `settings.agents.mine.command` labels it. */
-function commandText(t: Translator["t"], command: string, args: readonly string[]): string {
-  return t("settings.agents.mine.command", { command: [command, ...args].join(" ") });
-}
-
 /**
- * One of the nine agents we ship: its state, its own declared facts, and the one control a user has on it.
+ * One of the nine agents we ship: its state, the one line that says what to do, and its own declared facts
+ * behind `Details`.
  *
- * That control is an **action on the agent** — trigger its own sign-in, offered only for the state the daemon
- * measured a sign-in requirement in. There is deliberately **no** control here that takes the agent out of a
- * list: a shipped agent is what this product is, and the pickers' contents are derived from the state chip
- * beside it rather than from anything the user can set (see the module doc).
+ * The one control a user has on it is an **action on the agent** — trigger its own sign-in, offered only for
+ * the state the daemon measured a sign-in requirement in. There is deliberately **no** control here that takes
+ * the agent out of a list: a shipped agent is what this product is, and the pickers' contents are derived from
+ * the state chip beside it rather than from anything the user can set (see the module doc).
  */
 function ShippedAgent(props: {
   harness: HarnessSummary;
@@ -269,26 +249,70 @@ function ShippedAgent(props: {
   const { harness } = props;
   const availability = availabilityOf(props.harness);
   // The wire generation is decided **once per row**, here, and not inside the chip: an older daemon sends a
-  // boolean and no `availability`, and the same fact has to reach the chip, the install steps and the
-  // sentence that explains the daemon is a build behind.
+  // boolean and no `availability`, and the same fact has to reach the chip, the fix and the sentence that
+  // explains the daemon is a build behind.
   const legacyDaemon = harness.availability === undefined;
   const auth = authChipKeys(harness.auth);
 
+  /**
+   * **The one line.** Four sources, in the order a user would act on them.
+   *
+   * The fix first, because a row whose program is missing is the one row with something to do. Then the two
+   * daemon-skew cases, whose action is the same and is named in four words rather than a sentence. Then the
+   * tier, which is the honest answer for an agent that is simply working: there is no action, and "Ships with
+   * EnvoyCoder" is a fact rather than a filler.
+   */
+  const fix = availability.fix ?? [];
+  const line = fixOrPhrase(
+    fix,
+    legacyDaemon || harness.models === undefined || harness.thinking === undefined
+      ? t("settings.agents.row.restart")
+      : t(harness.tier === "built-in" ? "settings.agent.tier.builtIn" : "settings.agent.tier.catalogued"),
+    AGENT_ROW_LINE_BUDGET,
+  );
+
   return (
-    <li className="settings__agent">
-      <div className="settings__agent-head">
-        <strong>{harness.label}</strong>
-        <span className="settings__agent-summary">{harness.summary}</span>
-        <RowFacts availability={availability} harness={harness} legacyDaemon={legacyDaemon} />
-        {auth !== undefined ? (
-          <span className={`chip ${auth.chip}`} title={t("settings.agents.auth.title")}>
-            {t(auth.key)}
-          </span>
-        ) : null}
-      </div>
-      <DeclaredFacts harness={harness} />
-      {props.canSignIn && harness.auth.state === "needs-signin" ? (
-        <div className="settings__agent-facts">
+    <AgentRow
+      stateLabel={t(ROW_STATE_LABEL[availability.state])}
+      stateChip={ROW_STATE_CHIP[availability.state]}
+      name={harness.label}
+      about={harness.summary}
+      line={line.line}
+      lineIsCommand={line.isCommand}
+      {...(line.title !== undefined ? { lineTitle: line.title } : {})}
+      chips={
+        <>
+          {auth !== undefined ? (
+            <span className={`chip ${auth.chip}`} title={t("settings.agents.auth.title")}>
+              {t(auth.key)}
+            </span>
+          ) : null}
+          {harness.capabilities.approvals ? null : (
+            <span className="chip chip--warn" title={t("settings.agent.noApprovals.title")}>
+              {t("settings.agent.noApprovals")}
+            </span>
+          )}
+          {harness.capabilities.cancel ? null : (
+            <span className="chip chip--warn" title={t("settings.agent.noCancel.title")}>
+              {t("settings.agent.noCancel")}
+            </span>
+          )}
+          {/* **The provenance of a program found in somebody else's cache.** `dsh` can resolve out of
+              `~/.npm/_npx/<hash>/node_modules/.bin` — it is a real program and it really runs, so calling it
+              absent would be false, but it disappears with `npm cache clean`, so saying nothing would be the
+              other half of the same lie. One warn chip, and one sentence per cache naming what removes it. */}
+          {availability.provisional !== undefined ? (
+            <span
+              className="chip chip--warn"
+              title={t(`settings.agent.provisional.${availability.provisional}`)}
+            >
+              {t("settings.agent.provisional")}
+            </span>
+          ) : null}
+        </>
+      }
+      actions={
+        props.canSignIn && harness.auth?.state === "needs-signin" ? (
           <button
             type="button"
             className="button button--secondary button--small"
@@ -296,76 +320,100 @@ function ShippedAgent(props: {
             title={t("settings.agents.signIn.title", { agent: harness.label })}
             onClick={() => void props.onSignIn(harness)}
           >
-            {props.signingIn
-              ? t("settings.agents.signIn.working")
-              : t("settings.agents.signIn")}
+            {props.signingIn ? t("settings.agents.signIn.working") : t("settings.agents.signIn")}
           </button>
-        </div>
-      ) : null}
-    </li>
+        ) : null
+      }
+      details={<DeclaredFacts harness={harness} />}
+    />
   );
 }
 
 /**
- * The chip and the commands for one agent.
+ * One provider the **user** declared: its state, the command it runs, and its environment names.
  *
- * **The row's whole job, and the bug it was getting wrong.** This chip used to be
- * `available === false ? "Not installed" : …`, and a user who had installed Claude Code, Codex and DeepSeek
- * Harness read "Not installed" for all three: the agents were there and what was missing was the ACP *bridge*
- * we drive them through, plus a daemon that could not see `~/.local/bin` because a GUI launch hands it no
- * `PATH`. Five states now, each naming the thing that is actually absent — and `unknown` never renders as
- * "not installed", which is the one rule the state exists for.
+ * The declared facts block is darker here than on a shipped agent, and not for symmetry: the row's own state
+ * rests on an environment this daemon may not have, so the environment *names* are the first thing a user
+ * needs when the row says `not-installed` — see `settings.agents.mine.env.*`.
  */
-function RowFacts(props: {
-  availability: HarnessAvailability;
-  harness: HarnessSummary;
-  legacyDaemon: boolean;
+function ProviderRow(props: {
+  provider: SettingsSectionProps["state"]["providers"][number];
+  /**
+   * The label for the provider's command line, passed in as a **key** rather than as a string.
+   *
+   * `MessageKey` and not `string`, because this row renders it in two places — the line's `title` and the
+   * disclosure's first entry — and a caller that handed it pre-translated text would be able to pass anything.
+   * Typing it as the catalogue's own key type is what makes a typo a compile error rather than a French window
+   * with an English fragment in it.
+   */
+  commandLabel: MessageKey;
+  onRemove: () => void;
 }): JSX.Element {
   const { t } = useI18n();
-  const { availability, harness, legacyDaemon } = props;
+  const { provider } = props;
+  const fix = provider.availability.fix ?? [];
+  const command = [provider.command, ...provider.args].join(" ");
+  // The fix first, for the same reason as a shipped agent's row; and the command line second, because for a
+  // provider that is *working* the command is the actionable fact — it is what the user would run by hand to
+  // see what the daemon sees. The label goes to the `title` when the two are the same text twice.
+  const line = fixOrPhrase(fix, command, AGENT_ROW_LINE_BUDGET);
+
   return (
-    <div className="settings__agent-facts">
-      <span className={`chip ${ROW_STATE_CHIP[availability.state]}`}>
-        {t(ROW_STATE_LABEL[availability.state])}
-      </span>
-      {harness.capabilities.approvals ? null : (
-        <span className="chip chip--warn" title={t("settings.agent.noApprovals.title")}>
-          {t("settings.agent.noApprovals")}
-        </span>
-      )}
-      {harness.capabilities.cancel ? null : (
-        <span className="chip chip--warn" title={t("settings.agent.noCancel.title")}>
-          {t("settings.agent.noCancel")}
-        </span>
-      )}
-      {/* **The provenance of a program found in somebody else's cache.** `dsh` can resolve out of
-          `~/.npm/_npx/<hash>/node_modules/.bin` — it is a real program and it really runs, so calling it
-          absent would be false, but it disappears with `npm cache clean`, so saying nothing would be the
-          other half of the same lie. One warn chip, and one sentence per cache naming what removes it. */}
-      {availability.provisional ? (
-        <span className="chip chip--warn" title={t(`settings.agent.provisional.${availability.provisional}`)}>
-          {t("settings.agent.provisional")}
-        </span>
-      ) : null}
-      {/* **The commands that fix it, in the entry's own words.** Deliberately not translated: a translated
-          `npm install -g …` is a command that does not run. Shown only for the two states that assert
-          something is missing, because `availability.fix` is present exactly then — a state that does not
-          claim an absence must not offer an install command, and the schema rejects one that does.
-          Every step, not only the first: for an agent driven through a bridge, the agent and the bridge are
-          two installs, and naming one lands the user at the other a minute later. */}
-      {(availability.fix ?? []).map((step) => (
-        <span key={step.command} className="settings__hint" title={step.url}>
-          {step.command}
-        </span>
-      ))}
-      {/* A daemon **older than this field** sent a boolean, and `agentsAvailabilityOf` turned it into a state
-          rather than inventing one. What it cannot do is say which of the two things was absent — so the row
-          says that, and names the action that actually fixes it, rather than lending its authority to a claim
-          the old daemon never made. */}
-      {legacyDaemon ? (
-        <span className="settings__hint">{t("settings.agent.olderDaemon")}</span>
-      ) : null}
-    </div>
+    <AgentRow
+      stateLabel={t(ROW_STATE_LABEL[provider.availability.state])}
+      stateChip={ROW_STATE_CHIP[provider.availability.state]}
+      name={provider.label}
+      about={provider.detail}
+      line={line.line}
+      lineIsCommand={line.isCommand || fix.length === 0}
+      lineTitle={line.title ?? t(props.commandLabel, { command })}
+      actions={
+        /* **Remove, and it is not a hide.** This forgets a provider the *user declared* — an undo of their own
+           action, which is why it exists only on this list and on no shipped agent — and its title says what it
+           does and does not touch. Nothing is uninstalled. */
+        <button
+          type="button"
+          className="button button--ghost button--small"
+          title={t("settings.agents.mine.remove.title", { agent: provider.label })}
+          onClick={props.onRemove}
+        >
+          {t("settings.agents.mine.remove")}
+        </button>
+      }
+      details={
+        <ul className="settings__agent-more">
+          <li>{t(props.commandLabel, { command })}</li>
+          {provider.env.map((variable) => (
+            // **Three states, and the third is why this exists.** `set` alone could not say where a value came
+            // from, and for a variable a catalogue recipe supplies, "is set" would send a user to export
+            // something EnvoyCoder is already providing. `from` distinguishes the two sources, and the third is
+            // the daemon's own environment — which is where every credential still comes from and the only place
+            // one ever does.
+            <li
+              key={variable.name}
+              className={`settings__env${
+                variable.set
+                  ? variable.from === "catalogue"
+                    ? " settings__env--recipe"
+                    : ""
+                  : " settings__env--unset"
+              }`}
+              title={
+                variable.from === "catalogue"
+                  ? t("settings.agents.mine.env.recipe.title", { name: variable.name })
+                  : t("settings.agents.mine.env.title", { name: variable.name })
+              }
+            >
+              {variable.from === "catalogue"
+                ? t("settings.agents.mine.env.recipe", { name: variable.name })
+                : variable.set
+                  ? t("settings.agents.mine.env.set", { name: variable.name })
+                  : t("settings.agents.mine.env.unset", { name: variable.name })}
+            </li>
+          ))}
+        </ul>
+      }
+    />
   );
 }
 
@@ -380,6 +428,10 @@ function RowFacts(props: {
  * agent only publishes them inside a session, and we have not seen one) and `none` (it offers none) — because
  * collapsing the middle one into "none" is the exact sentence the protocol's own doc says must never be told
  * to a user.
+ *
+ * **Only ever rendered inside a disclosure**, which is what makes it a definition list rather than a band: 36
+ * lines of an agent's own answers is what a user looks at when something is wrong, and it is not what the nine
+ * rows are for.
  */
 function DeclaredFacts(props: { harness: HarnessSummary }): JSX.Element {
   const { t } = useI18n();
@@ -391,11 +443,12 @@ function DeclaredFacts(props: { harness: HarnessSummary }): JSX.Element {
    * `models` and `thinking` are required by `HarnessSummary` — a daemon that follows this protocol always
    * sends them — but a daemon from an **older build** does not, and the window accepts its answer. A settings
    * page must not take the application down because the daemon is a build behind, which is a state this
-   * document already records on the wire (§7.2). So the page says what happened instead: one sentence, in the
-   * user's language, naming the cause and the one action that fixes it.
+   * document already records on the wire (§7.2). So the disclosure says what happened instead: one sentence,
+   * in the user's language, naming the cause and the one action that fixes it — and the row's own line says
+   * the same action in four words, so a user who never opens `Details` still knows what to do.
    */
   if (harness.models === undefined || harness.thinking === undefined) {
-    return <p className="settings__note">{t("settings.agent.notDeclared", { agent: harness.label })}</p>;
+    return <p className="settings__agent-fact">{t("settings.agent.notDeclared", { agent: harness.label })}</p>;
   }
 
   // The one non-negotiable rule of the labels: translate what we wrote, show what the agent wrote.

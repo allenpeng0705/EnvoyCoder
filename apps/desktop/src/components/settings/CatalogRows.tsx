@@ -1,5 +1,5 @@
 /**
- * **Add an agent** — the catalogue's rows, and the form for one that is not in it.
+ * **Catalogue** — the 38 recipes, behind one press, and the form for a program that is not in it.
  *
  * ## The rule this file exists to keep: a row's state is measured, never implied
  *
@@ -11,12 +11,27 @@
  *
  * ## What a Check costs, said on the row
  *
- * The button is not free and the row says so, in the user's language, before they press it: one search of
+ * The button is not free and its `title` says so, in the user's language, before they press it: one search of
  * this machine's program directories, **one row at a time**, with no process started and nothing downloaded.
  * (The download is real, and it is the other sentence on the row: an `npx -y …` recipe fetches its package
  * from npm on the first *run*, once, which is why such a row needs no install at all.) A screen that probed
- * all 38 while opening would be a screen that spends the user's machine on rows nobody looked at, which is
- * the defect this per-row design exists to prevent.
+ * all 38 while opening would be a screen that spends the user's machine on rows nobody looked at, which is the
+ * defect this per-row design exists to prevent.
+ *
+ * ## Why the whole list is behind a button now, and why that is not the hide feature this repo deleted
+ *
+ * The page measured **10,817 characters and 38 expanded rows** for this group alone — 71% of everything on
+ * the Agents page and 5,835px of its 8,391 (`docs/settings-parity.md` §7.14). A user opening *Settings* to
+ * change their language scrolled past thirty-eight recipes to find out they were on the wrong page.
+ *
+ * So the list opens on demand, and **nothing becomes invisible**: the heading carries the count
+ * (`Catalogue · 38`), the button that opens it is always on screen, and the second way in — declaring a
+ * program of your own — is a button beside it. That is the distinction that matters, because this repository
+ * *did* delete a hiding feature (`docs/settings-parity.md` §5.8) and the two are not the same act:
+ *
+ *   * a **filter** moves an agent out of a list the user is looking at, and can do it to an agent *we ship*;
+ *   * a **disclosure** collapses a group, states its size on the heading, and unfolds on one press — the same
+ *     thing every settings page on this machine does with its advanced rows.
  *
  * ## The manual form, and the one thing it must not accept
  *
@@ -40,6 +55,8 @@ import { localize, type Notice } from "../../i18n/notice.js";
 import { formatWhen } from "../../i18n/when.js";
 import type { AgentActions } from "../../state/agent-actions.js";
 import type { CoderState } from "../../state/coderStore.js";
+import { AgentRow, fixOrPhrase } from "./AgentRow.js";
+import { AGENT_ROW_LINE_BUDGET } from "./density.js";
 import {
   ROW_STATE_CHIP,
   ROW_STATE_LABEL,
@@ -63,15 +80,21 @@ export interface CatalogListProps {
 }
 
 /**
- * The search box, the rows, and the form for an agent nobody catalogued.
+ * The heading, the two entry points, and — when one of them has been pressed — the list or the form.
  *
  * The probe results live here rather than in the store because they belong to the **row the user pressed**:
  * the daemon keeps the cache (it is globally true, and a second window must not make it search again), and
  * this holds what this window has been told about the rows on screen.
+ *
+ * **Which of the two panels is open is one value, not two booleans**, so "search and the form at the same
+ * time" is not a state this page can be in. The heading, both buttons and the count are outside the panel,
+ * which is what makes "nothing becomes invisible" a structural property rather than a promise.
  */
 export function CatalogList(props: CatalogListProps): JSX.Element {
   const { t } = useI18n();
   const { state, agents } = props;
+  /** `undefined` — nothing open; `"browse"` — the list; `"manual"` — the form for a program of your own. */
+  const [panel, setPanel] = useState<"browse" | "manual" | undefined>(undefined);
   const [query, setQuery] = useState("");
   const [probes, setProbes] = useState<Record<string, CatalogRowProbe>>({});
   const [adding, setAdding] = useState<string | undefined>();
@@ -123,25 +146,39 @@ export function CatalogList(props: CatalogListProps): JSX.Element {
     [agents],
   );
 
+  const toggle = (which: "browse" | "manual"): void =>
+    setPanel((current) => (current === which ? undefined : which));
+
   return (
     <>
-      <p className="settings__note">{t("settings.agents.add.note")}</p>
+      <h2 className="settings__heading">
+        {t("settings.agents.catalog.heading")}
+        {" · "}
+        <span className="settings__agent-count">{state.catalog.length}</span>
+      </h2>
 
-      <div className="settings__catalog-search">
-        {/* **The label wraps the control, and only the label's own words are its accessible name.** The
-            alternative — a wrapping `<label>` around a title *and* a detail sentence — gives an input a name
-            like "Environment variable names Names only, separated by commas…", which is what a screen reader
-            would read out. So the detail sits outside the label, and `getByLabelText` finds one exact string. */}
-        <label className="settings__field">
-          <span className="setting__title">{t("settings.agents.search.label")}</span>
-          <input
-            type="search"
-            className="input"
-            value={query}
-            placeholder={t("settings.agents.search.placeholder")}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
+      {/* **The two ways in, always on screen.** They are the entry points the count above them makes worth
+          pressing, and they stay rendered whether a panel is open or not — a control that disappears when its
+          panel opens is a page with no way back that is not a scroll. */}
+      <div className="settings__agent-entry">
+        <button
+          type="button"
+          className="button button--secondary button--small"
+          aria-expanded={panel === "browse"}
+          title={t("settings.agents.catalog.browse.title")}
+          onClick={() => toggle("browse")}
+        >
+          {panel === "browse" ? t("settings.agents.catalog.hide") : t("settings.agents.catalog.browse")}
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--small"
+          aria-expanded={panel === "manual"}
+          title={t("settings.agents.manual.open.title")}
+          onClick={() => toggle("manual")}
+        >
+          {t("settings.agents.manual.open")}
+        </button>
       </div>
 
       {notice !== undefined ? (
@@ -150,26 +187,47 @@ export function CatalogList(props: CatalogListProps): JSX.Element {
         </p>
       ) : null}
 
-      {rows.length === 0 ? (
-        <p className="settings__note">{t("settings.agents.add.noMatches", { query })}</p>
-      ) : (
-        <ul className="settings__catalog">
-          {rows.map((entry) => (
-            <CatalogRow
-              key={entry.id}
-              entry={entry}
-              probe={probes[entry.id]}
-              blocker={rowBlocker(entry, addedIds)}
-              busy={adding === entry.id}
-              onCheck={onCheck}
-              onAdd={onAdd}
-              onRemove={onRemove}
-            />
-          ))}
-        </ul>
-      )}
+      {panel === "browse" ? (
+        <>
+          <div className="settings__catalog-search">
+            {/* **The label wraps the control, and only the label's own words are its accessible name.** The
+                alternative — a wrapping `<label>` around a title *and* a detail sentence — gives an input a name
+                like "Environment variable names Names only, separated by commas…", which is what a screen reader
+                would read out. So the detail sits outside the label, and `getByLabelText` finds one exact string. */}
+            <label className="settings__field">
+              <span className="setting__title">{t("settings.agents.search.label")}</span>
+              <input
+                type="search"
+                className="input"
+                value={query}
+                placeholder={t("settings.agents.search.placeholder")}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+          </div>
 
-      <ManualAgentForm agents={agents} />
+          {rows.length === 0 ? (
+            <p className="settings__note">{t("settings.agents.add.noMatches", { query })}</p>
+          ) : (
+            <ul className="settings__catalog">
+              {rows.map((entry) => (
+                <CatalogRow
+                  key={entry.id}
+                  entry={entry}
+                  probe={probes[entry.id]}
+                  blocker={rowBlocker(entry, addedIds)}
+                  busy={adding === entry.id}
+                  onCheck={onCheck}
+                  onAdd={onAdd}
+                  onRemove={onRemove}
+                />
+              ))}
+            </ul>
+          )}
+        </>
+      ) : null}
+
+      {panel === "manual" ? <ManualAgentForm agents={agents} /> : null}
     </>
   );
 }
@@ -186,16 +244,25 @@ function measured(probe: CatalogProbe): CatalogRowProbe {
 }
 
 /**
- * One catalogued agent: what it is, how it is obtained, what this machine says about it, and the two things
- * a user can do with it.
+ * One catalogued agent: what it is, what this machine says about it, and the two things a user can do with it.
  *
- * ## The install guidance is the **entry's**, and it is shown whether or not anything was measured
+ * ## The one line, and the two facts it can be
  *
- * That order is deliberate. A user who has to install Goose needs the link and the command *now*, and making
- * them press *Check* first to be told "not installed, here is where to get it" is a step that exists only
- * because the screen was built around the probe. The two facts are different in kind — the recipe is data
- * (`npx`-fetched or not, and where the tool lives) and the state is a measurement — so they are rendered in
- * different places and neither waits for the other. The link is always shown; the *state* is never assumed.
+ * The row's visible line is chosen by `fixOrPhrase`, and the two branches are the two shapes a catalogue row
+ * comes in:
+ *
+ *   * **measured and missing something** → the fix, verbatim, when it is a command. The catalogue's own hints
+ *     are not always commands (`install Node.js so that \`npx\` is on PATH — …` is 127 characters of English),
+ *     and a hint that is a sentence gets the short phrase instead, with the whole of it one press away.
+ *   * **anything else** → what obtaining this program means, which is the honest and useful fact and is short:
+ *     `Nothing to install` for the 14 `npx` recipes, `Install Goose first` for the rest.
+ *
+ * ## Why the recipe's own command line is not the line
+ *
+ * It is the most tempting string on the row and it is the wrong one: `commandLineOf(entry)` is up to 60
+ * characters of argv (`npx -y droid@0.179.0 exec --output-format acp-daemon`), it is the same for every
+ * unmeasured row, and it answers "what would this run" to a user who has not yet asked whether this machine
+ * can run it. It is in the disclosure, monospaced and selectable, beside the description and the version.
  */
 function CatalogRow(props: {
   entry: CatalogEntry;
@@ -215,131 +282,151 @@ function CatalogRow(props: {
   // The fix is only ever present on a measurement that asserts an absence, which is the schema's rule rather
   // than this component's: `HarnessAvailability.fix` cannot exist on `ready`.
   const fix = probe?.state === "measured" ? (probe.availability.fix ?? []) : [];
+  const line = fixOrPhrase(
+    fix,
+    entry.install.kind === "npx"
+      ? t("settings.agents.row.nothingToInstall")
+      : t("settings.agents.row.install", { agent: entry.title }),
+    AGENT_ROW_LINE_BUDGET,
+  );
 
   return (
-    <li className="settings__catalog-row">
-      <div className="settings__agent-head">
-        <span className={`chip ${ROW_STATE_CHIP[state]}`}>{t(ROW_STATE_LABEL[state])}</span>
-        <strong>{entry.title}</strong>
-        <span className="settings__catalog-version">
-          {t("settings.agents.row.version", { version: entry.version })}
-        </span>
-      </div>
-      {/* **One line, because a list of thirty-eight is read by scanning.** The description is third-party
-          wording and some entries run to two hundred characters; at full length one row measures 220px and
-          the list becomes eighteen screens. So it is clamped to a single line with the whole sentence in the
-          `title` — *nothing is hidden*, it is one hover away, and a screen reader reads all of it because the
-          text is still in the document. Measured before and after this change: see §7.13. */}
-      <p className="settings__agent-summary" title={entry.description}>
-        {entry.description}
-      </p>
-      {/* **The command and the install guidance on one line, which is the pair a user acts on.** The command
-          is monospaced and selectable because it is what they would paste into a terminal; the sentence
-          beside it is the one that differs by shape, and it matters which one they read. An `npx` recipe
-          installs itself on the first run — there is nothing to fetch by hand, and a row that said "install
-          it" would send somebody to a download page for a program that has no installer. The other shape
-          names the tool and links to where its own documentation says to get it. */}
-      <p className="settings__catalog-facts">
-        <code className="settings__agent-command">{commandLineOf(entry)}</code>
-        <span className="settings__hint">
-          {entry.install.kind === "npx"
-            ? t("settings.agents.row.needsNoInstall", {
-                package: entry.install.package,
-                agent: entry.title,
-              })
-            : t("settings.agents.row.install", {
-                agent: entry.title,
-                command: commandLineOf(entry),
-              })}
-        </span>
-        {entry.installLink !== "" ? (
-          <a
-            className="settings__link"
-            href={entry.installLink}
-            target="_blank"
-            rel="noreferrer noopener"
-            title={t("settings.agents.row.installLink.title", { agent: entry.title })}
-          >
-            {t("settings.agents.row.installLink")}
-          </a>
-        ) : null}
-      </p>
-      {entry.env.length > 0 ? (
-        // **The recipe's own constants, and the sentence says they are supplied rather than owed.**
-        // This used to read "set these in the environment EnvoyCoder runs in", because a provider config
-        // could carry names only and the value was dropped on the way across. It cannot say that any more:
-        // the entry's constants travel with the reference, so what a user needs to know is which variables
-        // the recipe sets for them — and that exporting one is how they change it. The *values* are
-        // deliberately not printed: they are ours, they are in the catalogue, and a row is not the place to
-        // read a constant that no user action depends on.
-        <p className="settings__hint">
-          {t("settings.agents.row.recipeEnv", {
-            names: entry.env.map((constant) => constant.name).join(", "),
-          })}
-        </p>
-      ) : null}
-      {fix.map((step) => (
-        <p key={step.command} className="settings__hint" title={step.url}>
-          {step.command}
-        </p>
-      ))}
-      {probe?.state === "measured" ? (
-        <p className="settings__hint">
-          {probe.cached
-            ? t("settings.agents.row.checked.cached", { when: formatWhen(probe.observedAt, locale) })
-            : t("settings.agents.row.checked", {
-                when: formatWhen(probe.observedAt, locale),
-                ms: probe.costMs,
-              })}
-        </p>
-      ) : null}
-      {probe?.state === "refused" ? (
-        <p className="settings__note settings__note--refused" role="status">
-          {localize(t, probe.notice)}
-        </p>
-      ) : null}
-      <div className="settings__agent-facts">
-        <button
-          type="button"
-          className="button button--secondary button--small"
-          disabled={probe?.state === "checking"}
-          title={t("settings.agents.row.check.title")}
-          onClick={() => void props.onCheck(entry)}
-        >
-          {probe?.state === "checking"
-            ? t("settings.agent.checking")
-            : probe === undefined
-              ? t("settings.agents.row.check")
-              : t("settings.agents.row.checkAgain")}
-        </button>
-        {props.blocker === "built-in" ? (
-          // Shown rather than hidden: a user looking for Cursor must find it. What it loses is the button,
-          // because `resolveAgentEntry`'s rule is that a built-in wins — two rows answering to one id is the
-          // ambiguity that rule removes.
-          <span className="settings__hint">{t("settings.agents.row.builtIn")}</span>
-        ) : props.blocker === "already-added" ? (
+    <AgentRow
+      className="settings__catalog-row"
+      stateLabel={t(ROW_STATE_LABEL[state])}
+      stateChip={ROW_STATE_CHIP[state]}
+      name={entry.title}
+      about={entry.description}
+      line={line.line}
+      lineIsCommand={line.isCommand}
+      {...(line.title !== undefined ? { lineTitle: line.title } : {})}
+      actions={
+        <>
           <button
             type="button"
-            className="button button--ghost button--small"
-            disabled={props.busy}
-            title={t("settings.agents.mine.remove.title", { agent: entry.title })}
-            onClick={() => void props.onRemove(entry)}
+            className="button button--secondary button--small"
+            disabled={probe?.state === "checking"}
+            title={t("settings.agents.row.check.title")}
+            onClick={() => void props.onCheck(entry)}
           >
-            {t("settings.agents.mine.remove")}
+            {probe?.state === "checking"
+              ? t("settings.agent.checking")
+              : probe === undefined
+                ? t("settings.agents.row.check")
+                : t("settings.agents.row.checkAgain")}
           </button>
-        ) : (
-          <button
-            type="button"
-            className="button button--primary button--small"
-            disabled={props.busy}
-            title={t("settings.agents.row.add.title", { agent: entry.title })}
-            onClick={() => void props.onAdd(entry)}
-          >
-            {props.busy ? t("settings.agents.row.adding") : t("settings.agents.row.add")}
-          </button>
-        )}
-      </div>
-    </li>
+          {props.blocker === "built-in" ? (
+            // Shown rather than hidden: a user looking for Cursor must find it. What it loses is the button,
+            // because `resolveAgentEntry`'s rule is that a built-in wins — two rows answering to one id is the
+            // ambiguity that rule removes.
+            <span className="settings__agent-note" title={t("settings.agents.row.builtIn")}>
+              {t("settings.agents.row.builtIn.short")}
+            </span>
+          ) : props.blocker === "already-added" ? (
+            <button
+              type="button"
+              className="button button--ghost button--small"
+              disabled={props.busy}
+              title={t("settings.agents.mine.remove.title", { agent: entry.title })}
+              onClick={() => void props.onRemove(entry)}
+            >
+              {t("settings.agents.mine.remove")}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="button button--primary button--small"
+              disabled={props.busy}
+              title={t("settings.agents.row.add.title", { agent: entry.title })}
+              onClick={() => void props.onAdd(entry)}
+            >
+              {props.busy ? t("settings.agents.row.adding") : t("settings.agents.row.add")}
+            </button>
+          )}
+        </>
+      }
+      details={
+        <>
+          {/* The description is third-party wording and some entries run to two hundred characters, which is
+              why it is here rather than on the row: it is what a user reads when they have decided this recipe
+              might be the one, and it is noise to a user scanning thirty-eight. */}
+          <p className="settings__agent-fact">{entry.description}</p>
+          {/* The command, monospaced and selectable because it is what they would paste into a terminal. */}
+          <p className="settings__agent-fact">
+            <code className="settings__agent-command">{commandLineOf(entry)}</code>
+            <span className="settings__agent-note">
+              {t("settings.agents.row.version", { version: entry.version })}
+            </span>
+          </p>
+          {/* **The install guidance, and the one sentence that differs by shape.** An `npx` recipe installs
+              itself on the first run — there is nothing to fetch by hand, and a row that said "install it"
+              would send somebody to a download page for a program that has no installer. The other shape names
+              the tool and links to where its own documentation says to get it. */}
+          <p className="settings__agent-fact">
+            {entry.install.kind === "npx"
+              ? t("settings.agents.row.needsNoInstall", {
+                  package: entry.install.package,
+                  agent: entry.title,
+                })
+              : t("settings.agents.row.needsInstall", { agent: entry.title })}
+            {entry.installLink !== "" ? (
+              <>
+                {" "}
+                <a
+                  className="settings__link"
+                  href={entry.installLink}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  title={t("settings.agents.row.installLink.title", { agent: entry.title })}
+                >
+                  {t("settings.agents.row.installLink")}
+                </a>
+              </>
+            ) : null}
+          </p>
+          {entry.env.length > 0 ? (
+            // **The recipe's own constants, and the sentence says they are supplied rather than owed.** This
+            // used to read "set these in the environment EnvoyCoder runs in", because a provider config could
+            // carry names only and the value was dropped on the way across. It cannot say that any more: the
+            // entry's constants travel with the reference, so what a user needs to know is which variables the
+            // recipe sets for them — and that exporting one is how they change it. The *values* are deliberately
+            // not printed: they are ours, they are in the catalogue, and a row is not the place to read a
+            // constant that no user action depends on.
+            <p className="settings__agent-fact">
+              {t("settings.agents.row.recipeEnv", {
+                names: entry.env.map((constant) => constant.name).join(", "),
+              })}
+            </p>
+          ) : null}
+          {/* **The whole of a fix whose row line is a short phrase.** `fixOrPhrase` puts the command on the row
+              when it fits; when the fix is a *sentence* the row says what to do in three words and the sentence
+              has to live somewhere a keyboard and a touch screen can reach, which a `title` is not. Rendered
+              only in that branch: a command that is already the row's own line does not need saying twice. */}
+          {line.isCommand ? null : (
+            <ul className="settings__agent-more">
+              {fix.map((step) => (
+                <li key={step.command}>{step.command}</li>
+              ))}
+            </ul>
+          )}
+          {probe?.state === "measured" ? (
+            <p className="settings__agent-fact">
+              {probe.cached
+                ? t("settings.agents.row.checked.cached", { when: formatWhen(probe.observedAt, locale) })
+                : t("settings.agents.row.checked", {
+                    when: formatWhen(probe.observedAt, locale),
+                    ms: probe.costMs,
+                  })}
+            </p>
+          ) : null}
+          {probe?.state === "refused" ? (
+            <p className="settings__note settings__note--refused" role="status">
+              {localize(t, probe.notice)}
+            </p>
+          ) : null}
+        </>
+      }
+    />
   );
 }
 
@@ -407,7 +494,6 @@ function ManualAgentForm(props: { agents: AgentActions }): JSX.Element {
   return (
     <form className="settings__manual" onSubmit={(event) => void onSubmit(event)}>
       <h3 className="settings__heading">{t("settings.agents.manual.heading")}</h3>
-      <p className="settings__note">{t("settings.agents.manual.note")}</p>
 
       <label className="settings__field">
         <span className="setting__title">{t("settings.agents.manual.label")}</span>
