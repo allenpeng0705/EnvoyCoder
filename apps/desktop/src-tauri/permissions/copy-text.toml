@@ -1,0 +1,8 @@
+# Custom commands are not callable until a capability allows them — `invoke_handler!` registration alone is
+# not enough in Tauri v2, and the refusal is a raw ACL message the window renders as a failed copy.
+#
+# Same pattern as `permissions/pick-folder.toml` and `permissions/daemon-shell.toml`.
+[[permission]]
+identifier = "allow-copy-text"
+description = "Put a command on the clipboard, so a user can paste an install line this app showed them."
+commands.allow = ["copy_text"]

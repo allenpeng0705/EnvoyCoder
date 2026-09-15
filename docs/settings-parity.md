@@ -3164,6 +3164,41 @@ throughout, because nothing in them stored an observation through the schema —
 `HarnessAuthSchema` carries: `terminal` belongs to `needs-signin` alone.
 
 
+#### 7.22.6 The four facts that are still unmeasured, and exactly what unblocks them
+
+The Copilot entry is honest about what nobody has seen, and this is the state it is in: **`agentMode`, `model`,
+`thinking`, `approvals` and `approvalPolicy` are all `false`**, because all five are facts about a *session* and no
+session has opened on this machine — `session/new` answers `Authentication required` until `copilot login` has run.
+`drivable.test.ts` enforces the consequence: a `true` for `agentMode` must name the field the agent reads (`mode` or
+`modeId`), and that cannot be defaulted, because guessing wrong is a silent no-op for one of the two contracts. So the
+pickers are **off with a reason** rather than offering a model that never reaches the agent.
+
+Measured live, today, on the running daemon:
+
+```console
+copilot: availability ready (…/bin/copilot) · auth needs-signin (copilot-login)
+         terminal "…/@github/copilot-darwin-arm64/copilot login"
+         capabilities resume ✓ cancel ✓ structuredTools ✓ streaming ✓ images ✓
+                      approvals ✗ agentMode ✗ model ✗ thinking ✗ approvalPolicy ✗
+         delivery installed · fetchable @github/copilot (covers the agent)
+```
+
+That is the whole of what can be said without a login, and the row says exactly it: **installed and drivable**, needs
+its own sign-in, and — because its sign-in is a terminal command rather than a protocol step — the command itself
+instead of a button that could not work (§7.22.5).
+
+**What unblocks the rest**, in one command on this machine, and it is the owner's to run because it is a GitHub account
+and not ours:
+
+```console
+copilot login
+```
+
+After that, forcing the app's own *Ask again* (`coder.probeSessionOptions`) fills in the five flags from the session the
+agent then opens, and the entry's `evidence` gains the transcript. Until then the entry must not claim them, and does
+not.
+
+
 ### 7.23 Fetching is not only for bridges
 
 The owner's follow-up question, from the other end of §7.22: *"But if user didn't install copilot, what will happen?"*
@@ -3604,6 +3639,90 @@ form-control fixes removed (6 palette rows at 1.04:1). The e2e leg names the sur
 failed to open the task — a real failure mode, and the first thing this leg did — cannot pass by measuring an empty
 pane. Gates: **903 passed / 10 skipped**, 12 Rust tests, and the new `scripts:check` (the two extra skips are this
 leg, which needs `RUN_E2E=1` and a browser like every other pixel measurement here).
+
+### 7.29 Copying a command: the webview's gesture rules, and the one path that has none
+
+`Copy` beside an install command is a small control with three ways to work and four ways to lie about it, so the
+research is written down rather than remembered.
+
+| path | what it needs | where it fails |
+|---|---|---|
+| `navigator.clipboard.writeText` | a **live user gesture** | WebKit rejects with `NotAllowedError` if anything was awaited first; WebKitGTK additionally needs clipboard access enabled in the webview, which this shell does not do |
+| the shell's `copy_text` (`invoke` → the platform's own tool) | nothing | an older shell without the command, or a capability that does not grant it |
+| `document.execCommand("copy")` | a live gesture | deprecated, and **off by default under WebKitGTK** |
+
+The secure-context hypothesis this started from was **wrong**, and that matters because it would have been the
+expensive fix: the packaged origins are all secure (`tauri://localhost` on macOS and Linux, `http://tauri.localhost`
+on Windows — Tauri's custom protocol exists *to* provide a secure context), so `navigator.clipboard` is defined even
+in the bundle. What differs is *when* the write happens relative to the gesture, and what each platform's clipboard
+policy allows — and on a WebKitGTK window whose webview has clipboard access off, **no webview path works at all**,
+which is the case this fixes.
+
+#### 7.29.1 The order, and why it is that order
+
+1. **The webview's API first, synchronously** — the fast path, and only reliable before anything is awaited, so it
+   cannot be a fallback.
+2. **The shell second** — `copy_text` is an `invoke`, which is *not* gated on transient activation, so it catches
+   exactly what the first path drops: a refused permission, and every WebKitGTK build where `navigator.clipboard` is
+   missing (before 2.40) or its `javascriptCanAccessClipboard` is off.
+3. **`execCommand` last** — deprecated, may be disabled, attempted rather than trusted. Its answer is the function's.
+
+Each attempt is a real promise and the first that lands wins, so a machine with two working paths makes one write.
+The control reads the boolean honestly: `false` renders *Could not copy*, and `canCopyText()` is asked **before** the
+button is drawn — which is why the shell being able to write also means the button *exists* on a Linux window whose
+webview cannot.
+
+#### 7.29.2 Why a command rather than `tauri-plugin-clipboard-manager`
+
+The plugin is the supported route, and it was written first — registered, permission named
+(`clipboard-manager:allow-write-text`), the lot. **It could not be built on the machine this was developed on:**
+`cargo` cannot reach the registry through this environment's network. The fetch sits at *Updating crates.io index*
+indefinitely (measured: two established sockets to the CDN, no bytes written to the cache in fifteen minutes, while
+`curl` fetches the same index file and the same `.crate` in seconds), and the consequence was worse than a slow
+build: the owner's own `tauri dev` re-ran its build on the edited `Cargo.toml`, blocked on the package cache lock my
+fetch was holding, and the app window went away while both waited.
+
+A dependency that cannot be fetched is worse than the tool already in the box, so the clipboard goes through the
+platform's own binary — which is what `pick_folder` has always done for its dialogs, and what `Cargo.toml` explains
+for its refusals. `copy_text`:
+
+* **macOS** — `pbcopy`, which ships with the system;
+* **Windows** — `Set-Clipboard` through PowerShell, **reading stdin** so no text ever reaches a command line (a
+  command with `'`, `"` and `&` in it, quoted into a shell, is how a copy becomes an injection), with `clip.exe` as
+  the fallback for a machine without PowerShell — second because it writes in the OEM code page;
+* **Linux** — `wl-copy`, then `xclip -selection clipboard`, then `xsel --clipboard --input`, each named in the error
+  when none is installed, exactly as `pick_folder` names zenity and kdialog.
+
+Going back to the plugin later is a `Cargo.toml` line, a capability entry and one constant in `clipboard.ts`; that is
+recorded here so the next reader does not have to rediscover why the Rust side shells out for a clipboard.
+
+#### 7.29.3 The three files that have to agree, because the failure is silent
+
+A Tauri v2 command is not callable until a capability grants it — `invoke_handler!` alone leaves the window's promise
+rejected — so the command in `main.rs` (defined **and** registered), `permissions/copy-text.toml` (which names it)
+and `capabilities/default.json` (which grants that permission) all have to be there. If one is missing, the build
+succeeds, the app starts, and the write rejects at runtime with a message the Copy control renders as *Could not
+copy*, which is indistinguishable from a machine with no clipboard.
+
+`apps/desktop/test/clipboard-paths.test.ts` pins all three, anchored to the start of a line rather than by
+substring. **Reading is not offered at all**: the only clipboard command is the writer, and `copy_text` never looks at
+what is already on the clipboard.
+
+#### 7.29.4 What is verified, and what is not
+
+**A real round trip, on this machine.** `a_hostile_command_lands_on_the_clipboard_verbatim` calls the command with a
+string containing quotes, `&&`, `$HOME`, a semicolon and a newline, reads it back with `pbpaste`, and asserts byte
+equality — then puts the developer's own clipboard back. That is the instrument that can tell "the Copy control
+works" from "the promise resolved": the gesture rule this exists for is a runtime behaviour no type can express. A
+second Rust test asserts a missing tool is reported *by name*. **14 Rust tests**, up from 12.
+
+**Six jsdom legs**, each mutation-checked: the shell tried first (the fast path loses the gesture), the shell path
+removed, `canCopyText` ignoring the shell, the legacy path dropped, the permission naming a command that does not
+exist, the capability not granting it, and the command defined under a name other than the one registered.
+
+**Not verified by me: a press in a packaged WKWebView.** There is no CDP channel into a Tauri window, so the
+instrument for *that* is the owner's own click on a Copy control in the shipped window. Recorded as a limit rather
+than implied by a passing suite.
 
 ## 8. The slice plan
 

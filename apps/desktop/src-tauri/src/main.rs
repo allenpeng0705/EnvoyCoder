@@ -599,7 +599,10 @@ fn main() {
                 coder_paths,
                 daemon_endpoint,
                 daemon_status,
-                pick_folder
+                pick_folder,
+                // The clipboard: `Copy` beside an install command must not depend on the webview's gesture rules,
+                // which is what `copy_text`'s own doc explains.
+                copy_text
             ])
         .build(tauri::generate_context!())
         .expect("EnvoyCoder failed to start")
@@ -774,6 +777,129 @@ fn pick_folder(prompt: Option<String>, default_path: Option<String>) -> Result<O
     }
 }
 
+/**
+ * **Put text on the clipboard, through the platform's own tool.**
+ *
+ * ## Why the window asks the shell instead of calling the webview's clipboard API
+ *
+ * `navigator.clipboard.writeText` works in all three webviews this product ships in — the packaged origins are
+ * secure contexts (`tauri://localhost` on macOS and Linux, `http://tauri.localhost` on Windows), so the API is
+ * there — but it is gated on a **live user gesture**: WebKit rejects the write with `NotAllowedError` if anything
+ * was awaited first. The window still tries it first, in the same tick as the click, and this command is what
+ * catches the rest: a refused permission, and every WebKitGTK build where the API is missing (before 2.40) or its
+ * `javascriptCanAccessClipboard` is off — which is the default there, and which also disables the legacy
+ * `document.execCommand("copy")` path. On such a machine the Copy control beside an install command had no working
+ * path at all, and a user was left to retype a command line from a screenshot.
+ *
+ * ## Why a command rather than a plugin
+ *
+ * The supported route is `tauri-plugin-clipboard-manager`, and this was written that way first. It cannot be built
+ * on the machine this was developed on: `cargo` cannot reach the registry through this environment's network, so
+ * the new dependency made the whole shell unbuildable — including the owner's own `tauri dev`, which then sat
+ * waiting on the package-cache lock. A dependency that cannot be fetched is worse than the tool we already have,
+ * so the clipboard goes through the platform's own binary instead, which is what `pick_folder` below does for its
+ * dialogs and for the same reason: no new crate, and an honest error naming what was tried.
+ *
+ * ## The three platforms
+ *
+ *   * **macOS** — `pbcopy`, which ships with the system.
+ *   * **Windows** — `Set-Clipboard` through PowerShell, reading stdin so that no text ever reaches a command line
+ *     (quoting a command with `'` and `"` in it into a shell is how a copy becomes an injection). `clip.exe` is
+ *     the fallback for a machine where PowerShell is unavailable, and it is second because it writes in the OEM
+ *     code page: a command with a non-ASCII character in it survives the first and not the second.
+ *   * **Linux** — `wl-copy` on Wayland, then `xclip`, then `xsel`. All three read stdin.
+ *
+ * Returns the tool it used, so the window (or a test) can say which path answered rather than only that something
+ * did.
+ */
+#[tauri::command]
+fn copy_text(text: String) -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        write_stdin("pbcopy", &[], &text)?;
+        return Ok("pbcopy".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let script = "Set-Clipboard -Value ([Console]::In.ReadToEnd())";
+        if write_stdin(
+            "powershell",
+            &["-NoProfile", "-NonInteractive", "-Command", script],
+            &text,
+        )
+        .is_ok()
+        {
+            return Ok("powershell".to_string());
+        }
+        write_stdin("clip", &[], &text)?;
+        return Ok("clip".to_string());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Prefer the Wayland tool, then the two X11 ones. Each is tried in order, and what was tried is named
+        // when none of them is installed — the same rule `pick_folder` follows for its dialogs.
+        let mut tried: Vec<&str> = Vec::new();
+        for (bin, args) in [
+            ("wl-copy", vec![]),
+            ("xclip", vec!["-selection", "clipboard"]),
+            ("xsel", vec!["--clipboard", "--input"]),
+        ] {
+            match write_stdin(bin, &args, &text) {
+                Ok(()) => return Ok(bin.to_string()),
+                Err(_) => tried.push(bin),
+            }
+        }
+        return Err(format!(
+            "no clipboard tool available (tried {}). Install wl-clipboard, xclip or xsel to copy commands here.",
+            tried.join(", ")
+        ));
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        let _ = text;
+        Err("this platform has no clipboard path in this build".to_string())
+    }
+}
+
+/// Feed `text` to a platform tool on stdin and fail loudly if the tool does.
+///
+/// Reading from stdin rather than taking the text as an argument is the whole safety margin: a command line is
+/// parsed by a shell on one platform and by `CreateProcess` on another, and an install line is text a user is
+/// meant to copy — quotes, backslashes, `&` and newlines included.
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+fn write_stdin(bin: &str, args: &[&str], text: &str) -> Result<(), String> {
+    use std::io::Write as _;
+
+    let mut child = Command::new(bin)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("{bin} is not available: {error}"))?;
+
+    let mut stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| format!("{bin} did not accept input"))?;
+    stdin
+        .write_all(text.as_bytes())
+        .map_err(|error| format!("{bin} refused the text: {error}"))?;
+    drop(stdin);
+
+    let output = child
+        .wait_with_output()
+        .map_err(|error| format!("{bin} could not be waited for: {error}"))?;
+    if !output.status.success() {
+        let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(format!("{bin} exited {}: {detail}", output.status));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -784,6 +910,51 @@ mod tests {
         let result = body();
         std::env::remove_var("ENVOYMESH_HOME");
         result
+    }
+
+    /**
+     * **The clipboard path, end to end, on this machine.**
+     *
+     * Not a mock: the command runs the platform's own tool and the test reads the clipboard back with the
+     * platform's own reader. That is the only instrument that can tell "the Copy control works" from "the promise
+     * resolved" — and the gesture rule this command exists for is a *runtime* behaviour no type can express.
+     *
+     * The text is deliberately hostile: quotes, an ampersand, `$HOME`, a newline. An implementation that passed
+     * the text as a shell argument instead of writing it to stdin would mangle or execute exactly this string, and
+     * an install line is text a user is meant to copy verbatim.
+     *
+     * The developer's own clipboard is saved and put back, because a test that eats what someone was about to
+     * paste is a test people stop running.
+     *
+     * `pbpaste` here is the *test's* instrument — `copy_text` itself only ever writes, which is the whole of what
+     * this product asks the clipboard for.
+     */
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn a_hostile_command_lands_on_the_clipboard_verbatim() {
+        let before = Command::new("pbpaste").output().ok().map(|out| out.stdout);
+
+        let command = "npm install -g \"pkg\" && echo $HOME > /dev/null; echo 'done'";
+        let tool = copy_text(command.to_string()).expect("the clipboard write should land");
+        assert_eq!(tool, "pbcopy");
+
+        let read_back = Command::new("pbpaste").output().expect("pbpaste is part of macOS");
+        assert_eq!(
+            String::from_utf8_lossy(&read_back.stdout),
+            command,
+            "the clipboard must carry the command verbatim"
+        );
+
+        if let Some(previous) = before {
+            let _ = write_stdin("pbcopy", &[], &String::from_utf8_lossy(&previous));
+        }
+    }
+
+    /** A missing tool is an honest error naming it, never a silent success. */
+    #[test]
+    fn a_clipboard_tool_that_is_not_there_is_reported_by_name() {
+        let error = write_stdin("envoycoder-no-such-clipboard-tool", &[], "x").expect_err("there is no such tool");
+        assert!(error.contains("envoycoder-no-such-clipboard-tool"), "{error}");
     }
 
     #[test]
