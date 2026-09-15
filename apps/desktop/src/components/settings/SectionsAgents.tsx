@@ -102,6 +102,7 @@ import { localizeText } from "../../i18n/notice.js";
 import type { SettingsSectionProps } from "./SectionProps.js";
 import { AgentRow } from "./AgentRow.js";
 import { FactsBlock, GuideBlock } from "./RowGuide.js";
+import type { FixRunAnswer } from "./FixRunner.js";
 import { rowVerdict, verdictFacts } from "./agent-verdict.js";
 import { AGENT_ROW_LINE_BUDGET } from "./density.js";
 import { CatalogList } from "./CatalogRows.js";
@@ -136,6 +137,8 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
     providers: state.hello?.methods.includes("coder.listProviders") === true,
     signIn: state.hello?.methods.includes("coder.signInAgent") === true,
     recheck: state.hello?.methods.includes("coder.recheckAgents") === true,
+    // The press that runs a fix, and the same build-skew rule as every other control on this page.
+    runFix: state.hello?.methods.includes("coder.runFix") === true,
   };
 
   /**
@@ -212,6 +215,9 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
             canSignIn={can.signIn}
             signingIn={signingIn === harness.id}
             onSignIn={onSignIn}
+            {...(can.runFix
+              ? { onRunFix: () => agents.runFix({ kind: "harness", id: harness.id }) }
+              : {})}
           />
         ))}
         {state.harnesses.length === 0 ? (
@@ -242,6 +248,7 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
               provider={provider}
               commandLabel="settings.agents.mine.command"
               onRemove={() => void agents.removeProvider(provider.id)}
+              {...(can.runFix ? { onRunFix: () => agents.runFix({ kind: "provider", id: provider.id }) } : {})}
             />
           ))}
           {state.providers.length === 0 ? (
@@ -297,6 +304,13 @@ function ShippedAgent(props: {
   canSignIn: boolean;
   signingIn: boolean;
   onSignIn: (harness: HarnessSummary) => Promise<void>;
+  /**
+   * The press that runs this row's fix, when the daemon serves it.
+   *
+   * A closure rather than a flag plus an id, because the row is the only place that knows which of the three
+   * kinds of target it is — and the daemon's method takes an id, never a command.
+   */
+  onRunFix?: () => Promise<FixRunAnswer>;
 }): JSX.Element {
   const { t, locale } = useI18n();
   const { harness } = props;
@@ -361,7 +375,9 @@ function ShippedAgent(props: {
           {/* **The way out first, then the facts.** The order is the mandate's: a row that is not ready says
               what to do before it says what it is, and `GuideBlock` renders no list at all when there is
               nothing to do — the layout half of "our gap is not your missing install". */}
-          {verdict.guide !== undefined ? <GuideBlock guide={verdict.guide} /> : null}
+          {verdict.guide !== undefined ? (
+            <GuideBlock guide={verdict.guide} {...(props.onRunFix !== undefined ? { run: props.onRunFix } : {})} />
+          ) : null}
           <FactsBlock facts={facts} />
         </>
       }
@@ -396,6 +412,8 @@ function ProviderRow(props: {
    */
   commandLabel: MessageKey;
   onRemove: () => void;
+  /** The same press, for a program the user declared — see `ShippedAgent`'s prop for why it is a closure. */
+  onRunFix?: () => Promise<FixRunAnswer>;
 }): JSX.Element {
   const { t, locale } = useI18n();
   const { provider } = props;
@@ -458,7 +476,9 @@ function ProviderRow(props: {
       }
       details={
         <>
-          {verdict.guide !== undefined ? <GuideBlock guide={verdict.guide} /> : null}
+          {verdict.guide !== undefined ? (
+            <GuideBlock guide={verdict.guide} {...(props.onRunFix !== undefined ? { run: props.onRunFix } : {})} />
+          ) : null}
           <FactsBlock facts={facts} />
         </>
       }

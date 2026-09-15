@@ -68,6 +68,14 @@ class FakeConnection {
     // Looking at the machine again: acknowledged, and deliberately carrying no list (`coder.recheckAgents`
     // documents why). A store leg that wanted a *different* answer after a re-check stages it in `answers`.
     this.answers.set("coder.recheckAgents", { ok: true });
+    // Running a fix: a success with no output, which is the shape the daemon serves for a command that worked
+    // quietly. A leg about one of the other three outcomes stages its own.
+    this.answers.set("coder.runFix", {
+      outcome: "succeeded",
+      commands: ["npm install -g x"],
+      exitCode: 0,
+      output: "",
+    });
   }
 
   onStatus(listener: (status: ConnectionStatus) => void): () => void {
@@ -217,6 +225,56 @@ describe("the store's connection to the daemon", () => {
 
     expect(created.getSnapshot().error).toBeUndefined();
     expect(connection.calls.map((call) => call.method)).toContain("coder.listTasks");
+  });
+
+  it("runs a fix through the daemon, sending the target and returning its outcome", async () => {
+    // The one action in this store that changes the user's machine, and its shape is the design: **an id, never a
+    // command**. The daemon resolves the commands through the same probes that drew the row, so the mutation this
+    // fails on is a window passing a command line down from the row it happens to be showing.
+    const connection = new FakeConnection();
+    const created = createCoderStore({
+      resolveEndpoint: async () => endpoint,
+      connect: () => connection as unknown as CoderConnection,
+    });
+    await created.start();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    connection.calls.length = 0;
+
+    const result = await created.runFix({ kind: "harness", id: "codex" });
+    expect(result.ok).toBe(true);
+    const call = connection.calls.find((entry) => entry.method === "coder.runFix");
+    expect(call?.params).toEqual({ target: { kind: "harness", id: "codex" } });
+    // Nothing is refetched here: the daemon re-checks as part of the run and emits `harnesses`, and the window
+    // re-reads on that event like it does for every other change.
+    expect(connection.calls.map((entry) => entry.method)).toEqual(["coder.runFix"]);
+    if (result.ok) expect(result.result.outcome).toBe("succeeded");
+  });
+
+  it("does not offer to run a fix to a daemon that does not serve the method", async () => {
+    const connection = new FakeConnection();
+    connection.hello = {
+      product: "EnvoyCoder",
+      version: "0.1.0",
+      instanceId: "daemon-from-an-older-build",
+      home: "/home/you/.envoymesh",
+      stateDir: "/home/you/.envoymesh/EnvoyCoder",
+      startedAt: "2026-09-14T01:41:19.093Z",
+      windowCount: 1,
+      methods: ["coder.hello", "coder.listHarnesses"],
+      mesh: { kind: "no-node" },
+      notes: [],
+    };
+    const created = createCoderStore({
+      resolveEndpoint: async () => endpoint,
+      connect: () => connection as unknown as CoderConnection,
+    });
+    await created.start();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    connection.calls.length = 0;
+
+    const result = await created.runFix({ kind: "harness", id: "codex" });
+    expect(result.ok).toBe(false);
+    expect(connection.calls).toEqual([]);
   });
 
   it("re-checks the machine on request, then re-reads both lists through their ordinary loaders", async () => {

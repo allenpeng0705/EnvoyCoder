@@ -930,6 +930,30 @@ export const AvailabilityFixSchema = z
   .strict();
 
 /**
+ * **What a fix belongs to** — an id, and never a command line.
+ *
+ * The three tiers the Agents page draws (`HarnessSummary`, `AgentProviderSummary`, `CatalogEntry`), named by
+ * the id each of them already has. `coder.runFix` resolves the target through the same probes that drew the
+ * row, which is what makes "the command the user read is the command that runs" a property of the types
+ * rather than a promise.
+ */
+export const FixTargetSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("harness"), id: HarnessIdSchema }).strict(),
+  z.object({ kind: z.literal("catalog"), id: z.string().min(1) }).strict(),
+  z.object({ kind: z.literal("provider"), id: z.string().min(1) }).strict(),
+]);
+
+export type FixTarget = z.infer<typeof FixTargetSchema>;
+
+/**
+ * What one fix run produced — the shape `coder.runFix` answers with.
+ *
+ * Derived from the schema rather than written twice: the daemon's runner and the window's block both name this
+ * type, and a second interface would be the place the two drifted.
+ */
+export type FixRunResult = z.infer<(typeof RPC_SPECS)["coder.runFix"]["result"]>;
+
+/**
  * What this machine can actually do with one agent right now.
  *
  * ## The agreement rules the schema enforces rather than trusts
@@ -1876,6 +1900,56 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
   "coder.listHarnesses": {
     params: EmptyParams,
     result: z.object({ harnesses: z.array(HarnessSummarySchema).readonly() }).strict(),
+  },
+  /**
+   * **Run the fix a row is showing** — the answer to *"can we support run the commands in EnvoyCoder?"*
+   *
+   * ## The property this method exists to keep
+   *
+   * The window sends an **id and nothing else**. It cannot name a command, a shell, an argument or a
+   * directory: the daemon looks the target up through the same probes that drew the row, takes the
+   * `availability.fix` commands from that projection, and runs exactly those. So the command a user read is
+   * the command that runs, and a window — or anything pretending to be one — cannot ask this product to
+   * execute arbitrary shell.
+   *
+   * ## Four outcomes, and only one of them is a failure of the call
+   *
+   * `succeeded` and `failed` are about the command. `nothing-to-do` is the honest answer to a press that
+   * arrives after the world moved — the daemon re-measures on the read, so a user who installed the program
+   * in their own terminal and *then* pressed Install gets that answer rather than a command run twice.
+   * `refused` is about the target: an id that is no longer in any list. Only a malformed call is a protocol
+   * error; the other four are things this call found out, and a client renders them in the block the press
+   * came from.
+   *
+   * **The output is bounded and it is a tail.** Everything here is bounded — the login-shell asks, the probe,
+   * the search — and a package manager's transcript is the one thing in this product that can be genuinely
+   * enormous. What a user needs from it is the end: the error, when there is one.
+   */
+  "coder.runFix": {
+    params: z
+      .object({
+        target: FixTargetSchema,
+      })
+      .strict(),
+    result: z
+      .object({
+        outcome: z.enum(["succeeded", "failed", "nothing-to-do", "refused"]),
+        /** The exact commands, in the order they were run — the ones the row showed. */
+        commands: z.array(z.string()).readonly(),
+        /** The exit code of the step that stopped it, when one did. */
+        exitCode: z.number().int().nullable(),
+        /** The last of what the commands wrote, capped. */
+        output: z.string(),
+        /**
+         * Why nothing ran, when nothing did — **as a key, not as a sentence.**
+         *
+         * The daemon writes English; this window may be in Japanese, and a refusal that arrives as prose is a
+         * refusal that stays English (the same rule the error catalogue follows, one layer down). `timeout`
+         * means the sequence was killed at the deadline; `unknown-target` means the id is in no list any more.
+         */
+        reason: z.enum(["timeout", "unknown-target"]).optional(),
+      })
+      .strict(),
   },
   /**
    * **Look at this machine again** — the one method whose subject is the measurement itself.

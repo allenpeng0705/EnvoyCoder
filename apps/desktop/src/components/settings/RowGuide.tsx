@@ -22,6 +22,12 @@
  * is the same 1px frame, `--radius-lg` and 3px amber rule): a block a reader's eye lands on, the command in
  * the mono face on its own tinted line, and **Copy** beside it.
  *
+ * **And the block is where a row becomes resolvable.** `run` (FixRunner) is the press that executes the
+ * commands the block just showed — the answer to *"can we support run the commands in EnvoyCoder?"* — and it
+ * is passed in only by a caller that can name a target (a harness id, a catalogue id, a provider id) and only
+ * when the daemon serves the method. There is no command here for an `environment` guide to run, so that kind
+ * keeps the block and gets no button.
+ *
  * The colour is `--status-warning` and deliberately not the accent: the accent is this app's one *action*
  * colour (Send, Allow once) and a callout wearing it would compete with the primary button on the same
  * screen. Red is out for a recorded reason — destructive is a colour that only appears inside a confirmation.
@@ -47,6 +53,7 @@ import type { JSX } from "react";
 import { useI18n } from "../../i18n/context.js";
 import type { RowFact, VerdictGuide } from "./agent-verdict.js";
 import { CopyCommand } from "./CopyCommand.js";
+import { FixRunner, type FixRunAnswer } from "./FixRunner.js";
 
 /**
  * The way out of a Not-ready row — or the plain statement that there is nothing to do about it.
@@ -60,7 +67,18 @@ import { CopyCommand } from "./CopyCommand.js";
  * command line, so neither gets the block; giving them one would make the layout stop meaning *"there is
  * something here for you to run"*.
  */
-export function GuideBlock(props: { guide: VerdictGuide }): JSX.Element {
+export function GuideBlock(props: {
+  guide: VerdictGuide;
+  /**
+   * **The press that runs the commands**, when the caller can name a target and the daemon serves
+   * `coder.runFix`.
+   *
+   * Offered only for a `steps` guide: an `environment` guide names variables to set in the shell that started
+   * the daemon, and there is no command that would do that for the user — a button there would be a control
+   * that cannot work, which is the one thing this pane refuses to draw.
+   */
+  run?: () => Promise<FixRunAnswer>;
+}): JSX.Element {
   const { t } = useI18n();
   const { guide } = props;
   const fixable = guide.kind === "steps" || guide.kind === "environment";
@@ -86,6 +104,9 @@ export function GuideBlock(props: { guide: VerdictGuide }): JSX.Element {
               ))}
             </ul>
           )}
+          {/* **The press, after the commands.** A user reads what will run, then runs it — and a failure is
+              rendered right here, under the command that produced it. */}
+          {guide.kind === "steps" && props.run !== undefined ? <FixRunner run={props.run} /> : null}
           {guide.href !== undefined ? (
             <p className="settings__agent-fact">
               <a

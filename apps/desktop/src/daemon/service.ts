@@ -59,6 +59,7 @@ import type { CoderPaths } from "@envoycoder/host-bridge";
 
 import { keyed, ref } from "./messages.js";
 import { createCatalogHandlers } from "./catalog.js";
+import { createFixHandlers } from "./fixes.js";
 import { createRecheckHandlers } from "./recheck.js";
 import { createProviderHandlers } from "./providers.js";
 import { createSignInHandlers } from "./sign-in.js";
@@ -110,6 +111,15 @@ export interface CoderServiceDeps {
    * for a table built without one — the same shape `runs` uses when M1 builds a daemon that cannot run.
    */
   recheckAgents?: () => Promise<void>;
+  /**
+   * How a fix is run, injected for the same reason the probes are.
+   *
+   * A test of this method must be able to prove that the *sequence* runs and that a non-zero exit is reported
+   * without installing a package on anybody's machine: `fixes.test.ts` drives `runFixCommands` with `/bin/sh`
+   * scripts, and these two fields let the same be done through a daemon if a leg ever needs the whole path.
+   */
+  fixSpawn?: typeof import("node:child_process").spawn;
+  fixTimeoutMs?: number;
   /**
    * The environment a provider's named variables are read from.
    *
@@ -209,6 +219,23 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
             pathDirs: search.dirs,
             searchable: search.searchable,
           })),
+    }),
+    // **Running the fix a row shows** — the only method in this product that executes something on the user's
+    // behalf. The window sends an id; the commands come from the same probes that drew the row, at the moment of
+    // the press, so a command the user read is the command that runs and a window cannot name one. `fixes.ts`
+    // carries the four outcomes, the deadline and the group kill.
+    ...createFixHandlers({
+      probe,
+      providers: () => deps.store.providers(),
+      ...(probeProvider !== undefined ? { probeProvider } : {}),
+      ...(deps.probeCatalogEntry !== undefined ? { probeCatalogEntry: deps.probeCatalogEntry } : {}),
+      // A fix runs in the user's home, never in a project: an install is about the machine, and running one
+      // inside somebody's repository would put `node_modules` where they did not ask for it.
+      cwd: () => deps.paths.home,
+      pathDirs: () => currentSearchPath().dirs,
+      ...(deps.fixSpawn !== undefined ? { spawn: deps.fixSpawn } : {}),
+      ...(deps.fixTimeoutMs !== undefined ? { timeoutMs: deps.fixTimeoutMs } : {}),
+      ...(deps.recheckAgents !== undefined ? { recheck: deps.recheckAgents } : {}),
     }),
     // Looking at this machine again: one method, and its whole subject is the measurement — the user's half of
     // "I installed it while the window was open". `recheck.ts` carries why it is a press rather than a timer.

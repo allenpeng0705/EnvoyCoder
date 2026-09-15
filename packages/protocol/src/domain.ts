@@ -1027,6 +1027,15 @@ export const RPC_METHODS = [
    * that has to be asked about one at a time is a chore, and the chore was the design.
    */
   /**
+   * **Run the fix a row is showing**: the window names a target by id, the daemon resolves the commands
+   * through the same probes that drew the row, and runs exactly those.
+   *
+   * The one method in this product that executes a command on the user's behalf, which is why its shape is
+   * what it is: an id and nothing else, so a window cannot name a command; and one press per run, so the
+   * user is the one who decided. See `rpc.ts` for the four outcomes and the bounded output.
+   */
+  "coder.runFix",
+  /**
    * **Look at this machine again**: re-ask the login shell where the user's programs are, then tell every
    * window the answer may have changed.
    *

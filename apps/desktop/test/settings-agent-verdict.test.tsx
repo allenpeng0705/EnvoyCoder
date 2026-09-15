@@ -127,14 +127,30 @@ function show(
    * its own instead of restating a fifteen-line `hello`.
    */
   methods?: readonly string[],
-): { container: HTMLElement; touched: string[] } {
+  /**
+   * What `runFix` answers, when a leg is about one of the four outcomes.
+   *
+   * The proxy's default answer (`{ ok: true, detail }`) is the shape the *other* actions return, and a leg about
+   * a fix needs the result the daemon actually sends — success, a failure with an exit code, a timeout, or
+   * nothing to do. Additive: every existing leg keeps the default.
+   */
+  fixAnswer?: unknown,
+): { container: HTMLElement; touched: string[]; calls: { name: string; args: unknown[] }[] } {
   const touched: string[] = [];
+  const calls: { name: string; args: unknown[] }[] = [];
   const agents = new Proxy(
     {},
     {
       get: (_target, name) => {
         touched.push(String(name));
-        return vi.fn(async () => ({ ok: true as const, detail: "done" }));
+        const method = String(name);
+        return vi.fn(async (...args: unknown[]) => {
+          calls.push({ name: method, args });
+          if (method === "runFix") {
+            return fixAnswer ?? { ok: true as const, result: { outcome: "succeeded", commands: [], exitCode: 0, output: "" } };
+          }
+          return { ok: true as const, detail: "done" };
+        });
       },
     },
   ) as never;
@@ -204,7 +220,7 @@ function show(
       />
     </I18nProvider>,
   );
-  return { container, touched };
+  return { container, touched, calls };
 }
 
 const textOf = (node: Element | null): string => (node?.textContent ?? "").replace(/\s+/g, " ").trim();
@@ -714,6 +730,145 @@ describe("checking this machine again", () => {
       (candidate) => candidate.textContent === en["settings.agents.recheck"],
     );
     expect(button).toBeUndefined();
+  });
+});
+
+/* ────────────────────────── running the fix, in the block that shows it ────────────────────────── */
+
+/**
+ * **The owner's second question, as a control:** *"can we support run the commands in EnvoyCoder?"*
+ *
+ * The block already showed the command and a Copy; this is the press that runs it. Four things are asserted here,
+ * and each is a decision rather than a behaviour:
+ *
+ *   1. the press **sends the row's own target** — an id, never a command, which is what makes "the command you
+ *      read is the command that runs" a property of the daemon's method rather than a promise;
+ *   2. it is drawn **only where the daemon serves the method** (the build-skew rule) and **only for a `steps`
+ *      guide** — an `environment` guide names variables for the user's own shell, and there is no command that
+ *      could set them;
+ *   3. each of the daemon's four outcomes has its own sentence, and `timedOut` is not `failed`;
+ *   4. a failure shows the **command's own output**, because that is the only useful explanation of a package
+ *      manager's failure.
+ */
+describe("running the fix", () => {
+  const FIX_TARGET = { kind: "harness", id: "codex" };
+
+  /** The connector-missing row, with the press available. */
+  function connectorRow(fixAnswer?: unknown, methods: readonly string[] = ["coder.runFix"]) {
+    return show(
+      {
+        harnesses: [
+          harness({
+            id: "codex",
+            label: "Codex",
+            availability: { state: "needs-bridge", agentBinary: "/usr/local/bin/codex", fix: [{ command: ADAPTER }] },
+          }),
+        ],
+      },
+      methods,
+      fixAnswer,
+    );
+  }
+
+  const installButton = (container: HTMLElement): HTMLButtonElement => {
+    const panel = openDetails(rowOf(container, "Codex"));
+    const button = [...panel.querySelectorAll("button")].find(
+      (candidate) => candidate.textContent === en["settings.agents.fix.run"],
+    );
+    if (!(button instanceof HTMLButtonElement)) throw new Error("no Install control");
+    return button;
+  };
+
+  it("sends this row's own target, and says Done when the daemon says the command succeeded", async () => {
+    const { container, calls } = connectorRow();
+    fireEvent.click(installButton(container));
+    await waitFor(() => expect(calls.some((call) => call.name === "runFix")).toBe(true));
+
+    // **An id and nothing else.** The mutation this fails on is passing the command down from the window, which
+    // is exactly the property `coder.runFix` exists to make impossible.
+    const call = calls.find((entry) => entry.name === "runFix");
+    expect(call?.args[0]).toEqual(FIX_TARGET);
+    const panel = container.querySelector(".settings__agent-details");
+    await waitFor(() => expect(textOf(panel)).toContain(en["settings.agents.fix.run.done"]));
+  });
+
+  it("shows the exit code and the command's own output when it failed", async () => {
+    const { container } = connectorRow({
+      ok: true,
+      result: {
+        outcome: "failed",
+        commands: [ADAPTER],
+        exitCode: 3,
+        output: "npm ERR! 404 Not Found - GET https://registry.npmjs.org/x",
+      },
+    });
+    // `installButton` opens the disclosure as its side effect, so the panel is read *after* it rather than by
+    // opening a second time — `openDetails` toggles, and a second call would close what the first opened.
+    const button = installButton(container);
+    const panel = rowOf(container, "Codex").querySelector(".settings__agent-details");
+    if (panel === null) throw new Error("the disclosure did not open");
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(textOf(panel)).toContain(tEn("settings.agents.fix.run.failed", { code: 3 })),
+    );
+    // The command's words, verbatim: the only useful explanation of a package manager's failure.
+    const output = panel.querySelector(".settings__agent-output");
+    if (output === null) throw new Error("the failure showed no output");
+    expect(textOf(output)).toContain("npm ERR! 404");
+  });
+
+  it("tells a timeout apart from a failure", async () => {
+    const { container } = connectorRow({
+      ok: true,
+      result: { outcome: "failed", commands: [ADAPTER], exitCode: null, output: "", reason: "timeout" },
+    });
+    fireEvent.click(installButton(container));
+    const panel = container.querySelector(".settings__agent-details");
+    await waitFor(() => expect(textOf(panel)).toContain(en["settings.agents.fix.run.timedOut"]));
+    expect(textOf(panel)).not.toContain(tEn("settings.agents.fix.run.failed", { code: 0 }));
+  });
+
+  it("says nothing to install when the world moved between the read and the press", async () => {
+    // The honest answer to a press that arrives after the user installed the program themselves.
+    const { container } = connectorRow({
+      ok: true,
+      result: { outcome: "nothing-to-do", commands: [], exitCode: null, output: "" },
+    });
+    fireEvent.click(installButton(container));
+    const panel = container.querySelector(".settings__agent-details");
+    await waitFor(() => expect(textOf(panel)).toContain(en["settings.agents.fix.run.nothing"]));
+  });
+
+  it("is not offered where the daemon is a build behind, or where there is no command to run", () => {
+    // Two halves of "a control that cannot work is not drawn": the method is missing, or the guide is the
+    // `environment` kind — variables to set in the shell that started the daemon, which no command can do.
+    //
+    // **The panel is opened before the absence is asserted**, and that is not decoration: a closed row renders no
+    // disclosure at all, so the first version of this leg searched an empty DOM and passed whatever the code did.
+    // A test for a missing control has to look where the control would be.
+    const behind = connectorRow(undefined, []);
+    const behindPanel = openDetails(rowOf(behind.container, "Codex"));
+    expect(textOf(behindPanel).length).toBeGreaterThan(0);
+    expect(
+      [...behindPanel.querySelectorAll("button")].some(
+        (candidate) => candidate.textContent === en["settings.agents.fix.run"],
+      ),
+    ).toBe(false);
+
+    const { container } = show(
+      { providers: [provider({ env: [{ name: "ANTHROPIC_API_KEY", set: false }] })] },
+      ["coder.runFix"],
+    );
+    const panel = openDetails(rowOf(container, "My Agent"));
+    // The `environment` guide, identified by the variable it names — the assertion has to be about something
+    // real: `toContain(en[someKey] ?? "")` passes for any key that does not exist, which is a green light for
+    // a leg that looked at nothing.
+    expect(textOf(panel)).toContain("ANTHROPIC_API_KEY");
+    expect(
+      [...panel.querySelectorAll("button")].some(
+        (candidate) => candidate.textContent === en["settings.agents.fix.run"],
+      ),
+    ).toBe(false);
   });
 });
 

@@ -1917,6 +1917,49 @@ body {
   flex: none;
 }
 
+/* **The press that resolves the row, and what it says afterwards.** It sits at the bottom of the fix block,
+   under the commands it will run, because that is the thing being decided about — and a failure is rendered
+   right here rather than in a notice strip at the top of the pane. */
+.settings__agent-fix-run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The outcome line: it takes a line of its own when it has something to say, so a long sentence does not
+   squeeze the button. `role="status"` in the markup, so a screen reader hears it too. */
+.settings__agent-fix-outcome {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--foreground);
+}
+
+/* **A failure is a colour and not a chip.** Amber is this sheet's *needs you* — the block's own rule — and it
+   is the honest colour for a command that ran and did not finish. */
+.settings__agent-fix-outcome--failed {
+  color: var(--status-warning);
+}
+
+/* The command's own words, which is what explains a failure. Bounded and scrollable: an npm transcript is
+   long, and a block that pushed the rest of the page away would be worse than no output at all. */
+.settings__agent-output {
+  flex: 1 1 100%;
+  max-height: 220px;
+  margin: 0;
+  padding: var(--space-2);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-code);
+  color: var(--foreground-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 /* A copy that did not land says so in the one colour this sheet uses for *needs you* — and never shows the
    tick, which is the whole reason `copyText` reports a boolean instead of throwing. */
 .settings__agent-copy--failed {

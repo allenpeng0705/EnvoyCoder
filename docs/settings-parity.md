@@ -2804,9 +2804,101 @@ are honest, and they are not equivalent:
    output to capture. The costs are honest and different: a first run downloads a package, and the version is
    whatever npm resolves unless the recipe pins one.
 
-Nothing is built here, deliberately: the first is a new capability over a user's machine and the second is a
-catalogue-wide delivery decision, and both are the owner's call rather than a slice's. §7.19 is what makes
-either one finish cleanly — after an install, whether we ran it or they did, one press makes the page current.
+**What happened next.** The owner said *"follow your suggestions and make the UX better"*, so design **1** is
+built (§7.20) and design **2** is now the only one left — and it has not become smaller by waiting. It is a
+delivery-model change rather than a button: the catalogue would need to say that a bridge may be *fetched* rather
+than installed, `launchForHarness` would need a per-agent delivery override, and the row would need to say which
+of the two it is using. The decision that has to come first is the one this product has already faced twice in
+this document: **does it switch silently, or does the user choose?** A silent switch downloads a package on the
+first run of an agent whose program the user believed they had installed; a stored choice is a setting with a
+schema, a prune rule and seven languages. That is a slice, not a paragraph, and it is the honest next one.
+
+### 7.20 Running the fix: the row resolves, in the block that shows the command
+
+The owner's second question — *"can we support run the commands in EnvoyCoder?"* — built as §7.19.2's design **1**,
+which is the general half: it resolves **every** Not-ready row that carries a command, npm-published or not.
+
+#### 7.20.1 The property, because everything else follows from it
+
+**The window sends an id. It cannot send a command.** `coder.runFix` takes
+`{ target: { kind: "harness" | "catalog" | "provider", id } }`, resolves that target through the *same probes that
+drew the row* — `probe`, `probeProvider`, `probeCatalogEntry`, the three functions `coder.listHarnesses`,
+`coder.listProviders` and `coder.listCatalog` answer with — and runs the commands out of that projection's
+`availability.fix`. Two consequences, and they are the whole design:
+
+* the command a user read is the command that runs, with no second derivation to drift;
+* there is no field in the request that could carry a command line, so a window — or anything pretending to be
+  one — cannot ask this daemon to execute arbitrary shell. The `fixes.test.ts` leg that fails when the window
+  sends a command instead of a target is the assertion for that sentence.
+
+Resolution happens **at the moment of the press**, not when the row was drawn. That is what makes the fourth
+outcome possible: a user who installs the program in their own terminal and then presses the button gets
+`nothing-to-do`, which is the honest answer, rather than an install run a second time.
+
+#### 7.20.2 The four outcomes, and the three bounds
+
+| outcome | when | what the block says |
+|---|---|---|
+| `succeeded` | every command exited 0 | *Done — this list updates by itself.* (the daemon re-checks, so the row flips) |
+| `failed` | a command exited non-zero, or the deadline was reached | the exit code, then **the command's own output** |
+| `nothing-to-do` | the projection carries no fix any more | *Nothing to install: this agent is ready now.* |
+| `refused` | the id is in no list | *That agent is no longer in this list.* |
+
+`reason` travels as a **key** (`timeout` | `unknown-target`), never as an English sentence: the daemon writes
+English and this window may be in Japanese, which is the rule the error catalogue already follows one layer up.
+`timeout` is deliberately not folded into `failed` — *"it was stopped"* and *"it failed"* are different things to
+be told while waiting, and the window has a different sentence for each.
+
+The bounds are the ones every part of this product has: a **five-minute deadline** for the whole sequence, the
+process **group** killed on expiry (`spawnTreeOptions` + `processGroupTarget` — `npm install` spawns children, and
+a leader-only kill would leave the work running), and a **64 KiB tail** of output, because a package manager's
+transcript is the one thing here that can be genuinely enormous and the part a user needs is the end. `stdin` is
+`/dev/null`, so a prompt cannot hold a window open: EOF is an answer.
+
+#### 7.20.3 The UX, which is what the owner asked for
+
+Every piece of it is inside the fix block §7.18 built, because that is where the command is:
+
+* the press is a **button under the commands it will run**, labelled *Install*, with a `title` that says what it
+  does *and what it does not do* — a login shell, the user's home folder, nothing else on the machine changed;
+* **a failure lands under the command that produced it**, not in a notice strip at the top of the pane. The output
+  is rendered in a bounded, scrollable `<pre>` — the only useful explanation of a package manager's failure is the
+  package manager's own words, and hiding them behind "something went wrong" would send the user to a terminal to
+  reproduce what the press just did;
+* the outcome is a `role="status"` line, so it is announced and not merely drawn;
+* **the press is drawn only where it can work**: not for a daemon that does not serve `coder.runFix` (the
+  build-skew rule), and **not for an `environment` guide** — variables to set in the shell that started the daemon
+  are not something a command can do, so that kind keeps the block and gets no button.
+
+#### 7.20.4 What was measured, and the mutations
+
+| measurement | value |
+|---|---|
+| the runner, end to end, on harmless commands | order preserved; a non-zero exit stops the sequence (**the next command does not run**); a 69 KiB transcript keeps its end and says it dropped the start; a hanging command is killed **with its group** (the child's delayed write never happens) |
+| the resolver | the command the row carried is the command the shell is handed, verbatim, through `/bin/sh -lc`; `nothing-to-do` and `refused` **spawn nothing** |
+| the window | the press sends `{ target: { kind: "harness", id: "codex" } }`; each of the four outcomes gets its sentence; the failure shows `npm ERR! …` |
+| gates | 872 passed / 7 skipped, 12 Rust tests |
+
+| mutation | the test that reddens |
+|---|---|
+| the window sends a command instead of a target | *sends this row's own target…* (and the store leg that asserts the params) |
+| the press is drawn without the build-skew gate | *is not offered where the daemon is a build behind…* |
+| the kill signals the leader only | *kills the whole group when a command hangs…* |
+| a failure does not stop the sequence | *stops at the first failure…* |
+
+**Two legs in this slice passed for the wrong reason before they were fixed, and both are worth recording.** The
+build-skew leg searched a *closed* row's DOM for a button that only exists in an open disclosure — so it passed
+whatever the code did, and the fix was to open the panel and assert the absence where the control would be. And one
+assertion read `toContain(en[someKey] ?? "")`, which passes for a key that does not exist; it now asserts the
+variable's name. A green test that looked at nothing is the failure mode this document keeps paying for.
+
+**What was measured, and what was reasoned about.** Measured: everything in the table above, plus the live socket
+(`coder.runFix` on a ready agent answers `nothing-to-do` and starts nothing). Reasoned about rather than measured:
+that a five-minute deadline is right for a package install, and that a button labelled *Install* with the command
+directly above it is enough consent — there is no modal, because the thing being consented to is on screen and a
+dialog would hide it. **Not verified at all:** a real installation on a real machine. Every leg drives `/bin/sh`
+scripts, and the one press that would run `npm install -g` on the owner's machine is the owner's to make —
+which is the point of the control existing.
 
 ## 8. The slice plan
 

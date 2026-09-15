@@ -115,6 +115,8 @@ interface Report {
     blocks: number;
     commands: number;
     copyButtons: number;
+    /** Presses that run the command — `coder.runFix`. Measured so a block cannot offer a command and no way out. */
+    runButtons: number;
     commandsOverflowing: number;
     copyHeight: number;
     copySqueezed: number;
@@ -269,6 +271,13 @@ describeWhen("the agent rows, measured in a real window", () => {
       fixReport.fix.copyButtons,
       "a command is shown with no Copy control on a browser that can copy",
     ).toBe(fixReport.fix.commands);
+    // **Every command the block shows can be run, and every one can be copied.** A block that listed a command
+    // and offered neither would still measure "6 blocks, 6 commands" and read as complete — so the two controls
+    // are counted rather than assumed, and the first of them is the feature this measurement was extended for.
+    expect(
+      fixReport.fix.runButtons,
+      "a command is shown with no way to run it",
+    ).toBe(fixReport.fix.commands);
     // A real target, and a label that fits inside it.
     expect(fixReport.fix.copyHeight).toBeGreaterThanOrEqual(24);
     expect(fixReport.fix.copySqueezed).toBe(0);
@@ -282,7 +291,8 @@ describeWhen("the agent rows, measured in a real window", () => {
     ).toBe(0);
     console.log(
       `· fix block measured: ${fixReport.fix.blocks} block(s), ${fixReport.fix.commands} command(s), ` +
-        `${fixReport.fix.copyButtons} Copy control(s) at ${fixReport.fix.copyHeight}px, worst contrast ` +
+        `${fixReport.fix.copyButtons} Copy control(s) at ${fixReport.fix.copyHeight}px, ` +
+        `${fixReport.fix.runButtons} Install press(es), worst contrast ` +
         `${String(fixReport.fix.contrast.worst[0]?.ratio)}:1`,
     );
   });

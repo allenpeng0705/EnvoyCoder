@@ -530,6 +530,25 @@ export const en = {
   "settings.agents.recheck.title":
     "Ask your login shell where your programs are, and re-read every agent's state. Nothing is started and nothing is installed.",
   /**
+   * **The press that runs the fix.** The owner's second question, in the words a user sees: *"can we support run
+   * the commands in EnvoyCoder?"*
+   *
+   * `run` is the button, `busy` is what it says while the shell is working, and `title` says what the press does
+   * **and what it does not do** — it runs the command above, in a login shell, in the user's home folder, and
+   * changes nothing else. The four outcomes are the daemon's four (`coder.runFix`), each as a sentence: done,
+   * failed with the exit code, nothing to do because the world moved, or refused. `timedOut` is separate from
+   * `failed` because "it was stopped" and "it failed" are different things to be told while waiting.
+   */
+  "settings.agents.fix.run": "Install",
+  "settings.agents.fix.run.busy": "Installing…",
+  "settings.agents.fix.run.title":
+    "Runs the command above in a login shell, in your home folder. Nothing else on this machine is changed.",
+  "settings.agents.fix.run.done": "Done — this list updates by itself.",
+  "settings.agents.fix.run.nothing": "Nothing to install: this agent is ready now.",
+  "settings.agents.fix.run.refused": "That agent is no longer in this list.",
+  "settings.agents.fix.run.timedOut": "It took too long and was stopped. The output below is where it got to.",
+  "settings.agents.fix.run.failed": "The command exited with {code}. Its output:",
+  /**
    * **The fix block's one control.** Copy, and the two things that can happen when it is pressed.
    *
    * The command is never translated — a translated `npm install -g …` is a command that does not run — so

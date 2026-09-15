@@ -24,7 +24,7 @@
  *     agent, forget one they declared, or run an agent's own sign-in.
  */
 
-import type { HarnessId, SignInOutcome } from "@envoycoder/protocol";
+import type { FixRunResult, FixTarget, HarnessId, SignInOutcome } from "@envoycoder/protocol";
 
 import type { Refusal } from "../i18n/notice.js";
 import type { AddProviderInput } from "./coderStore.js";
@@ -40,6 +40,16 @@ export interface AgentActions {
 
   /** Forget a provider. The daemon answers the id it removed, or refuses because there is nothing there. */
   removeProvider(id: string): Promise<{ ok: true; removed: string } | Refusal>;
+
+  /**
+   * **Run the fix a row is showing** — the only action here that changes the user's machine.
+   *
+   * The target travels as an id and never as a command: the daemon resolves the commands through the same
+   * probes that drew the row, at the moment of the press. The answer is one of four outcomes, all of which are
+   * things the call found out rather than failures of it — a refusal is the one exception, and it means the
+   * call could not be made at all.
+   */
+  runFix(target: FixTarget): Promise<{ ok: true; result: FixRunResult } | Refusal>;
 
   /**
    * **Look at this machine again** — re-ask the login shell where the user's programs are, then re-read.

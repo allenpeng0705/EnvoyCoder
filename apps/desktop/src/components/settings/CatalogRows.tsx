@@ -61,6 +61,7 @@ import type { AgentActions } from "../../state/agent-actions.js";
 import type { CoderState } from "../../state/coderStore.js";
 import { AgentRow } from "./AgentRow.js";
 import { FactsBlock, GuideBlock } from "./RowGuide.js";
+import type { FixRunAnswer } from "./FixRunner.js";
 import { rowVerdict, verdictFacts } from "./agent-verdict.js";
 import { AGENT_ROW_LINE_BUDGET } from "./density.js";
 import {
@@ -94,6 +95,14 @@ export interface CatalogListProps {
 export function CatalogList(props: CatalogListProps): JSX.Element {
   const { t } = useI18n();
   const { state, agents } = props;
+  /**
+   * Does this daemon serve the press that runs a fix?
+   *
+   * The same build-skew rule the rest of the page follows: a control whose press would come back "Method not
+   * found" is not drawn at all. Read from `hello`'s own method list rather than through a new field, because
+   * that list *is* the daemon's method catalogue.
+   */
+  const runFixSupported = state.hello?.methods.includes("coder.runFix") === true;
   /** `undefined` — nothing open; `"browse"` — the list; `"manual"` — the form for a program of your own. */
   const [panel, setPanel] = useState<"browse" | "manual" | undefined>(undefined);
   const [query, setQuery] = useState("");
@@ -199,6 +208,7 @@ export function CatalogList(props: CatalogListProps): JSX.Element {
                   busy={adding === entry.id}
                   onAdd={onAdd}
                   onRemove={onRemove}
+                  {...(runFixSupported ? { onRunFix: () => agents.runFix({ kind: "catalog", id: entry.id }) } : {})}
                 />
               ))}
             </ul>
@@ -243,6 +253,8 @@ function CatalogRow(props: {
   busy: boolean;
   onAdd: (entry: CatalogEntry) => Promise<void>;
   onRemove: (entry: CatalogEntry) => Promise<void>;
+  /** The press that runs this recipe's fix — see `ShippedAgent`'s prop for why it is a closure. */
+  onRunFix?: () => Promise<FixRunAnswer>;
 }): JSX.Element {
   const { t, locale } = useI18n();
   const { entry } = props;
@@ -329,7 +341,9 @@ function CatalogRow(props: {
       details={
         <>
           {/* The way out first, then the facts — the same order as every other row on the page. */}
-          {verdict.guide !== undefined ? <GuideBlock guide={verdict.guide} /> : null}
+          {verdict.guide !== undefined ? (
+            <GuideBlock guide={verdict.guide} {...(props.onRunFix !== undefined ? { run: props.onRunFix } : {})} />
+          ) : null}
           {/* The description is third-party wording and some entries run to two hundred characters, which is
               why it is here rather than on the row: it is what a user reads when they have decided this recipe
               might be the one, and it is noise to a user scanning thirty-eight. */}

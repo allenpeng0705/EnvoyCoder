@@ -504,10 +504,14 @@ const report = await evaluate(`(() => {
       ratio: ratio(getComputedStyle(node).color, bgOf(node)),
     }));
   const copies = fixBlocks.flatMap((block) => [...block.querySelectorAll(".settings__agent-copy")]);
+  // The press that runs the fix. Measured for the same reason the Copy control is: a block that showed a command
+  // and offered no way to run it would still measure "6 blocks, 6 commands" and read as complete.
+  const runs = fixBlocks.flatMap((block) => [...block.querySelectorAll(".settings__agent-fix-run button")]);
   const fix = {
     blocks: fixBlocks.length,
     commands: fixBlocks.reduce((n, block) => n + block.querySelectorAll(".settings__agent-command").length, 0),
     copyButtons: copies.length,
+    runButtons: runs.length,
     commandsOverflowing: fixParts.filter(
       (node) => node.classList.contains("settings__agent-command")
         && node.scrollWidth > Math.ceil(node.getBoundingClientRect().width) + 1,

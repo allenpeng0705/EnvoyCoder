@@ -37,6 +37,7 @@ import type {
   AgentRun,
   CatalogEntry,
   CoderSettings,
+  FixTarget,
   HarnessId,
   HarnessSummary,
   ProbeOutcome,
@@ -48,6 +49,7 @@ import type {
   TaskDefaults,
 } from "@envoycoder/protocol";
 import { DEFAULT_CODER_SETTINGS, missingMethods } from "@envoycoder/protocol";
+import type { FixRunResult as FixRunResultWire } from "@envoycoder/protocol";
 
 import { localNotice, noticeFromError, type Notice, type Refusal } from "../i18n/notice.js";
 import { buildTranscript, type Transcript } from "./transcript.js";
@@ -661,6 +663,33 @@ export class CoderStore {
         return { ok: true as const, outcome: result.outcome, detail: result.detail };
       },
     );
+  }
+
+  /**
+   * **Run the fix a row is showing** — the one action here that changes the user's machine.
+   *
+   * It sends the **target**, never a command: the daemon resolves the commands through the same probes that drew
+   * the row, at the moment of the press (`fixes.ts` carries that property and why it is the whole design). The
+   * result is the daemon's four outcomes, and the caller renders them in the block the press came from — a
+   * failure inline, where the command is, rather than in a notice strip somewhere else.
+   *
+   * Nothing is refetched here: a successful install makes the daemon emit `harnesses` (it re-checks as part of
+   * the run), and the window already re-reads the list on that event — the push-driven arrangement this store is
+   * built on, rather than a second path that could disagree about when the list is current.
+   */
+  async runFix(target: FixTarget): Promise<{ ok: true; result: FixRunResultWire } | Refusal> {
+    // **Not asked of a daemon that does not have it**, on the same terms as the rest of this store: a call whose
+    // answer is already known to be "Method not found" produces a raw transport error in front of a user for no
+    // new information. The page does not draw the control either — the two halves of one decision.
+    if (!this.canCall("coder.runFix")) {
+      const failure = localNotice("error.daemonTooOld");
+      this.set({ error: failure });
+      return { ok: false, ...failure };
+    }
+    return this.mutate("coder.runFix", { target }, (answer) => {
+      const result = answer as FixRunResultWire;
+      return { ok: true as const, result };
+    });
   }
 
   /**
