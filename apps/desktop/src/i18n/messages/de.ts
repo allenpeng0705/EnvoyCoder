@@ -279,6 +279,7 @@ export const de: Catalogue = {
   "settings.defaultPath.placeholder": "/Users/you/work",
   "settings.defaultHarness.title": "Der Agent, mit dem neue Aufgaben starten",
   "settings.defaultHarness.detail": "Ein Projekt kann das überschreiben; das hier gilt, wenn es das nicht tut.",
+  "settings.defaultHarness.catalog": "Jeder Agent, den EnvoyCoder unterstützt, steht auf der Seite {section} — auch die, die hier nicht installiert sind, jeweils mit dem Befehl, der das behebt.",
   "settings.needsInstalling": "(muss installiert werden)",
   "settings.defaultModel.title": "Das Modell, mit dem neue Aufgaben starten",
   "settings.defaultModel.detail": "Leer gelassen läuft jede neue Aufgabe auf dem Modell, das der Agent selbst wählt. Auch das kann ein Projekt überschreiben.",
@@ -323,10 +324,6 @@ export const de: Catalogue = {
   "settings.agents.mine.env.recipe": "{name} — von diesem Rezept bereitgestellt",
   "settings.agents.mine.env.recipe.title":
     "Diese Variable ist eine Konstante des Katalogrezepts, aus dem dieser Agent hinzugefügt wurde, deshalb liefert EnvoyCoder sie — in deiner Umgebung ist für sie nichts gesetzt. Exportiere {name} selbst, um den Wert des Rezepts zu überschreiben.",
-  "settings.agents.hide": "Aus meinen Listen ausblenden",
-  "settings.agents.show": "In meinen Listen zeigen",
-  "settings.agents.hidden": "Ausgeblendet",
-  "settings.agents.hidden.title": "Du hast diesen Agenten aus deinen Agentenlisten genommen. Alles, was oben steht, ist weiterhin das Gemessene — ausgeblendet wird eine Vorliebe, kein Zustand.",
   "settings.agents.auth.title": "Ob dieser Agent hier eine Sitzung öffnet — eine andere Frage als die, ob sein Programm installiert ist.",
   "settings.agents.auth.needsSignin": "Anmeldung nötig",
   "settings.agents.auth.ready": "Spricht mit uns",
@@ -475,8 +472,6 @@ export const de: Catalogue = {
     "\"{name}\" kann keine Kennung für einen Anbieter sein. Eine Anbieter-Kennung besteht aus Kleinbuchstaben, Ziffern und Bindestrichen und beginnt mit einem Buchstaben oder einer Ziffer.",
   "error.providerCatalogMismatch":
     "„{entry}“ ist ein katalogisierter Agent, und das Rezept, das diese Anfrage beschreibt, ist nicht das, das dieser Eintrag angibt — deshalb wurde der Agent nicht hinzugefügt. Öffne die Agentenseite neu und füge die Zeile erneut hinzu.",
-  "error.agentNotFound":
-    "Es gibt hier keinen Agenten namens \"{id}\". Vielleicht wurde er in einem anderen Fenster entfernt.",
   "error.catalogAgentMissing": "Es gibt keinen Agenten namens „{id}“ im Katalog. Die Liste hat sich geändert, seit dieses Fenster sie gelesen hat — öffne die Agentenseite neu und versuche es erneut.",
   "signIn.already":
     "{agent} hat eine Sitzung geöffnet, ohne eine Anmeldung zu brauchen — es gab also nichts zu tun.",

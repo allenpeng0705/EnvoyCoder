@@ -279,6 +279,7 @@ export const it: Catalogue = {
   "settings.defaultPath.placeholder": "/Users/you/work",
   "settings.defaultHarness.title": "L'agente con cui partono le nuove attività",
   "settings.defaultHarness.detail": "Un progetto può sostituirlo; questo vale quando non lo fa.",
+  "settings.defaultHarness.catalog": "Ogni agente supportato da EnvoyCoder è nella pagina {section} — compresi quelli non installati qui, ciascuno con il comando che lo risolve.",
   "settings.needsInstalling": "(da installare)",
   "settings.defaultModel.title": "Il modello con cui partono le nuove attività",
   "settings.defaultModel.detail": "Lasciato vuoto, ogni nuova attività usa il modello che l'agente sceglie da sé. Anche questo può essere sostituito da un progetto.",
@@ -323,10 +324,6 @@ export const it: Catalogue = {
   "settings.agents.mine.env.recipe": "{name} — fornita da questa ricetta",
   "settings.agents.mine.env.recipe.title":
     "Questa variabile è una costante della ricetta di catalogo da cui questo agente è stato aggiunto, quindi la fornisce EnvoyCoder — nel tuo ambiente non è impostato nulla per lei. Esporta {name} tu stesso per sostituire il valore della ricetta.",
-  "settings.agents.hide": "Nascondi dai miei elenchi",
-  "settings.agents.show": "Mostra nei miei elenchi",
-  "settings.agents.hidden": "Nascosto",
-  "settings.agents.hidden.title": "Hai tolto questo agente dai tuoi elenchi. Tutto ciò che è riportato sopra resta quello che è stato misurato: nascondere è una preferenza, non uno stato.",
   "settings.agents.auth.title": "Se questo agente apre qui una sessione — una domanda diversa da quella se il suo programma sia installato.",
   "settings.agents.auth.needsSignin": "Serve l’accesso",
   "settings.agents.auth.ready": "Parla con noi",
@@ -475,8 +472,6 @@ export const it: Catalogue = {
     "\"{name}\" non può essere un identificativo di provider. Un identificativo di provider usa lettere minuscole, cifre e trattini e inizia con una lettera o una cifra.",
   "error.providerCatalogMismatch":
     "«{entry}» è un agente del catalogo, e la ricetta descritta da questa richiesta non è quella indicata da quella voce — quindi l’agente non è stato aggiunto. Riapri la pagina degli agenti e aggiungi di nuovo la riga.",
-  "error.agentNotFound":
-    "Qui non c'è nessun agente chiamato \"{id}\". Potrebbe essere stato rimosso da un'altra finestra.",
   "error.catalogAgentMissing": "Non esiste un agente del catalogo chiamato «{id}». L’elenco è cambiato da quando questa finestra l’ha letto — riapri la pagina degli agenti e riprova.",
   "signIn.already":
     "{agent} ha aperto una sessione senza bisogno di un accesso, quindi non c'era nulla da fare.",

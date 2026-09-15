@@ -196,7 +196,9 @@ export interface FolderSettingProps extends TextSettingProps {
  */
 export function FolderSetting(props: FolderSettingProps): JSX.Element {
   const { t } = useI18n();
-  const pickable = hasShellPicker();
+  // Named for what it asks rather than `pickable`, which is now the name of nothing: the agent pickers'
+  // rule lives in `composer/agent-for.ts` and a local of that name here read like a second copy of it.
+  const canPick = hasShellPicker();
 
   const choose = async (): Promise<void> => {
     props.onProblem(undefined);
@@ -216,7 +218,7 @@ export function FolderSetting(props: FolderSettingProps): JSX.Element {
   return (
     <div className="setting__field-group">
       <TextSetting {...props} />
-      {pickable ? (
+      {canPick ? (
         <button type="button" className="button button--secondary button--small" onClick={() => void choose()}>
           {t("settings.folder.choose")}
         </button>

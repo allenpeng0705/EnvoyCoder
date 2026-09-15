@@ -358,10 +358,8 @@ describe("the thinking level an agent offers, and what 'no list' means", () => {
         approvalPolicy: true,
       },
       availability: { state: "ready", binary: "/usr/local/bin/agent" },
-      // The two fields this slice added, and both are required for the reason the block below asserts:
-      // `hidden` is the user's preference (beside the state, never instead of it) and `auth` is what a probe
-      // established about whether the agent will open a session.
-      hidden: false,
+      // What a probe established about whether the agent will open a session, and required for the reason the
+      // block below asserts.
       auth: { state: "unknown" },
       evidence: "…",
       ...over,
@@ -369,12 +367,9 @@ describe("the thinking level an agent offers, and what 'no list' means", () => {
     expect(spec.result.safeParse({ harnesses: [harness({})] }).success).toBe(true);
     const { thinking: _t, ...withoutFact } = harness({}) as Record<string, unknown>;
     expect(spec.result.safeParse({ harnesses: [withoutFact] }).success).toBe(false);
-    // **The preference and the auth fact, both required.** An absent `hidden` would be read as one of the
-    // two answers by a client that had to guess — and guessing "hidden" would drop a working agent out of a
-    // picker, which is precisely the failure the field is documented against. An absent `auth` would be read
-    // as "this agent needs a sign-in" by the same kind of client, which is worse: it sends a user to perform
-    // a login that changes nothing.
-    for (const field of ["hidden", "auth"]) {
+    // **The auth fact, required.** An absent `auth` would be read as "this agent needs a sign-in" by a
+    // client that had to guess, which sends a user to perform a login that changes nothing.
+    for (const field of ["auth"]) {
       const { [field]: _dropped, ...withoutField } = harness({}) as Record<string, unknown>;
       expect(
         spec.result.safeParse({ harnesses: [withoutField] }).success,
@@ -580,7 +575,6 @@ describe("the agent's mode, and a task's folder", () => {
       thinking: { kind: "none", options: [], source: "…" },
       capabilities,
       availability: { state: "ready", binary: "/usr/local/bin/agent" },
-      hidden: false,
       auth: { state: "unknown" },
       evidence: "…",
     });

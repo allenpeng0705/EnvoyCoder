@@ -23,8 +23,8 @@
 import type {
   HarnessAvailability,
   HarnessId,
-  HarnessSummary,
   HarnessState,
+  HarnessSummary,
 } from "@envoycoder/protocol";
 
 import { harnessLabel } from "./harness-label.js";
@@ -55,19 +55,19 @@ import type { ComposerAgent } from "./controls.js";
  * what is missing, and an older daemon has not established that anything is. The window says the daemon is a
  * build behind instead, which names the action that actually helps (`SectionsFacts.tsx`).
  */
-export function availabilityOf(summary: HarnessSummary | undefined): HarnessAvailability {
+export function availabilityOf(summary: PickerSubject | undefined): HarnessAvailability {
   if (summary?.availability !== undefined) return summary.availability;
   const legacy = (summary as { available?: boolean | "unknown" } | undefined)?.available;
   return { state: legacy === true ? "ready" : "unknown" };
 }
 
 /** The single state a control branches on, from either wire generation. */
-export function stateOf(summary: HarnessSummary | undefined): HarnessState {
+export function stateOf(summary: PickerSubject | undefined): HarnessState {
   return availabilityOf(summary).state;
 }
 
 /** Can this agent be launched at all? One question, one place, both wire generations. */
-export function canRun(summary: HarnessSummary | undefined): boolean {
+export function canRun(summary: PickerSubject | undefined): boolean {
   return stateOf(summary) === "ready";
 }
 
@@ -80,44 +80,107 @@ export function canRun(summary: HarnessSummary | undefined): boolean {
  * other state is either runnable, runnable-but-not-drivable, installed-with-its-adapter-missing, or
  * unexamined — and a picker that hid any of those would remove an agent the user configured from their own
  * list, silently. The row explains the state; the list does not make the decision for them.
+ *
+ * This is the predicate `offeredAgents` below filters with, and it is the only one. It takes the same
+ * two-fact shape a provider carries, so the rule reads a user-declared agent exactly as it reads one we
+ * ship: a program the user typed is probed, never believed (§7.10).
  */
-export function knownMissing(summary: HarnessSummary | undefined): boolean {
+export function knownMissing(summary: PickerSubject | undefined): boolean {
   return stateOf(summary) === "not-installed";
 }
 
 /**
- * Has the **user** taken this agent out of their pickers?
+ * **What a picker offers, derived from what we measured — and why nothing a user stores may enter into it.**
  *
- * ## The other reason a picker may drop a row, and the only one that is not a measurement
+ * ## The rule, and the field it replaced
  *
- * `knownMissing` above is a fact we established. This is a preference the user expressed, and keeping the two
- * apart is the whole design of `CoderSettings.hiddenAgents` — *availability is ours to detect, preference is
- * theirs to set*. `docs/settings-parity.md` §5.8 records the audit that first ruled Paseo's "Enable
- * {provider}" row out as "not applicable as a setting", because it read the switch as a way to hide a working
- * agent. It is not: it is how a user describes their own machine, and the correction is that a hidden agent
- * still **reports** everything true about itself.
+ * Two facts used to decide this, and one of them did not belong. `knownMissing` (above) is a measurement.
+ * The other was a *stored preference* — `CoderSettings.hiddenAgents`, a list of ids the user had taken out
+ * of their lists, projected onto every row as `hidden` and filtered on here. That preference is gone, from
+ * the wire, the settings document, the daemon and this function, because a list filter is the one kind of
+ * control that can make an agent **this product ships disappear from the product's own lists** — which is
+ * the exact failure its owner objected to when they said they could not see the agents we support. The
+ * brief for this product is "the control plane of coding agents"; a control plane whose list of agents can
+ * be shortened by a preference is one that can be made to forget what it controls.
  *
- * `=== true` rather than a truthy read, and that is the compatibility rule: a daemon built before this field
- * existed sends no `hidden` at all, and absence means "not hidden" — an older daemon cannot be hiding
- * anything, because it had no way to.
+ * The deeper reason a stored filter was the wrong shape is not policy, it is correctness:
+ *
+ *   * **A derived rule can be wrong about a fact and then get better.** "The program is not on this
+ *     machine" is a claim we made, a probe can contradict it, and the next list call is right again. Our
+ *     ignorance and our mistakes both have a way out.
+ *   * **A stored filter is wrong by design and stays wrong.** A hidden id hides its agent until somebody
+ *     edits a settings file — no probe, no upgrade and no run changes it — and it is the one kind of wrong
+ *     answer this product has no mechanism to notice, because nothing measures it.
+ *
+ * ## What the rule is a function of, exactly
+ *
+ * One agent in, one answer out, and the only input is `availabilityOf(agent)` — that is, `availability`
+ * for a daemon that sends it, and the legacy `available` boolean for one that predates the field. Nothing
+ * else is read: not the settings document, not the task list, not a prop, not the module's own state. That
+ * is what makes "no user setting can hide an agent" a property of the code rather than a promise in a doc,
+ * and `test/agent-offer.test.ts` asserts it by handing this function a row that *claims* to be hidden and
+ * watching it stay.
+ *
+ * ## What it drops, what it keeps, and where the rest of the list lives
+ *
+ * It drops exactly one state: `not-installed`, the only one that asserts the agent is **absent**
+ * (`docs/settings-parity.md` §7.9).
+ * Every other state stays, `unknown` included — an agent nobody has looked at yet is not one we may decide
+ * about on the user's behalf, and a picker that quietly dropped it would remove an agent the user
+ * configured from their own list. The order is by how usable the answer says the agent is: `ready` first
+ * (`unknown` next, because the honest answer to "can this run" is *we have not looked* rather than *no*),
+ * then the states that name something missing. Within a group the incoming order is preserved, so the
+ * catalogue's own ordering — `envoy-harness` first, the default — is not rearranged by a sort nobody asked
+ * for.
+ *
+ * **Nothing is invisible because of this.** The Agents page (`docs/settings-parity.md` §7.12) lists the nine
+ * we ship, every provider the user declared and all 38 catalogue entries, each with the install command its
+ * state implies — so an agent this function drops from a picker is one step away, named, explained and
+ * fixable. A picker is where a choice is made; the catalogue is where the whole product is visible, and no
+ * control shortens it.
+ *
+ * ## Why one function rather than a filter at each call site
+ *
+ * There are two pickers (the machine's default agent, and a project's) and a third place would be invented
+ * by the next person who needs one. Both call this, so a third reason to drop a row cannot be added in one
+ * of them without the other hearing about it — which is what having no `offerable(one)` helper beside it is
+ * for.
  */
-export function hiddenAgent(summary: { hidden?: boolean } | undefined): boolean {
-  return summary?.hidden === true;
+export function offeredAgents<T extends PickerSubject>(agents: readonly T[]): T[] {
+  return agents
+    // Index carried through the sort rather than relying on `Array.prototype.sort` being stable: the order
+    // inside a rank is the catalogue's, and "the runtime is specified to be stable now" is not a reason for
+    // a picker's order to be a thing nobody can read off this file.
+    .map((agent, at) => ({ agent, at }))
+    .filter((entry) => !knownMissing(entry.agent))
+    .sort(
+      (left, right) =>
+        OFFER_ORDER[stateOf(left.agent)] - OFFER_ORDER[stateOf(right.agent)] || left.at - right.at,
+    )
+    .map((entry) => entry.agent);
 }
 
 /**
- * **May a picker offer this agent?** — the one function every agent picker filters with.
+ * How usable each state says an agent is — the whole ordering, and the reason `unknown` outranks the two
+ * "something is missing" states.
  *
- * Two reasons to drop a row, deliberately not folded into one: an agent we established is *absent* (a fact
- * about the machine) and an agent the *user* took out of their list (a preference). Everything else stays,
- * `unknown` included — a list that quietly dropped an agent nobody has looked at yet would be deciding on the
- * user's behalf, which is the mistake this pair of functions exists to keep apart.
- *
- * A picker that inlined `!knownMissing(h) && !hiddenAgent(h)` would work today and would be the place a third
- * reason gets added without the other pickers hearing about it, so both settings pickers call this instead.
+ * `not-installed` is ranked and never reached: the filter above removes it first. It is in the record
+ * anyway, because a partial `Record<HarnessState, number>` would make a *sixth* state added to the
+ * protocol a compile error in the one place that must decide where it goes — which is the point.
  */
-export function pickable(summary: HarnessSummary | undefined): boolean {
-  return !knownMissing(summary) && !hiddenAgent(summary);
+const OFFER_ORDER: Record<HarnessState, number> = {
+  ready: 0,
+  unknown: 1,
+  "needs-bridge": 2,
+  unsupported: 2,
+  "not-installed": 3,
+};
+
+/** The facts this rule may read — a shipped agent and a user-declared one both have them, and nothing else. */
+export interface PickerSubject {
+  availability?: HarnessAvailability;
+  /** The pre-`availability` wire generation. Read by `availabilityOf`, never by the rule itself. */
+  available?: boolean | "unknown";
 }
 
 export function agentFor(

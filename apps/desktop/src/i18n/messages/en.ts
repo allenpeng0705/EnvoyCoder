@@ -399,6 +399,8 @@ export const en = {
   "settings.defaultPath.placeholder": "/Users/you/work",
   "settings.defaultHarness.title": "The agent new tasks start with",
   "settings.defaultHarness.detail": "A project can override this; this is the answer when it does not.",
+  "settings.defaultHarness.catalog":
+    "Every agent EnvoyCoder supports is on the {section} page — including the ones that are not installed here, each with the command that fixes it.",
   "settings.needsInstalling": "(needs installing)",
   "settings.defaultModel.title": "The model new tasks start on",
   "settings.defaultModel.detail":
@@ -489,11 +491,6 @@ export const en = {
   "settings.agents.mine.env.recipe": "{name} — supplied by this recipe",
   "settings.agents.mine.env.recipe.title":
     "This variable is a constant of the catalogue recipe this agent was added from, so EnvoyCoder supplies it — nothing is set in your environment for it. Export {name} yourself to override the recipe's value.",
-  "settings.agents.hide": "Hide from my lists",
-  "settings.agents.show": "Show in my lists",
-  "settings.agents.hidden": "Hidden",
-  "settings.agents.hidden.title":
-    "You took this agent out of your agent lists. Everything it reports above is still what was measured — hiding a preference, not a state.",
   "settings.agents.auth.title":
     "Whether this agent will open a session here, which is a different question from whether its program is installed.",
   "settings.agents.auth.needsSignin": "Needs a sign-in",
@@ -793,10 +790,6 @@ export const en = {
   // which is why the sentence names reopening it rather than asking a user to edit anything.
   "error.providerCatalogMismatch":
     "\"{entry}\" is a catalogued agent, and the recipe this request describes is not the one that entry states — so the agent was not added. Reopen the agents page and add the row again.",
-  // The union of the two agent lists, which is why it needs its own key: `error.providerNotFound` would
-  // name the wrong list when a user mistyped one of the nine we ship.
-  "error.agentNotFound":
-    "There is no agent called \"{id}\" here. It may have been removed from another window.",
   // An id that names no catalogued entry: a bad parameter rather than a fact about a program. Answering
   // `unknown` instead would say "we could not look" about something that does not exist, which is how a typo
   // becomes a state a user can act on.

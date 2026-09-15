@@ -279,6 +279,7 @@ export const ja: Catalogue = {
   "settings.defaultPath.placeholder": "/Users/you/work",
   "settings.defaultHarness.title": "新しいタスクを始めるエージェント",
   "settings.defaultHarness.detail": "プロジェクト側で上書きできます。上書きしない場合の答えがこれです。",
+  "settings.defaultHarness.catalog": "EnvoyCoder が対応するエージェントはすべて「{section}」ページにあります。ここに未インストールのものも含まれ、それぞれ対処するコマンドが付いています。",
   "settings.needsInstalling": "（要インストール）",
   "settings.defaultModel.title": "新しいタスクが使うモデル",
   "settings.defaultModel.detail": "空のままにすると、新しいタスクはエージェントが自分で選んだモデルで動きます。プロジェクト側で上書きすることもできます。",
@@ -323,10 +324,6 @@ export const ja: Catalogue = {
   "settings.agents.mine.env.recipe": "{name} — このレシピが用意します",
   "settings.agents.mine.env.recipe.title":
     "この変数は、このエージェントを追加した元のカタログ項目のレシピ定数なので、EnvoyCoder が用意します——あなたの環境には何も設定されていません。レシピの値を変えたい場合は {name} を自分でエクスポートしてください。",
-  "settings.agents.hide": "自分の一覧から隠す",
-  "settings.agents.show": "自分の一覧に表示",
-  "settings.agents.hidden": "非表示",
-  "settings.agents.hidden.title": "このエージェントを一覧から外しました。上に表示されている内容はすべて実測されたままで、隠すのは好みであり状態ではありません。",
   "settings.agents.auth.title": "このエージェントがここでセッションを開くかどうか——プログラムがインストールされているかとは別の問いです。",
   "settings.agents.auth.needsSignin": "サインインが必要",
   "settings.agents.auth.ready": "対話できます",
@@ -475,8 +472,6 @@ export const ja: Catalogue = {
     "\"{name}\" はプロバイダーの ID にはできません。プロバイダーの ID は小文字の英字・数字・ハイフンで構成し、英字または数字で始めます。",
   "error.providerCatalogMismatch":
     "「{entry}」はカタログ済みのエージェントですが、このリクエストが示すレシピはその項目が記載しているものと一致しません——そのため追加されませんでした。エージェントのページを開き直して、もう一度その行を追加してください。",
-  "error.agentNotFound":
-    "ここに「{id}」というエージェントはありません。別のウィンドウで削除された可能性があります。",
   "error.catalogAgentMissing": "「{id}」というカタログのエージェントはありません。このウィンドウが読んだあとに一覧が変わっています——エージェントのページを開き直して、もう一度お試しください。",
   "signIn.already": "{agent} はサインインを必要とせずにセッションを開きました。行うことはありませんでした。",
   "signIn.signedIn": "{agent} はサインインを受け入れ、セッションを開きました。",

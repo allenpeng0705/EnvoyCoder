@@ -22,11 +22,15 @@ export interface SettingsSectionProps {
   /** The app-scope patch. Every section page writes through this and nothing else. */
   onUpdate: (patch: Partial<CoderSettings>) => void;
   /**
-   * The five calls the **Agents** page is allowed to make.
+   * The four calls the **Agents** page is allowed to make.
    *
    * Required rather than optional, for the rule this whole pane is built on: a control that presses into
    * nothing is worse than no control at all. An optional bundle would let a caller render the agents page
-   * with no way to add, hide or measure an agent — and every button on it would look like it worked.
+   * with no way to add, measure or sign in an agent — and every button on it would look like it worked.
+   *
+   * It used to carry a fifth, `setAgentHidden`, and the count is the point of the sentence: the page has no
+   * way to take an agent out of a list, so it cannot be handed one. See `AgentActions` for what is left and
+   * why.
    */
   agents: AgentActions;
 }

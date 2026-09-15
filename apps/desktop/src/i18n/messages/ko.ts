@@ -279,6 +279,7 @@ export const ko: Catalogue = {
   "settings.defaultPath.placeholder": "/Users/you/work",
   "settings.defaultHarness.title": "새 작업이 시작하는 에이전트",
   "settings.defaultHarness.detail": "프로젝트가 이를 재정의할 수 있습니다. 재정의하지 않을 때 적용되는 값입니다.",
+  "settings.defaultHarness.catalog": "EnvoyCoder가 지원하는 모든 에이전트는 {section} 페이지에 있습니다. 여기에 설치되지 않은 것도 포함되며, 각각 해결 명령이 함께 있습니다.",
   "settings.needsInstalling": "(설치 필요)",
   "settings.defaultModel.title": "새 작업이 사용하는 모델",
   "settings.defaultModel.detail": "비워 두면 새 작업마다 에이전트가 스스로 고른 모델로 실행됩니다. 프로젝트에서 이 값을 덮어쓸 수도 있습니다.",
@@ -323,10 +324,6 @@ export const ko: Catalogue = {
   "settings.agents.mine.env.recipe": "{name} — 이 레시피가 제공함",
   "settings.agents.mine.env.recipe.title":
     "이 변수는 이 에이전트를 추가한 카탈로그 항목의 레시피 상수이므로 EnvoyCoder가 제공합니다 — 사용자 환경에는 아무것도 설정되어 있지 않습니다. 레시피 값을 바꾸려면 {name}을(를) 직접 내보내세요.",
-  "settings.agents.hide": "내 목록에서 숨기기",
-  "settings.agents.show": "내 목록에 표시",
-  "settings.agents.hidden": "숨김",
-  "settings.agents.hidden.title": "이 에이전트를 목록에서 빼두었습니다. 위에 보고된 내용은 모두 측정된 그대로입니다. 숨김은 환경 설정이고 상태가 아닙니다.",
   "settings.agents.auth.title": "이 에이전트가 여기에서 세션을 여는지 — 프로그램이 설치되어 있는지와는 다른 질문입니다.",
   "settings.agents.auth.needsSignin": "로그인 필요",
   "settings.agents.auth.ready": "대화 가능",
@@ -475,8 +472,6 @@ export const ko: Catalogue = {
     "\"{name}\"은(는) 공급자 ID가 될 수 없습니다. 공급자 ID는 소문자 영문, 숫자, 하이픈으로 이루어지며 영문자나 숫자로 시작합니다.",
   "error.providerCatalogMismatch":
     "\"{entry}\"은(는) 카탈로그에 있는 에이전트이지만, 이 요청이 설명하는 레시피는 그 항목이 밝힌 것과 다릅니다 — 그래서 추가되지 않았습니다. 에이전트 페이지를 다시 열고 그 행을 다시 추가하세요.",
-  "error.agentNotFound":
-    "여기에 \"{id}\"라는 에이전트가 없습니다. 다른 창에서 제거되었을 수 있습니다.",
   "error.catalogAgentMissing": "카탈로그에 “{id}”라는 에이전트가 없습니다. 이 창이 읽은 뒤 목록이 바뀌었습니다 — 에이전트 페이지를 다시 열고 시도하세요.",
   "signIn.already": "{agent}이(가) 로그인 없이 세션을 열었으므로 할 일이 없었습니다.",
   "signIn.signedIn": "{agent}이(가) 로그인을 받아들여 세션을 열었습니다.",

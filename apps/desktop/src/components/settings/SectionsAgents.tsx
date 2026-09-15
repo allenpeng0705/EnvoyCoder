@@ -25,13 +25,28 @@
  * user's press, because 14 of the 38 are `npx` recipes and a screen that probed them all while opening would
  * be a screen that downloads fourteen npm packages because somebody clicked *Settings*.
  *
- * ## Availability and preference are different facts, and this page is where that is visible
+ * ## This page lists everything, and there is no control on it that can shorten it
  *
- * Hiding an agent (`coder.setAgentHidden`) filters the pickers. It does **not** change what the row reports:
- * a hidden agent that is installed still reads *Ready*, still carries its install command when it is not, and
- * still runs when a task already names it. `docs/settings-parity.md` §5.8 records the audit that got this
- * wrong twice, and the layout here is the correction — the switch and the chip are separate facts sitting
- * side by side, not one control that overwrites the other.
+ * **There used to be one, and it was the wrong shape.** A *Hide from my lists* switch wrote a stored
+ * preference that filtered the pickers, and the row carried a *Hidden* chip beside its state. It is gone —
+ * control, chip, copy and field — because a list filter is the one control that can make an agent **this
+ * product ships disappear from the product's own lists**, which is the exact thing this product exists not
+ * to do: its brief is that a user could not see the agents we support. The audit's first ruling (that the
+ * reference product's "Enable {provider}" row was not applicable here) was closer to right than the
+ * correction that replaced it, and `docs/settings-parity.md` §5.8 now records why.
+ *
+ * What a picker offers is instead **derived** from what a probe measured (`composer/agent-for.ts`'s
+ * `offeredAgents`), so nothing a user stores can shorten a list — and this page is the other half of that
+ * bargain: **every agent we ship, every agent the user declared and all 38 catalogue entries are here**, with
+ * the state each was measured in and the command that fixes it. A picker may drop an agent we established is
+ * absent; the page never does, and its note under *New tasks* says so.
+ *
+ * ## The one action that does remove a row, and why it is not the same thing
+ *
+ * A **Remove** button forgets a provider the *user declared*. That is an undo of the user's own action —
+ * they added it, they can un-add it — rather than a statement about an agent we shipped, which is the whole
+ * difference between remove and hide. There is no remove control on a shipped agent, because there is
+ * nothing of the user's to undo: the nine are what the product is.
  *
  * ## What is deliberately still read-only
  *
@@ -84,7 +99,6 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
   const can = {
     catalog: state.hello?.methods.includes("coder.listCatalog") === true,
     providers: state.hello?.methods.includes("coder.listProviders") === true,
-    hide: state.hello?.methods.includes("coder.setAgentHidden") === true,
     signIn: state.hello?.methods.includes("coder.signInAgent") === true,
   };
 
@@ -111,15 +125,6 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
     [agents],
   );
 
-  const onToggleHidden = useCallback(
-    async (id: string, hidden: boolean): Promise<void> => {
-      // The refusal reaches the user through the store's own error slot, which the shell renders as the
-      // notice strip — the same path every other write in this pane takes.
-      await agents.setAgentHidden(id, hidden);
-    },
-    [agents],
-  );
-
   if (state.hello === undefined) {
     // No daemon at all is not the same as a daemon that is a build behind, and the page says which.
     return <p className="settings__note">{t("settings.noDaemon")}</p>;
@@ -135,10 +140,8 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
           <ShippedAgent
             key={harness.id}
             harness={harness}
-            canHide={can.hide}
             canSignIn={can.signIn}
             signingIn={signingIn === harness.id}
-            onToggleHidden={onToggleHidden}
             onSignIn={onSignIn}
           />
         ))}
@@ -166,7 +169,6 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
                 <span className={`chip ${ROW_STATE_CHIP[provider.availability.state]}`}>
                   {t(ROW_STATE_LABEL[provider.availability.state])}
                 </span>
-                {agentHiddenChip(t, provider.hidden)}
                 {(provider.availability.fix ?? []).map((step) => (
                   <span key={step.command} className="settings__hint" title={step.url}>
                     {step.command}
@@ -207,15 +209,9 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
                 </ul>
               ) : null}
               <div className="settings__agent-facts">
-                {can.hide ? (
-                  <button
-                    type="button"
-                    className="button button--secondary button--small"
-                    onClick={() => void onToggleHidden(provider.id, !provider.hidden)}
-                  >
-                    {provider.hidden ? t("settings.agents.show") : t("settings.agents.hide")}
-                  </button>
-                ) : null}
+                {/* **Remove, and it is not a hide.** This forgets a provider the *user declared* — an undo
+                    of their own action, which is why it exists only on this list and on no shipped agent —
+                    and its title says what it does and does not touch. Nothing is uninstalled. */}
                 <button
                   type="button"
                   className="button button--ghost button--small"
@@ -255,27 +251,18 @@ function commandText(t: Translator["t"], command: string, args: readonly string[
   return t("settings.agents.mine.command", { command: [command, ...args].join(" ") });
 }
 
-/** The "Hidden" chip — **a preference, beside the state and never inside it**. */
-function agentHiddenChip(t: Translator["t"], hidden: boolean): JSX.Element | null {
-  return hidden ? (
-    <span className="chip chip--quiet" title={t("settings.agents.hidden.title")}>
-      {t("settings.agents.hidden")}
-    </span>
-  ) : null;
-}
-
 /**
- * One of the nine agents we ship: its state, its own declared facts, and the two controls a user has.
+ * One of the nine agents we ship: its state, its own declared facts, and the one control a user has on it.
  *
- * The controls are a **preference** (hide from the pickers) and an **action on the agent** (trigger its
- * sign-in). Neither can change the state chip, which is what the probe measured — see the module doc.
+ * That control is an **action on the agent** — trigger its own sign-in, offered only for the state the daemon
+ * measured a sign-in requirement in. There is deliberately **no** control here that takes the agent out of a
+ * list: a shipped agent is what this product is, and the pickers' contents are derived from the state chip
+ * beside it rather than from anything the user can set (see the module doc).
  */
 function ShippedAgent(props: {
   harness: HarnessSummary;
-  canHide: boolean;
   canSignIn: boolean;
   signingIn: boolean;
-  onToggleHidden: (id: string, hidden: boolean) => Promise<void>;
   onSignIn: (harness: HarnessSummary) => Promise<void>;
 }): JSX.Element {
   const { t } = useI18n();
@@ -293,7 +280,6 @@ function ShippedAgent(props: {
         <strong>{harness.label}</strong>
         <span className="settings__agent-summary">{harness.summary}</span>
         <RowFacts availability={availability} harness={harness} legacyDaemon={legacyDaemon} />
-        {agentHiddenChip(t, harness.hidden)}
         {auth !== undefined ? (
           <span className={`chip ${auth.chip}`} title={t("settings.agents.auth.title")}>
             {t(auth.key)}
@@ -301,30 +287,19 @@ function ShippedAgent(props: {
         ) : null}
       </div>
       <DeclaredFacts harness={harness} />
-      {props.canHide || (props.canSignIn && harness.auth.state === "needs-signin") ? (
+      {props.canSignIn && harness.auth.state === "needs-signin" ? (
         <div className="settings__agent-facts">
-          {props.canHide ? (
-            <button
-              type="button"
-              className="button button--secondary button--small"
-              onClick={() => void props.onToggleHidden(harness.id, !harness.hidden)}
-            >
-              {harness.hidden ? t("settings.agents.show") : t("settings.agents.hide")}
-            </button>
-          ) : null}
-          {props.canSignIn && harness.auth.state === "needs-signin" ? (
-            <button
-              type="button"
-              className="button button--secondary button--small"
-              disabled={props.signingIn}
-              title={t("settings.agents.signIn.title", { agent: harness.label })}
-              onClick={() => void props.onSignIn(harness)}
-            >
-              {props.signingIn
-                ? t("settings.agents.signIn.working")
-                : t("settings.agents.signIn")}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="button button--secondary button--small"
+            disabled={props.signingIn}
+            title={t("settings.agents.signIn.title", { agent: harness.label })}
+            onClick={() => void props.onSignIn(harness)}
+          >
+            {props.signingIn
+              ? t("settings.agents.signIn.working")
+              : t("settings.agents.signIn")}
+          </button>
         </div>
       ) : null}
     </li>

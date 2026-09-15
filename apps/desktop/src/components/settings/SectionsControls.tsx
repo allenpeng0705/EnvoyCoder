@@ -25,7 +25,7 @@ import { useState } from "react";
 
 import type { CoderSettings, HarnessId } from "@envoycoder/protocol";
 
-import { pickable } from "../../composer/agent-for.js";
+import { offeredAgents } from "../../composer/agent-for.js";
 import { useI18n } from "../../i18n/context.js";
 import { LOCALES, LOCALE_LABELS } from "../../i18n/locales.js";
 import { FolderSetting, SettingRow, TextSetting } from "../SettingsRows.js";
@@ -121,7 +121,11 @@ export function GeneralSection(props: SettingsSectionProps): JSX.Element {
 export function TasksSection(props: SettingsSectionProps): JSX.Element {
   const { t } = useI18n();
   const { settings } = props.state;
-  const available = props.state.harnesses.filter((harness) => pickable(harness));
+  // **The picker's contents, derived from what a probe measured.** `offeredAgents` drops only an agent we
+  // established is absent and orders the rest by how usable it says it is; nothing a user stored can enter
+  // into it, which is why this row cannot be made to forget an agent. See its doc for the reasoning, and the
+  // note under the select for where the ones it drops are.
+  const available = offeredAgents(props.state.harnesses);
   const defaultHarness = settings.defaults.harness ?? "envoy-harness";
 
   return (
@@ -131,24 +135,36 @@ export function TasksSection(props: SettingsSectionProps): JSX.Element {
         detail={t("settings.defaultHarness.detail")}
         developerNote="settings.defaults.harness"
       >
-        <select
-          className="select"
-          value={defaultHarness}
-          aria-label={t("settings.defaultHarness.title")}
-          onChange={(event) => props.onUpdate({ defaults: { harness: event.target.value as HarnessId } })}
-        >
-          {available.length === 0 ? (
-            // An empty picker is a lie by omission: it suggests nothing is installed when the
-            // truth is that we have not been told yet.
-            <option value={defaultHarness}>{defaultHarness}</option>
-          ) : null}
-          {available.map((harness) => (
-            <option key={harness.id} value={harness.id}>
-              {harness.label}
-              {harness.tier === "catalogued" ? ` ${t("settings.needsInstalling")}` : ""}
-            </option>
-          ))}
-        </select>
+        {/* One child, because `SettingRow` renders exactly one control beside its row — so the select and
+            the note under it are wrapped rather than passed as siblings. */}
+        <div className="setting__field-group">
+          <select
+            className="select"
+            value={defaultHarness}
+            aria-label={t("settings.defaultHarness.title")}
+            onChange={(event) => props.onUpdate({ defaults: { harness: event.target.value as HarnessId } })}
+          >
+            {available.length === 0 ? (
+              // An empty picker is a lie by omission: it suggests nothing is installed when the
+              // truth is that we have not been told yet.
+              <option value={defaultHarness}>{defaultHarness}</option>
+            ) : null}
+            {available.map((harness) => (
+              <option key={harness.id} value={harness.id}>
+                {harness.label}
+                {harness.tier === "catalogued" ? ` ${t("settings.needsInstalling")}` : ""}
+              </option>
+            ))}
+          </select>
+          {/* **Where the agents this picker does not offer are, said out loud.** The picker drops the one
+              state that asserts a program is absent, and an unexplained short list is how a user concludes
+              the product does not support their agent — which is precisely the complaint the catalogue screen
+              exists to answer. So the row names that place, where every agent we ship, every agent the user
+              declared and all 38 recipes are listed with the state each one was measured in. */}
+          <p className="settings__note">
+            {t("settings.defaultHarness.catalog", { section: t("settings.section.agents.title") })}
+          </p>
+        </div>
       </SettingRow>
 
       {/* **Read but unsettable, until slice 1.** `resolveTaskDefaults` has honoured `defaults.model`

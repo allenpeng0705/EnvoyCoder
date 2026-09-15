@@ -279,6 +279,7 @@ export const zh: Catalogue = {
   "settings.defaultPath.placeholder": "/Users/you/work",
   "settings.defaultHarness.title": "新任务默认使用的智能体",
   "settings.defaultHarness.detail": "项目可以覆盖它；项目没有覆盖时以此为准。",
+  "settings.defaultHarness.catalog": "EnvoyCoder 支持的每一个智能体都在“{section}”页面——包括这里尚未安装的，每个都附有修复它的命令。",
   "settings.needsInstalling": "（需要安装）",
   "settings.defaultModel.title": "新任务默认使用的模型",
   "settings.defaultModel.detail": "留空时，每个新任务都使用智能体自己选的模型。项目也可以覆盖这一项。",
@@ -323,10 +324,6 @@ export const zh: Catalogue = {
   "settings.agents.mine.env.recipe": "{name} —— 由本配方提供",
   "settings.agents.mine.env.recipe.title":
     "这个变量是此智能体所用目录条目的配方常量，由 EnvoyCoder 提供，你的环境里并没有为它设置任何东西。想改掉配方里的值，就自己导出 {name}。",
-  "settings.agents.hide": "从我的列表中隐藏",
-  "settings.agents.show": "在我的列表中显示",
-  "settings.agents.hidden": "已隐藏",
-  "settings.agents.hidden.title": "你把这个智能体从列表中取了出来。上面报告的一切仍是实测结果——隐藏的是偏好，不是状态。",
   "settings.agents.auth.title": "这个智能体是否愿意在这里打开会话，这与它的程序是否已安装是两个不同的问题。",
   "settings.agents.auth.needsSignin": "需要登录",
   "settings.agents.auth.ready": "愿意与我们对话",
@@ -475,7 +472,6 @@ export const zh: Catalogue = {
     "\"{name}\" 不能作为提供方的标识。提供方标识由小写字母、数字和连字符组成，并以字母或数字开头。",
   "error.providerCatalogMismatch":
     "「{entry}」是目录里的智能体，而这个请求描述的配方与那一条目记载的并不一致——所以没有添加。请重新打开智能体页面，再添加一次那一行。",
-  "error.agentNotFound": "这里没有名为“{id}”的智能体。它可能已在另一个窗口中被移除。",
   "signIn.already": "{agent} 无需登录就直接打开了会话，因此没有需要做的事。",
   "error.catalogAgentMissing": "目录中没有名为“{id}”的智能体。这个列表在这个窗口读取之后发生了变化——请重新打开智能体页面再试。",
   "signIn.signedIn": "{agent} 接受了登录并打开了会话。",

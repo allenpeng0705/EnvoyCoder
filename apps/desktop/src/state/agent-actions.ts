@@ -39,17 +39,6 @@ export interface AgentActions {
   removeProvider(id: string): Promise<{ ok: true; removed: string } | Refusal>;
 
   /**
-   * Put an agent in the user's list, or out of it — **a preference, and the only thing it changes**.
-   *
-   * It never touches what the row reports: a hidden agent that is installed still reads *Ready*, still
-   * carries its install command when it is not, and still runs when a task already names it.
-   */
-  setAgentHidden(
-    id: string,
-    hidden: boolean,
-  ): Promise<{ ok: true; hidden: boolean; hiddenAgents: readonly string[] } | Refusal>;
-
-  /**
    * Measure **one** catalogued entry, on the user's press.
    *
    * `force` is the difference between "tell me what you know" and "measure it now": the daemon refuses to

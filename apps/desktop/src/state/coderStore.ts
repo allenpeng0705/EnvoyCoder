@@ -819,23 +819,6 @@ export class CoderStore {
   }
 
   /**
-   * Put an agent in the user's list, or out of it — **a preference, and nothing else**.
-   *
-   * The result carries the whole resulting list, so the caller can see what it changed without a second
-   * call; the *rows* come back through the daemon's `harnesses`/`providers` broadcast, because a hidden
-   * agent must still report the state the probe found and this store must not be the place that rewrites it.
-   */
-  async setAgentHidden(
-    id: string,
-    hidden: boolean,
-  ): Promise<{ ok: true; hidden: boolean; hiddenAgents: readonly string[] } | Refusal> {
-    return this.mutate("coder.setAgentHidden", { id, hidden }, (result) => {
-      const answer = result as { hidden: boolean; hiddenAgents: string[] };
-      return { ok: true as const, hidden: answer.hidden, hiddenAgents: answer.hiddenAgents };
-    });
-  }
-
-  /**
    * Ask an agent to run its **own** sign-in flow, and report what happened.
    *
    * Every outcome comes back as a success, including the four that are not: the agent opened a session,

@@ -1105,19 +1105,6 @@ export interface HarnessSummary {
    */
   availability: HarnessAvailability;
   /**
-   * Whether the user has taken this agent out of their own pickers.
-   *
-   * **The preference, stored and never inferred from the state beside it.** An installed, hidden agent
-   * reports `availability.state === "ready"` and `hidden === true` — two facts, both true, and a row can
-   * say both ("Installed · hidden from your pickers"). Collapsing them into one field is precisely the
-   * design error `docs/settings-parity.md` §5.8 corrects: it would let a user's *preference* overwrite our
-   * *measurement*, which is the one direction this product never writes.
-   *
-   * Required on the wire so a client cannot read "absent" as one of the answers. A client built against a
-   * daemon that predates the field must treat the absence as `false` (`pickable` does).
-   */
-  hidden: boolean;
-  /**
    * Whether this agent opens a session here, or wants a sign-in first.
    *
    * See `HarnessAuth`: three states, `unknown` until a probe says otherwise, and the reason the two
@@ -1217,21 +1204,6 @@ export const HarnessSummarySchema = z
      * on `HarnessAvailability`.
      */
     availability: HarnessAvailabilitySchema,
-    /**
-     * Whether the user has taken this agent out of their pickers (`CoderSettings.hiddenAgents`).
-     *
-     * **A preference, beside the state and never instead of it.** Required, so a client never has to read
-     * an absent field as one of the two answers — and the two answers are different facts about different
-     * owners: an installed agent the user hid is still `ready`, still carries its `fix` when it is not, and
-     * is still the agent a task naming it runs on. `docs/settings-parity.md` §5.8 records the audit that got
-     * this wrong.
-     *
-     * The desktop pickers filter on it (`composer/agent-for.ts`'s `pickable`), which is the only thing it
-     * may change. A client that predates the field must treat absence as `false` — that is what the
-     * filter's `=== true` comparison does, and it is deliberate: an older daemon cannot be hiding anything,
-     * because it had no way to.
-     */
-    hidden: z.boolean(),
     /**
      * Whether this agent can open a session here, or wants a sign-in first.
      *
@@ -1364,9 +1336,14 @@ export type CatalogEnvConstant = z.infer<typeof CatalogEnvConstantSchema>;
  *     one yet. A field here would read `unknown` forever, which is not a fact about the program but a
  *     statement about us dressed as one about it. See `coder.signInAgent`.
  *
- * `hidden` **is** here, and it is the one field the two tiers are required to agree on: a preference about
- * an agent is the same preference whether the agent is one we ship or one the user typed, and a user who has
- * decluttered their pickers has done it to both lists at once.
+ * The two tiers used to be required to agree on one further field, a stored `hidden` preference over the
+ * pickers. It is **gone from both**, and the removal is the point rather than a tidy-up: a preference that
+ * filters a list is the one control that can make an agent this product ships disappear from the product's
+ * own lists, which is the exact failure the owner of this product objected to. What decides which agents a
+ * picker offers is now derived from `availability` — a fact we measure, and one we can be wrong about and
+ * then correct with a probe — and nothing a user stores can shorten a list. See
+ * `apps/desktop/src/composer/agent-for.ts` for the rule and `docs/settings-parity.md` §5.8 for the
+ * reasoning.
  */
 export interface AgentProviderSummary {
   /** The user's own id. Never one of `HARNESS_IDS` — `AgentProviderConfigSchema` refuses that. */
@@ -1389,12 +1366,6 @@ export interface AgentProviderSummary {
   transport: "acp" | "cli";
   availability: HarnessAvailability;
   /**
-   * Whether the user has taken this provider out of their own pickers — `HarnessSummary.hidden`, for the
-   * same reason and under the same rule: it filters what a picker offers and changes nothing about the
-   * state beside it.
-   */
-  hidden: boolean;
-  /**
    * One English sentence about this row — the probe's own reason when it is not ready.
    *
    * For the log and for the tests, like `HarnessSummary.evidence`: the states and the `fix` are what a
@@ -1413,7 +1384,6 @@ export const AgentProviderSummarySchema = z
     env: z.array(AgentProviderEnvStateSchema).readonly(),
     transport: z.enum(["acp", "cli"]),
     availability: HarnessAvailabilitySchema,
-    hidden: z.boolean(),
     detail: z.string(),
   })
   .strict();
@@ -2054,53 +2024,6 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
   "coder.removeProvider": {
     params: z.object({ id: z.string().min(1) }).strict(),
     result: z.object({ removed: z.string().min(1) }).strict(),
-  },
-  /**
-   * Put an agent in the user's list, or out of it.
-   *
-   * ## Why this is not a field on `coder.updateSettings`
-   *
-   * The preference is stored in the settings document (`CoderSettings.hiddenAgents`), so the tempting shape
-   * is to let a client send the whole array through the method that already writes settings. Two reasons it
-   * is a method of its own:
-   *
-   *   * **Two windows toggling two agents must not clobber each other.** A whole-array patch is a
-   *     read-modify-write on the *client*, so the second window's "hide codex" would be written against a
-   *     list it read before the first window's "hide cursor" landed — and the loser disappears without
-   *     anything reporting it. Here the daemon does the read and the write inside its own serialised write
-   *     chain (`CoderStore.setAgentHidden`), so both survive.
-   *   * **The id has to be checked against something.** `envoycoder.agent-missing` is the refusal for an id
-   *     that names no agent, and only the daemon can answer that: it holds both lists.
-   *
-   * The result carries the **whole resulting list**, not just the toggle, so a client can update every row
-   * it is showing without a second round trip — and so a caller can see the preference it just changed.
-   */
-  "coder.setAgentHidden": {
-    params: z
-      .object({
-        /**
-         * The agent's id — one of the nine we ship, or a provider the user declared.
-         *
-         * The two id spaces cannot collide (`AgentProviderConfigSchema` refuses a provider id that names a
-         * shipped agent), which is what lets one field address both lists without ambiguity.
-         */
-        id: z.string().min(1),
-        hidden: z.boolean(),
-      })
-      .strict(),
-    result: z
-      .object({
-        id: z.string().min(1),
-        hidden: z.boolean(),
-        /**
-         * Every agent the user has hidden, after the change — the stored `CoderSettings.hiddenAgents`.
-         *
-         * `[]` when the last one was brought back, which is a different answer from "we did not tell you":
-         * the field is required.
-         */
-        hiddenAgents: z.array(z.string()).readonly(),
-      })
-      .strict(),
   },
   /**
    * Trigger the agent's own sign-in flow, and say truthfully what happened.

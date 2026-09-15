@@ -43,7 +43,6 @@ import {
   ProjectSchema,
   type Task,
   TaskSchema,
-  isHarnessId,
   withoutRetiredSettingsKeys,
 } from "@envoycoder/protocol";
 import type { CoderPaths } from "@envoycoder/host-bridge";
@@ -325,10 +324,14 @@ export class CoderStore {
  *
  * The `.strict()` schema plus the quarantine below is the right treatment for a file we cannot
  * understand — but it is the wrong treatment for a file we understand *perfectly* and have simply
- * stopped using. `allowRemoteRuns` is that case: settings slice 1 removed the switch because nothing
- * read it, and without this strip an upgrading user's whole settings file would be quarantined —
- * taking their language, their default agent and their nominated folder with it — to discard one key
- * whose value never reached a single line of code. See `RETIRED_SETTINGS_KEYS` in the protocol.
+ * stopped using. Two keys are that case. `allowRemoteRuns` was removed by settings slice 1 because
+ * nothing read it. `hiddenAgents` was **deleted** because the feature it fed should not exist — a stored
+ * filter that could take an agent we ship out of the product's own lists — and that difference does not
+ * change the migration: the old file is understood perfectly, its `hiddenAgents` list is simply ignored
+ * (nothing reads lists of agents out of settings any more), and without this strip an upgrading user's
+ * whole settings file would be quarantined, taking their language, their default agent and their
+ * nominated folder with it. See `RETIRED_SETTINGS_KEYS` in the protocol, which carries the reasoning
+ * behind the deletion.
  */
 private async readSettings(): Promise<CoderSettings> {
   const raw = await this.files.readJson(this.paths.settingsFile);
@@ -668,51 +671,6 @@ private async readSettings(): Promise<CoderSettings> {
           ids: [parsed.harness],
         }),
     );
-  }
-
-  /**
-   * Hide an agent from the user's pickers, or bring it back — **and change nothing else**.
-   *
-   * ## Why the read and the write both happen here
-   *
-   * A client that toggled one agent by sending the whole list would be doing a read-modify-write from its
-   * own copy, so two windows hiding two agents in the same second would produce one survivor and no report
-   * of the loss. Here the list is written inside the store's serialised chain (`enqueue`), so both toggles
-   * land and the second one sees the first. `coder.setAgentHidden`'s spec records this as the reason the
-   * method exists rather than a field on `coder.updateSettings`.
-   *
-   * ## Two notifications, because two things moved
-   *
-   * `settings` keeps a client that renders the stored preference truthful, and `harnesses`/`providers`
-   * is the list a window is actually drawing the row from — the store's rule is that an event says *what*
-   * moved so a client refetches exactly that, and here the row it must redraw lives in an agent list rather
-   * than in the settings document. Which of the two list kinds is decided by the id itself: the two agent
-   * lists cannot collide, so the id says which one holds the row.
-   *
-   * Sorted on write, so the file is stable and a diff of it is readable. Empty means "nothing hidden" rather
-   * than an empty list, so an absent key and a cleared preference are the same stored document.
-   */
-  async setAgentHidden(id: string, hidden: boolean): Promise<CoderSettings> {
-    const current = this.settingsState.hiddenAgents ?? [];
-    const next = hidden
-      ? [...new Set([...current, id])].sort()
-      : current.filter((entry) => entry !== id);
-    this.settingsState = CoderSettingsSchema.parse({
-      ...this.settingsState,
-      hiddenAgents: next.length > 0 ? next : undefined,
-    });
-    await this.enqueue(
-      () => this.files.writeJsonAtomic(this.paths.settingsFile, this.settingsState),
-      () => {
-        this.emit({ kind: "settings", at: this.now().toISOString() });
-        this.emit({
-          kind: isHarnessId(id) ? "harnesses" : "providers",
-          at: this.now().toISOString(),
-          ids: [id],
-        });
-      },
-    );
-    return this.settingsState;
   }
 
   /* ────────────────────────────── reading ────────────────────────────── */

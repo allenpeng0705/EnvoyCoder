@@ -182,20 +182,6 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     env: deps.env ?? process.env,
   });
 
-  /**
-   * **The user's preference over their own pickers**, read once per list call.
-   *
-   * One function because two handlers need the same answer and there is only one rule: `hidden` is a filter
-   * over what a picker offers, and the *only* thing it may change. It is passed to the projection as a flag
-   * *beside* the probed state rather than folded into it — that separation is the whole point of
-   * `CoderSettings.hiddenAgents`, and `docs/settings-parity.md` §5.8 records the audit that got it wrong.
-   *
-   * A `Set` built per call rather than cached on the instance: a settings write must be visible to the very
-   * next list call, and a cache is how a window hides an agent and then still sees it in a picker.
-   */
-  const hiddenAgents = (): ReadonlySet<string> =>
-    new Set(deps.store.settings().hiddenAgents ?? []);
-
   const handlers: Partial<Record<RpcMethod, CoderHandler>> = {
     // The agents a user declared: three methods whose whole subject is `AgentProviderConfig`, kept in their
     // own module because the list handler, the refusals that are the user's to fix and the credential
@@ -544,19 +530,17 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     /* ────────────────── agents ────────────────── */
     "coder.listHarnesses": async (params) => {
       parseRpcParams("coder.listHarnesses", params);
-      const hidden = hiddenAgents();
       return {
         harnesses: ALL_HARNESSES.map((id) =>
           summarize(
             id,
             probe,
             deps.store.sessionOptions(id),
-            // **The preference, as a flag.** An agent the user hid still answers with everything the probe
-            // found — its five-state availability, its observed models, and now its auth state — because
-            // hiding is a filter over what a picker offers rather than a statement about the agent.
-            hidden.has(id),
-            // …and the auth record, which is a *measurement* and therefore never affected by the preference
-            // above. The two neighbours on this call are the two facts this slice keeps apart.
+            // The auth record — the last fact on this row. **Every field of a summary is something a probe
+            // established**; nothing here is read from the settings document, which is what makes a picker
+            // built over these rows impossible to shorten with a stored preference. The decision about which
+            // of them a picker offers lives in one pure function over them
+            // (`apps/desktop/src/composer/agent-for.ts`), not here.
             deps.store.agentAuth(id),
           ),
         ),
@@ -658,48 +642,28 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
       return { settings };
     },
 
-    /**
-     * Put an agent in the user's pickers, or take it out — **the preference, and nothing else**.
-     *
-     * ## Why this is not part of `coder.updateSettings`
-     *
-     * The preference *is* stored in the settings document (`CoderSettings.hiddenAgents`), so a whole-array
-     * patch through the method above would look natural — and it would lose a toggle. Two windows hiding two
-     * agents at once would each write a list read before the other's change landed, and the loser would
-     * disappear without anything reporting it. Here the read and the write both happen inside the store's
-     * serialised chain, so both land and the second one sees the first. `rpc.ts`'s spec says the same thing
-     * from the client's side.
-     *
-     * ## The id is checked against both lists before anything is stored
-     *
-     * `envoycoder.agent-missing` for an id that names neither one of the nine we ship nor a provider the user
-     * declared. The alternative — storing whatever a client sent — makes a typo permanent and invisible: the
-     * list would grow a string matching no row, and no control could remove it, because every control is
-     * rendered from a row.
-     *
-     * ## What is deliberately *not* here
-     *
-     * No probe, no launch, no state. This method cannot change what any row reports about the machine, and
-     * that is a property of the code rather than a promise in a doc: the only thing it writes is the
-     * preference, and the only thing that reads it is `hiddenAgents()` above — the filter over the pickers.
-     */
-    "coder.setAgentHidden": async (params) => {
-      const input = parseRpcParams("coder.setAgentHidden", params) as { id: string; hidden: boolean };
-      if (!isHarnessId(input.id) && !deps.store.findProvider(input.id)) {
-        throw coderError(
-          ENVOYCODER_ERRORS.agentMissing,
-          `There is no agent called "${input.id}" here. It may have been removed from another window.`,
-          ref("error.agentNotFound", { id: input.id }),
-        );
-      }
-      const settings = await deps.store.setAgentHidden(input.id, input.hidden);
-      return {
-        id: input.id,
-        hidden: input.hidden,
-        // The whole resulting list, so a client can update every row it is showing without a second call.
-        hiddenAgents: [...(settings.hiddenAgents ?? [])],
-      };
-    },
+    // **There is deliberately no `coder.setAgentHidden` here, and its absence is a design decision rather
+    // than an unimplemented method.** It existed: a stored list of agent ids (`CoderSettings.hiddenAgents`)
+    // that the projection turned into a `hidden` flag on every row, which the desktop pickers filtered on.
+    // It was removed for two reasons, and the second is the one that would have caught it earlier.
+    //
+    // The first is what a list filter *is*: the one control that can make an agent this product ships
+    // disappear from the product's own lists, which is the exact failure the owner objected to when they
+    // said they could not see the agents we support. The brief is "the control plane of coding agents", and
+    // a control plane whose list of agents can be shortened by a preference is one that can be made to
+    // forget what it controls.
+    //
+    // The second is that it was added on a misreading. Paseo's "Enable {provider}" row decides whether that
+    // daemon *instantiates* a provider at all — a fact about a daemon's wiring — and we turned it into a
+    // list filter. What a picker offers is now **derived from probed facts** instead, in one pure function
+    // (`apps/desktop/src/composer/agent-for.ts`), which can be wrong about a fact and be corrected by the
+    // next probe. A stored filter is wrong by design and stays wrong. `docs/settings-parity.md` §5.8 carries
+    // the correction and the reasoning; `RETIRED_SETTINGS_KEYS` carries the old key so an upgrading user's
+    // settings file is not quarantined over it.
+    //
+    // Nothing replaced it on the wire: what a user can *do* here is declare an agent
+    // (`coder.addProvider`) or forget one they declared (`coder.removeProvider`), which is an undo of their
+    // own action rather than a statement about an agent we ship.
   };
 
   return handlers;

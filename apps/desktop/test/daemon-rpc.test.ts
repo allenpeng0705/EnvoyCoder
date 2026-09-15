@@ -23,6 +23,21 @@ const FAKE_AGENT = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "fa
  * So this boots the real daemon on an OS-chosen port, under a temporary home, with a temporary
  * state directory, and drives it with the same `ws` protocol the window uses. `port: 0` throughout:
  * a fixed port in a test is a test that fails when something else on the machine happens to use it.
+ *
+ * ## `coder.setAgentHidden` used to be exercised here, and nothing replaced it
+ *
+ * A `describe` in this file drove the stored preference that took an agent out of the user's own lists —
+ * the round trip, a second window hearing which list moved, the list surviving a restart, and a refusal
+ * for an id naming no agent. The method and the field behind it are gone, deliberately: a stored filter
+ * that shortens the list of agents a product offers is the one control that can make an agent *we ship*
+ * disappear from our own lists, which is the failure this product's owner named when they said they could
+ * not see the agents we support (`docs/settings-parity.md` §5.8). What replaced it is not another wire
+ * method but a **derived** rule over probed facts, so its tests live where it does: `agent-offer.test.ts`
+ * for the rule and the proof that nothing a user stores can shorten the list it produces, and
+ * `settings-agents-catalog.test.tsx` for the screen's half — every agent we ship, every provider declared
+ * and every catalogue row rendered, with no control that can shorten that list. The one action that does
+ * take a row off a list is `coder.removeProvider`, an undo of the user's own declaration, which the
+ * provider cases above cover over this same socket.
  */
 
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -1989,119 +2004,5 @@ describe("asking an agent what it offers, before any run", () => {
     // …and a forced ask is the user pressing the button, which means it.
     await client.call("coder.probeSessionOptions", { harness: "deepseek-harness", force: true });
     expect(spawns()).toBe(2);
-  }, 60_000);
-});
-
-/**
- * **The user's own list of agents** — the preference, over a socket, with two windows listening.
- *
- * ## Why this is here rather than in the unit test beside it
- *
- * `agent-preference.test.ts` pins the shape, the filter and the quarantine rule as functions. What it cannot
- * reach is the three things that only exist on the wire:
- *
- *   * the preference **round-trips through a real daemon** — a client calls `coder.setAgentHidden`, and the
- *     *next* `coder.listHarnesses` from a *different* connection carries the flag;
- *   * a second window **hears about it** without polling, through the store's own change event, and the event
- *     names the list that actually moved (`harnesses`, not `settings`) — a client that refetched the settings
- *     document would keep drawing the row the user just hid;
- *   * and it **survives the daemon dying**, which is what makes it a preference rather than a UI state.
- *
- * The assertion about availability is deliberately *relative*: hiding must leave the row's state exactly as it
- * was, whatever this machine's probe says about these agents.
- */
-describe("the agents in the user's own list, and the ones they hid", () => {
-  it("round-trips through the daemon, and a second window hears which list moved", async () => {
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-hidden-rpc-"));
-    cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
-    const daemon = await startCoderDaemon({ port: 0, home, paths: coderPaths(home), skipMeshAttach: true });
-    cleanups.push(async () => daemon.stop());
-
-    // Two windows on one daemon, which is the normal case (and the phone is a third).
-    const first = await connect(daemon.port);
-    const second = await connect(daemon.port);
-    cleanups.push(async () => first.close());
-    cleanups.push(async () => second.close());
-    await second.subscribe(["coder:state-changed"]);
-
-    const rows = async (client: JsonRpcClient): Promise<{ id: string; hidden: boolean; state: string }[]> => {
-      const answer = (await client.call("coder.listHarnesses", undefined)) as {
-        harnesses: { id: string; hidden: boolean; availability: { state: string }; auth: { state: string } }[];
-      };
-      return answer.harnesses.map((row) => ({
-        id: row.id,
-        hidden: row.hidden,
-        state: row.availability.state,
-      }));
-    };
-
-    const before = await rows(second);
-    // Every row says "not hidden" to begin with, which is the shipped state: nothing is hidden until a user
-    // says so, and the field is present on every row rather than absent (a client must never have to read
-    // absence as one of the two answers).
-    expect(before.every((row) => row.hidden === false)).toBe(true);
-
-    const announced = second.waitForEvent(
-      "coder:state-changed",
-      (data) =>
-        (data as { kind?: string }).kind === "harnesses" &&
-        Array.isArray((data as { ids?: unknown }).ids),
-    );
-    const toggled = (await first.call("coder.setAgentHidden", { id: "opencode", hidden: true })) as {
-      id: string;
-      hidden: boolean;
-      hiddenAgents: string[];
-    };
-    expect(toggled).toEqual({ id: "opencode", hidden: true, hiddenAgents: ["opencode"] });
-
-    // **The second window's own answer**, not the first window's echo: it refetched when it heard the event,
-    // and the row it is drawing now carries the preference.
-    const after = await rows(second);
-    const hiddenRow = after.find((row) => row.id === "opencode");
-    expect(hiddenRow?.hidden).toBe(true);
-    // **And the state beside it is untouched.** A hidden agent is not a broken one: whatever this machine
-    // reported about `opencode` a moment ago it still reports, because the preference is a filter over what a
-    // picker offers and nothing else.
-    expect(hiddenRow?.state).toBe(before.find((row) => row.id === "opencode")?.state);
-    // Every other row is untouched too — this is a preference about one agent, not a mode.
-    expect(after.filter((row) => row.id !== "opencode")).toEqual(before.filter((row) => row.id !== "opencode"));
-
-    // The event names the list a client must refetch. `settings` would have left the row on screen wrong, which
-    // is why the store emits both: the preference lives in the settings document and the *row* lives in an
-    // agent list.
-    expect(await announced).toMatchObject({ kind: "harnesses", ids: ["opencode"] });
-
-    // And it is on disk, so the next daemon — and the phone talking to it — starts from the same list.
-    const stored = JSON.parse(await readFile(coderPaths(home).settingsFile, "utf8")) as {
-      hiddenAgents?: string[];
-    };
-    expect(stored.hiddenAgents).toEqual(["opencode"]);
-
-    // Bringing it back is the same call with `false`, and the list comes back empty rather than holding an
-    // empty entry.
-    const restored = (await first.call("coder.setAgentHidden", { id: "opencode", hidden: false })) as {
-      hiddenAgents: string[];
-    };
-    expect(restored.hiddenAgents).toEqual([]);
-    expect((await rows(first)).find((row) => row.id === "opencode")?.hidden).toBe(false);
-  }, 60_000);
-
-  it("refuses an id that names no agent, in the user's language", async () => {
-    const { daemon, home } = await bootDaemon();
-    cleanups.push(async () => {
-      await daemon.stop();
-      await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
-    });
-    const client = await connect(daemon.port);
-    cleanups.push(async () => client.close());
-
-    const wire = await refusalOfCall(client, "coder.setAgentHidden", { id: "no-such-agent", hidden: true });
-
-    // `envoycoder.agent-missing` rather than `provider-missing`: the id space is shared, so the refusal has to
-    // answer about the union of the two lists — and it carries a key, because a user reads this one.
-    expect(coderErrorCode(wire)).toBe(ENVOYCODER_ERRORS.agentMissing);
-    expect(coderErrorRef(wire)?.key).toBe("error.agentNotFound");
-    expect(isMessageKey(coderErrorRef(wire)?.key ?? "")).toBe(true);
-    expect(coderErrorMessage(wire)).toContain("no-such-agent");
   }, 60_000);
 });

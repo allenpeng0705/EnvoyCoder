@@ -27,10 +27,17 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { CatalogEntry, CatalogProbe, HarnessSummary } from "@envoycoder/protocol";
+import type {
+  CatalogEntry,
+  CatalogProbe,
+  HarnessAvailability,
+  HarnessSummary,
+} from "@envoycoder/protocol";
+import { ALL_HARNESSES, harnessDefinition } from "@envoycoder/agent-catalog";
 
 import { SettingsPane } from "../src/components/SettingsPane.js";
 import { addInputFor } from "../src/components/settings/agent-catalog.js";
+import { catalogEntries } from "../src/daemon/catalog.js";
 import { en } from "../src/i18n/messages/en.js";
 import { I18nProvider } from "../src/i18n/context.js";
 import type { Refusal } from "../src/i18n/notice.js";
@@ -70,7 +77,6 @@ function harness(over: Partial<HarnessSummary> & { id: HarnessSummary["id"] }): 
       approvalPolicy: true,
     },
     availability: { state: "ready", binary: `/usr/local/bin/${over.id}` },
-    hidden: false,
     auth: { state: "unknown" },
     evidence: "…",
     ...over,
@@ -174,7 +180,6 @@ const state: CoderState = {
       "coder.listProviders",
       "coder.listCatalog",
       "coder.probeCatalogAgent",
-      "coder.setAgentHidden",
       "coder.signInAgent",
     ],
     mesh: { kind: "no-node", reason: "not attached in this test" },
@@ -205,7 +210,6 @@ const state: CoderState = {
       env: [{ name: "MY_AGENT_TOKEN", set: false }],
       transport: "acp",
       availability: { state: "ready", binary: "/usr/local/bin/my-agent" },
-      hidden: false,
       detail: "Ready to run (/usr/local/bin/my-agent).",
     },
   ],
@@ -242,7 +246,6 @@ interface AgentCalls {
     /** The catalogue reference, present for a row and absent for the manual form. */
     catalogEntryId?: string;
   }[];
-  hidden: { id: string; hidden: boolean }[];
   removed: string[];
   probed: { id: string; force: boolean | undefined }[];
   signedIn: string[];
@@ -258,7 +261,7 @@ function agentActions(options: {
   probes?: Record<string, CatalogProbe | Refusal>;
   addRefusal?: Refusal;
 } = {}): { actions: Record<string, unknown>; calls: AgentCalls } {
-  const calls: AgentCalls = { added: [], hidden: [], removed: [], probed: [], signedIn: [] };
+  const calls: AgentCalls = { added: [], removed: [], probed: [], signedIn: [] };
   const actions = {
     addProvider: async (input: AgentCalls["added"][number]) => {
       calls.added.push({ ...input, args: [...input.args], env: [...input.env] });
@@ -268,10 +271,6 @@ function agentActions(options: {
     removeProvider: async (id: string) => {
       calls.removed.push(id);
       return { ok: true as const, removed: id };
-    },
-    setAgentHidden: async (id: string, hidden: boolean) => {
-      calls.hidden.push({ id, hidden });
-      return { ok: true as const, hidden, hiddenAgents: hidden ? [id] : [] };
     },
     probeCatalogAgent: async (id: string, probeOptions: { force?: boolean } = {}) => {
       calls.probed.push({ id, force: probeOptions.force });
@@ -366,6 +365,64 @@ describe("the agents screen", () => {
       expect(within(catalogList()).getByText(entry.title), entry.id).toBeTruthy();
     }
     expect(catalogList().querySelectorAll(".settings__catalog-row")).toHaveLength(catalog.length);
+  });
+
+  it("lists every agent we ship, every agent declared and all 38 catalogue rows, and nothing shortens it", () => {
+    // **The owner's brief, as an assertion.** *"We need user to see them and can enable and use them. That's
+    // the target of our control plane."* A control plane that cannot see the agents it controls is the exact
+    // complaint this screen exists to answer — and the one thing that was able to act against it was the
+    // deleted preference, which could take a **shipped** agent out of a list. So this case renders the real
+    // catalogue (`catalogEntries()`, the daemon's own projection, not a second copy of it), all nine shipped
+    // agents and two declared providers, and asserts the arithmetic: what the daemon served is what a user
+    // can see.
+    //
+    // **The mutation it fails on:** any filter, cap or "show more" over a list on this page — including a
+    // `hidden`-style predicate reintroduced in the render, which would take the shipped count from 9 to 8.
+    const entries = catalogEntries();
+    // **The nine, in all five states between them** — because a fixture where every agent is `ready` cannot
+    // tell "lists everything" from "lists everything that works", and it was that gap that let this case stay
+    // green under a `state === "ready"` filter while the weaker cases next door went red. Every state the
+    // pickers may drop is in the list, so only an unfiltered render puts all nine on the page.
+    const states: HarnessAvailability[] = [
+      { state: "ready", binary: "/usr/local/bin/agent" },
+      { state: "unknown" },
+      { state: "not-installed", fix: [{ command: "npm install -g the-agent" }] },
+      { state: "needs-bridge", agentBinary: "/usr/local/bin/agent", fix: [{ command: "npm install -g the-adapter" }] },
+      { state: "unsupported", binary: "/usr/local/bin/agent" },
+    ];
+    const shipped = ALL_HARNESSES.map((id, at) =>
+      harness({ id, label: harnessDefinition(id).label, availability: states[at % states.length]! }),
+    );
+    expect(entries, "the catalogue this product ships").toHaveLength(38);
+    expect(shipped, "the agents this product ships").toHaveLength(9);
+    expect(new Set(shipped.map((agent) => agent.availability.state)).size, "states covered").toBe(5);
+
+    show({
+      harnesses: shipped,
+      providers: [
+        { ...state.providers[0]!, id: "my-agent", label: "My Agent" },
+        { ...state.providers[0]!, id: "other-agent", label: "Other Agent" },
+      ],
+      catalog: entries,
+    });
+
+    const lists = document.querySelectorAll(".settings__agents");
+    const shippedRows = lists[0]?.querySelectorAll(".settings__agent") ?? [];
+    const providerRows = lists[1]?.querySelectorAll(".settings__agent") ?? [];
+    expect(shippedRows).toHaveLength(9);
+    expect(providerRows).toHaveLength(2);
+    for (const agent of shipped) {
+      expect(within(shippedList()).getByText(agent.label), agent.id).toBeTruthy();
+    }
+    for (const provider of ["My Agent", "Other Agent"]) {
+      expect(document.body.textContent).toContain(provider);
+    }
+
+    // Every entry, by the entry's own title: the count is the catalogue's, and no row is missing from it.
+    expect(catalogList().querySelectorAll(".settings__catalog-row")).toHaveLength(entries.length);
+    for (const entry of entries) {
+      expect(within(catalogList()).getByText(entry.title), entry.id).toBeTruthy();
+    }
   });
 
   it("shows each catalogue row's command, version and where to get it", () => {
@@ -640,42 +697,79 @@ describe("adding an agent from the catalogue", () => {
   });
 });
 
-describe("turning an agent on and off", () => {
-  it("hides an agent without changing one word of what it reports", async () => {
-    // **The audit's correction, as a test.** Hiding is a *preference* the user expresses; the state beside it
-    // is a *measurement* we made. Paseo's switch rewrites the reported state (`unavailable`, and a
-    // `listModels` that throws), and `docs/settings-parity.md` §5.8 records the audit that first mistook the
-    // two — twice. A test that only asserted "setAgentHidden was called" would pass on exactly that defect,
-    // so this one reads the row's own chip as well.
+describe("nothing on this page can take an agent out of a list", () => {
+  /**
+   * **The switch that used to be here, and what replaced it.**
+   *
+   * This describe was called *"turning an agent on and off"* and its first two cases pressed *Hide from my
+   * lists* and read the **Hidden** chip back off the row. The preference, the control and the chip are all
+   * gone: a stored filter that shortens the list of agents a product offers is the one control that can make
+   * an agent **we ship** disappear from our own lists, which is the failure this product's owner named when
+   * they said they could not see the agents we support. What decides a picker's contents is now derived from
+   * probed facts (`composer/agent-for.ts`'s `offeredAgents`), and the two cases here are the screen's half of
+   * that: **no control on the page mentions the preference**, and the keys that spelled it are gone from the
+   * catalogue rather than left behind as orphans.
+   */
+  it("offers no control, and no chip, that takes an agent out of the user's lists", () => {
+    // The vocabulary is the assertion. A *Hide*, a *Show* or a *Hidden* anywhere on this page is the feature
+    // coming back, whatever it is wired to — so the check is on the words a user would read, and on the two
+    // keys that spelled them being absent from the catalogue rather than merely unreferenced.
+    for (const key of [
+      "settings.agents.hide",
+      "settings.agents.show",
+      "settings.agents.hidden",
+      "settings.agents.hidden.title",
+    ]) {
+      expect(en[key as keyof typeof en], `${key} is still in the catalogue`).toBeUndefined();
+    }
+
+    show();
+    // The whole document, not one region: a *Hide* that moved elsewhere on the page is the same feature
+    // back, and a check scoped to the list it used to sit in would not notice.
+    for (const stale of ["Hide from my lists", "Show in my lists", "Hidden"]) {
+      expect(document.body.textContent, `the page still says "${stale}"`).not.toContain(stale);
+    }
+    // And a shipped agent's row carries exactly one button — its own sign-in, and only when the daemon says
+    // it wants one. Nothing beside it is a control over the *list* the agent appears in.
+    expect(within(rowFor("Envoy Harness")).queryAllByRole("button")).toEqual([]);
+  });
+
+  it("removes an agent the user declared, in words that are not 'hide'", async () => {
+    // **Remove is kept, and it is a different act from the deleted preference.** Removing a *declared*
+    // provider undoes the user's own action — they added it, they can un-add it — while the preference could
+    // take an agent **we ship** out of a list, which is why only the first survives. The copy is the other half
+    // of the guarantee: a control whose wording reads as "hide" would restore the confusion the deletion is
+    // about, so the title is asserted to say what Remove does *and* to avoid the vocabulary of hiding.
     const calls = show();
-    const envoy = rowFor("Envoy Harness");
-    expect(chipText(envoy)).toBe(en["settings.agent.ready"]);
-    expect(envoy.textContent).not.toContain(en["settings.agents.hidden"]);
+    const providerList = document.querySelectorAll(".settings__agents")[1];
+    const providerRow = providerList?.querySelector(".settings__agent");
+    if (!(providerRow instanceof HTMLElement)) throw new Error("no provider row was rendered");
 
-    press(envoy, en["settings.agents.hide"]);
-    await waitFor(() => expect(calls.hidden).toEqual([{ id: "envoy-harness", hidden: true }]));
-    // Nothing the row reports has moved. (It still says Ready and still carries its declared facts; the
-    // daemon is what will now hand the next `coder.listHarnesses` a `hidden: true` **beside** that state.)
-    expect(chipText(rowFor("Envoy Harness"))).toBe(en["settings.agent.ready"]);
-    expect(rowFor("Envoy Harness").textContent).toContain(en["settings.agent.tier.builtIn"]);
+    const remove = within(providerRow).getByRole("button", { name: en["settings.agents.mine.remove"] });
+    const title = remove.getAttribute("title") ?? "";
+    expect(title).toContain("Forget My Agent");
+    expect(title.toLowerCase()).not.toContain("hide");
+    expect(title).toContain("Nothing is uninstalled");
+
+    press(providerRow, en["settings.agents.mine.remove"]);
+    await waitFor(() => expect(calls.removed).toEqual(["mine"]));
+
+    // And no shipped agent carries it: there is nothing of the user's to undo on an agent we ship, so a
+    // Remove there would be the deleted preference wearing a different word.
+    expect(
+      within(rowFor("Envoy Harness")).queryByRole("button", { name: en["settings.agents.mine.remove"] }),
+    ).toBeNull();
   });
 
-  it("shows a hidden agent's own preference chip, over a state it does not touch", () => {
-    // The other half of the same property, and the half a fixture can prove: with `hidden: true` on the wire,
-    // the row carries **both** — the preference chip and the measured state — which is the whole shape of
-    // `HarnessSummary.hidden`.
-    show({ harnesses: [harness({ id: "envoy-harness", label: "Envoy Harness", tier: "built-in", hidden: true })] });
-    const envoy = rowFor("Envoy Harness");
-    expect(envoy.textContent).toContain(en["settings.agents.hidden"]);
-    expect(chipText(envoy)).toBe(en["settings.agent.ready"]);
-    expect(within(envoy).getByRole("button", { name: en["settings.agents.show"] })).toBeTruthy();
-  });
-
-  it("shows a missing agent's install command whatever the user has done to their list", () => {
+  it("lists a shipped agent the probe could not run at all, with the command that fixes it", () => {
+    // The other direction, and the one a picker may *not* take: `Codex` here is `not-installed`, so
+    // `offeredAgents` drops it from the two default-agent pickers — and this page still lists it, still says
+    // why, and still names the install command. That difference is the whole bargain: a picker is where a
+    // choice is made, and the catalogue is where the product is visible.
     show();
     const codex = rowFor("Codex");
-    expect(codex.textContent).toContain("npm install -g @openai/codex");
     expect(chipText(codex)).toBe(en["settings.agent.notInstalled"]);
+    expect(codex.textContent).toContain("npm install -g @openai/codex");
   });
 
   it("offers the agent's own sign-in only when it says it needs one", () => {

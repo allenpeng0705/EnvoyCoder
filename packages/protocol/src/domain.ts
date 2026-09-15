@@ -870,17 +870,6 @@ export const ENVOYCODER_ERRORS = {
    * value; see `AgentProviderConfig.env`.
    */
   providerEnvUnset: "envoycoder.provider-env-unset",
-  /**
-   * No agent called that — neither one of the nine we ship nor a provider the user declared.
-   *
-   * Its own code, and the fourth member of the family `projectMissing` / `taskMissing` / `providerMissing`
-   * started, because it answers about the **union** of the two lists: `coder.setAgentHidden` addresses an
-   * agent by id and the id space is deliberately shared (a provider may not take a shipped agent's id, see
-   * `AgentProviderConfigSchema`), so a refusal that named only one list would be a sentence about the wrong
-   * thing when the user had a typo. The alternative — two codes and a branch — would make a client ask
-   * which list it meant, which is exactly what one shared id space was chosen to avoid.
-   */
-  agentMissing: "envoycoder.agent-missing",
   /** No run with that id — typically a daemon that restarted under a window that was still open. */
   runMissing: "envoycoder.run-missing",
   /** The mesh node refused the product session, or granted it fewer methods. */
@@ -976,29 +965,6 @@ export const RPC_METHODS = [
   /** Forget a provider. Nothing is launched and nothing else is touched. */
   "coder.removeProvider",
   /**
-   * Put an agent **in the user's list, or out of it** — a preference, and the one thing it may change.
-   *
-   * Paseo's `providers` page calls this "Enable {provider}" and it is the row a user reaches for when the
-   * list of agents is longer than the list they use (`docs/settings-parity.md` §5.8). EnvoyCoder used to
-   * have no equivalent, and the audit that ruled it out made a real mistake worth recording: it treated the
-   * switch as a way to **falsify a state** ("let a user hide a working agent for no reason") when it is a
-   * way to **express a preference**. Those are two different facts about two different owners —
-   * *availability is ours to detect; preference is theirs to set* — so hiding moves an agent out of the
-   * pickers and changes nothing else. A hidden agent that is installed still reports `ready`, still carries
-   * its `fix` when it is not, and still runs when a task already names it.
-   *
-   * **The id space is one list, and it is provably unambiguous.** `AgentProviderConfigSchema` refuses a
-   * provider id that names an agent we ship, so no string in this field can mean two agents; a second list
-   * (one for the nine, one for the user's own) would therefore be two things to keep in step with no
-   * possible disagreement to justify them. This is the same reason the id is what travels rather than an
-   * index: it is the key both lists are searched by.
-   *
-   * Refused with `envoycoder.agent-missing` for an id that names no agent here — neither one we ship nor a
-   * provider the user declared — because a preference about an agent nobody has is a typo, and storing it
-   * would make the list grow silently.
-   */
-  "coder.setAgentHidden",
-  /**
    * **Trigger the agent's own sign-in flow**, and report truthfully whether a session opens afterwards.
    *
    * The ACP method it sends is `authenticate {methodId}`, with a method id the **agent advertised in its
@@ -1013,9 +979,9 @@ export const RPC_METHODS = [
    *
    * Named agents rather than providers, and the parameter type says so: a provider is not runnable by a
    * task yet and nothing in this daemon opens a session with one, so there is no flow here to trigger. When
-   * a task can run on a provider, this method's `harness` becomes the same kind of id `coder.setAgentHidden`
-   * takes — and that is a change to make deliberately, against a probe that exists, rather than a field
-   * widened in advance.
+   * a task can run on a provider, this method's `harness` becomes the same kind of id `coder.addProvider`
+   * and `coder.removeProvider` already take — and that is a change to make deliberately, against a probe
+   * that exists, rather than a field widened in advance.
    */
   "coder.signInAgent",
   /**
@@ -1188,45 +1154,6 @@ export interface CoderSettings {
    * and a second window could not see (and which a cleared webview cache would silently lose).
    */
   language?: CoderLanguage;
-  /**
-   * The agents the user has taken **out of their own pickers**, by id — and the one thing this changes.
-   *
-   * ## Why this is a preference and not a state, which is the whole point
-   *
-   * The reference product calls this row "Enable {provider}" and its daemon acts on it: a disabled
-   * provider is reported `unavailable` and its `listModels` throws. EnvoyCoder's audit first read that as
-   * a way to **falsify a fact** — "a switch that would let a user hide a working agent" — and ruled the
-   * row out as "not applicable as a setting" (`docs/settings-parity.md` §5.8). That ruling was wrong, and
-   * the correction is worth stating where the field lives: **availability is ours to detect, preference is
-   * theirs to set.** A user who has four agents installed and uses two is not lying about the other two by
-   * taking them out of a picker; they are describing their own machine the way they work on it.
-   *
-   * So this field is read in exactly one way — as a **filter over what the pickers offer** — and there is no
-   * code path in this product that lets it reach `availability`, `auth` or a launch. That is enforced by
-   * where the read happens (the daemon's summary projection, which sets a `hidden` flag *beside* the
-   * probed state rather than in place of it) and asserted by a test that hides an installed agent and
-   * checks it still reports `ready`.
-   *
-   * ## The shape: one list, addressed by id
-   *
-   * One list, because the id spaces of the two agent lists cannot collide — `AgentProviderConfigSchema`
-   * refuses a provider id that names one of the nine we ship — so a string here can never be ambiguous, and
-   * two lists would be two things to keep in step for no possible disagreement. It is also the form the
-   * wire already uses everywhere an agent is named (`Task.harness`, `AgentProviderConfig.id`), and it
-   * survives a provider being removed and re-added, which an index would not.
-   *
-   * ## A malformed value is quarantined, not repaired
-   *
-   * The settings document is one schema with one quarantine rule: a file that does not parse is **moved
-   * aside** and reported at `coder.hello` (`apps/desktop/src/daemon/state-file.ts`), never silently
-   * emptied. A `hiddenAgents` that is not a list of strings is therefore quarantined like any other broken
-   * settings file — the preference is not repaired into something a user did not write, and nothing that
-   * was on disk is lost.
-   *
-   * Optional, and absent when nothing is hidden: an empty list would be a claim that the list was
-   * considered, which is a different thing from never having expressed one.
-   */
-  hiddenAgents?: readonly string[];
 }
 
 export const DEFAULT_CODER_SETTINGS: CoderSettings = {
@@ -1273,16 +1200,6 @@ export const CoderSettingsSchema = z
     // Optional, and validated against the same closed list the app's picker offers: a client that
     // asked for a language nobody translated is a client bug the daemon should refuse, not store.
     language: CoderLanguageSchema.optional(),
-    /**
-     * The preference over the pickers (`CoderSettings.hiddenAgents` has the whole argument).
-     *
-     * `min(1)` per entry and nothing more, deliberately: an id that names no agent is **inert** rather
-     * than invalid — it matches no row, so it hides nothing — and refusing it here would quarantine the
-     * user's whole settings file (their language, their folder, their default agent) over a string they
-     * cannot see. What is *not* tolerated is a value of the wrong shape: a string where a list belongs, or
-     * a number inside it, is a file we cannot understand, and that is what quarantine is for.
-     */
-    hiddenAgents: z.array(z.string().min(1)).readonly().optional(),
   })
   .strict();
 
@@ -1299,8 +1216,21 @@ export const CoderSettingsSchema = z
  * `allowRemoteRuns` is the first entry, removed by settings slice 1: the switch promised to share this
  * machine's agents with the user's other machines, nothing read it, and `coder.offerRemoteRun` had no
  * handler (`docs/settings-parity.md` §7.1, §8.1).
+ *
+ * `hiddenAgents` is the second, and it is a **deletion rather than a retirement of something that merely
+ * went unused**. It was a list of agent ids a user had taken out of the pickers, served as a `hidden` flag
+ * on every `HarnessSummary` and `AgentProviderSummary` and read by one filter. The owner's brief for this
+ * product is that a user could not *see* the agents we support, and a list filter is the subtractive answer
+ * to that: it is the one control that can make an agent we ship disappear from the product's own lists. It
+ * was added on a misreading of Paseo's "Enable {provider}" row — that switch decides whether Paseo's daemon
+ * instantiates a provider at all, which is a fact about a daemon's wiring, not a preference over a list —
+ * and `docs/settings-parity.md` §5.8 records the correction and the reasoning. What replaces it is not
+ * another stored field but a **derived** rule over probed facts (`apps/desktop/src/composer/agent-for.ts`),
+ * which cannot be wrong by design because there is nothing in it a user can set. A future curation, if one
+ * is ever wanted, must be **additive** — a favourite that adds to a short list — so that nothing can become
+ * invisible.
  */
-export const RETIRED_SETTINGS_KEYS: readonly string[] = ["allowRemoteRuns"];
+export const RETIRED_SETTINGS_KEYS: readonly string[] = ["allowRemoteRuns", "hiddenAgents"];
 
 /** Drop retired keys, so an older settings file still parses. */
 export function withoutRetiredSettingsKeys(value: unknown): unknown {

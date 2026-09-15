@@ -113,7 +113,6 @@ function renderPane(
   const noAgentActions: AgentActions = {
     addProvider: vi.fn(),
     removeProvider: vi.fn(),
-    setAgentHidden: vi.fn(),
     probeCatalogAgent: vi.fn(),
     signInAgent: vi.fn(),
   } as unknown as AgentActions;

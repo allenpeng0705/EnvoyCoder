@@ -106,17 +106,15 @@ export function createProviderHandlers(
      */
     "coder.listProviders": async (params) => {
       parseRpcParams("coder.listProviders", params);
-      // The same preference the nine shipped agents carry, read from the same place and applied the same
-      // way: as a flag **beside** the probed state. A user who hid a provider still gets its five-state
-      // availability and its per-variable `set` flags, because hiding says something about the user's list
-      // and nothing about the program.
-      const hidden = new Set(deps.store.settings().hiddenAgents ?? []);
+      // **Nothing on this row comes from the settings document**, and that is the property the removed
+      // preference violated: a user-declared provider is listed exactly as the same prober measured it, so
+      // a picker built over these rows cannot be shortened by anything a user stored. Removing a provider
+      // is the one action that takes it off this list, and it is an *undo of the user's own declaration*
+      // (`coder.removeProvider`) rather than a filter over a list we curate.
       return {
         providers: deps.store
           .providers()
-          .map((provider) =>
-            summarizeProvider(provider, deps.probe, deps.env, hidden.has(provider.id)),
-          ),
+          .map((provider) => summarizeProvider(provider, deps.probe, deps.env)),
       };
     },
 

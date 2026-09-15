@@ -132,8 +132,7 @@ const otherProject: Project = {
 /** Two agents, so the scope's agent picker has something to switch between. */
 const harnesses: CoderState["harnesses"] = (["envoy-harness", "deepseek-harness"] as const).map((id) => ({
   id,
-  // Not hidden, and nothing probed: the two values a daemon that has just started sends.
-  hidden: false,
+  // Nothing probed yet, which is the value a daemon that has just started sends.
   auth: { state: "unknown" as const },
   label: id === "envoy-harness" ? "Envoy Harness" : "DeepSeek Harness",
   tier: id === "envoy-harness" ? ("built-in" as const) : ("catalogued" as const),
@@ -259,16 +258,18 @@ describe("a project's settings on the project's own row", () => {
     expect(screen.queryByRole("heading", { name: "Safety" })).toBeNull();
   });
 
-  it("drops an agent the user hid from the picker, and keeps one it merely has not looked at", () => {
-    // **The rendered half of "hiding is a filter over what the pickers offer"**, as opposed to the unit
-    // assertion about `pickable` in `agent-preference.test.ts`: this is the control a user actually opens.
-    // `deepseek-harness` is hidden and `envoy-harness` only *unexamined* — a daemon that has not probed it yet
-    // — and the two must be treated differently: a hidden agent leaves the list, and one nobody has looked at
-    // stays, because dropping it would make a decision on the user's behalf.
+  it("offers the agents a probe found usable, in order, and drops only one it found absent", () => {
+    // **The rendered half of the pickers' rule**, as opposed to the unit assertions in `agent-offer.test.ts`:
+    // this is the control a user actually opens. It used to assert the opposite thing about the same two
+    // agents — `deepseek-harness` *hidden* left the list and `envoy-harness` merely *unexamined* stayed — and
+    // the change is the whole point of this slice. Nothing a user stored can move a row any more, so the list
+    // is exactly what the measurements say, in the order they imply.
     show({
       harnesses: harnesses.map((harness) =>
         harness.id === "deepseek-harness"
-          ? { ...harness, hidden: true }
+          // A row that *claims* to carry the deleted preference. It is offered anyway — that is the property
+          // being measured here, and the reason the row is spelled this way rather than left out.
+          ? { ...harness, hidden: true, availability: { state: "ready" as const, binary: "/usr/local/bin/dsh" } }
           : { ...harness, availability: { state: "unknown" as const }, auth: { state: "unknown" as const } },
       ),
     });
@@ -277,6 +278,30 @@ describe("a project's settings on the project's own row", () => {
     const picker = screen.getByLabelText("The agent new tasks here start with");
     const offered = [...picker.querySelectorAll("option")].map((option) => option.textContent ?? "");
 
+    // Both are offered, and the one the probe called `ready` comes first: the order is a fact about the
+    // machine, not an accident of the order the daemon happened to send.
+    expect(offered.some((label) => label.includes("DeepSeek Harness"))).toBe(true);
+    expect(offered.some((label) => label.includes("Envoy Harness"))).toBe(true);
+    expect(offered.findIndex((label) => label.includes("DeepSeek Harness"))).toBeLessThan(
+      offered.findIndex((label) => label.includes("Envoy Harness")),
+    );
+  });
+
+  it("drops an agent the probe could not find, and says where the whole catalogue is", () => {
+    // The one row a picker may drop — a state that asserts the program is **absent** — and the sentence that
+    // keeps the short list from reading as "this product does not support your agent". An unexplained missing
+    // row is how a user concludes we do not support something we ship a recipe for.
+    show({
+      harnesses: harnesses.map((harness) =>
+        harness.id === "deepseek-harness"
+          ? { ...harness, availability: { state: "not-installed" as const } }
+          : harness,
+      ),
+    });
+    openProject("api");
+
+    const picker = screen.getByLabelText("The agent new tasks here start with");
+    const offered = [...picker.querySelectorAll("option")].map((option) => option.textContent ?? "");
     expect(offered.some((label) => label.includes("DeepSeek Harness"))).toBe(false);
     expect(offered.some((label) => label.includes("Envoy Harness"))).toBe(true);
   });

@@ -279,6 +279,7 @@ export const fr: Catalogue = {
   "settings.defaultPath.placeholder": "/Users/you/work",
   "settings.defaultHarness.title": "L'agent avec lequel démarrent les nouvelles tâches",
   "settings.defaultHarness.detail": "Un projet peut le remplacer ; ceci s'applique quand ce n'est pas le cas.",
+  "settings.defaultHarness.catalog": "Tous les agents pris en charge par EnvoyCoder figurent sur la page {section} — y compris ceux qui ne sont pas installés ici, chacun avec la commande qui y remédie.",
   "settings.needsInstalling": "(à installer)",
   "settings.defaultModel.title": "Le modèle avec lequel démarrent les nouvelles tâches",
   "settings.defaultModel.detail": "Laissé vide, chaque nouvelle tâche tourne sur le modèle que l'agent choisit lui-même. Un projet peut aussi remplacer ceci.",
@@ -323,10 +324,6 @@ export const fr: Catalogue = {
   "settings.agents.mine.env.recipe": "{name} — fourni par cette recette",
   "settings.agents.mine.env.recipe.title":
     "Cette variable est une constante de la recette de catalogue dont cet agent a été ajouté, c’est donc EnvoyCoder qui la fournit — rien n’est défini pour elle dans votre environnement. Exportez {name} vous-même pour remplacer la valeur de la recette.",
-  "settings.agents.hide": "Masquer de mes listes",
-  "settings.agents.show": "Afficher dans mes listes",
-  "settings.agents.hidden": "Masqué",
-  "settings.agents.hidden.title": "Vous avez retiré cet agent de vos listes d’agents. Tout ce qui est rapporté ci-dessus reste ce qui a été mesuré : masquer est une préférence, pas un état.",
   "settings.agents.auth.title": "Si cet agent ouvre une session ici — une autre question que celle de savoir si son programme est installé.",
   "settings.agents.auth.needsSignin": "Connexion requise",
   "settings.agents.auth.ready": "Communique avec nous",
@@ -475,8 +472,6 @@ export const fr: Catalogue = {
     "\"{name}\" ne peut pas être un identifiant de fournisseur. Un identifiant de fournisseur est composé de lettres minuscules, de chiffres et de tirets, et commence par une lettre ou un chiffre.",
   "error.providerCatalogMismatch":
     "« {entry} » est un agent du catalogue, et la recette décrite par cette requête n’est pas celle qu’indique cette entrée — l’agent n’a donc pas été ajouté. Rouvrez la page des agents et ajoutez la ligne à nouveau.",
-  "error.agentNotFound":
-    "Aucun agent nommé \"{id}\" ici. Il a peut-être été supprimé depuis une autre fenêtre.",
   "error.catalogAgentMissing": "Aucun agent du catalogue ne s’appelle « {id} ». La liste a changé depuis que cette fenêtre l’a lue — rouvrez la page des agents et réessayez.",
   "signIn.already":
     "{agent} a ouvert une session sans avoir besoin d'une connexion : il n'y avait donc rien à faire.",

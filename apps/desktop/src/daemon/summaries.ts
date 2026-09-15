@@ -47,16 +47,17 @@ import {
 /**
  * A catalogue entry plus what this machine can actually do with it.
  *
- * ## The two facts this row keeps apart, on purpose
+ * ## What this projection is, and what it deliberately cannot be
  *
- * `availability` and `auth` are ours to detect; `hidden` is the user's to set. They travel together in one
- * summary because a row needs all three, and they are **three separate fields because they are three
- * separate facts** — collapsing the preference into the state is the design error `docs/settings-parity.md`
- * §5.8 corrects, and it fails in the direction that matters: a preference written into `availability`
- * would be us reporting a *measurement* we did not make, which is the one thing this product never does.
- *
- * Everything below is therefore a projection of evidence plus one flag that is not evidence at all, and
- * the flag is passed in rather than read here so that this function stays a function of its arguments.
+ * **Everything in it is evidence.** Both fields a user acts on — `availability` (five states, with the
+ * commands that fix each one) and `auth` — are what a probe found, and neither is ever derived from
+ * anything a user stored. That sounds like a truism until you write down what it rules out: this row used
+ * to carry a third field, a `hidden` preference over the pickers, and the shape of the mistake is worth
+ * keeping. A *stored* filter is not evidence and cannot be corrected by looking again — it is a claim about
+ * a list that stays wrong until somebody edits a settings file — whereas a *derived* rule over probed facts
+ * is wrong exactly as long as our measurement is, and a probe fixes it. So the projection reports, and the
+ * decision about what a picker offers lives in one pure function over these rows
+ * (`apps/desktop/src/composer/agent-for.ts`).
  */
 export function summarize(
   id: HarnessId,
@@ -69,13 +70,6 @@ export function summarize(
    * whole "observed, not promised" story turns on.
    */
   observed: ObservedSessionOptions | undefined,
-  /**
-   * Whether the user has taken this agent out of their pickers, and **not** part of the state above.
-   *
-   * Defaulted to `false` so every caller that has no opinion (an older test, a projection built before the
-   * preference existed) says "not hidden", which is the same thing a daemon that never had the field says.
-   */
-  hidden = false,
   /**
    * What the daemon last established about this agent's authentication, if anything ever has.
    *
@@ -149,11 +143,6 @@ export function summarize(
     // projection and `HarnessAvailabilitySchema` re-checks its five agreement rules on every answer, so a
     // catalogue change that produced a self-contradicting state fails a test rather than reaching a window.
     availability: harnessAvailability(result),
-    // **The user's preference, beside the facts above and never mixed into them.** A hidden agent still
-    // reports whatever the probe found — `ready` for one that is installed, with its `fix` intact when it is
-    // not — and this flag is what a picker filters on. The doc on `HarnessSummary.hidden` carries the
-    // argument; `docs/settings-parity.md` §5.8 carries the correction that produced it.
-    hidden,
     // And the third fact: whether it will talk to us, or wants a sign-in first. `authOf` is the one place
     // that turns a record — or the absence of one — into the three-state answer.
     auth: authOf(auth),
@@ -197,13 +186,6 @@ export function summarizeProvider(
   provider: AgentProviderConfig,
   probe: (provider: AgentProviderConfig) => ProviderProbe,
   env: NodeJS.ProcessEnv,
-  /**
-   * Whether the user has taken this provider out of their pickers — **the same preference the nine
-   * shipped agents carry**, which is why the field exists on both summary types and nowhere else in this
-   * projection. A preference about an agent does not become a different kind of thing because the user
-   * typed the agent themselves.
-   */
-  hidden = false,
 ): AgentProviderSummary {
   const result = probe(provider);
   return {
@@ -214,7 +196,6 @@ export function summarizeProvider(
     env: providerEnvState(provider, env),
     transport: provider.transport,
     availability: harnessAvailability(result),
-    hidden,
     // The probe's own sentence when it is not ready, and the resolved path when it is — the same wording
     // `coder.probeHarness` uses, so one agent's diagnosis reads the same whichever tier it came from.
     detail:
