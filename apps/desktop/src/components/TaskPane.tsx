@@ -48,7 +48,14 @@ import {
 import { harnessLabel } from "../composer/harness-label.js";
 import { probeAsk, publishesOnlyInSession, type ProbeState } from "../composer/probe.js";
 import { useT } from "../i18n/context.js";
-import { localize, localizeText, noticeOf, type Refusal, statusKey } from "../i18n/notice.js";
+import {
+  localize,
+  localizeText,
+  noticeOf,
+  type Refusal,
+  type WriteFailure,
+  statusKey,
+} from "../i18n/notice.js";
 import { buildTranscript, type TranscriptEntry } from "../state/transcript.js";
 import { ComposerControls } from "./ComposerControls.js";
 import { FolderIcon } from "./icons.js";
@@ -60,7 +67,15 @@ export interface TaskPaneProps {
   events: readonly RunEvent[];
   /** The run's own status, which the header shows and the composer branches on. */
   runLive: boolean;
-  onSend: (text: string, mode: "queue" | "steer") => void | Promise<void>;
+  /**
+   * Say something to the running turn.
+   *
+   * **It answers**, and the answer is what decides whether the field is cleared: `undefined` means it landed, a
+   * refusal means the message is still the user's — the words stay in the box, the refusal is rendered under the
+   * composer, and the next press can try again (or, when the daemon said the run is finished, start a new one).
+   * A composer that cleared the field on the way out lost the message to a refusal nobody had answered yet.
+   */
+  onSend: (text: string, mode: "queue" | "steer") => WriteFailure | Promise<WriteFailure>;
   onCancel: () => void | Promise<void>;
   onAnswer: (requestId: string, optionId: string) => void | Promise<void>;
   /**
@@ -72,7 +87,12 @@ export interface TaskPaneProps {
    * control's *displayed* value and the value the run is started with identical even if the
    * `updateTask` that saved the choice is still in flight.
    */
-  onStart: (prompt: string, agentModeId?: string, model?: string, thinkingLevel?: string) => void | Promise<void>;
+  onStart: (
+    prompt: string,
+    agentModeId?: string,
+    model?: string,
+    thinkingLevel?: string,
+  ) => WriteFailure | Promise<WriteFailure>;
   /** Remember the agent's mode for this task, so the next run starts the way the user left it. */
   onChangeMode?: (agentModeId: string) => void | Promise<void>;
   /**
@@ -295,13 +315,36 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     if (first || atEnd) node.scrollTop = node.scrollHeight;
   }, [task.id, transcript.entries.length]);
 
+  /**
+   * Send, **and keep the words until they land**.
+   *
+   * The field used to be cleared the moment the call was dispatched, so a refusal — the daemon saying the run is
+   * finished, or that an approval is in the way — erased what the user had written and answered with a sentence
+   * about a run. The answer decides now: cleared when it lands, kept when it does not, with the refusal rendered
+   * under the composer by the shell.
+   */
+  /** Keep the words unless the send lands — see `submit`, and `settle`'s two shapes. */
+  const settle = (answer: WriteFailure | Promise<WriteFailure>): void => {
+    if (answer !== undefined && typeof (answer as Promise<WriteFailure>).then === "function") {
+      void (answer as Promise<WriteFailure>).then((failure) => {
+        if (failure === undefined) setText("");
+      });
+      return;
+    }
+    // A caller that answered **synchronously** has already landed: cleared now, in the same tick as the press.
+    if (answer === undefined) setText("");
+  };
+
   const submit = (): void => {
     const value = text.trim();
     if (value === "") return;
     // **`queue`, always.** A message sent while the agent is working waits for the turn in flight and is
     // delivered as the next prompt — the daemon's own default, and the one behaviour the window has a control
     // for no longer. `steer` remains on the wire (`coder.sendToRun {mode}`) for a client that offers it.
-    if (running) void props.onSend(value, "queue");
+    if (running) {
+      settle(props.onSend(value, "queue"));
+      return;
+    }
     // The mode travels only when the picker is on and something is chosen. Passing it always would
     // mean inventing an "undefined mode" for the agents that have none, and the daemon already reads
     // the task's stored mode when the argument is absent. The model travels on identical terms, and
@@ -317,9 +360,8 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
         thinkingOff === undefined && selectedThinkingLevel !== undefined && selectedThinkingLevel !== ""
           ? selectedThinkingLevel
           : undefined;
-      void props.onStart(value, modeEnabled ? selectedModeId : undefined, chosenModel, chosenThinking);
+      settle(props.onStart(value, modeEnabled ? selectedModeId : undefined, chosenModel, chosenThinking));
     }
-    setText("");
   };
 
   return (

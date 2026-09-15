@@ -138,6 +138,8 @@ function refusingStore(over: Record<string, unknown> = {}): CoderStore {
     sendToRun: refuse(),
     cancelRun: refuse(),
     answerApproval: refuse(),
+    // The shell asks about the run a pane is showing; a double that did not answer would throw in an effect.
+    openRun: vi.fn(async () => undefined),
     clearError: vi.fn(),
     ...over,
   } as unknown as CoderStore;
@@ -287,6 +289,36 @@ describe("a refused press is read where it was made", () => {
     expect(logo?.getAttribute("src") ?? "").not.toBe("");
   });
 
+  it("starts a new run when the task's run is one this window has never heard of", async () => {
+    // **The owner's report, exactly.** A task carries a `runId` from a daemon that has since restarted, so the
+    // window has no record of that run — and `runLive` used to read `state.runs[runId]?.run.endedAt === undefined`,
+    // which is **true** when the record is absent. The composer therefore queued the message behind a run that does
+    // not exist, the daemon answered *"That run has already finished…"*, and the field was cleared on the way out.
+    //
+    // With the record required for "live", the press is a *start*: the daemon's `startRun` is the thing that can
+    // honour it, and the old run id is not sent anywhere.
+    const actions = refusingStore();
+    show({ tasks: [task], runs: {} }, actions);
+    fireEvent.click(screen.getByText(task.title));
+    fireEvent.change(screen.getByLabelText(en["task.composer.aria"]), { target: { value: "hello" } });
+    fireEvent.click(screen.getByRole("button", { name: en["task.composer.start"] }));
+
+    await waitFor(() => expect(actions.startRun).toHaveBeenCalled());
+    expect(actions.sendToRun).not.toHaveBeenCalled();
+  });
+
+  it("offers the send action while the run it is showing is genuinely live", async () => {
+    // The other direction, so "unknown is not running" cannot become "nothing is ever running".
+    const actions = refusingStore();
+    show({ tasks: [task], runs: { "run-1": { run: runFixture(), events: [] } } }, actions);
+    fireEvent.click(screen.getByText(task.title));
+    fireEvent.change(screen.getByLabelText(en["task.composer.aria"]), { target: { value: "hello" } });
+    fireEvent.click(screen.getByRole("button", { name: en["task.composer.send"] }));
+
+    await waitFor(() => expect(actions.sendToRun).toHaveBeenCalled());
+    expect(actions.startRun).not.toHaveBeenCalled();
+  });
+
   it("still raises the bar for what the *window* could not do", () => {
     // The boundary. A read that failed is not about a control and has no row to live in, so it keeps the bar —
     // and `error.daemonTooOld` is the case that must never become silent, because the fix it names is a restart.
@@ -296,7 +328,6 @@ describe("a refused press is read where it was made", () => {
   });
 });
 
-/** The run the composer needs to be live, so Send is a control rather than a disabled box. */
 function runFixture(): NonNullable<CoderState["runs"][string]>["run"] {
   return {
     id: "run-1",

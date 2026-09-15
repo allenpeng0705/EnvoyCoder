@@ -4054,6 +4054,73 @@ and `npm run scripts:check` (added in §7.32.4) reported *"1 of 15 script(s) fai
 happened. That is the gate doing exactly what it was added for: the class of mistake that shipped a dead
 `audit-ui.mjs` now costs a second instead of a debugging session.
 
+### 7.35 "That run has already finished" — our ignorance was rendered as a running run
+
+The owner:
+
+> *"why I sent message, but got 'That run has already finished, so there is nothing to send to it. Start a new task
+> instead.'"*
+
+The daemon was telling the truth and the window was telling a lie, and the lie was one character long:
+`runLive` was computed as
+
+```tsx
+active.runId ? state.runs[active.runId]?.run.endedAt === undefined : false
+```
+
+— which is **`true` when the record is absent**, because `undefined === undefined`. A task's `runId` is the daemon's
+own record, and a daemon that has restarted since (an upgrade, the shell, a crash) knows nothing about it: the
+window had never fetched that run, so it read *"nobody has told us"* as *"it is going."* The composer therefore
+queued the message behind a run that did not exist, the daemon answered with the sentence above, and — worse — the
+field was cleared on the way out, so the message the user had typed was gone.
+
+Measured on the owner's own machine, against the running daemon:
+
+```console
+$ … coder.listTasks → "This is a test" (status done, runId c41e0ddc-…)
+$ … coder.tailRun   → envoycoder.run-missing: There is no run called "c41e0ddc-…".
+                      It may have been started by a daemon that has since restarted.
+$ … coder.sendToRun → envoycoder.harness-failed: That run has already finished, so there is nothing
+                      to send to it. Start a new task instead. [key: error.runFinished]
+```
+
+#### 7.35.1 The four fixes, in the order they matter
+
+1. **"Live" requires the record.** `runLive` is `activeRun !== undefined && activeRun.run.endedAt === undefined`, with
+   `activeRun` resolved once above the pane. An unknown run is not running: the press becomes a **start**, which is
+   the request the daemon can honour.
+2. **The pane asks about the run it is showing.** An effect fetches it (`openRun`) when the task carries a `runId`
+   the window has no record of — a task started by another window, or before this one connected, needs its
+   transcript anyway.
+3. **A run the daemon no longer has is not an error.** `openRun` reads `envoycoder.run-missing` as *"this run is
+   over"*: it records the run as ended (so nothing can call it live again) and leaves the window's bar alone,
+   because the task is fine and its next message starts a new run.
+4. **The message stays in the field until the send lands.** `submit` used to clear it the moment the call was
+   dispatched — a refusal erased what the user had written and answered with a sentence about a run. Now
+   `onSend`/`onStart` answer (`WriteFailure`), `settle` clears on `undefined` and keeps on a refusal, and the shell
+   renders the refusal under the composer (§7.27's rule) with the words still in the box.
+
+Two quieter fixes came with the same investigation, both about a run's record following the daemon:
+
+* **`run.ended` now moves the run's own record.** The event handler appended the event to the transcript and left
+  `run` untouched, so `endedAt` never arrived from the event — a run that ended while the window watched stayed
+  "live" in the record even though its transcript said otherwise. `run.status` moves the status for the same reason.
+* **A different daemon drops the runs it never produced.** Reconnecting with another `instanceId` clears the run
+  records: they belong to a process that is gone, and a record whose `endedAt` is missing is exactly the fiction
+  this section is about.
+
+#### 7.35.2 What is asserted, and the mutations
+
+Four legs in `coder-store.test.ts` (`run.ended` marks the end; `run.status` moves the status; a different
+`instanceId` drops the records; a refused send converges on the daemon's own record), two in `task-pane.test.tsx`
+(the field keeps the message on a refusal, clears it when the send lands) and two in `failure-placement.test.tsx`
+for the owner's scenario end to end — **a task with a `runId` this window has never heard of sends by starting a
+run**, and the other direction, that a genuinely live run still offers Send. Mutations: the event handler stops
+moving the record (2 legs), no convergence on a refused send, no instanceId drop, the field cleared before the
+answer, and `runLive` back to `undefined === undefined` (the original bug) — each reddening only its own.
+
+**Gates:** 933 passed / 12 skipped, 14 Rust tests.
+
 ## 8. The slice plan
 
 Ordered, and ordered by *cheapness times usefulness* rather than by Paseo's section order. Each slice

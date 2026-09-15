@@ -22,7 +22,7 @@
 
 import type { JSX } from "react";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useShortcuts, type ShortcutActions } from "../input/useShortcuts.js";
 import { wiredBindings } from "../input/shortcuts.js";
@@ -341,6 +341,38 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
     [state.tasks, activeId],
   );
 
+  /**
+   * **The run this task holds, and whether the window actually knows it is going.**
+   *
+   * Three states, not two, and the missing one produced the owner's report:
+   *
+   * > *"why I sent message, but got 'That run has already finished, so there is nothing to send to it. Start a new
+   * > task instead.'"*
+   *
+   * `runLive` used to be `state.runs[runId]?.run.endedAt === undefined`, which is **true when the record is
+   * absent** — because `undefined === undefined`. So a task whose `runId` came from a daemon that has since
+   * restarted (a record nobody ever fetched) read as *running*: the composer queued the message behind it, the
+   * daemon answered "that run has already finished", and the message was cleared on the way out. Our ignorance
+   * was rendered as a claim about the machine — the one thing this product's rules forbid.
+   *
+   * So "live" requires the record: an unknown run is not running, the composer offers to start one, and the effect
+   * below asks the daemon about it in the same breath.
+   */
+  const activeRun = active?.runId === undefined ? undefined : state.runs[active.runId];
+  const runLive = activeRun !== undefined && activeRun.run.endedAt === undefined;
+
+  /**
+   * **Ask about the run the pane is showing**, once, whenever it is not one we have.
+   *
+   * A task started by another window, or before this one connected, arrives with a `runId` and no transcript —
+   * and the pane has to render something true for it. `openRun` fetches the daemon's own record and events (and,
+   * for a run the daemon no longer has, records it as ended without raising the bar).
+   */
+  useEffect(() => {
+    if (active?.runId === undefined || state.runs[active.runId] !== undefined) return;
+    void props.actions.openRun(active.runId);
+  }, [active?.runId, state.runs, props.actions]);
+
   const contributions = useMemo(
     () =>
       buildCommandContributions({
@@ -524,7 +556,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               task={active}
               project={projectFor(state.projects, active)}
               events={active.runId ? (state.runs[active.runId]?.events ?? []) : []}
-              runLive={active.runId ? state.runs[active.runId]?.run.endedAt === undefined : false}
+              runLive={runLive}
               harnesses={state.harnesses}
               // **The window's half of the build-skew rule.** The probe is a method this build added, so a
               // window attached to an older daemon (the shell attaches to whichever build owns the port)
@@ -548,8 +580,10 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
                   ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
                 });
                 if (!result.ok) {
+                  // **The answer, back to the composer**, which keeps the prompt in the field rather than
+                  // clearing it into a refusal the user has not read yet.
                   toPane(active.id, result);
-                  return;
+                  return result;
                 }
                 // The first message names the task, when it has no name yet. Done after the run starts,
                 // so a refusal to rename can never take the prompt down with it — the agent is already
@@ -558,6 +592,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
                   const named = taskTitleFromPrompt(prompt);
                   if (named !== "") await props.actions.updateTask({ id: active.id, title: named });
                 }
+                return undefined;
               }}
               // The mode is saved on the task, not merely sent with the next run: it is part of what
               // this task *is*, and a choice that vanished with the window would make the picker
@@ -584,8 +619,9 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
                 toPane(active.id, asFailure(await props.actions.updateTask({ id: active.id, cwd: path })));
               }}
               onSend={async (text, mode) => {
-                if (!active.runId) return;
-                toPane(active.id, asFailure(await props.actions.sendToRun(active.runId, text, mode)));
+                if (!active.runId) return undefined;
+                const failure = asFailure(await props.actions.sendToRun(active.runId, text, mode));
+                return toPane(active.id, failure);
               }}
               onCancel={async () => {
                 if (!active.runId) return;

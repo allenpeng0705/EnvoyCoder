@@ -48,7 +48,7 @@ import type {
   Task,
   TaskDefaults,
 } from "@envoycoder/protocol";
-import { DEFAULT_CODER_SETTINGS, missingMethods } from "@envoycoder/protocol";
+import { DEFAULT_CODER_SETTINGS, ENVOYCODER_ERRORS, coderErrorCode, missingMethods } from "@envoycoder/protocol";
 import type { AgentDelivery as AgentDeliveryWire, FixRunResult as FixRunResultWire } from "@envoycoder/protocol";
 
 import { localNotice, noticeFromError, type Notice, type Refusal } from "../i18n/notice.js";
@@ -326,7 +326,18 @@ export class CoderStore {
           // bar read `hello.windowCount` — every one of them falling back to a default because nothing
           // ever wrote it. The connection has verified the handshake before it reports "connected", so
           // this is the moment the identity is known.
-          this.set({ hello: connection.hello });
+          /**
+           * **Runs belong to the daemon instance that produced them.**
+           *
+           * The window attaches to whichever daemon owns the port (family rule D2), and a daemon that was
+           * restarted — by an upgrade, by the shell, by a crash — knows nothing about the runs this window was
+           * watching: their records here are the *previous* process's, complete with a missing `endedAt`, and a
+           * composer that trusts them sends into nothing. So a different `instanceId` drops the run records
+           * entirely, and the next event or press refetches what is real.
+           */
+          const previous = this.state.hello?.instanceId;
+          const changed = previous !== undefined && previous !== connection.hello?.instanceId;
+          this.set({ hello: connection.hello, ...(changed ? { runs: {} } : {}) });
           // Identity first, then the lists: a window that is told at connect time that its daemon is
           // an older build can say so before anything fails, rather than after the rail has already
           // rendered a lie. `hello` is already in hand — the connection verified it before it counted
@@ -368,10 +379,29 @@ export class CoderStore {
           return;
         }
         if (existing.events.some((seen) => seen.seq === event.seq)) return;
+        /**
+         * **A run's own record moves with its events, and this is the bug the owner hit.**
+         *
+         * This handler used to append the event and leave `run` untouched — so `run.ended` never reached
+         * `run.endedAt`, and the composer, which branches on exactly that field (`runLive`), kept believing a
+         * finished run was live. The next message was sent to it and refused:
+         *
+         * > *"That run has already finished, so there is nothing to send to it. Start a new task instead."*
+         *
+         * The window was right and the state was wrong. `run.status` moves the same field for the same reason: a
+         * run that has become `needs-attention` is not a run whose status is whatever it was when the snapshot was
+         * fetched.
+         */
+        const run =
+          event.kind === "run.ended"
+            ? { ...existing.run, endedAt: event.at, status: event.status, exitCode: event.exitCode }
+            : event.kind === "run.status"
+              ? { ...existing.run, status: event.status }
+              : existing.run;
         this.set({
           runs: {
             ...this.state.runs,
-            [event.runId]: { run: existing.run, events: [...existing.events, event] },
+            [event.runId]: { run, events: [...existing.events, event] },
           },
         });
       }),
@@ -615,8 +645,42 @@ export class CoderStore {
       }>("coder.tailRun", { runId });
       this.set({ runs: { ...this.state.runs, [runId]: { run: answer.run, events: answer.events } } });
     } catch (error) {
+      /**
+       * **A run this daemon does not have is not a failure of the window, and it must not be left unknown.**
+       *
+       * A task's `runId` is the daemon's own record, and a daemon that has restarted since knows nothing about it
+       * (`docs/settings-parity.md` §7.35: the owner's task listed a run whose transcript the daemon answered with
+       * `envoycoder.run-missing`). The task is fine and its next message starts a new run, so the bar stays quiet
+       * — and the record is marked **ended** rather than left absent, because absence is what made the window treat
+       * a run it had never heard of as a run that was still going.
+       */
+      if (coderErrorCode(error instanceof Error ? error.message : String(error)) === ENVOYCODER_ERRORS.runMissing) {
+        this.markRunEnded(runId);
+        return;
+      }
       this.fail(error);
     }
+  }
+
+  /**
+   * Record that a run is over **when the daemon says so and will not say more** — a refusal to `send`, a `tailRun`
+   * that answers "no such run". `endedAt` is the field every reader branches on; the status is left alone rather
+   * than guessed, because the task list carries the real one.
+   */
+  private markRunEnded(runId: string): void {
+    const existing = this.state.runs[runId];
+    if (existing !== undefined && existing.run.endedAt !== undefined) return;
+    const run: AgentRun = existing?.run ?? {
+      id: runId,
+      taskId: "",
+      harness: "envoy-harness",
+      hostId: "local",
+      startedAt: new Date().toISOString(),
+      status: "done",
+    };
+    this.set({
+      runs: { ...this.state.runs, [runId]: { run: { ...run, endedAt: new Date().toISOString() }, events: existing?.events ?? [] } },
+    });
   }
 
   /** The transcript for a run, folded from its events. Pure, and cheap enough to do per render. */
@@ -670,10 +734,36 @@ export class CoderStore {
     text: string,
     mode: RunMode,
   ): Promise<{ ok: true; delivered: "queued" | "steered" } | Refusal> {
-    return this.mutate("coder.sendToRun", { runId, text, mode }, (answer) => ({
+    const answer = await this.mutate("coder.sendToRun", { runId, text, mode }, (result) => ({
       ok: true as const,
-      delivered: (answer as { delivered: "queued" | "steered" }).delivered,
+      delivered: (result as { delivered: "queued" | "steered" }).delivered,
     }));
+    // **The daemon has just told this window something about its own state: the run it was about to send to is
+    // finished.** Leaving the record as it was would keep the composer in "queue behind the running turn" mode and
+    // refuse the *next* message too, so the window converges on the daemon's answer before the user presses again.
+    if (!answer.ok && answer.key === "error.runFinished") await this.convergeRun(runId);
+    return answer;
+  }
+
+  /**
+   * **Bring one run's record into line with the daemon**, after it said the run is finished.
+   *
+   * `tailRun` is the honest source — the daemon's record carries the real `endedAt` and the events this window may
+   * have missed — and a refusal of *that* is the one case where inventing an end is better than keeping a live
+   * run: the run is gone (a daemon restarted since it was started), and the only thing that must not survive is a
+   * run this window believes it can still send to.
+   */
+  private async convergeRun(runId: string): Promise<void> {
+    const connection = this.connection;
+    if (connection && connection.status.state === "connected") {
+      try {
+        await this.openRun(runId);
+        return;
+      } catch {
+        // Fall through: `openRun` reports its own failures, and the end is marked either way.
+      }
+    }
+    this.markRunEnded(runId);
   }
 
   async cancelRun(runId: string): Promise<{ ok: true } | Refusal> {

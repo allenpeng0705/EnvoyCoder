@@ -399,6 +399,35 @@ describe("the new chat, which is where a session starts", () => {
     expect(card?.contains(screen.getByRole("button", { name: "Start" }))).toBe(true);
   });
 
+  it("keeps the message when the send is refused, so nothing is lost to a stale run", async () => {
+    // **The other half of the owner's report.** The field used to be cleared the moment the call was dispatched, so
+    // a refusal — *"That run has already finished…"* — erased what they had written and answered with a sentence
+    // about a run instead. The answer decides now: cleared when it lands, kept when it does not.
+    const onSend = vi.fn(async () => ({
+      ok: false as const,
+      message: "That run has already finished, so there is nothing to send to it.",
+      key: "error.runFinished" as const,
+    }));
+    renderPane([], { runLive: true, onSend });
+    fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "and now the tests" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalled());
+    expect((screen.getByLabelText("Message the agent") as HTMLTextAreaElement).value).toBe("and now the tests");
+  });
+
+  it("clears the message when the send lands", async () => {
+    // The other direction, so "kept" cannot become "never cleared".
+    const onSend = vi.fn(async () => undefined);
+    renderPane([], { runLive: true, onSend });
+    fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "and now the tests" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() =>
+      expect((screen.getByLabelText("Message the agent") as HTMLTextAreaElement).value).toBe(""),
+    );
+  });
+
   it("draws no send action at all until there is something to send, and then draws a glyph", () => {
     // **The owner's second style ask**: *"no text, no send button, when inputting, the icon button displayed"* —
     // the reference product's own rule (`resolvePrimaryActionKind`: `hasSendableContent` → the send action, and

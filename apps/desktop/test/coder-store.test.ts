@@ -236,6 +236,118 @@ describe("one window, one socket", () => {
   });
 });
 
+describe("a run's record follows its own events", () => {
+  /**
+   * **The bug the owner hit, in four legs.**
+   *
+   * > *"why I sent message, but got 'That run has already finished, so there is nothing to send to it. Start a new
+   * > task instead.'"*
+   *
+   * The window was right and its state was wrong. The event handler appended `run.ended` to the transcript and left
+   * the run's *record* untouched, so `run.endedAt` stayed undefined — and the composer branches on exactly that
+   * field (`runLive`) to choose between "queue behind the running turn" and "start a new run". Every message after
+   * the first turn went to a finished run and was refused.
+   */
+  async function withRun() {
+    const opened = await store();
+    opened.connection.answers.set("coder.tailRun", {
+      run: {
+        id: "run-1",
+        taskId: "w1",
+        harness: "envoy-harness",
+        hostId: "local",
+        startedAt: "2026-09-13T09:00:00.000Z",
+        status: "running",
+      },
+      events: [],
+    });
+    await opened.store.openRun("run-1");
+    return opened;
+  }
+
+  it("marks the run ended when `run.ended` arrives, so the composer stops queueing behind it", async () => {
+    const { connection, state } = await withRun();
+    expect(state().runs["run-1"]?.run.endedAt).toBeUndefined();
+
+    connection.push("coder:run-event", runEvent({ kind: "run.ended", exitCode: 0, status: "done" }));
+
+    expect(state().runs["run-1"]?.run.endedAt).toBe("2026-09-13T10:00:00.000Z");
+    expect(state().runs["run-1"]?.run.status).toBe("done");
+  });
+
+  it("moves the status on `run.status` too, because a parked run is not a running one", async () => {
+    const { connection, state } = await withRun();
+    connection.push("coder:run-event", runEvent({ kind: "run.status", status: "needs-attention" }));
+    expect(state().runs["run-1"]?.run.status).toBe("needs-attention");
+  });
+
+  it("drops run records when the window reconnects to a different daemon", async () => {
+    // **Runs belong to the process that produced them.** A daemon restarted mid-run never sends `run.ended`, so the
+    // window's old records are a live-looking fiction; a different `instanceId` is the fact that says so.
+    const connection = new FakeConnection();
+    const hello = (instanceId: string): HelloResult => ({
+      product: "EnvoyCoder",
+      version: "0.1.0",
+      instanceId,
+      home: "/home/you/.envoymesh",
+      stateDir: "/home/you/.envoymesh/EnvoyCoder",
+      startedAt: "2026-09-14T00:00:00.000Z",
+      windowCount: 1,
+      methods: [],
+      mesh: { kind: "no-node" },
+      notes: [],
+    });
+    connection.hello = hello("the-daemon-that-was");
+    const created = createCoderStore({
+      resolveEndpoint: async () => endpoint,
+      connect: () => connection as unknown as CoderConnection,
+    });
+    await created.start();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // A run the window is watching, fetched from the daemon it is attached to.
+    connection.answers.set("coder.tailRun", { run: { id: "run-1", taskId: "w1", harness: "envoy-harness", hostId: "local", startedAt: "", status: "running" }, events: [] });
+    await created.openRun("run-1");
+    expect(created.getSnapshot().runs["run-1"]).toBeDefined();
+
+    // The same window reconnects — the daemon it finds is a different process, with its own runs.
+    connection.hello = hello("a-different-daemon");
+    connection.setStatus({ state: "connected", endpoint: { host: "127.0.0.1", port: 4770, path: "/ws" } });
+
+    expect(created.getSnapshot().runs).toEqual({});
+  });
+
+  it("converges on the daemon when a send is refused because the run is finished", async () => {
+    // The self-healing half, and it does not depend on what left the record stale: the daemon's refusal is the
+    // truth, so the window fetches the run (its own end time, and any events it missed) before the user presses
+    // again. The key is what the daemon sends with that sentence — `coderError`'s code for it is the generic
+    // `harnessFailed`, so the *ref* is the specific statement, and it is the same key the row renders.
+    const { store: s, connection, state } = await withRun();
+    connection.refusals.set(
+      "coder.sendToRun",
+      'envoycoder.harness-failed: That run has already finished, so there is nothing to send to it. Start a new task instead. [envoycoder.key] {"key":"error.runFinished"}',
+    );
+    connection.answers.set("coder.tailRun", {
+      run: {
+        id: "run-1",
+        taskId: "w1",
+        harness: "envoy-harness",
+        hostId: "local",
+        startedAt: "2026-09-13T09:00:00.000Z",
+        endedAt: "2026-09-13T09:30:00.000Z",
+        status: "done",
+      },
+      events: [],
+    });
+
+    const answer = await s.sendToRun("run-1", "hello", "queue");
+
+    expect(answer.ok).toBe(false);
+    expect(answer.ok === false ? answer.key : "").toBe("error.runFinished");
+    // The record now carries the daemon's own end, so the next press starts a new run instead of being refused.
+    expect(state().runs["run-1"]?.run.endedAt).toBe("2026-09-13T09:30:00.000Z");
+  });
+});
+
 describe("the store's connection to the daemon", () => {
   it("subscribes to what it renders, once, and loads what it needs", async () => {
     const { connection, state } = await store();
