@@ -117,14 +117,67 @@ function pidsMatching(pattern) {
   }
 }
 
-/** Is the pid alive? `kill(pid, 0)` asks without signalling. */
+/**
+ * The pids of every process whose **executable** is `absPath` — this checkout's own binary, or nothing.
+ *
+ * `pgrep -f` reads the command line, and the command line is not the program: what a process was *invoked* as
+ * and what it *is* can differ (a relative path, a shim, a symlink). So the candidates come from a loose match on
+ * the file name and the *decision* comes from `lsof`'s view of the executable, which is an absolute path or
+ * nothing at all. The loose match is what keeps a sibling product's identically-named binary safe: its
+ * executable is somewhere else, and that is the test.
+ */
+function pidsRunningExecutable(absPath) {
+  if (isWindows) return [];
+  return pidsMatching(path.basename(absPath)).filter((pid) => executableOf(pid) === absPath);
+}
+
+/** What a process is actually running, as the kernel sees it. `null` when it cannot be read. */
+function executableOf(pid) {
+  try {
+    const line = execFileSync("lsof", ["-p", String(pid), "-a", "-d", "txt", "-Fn"], { encoding: "utf8" })
+      .split("\n")
+      .find((candidate) => candidate.startsWith("n"));
+    return line === undefined ? null : line.slice(1);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The process's state letter, or `null` when it cannot be read. `Z` is a zombie — see `isAlive`.
+ *
+ * Windows has no such state (an exited process is gone), so `ps` is not consulted there at all.
+ */
+function processState(pid) {
+  if (isWindows) return null;
+  try {
+    const state = execFileSync("ps", ["-o", "stat=", "-p", String(pid)], { encoding: "utf8" }).trim();
+    return state === "" ? null : state;
+  } catch {
+    // `ps` exits non-zero for a pid it cannot see. That is not evidence of life, and the signal probe has
+    // already had its say, so the caller treats an unreadable state as "unknown" rather than as "dead".
+    return null;
+  }
+}
+
+/**
+ * Is the pid a **running** process?
+ *
+ * `kill(pid, 0)` asks without signalling, and it answers *yes* for a process that has exited and has not been
+ * reaped — a **zombie**. That distinction is the whole reason this is more than one line: the window is the
+ * parent of the daemon it spawns, so a daemon killed while the window is still up is a zombie until the window
+ * notices, and a script that read that as "still running" refused to start the app over a process holding
+ * neither a port nor a claim. It is the same question `apps/desktop/src/daemon/lock.ts` asks in TypeScript, and
+ * the two must agree for the reason the home resolution must (`docs/envoycoder-platforms.md` §5).
+ */
 function isAlive(pid) {
   try {
     process.kill(pid, 0);
-    return true;
   } catch {
     return false;
   }
+  const state = processState(pid);
+  return state === null ? true : !state.startsWith("Z");
 }
 
 async function waitForDeath(pid, ms) {
@@ -216,10 +269,12 @@ if (isWindows) {
     }
   }
 } else {
-  // Absolute paths inside this checkout, never a bare name: `target/debug/envoycoder` would also match a
-  // sibling product's dev build if it happened to use the same layout.
+  // **By the executable, not by the command line.** Cargo starts the dev shell as `target/debug/envoycoder`
+  // from its own working directory, so the absolute path this script knows appears nowhere in the process's
+  // command line — and a pattern looking for it matched nothing, which is how a "restart" once left the window
+  // running while the daemon underneath it was killed and became a zombie.
   for (const binary of ["target/debug/envoycoder", "target/release/envoycoder"]) {
-    for (const pid of pidsMatching(path.join(root, "apps/desktop/src-tauri", binary))) {
+    for (const pid of pidsRunningExecutable(path.join(root, "apps/desktop/src-tauri", binary))) {
       await stopProcess(pid, "the window");
     }
   }
@@ -247,11 +302,16 @@ for (const candidate of candidateHomes()) {
 // Anything else running this app's daemon: the shell may have started it from the bundle, and a daemon
 // started outside this checkout publishes a claim this sweep already handled above.
 if (!isWindows) {
+  // A Node program appears twice over: npm puts a **shim** on `PATH` (`node_modules/.bin/<name>`) and the
+  // command line carries whichever path started it — the shim when npm ran it, the realpath when something
+  // resolved the link first. Both are listed because a pattern that knows only one of them misses the other:
+  // the dev server survived a "stop everything" exactly this way.
   for (const entry of [
     "apps/desktop/dist-daemon/main.mjs",
     "apps/desktop/src/daemon/main.ts",
     "node_modules/@tauri-apps/cli",
     "node_modules/.bin/tauri",
+    "node_modules/.bin/vite",
     "node_modules/vite/bin/vite.js",
   ]) {
     for (const pid of pidsMatching(path.join(root, entry))) {

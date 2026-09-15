@@ -212,11 +212,19 @@ fn read_claim(path: &Path) -> Option<DaemonClaim> {
     (claim.product == PRODUCT_NAME).then_some(claim)
 }
 
-/// Is this pid still running?
+/// Is this pid still **running**?
 ///
 /// `kill -0` on POSIX, `tasklist` on Windows. Both answer "does a process with this number exist",
 /// not "is it our daemon" — pid reuse is real, which is why the claim also carries an `instanceId`
 /// and why the window verifies it over the protocol.
+///
+/// **Existing and running are not the same question, and on POSIX the difference is a zombie.** A process that
+/// has exited and has not been reaped still answers `kill -0`; this shell is the parent of the daemon it
+/// spawned, so a daemon that dies while a window is open stays a zombie until this process reaps it — through
+/// `try_wait` in `daemon_endpoint`, which may be minutes away if nobody asks. A claim naming that pid would be
+/// handed to the window as its daemon, and the window would report a daemon that is not answering while the
+/// truth is that it is already dead. So the state letter is read, and `Z` is not running. Windows has no such
+/// state — an exited process is gone — so `tasklist` is the whole answer there.
 #[cfg(unix)]
 fn is_alive(pid: u32) -> bool {
     // `kill -0 0` is not a liveness probe: pid 0 means "every process in my process group", and the
@@ -225,12 +233,28 @@ fn is_alive(pid: u32) -> bool {
     if pid == 0 {
         return false;
     }
-    Command::new("kill")
+    let exists = Command::new("kill")
         .args(["-0", &pid.to_string()])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
         .map(|status| status.success())
+        .unwrap_or(false);
+    if !exists {
+        return false;
+    }
+    !is_zombie(pid)
+}
+
+/// Has this process exited without being reaped? `ps` is asked for the state letter, and an unreadable answer
+/// counts as *not* a zombie: believing a live process is dead costs a second daemon against one state
+/// directory, which is the worse mistake of the two.
+#[cfg(unix)]
+fn is_zombie(pid: u32) -> bool {
+    Command::new("ps")
+        .args(["-o", "stat=", "-p", &pid.to_string()])
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().starts_with('Z'))
         .unwrap_or(false)
 }
 
@@ -908,5 +932,35 @@ mod tests {
         // The shell calls this on a claim written by a daemon that may have crashed; pid 0 is never
         // a real process and must not panic.
         assert!(!is_alive(0));
+    }
+
+    /// A child that has exited and not been reaped is **not** a running daemon, and this is a real zombie
+    /// rather than a simulated one: `Command::spawn` makes the test process the parent, the child exits
+    /// immediately, and nothing reaps it until the `wait` at the end.
+    ///
+    /// The mutation this fails on is the one-line liveness probe (`kill -0` alone): it answers *alive* for a
+    /// zombie, so the shell would hand a window a claim naming a daemon that is already dead — the window then
+    /// reports a daemon that is not answering, which is the most expensive kind of wrong this file can be.
+    #[cfg(unix)]
+    #[test]
+    fn a_child_that_exited_but_was_not_reaped_is_not_a_running_daemon() {
+        let mut child = Command::new("sleep")
+            .arg("0")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn a child that exits at once");
+        let pid = child.id();
+
+        // Until it is reaped it is a zombie, and `kill -0` still answers yes — which is the state the shell is
+        // in after a daemon dies while a window is open.
+        std::thread::sleep(Duration::from_millis(400));
+        assert!(is_zombie(pid), "the child should still be a zombie at this point");
+        assert!(!is_alive(pid), "a zombie is not a running daemon");
+
+        // Reap it, so the test leaves no process table entry behind and the next assertion is about the
+        // *other* branch: a pid whose process is genuinely gone.
+        let _ = child.wait();
+        assert!(!is_alive(pid));
     }
 }

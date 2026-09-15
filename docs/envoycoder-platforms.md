@@ -143,12 +143,28 @@ What the shell owns, and why (`apps/desktop/src-tauri/src/main.rs`):
    cannot fix a disagreement about a *path*, which is why `scripts/restart-app.mjs` stops a daemon whose
    claim it finds in **any** home the rule can choose and prints the home it resolves.
 4. **Restarting is a script, not a ritual** — `npm run app:restart` / `npm run app:stop`
-   (`scripts/restart-app.mjs`). It stops this checkout's processes by **absolute path** (never by port,
-   never by a bare name, so a sibling product's daemon or dev server cannot match), confirms each one is
+   (`scripts/restart-app.mjs`). It stops this checkout's processes and nothing else, confirms each one is
    *gone* (SIGTERM → wait → SIGKILL → report), removes only claims whose pid is dead, and refuses to start
    while 6173 or 4770 is still held — then exits with `tauri:dev`'s own status. A leftover daemon holding
-   4770 and a stale claim naming a dead pid are the two failures that read as "the app didn't start", and
-   a script that printed "stopped" the moment it sent a signal was reporting its intent, not the machine.
+   4770 and a stale claim naming a dead pid are the two failures that read as "the app didn't start", and a
+   script that printed "stopped" the moment it sent a signal was reporting its intent, not the machine.
+
+   Two identification traps cost a restart each, and both are recorded because neither is visible in the
+   process list a person looks at:
+
+   * **A command line is not a program.** Cargo starts the dev shell as `target/debug/envoycoder` *relative*
+     to its own directory, so a pattern matching the absolute path matched nothing — the window survived a
+     "stop everything" while the daemon under it was killed. The window is therefore identified by its
+     **executable** (`lsof -a -d txt`), which is an absolute path or nothing, and which also keeps a sibling
+     product's identically-named binary safe. Node programs are the other half of the same trap: npm runs
+     them through the `node_modules/.bin/<name>` shim, and a pattern that knows only the realpath
+     (`node_modules/vite/bin/vite.js`) misses the dev server that is actually running.
+   * **Existing is not running.** A process that has exited and not been reaped still answers `kill(pid, 0)`,
+     and the window is the parent of the daemon it spawned — so a daemon killed while a window is open is a
+     **zombie** until the window reaps it. Read as "running", it blocks the next start. The rule is read from
+     the state letter (`Z`) on all three sides that ask it — this script, the shell (`main.rs`, `is_alive`)
+     and the daemon (`lock.ts`, `isProcessAlive`) — because they answer the same question about the same
+     claim, and a rule that is *nearly* the same on both sides is exactly how §5's home bug happened.
 
 Linux needs `libwebkit2gtk-4.1-0` and a FUSE provider for the AppImage; the bundle config declares the
 first, and the second is a packaging check the roadmap owes (Paseo never validates it in CI, and its
