@@ -516,6 +516,20 @@ export const en = {
   "settings.agents.row.installLink": "Where to get it",
   "settings.agents.row.installLink.title": "{agent}'s own page",
   /**
+   * **Looking at this machine again**, and the two things the control says.
+   *
+   * The owner's question, verbatim: *"After I run
+   * `npm install -g @agentclientprotocol/codex-acp`, how do we let EnvoyCoder know that without
+   * restarting?"* The answer is a press rather than a restart: `coder.recheckAgents` re-asks the login shell
+   * where the user's programs are and re-reads every row. `title` says what the press does **and what it does
+   * not do** — nothing is started — because that is the question a careful user asks before pressing a button
+   * on a page about their machine.
+   */
+  "settings.agents.recheck": "Check again",
+  "settings.agents.recheck.busy": "Checking…",
+  "settings.agents.recheck.title":
+    "Ask your login shell where your programs are, and re-read every agent's state. Nothing is started and nothing is installed.",
+  /**
    * **The fix block's one control.** Copy, and the two things that can happen when it is pressed.
    *
    * The command is never translated — a translated `npm install -g …` is a command that does not run — so

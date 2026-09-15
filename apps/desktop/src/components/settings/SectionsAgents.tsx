@@ -135,7 +135,16 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
     catalog: state.hello?.methods.includes("coder.listCatalog") === true,
     providers: state.hello?.methods.includes("coder.listProviders") === true,
     signIn: state.hello?.methods.includes("coder.signInAgent") === true,
+    recheck: state.hello?.methods.includes("coder.recheckAgents") === true,
   };
+
+  /**
+   * Is a re-check running? One flag for the whole page, because the press re-reads every list on it.
+   *
+   * The button says *Checking…* rather than spinning in place, for the reason this pane has about disabled
+   * controls: a control that looks the same while it works is a control a user presses twice.
+   */
+  const [checking, setChecking] = useState(false);
 
   /**
    * The outcome of the last sign-in attempt, as the daemon's own keyed sentence.
@@ -169,11 +178,32 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
     <>
       {/* **The heading carries the count, and the count is the point.** Three groups with their sizes on them
           are three facts; three groups with names only are three invitations to scroll and find out. */}
-      <h2 className="settings__heading">
-        {t("settings.agents.shipped.heading")}
-        {" · "}
-        <span className="settings__agent-count">{state.harnesses.length}</span>
-      </h2>
+      {/* **The count and the control that can change it, on one line.** *"After I run npm install -g … how do we
+          let EnvoyCoder know that without restarting?"* — the daemon re-measures every row on the read, and the
+          two inputs it captures once per process need asking again, so the page gets one press that does that
+          and re-reads. It sits beside the number it invalidates rather than in a toolbar: a page-level gesture
+          with one meaning, and no per-row *Check* (which is the chore this page already removed). */}
+      <div className="settings__section-head">
+        <h2 className="settings__heading">
+          {t("settings.agents.shipped.heading")}
+          {" · "}
+          <span className="settings__agent-count">{state.harnesses.length}</span>
+        </h2>
+        {can.recheck ? (
+          <button
+            type="button"
+            className="button button--ghost button--small"
+            title={t("settings.agents.recheck.title")}
+            disabled={checking}
+            onClick={() => {
+              setChecking(true);
+              void agents.recheckAgents().finally(() => setChecking(false));
+            }}
+          >
+            {checking ? t("settings.agents.recheck.busy") : t("settings.agents.recheck")}
+          </button>
+        ) : null}
+      </div>
       <ul className="settings__agents">
         {state.harnesses.map((harness) => (
           <ShippedAgent

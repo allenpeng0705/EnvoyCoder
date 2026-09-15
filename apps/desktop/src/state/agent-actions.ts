@@ -41,6 +41,20 @@ export interface AgentActions {
   /** Forget a provider. The daemon answers the id it removed, or refuses because there is nothing there. */
   removeProvider(id: string): Promise<{ ok: true; removed: string } | Refusal>;
 
+  /**
+   * **Look at this machine again** — re-ask the login shell where the user's programs are, then re-read.
+   *
+   * The fourth call, and the only one on this page whose subject is the measurement rather than an agent. It
+   * exists because the daemon cannot know that its answer is out of date: a user who installs a bridge in their
+   * own terminal tells nobody, and two of the daemon's inputs (the login shell's `PATH`, and its `command -v`
+   * answer per name) are captured once per process on purpose. A press is the signal, and the page offers it
+   * next to the count it invalidates.
+   *
+   * Returns nothing: the daemon emits the same `harnesses` change the boot primes emit, and the store re-reads
+   * through its ordinary loaders. An answer carrying a list would be a second source of truth for the list.
+   */
+  recheckAgents(): Promise<void>;
+
   /** Trigger the agent's own sign-in flow. See the module doc for why all five outcomes are `ok: true`. */
   signInAgent(
     harness: HarnessId,

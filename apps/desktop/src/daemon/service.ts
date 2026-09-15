@@ -59,6 +59,7 @@ import type { CoderPaths } from "@envoycoder/host-bridge";
 
 import { keyed, ref } from "./messages.js";
 import { createCatalogHandlers } from "./catalog.js";
+import { createRecheckHandlers } from "./recheck.js";
 import { createProviderHandlers } from "./providers.js";
 import { createSignInHandlers } from "./sign-in.js";
 import type { SessionSignIn } from "./sign-in.js";
@@ -100,6 +101,15 @@ export interface CoderServiceDeps {
    * is replacing a measurement, not a rule.
    */
   probeCatalogEntry?: (entry: AcpAgentEntry) => ProbeFinding;
+  /**
+   * Re-ask the machine where the user's programs are, and emit the change.
+   *
+   * Injected on the same terms as the three probes above: `serve.ts` owns the login-shell caches and the event
+   * bus, and a test of this table wants to assert that a press reaches an implementation without spawning a
+   * login shell. Absent means the method answers `{ ok: true }` having done nothing, which is the honest answer
+   * for a table built without one — the same shape `runs` uses when M1 builds a daemon that cannot run.
+   */
+  recheckAgents?: () => Promise<void>;
   /**
    * The environment a provider's named variables are read from.
    *
@@ -199,6 +209,11 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
             pathDirs: search.dirs,
             searchable: search.searchable,
           })),
+    }),
+    // Looking at this machine again: one method, and its whole subject is the measurement — the user's half of
+    // "I installed it while the window was open". `recheck.ts` carries why it is a press rather than a timer.
+    ...createRecheckHandlers({
+      recheck: deps.recheckAgents ?? (async () => undefined),
     }),
     // The sign-in: one method whose whole subject is an agent's own authentication flow. Spread in the same
     // way the provider methods are, so this table stays the complete list of what the daemon serves.

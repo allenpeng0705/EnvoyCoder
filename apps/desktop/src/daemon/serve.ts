@@ -45,6 +45,8 @@ import {
   currentSearchPath,
   primeSearchPath,
   primeShellBinaries,
+  reaskShellBinaries,
+  refreshSearchPath,
   type SearchPath,
 } from "@envoycoder/platform";
 import {
@@ -234,6 +236,33 @@ export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): P
     });
   };
 
+  /**
+   * **Ask this machine again** — the user's half of *"I installed it while the window was open"*.
+   *
+   * `coder.recheckAgents` calls this, and what it does is deliberately only the two things that *cannot* be
+   * right on their own: the login shell's `PATH` and its per-name `command -v` answers are captured once per
+   * process on purpose (one shell, and a toolchain manager's rc file is expensive), so a program that installs
+   * where only the shell can see it stays missed until something asks again. Everything else in the row is
+   * already re-measured on every read — `harnessProbe` above builds a fresh `ProbeFinding` per call, and
+   * `catalog.ts` carries why no cache belongs there.
+   *
+   * The broadcast is the half the *window* needs and it is the same event the boot primes emit, so a page
+   * updates through its ordinary path: one list-shaped answer, re-read by every window, rather than a second
+   * copy of the list travelling back on this call's result.
+   *
+   * A failure is a log line and not a refusal, for the same reason the boot primes fail quietly: a shell that
+   * is missing, slow or hostile leaves the previous answers in place, and a search that could not be redone is
+   * not a claim about anybody's machine.
+   */
+  const recheckAgents = async (): Promise<void> => {
+    const names = probeableBinaryNames(store.providers().map((provider) => provider.command));
+    await Promise.all([
+      refreshSearchPath().catch(() => undefined),
+      names.length > 0 ? reaskShellBinaries(names).catch(() => undefined) : Promise.resolve(undefined),
+    ]);
+    bus.emit("coder:state-changed", { kind: "harnesses", at: new Date().toISOString() });
+  };
+
 /**
  * Has this agent been looked at recently enough that a background pass may skip it?
  *
@@ -260,6 +289,8 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
     mesh: () => mesh,
     // The same function the warm-up reads, so the list and the background pass cannot disagree.
     probe: harnessProbe,
+    // The one method whose subject is the measurement itself: the page's "Check again".
+    recheckAgents,
     ...(options.isDirectory ? { isDirectory: options.isDirectory } : {}),
   });
 

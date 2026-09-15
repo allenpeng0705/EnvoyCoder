@@ -2708,6 +2708,106 @@ in this slice a packaged build should confirm on each OS at M6.
 | the tint adds vertical padding | *gives the tint no vertical padding, so every row keeps the height the page measured* |
 
 
+### 7.19 Looking again, and finding out without a restart
+
+The owner's question, verbatim: *"After I run `npm install -g @agentclientprotocol/codex-acp`, how we let
+EnvoyCode know that without restarting or can we support run the commands in EnvoyCoder?"*
+
+It is two questions, and the first one's answer was already half-built. Measured on the machine it was asked
+about, with the bridges the owner had installed **minutes earlier** and a daemon that had been running since
+before that install:
+
+```console
+$ node -e '…coder.listHarnesses over the socket…'
+claudecode   ready  binary=/Users/shileipeng/.npm-global/bin/claude-agent-acp
+codex        ready  binary=/Users/shileipeng/.npm-global/bin/codex-acp
+```
+
+So the daemon already knew: `coder.listHarnesses` resolves each row's state from filesystem and environment
+reads **on the read**, with no cache in the path (§7.17.2) — a program that lands in a directory the daemon
+already searches is real the next time anything asks. What was missing was *the asking*, and it was missing in
+three places:
+
+| the gap | why it existed | what closed it |
+|---|---|---|
+| nothing tells an open window that the machine is different | the daemon emits `harnesses` when *it* learns something; a user's terminal is not the daemon | `coder.recheckAgents` re-asks, then emits the same `harnesses` change the boot primes emit, so every window re-reads through its ordinary path |
+| the login shell's `PATH` is asked once per process | one shell per daemon is the point — a `nvm` rc file is expensive | `refreshSearchPath()` on demand |
+| the shell's `command -v` answer per name is asked **once, ever** | a name is remembered as asked; one resolving name is enough for the invocation to count as answered, so a miss stays a miss | `reaskShellBinaries()` — the same question, asked again |
+
+The third row is the one that matters most, and it is the old `dsh` bug in a new place: a bridge that installs
+somewhere only the user's own shell can resolve would read "not installed" for the rest of the daemon's life.
+`packages/platform/test/shell-binaries.test.ts` drives it from both sides — the ordinary second ask returns the
+cached miss, the re-ask finds the program — and the re-ask leg fails if `reaskShellBinaries` forgets nothing,
+which was checked by reverting the deletion.
+
+**A press, not a timer.** A periodic re-check spawns a login shell on a schedule nobody asked for; one on
+window focus does it every time the user alt-tabs. Neither is the product answering a question that was asked.
+A press is a question, and only the user knows that something changed outside the app — so the control sits
+beside the count it invalidates, on the *On this machine* group, and it is gated on the daemon actually
+serving the method (the build-skew rule the whole pane follows).
+
+**The answer carries no list.** `coder.recheckAgents` returns `{ ok: true }` and the windows re-read through
+`coder.listHarnesses` — the one projection. A list on this answer would be a second source of truth for the
+same rows, free to disagree with the one the store already applies, and the *other* windows would still need
+the event. So the method does exactly two things: re-ask, and emit.
+
+#### 7.19.1 What the measurement says, and one instrument that had to be fixed first
+
+`scripts/measure-settings.mjs`'s verdict census counted *any* button whose label matches `/check/i` as a
+"button that asks the user to find out a state" — the field that exists to keep §7.17's defect (38 per-row
+*Check* buttons, each leaving its row unknowing until pressed) from coming back. The new control matched it, and
+the census is right that the words are the same and wrong about the class: a page-level *Check again* changes
+no row from known to unknown. Reporting it as the defect metric would have been a false alarm; excluding label
+matches wholesale would have let a real per-row regression hide behind the exception. So the census splits:
+**`checkControls` counts matches inside a row** (must be zero, and is), and **`pageControls` names the ones
+outside one** — currently `["Check again"]`, printed rather than silent.
+
+Measured on the real page in headless Chrome, after pressing it:
+
+| measurement | value |
+|---|---|
+| `checkControls` / `pageControls` | **0** / `["Check again"]` |
+| rows with a verdict, of rows | **9 / 9** — unchanged by the new control |
+| third verdict word, rows with >1 chip | `[]` / **0** |
+| the press, over the live socket | `coder.recheckAgents` → `{ "ok": true }` in **235 ms**, **1** `harnesses` broadcast |
+| the fix blocks, disclosures open | **4** blocks / 4 commands / 4 Copy at 24px, worst contrast 6.52:1 |
+| row anatomy | unchanged: 0px chip-right spread, 0px actions-right spread, one height for all 48 rows |
+
+The fix-block count fell from six to four between §7.18 and now, which is not a regression and is worth
+recording: **Codex and Claude Code became Ready** because their bridges are installed, so two rows stopped
+carrying an install to do. The page measuring that by itself is the property this whole slice is about.
+
+**What was measured, and what was reasoned about.** Measured: every number above; the four mutations below, each
+reddening the named leg. Reasoned about rather than measured: that a page-level gesture is the right shape
+(rather than a per-row one, which is the chore §7.17 removed), and that the control belongs beside the count
+rather than in a toolbar. **Not done at all:** running the fix command from the app — see §7.19.2.
+
+#### 7.19.2 Running the commands in EnvoyCoder: the design, and why it is not in this slice
+
+The owner's second question — *"can we support run the commands in EnvoyCoder?"* — has an answer that is
+buildable and a shape that has to be right, and the difference is a new privilege for the daemon. Two designs
+are honest, and they are not equivalent:
+
+1. **Run the catalogue's own command.** The window would send an **id** (a harness id, a catalogue entry id, a
+   provider id) and never a command line: the daemon looks the fix up in *our* catalogue and runs exactly what
+   the row showed. That is the property the whole design rests on — a window cannot ask this product to run
+   arbitrary shell, and the command the user read is the command that runs. It needs: the spawn (through the
+   login shell, in the user's home, with a timeout and its process group killed on expiry — `spawnTreeOptions`
+   and `buildKillPlan` already exist for this), bounded output capture, an outcome the row can render
+   (`succeeded` / `failed` / `refused`, with the output tail), and a re-check afterwards so the row flips by
+   itself. The cost is the privilege: this daemon would, for the first time, execute a package installation on
+   the user's machine on a press.
+2. **Prefer an `npx` delivery, so there is nothing to install.** Fourteen of the catalogue's recipes already
+   work this way (`install.kind: "npx"`, §7.12), and both bridges in question are published on npm:
+   `npx -y @agentclientprotocol/codex-acp` is a program the daemon can start with the argv path it *already*
+   uses for every agent, so the whole feature needs **no new privilege at all** — no shell, no installer, no
+   output to capture. The costs are honest and different: a first run downloads a package, and the version is
+   whatever npm resolves unless the recipe pins one.
+
+Nothing is built here, deliberately: the first is a new capability over a user's machine and the second is a
+catalogue-wide delivery decision, and both are the owner's call rather than a slice's. §7.19 is what makes
+either one finish cleanly — after an install, whether we ran it or they did, one press makes the page current.
+
 ## 8. The slice plan
 
 Ordered, and ordered by *cheapness times usefulness* rather than by Paseo's section order. Each slice

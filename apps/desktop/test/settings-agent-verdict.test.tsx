@@ -119,7 +119,15 @@ function entry(over: Partial<CatalogEntry> & { id: string }): CatalogEntry {
  * not only the calls a test remembered to spy on, which is what makes "rendering performs no action" a real
  * assertion rather than a list of the methods somebody thought of.
  */
-function show(over: Partial<CoderState> = {}): { container: HTMLElement; touched: string[] } {
+function show(
+  over: Partial<CoderState> = {},
+  /**
+   * What this daemon advertises, when a leg is about the *build-skew* half of a control rather than about the
+   * data. Defaults to the base list; a leg that needs the new method (or must prove the absence of one) passes
+   * its own instead of restating a fifteen-line `hello`.
+   */
+  methods?: readonly string[],
+): { container: HTMLElement; touched: string[] } {
   const touched: string[] = [];
   const agents = new Proxy(
     {},
@@ -148,6 +156,7 @@ function show(over: Partial<CoderState> = {}): { container: HTMLElement; touched
         "coder.listProviders",
         "coder.listCatalog",
         "coder.signInAgent",
+        ...(methods ?? []),
       ],
       mesh: { kind: "no-node", reason: "" },
       notes: [],
@@ -664,6 +673,47 @@ describe("the facts that are not problems, and the ones that cannot be known che
     );
     const publishes = facts.find((fact) => fact.label === en["settings.agent.fact.publishes"]);
     expect(publishes?.value).toBe(tEn("settings.agent.notDeclared", { agent: "Codex" }));
+  });
+});
+
+/* ────────────────────────── looking at the machine again ────────────────────────── */
+
+/**
+ * **The owner's question, on the page it was asked about:** *"After I run
+ * `npm install -g @agentclientprotocol/codex-acp`, how do we let EnvoyCoder know that without restarting?"*
+ *
+ * The daemon re-measures on every read, so the answer to *"does the page know?"* is entirely about whether
+ * something makes it read again. This is that something: one page-level press, rendered beside the count it
+ * invalidates, and gated on the method the daemon actually serves — the build-skew rule this whole pane
+ * follows, because the shell attaches to whichever daemon owns the port.
+ */
+describe("checking this machine again", () => {
+  it("offers the press, and it reaches the daemon exactly once", async () => {
+    const { container, touched } = show({}, ["coder.recheckAgents"]);
+    const button = [...container.querySelectorAll("button")].find(
+      (candidate) => candidate.textContent === en["settings.agents.recheck"],
+    );
+    if (!(button instanceof HTMLButtonElement)) throw new Error("no Check again control");
+
+    // It says what it does before it is pressed, including what it does *not* do — nothing is started.
+    expect(button.getAttribute("title")).toBe(en["settings.agents.recheck.title"]);
+    fireEvent.click(button);
+    await waitFor(() => expect(touched).toContain("recheckAgents"));
+    expect(touched.filter((name) => name === "recheckAgents")).toHaveLength(1);
+    // And it comes back to its resting label, so the control is usable a second time — which is the point of
+    // the flag the page clears in a `finally`.
+    await waitFor(() => expect(button.textContent).toBe(en["settings.agents.recheck"]));
+  });
+
+  it("is not rendered at all when the daemon is a build behind", () => {
+    // The other half of the same rule: no control whose press would come back "Method not found". A page that
+    // drew it anyway would be offering a gesture with nothing behind it, which is the one thing this pane's
+    // laws forbid outright.
+    const { container } = show();
+    const button = [...container.querySelectorAll("button")].find(
+      (candidate) => candidate.textContent === en["settings.agents.recheck"],
+    );
+    expect(button).toBeUndefined();
   });
 });
 

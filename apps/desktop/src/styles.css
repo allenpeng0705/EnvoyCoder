@@ -1448,6 +1448,17 @@ body {
   color: var(--text-dim, #8b8f98);
 }
 
+/* **A group heading and the one control that can change its count.** The Agents page's *Check again* lives
+   here rather than in a toolbar: it is a page-level gesture, it is about the number beside it, and it costs
+   the heading no extra row — the button is 24px against the heading's 13px line, so the group grows by the
+   difference in one place instead of by a band of controls between the count and the list. */
+.settings__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
 .settings__note {
   margin: 0;
   font-size: 12px;

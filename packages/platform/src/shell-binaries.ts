@@ -341,6 +341,32 @@ export async function primeShellBinaries(
 }
 
 /**
+ * **Ask again about names that have already been asked about.**
+ *
+ * `primeShellBinaries` remembers every name it has asked, so a name the shell could not find is never looked
+ * for again for the life of the process. That is right at boot — one login shell is expensive and a user's rc
+ * files should pay for it once — and it is wrong the moment the user installs something while the app is
+ * open: *"I ran `npm install -g …` and it still says missing"* is this cache, and the fix is not a cleverer
+ * search but the willingness to ask a second time.
+ *
+ * Only names already asked are forgotten, so a re-ask cannot invent work nobody wanted: a name that has never
+ * been asked about is asked by the ordinary path, and one the daemon does not care about is not asked at all.
+ * Names the shell *did* resolve keep their answer — a successful resolution is not in question, and dropping
+ * it would make every re-ask re-derive what a real installation already told us.
+ */
+export async function reaskShellBinaries(
+  names: readonly string[],
+  options: Parameters<typeof readLoginShellBinaries>[1] = {},
+): Promise<ReadonlyMap<string, string>> {
+  for (const name of names) {
+    const trimmed = name.trim();
+    if (answers.has(trimmed)) continue;
+    asked.delete(trimmed);
+  }
+  return primeShellBinaries(names, options);
+}
+
+/**
  * Forget everything, for tests.
  *
  * Named as a warning rather than a generic `reset()`: this is module state production code must never clear,

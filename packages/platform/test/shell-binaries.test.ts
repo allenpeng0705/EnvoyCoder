@@ -41,6 +41,7 @@ import {
   shellBinariesGeneration,
   shellResolvedBinaries,
   resetShellBinaryCacheForTests,
+  reaskShellBinaries,
 } from "../src/index.js";
 
 /**
@@ -310,6 +311,37 @@ describe("the cache, and the two halves of the ask landing at different times", 
     expect(after.dirs[0]).toBe(dir);
     resetShellBinaryCacheForTests();
     resetSearchPathCacheForTests();
+  });
+
+  posixOnly("finds a program installed while the app was open, because a re-ask is a second question", async () => {
+    // The owner's report as a mechanism: *"After I run `npm install -g @agentclientprotocol/codex-acp`, how do
+    // we let EnvoyCoder know that without restarting?"* A name the shell could not find stays on the asked list
+    // — one resolving name is enough for the invocation to count as answered — so the daemon keeps a miss it
+    // has no way to notice is out of date. This is the leg that separates "asked once" from "asked again".
+    resetShellBinaryCacheForTests();
+
+    const boot = await primeShellBinaries(
+      ["codex", "codex-acp"],
+      scripted(answer("codex", "/usr/bin/codex")),
+    );
+    expect(boot.get("codex")).toBe("/usr/bin/codex");
+    expect(boot.get("codex-acp")).toBeUndefined();
+
+    // The bridge is installed. Nothing has been told to the daemon, and the *next* ordinary ask does not run the
+    // shell at all for a name already on the list — even the script that would now answer both.
+    const installed = scripted(
+      answer("codex", "/usr/bin/codex") + answer("codex-acp", "/opt/only-here/bin/codex-acp"),
+    );
+    const afterInstall = await primeShellBinaries(["codex", "codex-acp"], installed);
+    expect(afterInstall.get("codex-acp")).toBeUndefined();
+
+    // A re-ask is not a cleverer search: the same question, asked again, and now answered.
+    const reasked = await reaskShellBinaries(["codex", "codex-acp"], installed);
+    expect(reasked.get("codex-acp")).toBe("/opt/only-here/bin/codex-acp");
+    // A name that already resolved keeps its answer: a real installation is not in question, and dropping it
+    // would make every re-check re-derive what the first ask established.
+    expect(reasked.get("codex")).toBe("/usr/bin/codex");
+    resetShellBinaryCacheForTests();
   });
 
   posixOnly("asks about a name once, and asks again after a failed invocation", async () => {

@@ -65,6 +65,9 @@ class FakeConnection {
     // and the store may load it with everything else. Empty here, because a fixture with thirty-eight
     // entries would be describing `@envoycoder/agent-catalog` a second time.
     this.answers.set("coder.listCatalog", { entries: [] });
+    // Looking at the machine again: acknowledged, and deliberately carrying no list (`coder.recheckAgents`
+    // documents why). A store leg that wanted a *different* answer after a re-check stages it in `answers`.
+    this.answers.set("coder.recheckAgents", { ok: true });
   }
 
   onStatus(listener: (status: ConnectionStatus) => void): () => void {
@@ -214,6 +217,63 @@ describe("the store's connection to the daemon", () => {
 
     expect(created.getSnapshot().error).toBeUndefined();
     expect(connection.calls.map((call) => call.method)).toContain("coder.listTasks");
+  });
+
+  it("re-checks the machine on request, then re-reads both lists through their ordinary loaders", async () => {
+    // The owner's question, as the store's half of it: *"After I run `npm install -g
+    // @agentclientprotocol/codex-acp`, how do we let EnvoyCoder know that without restarting?"* The daemon
+    // re-measures on every read; this is the window asking it to, and then reading again — through
+    // `loadHarnesses`/`loadCatalog` rather than by accepting a list on the re-check's own answer, so there is
+    // one projection and one path.
+    const connection = new FakeConnection();
+    const created = createCoderStore({
+      resolveEndpoint: async () => endpoint,
+      connect: () => connection as unknown as CoderConnection,
+    });
+    await created.start();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    connection.calls.length = 0;
+
+    // What the daemon measures *after* the user installed something: the same call, a different answer.
+    connection.answers.set("coder.listHarnesses", {
+      harnesses: [{ id: "codex", availability: { state: "ready", binary: "/usr/bin/codex-acp" } }],
+    });
+    await created.recheckAgents();
+
+    const methods = connection.calls.map((call) => call.method);
+    expect(methods[0]).toBe("coder.recheckAgents");
+    expect(methods).toContain("coder.listHarnesses");
+    expect(methods).toContain("coder.listCatalog");
+    expect(created.getSnapshot().harnesses).toHaveLength(1);
+  });
+
+  it("does nothing at all when the daemon is a build behind, rather than asking for a method it lacks", async () => {
+    // The same rule the rest of this store follows: a call whose answer is already known to be "Method not
+    // found" is not made. The page does not draw the control either — two halves of one decision, and this is
+    // the half a test can see from here.
+    const connection = new FakeConnection();
+    connection.hello = {
+      product: "EnvoyCoder",
+      version: "0.1.0",
+      instanceId: "daemon-from-an-older-build",
+      home: "/home/you/.envoymesh",
+      stateDir: "/home/you/.envoymesh/EnvoyCoder",
+      startedAt: "2026-09-14T01:41:19.093Z",
+      windowCount: 1,
+      methods: ["coder.hello", "coder.listHarnesses"],
+      mesh: { kind: "no-node" },
+      notes: [],
+    };
+    const created = createCoderStore({
+      resolveEndpoint: async () => endpoint,
+      connect: () => connection as unknown as CoderConnection,
+    });
+    await created.start();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    connection.calls.length = 0;
+
+    await created.recheckAgents();
+    expect(connection.calls).toEqual([]);
   });
 
   it("treats an empty method list as 'no idea', not as 'no methods'", async () => {

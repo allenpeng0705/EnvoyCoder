@@ -323,6 +323,48 @@ describe("the daemon over a socket", () => {
     expect(tasks.tasks).toHaveLength(1);
   });
 
+  it("looks at the machine again when a window asks, and tells every window the answer may have changed", async () => {
+    // **The owner's question, as a wire fact:** *"After I run `npm install -g @agentclientprotocol/codex-acp`,
+    // how do we let EnvoyCoder know that without restarting?"* The daemon re-measures every row on the read, so
+    // the list is never stale *if* something asks it — this method is the asking, and the broadcast is what makes
+    // an already-open page current. Both halves are asserted here: the call, and an event a client can act on.
+    const { daemon, home } = await bootDaemon();
+    cleanups.push(async () => {
+      await daemon.stop();
+      await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    });
+
+    // **Both boot primes are awaited before subscribing**, so the event this leg waits for cannot be one of
+    // theirs. Those two seams exist for exactly this: a re-check leg that could be satisfied by boot traffic
+    // would pass on a daemon that never re-asked anything.
+    await daemon.searchPath();
+    await daemon.shellBinaries();
+
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+    const hello = (await client.call("coder.hello", {})) as { methods: string[] };
+    // Advertised like every other method, which is what lets a window decide whether to draw the control.
+    expect(hello.methods).toContain("coder.recheckAgents");
+
+    await client.subscribe(["coder:state-changed"]);
+
+    // **The waiter is registered before the call, not after it.** The daemon emits inside the handler, so an
+    // event that arrives while the call is still in flight would be missed by a listener added afterwards —
+    // which is a test that times out on a daemon that worked.
+    const broadcast = client.waitForEvent("coder:state-changed", (data) => {
+      const change = data as { kind?: string };
+      return change.kind === "harnesses";
+    });
+
+    const answer = await client.call("coder.recheckAgents", {});
+    expect(answer).toEqual({ ok: true });
+    // The answer deliberately carries no list: the window re-reads through `coder.listHarnesses`, the one
+    // projection, and a second copy here would be a second source of truth for the same rows.
+    await broadcast;
+    const harnesses = (await client.call("coder.listHarnesses", {})) as { harnesses: unknown[] };
+    expect(harnesses.harnesses.length).toBeGreaterThan(0);
+  });
+
   it("remembers the language across a restart, because it is a user setting and not a window's", async () => {
     // The language is the one setting whose *storage* is part of its behaviour: the daemon is what
     // sends the refusals, so a window that kept the choice for itself would answer a German user in

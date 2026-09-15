@@ -95,6 +95,15 @@ asks it about individual names, both bounded and both off the critical path. On 
 and deliberately: the registry `PATH` reaches a GUI process there, so there is nothing to repair —
 `docs/settings-parity.md` §7.9 has the ordering and §7.16 the measurement behind the per-name ask.
 
+**Both asks are cached per process, and that cache is a product decision with a user-visible edge.** One
+login shell per daemon is the point: a `nvm`/`volta` rc file is expensive and a program name asked about
+twice is a second shell for an answer we already have. The edge is that *nothing the user does outside the
+app* invalidates it — `npm install -g @agentclientprotocol/codex-acp` in their own terminal changes the
+machine and tells the daemon nothing — so the page offers one press that asks again
+(`reaskShellBinaries`, `docs/settings-parity.md` §7.19) rather than a timer that would spawn a login shell
+on a schedule nobody asked for. A program installed into a directory the daemon already searches needs no
+re-ask at all: every row's state is recomputed on every read.
+
 ## 4. DeepSeek Harness, per platform
 
 Its own support matrix, which we rely on when driving it:

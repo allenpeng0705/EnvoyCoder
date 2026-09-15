@@ -663,6 +663,36 @@ export class CoderStore {
     );
   }
 
+  /**
+   * **Look at this machine again** — the page's *Check again*, and the answer to *"I installed the bridge in
+   * my terminal; how does EnvoyCoder find out without a restart?"*
+   *
+   * The daemon re-measures every row on the read, so the list itself is never stale *if* something asks it.
+   * What cannot be right on its own is the two inputs the daemon captures once per process — the login shell's
+   * `PATH` and its per-name `command -v` answers — so the call re-asks those and then broadcasts, and this
+   * method re-reads through the ordinary loaders rather than accepting a list back on the answer: one
+   * projection, one path, and the *other* windows hear on the bus like they do for every other change.
+   *
+   * A daemon that does not serve the method is not an error to report — the control is not rendered
+   * (`SettingsPane` gates on `coder.hello`'s method list), and a press that arrives from an older build's
+   * window does nothing rather than showing a failure for a page that is about to be correct by itself.
+   */
+  async recheckAgents(): Promise<void> {
+    const connection = this.connection;
+    if (!connection || connection.status.state !== "connected") return;
+    if (!this.canCall("coder.recheckAgents")) return;
+    try {
+      await connection.callTyped("coder.recheckAgents", {});
+    } catch {
+      // The re-ask is best effort: the daemon logs what a shell could not tell it, and the re-read below still
+      // shows the user the most current answer the daemon has.
+    }
+    await Promise.all([
+      this.loadHarnesses(),
+      this.canCall("coder.listCatalog") ? this.loadCatalog() : Promise.resolve(),
+    ]);
+  }
+
   /* ────────────────────────────── actions ────────────────────────────── */
 
   /**

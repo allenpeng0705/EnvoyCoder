@@ -647,8 +647,15 @@ const report = await evaluate(`(() => {
    *     'otherWords' rather than hiding;
    *   * 'multipleChips' — the mandate's *"a row renders at most one chip"*, counted on the page rather than
    *     asserted in a test that might be looking at a different row;
-   *   * 'checkControls' — buttons whose label asks the user to find out a state. The old page had one per
-   *     catalogue row; the number that must be zero is this one.
+   *   * 'checkControls' — buttons **inside a row** whose label asks the user to find out a state. The old page
+   *     had one per catalogue row and each press left that row unknowing; the number that must be zero is this
+   *     one.
+   *   * 'pageControls' — the same words on a button that is **not** in a row, and the reason the two are counted
+   *     apart. The Agents page has one page-level *Check again*: it re-asks the machine where the user's programs
+   *     are, after the user installed something in their own terminal, and it changes no row's state from known
+   *     to unknown. Folding it into 'checkControls' would report the defect metric as failed by a control that
+   *     is not the defect, and excluding label matches from it wholesale would let a real per-row regression
+   *     hide — so a reader gets both numbers, and the exception is named rather than silent.
    */
   const verdictWords = ["Ready", "Not ready"];
   const chipsOf = (row) => [...row.querySelectorAll(".chip")];
@@ -678,7 +685,10 @@ const report = await evaluate(`(() => {
     // 'rows + emptyStates ===' the number of 'settings__agent' elements, which is a check a reader can do.
     emptyStates,
     checkControls: [...body.querySelectorAll("button")]
-      .filter((b) => /check/i.test(b.textContent ?? ""))
+      .filter((b) => /check/i.test(b.textContent ?? "") && rows.some((row) => row.contains(b)))
+      .map((b) => (b.textContent ?? "").trim()),
+    pageControls: [...body.querySelectorAll("button")]
+      .filter((b) => /check/i.test(b.textContent ?? "") && !rows.some((row) => row.contains(b)))
       .map((b) => (b.textContent ?? "").trim()),
   };
 

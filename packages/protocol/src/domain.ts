@@ -1026,6 +1026,16 @@ export const RPC_METHODS = [
    * owner's report — *"I don't want user to guess, to check if we can do that"* — is why it is gone: a row
    * that has to be asked about one at a time is a chore, and the chore was the design.
    */
+  /**
+   * **Look at this machine again**: re-ask the login shell where the user's programs are, then tell every
+   * window the answer may have changed.
+   *
+   * The daemon already re-measures each row on every read, so this is not a cache to bust in the list — it is
+   * the two inputs that are captured once per process (`PATH`, and `command -v` per program name) and the
+   * broadcast that makes an open page current. It exists because a user who installs a bridge in their own
+   * terminal has told nobody, and *"restart the app to find out whether your install worked"* is not an answer.
+   */
+  "coder.recheckAgents",
   "coder.listCatalog",
   "coder.meshStatus",
   "coder.listPeers",

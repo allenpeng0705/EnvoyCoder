@@ -1878,6 +1878,35 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
     result: z.object({ harnesses: z.array(HarnessSummarySchema).readonly() }).strict(),
   },
   /**
+   * **Look at this machine again** — the one method whose subject is the measurement itself.
+   *
+   * ## Why this exists when the daemon already re-measures on every read
+   *
+   * It does: `coder.listHarnesses` and `coder.listCatalog` resolve each row's state from filesystem and
+   * environment reads on the read, so a program installed in a directory the daemon already searches is
+   * reported ready the next time a window asks. What the daemon *cannot* know is that its answer is stale: a
+   * user who runs `npm install -g @agentclientprotocol/codex-acp` in their own terminal tells nobody, so the
+   * page keeps the answer it last drew — and two of the daemon's own inputs are captured once per process on
+   * purpose (the login shell's `PATH`, and its `command -v` answer per name; see
+   * `packages/platform/src/shell-binaries.ts`). Without this method the only way to make the page current is
+   * to restart something, which is exactly the thing a user should not have to do to find out whether their
+   * own install worked.
+   *
+   * ## What it does, and what it deliberately does not return
+   *
+   * It re-asks the login shell for `PATH` and for every program name the daemon cares about, and then emits
+   * the same `harnesses` change the boot primes emit. **It returns no list**: the window re-reads through
+   * `coder.listHarnesses` — the one projection — and every *other* window hears on the bus, which a second
+   * copy of the list in this result would quietly compete with.
+   *
+   * It starts nothing. A re-check is the cheap half of the page (`docs/settings-parity.md` §7.17.4): what an
+   * agent publishes about itself still needs `coder.probeSessionOptions`, and a run still needs a task.
+   */
+  "coder.recheckAgents": {
+    params: EmptyParams,
+    result: z.object({ ok: z.literal(true) }).strict(),
+  },
+  /**
    * The whole catalogue, **with the cheap verdict on every row** — and still nothing started.
    *
    * It used to serve "nothing measured" and leave each row's state to a second call the user had to make,
