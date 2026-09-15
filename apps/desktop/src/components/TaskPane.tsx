@@ -38,13 +38,20 @@ import type { HarnessId, HarnessSummary, ProbeOutcome, Project, RunEvent, Task }
 
 import { hasShellPicker, pickFolder } from "../client/folder-picker.js";
 import { agentFor } from "../composer/agent-for.js";
-import { composerControls, modeOffReason, modelOffReason, thinkingOffReason } from "../composer/controls.js";
+import {
+  composerControls,
+  modeOffReason,
+  modelOffReason,
+  taskLocationLabel,
+  thinkingOffReason,
+} from "../composer/controls.js";
 import { harnessLabel } from "../composer/harness-label.js";
 import { probeAsk, publishesOnlyInSession, type ProbeState } from "../composer/probe.js";
 import { useT } from "../i18n/context.js";
 import { localize, localizeText, noticeOf, type Refusal, statusKey } from "../i18n/notice.js";
 import { buildTranscript, type TranscriptEntry } from "../state/transcript.js";
 import { ComposerControls } from "./ComposerControls.js";
+import { FolderIcon } from "./icons.js";
 
 export interface TaskPaneProps {
   task: Task;
@@ -260,6 +267,8 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   // `hasShellPicker()` is synchronous on purpose (see `folder-picker.ts`): a control that decides after
   // an `await` looks like a dead click, and a disabled one can say why in the same tick as the render.
   const canChooseFolder = props.onChangeFolder !== undefined && hasShellPicker();
+  /** The permanent half of the folder control's off state — attached to the chip, never a paragraph. */
+  const folderUnavailable = canChooseFolder ? undefined : t("task.composer.folder.noPicker");
 
   const chooseFolder = async (): Promise<void> => {
     if (!props.onChangeFolder) return;
@@ -322,9 +331,35 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               {harnessLabel(task.harness)}
             </span>
             {task.model ? <span className="chip chip--quiet">{task.model}</span> : null}
-            <span className="chip chip--quiet" title={t("task.meta.cwd", { path: task.cwd })}>
-              {project?.label ?? basename(task.cwd)}
-            </span>
+            {/* **Where the task runs, and the control that moves it.**
+                It used to be a passive chip here *and* a pill with the path in it in the composer — the one
+                place a path is least worth reading, since it is long, truncated, and competing with the
+                message being typed (the owner: *"we needn't to show the folder path on the inputting field"*).
+                The composer row is a toolbar of agent settings now, and the location lives here: a glyph and
+                the project's name, the whole path in the title, and a press opens the folder chooser.
+
+                A window with no chooser keeps the chip and takes the reason — attached, as §7.30's rule has
+                it — and a chooser that *fails* says so on the line below, because §7.27's rule is that a
+                refusal is read where the press was. */}
+            <button
+              type="button"
+              className="chip chip--quiet pane__cwd"
+              title={
+                folderUnavailable === undefined ? task.cwd : `${task.cwd} — ${folderUnavailable}`
+              }
+              aria-label={t("task.composer.folder.aria")}
+              {...(folderUnavailable !== undefined ? { "aria-describedby": "pane-cwd-reason" } : {})}
+              disabled={!canChooseFolder}
+              onClick={() => void chooseFolder()}
+            >
+              <FolderIcon size={12} />
+              {taskLocationLabel(task.cwd, project === undefined ? undefined : { label: project.label, path: project.path })}
+            </button>
+            {folderUnavailable === undefined ? null : (
+              <p className="visually-hidden" id="pane-cwd-reason">
+                {folderUnavailable}
+              </p>
+            )}
             {task.worktree ? (
               <span className="chip chip--quiet" title={task.worktree.path}>
                 {task.worktree.branch}
@@ -335,6 +370,13 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               {task.hostId && task.hostId !== "local" ? task.hostId : t("app.thisMachine")}
             </span>
           </div>
+          {/* **A press that failed, under the chip that was pressed.** §7.27's rule, and the reason this is
+              not silence: the chooser refused, so the header says so where the click was made. */}
+          {pickerProblem === undefined ? null : (
+            <p className="pane__notice" role="status">
+              {t("palette.pickerFailed", { detail: pickerProblem })}
+            </p>
+          )}
         </div>
         <div className="pane__actions">
           {running ? (
@@ -395,60 +437,6 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
 
       <footer className="composer">
         <div className="composer__card">
-          {/* **Two controls above the field, and both say what they will do.** Each applies to the
-              *next run* — the agent is launched with `task.cwd` and put into its mode right after
-              `session/new` — so neither pretends to move or re-mode a run that is already going. */}
-          <ComposerControls
-            cwd={task.cwd}
-            projectPath={project?.path}
-            canChooseFolder={canChooseFolder}
-            folderProblem={pickerProblem}
-            onChooseFolder={() => void chooseFolder()}
-            modes={controls.mode.options}
-            selectedModeId={selectedModeId}
-            modeOff={modeOff}
-            onChooseMode={(chosen) => {
-              setPickedMode(chosen);
-              void props.onChangeMode?.(chosen);
-            }}
-            modelKind={controls.model.kind}
-            models={controls.model.options}
-            selectedModelId={selectedModelId}
-            modelOff={modelOff}
-            agentLabel={agent.label}
-            onChooseModel={(chosen) => {
-              // `""` is the agent's own default, and it is kept as the empty string here rather than
-              // collapsed to `undefined`: the pane must show the click immediately, and `undefined`
-              // would fall through to the task's stored model — the very value the user just cleared.
-              setPickedModel(chosen);
-              void props.onChangeModel?.(chosen);
-            }}
-            thinkingOptions={controls.thinking.options}
-            selectedThinkingLevel={selectedThinkingLevel}
-            thinkingOff={thinkingOff}
-            modelObservedAt={controls.model.observedAt}
-            thinkingObservedAt={controls.thinking.observedAt}
-            onChooseThinking={(chosen) => {
-              // The model's rule, for the model's reason: `""` means "the agent's own default" and has
-              // to be shown at once rather than falling through to the level the user just cleared.
-              setPickedThinking(chosen);
-              void props.onChangeThinking?.(chosen);
-            }}
-            running={running}
-            probeNote={probe.note}
-            // Drawn only when there is a button to draw: `probe.buttonKey` is absent for an agent the
-            // daemon cannot be asked about, and an enabled-looking control that goes nowhere is the bug
-            // this row keeps refusing.
-            probeAction={
-              probe.buttonKey === undefined
-                ? undefined
-                : { key: probe.buttonKey, enabled: probe.enabled }
-            }
-            onProbeAgent={
-              props.onProbeAgent === undefined ? undefined : () => void askAgent(probe.force)
-            }
-          />
-
           <textarea
             ref={inputRef}
             className="composer__input"
@@ -473,7 +461,61 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
             aria-label={t("task.composer.aria")}
           />
           {props.notice ? <p className="composer__notice">{props.notice}</p> : null}
+          {/* **The row under the field: agent settings on the left, the action on the right.**
+              Paseo's composer is a field with one button row beneath it — the attach button and the agent's
+              controls at the left, send at the right (`composer/input/input.tsx`, the `buttonRow`) — and this is
+              that shape now. It used to draw a second row *above* the field holding three labelled form controls,
+              which is what the owner read as *"too ugly and nosing"*. */}
           <div className="composer__toolbar">
+            {/* **The agent's settings, as a toolbar.** Each applies to the *next run* — the agent is
+                launched with `task.cwd` and put into its mode right after `session/new` — so none of them
+                pretends to move or re-mode a run that is already going. */}
+            <ComposerControls
+              modes={controls.mode.options}
+              selectedModeId={selectedModeId}
+              modeOff={modeOff}
+              onChooseMode={(chosen) => {
+                setPickedMode(chosen);
+                void props.onChangeMode?.(chosen);
+              }}
+              modelKind={controls.model.kind}
+              models={controls.model.options}
+              selectedModelId={selectedModelId}
+              modelOff={modelOff}
+              agentLabel={agent.label}
+              onChooseModel={(chosen) => {
+                // `""` is the agent's own default, and it is kept as the empty string here rather than
+                // collapsed to `undefined`: the pane must show the click immediately, and `undefined`
+                // would fall through to the task's stored model — the very value the user just cleared.
+                setPickedModel(chosen);
+                void props.onChangeModel?.(chosen);
+              }}
+              thinkingOptions={controls.thinking.options}
+              selectedThinkingLevel={selectedThinkingLevel}
+              thinkingOff={thinkingOff}
+              modelObservedAt={controls.model.observedAt}
+              thinkingObservedAt={controls.thinking.observedAt}
+              onChooseThinking={(chosen) => {
+                // The model's rule, for the model's reason: `""` means "the agent's own default" and has
+                // to be shown at once rather than falling through to the level the user just cleared.
+                setPickedThinking(chosen);
+                void props.onChangeThinking?.(chosen);
+              }}
+              running={running}
+              probeNote={probe.note}
+              // Drawn only when there is a button to draw: `probe.buttonKey` is absent for an agent the
+              // daemon cannot be asked about, and an enabled-looking control that goes nowhere is the bug
+              // this row keeps refusing.
+              probeAction={
+                probe.buttonKey === undefined
+                  ? undefined
+                  : { key: probe.buttonKey, enabled: probe.enabled }
+              }
+              onProbeAgent={
+                props.onProbeAgent === undefined ? undefined : () => void askAgent(probe.force)
+              }
+            />
+            <div className="composer__toolbar-actions">
             {/* The mode only exists while there is a turn to join: showing it on a finished task would
                 offer a choice that does nothing. */}
             {running ? (
@@ -520,6 +562,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               </svg>
               {running ? t("task.composer.send") : t("task.composer.start")}
             </button>
+            </div>
           </div>
         </div>
       </footer>

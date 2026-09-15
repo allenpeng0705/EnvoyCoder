@@ -73,7 +73,6 @@ import {
   modelNote,
   optionDescription,
   optionLabel,
-  shortenFolder,
   thinkingNote,
   type ComposerMode,
   type ComposerModel,
@@ -87,17 +86,9 @@ import type { MessageKey } from "../i18n/messages/en.js";
 import { localize, type Notice } from "../i18n/notice.js";
 import { formatWhen } from "../i18n/when.js";
 import { ModelChoice } from "./ModelChoice.js";
+import { ModeIcon, ModelIcon, ThinkingIcon } from "./icons.js";
 
 export interface ComposerControlsProps {
-  /** The folder the agent works in — the one the next run will be launched with. */
-  cwd: string;
-  /** The project's path, so the pill can show the folder the way the user thinks of it. */
-  projectPath?: string | undefined;
-  /** Is there a shell to ask for a folder? The caller decides this synchronously. */
-  canChooseFolder: boolean;
-  /** Why the chooser would not open, after a click that found out. */
-  folderProblem?: string | undefined;
-  onChooseFolder: () => void;
   /** The modes the agent declares, in the agent's own order. Empty is a fact, not a gap. */
   modes: readonly ComposerMode[];
   /** What the picker shows, when it has something to show. */
@@ -178,25 +169,11 @@ export interface ComposerControlsProps {
 
 export function ComposerControls(props: ComposerControlsProps): JSX.Element {
   const { t, locale } = useI18n();
-  const { cwd, running } = props;
+  const { running } = props;
   const modeOff = props.modeOff;
   const modelOff = props.modelOff;
   const thinkingOff = props.thinkingOff;
 
-  /**
-   * **A press that failed is news; a state that never changes is a description.**
-   *
-   * `folderProblem` is a dialog that would not open — something the user just did, and §7.27's rule says a
-   * refusal is read where the press was, so it keeps the visible line. "This window has no folder chooser" is
-   * a permanent property of the window, and it becomes the pill's own description instead.
-   *
-   * `folderProblem` is a message from the platform, so it is a value and not a key; the sentence around it is
-   * ours and is translated.
-   */
-  const folderFailure = props.folderProblem
-    ? t("palette.pickerFailed", { detail: props.folderProblem })
-    : undefined;
-  const folderUnavailable = props.canChooseFolder ? undefined : t("task.composer.folder.noPicker");
   const selectedMode = props.modes.find((mode) => mode.id === props.selectedModeId);
   const selectedModel = props.models.find((model) => model.id === props.selectedModelId);
   const selectedThinking = props.thinkingOptions.find(
@@ -263,56 +240,35 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
         : undefined;
 
   /**
-   * The free-text draft moved into `ModelChoice`, along with the commit rule — a field's state belongs
-   * with the field, and the settings pane's model row needs exactly the same behaviour (see that file).
+   * **The toolbar, in Paseo's shape: a glyph and a value, no label and no box.**
+   *
+   * The owner's report was *"can the others fields use the same style with paseo. The current style on the top of
+   * inputting field are too ugly and nosing"* — and the reference product's composer row is exactly this: 28px
+   * chips, a muted glyph, the value beside it, a caret only where the control opens something, and a faint fill on
+   * hover (never a border, never a labelled form field). The label a form would put to the left of the control
+   * lives on the control instead — as its `aria-label` and its tooltip — which is what makes the row read as a
+   * toolbar rather than as a form.
+   *
+   * The folder is **gone from here**: it was a pill with the path in it, the one place a path is least worth
+   * reading, and the location already has a home in the pane's header (a glyph and the project's name, the whole
+   * path in the title) where it is also the control that changes it.
    */
   return (
     <>
       <div className="composer__controls">
-        <div className="composer__control">
-          <span className="composer__control-label">{t("task.composer.folder.label")}</span>
-          <button
-            type="button"
-            className="composer__pill"
-            // Truncated on the pill, whole in the title: a path is worth reading at the end, and a user
-            // who needs the beginning can hover or copy it. When there is no chooser the reason takes the
-            // title, and the hidden paragraph beside it carries the same sentence to a screen reader.
-            // The path stays in the title even when there is no chooser — it is the fact a user hovers for — and
-            // the reason is appended rather than substituted, because both answers are wanted from the same hover.
-            title={folderUnavailable === undefined ? cwd : `${cwd} — ${folderUnavailable}`}
-            aria-label={t("task.composer.folder.aria")}
-            {...(folderUnavailable !== undefined ? { "aria-describedby": "composer-folder-reason" } : {})}
-            disabled={!props.canChooseFolder}
-            onClick={props.onChooseFolder}
-          >
-            {shortenFolder(cwd, props.projectPath)}
-          </button>
-          {folderUnavailable === undefined ? null : (
-            <p className="visually-hidden" id="composer-folder-reason">
-              {folderUnavailable}
-            </p>
-          )}
-        </div>
-
-        <div className="composer__control">
-          <span className="composer__control-label" id="composer-agent-mode-label">
-            {t("task.composer.agentMode.label")}
-          </span>
+        <div className="composer__chips">
+        <span className="composer__chip" title={modeReason ?? modeDescription(selectedMode, t) ?? t("task.composer.agentMode.title")}>
+          <ModeIcon size={14} />
           <select
-            className="select"
-            // Enabled only when the wire said the daemon can put this agent into a mode. An agent with
-            // modes it cannot be *set* into keeps its options *visible* and the control disabled, with
-            // the reason on the next line: a picker that silently does nothing is the bug this control
-            // exists to avoid.
+            className="composer__chip-field"
             disabled={modeOff !== undefined}
-            aria-labelledby="composer-agent-mode-label"
+            aria-label={t("task.composer.agentMode.label")}
             {...(modeReason !== undefined ? { "aria-describedby": "composer-mode-reason" } : {})}
-            title={modeReason ?? modeDescription(selectedMode, t) ?? t("task.composer.agentMode.title")}
             value={props.selectedModeId ?? ""}
             onChange={(event) => props.onChooseMode(event.target.value)}
           >
-            {/* No modes to list is a *state*, not an empty box: the option says so, and the reason line
-                below says why. */}
+            {/* No modes to list is a *state*, not an empty box: the option says so, and the reason attached to the
+                control says why (`docs/settings-parity.md` §7.30). */}
             {props.modes.length === 0 ? (
               <option value="">{t("task.composer.agentMode.unset")}</option>
             ) : null}
@@ -322,26 +278,29 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
               </option>
             ))}
           </select>
+          <span className="composer__chip-caret" aria-hidden>
+            ▾
+          </span>
           {modeReason === undefined ? null : (
             <p className="visually-hidden" id="composer-mode-reason">
               {modeReason}
             </p>
           )}
-        </div>
+        </span>
 
-        <div className="composer__control">
-          <span className="composer__control-label" id="composer-model-label">
-            {t("task.composer.model.label")}
-          </span>
-          {/* **Three shapes for three facts, and the middle one is the reason this is not one `<select>`.**
-              A list to choose from is a picker. An agent that publishes none and takes one is a text
-              field — genuinely usable, with the `provider/model` shape in its note. An agent that takes
-              no model is a disabled picker with the reason below it. `options.length === 0` decides
-              nothing here: it is true for the free-text case, which works.
-              The control itself is shared with the settings pane (`ModelChoice`), so the app's default
-              model, a project's default model and a task's model cannot come to mean three things. */}
+        {/* **Three shapes for three facts, and the middle one is the reason this is not one `<select>`.**
+            A list to choose from is a picker. An agent that publishes none and takes one is a text field —
+            genuinely usable. An agent that takes no model is a disabled chip with the reason attached to it.
+            `options.length === 0` decides nothing here: it is true for the free-text case, which works.
+            The control itself is shared with the settings pane (`ModelChoice`), so the app's default model, a
+            project's default model and a task's model cannot come to mean three things; only its *skin* differs. */}
+        <span
+          className="composer__chip"
+          title={modelReason ?? selectedModel?.description ?? t("task.composer.model.title")}
+        >
+          <ModelIcon size={14} />
           <ModelChoice
-            labelId="composer-model-label"
+            ariaLabel={t("task.composer.model.label")}
             kind={props.modelKind}
             options={props.models}
             selected={props.selectedModelId}
@@ -349,47 +308,60 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
             {...(modelReason !== undefined ? { descriptionId: "composer-model-reason" } : {})}
             title={modelReason ?? selectedModel?.description ?? t("task.composer.model.title")}
             onChoose={props.onChooseModel}
-            inputClassName="input composer__model-input"
+            fieldClassName="composer__chip-field"
+            inputClassName="composer__chip-field composer__chip-field--text"
           />
+          {props.modelKind === "listed" ? (
+            <span className="composer__chip-caret" aria-hidden>
+              ▾
+            </span>
+          ) : null}
           {modelReason === undefined ? null : (
             <p className="visually-hidden" id="composer-model-reason">
               {modelReason}
             </p>
           )}
-        </div>
+        </span>
 
-        <div className="composer__control">
-          <span className="composer__control-label" id="composer-thinking-label">
-            {t("task.composer.thinking.label")}
-          </span>
-          {/* **One shape, unlike the model.** A thinking level is an id in the agent's own vocabulary
-              (`off`, `low`, `high`, `max`) that nobody outside the agent can guess, so there is no
-              free-text counterpart: the control is a picker, or it is off with the reason below it. The
-              first option is *ours* and means "the agent decides", which is also the state a task is in
-              before anybody picks — and the only way to undo a choice. */}
+        {/* **One shape, unlike the model.** A thinking level is an id in the agent's own vocabulary (`off`, `low`,
+            `high`, `max`) that nobody outside the agent can guess, so there is no free-text counterpart: the
+            control is a picker, or it is off with the reason attached to it. The first option is *ours* and means
+            "the agent decides", which is also the state a task is in before anybody picks — and the only way to
+            undo a choice. */}
+        <span
+          className="composer__chip"
+          title={thinkingReason ?? optionDescription(selectedThinking, t) ?? t("task.composer.thinking.title")}
+        >
+          <ThinkingIcon size={14} />
           <select
-            className="select"
+            className="composer__chip-field"
             disabled={thinkingOff !== undefined}
-            aria-labelledby="composer-thinking-label"
+            aria-label={t("task.composer.thinking.label")}
             {...(thinkingReason !== undefined ? { "aria-describedby": "composer-thinking-reason" } : {})}
-            title={thinkingReason ?? optionDescription(selectedThinking, t) ?? t("task.composer.thinking.title")}
             value={props.selectedThinkingLevel ?? ""}
             onChange={(event) => props.onChooseThinking(event.target.value)}
           >
-            <option value="">{t("task.composer.thinking.agentDefault")}</option>
+            {/* **Short on the row, whole in the dropdown's tooltip.** A chip has one line; the sentence that
+                explains *whose* default it is belongs where a user is reading a list. */}
+            <option value="" title={t("task.composer.thinking.agentDefault")}>
+              {t("task.composer.value.default")}
+            </option>
             {props.thinkingOptions.map((option) => (
               <option key={option.value} value={option.value} title={optionDescription(option, t)}>
                 {optionLabel(option, t)}
               </option>
             ))}
           </select>
+          <span className="composer__chip-caret" aria-hidden>
+            ▾
+          </span>
           {thinkingReason === undefined ? null : (
             <p className="visually-hidden" id="composer-thinking-reason">
               {thinkingReason}
             </p>
           )}
+          </span>
         </div>
-      </div>
 
       {/* **One line, and only when the user needs it now.**
           This was a stack of up to five paragraphs — one per control saying "your choice applies to the next
@@ -409,9 +381,7 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
               learn what the agent offers) takes the line instead.
 
           One line at the most, in that order. Measured: `composer-notes.test.tsx` counts them. */}
-      {folderFailure !== undefined ? (
-        <p className="composer__control-note">{folderFailure}</p>
-      ) : (probeText !== undefined && probeText !== "") ||
+      {(probeText !== undefined && probeText !== "") ||
         (props.probeAction !== undefined && props.onProbeAgent !== undefined) ? (
         <p className="composer__control-note">
           {probeText === undefined ? null : <span>{probeText}</span>}
@@ -432,6 +402,7 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
       ) : running ? (
         <p className="composer__control-note">{t("task.composer.appliesNextRun")}</p>
       ) : null}
+      </div>
     </>
   );
 }

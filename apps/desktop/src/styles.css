@@ -771,6 +771,33 @@ body {
   gap: var(--space-1-5);
 }
 
+/* **The header's location chip is a control.** It reads exactly like the chips beside it — that was the point
+   of moving it out of the composer — and the only addition is the glyph before the name and a hover fill, so a
+   user can tell it is pressable without it becoming a button-shaped thing in a row of facts. */
+.pane__cwd {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.pane__cwd:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.pane__cwd:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+/* A failed press, under the row of chips it came from — the header's own line, on §7.27's rule. */
+.pane__notice {
+  margin: var(--space-1) 0 0;
+  color: var(--status-danger);
+  font-size: var(--font-size-sm);
+}
+
 .pane__actions {
   margin-left: auto;
 }
@@ -910,78 +937,94 @@ body {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
-/* The row above the field: the task's folder, the agent's own mode, and its model.
-
-   Pills rather than full-width fields, because all three are facts about this run that a user changes
-   rarely — a second row of form controls above the message box is what turns a composer into a
-   settings form. Compact height (`--control-tight`), so the row never competes with the message
-   itself, which is the thing actually being typed. */
+/**
+ * **The row above the field: a toolbar, not a form.**
+ *
+ * The owner: *"can the others fields use the same style with paseo. The current style on the top of inputting
+ * field are too ugly and nosing."* The row used to be three labelled form controls — a `Folder  packages/api`
+ * pill with a path in it, a `Mode  [select]`, a `Model  [select]`, a `Thinking  [select]` — each with a border and
+ * a fill, which is a settings form sitting on top of a message box.
+ *
+ * The reference product's composer row is a **toolbar**: 28px chips, a muted glyph, the value beside it, a caret
+ * only where the control opens something, no label (the accessible name and the tooltip carry it), a faint fill
+ * on hover and nothing at all the rest of the time. That is what this is, and it is why the row no longer draws
+ * a single box: a border per control is what made it read as furniture.
+ *
+ * The folder is not here at all — it is the pane header's own control, as a glyph and the project's name.
+ */
 .composer__controls {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-2) 0;
+  gap: 2px;
+  padding: var(--space-2) var(--space-1) 0;
 }
 
-.composer__control {
-  display: flex;
+.composer__chip {
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: 4px;
   min-width: 0;
-}
-
-.composer__control-label {
-  color: var(--foreground-muted);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-}
-
-.composer__pill {
-  display: block;
-  max-width: 260px;
-  height: var(--control-tight);
+  height: 28px;
   padding: 0 var(--space-2);
-  overflow: hidden;
-  border: 1px solid var(--border);
   border-radius: var(--radius-full);
-  background: var(--surface-2);
-  color: var(--foreground);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.composer__chip:hover {
+  background: var(--bg-hover);
+}
+
+/* The control inside a chip draws nothing of its own: the chip is the box, the field is the value. */
+.composer__chip-field {
+  min-width: 0;
+  max-width: 22ch;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
   font: inherit;
   font-size: var(--font-size-sm);
-  line-height: calc(var(--control-tight) - 2px);
-  white-space: nowrap;
   text-overflow: ellipsis;
   cursor: pointer;
+  appearance: none;
 }
 
-.composer__pill:hover:not(:disabled) {
-  border-color: var(--accent);
+.composer__chip-field:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: 1px;
+  border-radius: var(--radius-sm);
 }
 
-/* A control that cannot work is **disabled and explained**, never omitted: a user looking for the
-   folder cannot tell "this window has no chooser" from "the app forgot to draw it". The sentence is
-   the line below, in `.composer__control-note` — muted, because it is an explanation rather than a
-   failure, and red above the field reads as one. */
-.composer__pill:disabled {
-  color: var(--foreground-extra-muted);
+/* A disabled chip keeps its value **legible**: `--text-faint` is measured at 4.76:1 on `--bg-hover` and 5.34:1 on
+   the card, where Paseo's `opacity: 0.5` would put it under the floor this product holds small text to. The
+   state is carried by the missing caret, the missing hover, and the reason attached to the control's own
+   description (§7.30). */
+.composer__chip-field:disabled {
+  color: var(--text-faint);
   cursor: default;
 }
 
+.composer__chip-field--text {
+  width: 18ch;
+}
+
+.composer__chip-caret {
+  margin-left: -2px;
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.composer__chip-note,
 .composer__control-note {
   margin: 0;
   padding: var(--space-1) var(--space-2) 0;
   color: var(--foreground-muted);
-  font-size: var(--font-size-sm);
-}
-
-/* The free-text model field — the one control in this row that is typed into rather than chosen.
-   Sized like the pills beside it, and deliberately not full width: the value is a `provider/model`
-   pair, and a field that stretched across the composer would read as a second message box for
-   something that is a setting. Its `.input` base supplies the border and focus ring. */
-.composer__model-input {
-  width: 220px;
-  height: var(--control-tight);
   font-size: var(--font-size-sm);
 }
 
@@ -1012,9 +1055,19 @@ body {
 
 .composer__toolbar {
   display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-1);
+}
+
+/* The action side of the button row: the queue/steer picker while a turn is running, the keyboard hint, and the
+   button. `margin-left: auto` is what puts the chips' column on the left and this on the right — the whole layout
+   of Paseo's `buttonRow`. */
+.composer__toolbar-actions {
+  display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 0 var(--space-1) var(--space-1);
+  margin-left: auto;
 }
 
 .composer__hint {

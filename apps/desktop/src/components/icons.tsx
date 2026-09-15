@@ -1,5 +1,5 @@
 /**
- * The icon set — five glyphs, inline, no dependency.
+ * The icon set — the app's own glyphs, inline, no dependency.
  *
  * The app had no icons at all: buttons were bare words, and the two glyphs that existed were text
  * characters (`＋`, `▾`) whose weight and alignment differ per platform font. Paseo draws every icon as
@@ -123,6 +123,52 @@ export function EllipsisIcon({ size = 16 }: IconProps): JSX.Element {
       <circle cx="5" cy="12" r="1.6" />
       <circle cx="12" cy="12" r="1.6" />
       <circle cx="19" cy="12" r="1.6" />
+    </svg>
+  );
+}
+
+/**
+ * The folder a task runs in — the header's own glyph, before the project's name.
+ *
+ * The composer drew this as a **pill with the path in it**, which is the one place a path is least worth
+ * reading: it is long, it is truncated, and it competes with the message being typed. The control lives in the
+ * pane's header now, as a glyph and the project's name, with the whole path in the title.
+ */
+export function FolderIcon({ size = 16 }: IconProps): JSX.Element {
+  return (
+    <svg {...frame(size)}>
+      <path d="M3 7.5A2 2 0 0 1 5 5.5h3.6a2 2 0 0 1 1.4.6l1 1a2 2 0 0 0 1.4.6H19a2 2 0 0 1 2 2v7.2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    </svg>
+  );
+}
+
+/** How much the agent may do — a pair of sliders, which is what a mode is. */
+export function ModeIcon({ size = 16 }: IconProps): JSX.Element {
+  return (
+    <svg {...frame(size)}>
+      <path d="M4 8h16M4 16h16" />
+      <circle cx="9" cy="8" r="2.2" />
+      <circle cx="15" cy="16" r="2.2" />
+    </svg>
+  );
+}
+
+/** Which model runs — a chip, because that is what the agent is being put on. */
+export function ModelIcon({ size = 16 }: IconProps): JSX.Element {
+  return (
+    <svg {...frame(size)}>
+      <rect x="6" y="6" width="12" height="12" rx="2.5" />
+      <path d="M10 3v3M14 3v3M10 18v3M14 18v3M3 10h3M3 14h3M18 10h3M18 14h3" />
+    </svg>
+  );
+}
+
+/** How hard it is asked to think — a bulb. */
+export function ThinkingIcon({ size = 16 }: IconProps): JSX.Element {
+  return (
+    <svg {...frame(size)}>
+      <path d="M9.5 17.5h5M10.5 20.5h3" />
+      <path d="M12 3.5a5.8 5.8 0 0 0-3.4 10.5v1.8h6.8v-1.8A5.8 5.8 0 0 0 12 3.5z" />
     </svg>
   );
 }

@@ -21,6 +21,7 @@ import {
   optionDescription,
   optionLabel,
   shortenFolder,
+  taskLocationLabel,
   resolveSendBehaviour,
   sendLabel,
   thinkingNote,
@@ -697,6 +698,35 @@ describe("shortening a folder for the pill", () => {
     // Two segments or fewer is already short enough to show whole.
     expect(shortenFolder("/repo", "/repo")).toBe("/repo");
     expect(shortenFolder("/repo")).toBe("/repo");
+  });
+});
+
+/**
+ * **Where the task runs, as the header's chip names it.**
+ *
+ * The rule has three cases and the middle one is the reason it is a function: the chip is the only place that
+ * names the project, so a task inside the project has to keep the project's name in front of the part below it.
+ * (`shortenFolder` above drops it, which was right for the composer's pill — the pill sat under a header that
+ * named the project — and is wrong here, which is why the two are separate functions rather than one.)
+ */
+describe("naming the task's location in the header", () => {
+  const project = { label: "payments-api", path: "/Users/dev/work/payments-api" };
+
+  it("uses the project's own name when the task runs in the project's folder", () => {
+    expect(taskLocationLabel("/Users/dev/work/payments-api", project)).toBe("payments-api");
+    // A trailing separator, as a copy from Finder carries.
+    expect(taskLocationLabel("/Users/dev/work/payments-api/", project)).toBe("payments-api");
+  });
+
+  it("keeps the project's name in front of the part below it", () => {
+    expect(taskLocationLabel("/Users/dev/work/payments-api/packages/api", project)).toBe(
+      "payments-api/packages/api",
+    );
+  });
+
+  it("falls back to the tail for a folder that is not in the project, and copes with no project", () => {
+    expect(taskLocationLabel("/elsewhere/deep/api", project)).toBe("…/deep/api");
+    expect(taskLocationLabel("/Users/dev/work/other", undefined)).toBe("…/work/other");
   });
 });
 

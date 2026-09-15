@@ -526,6 +526,30 @@ export function shortenFolder(cwd: string, projectPath?: string): string {
 }
 
 /**
+ * **Where this task runs, in the few characters a chip has room for** — the header's location control.
+ *
+ * Three cases, and the third is why this is a function rather than a `.label ?? basename(cwd)`:
+ *
+ *   * the task runs in its project's own folder → the project's label, which is the name the user gave it;
+ *   * the task runs *inside* the project (a monorepo package, a worktree checked out under it) → the project's
+ *     label **and the part below it** (`payments-api/packages/api`). The header's chip is the only place naming
+ *     the project, so a relative path with the project dropped would leave a reader unable to tell where they are;
+ *   * anywhere else → the last two segments with a leading ellipsis, because a chip cannot show a path and the end
+ *     of one is what a reader recognises.
+ *
+ * The whole path is always in the chip's `title`, so nothing is hidden by the shortening — and this is the rule
+ * the composer's old folder pill used, moved to the header along with the control (§7.32).
+ */
+export function taskLocationLabel(cwd: string, project: { label: string; path: string } | undefined): string {
+  if (project === undefined) return shortenFolder(cwd, undefined);
+  const clean = cwd.replace(/\\/g, "/").replace(/\/+$/, "");
+  const root = project.path.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (clean === root) return project.label;
+  if (root !== "" && clean.startsWith(`${root}/`)) return `${project.label}/${clean.slice(root.length + 1)}`;
+  return shortenFolder(cwd, undefined);
+}
+
+/**
  * The send button's text, from the behaviour and the run's state.
  *
  * Paseo's own chain: `Interrupt agent` while loading, `Queue message` when it will wait,

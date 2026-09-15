@@ -188,8 +188,8 @@ export const en = {
      report was exact: *"These texts are useless, but make the chats inputting messy."* A control that
      cannot be used still says why: **on itself**, as its tooltip and its `aria-describedby`, rather than
      as a paragraph about it (`docs/settings-parity.md` §7.30). */
+  "task.composer.value.default": "Default",
   "task.composer.appliesNextRun": "Applies to the next run.",
-  "task.composer.folder.label": "Folder",
   "task.composer.folder.aria": "Change this task's folder",
   "task.composer.folder.noPicker":
     "This window has no folder chooser, so this task's folder cannot be changed here.",

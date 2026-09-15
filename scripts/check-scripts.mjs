@@ -24,7 +24,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { readdirSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -53,7 +53,63 @@ for (const file of files) {
   } catch (error) {
     const output = `${error.stdout ?? ""}${error.stderr ?? ""}`.trim();
     failures.push({ file: path.relative(root, file), output });
+    continue;
   }
+  // Parsing is not enough for the page scripts: see `strayBacktick`.
+  const problems = strayBacktick(readFileSync(file, "utf8"));
+  if (problems.length > 0) {
+    failures.push({ file: path.relative(root, file), output: problems.join("\n") });
+  }
+}
+
+/**
+ * **A page script may not contain a stray backtick, and this is the rule that catches it.**
+ *
+ * `evaluate(\`…\`)` passes a *template literal*, and a backtick inside the script — in a comment, usually, as
+ * `` `<select>` `` — ends the template early. What follows is then ordinary script text, and whether that parses is
+ * luck: the failure appears at *runtime*, as a `ReferenceError` from a name the page never had, when the tool is
+ * next run. This happened three times in one afternoon (`audit-ui.mjs` was shipped in that state).
+ *
+ * The check is the shape of the call: after the first closing backtick that follows `evaluate(`, the next
+ * non-space character has to be `)`. A template that ended early leaves something else there — the remains of the
+ * page script — which is exactly what is reported.
+ */
+function strayBacktick(text) {
+  const problems = [];
+  // Only the calls whose argument *is* a template: `evaluate(JSON.stringify(...))` is not one of these.
+  const opener = /evaluate\(\s*`/g;
+  let match;
+  while ((match = opener.exec(text)) !== null) {
+    const start = match.index + match[0].length;
+    // **The first *unescaped* backtick.** `\`` inside the page script is an escape sequence and does not end the
+    // template (three of these files legitimately write one), so a plain `indexOf` reports them as failures —
+    // which is how this rule first announced three tools that are all perfectly fine.
+    let end = start;
+    while (end < text.length) {
+      if (text[end] === "\\") {
+        end += 2;
+        continue;
+      }
+      if (text[end] === "`") break;
+      end += 1;
+    }
+    if (end >= text.length) {
+      problems.push("evaluate( template is never closed");
+      break;
+    }
+    const after = text.slice(end + 1).match(/\S/);
+    // `)` or `,` — a trailing comma or a second argument are both ordinary calls.
+    if (after?.[0] !== ")" && after?.[0] !== ",") {
+      const line = text.slice(0, start).split("\n").length;
+      problems.push(
+        `the template opened near line ${String(line)} ends at line ${String(
+          text.slice(0, end).split("\n").length,
+        )} and the next character is ${JSON.stringify(after?.[0] ?? "")} rather than ")" — a stray backtick inside the page script`,
+      );
+    }
+    opener.lastIndex = end + 1;
+  }
+  return problems;
 }
 
 if (failures.length > 0) {

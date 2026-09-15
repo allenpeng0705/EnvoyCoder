@@ -37,8 +37,16 @@ import {
 import { useI18n } from "../i18n/context.js";
 
 export interface ModelChoiceProps {
-  /** The id of the visible label element, which is this control's accessible name. */
-  labelId: string;
+  /**
+   * The id of the visible label element — **or, on a surface with no room for one, `ariaLabel`.**
+   *
+   * Exactly one of the two, and the pair exists because the two surfaces differ: the settings pane draws a title
+   * beside the control, so the name is `aria-labelledby` pointing at it (one name on screen and one announced);
+   * the composer's toolbar is chips with no labels at all, so there the control is named directly. A control with
+   * neither is a control a screen reader reads as "combobox".
+   */
+  labelId?: string;
+  ariaLabel?: string;
   kind: "listed" | "free-text" | "none";
   options: readonly ComposerModel[];
   /** The stored value, provider-qualified. `undefined` means "the agent's own default". */
@@ -60,6 +68,14 @@ export interface ModelChoiceProps {
   onChoose: (id: string) => void;
   /** Only the input's own class differs between surfaces; the shape does not. */
   inputClassName?: string;
+  /**
+   * The `select`'s class, for the surface that draws the picker as a **toolbar chip** rather than a form field.
+   *
+   * The composer's row is a toolbar (icons and values, no labels, no boxes), and the settings pane's row is a
+   * form — the same control, two skins, and one place that decides how a model is chosen. Defaults to the
+   * form's `.select`, so a caller that says nothing gets the settings look.
+   */
+  fieldClassName?: string;
 }
 
 export function ModelChoice(props: ModelChoiceProps): JSX.Element {
@@ -91,7 +107,8 @@ export function ModelChoice(props: ModelChoiceProps): JSX.Element {
         // The visible span labels both shapes, exactly as it does for a `<select>`: `aria-labelledby`
         // rather than a second `aria-label`, so the name a screen reader announces and the one on screen
         // cannot drift apart.
-        aria-labelledby={props.labelId}
+        {...(props.labelId !== undefined ? { "aria-labelledby": props.labelId } : {})}
+        {...(props.ariaLabel !== undefined ? { "aria-label": props.ariaLabel } : {})}
         {...(props.descriptionId !== undefined ? { "aria-describedby": props.descriptionId } : {})}
         disabled={props.off !== undefined}
         placeholder={t("task.composer.model.placeholder")}
@@ -111,20 +128,25 @@ export function ModelChoice(props: ModelChoiceProps): JSX.Element {
 
   return (
     <select
-      className="select"
+      className={props.fieldClassName ?? "select"}
       // Enabled only when the wire said the daemon can put this agent on a chosen model. An agent that
       // publishes models it cannot be *set* to keeps the control visible and disabled, with the reason
       // on the next line.
       disabled={props.off !== undefined}
-      aria-labelledby={props.labelId}
+      {...(props.labelId !== undefined ? { "aria-labelledby": props.labelId } : {})}
+      {...(props.ariaLabel !== undefined ? { "aria-label": props.ariaLabel } : {})}
       {...(props.descriptionId !== undefined ? { "aria-describedby": props.descriptionId } : {})}
       title={props.title}
       value={props.selected ?? ""}
       onChange={(event) => props.onChoose(event.target.value)}
     >
-      {/* "The agent's own default" is a choice, not an empty slot: it is the state a task is in before
-          anybody picks, and picking it is how a user undoes a model they chose. */}
-      <option value="">{t("task.composer.model.agentDefault")}</option>
+      {/* "The agent's own default" is a choice, not an empty slot: it is the state a task is in before anybody
+          picks, and picking it is how a user undoes a model they chose. Its *text* is the short form because this
+          control is a chip on the composer's toolbar, where one line is all there is; the sentence that explains
+          whose default it is is the option's tooltip (`task.composer.model.agentDefault`). */}
+      <option value="" title={t("task.composer.model.agentDefault")}>
+        {t("task.composer.value.default")}
+      </option>
       {props.options.map((model) => (
         <option key={model.id} value={model.id} title={model.description}>
           {model.label}

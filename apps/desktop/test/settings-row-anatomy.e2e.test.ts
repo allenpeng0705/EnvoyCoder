@@ -113,7 +113,14 @@ interface Report {
    * **The composer's prose, as the lines it draws** — the thing the owner complained about, in numbers:
    * *"These texts are usless, but make the chats inputting messy."* Zero lines for a task with nothing running.
    */
-  composer: { present: boolean; notes: readonly string[] };
+  composer: {
+    present: boolean;
+    notes: readonly string[];
+    fieldWidth: number | null;
+    cardWidth: number | null;
+    chips: readonly { label: string; height: number; border: string }[];
+    actionsSameRowAsChips: boolean | null;
+  };
   /**
    * **Every text-bearing element on the page**, not only the chips and small print the narrower `contrast` list
    * samples. It exists because that list reported zero failures in the light palette while the page still had text
@@ -411,13 +418,24 @@ describeWhen("the work surface, measured in a real window", () => {
 });
 
 describeWhen("the composer, measured in a real window", () => {
-  it("draws no line of prose above the field for a task with nothing running", () => {
+  it("is a 28px toolbar under the field, with no prose of its own", () => {
     // The measurement boots its own daemon with a seeded project and task, opens it, and counts the lines the
     // composer draws under its controls. Before §7.30 this page had two — a window with no folder chooser, and Envoy
     // Harness's missing thinking level, 126 characters in all — and the owner's own window had four while a turn was
     // running, one per control, each saying the same thing.
     expect(workReport.composer.present).toBe(true);
     expect(workReport.composer.notes).toEqual([]);
+    // **And that it is Paseo's shape rather than a form.** The field owns the row, the chips are 28px with no
+    // border at all (a border per control is what made the old row read as furniture), and they sit on the same
+    // line as the send button. These are the numbers behind *"can the others fields use the same style with
+    // paseo"*; the compositor's own doc in `styles.css` argues the rest.
+    expect(workReport.composer.fieldWidth).toBeGreaterThan((workReport.composer.cardWidth ?? 0) - 40);
+    expect(workReport.composer.chips.length).toBeGreaterThanOrEqual(3);
+    for (const chip of workReport.composer.chips) {
+      expect(chip.height, `${chip.label} is not a 28px chip`).toBe(28);
+      expect(chip.border, `${chip.label} draws a border`).toBe("0px");
+    }
+    expect(workReport.composer.actionsSameRowAsChips).toBe(true);
     console.log(
       `· composer measured: ${String(workReport.composer.notes.length)} note line(s) above the field, ` +
         `${String(workReport.composer.notes.reduce((n, line) => n + line.length, 0))} characters`,

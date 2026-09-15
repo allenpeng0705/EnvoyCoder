@@ -1003,6 +1003,50 @@ const report = await evaluate(`(() => {
     composer: {
       present: document.querySelector(".composer") !== null,
       notes: [...document.querySelectorAll(".composer__control-note")].map((node) => ownText(node)),
+      /**
+       * **The row's geometry**, because "it looks like the reference product" is a claim about boxes.
+       *
+       * Paseo's composer is a field with one button row under it: the controls at the left, the action at the
+       * right, 28px chips with no borders. These numbers say whether this one is that shape — the field's width
+       * against the card's, the chips' height, and whether the chips and the send button share a row (their
+       * vertical centres within a few pixels).
+       */
+      fieldWidth: (() => {
+        const field = document.querySelector(".composer__input");
+        return field === null ? null : Math.round(field.getBoundingClientRect().width);
+      })(),
+      cardWidth: (() => {
+        const card = document.querySelector(".composer__card");
+        return card === null ? null : Math.round(card.getBoundingClientRect().width);
+      })(),
+      chips: [...document.querySelectorAll(".composer__chip")].map((node) => ({
+        // **What the chip *shows*, not what is inside it.** A select's text content is every option
+        // concatenated — "Default Plan Review" for a mode picker — which is not the value on screen; the
+        // instrument would be reporting the wrong fact about a row it is being used to judge.
+        label: (() => {
+          const select = node.querySelector("select");
+          if (select !== null) {
+            const shown = (select.selectedOptions?.[0]?.textContent ?? "").trim();
+            return (shown === "" ? ownText(node) : shown).slice(0, 24);
+          }
+          const input = node.querySelector("input");
+          if (input !== null) return (input.value !== "" ? input.value : input.placeholder).slice(0, 24);
+          return ownText(node).slice(0, 24);
+        })(),
+        height: Math.round(node.getBoundingClientRect().height),
+        // A border is what made the old row read as a form: the reference product draws none.
+        border: getComputedStyle(node).borderTopWidth,
+      })),
+      actionsSameRowAsChips: (() => {
+        const chips = [...document.querySelectorAll(".composer__chip")];
+        const send = document.querySelector(".composer__toolbar-actions button");
+        if (chips.length === 0 || send === null) return null;
+        const center = (node) => {
+          const box = node.getBoundingClientRect();
+          return box.top + box.height / 2;
+        };
+        return Math.abs(center(chips[0]) - center(send)) <= 4;
+      })(),
     },
     // The whole page, in both palettes — see contrastAll for why the narrower list was not enough.
     contrastAll: {

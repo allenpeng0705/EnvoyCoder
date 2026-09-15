@@ -412,14 +412,25 @@ describe("the new chat, which is where a session starts", () => {
 describe("the folder control", () => {
   const nested = { ...task, cwd: "/repo/packages/api" };
 
-  it("shows the folder relative to the project, with the whole path in the title", () => {
+  it("names where the task runs — the project, and the part of it below the project", () => {
+    // **Moved here from the composer, and this is why.** The task's folder used to be a pill above the message
+    // box carrying the path, which the owner read as *"we needn't to show the folder path on the inputting
+    // field"*: the header is where the location belongs, and the composer's row is a toolbar of agent settings
+    // now. The chip is the control too, so the place and the way to change it are the same thing.
     renderPane([], { task: nested });
-    const pill = screen.getByLabelText("Change this task's folder");
-    // Relative, because that is the shape a user recognises: the project is already named in the header.
-    expect(pill.textContent).toBe("packages/api");
+    const chip = screen.getByLabelText("Change this task's folder");
+    // The project's label is part of it: this chip is the only place naming the project, so `packages/api`
+    // alone would leave a reader unable to tell which project they are in.
+    expect(chip.textContent).toBe("payments-api/packages/api");
     // Nothing is hidden: the full path is one hover away. (The title *contains* it rather than being it, because
     // a window with no chooser appends the reason to the same hover — see the leg below.)
-    expect(pill.getAttribute("title")).toContain("/repo/packages/api");
+    expect(chip.getAttribute("title")).toContain("/repo/packages/api");
+  });
+
+  it("says the project's own name when the task runs in the project's folder", () => {
+    // The third case of `taskLocationLabel`: no repetition of a path the user already gave a name to.
+    renderPane([], { task });
+    expect(screen.getByLabelText("Change this task's folder").textContent).toBe("payments-api");
   });
 
   it("is disabled with the reason on itself when this window has no chooser", () => {
@@ -440,6 +451,26 @@ describe("the folder control", () => {
     // point is that the *reason* is not a second one.
     const notes = [...document.querySelectorAll(".composer__control-note")];
     expect(notes.map((node) => node.textContent)).toEqual(["Applies to the next run."]);
+  });
+
+  it("shows a failed chooser under the header, where the press was", async () => {
+    // §7.27's rule, moved with the control: the picker refusing is news the user caused, so it is read at the
+    // chip — not as a paragraph above the message box (which no longer exists for the folder) and not in the
+    // window's own bar. The shell here lends a picker that resolves with nothing, so the pane reports why.
+    // A shell whose chooser *throws* — the other failure shape, where `pickFolder` answers `unavailable` rather
+    // than `cancelled` (a closed dialog is not an error, and the leg above pins that).
+    lendShell(async () => {
+      throw new Error("zenity: command not found");
+    });
+    renderPane([], { task: nested, onChangeFolder: vi.fn() });
+    fireEvent.click(screen.getByLabelText("Change this task's folder"));
+
+    await waitFor(() => expect(document.querySelector(".pane__notice")).toBeTruthy());
+    expect(document.querySelector(".pane__notice")?.textContent ?? "").toMatch(/could not open/i);
+    // The composer drew nothing about the folder for it. (`renderPane` renders a live run, so the row's own
+    // "applies to the next run" line is there — the point is that the *failure* is not.)
+    const notes = [...document.querySelectorAll(".composer__control-note")].map((node) => node.textContent);
+    expect(notes).toEqual(["Applies to the next run."]);
   });
 
   it("changes the folder through the shell's picker when there is one", async () => {
@@ -607,8 +638,10 @@ describe("the model control", () => {
     expect(picker.disabled).toBe(false);
     // The empty option is first and is the state a task is in before anybody chooses — an agent running
     // on whatever it defaults to. It is a *choice* here, and picking it is how a user undoes a model.
+    // The first choice reads **short** because this control is a chip on the composer's toolbar now, where one
+    // line is all there is; the sentence that explains whose default it is is the option's own tooltip.
     expect([...picker.options].map((option) => option.textContent)).toEqual([
-      "The agent's own default",
+      "Default",
       "gpt-4o",
       "claude-sonnet-4-6",
       "deepseek-chat",
@@ -617,6 +650,7 @@ describe("the model control", () => {
       "qwen-plus",
       "llama3.1",
     ]);
+    expect(picker.options[0]?.title).toBe("The agent's own default");
     expect(picker.value).toBe("");
     for (const option of [...picker.options]) {
       // The id is the value, because it is what the task stores and what the daemon resolves.
@@ -773,7 +807,7 @@ describe("the thinking control", () => {
     // The agent's own words, untranslated, because they are the values it validates: `Off` is not German
     // in German, it is what the agent accepts.
     expect([...picker.options].map((option) => option.textContent)).toEqual([
-      "The agent's own default",
+      "Default",
       "Off",
       "Low",
       "High",
@@ -934,7 +968,7 @@ describe("the model control when the list came from a session", () => {
     const picker = screen.getByLabelText("Model") as HTMLSelectElement;
     expect(picker.tagName).toBe("SELECT");
     expect([...picker.options].map((option) => option.textContent)).toEqual([
-      "The agent's own default",
+      "Default",
       "DeepSeek-V4-Flash",
       "DeepSeek-V4-Pro",
     ]);

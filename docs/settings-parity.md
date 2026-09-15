@@ -3859,6 +3859,79 @@ A **live** badge is the alternative and was declined rather than half-done: it n
 when its connection count moves and the window to re-read `hello` (a new event kind plus a refetch), which is real
 work for a number with nothing to act on. Recorded here so the next reader knows it was a decision.
 
+### 7.32 The composer's row was a form; Paseo's is a toolbar, and the folder belongs in the header
+
+The owner, looking at the row above the message box:
+
+> *"we needn't to show the folder path on the inputting field, and can the others fields use the same style with
+> paseo. The current style on the top of inputting field are too ugly and nosing."*
+
+Two changes, and the second is the larger one.
+
+#### 7.32.1 The folder left the composer
+
+The row carried a pill reading `Folder  packages/api` — the task's path, truncated, in the one place a path is least
+worth reading: it competes with the message being typed, and it was the longest thing on the row. The location
+already has a home: the pane's **header**, where it was a passive chip showing the project's name with the path in
+its title. That chip is now **the control** — a folder glyph and the project's name, the whole path in the tooltip,
+and a press opens the chooser — so the place and the way to change it are one thing, and the composer talks about
+the agent and nothing else.
+
+Two details came with the move, both from rules this document already holds. The header chip names a task running
+in a *sub*folder as `payments-api/packages/api` rather than `packages/api` (`taskLocationLabel`): the header is the
+only place naming the project, so a bare relative path would leave a reader unable to tell where they are. And a
+chooser that *fails* says so on a line under the chip — §7.27's rule, that a refusal is read where the press was —
+rather than as a paragraph above the field.
+
+#### 7.32.2 The row is a toolbar now: glyph, value, no label, no box
+
+The three remaining controls were labelled form controls — `Mode [select]`, `Model [select]`, `Thinking [select]`,
+each with a border and a fill, each with its name to the left. That is a settings form sitting on top of a message
+box. The reference product's composer row is a **toolbar** (`composer/agent-controls/control.tsx`: 28px chips, a
+muted glyph, the value beside it, a caret only where the control opens something, a faint fill on hover and nothing
+at rest) — and the labels a form would put beside each control live on the controls instead, as their accessible
+names and tooltips.
+
+Three marks were added (`icons.tsx`), and the row moved **under the field**, which is where Paseo keeps it: its
+`buttonRow` holds the attach button and the agent's controls at the left and the action at the right
+(`composer/input/input.tsx`). Ours now reads: field, then one row — chips on the left, the queue/steer picker, the
+keyboard hint and Send on the right.
+
+Measured in a real window, in both palettes, by an instrument extended for the question ("it looks like the
+reference product" is a claim about boxes):
+
+```console
+$ node scripts/measure-settings.mjs --section work --seed --open "the task the tool measures"
+composer: field 802 / card 820        # the field owns the row
+          chips: 3 × height 28, border 0px
+          actionsSameRowAsChips: true
+          notes: 0                    # §7.30's line, which is the only prose left
+contrastAll.below45: 0 in dark and in light
+```
+
+#### 7.32.3 What the tests hold
+
+`task-pane.test.tsx` walks the moved control (the header chip is the button, the chip names the sub-folder, the
+project's own name where the task runs in it, the reason attached when the window has no chooser, and the failure
+line under the header); `composer-notes.test.tsx` asserts the composer **no longer renders the folder at all** —
+not the path, not its failures — and that a disabled control's reason is still on the control;
+`composer-controls.test.ts` unit-tests `taskLocationLabel`'s three cases. The real-window leg asserts the geometry
+above, and three mutations — chips at 34px, a border put back, the actions stacked under the chips — each redden it.
+
+The unset value reads **`Default`** on the chip rather than "The agent's own default", with the sentence as the
+option's tooltip: a chip has one line, and the sentence that explains whose default it is belongs where a user is
+reading a list. Three chips can therefore read `Default` at once on a brand-new task, which the distinct glyphs,
+the tooltips and the accessible names carry.
+
+#### 7.32.4 And the instrument had the same bug for the third time
+
+The measurement had to be extended to name what a chip *shows* (a `<select>`'s text content is every option
+concatenated — "Default Plan Review" for a mode picker), and writing that comment put an unescaped backtick inside
+a page script for the **third** time in this session. `scripts/check-scripts.mjs` now catches that class: it scans
+every `evaluate(\`…\`)` call and requires the template to close where the call ends, allowing an escaped
+`` \` `` (three files legitimately contain one) and a trailing comma. Verified both ways — clean on the tree, and
+red when the mistake is put back.
+
 ## 8. The slice plan
 
 Ordered, and ordered by *cheapness times usefulness* rather than by Paseo's section order. Each slice

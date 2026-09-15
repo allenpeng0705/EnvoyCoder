@@ -43,10 +43,6 @@ afterEach(cleanup);
 
 /** Every control working, no turn running — the state in which the composer should say nothing at all. */
 const WORKING: ComposerControlsProps = {
-  cwd: "/Users/you/work/api",
-  projectPath: "/Users/you/work/api",
-  canChooseFolder: true,
-  onChooseFolder: vi.fn(),
   modes: [{ id: "plan", label: "Plan" }],
   selectedModeId: "plan",
   onChooseMode: vi.fn(),
@@ -98,7 +94,9 @@ describe("the composer's notes", () => {
     const reason = en["task.composer.thinking.none"].replace("{agent}", "Envoy Harness");
     const picker = screen.getByLabelText(en["task.composer.thinking.label"]) as HTMLSelectElement;
     expect(picker.disabled).toBe(true);
-    expect(picker.title).toBe(reason);
+    // The tooltip is on the **chip**, not on the bare `<select>`: the chip is what a pointer lands on, and a
+    // disabled control inside it takes no hover of its own.
+    expect(picker.closest(".composer__chip")?.getAttribute("title")).toBe(reason);
     const describedBy = picker.getAttribute("aria-describedby");
     expect(describedBy).toBe("composer-thinking-reason");
     expect(document.getElementById(describedBy as string)?.textContent).toBe(reason);
@@ -118,9 +116,9 @@ describe("the composer's notes", () => {
     });
 
     // The mode and the model are described by their own reasons…
-    expect(screen.getByLabelText(en["task.composer.agentMode.label"]).title).toBe(
-      en["task.composer.agentMode.none"].replace("{agent}", "Envoy Harness"),
-    );
+    expect(
+      screen.getByLabelText(en["task.composer.agentMode.label"]).closest(".composer__chip")?.getAttribute("title"),
+    ).toBe(en["task.composer.agentMode.none"].replace("{agent}", "Envoy Harness"));
     expect(document.getElementById("composer-model-reason")?.textContent).toBe(
       en["task.composer.model.none"].replace("{agent}", "Envoy Harness"),
     );
@@ -130,26 +128,13 @@ describe("the composer's notes", () => {
     expect(notes()).toEqual([]);
   });
 
-  it("keeps the visible line for a failure the user just caused", () => {
-    // §7.27's rule, and the half of this that must not be traded away for tidiness: a press that failed is read
-    // where the press was. The chooser would not open, so the composer says so — and says nothing else.
-    show({ folderProblem: "zenity is not installed", running: true });
-    expect(notes()).toEqual([en["palette.pickerFailed"].replace("{detail}", "zenity is not installed")]);
-  });
-
-  it("describes a window with no chooser instead of repeating a line about it", () => {
-    // A permanent property of the window, not news: it goes on the pill (title + description) and the line is left
-    // for something the user has to act on.
-    show({ canChooseFolder: false });
-    const pill = screen.getByLabelText(en["task.composer.folder.aria"]);
-    // Both facts from the same hover: the whole path, and why the control is off.
-    expect(pill.title).toContain(en["task.composer.folder.noPicker"]);
-    expect(pill.title).toContain("/Users/you/work/api");
-    expect(pill.getAttribute("aria-describedby")).toBe("composer-folder-reason");
-    expect(document.getElementById("composer-folder-reason")?.textContent).toBe(
-      en["task.composer.folder.noPicker"],
-    );
-    expect(notes()).toEqual([]);
+  it("no longer carries the folder at all — not the path, and not its failures", () => {
+    // **The owner's first half.** *"we needn't to show the folder path on the inputting field"*: the folder,
+    // its path, the chooser and the chooser's failures belong to the pane's header now (`task-pane.test.tsx`),
+    // and this row is a toolbar of agent settings.
+    show({ running: true });
+    expect(screen.queryByLabelText(en["task.composer.folder.aria"])).toBeNull();
+    expect(document.body.textContent ?? "").not.toContain("/Users/you/work/api");
   });
 
   it("gives the line to the probe when there is an action to take", () => {
@@ -174,8 +159,8 @@ describe("the composer's notes", () => {
     const states: Partial<ComposerControlsProps>[] = [
       {},
       { running: true },
-      { running: true, folderProblem: "the dialog would not open" },
-      { canChooseFolder: false },
+      // The folder's own states are the pane header's now, and covered by `task-pane.test.tsx`.
+      { running: true, probeNote: { message: "The agent answered and published nothing." } },
       { modeOff: { key: "task.composer.agentMode.unknown", values: { agent: "Codex" } }, running: true },
       {
         modelOff: { key: "task.composer.model.unknown", values: { agent: "Codex" } },
