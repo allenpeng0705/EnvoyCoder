@@ -2949,7 +2949,38 @@ route has nothing to install and `installFix` is legitimately absent — the liv
 field's *absence* for the right reason rather than its presence. The rendering is asserted in jsdom, the projection
 by the table test, and a machine missing its bridge is where a user meets it.
 
-#### 7.21.3 Measured, live, on this machine
+#### 7.21.3 The offer is made only where it can be kept
+
+The owner's next report, and it was the pane's own law being broken rather than a matter of taste: *"For the 'Ready'
+status agent, why they still have 'Run it through npx'?"*
+
+The control was drawn for **every** row the daemon could write, because the only thing it checked was whether the
+method existed. So it appeared — and could only fail — in two different ways at once:
+
+* on a **Ready** row, where the installed route is working and there is no problem to route around;
+* on **Envoy Harness**, **DeepSeek Harness** and **Cursor Agent**, whose adapters are in this repository — there is
+  no package to fetch, and the press could only come back `connector-not-fetchable`, a refusal a user can do nothing
+  with.
+
+Two fixes, and the first is the kind that has to be a *fact on the wire* rather than a rule in the window: the
+window cannot invent a package name, so `HarnessSummary.fetchable` now carries the one the catalogue knows
+(present for the two bridges, absent for the seven built-ins), and `HarnessSummarySchema` refuses a fetched delivery
+that does not name it. The second is the rule itself — the offer is made in exactly one case:
+
+| the row | the control |
+|---|---|
+| delivery is `npx` | *Use the installed copy* — always valid: it forgets the choice |
+| `needs-bridge` (the agent is here, the piece that drives it is not) **and** the connector is on npm | *Run it through npx* — the route that resolves this row without installing anything |
+| Ready, `installed` | **nothing** — there is nothing to route around |
+| `not-installed` (the agent itself is missing too) | **nothing** — fetching only the connector leaves the row exactly as unusable, and an offer that does not resolve the row is not an offer |
+| no npm connector, or a daemon without the method | **nothing** |
+
+Three legs in `settings-agent-verdict.test.tsx` (*is not drawn on a Ready row, or on one whose connector is not on
+npm*; *… on a row that is missing the agent itself*; and the existing cannot-work leg), one in
+`agent-delivery.test.ts` for the fact travelling, and one parse in `packages/protocol/test/rpc.test.ts` for the
+fetched-delivery-without-a-package refusal. Gates: **885 passed / 7 skipped**, 12 Rust tests.
+
+#### 7.21.4 Measured, live, on this machine
 
 ```console
 $ …coder.hello            → advertises coder.setAgentDelivery, 32 methods

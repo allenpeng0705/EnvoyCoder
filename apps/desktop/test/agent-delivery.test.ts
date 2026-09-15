@@ -45,7 +45,7 @@ const ADAPTER = "npm install -g @agentclientprotocol/codex-acp";
 async function summariseFor(
   finding: { state: "needs-bridge" | "ready"; fix?: { command: string }[] },
   delivery: "installed" | "npx",
-): Promise<HarnessSummary | undefined> {
+): Promise<HarnessSummary[]> {
   const home = await mkdtemp(join(tmpdir(), "envoycoder-delivery-"));
   cleanups.push(() => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
   const paths = coderPaths(home);
@@ -73,12 +73,13 @@ async function summariseFor(
   });
 
   const answer = (await handlers["coder.listHarnesses"]?.({})) as { harnesses: HarnessSummary[] };
-  return answer.harnesses.find((summary) => summary.id === "codex");
+  return answer.harnesses;
 }
 
 describe("the install command on a row that fetches its connector", () => {
   it("keeps the command, so a user can install it themselves", async () => {
-    const codex = await summariseFor({ state: "needs-bridge", fix: [{ command: ADAPTER }] }, "npx");
+    const rows = await summariseFor({ state: "needs-bridge", fix: [{ command: ADAPTER }] }, "npx");
+    const codex = rows.find((summary) => summary.id === "codex");
     expect(codex?.delivery).toEqual({ kind: "npx", package: "@agentclientprotocol/codex-acp" });
     // The command the catalogue carries, verbatim — the same string the fix block would have shown, which is what
     // makes the text and the press one answer rather than two.
@@ -86,18 +87,26 @@ describe("the install command on a row that fetches its connector", () => {
     // And the route in force is the fetched one: the probe followed the delivery, so the row is `ready` through
     // `npx` rather than through the bridge this fixture says is missing.
     expect(codex?.availability.state).toBe("ready");
+    // **The offer travels too**, because the window cannot invent a package name — without it, every row the
+    // daemon could write drew a *Run it through npx* press, including Envoy Harness, whose press could only come
+    // back `connector-not-fetchable`. That is the owner's report: *"For the 'Ready' status agent, why they still
+    // have 'Run it through npx'?"*
+    expect(codex?.fetchable).toEqual({ package: "@agentclientprotocol/codex-acp" });
+    // An agent whose adapter lives in this repository has no offer at all.
+    const builtIn = rows.find((summary) => summary.id === "envoy-harness");
+    expect(builtIn?.fetchable).toBeUndefined();
   });
 
   it("sends none when there is nothing to install", async () => {
     // The ordinary delivery, and the connector already here: an install command on this row would invite a user to
     // reinstall a program the row just said was working — the contradiction `HarnessSummarySchema` refuses.
-    const installed = await summariseFor({ state: "ready" }, "installed");
+    const installed = (await summariseFor({ state: "ready" }, "installed")).find((row) => row.id === "codex");
     expect(installed?.installFix).toBeUndefined();
     expect(installed?.delivery).toEqual({ kind: "installed" });
 
     // And a fetched row whose connector is *also* installed carries none either: the same rule, from the state
     // side rather than the delivery side.
-    const fetchedButPresent = await summariseFor({ state: "ready" }, "npx");
+    const fetchedButPresent = (await summariseFor({ state: "ready" }, "npx")).find((row) => row.id === "codex");
     expect(fetchedButPresent?.installFix).toBeUndefined();
     expect(fetchedButPresent?.delivery).toEqual({ kind: "npx", package: "@agentclientprotocol/codex-acp" });
   });

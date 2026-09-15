@@ -705,12 +705,13 @@ describe("telling the window and its daemon apart", () => {
     };
     const install = [{ command: "npm install -g @agentclientprotocol/codex-acp" }];
 
-    // A fetched row carries the command that would install it here instead.
+    // A fetched row carries the command that would install it here instead — and the offer it came from.
     expect(
       HarnessSummarySchema.safeParse({
         ...base,
         delivery: { kind: "npx", package: "@agentclientprotocol/codex-acp" },
         installFix: install,
+        fetchable: { package: "@agentclientprotocol/codex-acp" },
       }).success,
     ).toBe(true);
     // A fetched row without it is refused: the text cannot be dropped from a row that is fetching.
@@ -726,6 +727,23 @@ describe("telling the window and its daemon apart", () => {
     ).toBe(false);
     // A daemon older than the field is unaffected — no delivery, no install commands, and that parses.
     expect(HarnessSummarySchema.safeParse(base).success).toBe(true);
+    // **And the offer has to be on the wire for a fetched row.** The window cannot invent a package name, so a
+    // fetched delivery without `fetchable` is a row that would have to guess what it is fetching — refused here.
+    expect(
+      HarnessSummarySchema.safeParse({
+        ...base,
+        delivery: { kind: "npx", package: "@agentclientprotocol/codex-acp" },
+        installFix: install,
+      }).success,
+    ).toBe(false);
+    expect(
+      HarnessSummarySchema.safeParse({
+        ...base,
+        delivery: { kind: "npx", package: "@agentclientprotocol/codex-acp" },
+        installFix: install,
+        fetchable: { package: "@agentclientprotocol/codex-acp" },
+      }).success,
+    ).toBe(true);
   });
 
   it("does not turn 'says nothing' into 'has nothing'", () => {

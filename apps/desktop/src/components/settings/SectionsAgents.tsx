@@ -432,6 +432,8 @@ function ShippedAgent(props: {
           <DeliveryControl
             harness={harness.id}
             delivery={harness.delivery}
+            {...(harness.fetchable !== undefined ? { fetchable: harness.fetchable } : {})}
+            {...(verdict.reason !== undefined ? { reason: verdict.reason } : {})}
             {...(props.onChooseDelivery !== undefined ? { onChoose: props.onChooseDelivery } : {})}
           />
         </>

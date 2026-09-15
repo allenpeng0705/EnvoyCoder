@@ -90,6 +90,13 @@ export function summarize(
   delivery: AgentDelivery = { kind: "installed" },
   /** The other route's commands — see `HarnessSummary.installFix`; the caller decides when they apply. */
   installFix?: readonly AvailabilityFix[],
+  /**
+   * The npm package this agent's connector could be fetched from, when it has one.
+   *
+   * Read from the catalogue (`bridgePackage`) rather than from anything stored: it is a fact about the *recipe*,
+   * and a stored copy would go stale the day a package is renamed.
+   */
+  fetchable?: { package: string },
 ): HarnessSummary {
   const definition = harnessDefinition(id);
   const result = probe(id);
@@ -158,6 +165,7 @@ export function summarize(
     availability: harnessAvailability(result),
     delivery,
     ...(installFix !== undefined && installFix.length > 0 ? { installFix } : {}),
+    ...(fetchable !== undefined ? { fetchable } : {}),
     // And the third fact: whether it will talk to us, or wants a sign-in first. `authOf` is the one place
     // that turns a record — or the absence of one — into the three-state answer.
     auth: authOf(auth),

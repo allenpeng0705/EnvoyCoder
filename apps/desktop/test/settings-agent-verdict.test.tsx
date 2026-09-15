@@ -752,6 +752,24 @@ describe("choosing how a connector is delivered", () => {
     // delivery is the separate fact that says the first run downloads something.
     availability: { state: "ready" as const, binary: "/usr/local/bin/npx" },
     delivery: { kind: "npx" as const, package: "@agentclientprotocol/codex-acp" },
+    fetchable: { package: "@agentclientprotocol/codex-acp" },
+  };
+
+  /** A **Ready** agent whose connector is installed: the case the owner asked about. */
+  const READY_INSTALLED = {
+    id: "codex" as const,
+    label: "Codex",
+    availability: { state: "ready" as const, binary: "/Users/you/.npm-global/bin/codex-acp" },
+    delivery: { kind: "installed" as const },
+    fetchable: { package: "@agentclientprotocol/codex-acp" },
+  };
+
+  /** An agent whose adapter lives in this repository: there is nothing to fetch, ever. */
+  const BUILT_IN_READY = {
+    id: "envoy-harness" as const,
+    label: "Envoy Harness",
+    availability: { state: "ready" as const, binary: "/usr/local/bin/agent" },
+    delivery: { kind: "installed" as const },
   };
 
   it("says which route is in force, on the line and as a property", () => {
@@ -832,6 +850,9 @@ describe("choosing how a connector is delivered", () => {
               agentBinary: "/usr/local/bin/codex",
               fix: [{ command: ADAPTER }],
             },
+            // The offer needs the package, which the window cannot invent: this is what the daemon sends for an
+            // agent whose connector is published on npm.
+            fetchable: { package: "@agentclientprotocol/codex-acp" },
           }),
         ],
       },
@@ -848,6 +869,58 @@ describe("choosing how a connector is delivered", () => {
     await waitFor(() => expect(calls.some((call) => call.name === "setAgentDelivery")).toBe(true));
     const call = calls.find((entry) => entry.name === "setAgentDelivery");
     expect(call?.args).toEqual(["codex", "npx"]);
+  });
+
+  it("is not drawn on a Ready row, or on one whose connector is not on npm", () => {
+    // **The owner's report:** *"For the 'Ready' status agent, why they still have 'Run it through npx'?"* Two
+    // controls that could not work, in one press: a Ready row has nothing to work around, and an agent whose
+    // adapter lives in this repository has nothing to fetch — its press would come back
+    // `connector-not-fetchable`, which is a refusal a user can do nothing with.
+    const ready = show({ harnesses: [harness(READY_INSTALLED)] }, ["coder.setAgentDelivery"]);
+    const readyRow = rowOf(ready.container, "Codex");
+    expect(verdictOf(readyRow)).toBe(READY);
+    const readyPanel = openDetails(readyRow);
+    expect(textOf(readyPanel).length).toBeGreaterThan(0);
+    expect(
+      [...readyPanel.querySelectorAll("button")].some(
+        (candidate) => candidate.textContent === en["settings.agents.delivery.npx"],
+      ),
+      "a Ready row offered to fetch a connector that is working",
+    ).toBe(false);
+
+    const builtIn = show({ harnesses: [harness(BUILT_IN_READY)] }, ["coder.setAgentDelivery"]);
+    const builtInPanel = openDetails(rowOf(builtIn.container, "Envoy Harness"));
+    expect(
+      [...builtInPanel.querySelectorAll("button")].some(
+        (candidate) => candidate.textContent === en["settings.agents.delivery.npx"],
+      ),
+      "an agent with no npm connector offered to fetch one",
+    ).toBe(false);
+  });
+
+  it("is not drawn on a row that is missing the agent itself, because fetching would not resolve it", () => {
+    // `absent` is the agent missing *and* its connector: fetching the connector alone leaves the row exactly as
+    // unusable, so the offer is not made. The fix block's install command — which names both steps — is where that
+    // row's way out lives.
+    const { container } = show(
+      {
+        harnesses: [
+          harness({
+            id: "codex",
+            label: "Codex",
+            availability: { state: "not-installed", fix: [{ command: "npm install -g @openai/codex" }] },
+            fetchable: { package: "@agentclientprotocol/codex-acp" },
+          }),
+        ],
+      },
+      ["coder.setAgentDelivery"],
+    );
+    const panel = openDetails(rowOf(container, "Codex"));
+    expect(
+      [...panel.querySelectorAll("button")].some(
+        (candidate) => candidate.textContent === en["settings.agents.delivery.npx"],
+      ),
+    ).toBe(false);
   });
 
   it("is not drawn when the daemon does not serve the method", () => {

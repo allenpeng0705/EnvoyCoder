@@ -1201,6 +1201,18 @@ export interface HarnessSummary {
    */
   installFix?: readonly AvailabilityFix[];
 
+  /**
+   * **The npm package this agent's connector could be fetched from** — the *offer*, as opposed to `delivery`,
+   * which is the route in force.
+   *
+   * Present only for an agent whose adapter is published on npm (the two bridges), and absent for the seven whose
+   * adapter is in this repository. The window needs it because it cannot invent a package name: without this field
+   * it drew a *Run it through npx* press on **every** row the daemon could write — including Envoy Harness, whose
+   * press could only ever come back `connector-not-fetchable`. That is a control that cannot work, which this
+   * panes's laws forbid outright (`docs/settings-parity.md` §7.18.2).
+   */
+  fetchable?: { package: string };
+
 }
 
 export const HarnessSummarySchema = z
@@ -1300,6 +1312,8 @@ export const HarnessSummarySchema = z
     // The other route's commands, present **exactly** when the delivery in force is `npx`: with the connector
     // installed there is nothing to install, and offering the command anyway would be an invitation to reinstall
     // a program the row just said was working.
+    // The offer, as opposed to the choice: the package this connector could be fetched from, when there is one.
+    fetchable: z.object({ package: z.string().min(1) }).strict().optional(),
     installFix: z.array(AvailabilityFixSchema).min(1).readonly().optional(),
   })
   .strict()
@@ -1311,6 +1325,13 @@ export const HarnessSummarySchema = z
    */
   .superRefine((value, ctx) => {
     const fetching = value.delivery?.kind === "npx";
+    if (fetching && value.fetchable === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["fetchable"],
+        message: "a fetched delivery must name the package it fetches from",
+      });
+    }
     if (fetching !== (value.installFix !== undefined)) {
       ctx.addIssue({
         code: "custom",

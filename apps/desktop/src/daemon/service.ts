@@ -638,6 +638,9 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
             // `HarnessSummarySchema` refuses any other combination. (An argument, not a spread: a spread is an
             // object-literal form, and this is a call.)
             installFix !== undefined && installFix.length > 0 ? installFix : undefined,
+            // The offer, from the catalogue: what this connector *could* be fetched from. Absent for an agent
+            // whose adapter is in this repository, which is what stops the window drawing a press that cannot work.
+            bridgePackage(id) !== undefined ? { package: bridgePackage(id) ?? "" } : undefined,
           );
         }),
       };

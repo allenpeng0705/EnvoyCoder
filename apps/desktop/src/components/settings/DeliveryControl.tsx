@@ -30,6 +30,21 @@ import { localize, type Refusal } from "../../i18n/notice.js";
 export function DeliveryControl(props: {
   harness: HarnessId;
   delivery: AgentDelivery | undefined;
+  /**
+   * The package this connector could be fetched from — the *offer*, from the wire.
+   *
+   * `undefined` for an agent whose adapter is in this repository, and that absence is what stops this control
+   * drawing a press that could only come back `connector-not-fetchable`.
+   */
+  fetchable?: { package: string };
+  /**
+   * Why the row is not ready, when it is not — from `rowVerdict`'s own reason.
+   *
+   * The offer is made only for `connector`: the agent is here and the piece that drives it is not, which is exactly
+   * the case fetching resolves. A row that is `absent` is missing the **agent** too, so fetching its connector
+   * would leave it just as unusable — and an offer that does not resolve the row is not an offer.
+   */
+  reason?: "connector" | "absent" | "env" | "our-gap" | "unlooked";
   /** `undefined` when the daemon does not serve `coder.setAgentDelivery` — the control is not drawn then. */
   onChoose?: (harness: HarnessId, delivery: "installed" | "npx") => Promise<{ ok: true } | Refusal>;
 }): JSX.Element | null {
@@ -54,6 +69,25 @@ export function DeliveryControl(props: {
 
   if (props.onChoose === undefined) return null;
   const fetching = props.delivery?.kind === "npx";
+  /**
+   * **What this control may offer, and when it may offer nothing.**
+   *
+   * The owner's report, verbatim: *"For the 'Ready' status agent, why they still have 'Run it through npx'?"* They
+   * were pointing at a control that cannot work in two different ways at once, which is the one thing this pane's
+   * laws forbid outright:
+   *
+   *   * **a Ready agent has nothing to work around.** The installed route is working; offering to fetch the same
+   *     connector would be a preference with no problem behind it. (If the user *has* chosen fetching, the row is
+   *     Ready *through* it — and then the offer runs the other way, as it must.)
+   *   * **an agent with no npm connector cannot be fetched at all.** Envoy Harness, DeepSeek Harness and Cursor
+   *     Agent have their adapters in this repository, so `fetchable` is absent and the press would come back
+   *     `connector-not-fetchable` — a refusal the user can do nothing with.
+   *
+   * So the offer is made in exactly one case: the agent is here, the piece that drives it is not, and the catalogue
+   * knows where that piece could be fetched from.
+   */
+  const offerable = props.fetchable !== undefined && props.reason === "connector";
+  if (!fetching && !offerable) return null;
 
   return (
     <div className="settings__agent-delivery">
