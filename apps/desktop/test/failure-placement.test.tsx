@@ -319,6 +319,20 @@ describe("a refused press is read where it was made", () => {
     expect(actions.startRun).not.toHaveBeenCalled();
   });
 
+  it("keeps the rail's toggle out of the top bar, and reachable from the palette", () => {
+    // **Removing a control is only honest if the capability survives it.** The owner asked for the button left of
+    // the app logo to go; the rail is not stranded, because the command palette carries the same action as a row
+    // and `⌘B` is bound to it (`input/shortcuts.ts`, listed on Settings → Keyboard shortcuts).
+    show();
+    const titlebar = document.querySelector(".titlebar") as HTMLElement;
+    expect(titlebar.querySelectorAll("button")).toHaveLength(1);
+    expect(titlebar.textContent ?? "").not.toContain("▤");
+
+    // …and the row is still there, in the palette the window opens with its own button.
+    fireEvent.click(screen.getByRole("button", { name: en["palette.title"] }));
+    expect(screen.getByText(en["palette.toggleRail.title"])).toBeTruthy();
+  });
+
   it("still raises the bar for what the *window* could not do", () => {
     // The boundary. A read that failed is not about a control and has no row to live in, so it keeps the bar —
     // and `error.daemonTooOld` is the case that must never become silent, because the fix it names is a restart.

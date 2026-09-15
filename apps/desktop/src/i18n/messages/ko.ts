@@ -35,9 +35,6 @@ export const ko: Catalogue = {
   /* ── the product, and the machine it is on ── */
   "app.name": "EnvoyCoder",
   "app.thisMachine": "이 컴퓨터",
-  "app.rail.show": "프로젝트 표시",
-  "app.rail.hide": "프로젝트 숨기기",
-  "app.rail.toggle": "프로젝트 레일 표시 전환",
 
   /* ── the connection, said the way a user needs it ── */
   "connection.starting": "시작 중…",

@@ -436,15 +436,13 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
            control behaves normally. */
         onMouseDown={(event) => startWindowDrag(event)}
       >
-        <button
-          type="button"
-          className="button button--ghost button--icon"
-          aria-label={railOpen ? t("app.rail.hide") : t("app.rail.show")}
-          onClick={() => setRailOpen((open) => !open)}
-          title={t("app.rail.toggle")}
-        >
-          ▤
-        </button>
+        {/* **The rail's toggle used to stand here, and it is gone.**
+            The owner: *"I think we don't [need] the icon button at the left side of app logo on the app's window."*
+            It was a `▤` glyph before the mark and the name, which is the one place in the window reserved for
+            *which product this is*. The rail is not stranded without it: `⌘B` toggles it
+            (`input/shortcuts.ts`, listed on *Settings → Keyboard shortcuts*) and the command palette carries
+            *Toggle the project rail* as a row — the same shape the reference product uses for the commands it does
+            not put in its chrome. */}
         {/* **The app's own mark, from the asset the product ships** (`apps/desktop/assets/logo.png`, rendered at
             18px from a 128px copy so a window does not decode a megabyte for a favicon-sized slot). It is
             decorative — `alt=""` — because the name is right beside it and a screen reader that read both would

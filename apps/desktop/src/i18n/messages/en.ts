@@ -32,9 +32,6 @@ export const en = {
   /* ── the product, and the machine it is on ── */
   "app.name": "EnvoyCoder",
   "app.thisMachine": "This machine",
-  "app.rail.show": "Show projects",
-  "app.rail.hide": "Hide projects",
-  "app.rail.toggle": "Toggle the project rail",
 
   /* ── the connection, said the way a user needs it ── */
   "connection.starting": "Starting…",

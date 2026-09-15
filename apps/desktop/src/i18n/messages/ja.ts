@@ -35,9 +35,6 @@ export const ja: Catalogue = {
   /* ── the product, and the machine it is on ── */
   "app.name": "EnvoyCoder",
   "app.thisMachine": "このコンピューター",
-  "app.rail.show": "プロジェクトを表示",
-  "app.rail.hide": "プロジェクトを隠す",
-  "app.rail.toggle": "プロジェクトバーの表示を切り替え",
 
   /* ── the connection, said the way a user needs it ── */
   "connection.starting": "起動中…",

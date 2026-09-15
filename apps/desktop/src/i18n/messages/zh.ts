@@ -35,9 +35,6 @@ export const zh: Catalogue = {
   /* ── the product, and the machine it is on ── */
   "app.name": "EnvoyCoder",
   "app.thisMachine": "本机",
-  "app.rail.show": "显示项目",
-  "app.rail.hide": "隐藏项目",
-  "app.rail.toggle": "切换项目栏",
 
   /* ── the connection, said the way a user needs it ── */
   "connection.starting": "正在启动…",

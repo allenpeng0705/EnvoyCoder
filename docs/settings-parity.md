@@ -4121,6 +4121,29 @@ answer, and `runLive` back to `undefined === undefined` (the original bug) — e
 
 **Gates:** 933 passed / 12 skipped, 14 Rust tests.
 
+### 7.36 The top bar is the product's, and nothing else
+
+The owner, after the logo landed:
+
+> *"I think we don't [need] the icon button at the left side of app logo on the app's window."*
+
+The `▤` rail toggle stood immediately before the mark and the name — the two things in this window that say *which
+product this is*. It is gone, and the removal is only honest because the capability survives it:
+
+* **`⌘B`** toggles the rail (`input/shortcuts.ts`'s `sidebar.toggle`, listed on *Settings → Keyboard shortcuts*);
+* the **command palette** carries *Toggle the project rail* as a row, which is the same place the reference product
+  puts the commands it does not draw in its chrome.
+
+`failure-placement.test.tsx` holds both halves at once: the top bar has exactly one button (the command palette's)
+and no `▤`, and the palette row is still rendered when it opens — so a later change cannot quietly take the last
+route away. A mutation that puts the button back reddens it.
+
+Three catalogue keys retired with it (`app.rail.hide`, `app.rail.show`, `app.rail.toggle`; 447/447 complete in all
+seven). The chrome's own measurement: the mark still loads (`naturalWidth` 128), the contrast floor holds, and 562
+visible characters on the work surface — the same as before the button went, because a `▤` is one glyph.
+
+**Gates:** 934 passed / 12 skipped, 14 Rust tests.
+
 ## 8. The slice plan
 
 Ordered, and ordered by *cheapness times usefulness* rather than by Paseo's section order. Each slice

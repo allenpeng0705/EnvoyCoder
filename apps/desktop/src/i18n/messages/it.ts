@@ -35,9 +35,6 @@ export const it: Catalogue = {
   /* ── the product, and the machine it is on ── */
   "app.name": "EnvoyCoder",
   "app.thisMachine": "Questo computer",
-  "app.rail.show": "Mostra i progetti",
-  "app.rail.hide": "Nascondi i progetti",
-  "app.rail.toggle": "Mostra o nascondi la barra dei progetti",
 
   /* ── the connection, said the way a user needs it ── */
   "connection.starting": "Avvio…",
