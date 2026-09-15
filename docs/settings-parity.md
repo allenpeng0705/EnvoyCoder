@@ -3153,9 +3153,27 @@ window's *offers the route on an agent that is its own ACP server and is not ins
 `covers` field — plus the updated expectations in the delivery table. Gates: **886 passed / 7 skipped**, 12 Rust
 tests.
 
-**One thing this does not claim:** that fetching Copilot *installed* nothing. `npx` writes the package into npm's
-cache (`~/.npm/_npx/…`) and runs it from there — the same place `dsh` was found in §7.16 — so "nothing installed"
-means "nothing on `PATH`, nothing global", which is exactly the trade the delivery control describes.
+#### 7.23.1 The cold path, measured three times because the first two were not cold
+
+The claim that matters to the owner's question is not "npx starts the server" but "npx starts it on a machine with
+**nothing installed**", and the first two attempts did not establish it. Recorded because the mistake is exactly the
+kind this document exists to catch:
+
+| attempt | what it actually did | result |
+|---|---|---|
+| `npx -y @github/copilot --acp` | resolved the **global** install — a 1s answer, and no copy in npm's cache afterwards | the argv and the spec are right; **nothing** about a cold machine |
+| `npx --ignore-existing -y …` | this npm **removed** that flag (`npx: the --ignore-existing argument has been removed`) — so the same global install answered again, in 1s | still not cold |
+| empty `npm_config_prefix` **and** empty `npm_config_cache`, `~/.npm-global/bin` off `PATH` | npx had to fetch the package from the registry | **`initialize` answers in 14s**: `protocolVersion 1`, `agentInfo {Copilot 1.0.83}`, `authMethods [copilot-login]` |
+
+So the offer is honest: a user with no Copilot gets a working ACP server from the fetch route, at the cost of that
+first download. What "nothing installed" means here is precise — the package goes into npm's cache and runs from
+there (the same place `dsh` was found in §7.16): nothing on `PATH`, nothing global — which is exactly the trade the
+delivery control describes.
+
+**What the three attempts also show is how easy this claim is to make wrongly.** A 1-second answer is evidence that
+*something* answered, and this machine had `copilot` installed the whole time; the measurement only became about the
+owner's question when the package could not be resolved locally. A leg that cannot fail — here, a cold read that was
+not cold — is the failure mode §7.20.4 and §7.21.2 already record twice.
 
 ## 8. The slice plan
 
