@@ -75,11 +75,36 @@ describe("the composer's notes", () => {
     expect(notes()).toEqual([]);
   });
 
-  it("says the shared fact once while a turn is running, instead of once per control", () => {
-    // **The reported mess, in one assertion.** Three sentences used to appear here — one per control — each ending
-    // "your choice applies to the next run". A mutation that puts any of them back makes this fail with four lines.
+  it("draws no line at all while a turn is running — the fact is on the controls", () => {
+    // **Where the owner's last two reports meet.** Three sentences per control became one line (§7.30), and then
+    // the owner asked for that line as well: *"we needn't 'Applies to the next run.' text"*. It is not information
+    // that can be dropped — a user who changes the model mid-turn is owed the truth that the running agent keeps
+    // the one it started on — so it moved to where a fact belongs: **on the control**, in the tooltip a pointer
+    // opens and in the description a screen reader reads with it.
     show({ running: true });
-    expect(notes()).toEqual([en["task.composer.appliesNextRun"]]);
+    expect(notes()).toEqual([]);
+
+    const sentence = en["task.composer.appliesNextRun"];
+    const thinking = screen.getByLabelText(en["task.composer.thinking.label"]);
+    expect(thinking.closest(".composer__chip")?.getAttribute("title")).toContain(sentence);
+    const describedBy = thinking.getAttribute("aria-describedby");
+    expect(document.getElementById(describedBy as string)?.textContent).toContain(sentence);
+  });
+
+  it("keeps the tooltip off the controls when nothing is running", () => {
+    // The sentence is about a *live* turn: with nothing running, a change takes effect immediately and the words
+    // would be a claim about a state the window is not in.
+    show();
+    for (const label of [
+      en["task.composer.agentMode.label"],
+      en["task.composer.model.label"],
+      en["task.composer.thinking.label"],
+    ]) {
+      const control = screen.getByLabelText(label);
+      expect(control.closest(".composer__chip")?.getAttribute("title")).not.toContain(
+        en["task.composer.appliesNextRun"],
+      );
+    }
   });
 
   it("puts a disabled control's reason on the control, and not in the composer", () => {
@@ -95,13 +120,18 @@ describe("the composer's notes", () => {
     const picker = screen.getByLabelText(en["task.composer.thinking.label"]) as HTMLSelectElement;
     expect(picker.disabled).toBe(true);
     // The tooltip is on the **chip**, not on the bare `<select>`: the chip is what a pointer lands on, and a
-    // disabled control inside it takes no hover of its own.
-    expect(picker.closest(".composer__chip")?.getAttribute("title")).toBe(reason);
+    // disabled control inside it takes no hover of its own. It carries the control's own reason, and — because
+    // this leg renders a live turn — the fact the whole row shares, joined by a middle dot.
+    expect(picker.closest(".composer__chip")?.getAttribute("title")).toBe(
+      `${reason} · ${en["task.composer.appliesNextRun"]}`,
+    );
     const describedBy = picker.getAttribute("aria-describedby");
     expect(describedBy).toBe("composer-thinking-reason");
-    expect(document.getElementById(describedBy as string)?.textContent).toBe(reason);
-    // …and the composer itself still shows the one line, not the reason as well.
-    expect(notes()).toEqual([en["task.composer.appliesNextRun"]]);
+    expect(document.getElementById(describedBy as string)?.textContent).toBe(
+      `${reason} · ${en["task.composer.appliesNextRun"]}`,
+    );
+    // …and the composer itself shows no line, in any state.
+    expect(notes()).toEqual([]);
   });
 
   it("does the same for the mode and the model, and for a list observed in a session", () => {
@@ -119,6 +149,8 @@ describe("the composer's notes", () => {
     expect(
       screen.getByLabelText(en["task.composer.agentMode.label"]).closest(".composer__chip")?.getAttribute("title"),
     ).toBe(en["task.composer.agentMode.none"].replace("{agent}", "Envoy Harness"));
+    // Nothing is running in this leg, so the description is the refusal alone — no "next run" sentence, which
+    // would be a claim about a turn that does not exist.
     expect(document.getElementById("composer-model-reason")?.textContent).toBe(
       en["task.composer.model.none"].replace("{agent}", "Envoy Harness"),
     );
@@ -154,7 +186,7 @@ describe("the composer's notes", () => {
     expect(screen.getByRole("button", { name: en["task.composer.probe.ask"].replace("{agent}", "Envoy Harness") })).toBeTruthy();
   });
 
-  it("never draws more than one note, in any of the states above", () => {
+  it("never draws more than one note, and never one for the row's own fact", () => {
     // The property, asserted over the states rather than one at a time — a fifth branch added later has to keep it.
     const states: Partial<ComposerControlsProps>[] = [
       {},

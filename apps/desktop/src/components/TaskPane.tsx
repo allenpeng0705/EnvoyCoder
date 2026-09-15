@@ -140,7 +140,6 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   const { task, project, events } = props;
   const running = props.runLive;
   const [text, setText] = useState("");
-  const [mode, setMode] = useState<"queue" | "steer">("queue");
   /** A mode the user has just chosen, before the task's saved copy comes back. */
   const [pickedMode, setPickedMode] = useState<string | undefined>(undefined);
   /** A model the user has just chosen, for the same reason and with the same lifetime. */
@@ -299,7 +298,10 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   const submit = (): void => {
     const value = text.trim();
     if (value === "") return;
-    if (running) void props.onSend(value, mode);
+    // **`queue`, always.** A message sent while the agent is working waits for the turn in flight and is
+    // delivered as the next prompt — the daemon's own default, and the one behaviour the window has a control
+    // for no longer. `steer` remains on the wire (`coder.sendToRun {mode}`) for a client that offers it.
+    if (running) void props.onSend(value, "queue");
     // The mode travels only when the picker is on and something is chosen. Passing it always would
     // mean inventing an "undefined mode" for the agents that have none, and the daemon already reads
     // the task's stored mode when the argument is absent. The model travels on identical terms, and
@@ -459,6 +461,8 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                   : t("task.composer.placeholder.idle")
             }
             aria-label={t("task.composer.aria")}
+            // The keyboard contract, where a user looks for it: on the field they are typing into.
+            title={t("task.composer.hint")}
           />
           {props.notice ? <p className="composer__notice">{props.notice}</p> : null}
           {/* **The row under the field: agent settings on the left, the action on the right.**
@@ -516,23 +520,12 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               }
             />
             <div className="composer__toolbar-actions">
-            {/* The mode only exists while there is a turn to join: showing it on a finished task would
-                offer a choice that does nothing. */}
-            {running ? (
-              <label className="composer__mode" title={t("task.composer.mode.title")}>
-                <select
-                  className="select"
-                  value={mode}
-                  onChange={(event) => setMode(event.target.value as "queue" | "steer")}
-                  aria-label={t("task.composer.mode.aria")}
-                >
-                  <option value="queue">{t("task.composer.queue")}</option>
-                  <option value="steer">{t("task.composer.steer")}</option>
-                </select>
-              </label>
-            ) : null}
-            {/* The keyboard contract, on screen. It was only in a comment. */}
-            <span className="composer__hint">{t("task.composer.hint")}</span>
+            {/* **The Queue/Steer picker is gone.** Two words in a select, explained by a tooltip nobody opened:
+                the owner asked what they meant, which is the answer. A message sent while a turn is running
+                **queues** — the daemon finishes what it is doing and reads it next — and the button underneath
+                says so in its tooltip. `steer` (interrupt the turn and send this instead) is still on the wire;
+                a *setting* for which one is the default is where that choice belongs (§8.3).
+                The keyboard contract went with it, off the row and onto the field's own tooltip. */}
             <button
               type="button"
               className="button button--primary"
@@ -542,7 +535,9 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                 approvalOpen
                   ? t("task.composer.submit.blocked")
                   : running
-                    ? t("task.composer.send")
+                    ? // **What pressing it will do**, since the picker that used to say it is gone: the message
+                      // waits for the turn in flight and is read next.
+                      t("task.composer.send.queued")
                     : t("task.composer.start")
               }
             >

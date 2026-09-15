@@ -5,24 +5,29 @@
  * `plan`/`acceptEdits`/`bypassPermissions`, Codex `auto-review`/`full-access`, OpenCode `build`/`plan`,
  * Pi none at all. Some can cancel, some can ask us for approval, some can take an image. A composer
  * with a fixed set of controls therefore lies about at least one agent at all times — which is what ours
- * did, with a bare Queue/Steer select and no notion of the agent at all.
+ * did, with a bare Queue/Steer select and no notion of the agent at all — and that select is gone now, for the
+ * second half of the same reason: two words in a picker, explained only by a tooltip, taught the user nothing
+ * (`docs/settings-parity.md` §7.33). The window sends `queue`, the protocol keeps both modes, and a *setting* for
+ * the default is where the choice belongs (§8.3's send behaviour).
  *
  * This module is the *decision*, kept away from the rendering so it can be tested without a DOM: given
  * what the wire says about an agent (`coder.listHarnesses` now carries `modes`) and what the run is
- * doing, it returns the controls to draw, the send button's behaviour and label, and — for anything the
- * agent offers that we cannot yet honour — a **reason** rather than a hidden control.
+ * doing, it returns the controls to draw and — for anything the agent offers that we cannot yet honour —
+ * a **reason** rather than a hidden control.
  *
- * ## The three rules it encodes, each with a source
+ * ## The two rules it encodes, each with a source
  *
- *   1. **An approval in flight forces `interrupt`.** Paseo does exactly this
- *      (`resolveActiveSendBehavior`), because a queued message behind a permission prompt is stranded:
- *      the turn is parked until somebody answers. See `docs/paseo-design-decisions.md`.
- *   2. **The send label states what will happen**, never just "Send": `Interrupt agent` while a turn
- *      runs, `Queue message` when it will wait, `Send and steer` when it joins.
- *   3. **A control we cannot honour is disabled with a reason, not hidden.** The mode picker is the
+ *   1. **A control we cannot honour is disabled with a reason, not hidden.** The mode picker is the
  *      live example: the agent's modes and whether the daemon can *set* one both travel on the wire
  *      (`HarnessSummary.modes` and `.capabilities.agentMode`), and the picker is enabled only when
  *      both say yes — otherwise it is off, with the reason rendered in the user's language.
+ *   2. **What the agent publishes is a property, never a promise.** `observedAt` travels with every list a
+ *      session produced, and nothing here invents one.
+ *
+ * (A third rule stood here — *"the send label states what will happen"*, with `resolveSendBehaviour` and
+ * `sendLabel` behind it. Nothing drew it: the composer rendered its own "Send"/"Start" and ignored the
+ * result, so the whole chain was reachable only from its own tests, and a Queue/Steer *select* was the only
+ * place the choice existed. The select is gone (§7.33) and so is the chain.)
  */
 
 import type { HarnessAvailability } from "@envoycoder/protocol";
@@ -163,9 +168,6 @@ export interface ComposerState {
   approvalPending: boolean;
 }
 
-/** What sending will do. `interrupt` is the forced one. */
-export type SendBehaviour = "send" | "queue" | "steer" | "interrupt";
-
 export interface ComposerControl {
   /** A stable id the component can key on. */
   kind: "agent" | "mode" | "model" | "thinking" | "cancel" | "approvals" | "images";
@@ -235,7 +237,6 @@ export interface ComposerControls {
     reasonKey?: MessageKey;
     reasonValues?: Record<string, string | number>;
   };
-  send: { behaviour: SendBehaviour; label: string; enabled: boolean; reason?: string };
   /** The controls the agent's capabilities allow, in the order a composer should draw them. */
   controls: ComposerControl[];
   /** Anything worth telling the user about this agent, in their language. */
@@ -549,43 +550,10 @@ export function taskLocationLabel(cwd: string, project: { label: string; path: s
   return shortenFolder(cwd, undefined);
 }
 
-/**
- * The send button's text, from the behaviour and the run's state.
- *
- * Paseo's own chain: `Interrupt agent` while loading, `Queue message` when it will wait,
- * `Send and steer` / `Send and interrupt` when it will act on the running turn, `Send message` when
- * nothing is running. Users learn the difference by reading the button, so it has to say it.
- */
-export function sendLabel(behaviour: SendBehaviour): string {
-  switch (behaviour) {
-    case "interrupt":
-      return "Interrupt agent";
-    case "queue":
-      return "Queue message";
-    case "steer":
-      return "Send and steer";
-    case "send":
-      return "Send message";
-  }
-}
-
-/** Which behaviour applies, given the run state and the user's preference. */
-export function resolveSendBehaviour(
-  state: ComposerState,
-  preferred: "queue" | "steer" = "steer",
-): SendBehaviour {
-  // Rule 1, before the preference and before anything else: with an approval in flight, queueing would
-  // park the message behind a turn that is itself parked.
-  if (state.approvalPending) return "interrupt";
-  if (!state.running) return "send";
-  return preferred;
-}
-
 export function composerControls(
   agent: ComposerAgent,
   state: ComposerState,
   options: {
-    preferred?: "queue" | "steer";
     selectedModeId?: string;
     /** The task's stored model, provider-qualified. Absent means "the agent's own default". */
     selectedModelId?: string;
@@ -727,8 +695,6 @@ export function composerControls(
           : undefined;
 
   /* ── sending ── */
-  const behaviour = resolveSendBehaviour(state, options.preferred ?? "steer");
-  const sendEnabled = available;
   if (capabilities.approvals && available) {
     // A fact worth surfacing: the agent can ask, so a stalled turn may be waiting on the user.
     notes.push(`${agent.label} can ask you before it acts.`);
@@ -739,7 +705,7 @@ export function composerControls(
 
   /* ── the controls the agent's capabilities allow ── */
   const controls: ComposerControl[] = [
-    { kind: "agent", label: agent.label, enabled: available, ...(sendEnabled ? {} : { reason: notes[0] }) },
+    { kind: "agent", label: agent.label, enabled: available, ...(available ? {} : { reason: notes[0] }) },
     {
       kind: "mode",
       label: "Mode",
@@ -830,12 +796,6 @@ export function composerControls(
       ...(thinkingReason ? { reason: thinkingReason } : {}),
       ...(thinkingReasonKey ? { reasonKey: thinkingReasonKey } : {}),
       ...(thinkingReasonKey ? { reasonValues: { agent: agent.label } } : {}),
-    },
-    send: {
-      behaviour,
-      label: sendLabel(behaviour),
-      enabled: sendEnabled,
-      ...(sendEnabled ? {} : { reason: notes[0] }),
     },
     controls,
     notes,

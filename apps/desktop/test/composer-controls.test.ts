@@ -22,8 +22,6 @@ import {
   optionLabel,
   shortenFolder,
   taskLocationLabel,
-  resolveSendBehaviour,
-  sendLabel,
   thinkingNote,
   thinkingOffReason,
   type ComposerAgent,
@@ -58,27 +56,16 @@ const idle = { running: false, approvalPending: false };
 const working = { running: true, approvalPending: false };
 const blocked = { running: true, approvalPending: true };
 
-describe("the send button says what will happen", () => {
-  it("offers the plain send when nothing is running", () => {
-    expect(resolveSendBehaviour(idle)).toBe("send");
-    expect(sendLabel("send")).toBe("Send message");
-  });
-
-  it("follows the user's preference while a turn runs", () => {
-    expect(resolveSendBehaviour(working, "steer")).toBe("steer");
-    expect(resolveSendBehaviour(working, "queue")).toBe("queue");
-    expect(sendLabel("steer")).toBe("Send and steer");
-    expect(sendLabel("queue")).toBe("Queue message");
-  });
-
-  it("forces interrupt while an approval is pending, whatever the preference says", () => {
-    // The rule from `docs/paseo-design-decisions.md`: queueing behind an approval strands the message,
-    // because the turn is parked until somebody answers.
-    expect(resolveSendBehaviour(blocked, "queue")).toBe("interrupt");
-    expect(resolveSendBehaviour(blocked, "steer")).toBe("interrupt");
-    expect(sendLabel("interrupt")).toBe("Interrupt agent");
-  });
-});
+/**
+ * **Where the send behaviour went.** Three legs stood here — the plain send when nothing runs, the user's
+ * preference while a turn runs, and `interrupt` forced by an approval. They pinned `resolveSendBehaviour` and
+ * `sendLabel`, which **nothing in the window ever read**: the composer drew its own "Send"/"Start" and the only
+ * place the choice existed was a Queue/Steer select, which the owner asked about and which is gone
+ * (`docs/settings-parity.md` §7.33). A decision nothing can reach is a claim, not a feature — so the pair went
+ * with the select, and what replaced it is one fact on the button's tooltip: a message sent while the agent is
+ * working queues behind the turn in flight. `steer` is still on the wire for a client that offers it, and the
+ * *default* behaviour is a setting (§8.3).
+ */
 
 describe("the mode picker is honest about what it can do", () => {
   it("is off with a reason when the daemon cannot apply a mode yet", () => {
@@ -547,7 +534,7 @@ describe("the controls follow the agent's capabilities", () => {
     expect(noCancel.controls.find((c) => c.kind === "images")?.enabled).toBe(true);
   });
 
-  it("disables sending for an agent that is not installed, and says so", () => {
+  it("says an agent that is not installed cannot be used, and what to run", () => {
     const missing = composerControls(
       agent({
         availability: {
@@ -557,11 +544,12 @@ describe("the controls follow the agent's capabilities", () => {
       }),
       idle,
     );
-    expect(missing.send.enabled).toBe(false);
-    expect(missing.send.reason).toMatch(/not installed/);
+    // The sentence lives in `notes` — the reason the agent chip carries and the composer shows — because the
+    // `send` field that used to duplicate it went with the Queue/Steer select (§7.33).
+    expect(missing.notes.join(" ")).toMatch(/not installed/);
     // The command travels with the reason, because a state whose content is "this is missing" and which does
     // not say what to run is the sentence this whole change removed.
-    expect(missing.send.reason).toContain("npm install -g @anthropic-ai/claude-code");
+    expect(missing.notes.join(" ")).toContain("npm install -g @anthropic-ai/claude-code");
   });
 
   it("says the *adapter* is missing when the agent itself is installed", () => {
@@ -578,22 +566,22 @@ describe("the controls follow the agent's capabilities", () => {
       }),
       idle,
     );
-    expect(bridged.send.enabled).toBe(false);
-    expect(bridged.send.reason).toMatch(/is installed, but the program EnvoyCoder drives it through is missing/);
-    expect(bridged.send.reason).toContain("npm install -g @agentclientprotocol/claude-agent-acp");
-    expect(bridged.send.reason).not.toMatch(/is not installed on this machine/);
+    expect(bridged.notes.join(" ")).toMatch(/is installed, but the program EnvoyCoder drives it through is missing/);
+    expect(bridged.notes.join(" ")).toContain("npm install -g @agentclientprotocol/claude-agent-acp");
+    expect(bridged.notes.join(" ")).not.toMatch(/is not installed on this machine/);
   });
 
   it("distinguishes 'we could not tell' from 'it is missing', from 'we cannot drive it'", () => {
     const unknown = composerControls(agent({ availability: { state: "unknown" } }), idle);
-    expect(unknown.send.enabled).toBe(false);
-    expect(unknown.send.reason).toMatch(/could not tell whether/);
-    expect(unknown.send.reason).not.toMatch(/is not installed/);
+    expect(unknown.notes.join(" ")).toMatch(/could not tell whether/);
+    expect(unknown.notes.join(" ")).not.toMatch(/is not installed/);
 
-    const undrivable = composerControls(agent({ availability: { state: "unsupported", binary: "/usr/bin/copilot" } }), idle);
-    expect(undrivable.send.enabled).toBe(false);
-    expect(undrivable.send.reason).toMatch(/speaks a protocol EnvoyCoder cannot drive yet/);
-    expect(undrivable.send.reason).not.toMatch(/is not installed/);
+    const undrivable = composerControls(
+      agent({ availability: { state: "unsupported", binary: "/usr/bin/copilot" } }),
+      idle,
+    );
+    expect(undrivable.notes.join(" ")).toMatch(/speaks a protocol EnvoyCoder cannot drive yet/);
+    expect(undrivable.notes.join(" ")).not.toMatch(/is not installed/);
   });
 });
 

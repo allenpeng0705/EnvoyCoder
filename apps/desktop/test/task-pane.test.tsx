@@ -285,16 +285,22 @@ describe("the composer", () => {
     fireEvent.change(screen.getByLabelText("Message the agent"), {
       target: { value: "and make it idempotent too" },
     });
-    fireEvent.change(screen.getByLabelText("How to deliver the message"), { target: { value: "steer" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    expect(pane.onSend).toHaveBeenCalledWith("and make it idempotent too", "steer");
+    // **`queue`, always, and it is said on the button rather than chosen in a picker.** The Queue/Steer select was
+    // two words in a control nobody could explain without a tooltip (`docs/settings-parity.md` §7.33): the owner
+    // asked what they meant. A message sent while the agent is working waits for the turn in flight, and the
+    // button's own tooltip says so — `steer` is still on the wire for a client that offers it.
+    expect(pane.onSend).toHaveBeenCalledWith("and make it idempotent too", "queue");
   });
 
-  it("hides the mode picker when there is no turn to join", () => {
-    renderPane([], { runLive: false });
-    // Offering "Queue or Steer" on a finished task is a choice that does nothing.
+  it("says on the button what pressing it will do, instead of offering the words Queue and Steer", () => {
+    renderPane([], { runLive: true });
+    const send = screen.getByRole("button", { name: "Send" });
+    expect(send.getAttribute("title")).toBe("The agent finishes the turn it is on, then reads this.");
+    // And the picker is gone: one fewer control on the row, and no unexplained vocabulary on it.
     expect(screen.queryByLabelText("How to deliver the message")).toBeNull();
-    expect(screen.getByRole("button", { name: "Start" })).toBeTruthy();
+    expect(screen.queryByText("Queue")).toBeNull();
+    expect(screen.queryByText("Steer")).toBeNull();
   });
 
   it("starts a task when nothing is running, rather than sending to a run that does not exist", () => {
@@ -370,9 +376,14 @@ describe("the new chat, which is where a session starts", () => {
     expect(onStart).not.toHaveBeenCalled();
   });
 
-  it("says how to send, on the screen rather than only in a comment", () => {
+  it("keeps the keyboard contract on the field, not on the row", () => {
+    // It was a line of small print beside the send button — *"Enter to send · Shift+Enter for a new line"* — and
+    // the owner asked for it off the row. It is the tooltip of the field it is about now, which is where a user
+    // looks when they wonder how to add a line.
     renderPane([], { runLive: false });
-    expect(screen.getByText("Enter to send · Shift+Enter for a new line")).toBeTruthy();
+    const field = screen.getByLabelText("Message the agent");
+    expect(field.getAttribute("title")).toBe("Enter to send · Shift+Enter for a new line");
+    expect(screen.queryByText("Enter to send · Shift+Enter for a new line", { selector: ".composer__hint" })).toBeNull();
   });
 
   it("keeps the field and the send action in one card, so the composer reads as one control", () => {
@@ -446,11 +457,9 @@ describe("the folder control", () => {
     expect(pill.title).toContain("/repo/packages/api");
     const describedBy = pill.getAttribute("aria-describedby");
     expect(document.getElementById(describedBy as string)?.textContent).toMatch(/no folder chooser/i);
-    // Nothing visible was added for it: the reason is attached to the pill. The only line the composer has
-    // here is the run's own — `renderPane` renders a live run by default, so that line is expected, and the
-    // point is that the *reason* is not a second one.
-    const notes = [...document.querySelectorAll(".composer__control-note")];
-    expect(notes.map((node) => node.textContent)).toEqual(["Applies to the next run."]);
+    // Nothing visible was added for it: the reason is attached to the chip. And the composer draws no line for
+    // the run either, since §7.33 moved that fact onto the controls themselves.
+    expect(document.querySelectorAll(".composer__control-note")).toHaveLength(0);
   });
 
   it("shows a failed chooser under the header, where the press was", async () => {
@@ -467,10 +476,8 @@ describe("the folder control", () => {
 
     await waitFor(() => expect(document.querySelector(".pane__notice")).toBeTruthy());
     expect(document.querySelector(".pane__notice")?.textContent ?? "").toMatch(/could not open/i);
-    // The composer drew nothing about the folder for it. (`renderPane` renders a live run, so the row's own
-    // "applies to the next run" line is there — the point is that the *failure* is not.)
-    const notes = [...document.querySelectorAll(".composer__control-note")].map((node) => node.textContent);
-    expect(notes).toEqual(["Applies to the next run."]);
+    // The composer drew nothing about it: the failure belongs to the header, where the press was.
+    expect(document.querySelectorAll(".composer__control-note")).toHaveLength(0);
   });
 
   it("changes the folder through the shell's picker when there is one", async () => {
@@ -498,14 +505,19 @@ describe("the folder control", () => {
     expect(screen.queryByText(/could not open/i)).toBeNull();
   });
 
-  it("says a live run keeps its settings, once, without naming the folder it is in", () => {
+  it("states a live run's rule on the controls, and names no path anywhere on the row", () => {
     lendShell(async () => null);
     renderPane([], { task: nested, runLive: true, onChangeFolder: vi.fn() });
     // Not a disabled control: the choice is real and will be used. It is the *running* agent that keeps the
-    // directory it started in — and the path is already on the pill, so the old sentence said it twice.
-    const notes = [...document.querySelectorAll(".composer__control-note")];
-    expect(notes).toHaveLength(1);
-    expect(notes[0]?.textContent).toBe("Applies to the next run.");
+    // settings it started with, and that fact is on the controls (§7.33) rather than in a line under them.
+    expect(document.querySelectorAll(".composer__control-note")).toHaveLength(0);
+    for (const label of ["Mode", "Model", "Thinking"]) {
+      expect(screen.getByLabelText(label).closest(".composer__chip")?.getAttribute("title")).toContain(
+        "Applies to the next run.",
+      );
+    }
+    // And no path on the row: the composer talks about the agent, the header about the place.
+    expect(document.querySelector(".composer__controls")?.textContent ?? "").not.toContain("/repo/packages/api");
     expect(screen.queryByText(/still working in/)).toBeNull();
   });
 });
@@ -534,7 +546,15 @@ describe("the agent's mode control", () => {
     renderPane([], { task, harnesses: [harnessFor("deepseek-harness")] });
     const picker = screen.getByLabelText("Mode") as HTMLSelectElement;
     expect(picker.disabled).toBe(true);
-    expect(screen.getByText("DeepSeek Harness does not offer selectable modes.")).toBeTruthy();
+    // The reason is on the control — its tooltip and its `aria-describedby` — rather than as a paragraph under
+    // the row (§7.30's rule, applied to the reason as well).
+    expect(picker.closest(".composer__chip")?.getAttribute("title")).toContain(
+      "DeepSeek Harness does not offer selectable modes.",
+    );
+    const describedBy = picker.getAttribute("aria-describedby");
+    expect(document.getElementById(describedBy as string)?.textContent).toContain(
+      "DeepSeek Harness does not offer selectable modes.",
+    );
   });
 
   it("is disabled even when modes are declared, if the daemon cannot set one", () => {
@@ -560,7 +580,9 @@ describe("the agent's mode control", () => {
     // *lack* of modes when the truth is our own ignorance is the mistake this asserts against.
     renderPane([], { task: envoyTask });
     expect(screen.getByText(/has not been told which modes Envoy Harness offers yet/)).toBeTruthy();
-    expect(screen.queryByText(/does not offer selectable modes/)).toBeNull();
+    expect(screen.getByLabelText("Mode").closest(".composer__chip")?.getAttribute("title") ?? "").not.toContain(
+      "does not offer selectable modes",
+    );
   });
 
   it("sends the chosen mode with the first message, so the picker is not decorative", () => {
@@ -603,11 +625,11 @@ describe("the agent's mode control", () => {
     );
   });
 
-  it("says a live run keeps its settings once, and does not put a sentence under each control", () => {
+  it("says a live run keeps its settings, on the controls and nowhere else", () => {
     renderPane([], { task: envoyTask, runLive: true, harnesses: [harnessFor("envoy-harness")] });
-    // The three per-control "your choice applies to the next run" sentences were the same fact three times over,
-    // above the field the user was typing into. One line now, and each control carries only its *own* reason.
-    expect(document.querySelectorAll(".composer__control-note")).toHaveLength(1);
+    // The three per-control "your choice applies to the next run" sentences were the same fact three times over;
+    // then one line (§7.30); now no line at all, with the fact on each control's own tooltip and description.
+    expect(document.querySelectorAll(".composer__control-note")).toHaveLength(0);
     expect(screen.queryByText(/keeps the mode it started with/)).toBeNull();
     expect(screen.queryByText(/still working in/)).toBeNull();
   });
@@ -675,8 +697,8 @@ describe("the model control", () => {
     expect(document.getElementById(describedBy as string)?.textContent).toMatch(
       /publishes its models only inside a running session/,
     );
-    // And a live run is one line about the run, not a sentence per control.
-    expect(document.querySelectorAll(".composer__control-note")).toHaveLength(1);
+    // And a live run adds no line: the fact is on each control, not under the row (§7.33).
+    expect(document.querySelectorAll(".composer__control-note")).toHaveLength(0);
     // Not the refusal sentences: nothing here is being refused.
     expect(screen.queryByText(/does not take a model/)).toBeNull();
     expect(screen.queryByText(/not wired up yet/)).toBeNull();
@@ -914,9 +936,9 @@ describe("the thinking control", () => {
     expect(screen.queryByText(/has not opened a session/)).toBeNull();
   });
 
-  it("says the choice applies to the next run while one is live", () => {
-    // The shared property of every control on this row, in its own line: a user who changed only the
-    // thinking level must not be told about the folder or the model.
+  it("puts the run's rule on every control, without a line of its own", () => {
+    // The shared property of the row, said once per control *on* the control: a user who changed only the
+    // thinking level is not told about the folder or the model, because there is no shared paragraph at all.
     renderPane([], {
       task: deepseek,
       harnesses: [harnessFor("deepseek-harness", { thinking: LEVELS })],
@@ -924,8 +946,12 @@ describe("the thinking control", () => {
     });
     expect(screen.queryByText(/keeps the thinking level it started with/)).toBeNull();
     expect(screen.queryByText(/keeps the model it started on/)).toBeNull();
-    // One line for the run — which is what those two sentences were both saying.
-    expect(document.querySelectorAll(".composer__control-note")).toHaveLength(1);
+    expect(document.querySelectorAll(".composer__control-note")).toHaveLength(0);
+    for (const label of ["Mode", "Model", "Thinking"]) {
+      expect(screen.getByLabelText(label).closest(".composer__chip")?.getAttribute("title")).toContain(
+        "Applies to the next run.",
+      );
+    }
   });
 });
 

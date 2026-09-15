@@ -225,6 +225,23 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
    * and why should I trust it", which is the question a user has while reaching for the control — so both belong
    * on it. See the notes rule at the foot of this component for why.
    */
+  /**
+   * **The fact every control on this row shares, said on the controls rather than under them.**
+   *
+   * A choice made while a turn is running applies to the **next** run — the agent is launched with
+   * `task.cwd` and put into its mode right after `session/new` — and that used to be a line under the row. The
+   * owner asked for the line to go (*"we needn't 'Applies to the next run.' text"*), and it is not information
+   * that can be dropped: a user who changes the model mid-turn is owed the truth that the running agent keeps
+   * the one it started on. So it moved to where §7.30 already puts a fact — **on the control**: the tooltip a
+   * pointer opens, and the description a screen reader reads with the control.
+   */
+  const nextRun = running ? t("task.composer.appliesNextRun") : undefined;
+  /** A control's tooltip: its own reason, then the fact the whole row shares. */
+  const chipTitle = (...parts: (string | undefined)[]): string | undefined => {
+    const said = parts.filter((part): part is string => part !== undefined && part !== "");
+    return said.length === 0 ? undefined : said.join(" · ");
+  };
+
   const modeReason = modeOff === undefined ? undefined : t(modeOff.key, modeOff.values);
   const modelReason =
     modelOff !== undefined
@@ -257,13 +274,16 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
     <>
       <div className="composer__controls">
         <div className="composer__chips">
-        <span className="composer__chip" title={modeReason ?? modeDescription(selectedMode, t) ?? t("task.composer.agentMode.title")}>
+        <span
+          className="composer__chip"
+          title={chipTitle(modeReason ?? modeDescription(selectedMode, t) ?? t("task.composer.agentMode.title"), nextRun)}
+        >
           <ModeIcon size={14} />
           <select
             className="composer__chip-field"
             disabled={modeOff !== undefined}
             aria-label={t("task.composer.agentMode.label")}
-            {...(modeReason !== undefined ? { "aria-describedby": "composer-mode-reason" } : {})}
+            {...(chipTitle(modeReason, nextRun) !== undefined ? { "aria-describedby": "composer-mode-reason" } : {})}
             value={props.selectedModeId ?? ""}
             onChange={(event) => props.onChooseMode(event.target.value)}
           >
@@ -281,9 +301,9 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
           <span className="composer__chip-caret" aria-hidden>
             ▾
           </span>
-          {modeReason === undefined ? null : (
+          {chipTitle(modeReason, nextRun) === undefined ? null : (
             <p className="visually-hidden" id="composer-mode-reason">
-              {modeReason}
+              {chipTitle(modeReason, nextRun)}
             </p>
           )}
         </span>
@@ -296,7 +316,7 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
             project's default model and a task's model cannot come to mean three things; only its *skin* differs. */}
         <span
           className="composer__chip"
-          title={modelReason ?? selectedModel?.description ?? t("task.composer.model.title")}
+          title={chipTitle(modelReason ?? selectedModel?.description ?? t("task.composer.model.title"), nextRun)}
         >
           <ModelIcon size={14} />
           <ModelChoice
@@ -305,8 +325,13 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
             options={props.models}
             selected={props.selectedModelId}
             off={modelOff}
-            {...(modelReason !== undefined ? { descriptionId: "composer-model-reason" } : {})}
-            title={modelReason ?? selectedModel?.description ?? t("task.composer.model.title")}
+            {...(chipTitle(modelReason, nextRun) !== undefined ? { descriptionId: "composer-model-reason" } : {})}
+            title={
+              chipTitle(
+                modelReason ?? selectedModel?.description ?? t("task.composer.model.title"),
+                nextRun,
+              ) ?? t("task.composer.model.title")
+            }
             onChoose={props.onChooseModel}
             fieldClassName="composer__chip-field"
             inputClassName="composer__chip-field composer__chip-field--text"
@@ -316,9 +341,9 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
               ▾
             </span>
           ) : null}
-          {modelReason === undefined ? null : (
+          {chipTitle(modelReason, nextRun) === undefined ? null : (
             <p className="visually-hidden" id="composer-model-reason">
-              {modelReason}
+              {chipTitle(modelReason, nextRun)}
             </p>
           )}
         </span>
@@ -330,14 +355,19 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
             undo a choice. */}
         <span
           className="composer__chip"
-          title={thinkingReason ?? optionDescription(selectedThinking, t) ?? t("task.composer.thinking.title")}
+          title={chipTitle(
+            thinkingReason ?? optionDescription(selectedThinking, t) ?? t("task.composer.thinking.title"),
+            nextRun,
+          )}
         >
           <ThinkingIcon size={14} />
           <select
             className="composer__chip-field"
             disabled={thinkingOff !== undefined}
             aria-label={t("task.composer.thinking.label")}
-            {...(thinkingReason !== undefined ? { "aria-describedby": "composer-thinking-reason" } : {})}
+            {...(chipTitle(thinkingReason, nextRun) !== undefined
+              ? { "aria-describedby": "composer-thinking-reason" }
+              : {})}
             value={props.selectedThinkingLevel ?? ""}
             onChange={(event) => props.onChooseThinking(event.target.value)}
           >
@@ -355,9 +385,9 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
           <span className="composer__chip-caret" aria-hidden>
             ▾
           </span>
-          {thinkingReason === undefined ? null : (
+          {chipTitle(thinkingReason, nextRun) === undefined ? null : (
             <p className="visually-hidden" id="composer-thinking-reason">
-              {thinkingReason}
+              {chipTitle(thinkingReason, nextRun)}
             </p>
           )}
           </span>
@@ -399,8 +429,6 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
             </>
           )}
         </p>
-      ) : running ? (
-        <p className="composer__control-note">{t("task.composer.appliesNextRun")}</p>
       ) : null}
       </div>
     </>

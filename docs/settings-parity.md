@@ -3932,6 +3932,67 @@ every `evaluate(\`…\`)` call and requires the template to close where the call
 `` \` `` (three files legitimately contain one) and a trailing comma. Verified both ways — clean on the tree, and
 red when the mistake is put back.
 
+### 7.33 Three more things the row did not need, and one it could not explain
+
+The owner, on the toolbar §7.32 had just built:
+
+> *"we needn't 'Applies to the next run.' text and what's the Queue and Steer? text 'Enter to send · Shift+Enter for a
+> new line' should be removed too."*
+
+Three removals, and the middle one is a question — which is itself the finding.
+
+#### 7.33.1 "Applies to the next run." — off the row, onto the controls
+
+§7.30 had reduced four sentences to one line. The owner asked for that line as well, and it is not information that
+can be dropped: a user who changes the model mid-turn is owed the truth that the running agent keeps the one it
+started on. So it moved to where §7.30 already puts a fact — **on the control**: each chip's `title` now reads
+*reason · Applies to the next run.*, and the same sentence goes into the `aria-describedby` text a screen reader
+reads with the control. Nothing on the row; the fact still reachable at the control, and only while a turn is
+running (with nothing running, a change takes effect at once, so the words would be a claim about a state the
+window is not in — a leg asserts both halves).
+
+The composer now draws **no prose at all** in the state the owner was looking at. The only line it can still draw is
+the probe's, which carries a *button* — the one way to learn what an agent offers when nothing has been observed.
+
+#### 7.33.2 "What's the Queue and Steer?" — the answer is that a control needs two words and a tooltip to explain it
+
+`Queue` and `Steer` were a select beside the send button, taken from the reference product's vocabulary: a message
+sent while the agent is working can either **wait** for the turn in flight (`queue`) or **interrupt it and be sent
+instead** (`steer`). Both modes are real — the daemon implements them (`runs.ts`: `queue` pushes onto `live.queued`
+and is read as the next prompt; `steer` sets `live.intent = "steer"` and cancels the turn in flight) — and the whole
+explanation lived in the select's tooltip, which nobody opens. A control whose meaning has to be asked for is a
+control that does not work.
+
+So the select is gone. **A message now always queues**, and the *button* says so: while a turn is live its tooltip
+reads *"The agent finishes the turn it is on, then reads this."* `steer` stays on the wire
+(`coder.sendToRun {mode: "steer"}`), so a client that wants to offer it can — and the *default* behaviour belongs in
+settings (§8.3's send behaviour), not in a two-word picker on the composer.
+
+**And the chain behind it went too.** `resolveSendBehaviour` and `sendLabel` were written for a Paseo-shaped send
+button that says *Queue message* / *Send and steer*, and **nothing drew them**: the composer rendered its own
+"Send"/"Start" and ignored the result, so the pair was reachable only from its own three tests. That is a claim, not
+a feature, and the legs went with it (the sentences they pinned are the same ones the availability legs now read
+from `notes`).
+
+#### 7.33.3 "Enter to send · Shift+Enter for a new line" — onto the field
+
+It was a line of small print in the button row, and it is the tooltip of the message field now — the place a user
+looks when they wonder how to add a line. One less thing on the row, and the keyboard contract is still discoverable
+without opening a doc.
+
+#### 7.33.4 Measured
+
+```console
+before §7.32:  visibleChars 687, 2 note lines + a folder path on the row
+after  §7.32:  visibleChars 637, 0 note lines, chips 3 × 28px
+after  §7.33:  visibleChars 562, 0 note lines, no Queue/Steer, no hint
+               contrast floor held in dark and in light, no horizontal overflow
+```
+
+The row is now three chips and a button; everything else it used to say is on the controls themselves. Statements
+retired or moved: four picker keys (`queue`, `steer`, `mode.aria`, `mode.title`) deleted from all seven catalogues,
+one added (`task.composer.send.queued`), 450/450 complete.
+
 ## 8. The slice plan
 
 Ordered, and ordered by *cheapness times usefulness* rather than by Paseo's section order. Each slice
