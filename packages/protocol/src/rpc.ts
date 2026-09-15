@@ -1211,7 +1211,17 @@ export interface HarnessSummary {
    * press could only ever come back `connector-not-fetchable`. That is a control that cannot work, which this
    * panes's laws forbid outright (`docs/settings-parity.md` §7.18.2).
    */
-  fetchable?: { package: string };
+  fetchable?: {
+    package: string;
+    /**
+     * **What fetching this resolves** — a *connector* for an agent that is already here, or the *agent itself*.
+     *
+     * The two are not interchangeable, which is why the row has to be told which: Claude Code missing its bridge can
+     * be fetched into usability, and so can Copilot missing entirely — but neither offer is valid in the other's
+     * state. The window offers the press only where fetching would actually resolve the row.
+     */
+    covers: "connector" | "agent";
+  };
 
 }
 
@@ -1313,7 +1323,10 @@ export const HarnessSummarySchema = z
     // installed there is nothing to install, and offering the command anyway would be an invitation to reinstall
     // a program the row just said was working.
     // The offer, as opposed to the choice: the package this connector could be fetched from, when there is one.
-    fetchable: z.object({ package: z.string().min(1) }).strict().optional(),
+    fetchable: z
+      .object({ package: z.string().min(1), covers: z.enum(["connector", "agent"]) })
+      .strict()
+      .optional(),
     installFix: z.array(AvailabilityFixSchema).min(1).readonly().optional(),
   })
   .strict()

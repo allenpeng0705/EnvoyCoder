@@ -62,8 +62,8 @@ import {
   harnessRecipe,
   probeRecipe,
   providerRecipe,
-  fetchedBridgeArgs,
-  fetchedBridgeRecipe,
+  fetchedArgs,
+  fetchedRecipe,
   resolveHarnessCommand,
   resolveProviderEnv,
   splitArgs,
@@ -167,7 +167,7 @@ export function launchForHarness(input: LaunchInput): AcpLaunch {
    * the installed recipe: that combination can only arrive from a client hand-writing the call, because the
    * daemon refuses to *store* an unfetchable delivery in the first place.
    */
-  const fetched = delivery === "npx" ? fetchedBridgeRecipe(harness) : undefined;
+  const fetched = delivery === "npx" ? fetchedRecipe(harness) : undefined;
   return resolveLaunch(
     {
       label: definition.label,
@@ -181,7 +181,12 @@ export function launchForHarness(input: LaunchInput): AcpLaunch {
             // The path the probe resolved rather than the bare name `npx`, on the same rule every other launch
             // follows: "the probe verified this file" is a different claim from "something answers to this name".
             command: probe.binaryPath ?? "npx",
-            args: fetchedBridgeArgs(harness, extraArgs),
+            args: fetchedArgs(harness, {
+              prompt: "",
+              cwd,
+              ...(model ? { model } : {}),
+              ...(extraArgs ? { extraArgs } : {}),
+            }),
           })
         : (probe) =>
             resolveHarnessCommand(harness, probe, {

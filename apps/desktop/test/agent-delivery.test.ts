@@ -91,7 +91,7 @@ describe("the install command on a row that fetches its connector", () => {
     // daemon could write drew a *Run it through npx* press, including Envoy Harness, whose press could only come
     // back `connector-not-fetchable`. That is the owner's report: *"For the 'Ready' status agent, why they still
     // have 'Run it through npx'?"*
-    expect(codex?.fetchable).toEqual({ package: "@agentclientprotocol/codex-acp" });
+    expect(codex?.fetchable).toEqual({ package: "@agentclientprotocol/codex-acp", covers: "connector" });
     // An agent whose adapter lives in this repository has no offer at all.
     const builtIn = rows.find((summary) => summary.id === "envoy-harness");
     expect(builtIn?.fetchable).toBeUndefined();

@@ -711,7 +711,7 @@ describe("telling the window and its daemon apart", () => {
         ...base,
         delivery: { kind: "npx", package: "@agentclientprotocol/codex-acp" },
         installFix: install,
-        fetchable: { package: "@agentclientprotocol/codex-acp" },
+        fetchable: { package: "@agentclientprotocol/codex-acp", covers: "connector" },
       }).success,
     ).toBe(true);
     // A fetched row without it is refused: the text cannot be dropped from a row that is fetching.
@@ -741,7 +741,7 @@ describe("telling the window and its daemon apart", () => {
         ...base,
         delivery: { kind: "npx", package: "@agentclientprotocol/codex-acp" },
         installFix: install,
-        fetchable: { package: "@agentclientprotocol/codex-acp" },
+        fetchable: { package: "@agentclientprotocol/codex-acp", covers: "connector" },
       }).success,
     ).toBe(true);
   });

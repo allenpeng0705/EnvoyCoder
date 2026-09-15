@@ -30,7 +30,9 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   bridgePackage,
-  fetchedBridgeRecipe,
+  fetchedRecipe,
+  fetchableCovers,
+  fetchablePackage,
   probeHarness,
   probeProvider,
 } from "@envoycoder/agent-catalog";
@@ -463,10 +465,17 @@ describe("a connector that is fetched rather than installed", () => {
     expect(bridgePackage("codex")).toBe("@agentclientprotocol/codex-acp");
     expect(bridgePackage("claudecode")).toBe("@agentclientprotocol/claude-agent-acp");
     expect(bridgePackage("envoy-harness")).toBeUndefined();
-    expect(fetchedBridgeRecipe("envoy-harness")).toBeUndefined();
-    expect(fetchedBridgeRecipe("codex")?.binaries).toEqual(["npx"]);
+    expect(fetchedRecipe("envoy-harness")).toBeUndefined();
+    expect(fetchedRecipe("codex")?.binaries).toEqual(["npx"]);
     // And the agent's own program stays on the fetched recipe: the bridge drives it, so an absent agent is still
     // reported as an absent agent rather than as a package to download.
-    expect(fetchedBridgeRecipe("codex")?.agentBinaries).toEqual(["codex"]);
+    expect(fetchedRecipe("codex")?.agentBinaries).toEqual(["codex"]);
+    // **Copilot is the other shape**, and the difference is what `covers` names: its own CLI *is* the ACP server, so
+    // the fetched package is the agent rather than an adapter over it — and requiring it as an `agentBinary` would
+    // report the route as unusable in the one case it exists for.
+    expect(fetchablePackage("copilot")).toBe("@github/copilot");
+    expect(fetchableCovers("copilot")).toBe("agent");
+    expect(fetchableCovers("codex")).toBe("connector");
+    expect(fetchedRecipe("copilot")?.agentBinaries).toBeUndefined();
   });
 });

@@ -53,8 +53,9 @@ import {
   type HarnessProbe,
   type ProbeFinding,
   type ProviderProbe,
-  bridgePackage,
-  fetchedBridgeRecipe,
+  fetchableCovers,
+  fetchablePackage,
+  fetchedRecipe,
 } from "@envoycoder/agent-catalog";
 
 import type { CoderPaths } from "@envoycoder/host-bridge";
@@ -602,7 +603,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
            * launch time, so a catalogue edit is not a migration of anybody's stored choice.
            */
           const delivery = deps.deliveries?.of(id) ?? "installed";
-          const recipe = delivery === "npx" ? fetchedBridgeRecipe(id) : undefined;
+          const recipe = delivery === "npx" ? fetchedRecipe(id) : undefined;
           const installed = probe(id);
           const finding: HarnessProbe =
             recipe === undefined
@@ -632,7 +633,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
             // (`apps/desktop/src/composer/agent-for.ts`), not here.
             deps.store.agentAuth(id),
             delivery === "npx" && recipe !== undefined
-              ? { kind: "npx", package: bridgePackage(id) ?? "" }
+              ? { kind: "npx", package: fetchablePackage(id) ?? "" }
               : { kind: "installed" },
             // Present exactly when the delivery is `npx` and there is something to install on this machine —
             // `HarnessSummarySchema` refuses any other combination. (An argument, not a spread: a spread is an
@@ -640,7 +641,9 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
             installFix !== undefined && installFix.length > 0 ? installFix : undefined,
             // The offer, from the catalogue: what this connector *could* be fetched from. Absent for an agent
             // whose adapter is in this repository, which is what stops the window drawing a press that cannot work.
-            bridgePackage(id) !== undefined ? { package: bridgePackage(id) ?? "" } : undefined,
+            fetchablePackage(id) !== undefined && fetchableCovers(id) !== undefined
+              ? { package: fetchablePackage(id) ?? "", covers: fetchableCovers(id) ?? "connector" }
+              : undefined,
           );
         }),
       };
@@ -659,7 +662,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         delivery: "installed" | "npx";
       };
       if (delivery === "npx") {
-        const pkg = bridgePackage(harness);
+        const pkg = fetchablePackage(harness);
         if (pkg === undefined) {
           throw coderError(
             ENVOYCODER_ERRORS.connectorNotFetchable,
@@ -676,7 +679,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         harness,
         delivery:
           delivery === "npx"
-            ? ({ kind: "npx", package: bridgePackage(harness) ?? "" } as const)
+            ? ({ kind: "npx", package: fetchablePackage(harness) ?? "" } as const)
             : ({ kind: "installed" } as const),
       };
     },

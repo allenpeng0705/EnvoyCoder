@@ -96,7 +96,7 @@ export function summarize(
    * Read from the catalogue (`bridgePackage`) rather than from anything stored: it is a fact about the *recipe*,
    * and a stored copy would go stale the day a package is renamed.
    */
-  fetchable?: { package: string },
+  fetchable?: { package: string; covers: "connector" | "agent" },
 ): HarnessSummary {
   const definition = harnessDefinition(id);
   const result = probe(id);

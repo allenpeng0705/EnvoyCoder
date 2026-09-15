@@ -3111,6 +3111,52 @@ posture. All of them need `copilot login` first, which is the owner's to do — 
 be finished in one pass and the entry's `agentMode`, `model` and `thinking` upgraded from what the session actually
 says.
 
+### 7.23 Fetching is not only for bridges
+
+The owner's follow-up question, from the other end of §7.22: *"But if user didn't install copilot, what will happen?"*
+
+The honest answer had a wrinkle in it. Without Copilot installed the row is `not-installed` and carries the install
+command — so the text, the Copy control and the **Install** press are all there, and pressing it ends at
+`copilot login` one step later. What was *missing* was the second route the two bridges have: **fetch instead of
+install** was keyed on `install.bridge.package`, and Copilot has no bridge, because its own CLI *is* the ACP server.
+
+So the fetch route was generalised — and measured first, because the claim is the measurement:
+
+```console
+$ npx -y @github/copilot --acp        # first run downloads the package into npm's cache
+initialize → { protocolVersion: 1, agentInfo: {name: "Copilot", version: "1.0.83"},
+               authMethods: [{id: "copilot-login", …}] }      ← answered in 1s
+```
+
+| piece | before | after |
+|---|---|---|
+| the package | `bridgePackage` (a bridge over somebody else's CLI) | `fetchablePackage` — the bridge, **or the agent's own npm package** (`install.package`, a new structured field) |
+| what it resolves | always a connector | `fetchableCovers`: `connector` (the agent is here, the adapter is not) or `agent` (the program itself is what is missing) |
+| the recipe | `fetchedBridgeRecipe` — always kept `agentBinaries` | `fetchedRecipe` — keeps the agent requirement **only** when fetching a bridge; an agent that is its own server is the thing being fetched, so requiring it as an `agentBinary` would report the route unusable in the one case it exists for |
+| the argv | `["-y", bridgePackage]` | `["-y", package, ...theProgramsOwnArguments]` — `-y @github/copilot --acp`, and `-y @agentclientprotocol/codex-acp` for a bridge |
+| the wire | `fetchable: {package}` | `fetchable: {package, covers}` — the window cannot tell which state the offer is valid in without it |
+
+And the window's rule follows the same distinction, which is the part that keeps the press honest: a **connector**
+offer is drawn on a `needs-bridge` row, an **agent** offer on an `absent` row, and neither in the other's state — a
+press that downloads something and leaves the row exactly as it was is not an offer.
+
+Measured live on this machine, which has Copilot installed (so the offer is correctly *not* shown — the row is Ready):
+
+```console
+copilot   ready  fetchable: @github/copilot (covers agent)
+codex     ready  fetchable: @agentclientprotocol/codex-acp (covers connector)
+opencode  not-installed  —            # not on npm under a name we know: install only
+```
+
+Four new legs: the catalogue's two shapes (`fetchableCovers` and `fetchedRecipe`'s dropped `agentBinaries`), the
+window's *offers the route on an agent that is its own ACP server and is not installed*, and the protocol's
+`covers` field — plus the updated expectations in the delivery table. Gates: **886 passed / 7 skipped**, 12 Rust
+tests.
+
+**One thing this does not claim:** that fetching Copilot *installed* nothing. `npx` writes the package into npm's
+cache (`~/.npm/_npx/…`) and runs it from there — the same place `dsh` was found in §7.16 — so "nothing installed"
+means "nothing on `PATH`, nothing global", which is exactly the trade the delivery control describes.
+
 ## 8. The slice plan
 
 Ordered, and ordered by *cheapness times usefulness* rather than by Paseo's section order. Each slice

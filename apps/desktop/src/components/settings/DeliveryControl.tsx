@@ -36,7 +36,7 @@ export function DeliveryControl(props: {
    * `undefined` for an agent whose adapter is in this repository, and that absence is what stops this control
    * drawing a press that could only come back `connector-not-fetchable`.
    */
-  fetchable?: { package: string };
+  fetchable?: { package: string; covers: "connector" | "agent" };
   /**
    * Why the row is not ready, when it is not — from `rowVerdict`'s own reason.
    *
@@ -86,7 +86,19 @@ export function DeliveryControl(props: {
    * So the offer is made in exactly one case: the agent is here, the piece that drives it is not, and the catalogue
    * knows where that piece could be fetched from.
    */
-  const offerable = props.fetchable !== undefined && props.reason === "connector";
+  /**
+   * **And it is offered only where fetching would resolve *this* row.**
+   *
+   * The two shapes are not interchangeable, which is what `covers` is for: a **bridge** package helps a row that
+   * has the agent and is missing the adapter (`connector`), while an agent that *is* its own ACP server — Copilot,
+   * whose `npx -y @github/copilot --acp` was measured to answer `initialize` — is exactly what is missing when the
+   * row reads `absent`. Offering either in the other's state would be a press that downloads something and leaves
+   * the row exactly as it was.
+   */
+  const offerable =
+    props.fetchable !== undefined &&
+    ((props.fetchable.covers === "connector" && props.reason === "connector") ||
+      (props.fetchable.covers === "agent" && props.reason === "absent"));
   if (!fetching && !offerable) return null;
 
   return (

@@ -752,7 +752,7 @@ describe("choosing how a connector is delivered", () => {
     // delivery is the separate fact that says the first run downloads something.
     availability: { state: "ready" as const, binary: "/usr/local/bin/npx" },
     delivery: { kind: "npx" as const, package: "@agentclientprotocol/codex-acp" },
-    fetchable: { package: "@agentclientprotocol/codex-acp" },
+    fetchable: { package: "@agentclientprotocol/codex-acp", covers: "connector" as const },
   };
 
   /** A **Ready** agent whose connector is installed: the case the owner asked about. */
@@ -761,7 +761,7 @@ describe("choosing how a connector is delivered", () => {
     label: "Codex",
     availability: { state: "ready" as const, binary: "/Users/you/.npm-global/bin/codex-acp" },
     delivery: { kind: "installed" as const },
-    fetchable: { package: "@agentclientprotocol/codex-acp" },
+    fetchable: { package: "@agentclientprotocol/codex-acp", covers: "connector" as const },
   };
 
   /** An agent whose adapter lives in this repository: there is nothing to fetch, ever. */
@@ -852,7 +852,7 @@ describe("choosing how a connector is delivered", () => {
             },
             // The offer needs the package, which the window cannot invent: this is what the daemon sends for an
             // agent whose connector is published on npm.
-            fetchable: { package: "@agentclientprotocol/codex-acp" },
+            fetchable: { package: "@agentclientprotocol/codex-acp", covers: "connector" as const },
           }),
         ],
       },
@@ -909,7 +909,9 @@ describe("choosing how a connector is delivered", () => {
             id: "codex",
             label: "Codex",
             availability: { state: "not-installed", fix: [{ command: "npm install -g @openai/codex" }] },
-            fetchable: { package: "@agentclientprotocol/codex-acp" },
+            // A *bridge* offer on a row that is missing the agent itself: fetching the adapter would leave the row
+            // exactly as unusable, so the press is not drawn — see the leg below for the shape that does resolve it.
+            fetchable: { package: "@agentclientprotocol/codex-acp", covers: "connector" as const },
           }),
         ],
       },
@@ -921,6 +923,33 @@ describe("choosing how a connector is delivered", () => {
         (candidate) => candidate.textContent === en["settings.agents.delivery.npx"],
       ),
     ).toBe(false);
+  });
+
+  it("offers the route on an agent that is its own ACP server and is not installed", () => {
+    // **The owner's question, answered in the UI:** *"But if user didn't install copilot, what will happen?"* Copilot
+    // is not a bridge over somebody else's CLI — its own program is the ACP server, and `npx -y @github/copilot
+    // --acp` was measured to answer `initialize` (2026-08-… correction: 2026-09-15, version 1.0.83). So a row that
+    // is `absent` with a fetchable `agent` is *exactly* the case fetching resolves, and the press is offered beside
+    // the install command the block already shows.
+    const { container } = show(
+      {
+        harnesses: [
+          harness({
+            id: "copilot",
+            label: "GitHub Copilot",
+            availability: { state: "not-installed", fix: [{ command: "npm install -g @github/copilot" }] },
+            fetchable: { package: "@github/copilot", covers: "agent" as const },
+          }),
+        ],
+      },
+      ["coder.setAgentDelivery", "coder.runFix"],
+    );
+    const panel = openDetails(rowOf(container, "GitHub Copilot"));
+    const labels = [...panel.querySelectorAll("button")].map((candidate) => candidate.textContent);
+    // The install command and its press are there …
+    expect(labels).toContain(en["settings.agents.fix.run"]);
+    // … and so is the route that needs no install at all.
+    expect(labels).toContain(en["settings.agents.delivery.npx"]);
   });
 
   it("is not drawn when the daemon does not serve the method", () => {

@@ -344,6 +344,16 @@ export interface HarnessDefinition {
      * honest answer for the seven agents we ship whose adapter is in this repository.
      */
     bridge?: { hint: string; url?: string; package?: string };
+    /**
+     * **The agent's own program, when it is published on npm** — as opposed to `bridge.package`, which is the
+     * adapter layered over somebody else's CLI.
+     *
+     * It is what makes a *fetched* delivery possible for an agent that is its own ACP server: Copilot 1.0.83
+     * advertises nothing to install beyond itself, and `npx -y @github/copilot --acp` was measured to answer an ACP
+     * `initialize` (2026-09-15, 1.0.83), so a user who would rather not install it globally can run it from npm's
+     * cache. A package *parsed out of `hint`* would be one catalogue edit away from being wrong; this is the field.
+     */
+    package?: string;
   };
   /** Where the facts came from. `unverified` means "confirm before relying on it". */
   evidence: string;
@@ -774,7 +784,13 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       approvalPolicy: false,
       worktrees: "external",
     },
-    install: { hint: "npm install -g @github/copilot", url: "https://github.com/features/copilot/cli/" },
+    install: {
+      hint: "npm install -g @github/copilot",
+      url: "https://github.com/features/copilot/cli/",
+      // `npx -y @github/copilot --acp` starts the same ACP server without a global install — measured, see
+      // `evidence`.
+      package: "@github/copilot",
+    },
     evidence:
       "VERIFIED against the real binary on 2026-09-15, macOS: `copilot --version` → 1.0.83, and " +
       "`copilot --help` lists `--acp  Start as Agent Client Protocol server`. Driving it over stdio: " +
@@ -1138,6 +1154,26 @@ export function bridgePackage(id: HarnessId): string | undefined {
 }
 
 /**
+ * **The package this agent could be run from without installing anything** — a bridge, or the agent itself.
+ *
+ * Two shapes, and the difference matters to the row that offers the route rather than to the fetch: a *bridge*
+ * package only helps when the agent's own program is already here (`needs-bridge`), while an agent that is its own
+ * ACP server is exactly what is missing when it is not installed. `fetchableCovers` names which of the two this is,
+ * and the window offers the press only where fetching would actually resolve the row.
+ */
+export function fetchablePackage(id: HarnessId): string | undefined {
+  const install = HARNESS_CATALOG[id].install;
+  return install?.bridge?.package ?? install?.package;
+}
+
+/** What fetching resolves: the adapter over an agent that is here, or the agent itself. */
+export function fetchableCovers(id: HarnessId): "connector" | "agent" | undefined {
+  const install = HARNESS_CATALOG[id].install;
+  if (install?.bridge?.package !== undefined) return "connector";
+  return install?.package !== undefined ? "agent" : undefined;
+}
+
+/**
  * **The recipe for a connector that is fetched rather than installed** — what the launch probes and runs when a
  * user has chosen the `npx` delivery.
  *
@@ -1152,23 +1188,29 @@ export function bridgePackage(id: HarnessId): string | undefined {
  * `claude`, and a fetched bridge for an agent that is itself absent would download a package and then fail. The
  * probe keeps reporting that honestly (`not-installed`, with the agent's own install hint).
  */
-export function fetchedBridgeRecipe(id: HarnessId): ProbeRecipe | undefined {
+export function fetchedRecipe(id: HarnessId): ProbeRecipe | undefined {
   const definition = HARNESS_CATALOG[id];
-  const pkg = bridgePackage(id);
-  if (pkg === undefined || definition.launch.kind !== "child-process") return undefined;
+  const pkg = fetchablePackage(id);
+  const covers = fetchableCovers(id);
+  if (pkg === undefined || covers === undefined || definition.launch.kind !== "child-process") return undefined;
+  const bridge = definition.install?.bridge;
   return {
     label: definition.label,
     kind: "child-process",
-    // **The program we launch is `npx`**, and that is what the probe looks for: a machine with no `npx` cannot
-    // take this route, and the row must say so rather than offering a download nothing can perform.
+    // **The program we launch is `npx`**, and that is what the probe looks for: a machine with no `npx` cannot take
+    // this route, and the row must say so rather than offering a download nothing can perform.
     binaries: ["npx"],
     transport: definition.launch.transport,
-    ...(definition.launch.agentBinaries ? { agentBinaries: definition.launch.agentBinaries } : {}),
-    // The bridge's own hint, and the page that explains it — this is the thing being fetched, so it is what an
-    // install hint has to be about.
+    // **The agent's own program stays required only when we are fetching a bridge over it.** An agent that *is* its
+    // own ACP server (Copilot) is the thing being fetched, so requiring it as an `agentBinary` would report the
+    // route as unusable for the very case it exists for.
+    ...(covers === "connector" && definition.launch.agentBinaries
+      ? { agentBinaries: definition.launch.agentBinaries }
+      : {}),
+    // The hint is about the thing being fetched: the bridge's own, or the agent's.
     install: {
-      hint: definition.install?.bridge?.hint ?? `npx -y ${pkg}`,
-      ...(definition.install?.bridge?.url !== undefined ? { url: definition.install.bridge.url } : {}),
+      hint: bridge?.hint ?? `npx -y ${pkg}`,
+      ...(bridge?.url !== undefined ? { url: bridge.url } : {}),
     },
   };
 }
@@ -1180,10 +1222,19 @@ export function fetchedBridgeRecipe(id: HarnessId): ProbeRecipe | undefined {
  * ACP server is a process that never answers `initialize` — the failure would read as "the agent is broken"
  * rather than "somebody has to type `y`". The user's decision was the press that chose this delivery.
  */
-export function fetchedBridgeArgs(id: HarnessId, extraArgs: string | undefined): string[] {
-  const pkg = bridgePackage(id);
-  if (pkg === undefined) return [];
-  return ["-y", pkg, ...splitArgs(extraArgs)];
+export function fetchedArgs(id: HarnessId, input: RunInput): string[] {
+  const pkg = fetchablePackage(id);
+  const definition = HARNESS_CATALOG[id];
+  if (pkg === undefined || definition.launch.kind !== "child-process") return [];
+  /**
+   * **`-y`, then the package, then the program's own arguments.**
+   *
+   * For a bridge those arguments are empty (the bridge *is* the ACP server), and for an agent that is its own
+   * server they are its own (`--acp`). One rule covers both, which is the point: the fetched route launches
+   * *the same program the installed route would*, obtained differently.
+   */
+  const own = definition.launch.buildArgs({ ...input, extraArgs: input.extraArgs });
+  return ["-y", pkg, ...own];
 }
 
 /**
