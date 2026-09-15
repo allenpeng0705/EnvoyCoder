@@ -189,7 +189,7 @@ describe("probing and spawning use the same PATH", () => {
     const cwd = await tempDir("envoycoder-refusal-cwd-");
     const home = await tempDir("envoycoder-refusal-home-");
     const empty = await tempDir("envoycoder-refusal-empty-");
-    const called = (harm: "claudecode" | "copilot", dirs: readonly string[]): Error => {
+    const called = (harm: "claudecode" | "opencode", dirs: readonly string[]): Error => {
       try {
         launchForHarness({ harness: harm, cwd, paths: coderPaths(home), searchDirs: dirs });
       } catch (error) {
@@ -198,10 +198,14 @@ describe("probing and spawning use the same PATH", () => {
       throw new Error(`${harm} was launched when it should have been refused`);
     };
 
-    // 1. Installed and undrivable: `copilot` is `transport: "cli"`, and the list holds a `copilot` binary.
-    const copilotDir = await tempDir("envoycoder-refusal-copilot-");
-    await bridgeIn(copilotDir, "copilot");
-    const undrivable = called("copilot", [copilotDir]);
+    // 1. Installed and undrivable: `opencode` is `transport: "cli"`, and the list holds an `opencode` binary.
+    //
+    // `copilot` was this leg's example until 2026-09-15, when its own `--acp` server was measured and it became
+    // drivable — the state this leg asserts is "installed, and we have no adapter", which has to be shown by an
+    // agent that really is undrivable.
+    const undrivableDir = await tempDir("envoycoder-refusal-undrivable-");
+    await bridgeIn(undrivableDir, "opencode");
+    const undrivable = called("opencode", [undrivableDir]);
     expect(coderErrorCode(undrivable.message)).toBe(ENVOYCODER_ERRORS.harnessUnsupported);
     expect(coderErrorRef(undrivable.message)?.key).toBe("error.harnessUnsupported");
     // And not the sentence that tells them to install what they already have.

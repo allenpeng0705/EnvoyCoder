@@ -227,9 +227,11 @@ describe("a provider launches through the same path as a catalogue entry", () =>
         searchDirs: [],
       }),
     );
+    // `opencode` rather than `copilot`: since 2026-09-15 Copilot's own `--acp` server is measured and the entry is
+    // drivable, so it can no longer stand for "a shipped agent this build cannot speak to".
     const harnessError = refusalOf(() =>
       launchForHarness({
-        harness: "copilot",
+        harness: "opencode",
         cwd: "/tmp",
         paths: coderPaths("/tmp/envoycoder-home"),
         searchDirs: [],

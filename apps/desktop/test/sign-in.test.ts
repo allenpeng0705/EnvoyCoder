@@ -303,17 +303,20 @@ describe("what pressing Sign in can come back as", () => {
 
   it("says it could not start the agent rather than blaming the sign-in", async () => {
     // The daemon's own resolution here, because this is the case where it must refuse *before* a process
-    // exists: `copilot` is a command-line agent this build cannot drive, so `launchForHarness` — the same
+    // exists: `opencode` is a command-line agent this build cannot drive, so `launchForHarness` — the same
     // function a run calls — throws `harnessUnsupported`.
+    //
+    // (`copilot` was this leg's subject until 2026-09-15: its `--acp` server was measured, so it launches now and
+    // the leg's premise — a refusal before any process exists — no longer holds for it.)
     const b = await bench({}, { realLaunch: true });
-    const answer = await b.signIn.signIn("copilot");
+    const answer = await b.signIn.signIn("opencode");
 
     expect(answer.outcome).toBe("unavailable");
     // The outer sentence is ours and keyed — so what a translator writes is one string — while the launch's own
     // refusal is embedded as a *value*, arriving whole. That division is the same one `SessionProbe` uses for a
     // failed ask, and it is what makes the reason readable in a language we did not write it in.
     expect(parseMessageRef(answer.detail).ref?.key).toBe("signIn.unavailable");
-    expect(answer.detail).toContain("GitHub Copilot");
+    expect(answer.detail).toContain("OpenCode");
     // …and the value is the launch's sentence, which is the one that says *which* of the four ways it failed.
     expect(parseMessageRef(answer.detail).ref?.values?.reason).toContain(
       "speaks a protocol EnvoyCoder cannot drive yet",
@@ -465,8 +468,9 @@ describe("the method, and the daemon that has no flow to serve it", () => {
     await expect(withFlow["coder.signInAgent"]?.({ harness: "not-a-harness" })).rejects.toThrow(
       /coder\.signInAgent was called with an unusable/,
     );
-    // And a real one reaches the flow, which reports what this machine can do with `copilot`.
-    const answer = (await withFlow["coder.signInAgent"]?.({ harness: "copilot" })) as { outcome: string };
+    // And a real one reaches the flow, which reports what this machine can do with `opencode` — an agent this
+    // build cannot launch, so the answer is `unavailable` rather than a sign-in nobody could perform.
+    const answer = (await withFlow["coder.signInAgent"]?.({ harness: "opencode" })) as { outcome: string };
     expect(answer.outcome).toBe("unavailable");
   });
 });

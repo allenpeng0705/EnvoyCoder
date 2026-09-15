@@ -249,9 +249,10 @@ export interface AgentCapabilities {
    *     offering a control that would be silently ignored — which is why `modes` is empty there and
    *     this is `false`.
    *
-   * The third-party CLI entries are all `false`: they declare modes with their own ids (carried over
-   * from Paseo's provider manifest), and `isDrivableByAcpAdapter` already refuses to launch them at
-   * all — so a mode could not be applied even if one were chosen.
+   * The third-party entries are `false` too, for two different reasons recorded where they apply: the
+   * ones `isDrivableByAcpAdapter` refuses (`opencode`, `pi`, `omp`) could not have a mode applied even if
+   * one were chosen, and `copilot` — drivable since its own `--acp` server was measured on 2026-09-15 —
+   * has a mode *field* nobody has read yet, because its `session/new` refuses until the user signs in.
    */
   agentMode: boolean;
   /**
@@ -731,38 +732,65 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       { id: "https://agentclientprotocol.com/protocol/session-modes#plan", label: "Plan", description: "Read-only." },
       { id: "allow-all", label: "Allow all", unattended: true },
     ],
-    summary: "GitHub Copilot's CLI agent.",
+    summary: "GitHub Copilot's CLI agent, driven over ACP by its own `--acp` server.",
     launch: {
       kind: "child-process",
       binaries: ["copilot"],
-      buildArgs: ({ prompt, extraArgs }) => [...splitArgs(extraArgs), "-p", prompt],
-      stream: "text",
-      transport: "cli",
+      /**
+       * **`--acp`, and nothing else.** Copilot 1.0.83 starts an Agent Client Protocol server on stdin/stdout
+       * with that one flag; it takes no prompt, no model and no resume id in argv — a prompt in this argv would
+       * be handed to a program that reads none of it. The model and the mode travel as session options, exactly
+       * as they do for the two bridges.
+       */
+      buildArgs: ({ extraArgs }) => ["--acp", ...splitArgs(extraArgs)],
+      stream: "jsonl",
+      transport: "acp",
+      // Measured, not guessed: `initialize` answers this method id, and it is the one `coder.signInAgent` must
+      // name. See `evidence` for what it does when asked — the answer is honest and not what the button implies.
+      authMethodId: "copilot-login",
     },
     capabilities: {
-      resume: false,
+      // `agentCapabilities.loadSession: true` and `sessionCapabilities: {close, list}` — advertised by the server
+      // on `initialize`. Advertised is what this entry can record; a resume has not been exercised here.
+      resume: true,
       cancel: true,
+      // Not observed: no session has opened on the machine this was written on, so no `session/request_permission`
+      // has been seen. Claiming `true` would enable "ask before anything destructive" for an agent whose asking
+      // posture has never been watched — the mistake the `claudecode` entry records and undid.
       approvals: false,
-      structuredTools: false,
+      structuredTools: true,
       streaming: true,
-      images: false,
+      // `promptCapabilities.image: true`, measured on `initialize`.
+      images: true,
+      /**
+       * **Off, and it was `true` while this entry was refused.** The flag means "this daemon can *set* a mode", and
+       * `drivable.test.ts` demands that a `true` here name the field the agent reads (`mode` or `modeId`) — which
+       * cannot be defaulted, because a wrong guess is a silent no-op for one of the two contracts. Nobody has read
+       * that field on this server: `session/new` answers `Authentication required` until `copilot login` has run,
+       * so there has been no session to ask. The modes below still travel as facts; the picker stays off with a
+       * reason until somebody signs in and reads a session.
+       */
       agentMode: false,
-      // Same claim, same reason: no ACP policy method for this entry to be handed one through.
       approvalPolicy: false,
       worktrees: "external",
     },
     install: { hint: "npm install -g @github/copilot", url: "https://github.com/features/copilot/cli/" },
     evidence:
-      "unverified, and the least certain entry in the catalogue: Paseo lists Copilot as a supported " +
-      "agent (paseo README, 'Prerequisites'), but its non-interactive flag surface has not been read. " +
-      "Treat as `stream: text` until proven otherwise — a text-only agent must not be offered the " +
-      "structured diff panel. **A LEAD, not this entry's command, and not a claim:** GitHub announced " +
-      "ACP support in Copilot CLI (github.blog changelog, 2026-01-28, 'public preview') and documents an " +
-      "ACP server page for it, so this entry is likely wirable over the same adapter as the five that " +
-      "work instead of needing a transport of its own. The exact command was NOT verified here — " +
-      "`copilot` is not installed on the machine this was written on — and this entry is still " +
-      "`transport: \"cli\"`, still refused by `isDrivableByAcpAdapter`, and must stay that way until " +
-      "somebody drives the real binary and records what it said.",
+      "VERIFIED against the real binary on 2026-09-15, macOS: `copilot --version` → 1.0.83, and " +
+      "`copilot --help` lists `--acp  Start as Agent Client Protocol server`. Driving it over stdio: " +
+      "`initialize {protocolVersion: 1}` → `{protocolVersion: 1, agentInfo: {name: 'Copilot', version: " +
+      "'1.0.83'}, agentCapabilities: {loadSession: true, sessionCapabilities: {close, list}, " +
+      "mcpCapabilities: {http, sse}, promptCapabilities: {image: true, embeddedContext: true}}, " +
+      "authMethods: [{id: 'copilot-login', name: 'Log in with Copilot CLI'}]}`. This is why the entry is " +
+      "`transport: \"acp\"` and not `\"cli\"`: it was the least certain entry in the catalogue, Paseo drives " +
+      "the same server (`packages/server/src/server/agent/providers/copilot-acp-agent.ts`, " +
+      "`defaultCommand: [\"copilot\", \"--acp\"]`), and the binary answers. " +
+      "**`session/new` asserts the limit of this measurement:** it answers `-32000 Authentication required` " +
+      "until the user has run `copilot login`, so the modes, the model list and the `allow_all` config option " +
+      "advertised by the server have NOT been read here — the modes below are Paseo's ids for this server, not " +
+      "this machine's observation of them, and the capability flag that depends on a session " +
+      "(`thinking`) is `false` for that reason rather than because the server lacks it. UNVERIFIED: " +
+      "`capabilities.cancel`, `approvals`, and every mode change.",
   },
 
   opencode: {

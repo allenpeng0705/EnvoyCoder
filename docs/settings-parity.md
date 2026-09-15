@@ -3015,6 +3015,102 @@ convenience); and that the choice belongs in the row's disclosure rather than in
 compete with Run. **Not verified:** a real fetched run — `npx -y @agentclientprotocol/codex-acp` downloading and
 opening a session. That is one press on the owner's machine and one download, and it is theirs to make.
 
+### 7.22 GitHub Copilot: "we cannot drive this" was our entry being stale, not the agent
+
+The owner's question, looking at the row: *"How paseo support it?"* The row said *EnvoyCoder cannot drive this agent
+yet*, and the honest answer turned out to be that Paseo drives it exactly the way we drive the two bridges.
+
+#### 7.22.1 What the reference product does, and what our binary says
+
+```ts
+// ../paseo/packages/server/src/server/agent/providers/copilot-acp-agent.ts:87
+defaultCommand: ["copilot", "--acp"]
+```
+
+Paseo has a first-class `CopilotACPAgentClient` (registered as the `copilot` provider) extending its shared
+`ACPAgentClient` — the same base its Cursor and Trae clients use. It declares the three modes our entry already
+listed (the URL-shaped ids are real: Copilot names its modes that way), plus two config options we do not (`allow_all`,
+`agent`).
+
+And the binary on this machine agrees, measured on 2026-09-15:
+
+```console
+$ copilot --version   → 1.0.83
+$ copilot --help      → --acp   Start as Agent Client Protocol server
+$ initialize {protocolVersion: 1} →
+  { protocolVersion: 1, agentInfo: {name: "Copilot", version: "1.0.83"},
+    agentCapabilities: {loadSession: true, sessionCapabilities: {close, list},
+                        mcpCapabilities: {http, sse},
+                        promptCapabilities: {image: true, embeddedContext: true}},
+    authMethods: [{id: "copilot-login", name: "Log in with Copilot CLI"}] }
+$ session/new         → -32000 "Authentication required"
+```
+
+So our entry was wrong in one field — `transport: "cli"` — and everything the owner saw followed from it: the
+`unsupported` state, the sentence *"installing it again would change nothing"*, no install command, no press. The
+entry's own `evidence` had already flagged it as *"unverified, and the least certain entry in the catalogue"*, which
+is what made the fix a measurement rather than a guess.
+
+#### 7.22.2 What changed, and what deliberately did not
+
+| field | before | after |
+|---|---|---|
+| `transport` | `"cli"` | `"acp"` |
+| argv | `["-p", prompt]` | `["--acp"]` — the prompt travels over the protocol, as it does for the bridges |
+| `stream` | `"text"` | `"jsonl"` |
+| `authMethodId` | — | `"copilot-login"`, from `initialize` |
+| capabilities | mostly `false` | `resume`, `structuredTools`, `streaming`, `images` true; `approvals`, `agentMode`, `approvalPolicy` **false** |
+| `modes` | three ids (Paseo's) | unchanged — now corroborated |
+| `evidence` | "unverified" | the measurement above, with the refusal in it |
+
+**`agentMode` stays `false`, and that is the interesting one.** The flag means *we can set a mode*, and
+`drivable.test.ts` demands that a `true` here name the field the agent reads (`mode` or `modeId`) — which cannot be
+defaulted, because one of the two contracts ignores a wrong field and answers success. Nobody has read that field on
+this server: `session/new` refuses until the user signs in, so there has been no session to ask. The modes still
+travel as facts; the picker stays off with a reason until somebody can read a session. `model` and `thinking` are
+false for the same reason, and the entry says so rather than implying the server lacks them.
+
+#### 7.22.3 The six tests that had to change, and why that is not weakening them
+
+Every one of them used `copilot` as *the* example of an installed-but-undrivable agent, which is exactly the claim
+that stopped being true:
+
+* *drives the five …* → **six**, with `copilot` in the list;
+* *keeps the four agents with no ACP surface …* → **three** (`opencode`, `pi`, `omp`);
+* *makes every agent that claims a settable mode say which field carries it* → unchanged, and it is what forced
+  `agentMode: false` above;
+* *names the one agent that cannot open a session without authenticating* → **two** (`copilot`, `cursor`);
+* *marks text-only agents as unstructured* → the sample loses `copilot` (it is a JSONL ACP server now) and keeps
+  `opencode`/`pi`;
+* *reports `unsupported` for an installed agent whose protocol this build cannot speak*, plus the three
+  `opencode` refusals in `launch-search-path`, `providers` and `sign-in` → the subject moves to `opencode`.
+
+Each keeps its assertion and changes its example, which is the only honest way to update a test whose subject
+changed: the alternative — deleting the leg, or loosening it to `toContain` — would have hidden the next agent in the
+same position.
+
+#### 7.22.4 What the row says now, measured live
+
+```console
+copilot row:
+  state       ready  /Users/shileipeng/.npm-global/bin/copilot
+  modes       Agent, Plan, Allow all
+  auth        {"state":"needs-signin","methodId":"copilot-login","observedAt":"2026-09-15T12:45:01Z"}
+  capabilities {"resume":true,"cancel":true,"approvals":false,"structuredTools":true,
+                "streaming":true,"images":true,"agentMode":false,"model":false,
+                "thinking":false,"approvalPolicy":false}
+```
+
+**`ready` and `needs-signin` at once, and both are true**: the program is installed and speaks ACP, and it will not
+open a session until the user has run `copilot login` — which the daemon discovered by trying, in the background
+warm pass, and recorded with the method id it was told. That is the row a user should see: drivable, one step away,
+and the step named.
+
+**Not verified, and the entry says so:** a real session, a turn, a mode change, `session/cancel`, and the approval
+posture. All of them need `copilot login` first, which is the owner's to do — and after it, the same measurement can
+be finished in one pass and the entry's `agentMode`, `model` and `thinking` upgraded from what the session actually
+says.
+
 ## 8. The slice plan
 
 Ordered, and ordered by *cheapness times usefulness* rather than by Paseo's section order. Each slice
