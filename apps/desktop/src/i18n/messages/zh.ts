@@ -238,7 +238,7 @@ export const zh: Catalogue = {
   /* ── the status line, and the one place the mesh is always visible ── */
   "mesh.attached.peers": "Mesh 已连接 — {count} 台机器可达",
   "mesh.attached.none": "Mesh 已连接 — 暂时没有其他机器可达",
-  "mesh.noNode": "EnvoyMesh 未运行 — 任务留在这台机器上",
+  "mesh.noNode": "独立运行 — 任务留在这台机器上",
   "mesh.refused": "EnvoyMesh 拒绝为 EnvoyCoder 授予会话 — 任务留在这台机器上",
   "mesh.peers": "{count} 个对等节点",
   "mesh.scope.title": "会话范围 {scope}",

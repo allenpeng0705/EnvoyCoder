@@ -238,7 +238,7 @@ export const ko: Catalogue = {
   /* ── the status line, and the one place the mesh is always visible ── */
   "mesh.attached.peers": "메시 연결됨 — 컴퓨터 {count}대에 도달 가능",
   "mesh.attached.none": "메시 연결됨 — 아직 도달할 수 있는 다른 컴퓨터가 없습니다",
-  "mesh.noNode": "EnvoyMesh가 실행되지 않았습니다 — 작업은 이 컴퓨터에 남습니다",
+  "mesh.noNode": "단독 실행 — 작업은 이 컴퓨터에서 실행됩니다",
   "mesh.refused": "EnvoyMesh가 EnvoyCoder에 세션을 허용하지 않았습니다 — 작업은 이 컴퓨터에 남습니다",
   "mesh.peers": "피어 {count}개",
   "mesh.scope.title": "세션 범위 {scope}",

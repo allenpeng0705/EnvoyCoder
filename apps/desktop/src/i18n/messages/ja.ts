@@ -238,7 +238,7 @@ export const ja: Catalogue = {
   /* ── the status line, and the one place the mesh is always visible ── */
   "mesh.attached.peers": "メッシュ接続済み — {count} 台に到達できます",
   "mesh.attached.none": "メッシュ接続済み — 到達できる他のマシンはまだありません",
-  "mesh.noNode": "EnvoyMesh が動いていません — タスクはこのコンピューターにとどまります",
+  "mesh.noNode": "単独で動作 — タスクはこのマシン上で実行されます",
   "mesh.refused": "EnvoyMesh が EnvoyCoder にセッションを許可しませんでした — タスクはこのコンピューターにとどまります",
   "mesh.peers": "{count} ピア",
   "mesh.scope.title": "セッションスコープ {scope}",

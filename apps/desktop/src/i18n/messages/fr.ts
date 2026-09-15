@@ -238,7 +238,7 @@ export const fr: Catalogue = {
   /* ── the status line, and the one place the mesh is always visible ── */
   "mesh.attached.peers": "Mesh connecté — {count} machines joignables",
   "mesh.attached.none": "Mesh connecté — aucune autre machine joignable pour l'instant",
-  "mesh.noNode": "EnvoyMesh n'est pas lancé — les tâches restent sur cet ordinateur",
+  "mesh.noNode": "Autonome — les tâches restent sur cette machine",
   "mesh.refused": "EnvoyMesh a refusé une session à EnvoyCoder — les tâches restent sur cet ordinateur",
   "mesh.peers": "{count} pairs",
   "mesh.scope.title": "Portée de session {scope}",

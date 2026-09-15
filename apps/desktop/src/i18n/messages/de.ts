@@ -238,7 +238,7 @@ export const de: Catalogue = {
   /* ── the status line, and the one place the mesh is always visible ── */
   "mesh.attached.peers": "Mesh verbunden — {count} Computer erreichbar",
   "mesh.attached.none": "Mesh verbunden — noch keine anderen Computer erreichbar",
-  "mesh.noNode": "EnvoyMesh läuft nicht — Aufgaben bleiben auf diesem Computer",
+  "mesh.noNode": "Eigenständig — Aufgaben bleiben auf diesem Rechner",
   "mesh.refused": "EnvoyMesh hat EnvoyCoder keine Sitzung gewährt — Aufgaben bleiben auf diesem Computer",
   "mesh.peers": "{count} Peers",
   "mesh.scope.title": "Sitzungsbereich {scope}",

@@ -331,7 +331,7 @@ export const en = {
   /* ── the status line, and the one place the mesh is always visible ── */
   "mesh.attached.peers": "Mesh connected — {count} machines reachable",
   "mesh.attached.none": "Mesh connected — no other machines reachable yet",
-  "mesh.noNode": "EnvoyMesh is not running — tasks stay on this machine",
+  "mesh.noNode": "Standalone — tasks stay on this machine",
   "mesh.refused": "EnvoyMesh refused EnvoyCoder a session — tasks stay on this machine",
   "mesh.peers": "{count} peers",
   "mesh.scope.title": "Session scope {scope}",
