@@ -280,7 +280,6 @@ export const zh: Catalogue = {
   "settings.defaultHarness.title": "新任务默认使用的智能体",
   "settings.defaultHarness.detail": "项目可以覆盖它；项目没有覆盖时以此为准。",
   "settings.defaultHarness.catalog": "这里没装？看 {section}。",
-  "settings.needsInstalling": "（需要安装）",
   "settings.defaultModel.title": "新任务默认使用的模型",
   "settings.defaultModel.detail": "留空则由智能体自己选。",
   "settings.extraArgs.title": "传给智能体的额外参数",

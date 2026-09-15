@@ -30,7 +30,8 @@ import { useI18n } from "../../i18n/context.js";
 import { LOCALES, LOCALE_LABELS } from "../../i18n/locales.js";
 import { FolderSetting, SettingRow, TextSetting } from "../SettingsRows.js";
 import type { SettingsSectionProps } from "./SectionProps.js";
-import { ApprovalRow, ModelRow, summaryFor } from "./SettingsRowParts.js";
+import { ApprovalRow, ModelRow, labelForHarness, summaryFor } from "./SettingsRowParts.js";
+import { verdictSuffix } from "./agent-verdict.js";
 
 /**
  * **General** — the language this window speaks, and the folder a new project starts from.
@@ -144,15 +145,24 @@ export function TasksSection(props: SettingsSectionProps): JSX.Element {
             aria-label={t("settings.defaultHarness.title")}
             onChange={(event) => props.onUpdate({ defaults: { harness: event.target.value as HarnessId } })}
           >
-            {available.length === 0 ? (
-              // An empty picker is a lie by omission: it suggests nothing is installed when the
-              // truth is that we have not been told yet.
-              <option value={defaultHarness}>{defaultHarness}</option>
-            ) : null}
+            {available.some((entry) => entry.id === defaultHarness) ? null : (
+              // **The stored value, when the list does not carry it.**
+              //
+              // `offeredAgents` drops the one state that asserts a program is absent, so a default agent that
+              // was measured `not-installed` is not among the options — and a `<select>` whose value matches no
+              // option is not "empty", it is *blank*: the browser clears the selection and the row stops saying
+              // which agent a new task would start on. Both pickers therefore render the stored value itself,
+              // and — because the reason it is missing from the list is a fact a user needs, not a detail —
+              // with the same measured suffix every other row carries.
+              <option value={defaultHarness}>
+                {labelForHarness(defaultHarness, props.state)}
+                {verdictSuffix(summaryFor(props.state, defaultHarness)?.availability, t)}
+              </option>
+            )}
             {available.map((harness) => (
               <option key={harness.id} value={harness.id}>
                 {harness.label}
-                {harness.tier === "catalogued" ? ` ${t("settings.needsInstalling")}` : ""}
+                {verdictSuffix(harness.availability, t)}
               </option>
             ))}
           </select>

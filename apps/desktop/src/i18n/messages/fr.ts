@@ -280,7 +280,6 @@ export const fr: Catalogue = {
   "settings.defaultHarness.title": "L'agent avec lequel démarrent les nouvelles tâches",
   "settings.defaultHarness.detail": "Un projet peut le remplacer ; ceci s'applique quand ce n'est pas le cas.",
   "settings.defaultHarness.catalog": "Pas installé ici ? Voir {section}.",
-  "settings.needsInstalling": "(à installer)",
   "settings.defaultModel.title": "Le modèle avec lequel démarrent les nouvelles tâches",
   "settings.defaultModel.detail": "Vide : l'agent choisit.",
   "settings.extraArgs.title": "Arguments supplémentaires pour l'agent",

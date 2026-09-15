@@ -280,7 +280,6 @@ export const ko: Catalogue = {
   "settings.defaultHarness.title": "새 작업이 시작하는 에이전트",
   "settings.defaultHarness.detail": "프로젝트가 이를 재정의할 수 있습니다. 재정의하지 않을 때 적용되는 값입니다.",
   "settings.defaultHarness.catalog": "여기 없나요? {section}을(를) 보세요.",
-  "settings.needsInstalling": "(설치 필요)",
   "settings.defaultModel.title": "새 작업이 사용하는 모델",
   "settings.defaultModel.detail": "비워 두면 에이전트가 고릅니다.",
   "settings.extraArgs.title": "에이전트에 전달할 추가 인수",

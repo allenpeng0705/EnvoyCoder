@@ -102,6 +102,34 @@ export const VERDICT_CHIP = {
 } as const satisfies Record<Verdict, { key: MessageKey; className: string }>;
 
 /**
+ * **What a picker may say beside an agent's name — the same two words the Agents page uses, and nothing else.**
+ *
+ * Both pickers (the machine's default agent, a project's) used to append *"(needs installing)"* whenever the
+ * recipe was `tier: "catalogued"`. That is a fact about where a recipe came from rendered as a fact about the
+ * user's machine, and it was wrong the moment the programme was installed: the owner's report — *"the dropdown has
+ * some agents, but the status is wrong"* — is a catalogued agent that is **ready** reading *needs installing*.
+ *
+ * So the suffix **is the verdict** — computed by the same `rowVerdict` the page's rows use, in the words of the same
+ * `VERDICT_CHIP` table — and the picker and the page cannot drift, because there is one decision and one table.
+ * `""` for a ready agent: a picker that labels every row is a picker whose labels stop being read.
+ */
+export function verdictSuffix(availability: HarnessAvailability | undefined, t: Translate): string {
+  const ready = rowVerdict(
+    {
+      label: "",
+      availability,
+      // Neither is needed for the verdict itself, and `rowVerdict` is where the decision lives: an agent we could
+      // not look at is **Not ready** here exactly as it is on the page, because "we have not looked" is not a
+      // reason to promise a run.
+      readyLine: "",
+    },
+    t,
+    0,
+  ).verdict;
+  return ready === "ready" ? "" : ` — ${t(VERDICT_CHIP["not-ready"].key)}`;
+}
+
+/**
  * What the disclosure leads with — **the fix, or the plain statement that there is none.**
  *
  * Four kinds and not two, because "there is something to do" has three genuinely different shapes (run these

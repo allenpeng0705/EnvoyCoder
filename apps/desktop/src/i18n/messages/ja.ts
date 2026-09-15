@@ -280,7 +280,6 @@ export const ja: Catalogue = {
   "settings.defaultHarness.title": "新しいタスクを始めるエージェント",
   "settings.defaultHarness.detail": "プロジェクト側で上書きできます。上書きしない場合の答えがこれです。",
   "settings.defaultHarness.catalog": "ここに無い場合は {section} をご覧ください。",
-  "settings.needsInstalling": "（要インストール）",
   "settings.defaultModel.title": "新しいタスクが使うモデル",
   "settings.defaultModel.detail": "空欄ならエージェントが選びます。",
   "settings.extraArgs.title": "エージェントに渡す追加の引数",

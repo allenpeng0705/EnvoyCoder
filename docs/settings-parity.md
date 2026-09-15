@@ -3343,6 +3343,122 @@ failure should never have happened — the row's own inline notice (`setNotice` 
 that genuinely cannot be stored will say so, and it is a separate question whether the app-wide strip should keep
 carrying action failures at all.
 
+### 7.26 The agent pickers said "(needs installing)" about agents that are ready
+
+The owner, on *Settings → New tasks → "The agent new tasks start with"*:
+
+> *why the All settings - New tasks - The agent new tasks start with, the dropdown has some agents, but the status is
+> wrong. we should make this the same with Agents. Maybe put the ready status agent? How do you think?*
+
+Both pickers appended *"(needs installing)"* to an option whenever `harness.tier === "catalogued"` — a fact about
+**where the recipe came from** rendered as a fact about **the user's machine**. The two are unrelated: a catalogued
+agent is one whose program the user installs from its vendor, which is exactly the case in which the program is
+usually *already* there. On this machine, five of the six offered rows read *"(needs installing)"* while the Agents
+page called every one of them **Ready**.
+
+**The real window, after the fix** — `scripts/measure-settings.mjs --select` (a flag added for this report: an
+option's text is the one thing on this page that no pixel number and no verdict census can see):
+
+```console
+$ node scripts/measure-settings.mjs --section tasks --select "The agent new tasks start with"
+walk: Settings → tasks
+  Settings: ok
+  New tasks: ok
+select "The agent new tasks start with": value="envoy-harness" selectedIndex=0
+  → "Envoy Harness"  (value "envoy-harness")
+    "DeepSeek Harness"  (value "deepseek-harness")
+    "Claude Code"  (value "claudecode")
+    "Codex"  (value "codex")
+    "GitHub Copilot"  (value "copilot")
+    "Cursor Agent"  (value "cursor")
+```
+
+Every catalogued agent that is ready reads bare — `(needs installing)` is gone from all five — and the option the
+row *selects* is a name, with `selectedIndex=0` matching `value="envoy-harness"` rather than the blank control
+§7.26.3 is about. The same six rows, from the daemon's own measurements through the real rule — a **one-off**
+script over a real socket (`coder.listHarnesses` against the running daemon), importing `offeredAgents` and
+`verdictSuffix` from source rather than restating them; it is not kept, because the permanent instruments are
+`--select` above and the mutations below:
+
+```console
+$ node … # `coder.listHarnesses` from the running daemon, through the real `offeredAgents` / `verdictSuffix`
+  envoy-harness     built-in    ready          Envoy Harness
+  deepseek-harness  catalogued  ready          DeepSeek Harness
+  claudecode        catalogued  ready          Claude Code
+  codex             catalogued  ready          Codex
+  copilot           catalogued  ready          GitHub Copilot
+  cursor            catalogued  ready          Cursor Agent
+  opencode          catalogued  not-installed  OpenCode
+  pi                catalogued  not-installed  Pi
+  omp               catalogued  not-installed  OMP (Oh My Pi)
+
+the New-tasks picker offers 6 of them, and renders:
+  "Envoy Harness"
+  "DeepSeek Harness"
+  "Claude Code"
+  "Codex"
+  "GitHub Copilot"
+  "Cursor Agent"
+
+dropped (established absent, so the list is not a promise): opencode, pi, omp
+
+catalogued agents that are ready and now read bare (the reported bug): deepseek-harness, claudecode, codex, copilot, cursor
+  any of them carrying "Not ready"? false
+```
+
+Two screens of one product contradicting each other about one agent is worse than either being silent: a user who
+reads *"(needs installing)"* next to Codex, and *Ready* for the same Codex one page away, has learned not to
+believe this product's words about their own machine.
+
+#### 7.26.1 The fix: the suffix is the verdict, and its words come from one table
+
+`verdictSuffix(availability, t)` (`agent-verdict.ts`) runs the **same** `rowVerdict` the Agents page's rows run and
+takes its words from the same `VERDICT_CHIP` table, so the two surfaces cannot drift — there is one table of two
+words. A ready agent gets **no suffix at all**: a picker that labels every row is a picker whose labels stop being
+read, and *"Ready"* beside six options is noise a user learns to skip. Every other state gets ` — Not ready`, which
+is the honest answer in a picker even for `unknown`: *"we have not looked"* is not a reason to promise a run.
+
+#### 7.26.2 The owner's suggestion, considered and declined: the list is labelled, not shortened
+
+The owner asked *"Maybe put the ready status agent?"* — offer only the Ready ones. That is the one thing this
+picker may not do, and the reason is already written down in `offeredAgents` (§5.8, §7.9): the picker drops exactly
+the state that asserts a program is **absent**, and an unexplained short list is how a user concludes this product
+does not support their agent. `opencode`, `pi` and `omp` are dropped here because a probe established they are not
+on this machine — that is a measurement, and it can change on the next scan. `copilot` and `cursor` stay, ready or
+not, because hiding an agent a user installed is the failure the *Agents* page exists to answer, and the note under
+the select points at it. So the list keeps its rows and each row now says what it is.
+
+#### 7.26.3 The third defect this exposed: a stored value with no option is a blank control
+
+The New-tasks picker rendered its fallback option only when the offered list was **entirely** empty. Its value is
+`settings.defaults.harness`, which `offeredAgents` drops when that agent is `not-installed` — and a `<select>`
+whose `value` matches no `<option>` is not "empty", it is **blank**: the browser clears the selection, so the row
+that is supposed to say which agent a new task starts on says nothing, while the daemon still holds the value. The
+condition is now `offeredAgents`-shaped in both pickers (`available.some(…id === stored) ? null : <option …>`), and
+that option carries the agent's **label** rather than the raw id (`claudecode`) it used to print, plus the same
+measured suffix — the reason it is missing from the list is a fact a user needs, not a detail.
+
+#### 7.26.4 What is asserted, and the mutations
+
+`settings-agent-picker.test.tsx` renders both pages and reads the option text a user reads, with the two words
+taken from the catalogue rather than spelled in the file:
+
+1. a ready **catalogued** agent reads bare — the reported bug, mutated back to the tier-derived suffix it fails on;
+2. `needs-bridge` and `unknown` read `— Not ready` **and are still offered** — deleting the suffix reddens both,
+   and so does filtering the picker down to Ready agents (the owner's suggestion, as a mutation);
+3. an agent established absent is still dropped — unchanged, asserted beside it so the two rules cannot be
+   confused later;
+4. the stored agent the measurement dropped stays on screen **with `select.value` equal to the stored id** —
+   restoring the old fallback condition, or removing the suffix from that option, reddens it;
+5. the project picker says the same thing about the same measurements, which is what fails if either picker grows
+   a suffix of its own.
+
+Mutation-tested the whole way, one leg at a time: the tier-derived suffix (3 legs red), no suffix at all (2), no
+verdict in the project picker (1), Ready-only filtering (3), the old fallback condition (1), a bare fallback
+option (2), a fixed word instead of the catalogue's (5), and `unknown` rendered as ready (1). The
+`settings.needsInstalling` key is **deleted** from all seven catalogues (`i18n:gap` 458/458) — the retired key is
+how the old defect would come back. Gates: **897 passed / 8 skipped**, 12 Rust tests.
+
 ## 8. The slice plan
 
 Ordered, and ordered by *cheapness times usefulness* rather than by Paseo's section order. Each slice

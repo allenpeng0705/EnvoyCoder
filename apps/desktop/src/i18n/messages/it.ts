@@ -280,7 +280,6 @@ export const it: Catalogue = {
   "settings.defaultHarness.title": "L'agente con cui partono le nuove attività",
   "settings.defaultHarness.detail": "Un progetto può sostituirlo; questo vale quando non lo fa.",
   "settings.defaultHarness.catalog": "Non installato qui? Vedi {section}.",
-  "settings.needsInstalling": "(da installare)",
   "settings.defaultModel.title": "Il modello con cui partono le nuove attività",
   "settings.defaultModel.detail": "Vuoto: sceglie l'agente.",
   "settings.extraArgs.title": "Argomenti aggiuntivi per l'agente",

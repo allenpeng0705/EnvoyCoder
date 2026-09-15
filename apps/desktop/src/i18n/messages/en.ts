@@ -397,7 +397,6 @@ export const en = {
   "settings.defaultHarness.title": "The agent new tasks start with",
   "settings.defaultHarness.detail": "A project can override this; this is the answer when it does not.",
   "settings.defaultHarness.catalog": "Not installed here? See {section}.",
-  "settings.needsInstalling": "(needs installing)",
   "settings.defaultModel.title": "The model new tasks start on",
   "settings.defaultModel.detail": "Empty means the agent chooses.",
   "settings.extraArgs.title": "Extra arguments for the agent",

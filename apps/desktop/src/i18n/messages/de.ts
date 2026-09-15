@@ -280,7 +280,6 @@ export const de: Catalogue = {
   "settings.defaultHarness.title": "Der Agent, mit dem neue Aufgaben starten",
   "settings.defaultHarness.detail": "Ein Projekt kann das überschreiben; das hier gilt, wenn es das nicht tut.",
   "settings.defaultHarness.catalog": "Nicht installiert? Siehe {section}.",
-  "settings.needsInstalling": "(muss installiert werden)",
   "settings.defaultModel.title": "Das Modell, mit dem neue Aufgaben starten",
   "settings.defaultModel.detail": "Leer heißt: Der Agent wählt.",
   "settings.extraArgs.title": "Zusätzliche Argumente für den Agenten",

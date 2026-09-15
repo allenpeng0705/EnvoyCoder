@@ -45,11 +45,15 @@
  * node scripts/measure-settings.mjs --section agents --open "Browse the catalogue"
  * node scripts/measure-settings.mjs --section general --out /tmp/envoycoder-measure
  * node scripts/measure-settings.mjs --section agents --theme light
+ * node scripts/measure-settings.mjs --section tasks --select "The agent new tasks start with"
  * ```
  *
  * `--open "<label>"` presses one more thing before measuring, by the words a user reads. The Agents page needs
  * it: the page as it *opens* and the page with a group unfolded are two different and equally honest numbers,
  * and a tool that could only report one of them would have its output quoted as if it were the other.
+ *
+ * `--select "<aria-label>"` prints one picker's option texts and which option is selected — the words a user
+ * reads in a dropdown, which no pixel number and no verdict census can see.
  */
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -386,6 +390,59 @@ if (openAria !== undefined) {
   })()`);
   console.log(`  panels opened by aria prefix "${openAria}": ${pressed}`);
   await sleep(1400);
+}
+
+/**
+ * `--select "<aria-label>"` — print **one picker's options**, and which of them is selected.
+ *
+ * The one thing on this page that no pixel number and no verdict census can see, and the reason it is a flag
+ * rather than a one-off: an option's *text* is a claim about the machine — *"(needs installing)"* beside an agent
+ * whose bridge is installed — and a claim about the machine cannot be measured by counting rows. §7.26 is the
+ * report that made this instrument necessary: five ready catalogued agents read *"(needs installing)"* in a picker
+ * while the page behind it called every one of them Ready.
+ *
+ * It refuses loudly when the label matches nothing, because a flag that silently printed no options is a flag
+ * whose next reader reports "the picker is empty" as a fact.
+ */
+const selectLabel = flag("select");
+if (selectLabel !== undefined) {
+  const dump = await evaluate(`(() => {
+    const wanted = ${JSON.stringify(selectLabel)};
+    const node = [...document.querySelectorAll("select")].find(
+      (candidate) => (candidate.getAttribute("aria-label") ?? "") === wanted);
+    if (!node) {
+      return { found: false, labels: [...document.querySelectorAll("select")].map(
+        (candidate) => candidate.getAttribute("aria-label") ?? "(no aria-label)") };
+    }
+    return {
+      found: true,
+      value: node.value,
+      selected: node.selectedIndex,
+      options: [...node.options].map((option, at) => ({
+        text: option.textContent ?? "",
+        value: option.value,
+        chosen: at === node.selectedIndex,
+      })),
+    };
+  })()`);
+  if (!dump.found) {
+    console.error(
+      `no select on this page has the aria-label ${JSON.stringify(selectLabel)} — refusing to print an empty ` +
+        `picker as a result. Labels here: ${dump.labels.map((label) => JSON.stringify(label)).join(", ") || "(none)"}`,
+    );
+    process.exit(2);
+  }
+  // The selection is reported as a **value** as well as a position: `selectedIndex: -1` is the blank control,
+  // and a list of option texts cannot show it — a `<select>` whose value matches no option renders nothing
+  // selected at all, which is how a stored default agent can silently vanish from the row that states it.
+  console.log(
+    `\nselect ${JSON.stringify(selectLabel)}: value=${JSON.stringify(dump.value)} selectedIndex=${String(dump.selected)}`,
+  );
+  for (const option of dump.options) {
+    console.log(
+      `  ${option.chosen ? "→" : " "} ${JSON.stringify(option.text)}  (value ${JSON.stringify(option.value)})`,
+    );
+  }
 }
 
 /**

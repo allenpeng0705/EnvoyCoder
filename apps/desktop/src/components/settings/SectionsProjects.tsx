@@ -38,6 +38,7 @@ import { SettingNavRow, SettingRow, TextSetting } from "../SettingsRows.js";
 import { shortPath } from "../SettingsShell.js";
 import type { SettingsSectionProps } from "./SectionProps.js";
 import { labelForHarness, ModelRow, summaryFor } from "./SettingsRowParts.js";
+import { verdictSuffix } from "./agent-verdict.js";
 
 /** What the two project pages need beyond the settings they share: the live list, and the way down. */
 export interface ProjectSectionProps extends SettingsSectionProps {
@@ -166,13 +167,19 @@ export function ProjectSection(props: ProjectSectionProps & { project: Project }
           aria-label={t("settings.project.harness.title")}
           onChange={(event) => write({ harness: event.target.value as HarnessId })}
         >
-          {available.length === 0 || available.every((entry) => entry.id !== harness) ? (
-            <option value={harness}>{labelForHarness(harness, state)}</option>
+          {available.every((entry) => entry.id !== harness) ? (
+            // The stored value, when the measurement took it out of the list — see the New-tasks row in
+            // `SectionsControls.tsx` for why a value with no option is a blank control rather than an empty one,
+            // and why the reason travels with it.
+            <option value={harness}>
+              {labelForHarness(harness, state)}
+              {verdictSuffix(summaryFor(state, harness)?.availability, t)}
+            </option>
           ) : null}
           {available.map((entry) => (
             <option key={entry.id} value={entry.id}>
               {entry.label}
-              {entry.tier === "catalogued" ? ` ${t("settings.needsInstalling")}` : ""}
+              {verdictSuffix(entry.availability, t)}
             </option>
           ))}
         </select>
