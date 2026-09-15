@@ -35,6 +35,8 @@
 import type {
   AgentProviderSummary,
   AgentRun,
+  CatalogEntry,
+  CatalogProbe,
   CoderSettings,
   HarnessId,
   HarnessSummary,
@@ -42,6 +44,7 @@ import type {
   Project,
   RunEvent,
   RunMode,
+  SignInOutcome,
   Task,
   TaskDefaults,
 } from "@envoycoder/protocol";
@@ -91,6 +94,17 @@ export interface CoderState {
    * have is shown as a fact about our environment, with its **name** and never its value.
    */
   providers: readonly AgentProviderSummary[];
+  /**
+   * The catalogued agents — **the recipes, with nothing measured about them**.
+   *
+   * `coder.listCatalog` walks no search path and starts no process, so this list may be loaded with every
+   * other list at connect time. What it deliberately does **not** carry is a state: an entry is a recipe,
+   * and whether this machine can run it is a fact somebody has to measure. Each row's measurement lives
+   * beside it in the settings screen's own state, taken one row at a time when the user asks for that row
+   * (`probeCatalogAgent`), because 14 of the entries are `npx` recipes and a sweep would be a window that
+   * fetches packages for asking a question nobody asked.
+   */
+  catalog: readonly CatalogEntry[];
   mesh: MeshStatus;
   /**
    * Runs this window knows about, by run id.
@@ -128,12 +142,32 @@ const initialState: CoderState = {
   settings: DEFAULT_CODER_SETTINGS,
   harnesses: [],
   providers: [],
+  catalog: [],
   mesh: { kind: "no-node", reason: "" },
   runs: {},
   loaded: false,
   error: undefined,
   notes: [],
 };
+
+/**
+ * What a screen has to supply to declare an agent — `coder.addProvider`'s required parameters.
+ *
+ * Named here, next to the method that sends them, so the screen that fills it in and the daemon that
+ * validates it are talking about one shape. `transport` is required and has no default anywhere on this
+ * path: see `AgentProviderConfig` for why choosing a dialect on the user's behalf is the one thing this
+ * field exists to prevent.
+ */
+export interface AddProviderInput {
+  /** The provider id — the catalogue entry's own id, or a slug the user's label produces. */
+  id: string;
+  label: string;
+  command: string;
+  args: readonly string[];
+  /** Environment variable **names**. A value cannot be expressed — that is the schema, not a rule here. */
+  env: readonly string[];
+  transport: "acp" | "cli";
+}
 
 export interface CoderStoreOptions {
   /**
@@ -318,6 +352,7 @@ export class CoderStore {
       this.loadSettings(),
       this.loadHarnesses(),
       this.loadProviders(),
+      this.loadCatalog(),
       this.loadMesh(),
     ]);
     this.set({ loaded: true });
@@ -387,6 +422,19 @@ export class CoderStore {
   }
 
   /**
+   * Does the daemon say it serves this method?
+   *
+   * `hello` carries the daemon's own compiled method list, so this is known before the first call — and it
+   * is the difference between a window that reports the skew once and a window that earns twenty identical
+   * "Method not found" refusals. An **empty** advertised list means the daemon does not describe itself at
+   * all; that is not evidence that everything is missing, so the answer is yes and the calls speak for
+   * themselves (`missingMethods` states the same asymmetry).
+   */
+  private canCall(method: string): boolean {
+    return this.advertised.size === 0 || this.advertised.has(method);
+  }
+
+  /**
    * One read that reports its failure instead of throwing, so its sibling still lands.
    *
    * Deliberately not a `Promise.all` of the calls themselves: the point is that the two lists fail
@@ -403,7 +451,7 @@ export class CoderStore {
     // words for it are the sentence `noteVersionSkew` has already turned into advice. The error below
     // is deliberately the *same text* the transport would have produced, so both paths end in one
     // notice — a caller cannot tell (and must not care) which one happened.
-    if (this.advertised.size > 0 && !this.advertised.has(method)) {
+    if (!this.canCall(method)) {
       return { ok: false, error: new Error(`Method not found: ${method}`) };
     }
     try {
@@ -456,6 +504,52 @@ export class CoderStore {
     } catch (error) {
       this.fail(error);
     }
+  }
+
+  /**
+   * The catalogued agents, as the daemon projects them.
+   *
+   * **Failure is silent here, and that is deliberate.** `coder.listCatalog` is a method this build added,
+   * and the shell attaches to whichever daemon owns the port — so an older daemon refuses it by name. The
+   * other loads report that through `fail`, which is right for them: a missing task list is a lie about the
+   * user's work. An empty catalogue is not a lie about anything, because the screen renders "this daemon is
+   * an older build, so it has no catalogue to show" from the method list itself rather than from an empty
+   * array. Raising a global error banner for it would put a scary sentence over the whole window for a
+   * feature that is simply not there yet.
+   */
+  async loadCatalog(): Promise<void> {
+    const connection = this.connection;
+    if (!connection || connection.status.state !== "connected") return;
+    // A call this daemon cannot serve is not worth making: `coder.hello`'s method list already answered,
+    // and the transport's refusal is the same fact one round trip later.
+    if (!this.canCall("coder.listCatalog")) return;
+    try {
+      const answer = await connection.callTyped<{ entries: CatalogEntry[] }>("coder.listCatalog");
+      this.set({ catalog: answer.entries });
+    } catch {
+      // Nothing to report: see the doc above. The screen renders an empty catalogue as "not offered by
+      // this daemon", never as "there are no agents".
+    }
+  }
+
+  /**
+   * One catalogued entry, measured — the row a user asked about, and only that row.
+   *
+   * The result is returned rather than stored, on the same arrangement `probeSessionOptions` uses and for a
+   * sharper version of the same reason: the measurement belongs to the row the user pressed, the caller is
+   * the thing rendering that row, and a copy in this store would be a second place a state could live. What
+   * the *daemon* keeps is the cache, which is where it belongs — it is globally true, and a second window
+   * asking a minute later must not make the daemon walk the search path again.
+   */
+  async probeCatalogAgent(
+    id: string,
+    options: { force?: boolean } = {},
+  ): Promise<{ ok: true; probe: CatalogProbe } | Refusal> {
+    return this.mutate(
+      "coder.probeCatalogAgent",
+      { id, ...(options.force !== undefined ? { force: options.force } : {}) },
+      (answer) => ({ ok: true as const, probe: answer as CatalogProbe }),
+    );
   }
 
   async loadMesh(): Promise<void> {
@@ -673,6 +767,83 @@ export class CoderStore {
       ok: true,
       project: (result as { project: Project }).project,
     }));
+  }
+
+  /* ────────────────────── the agents a user manages ────────────────────── */
+
+  /**
+   * Declare an agent — one of the catalogue's, or one nobody catalogued.
+   *
+   * The parameters are sent **verbatim**, `transport` included, and that is the point of the signature
+   * taking the whole input rather than a set of fields: the screen that adds a catalogue entry passes the
+   * entry's own statement of its dialect through untouched, so no caller here can decide one. A field
+   * defaulted in this store would be a dialect invented one layer below the screen, which is exactly the
+   * silent wrongness `AgentProviderConfig` requires the field to prevent.
+   *
+   * The list is refetched rather than patched locally. The daemon broadcasts `providers` and this store's
+   * own event handler already reloads it — and the second window must see the same list, which a local
+   * append would not do.
+   */
+  async addProvider(input: AddProviderInput): Promise<{ ok: true } | Refusal> {
+    return this.mutate(
+      "coder.addProvider",
+      {
+        id: input.id,
+        label: input.label,
+        command: input.command,
+        args: [...input.args],
+        env: [...input.env],
+        transport: input.transport,
+      },
+      () => ({ ok: true as const }),
+    );
+  }
+
+  /** Forget a provider. The daemon answers the id it removed, or refuses because there is nothing there. */
+  async removeProvider(id: string): Promise<{ ok: true; removed: string } | Refusal> {
+    return this.mutate("coder.removeProvider", { id }, (result) => ({
+      ok: true as const,
+      removed: (result as { removed: string }).removed,
+    }));
+  }
+
+  /**
+   * Put an agent in the user's list, or out of it — **a preference, and nothing else**.
+   *
+   * The result carries the whole resulting list, so the caller can see what it changed without a second
+   * call; the *rows* come back through the daemon's `harnesses`/`providers` broadcast, because a hidden
+   * agent must still report the state the probe found and this store must not be the place that rewrites it.
+   */
+  async setAgentHidden(
+    id: string,
+    hidden: boolean,
+  ): Promise<{ ok: true; hidden: boolean; hiddenAgents: readonly string[] } | Refusal> {
+    return this.mutate("coder.setAgentHidden", { id, hidden }, (result) => {
+      const answer = result as { hidden: boolean; hiddenAgents: string[] };
+      return { ok: true as const, hidden: answer.hidden, hiddenAgents: answer.hiddenAgents };
+    });
+  }
+
+  /**
+   * Ask an agent to run its **own** sign-in flow, and report what happened.
+   *
+   * Every outcome comes back as a success, including the four that are not: the agent opened a session,
+   * refused, accepted but did not finish, named no method we may send, or could not be started. All five
+   * are answers this call produced, and the caller renders the daemon's keyed sentence for whichever it
+   * was. Only a failure of the *call* is a `Refusal` — no connection, a method this daemon lacks.
+   */
+  async signInAgent(
+    harness: HarnessId,
+    options: { methodId?: string } = {},
+  ): Promise<{ ok: true; outcome: SignInOutcome; detail: string } | Refusal> {
+    return this.mutate(
+      "coder.signInAgent",
+      { harness, ...(options.methodId !== undefined ? { methodId: options.methodId } : {}) },
+      (result) => {
+        const answer = result as { outcome: SignInOutcome; detail: string };
+        return { ok: true as const, outcome: answer.outcome, detail: answer.detail };
+      },
+    );
   }
 
   async updateSettings(patch: Partial<CoderSettings>): Promise<{ ok: true } | Refusal> {

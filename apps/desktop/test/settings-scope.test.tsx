@@ -174,6 +174,7 @@ function stateWith(over: Partial<CoderState> = {}): CoderState {
     settings,
     harnesses,
     providers: [],
+  catalog: [],
     mesh: { kind: "no-node", reason: "" },
     runs: {},
     loaded: true,

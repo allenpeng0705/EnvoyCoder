@@ -90,6 +90,8 @@ import type { JSX, ReactNode } from "react";
 
 import type { CoderSettings, Project, TaskDefaults } from "@envoycoder/protocol";
 
+import type { AgentActions } from "../state/agent-actions.js";
+
 import { useI18n } from "../i18n/context.js";
 import type { KeyBinding } from "../input/shortcuts.js";
 import type { CoderState } from "../state/coderStore.js";
@@ -105,7 +107,8 @@ import {
 import { sectionById, type SettingsSectionId } from "../state/settings-sections.js";
 import { SettingsNav, SettingsSectionRows } from "./SettingsNav.js";
 import { SettingsShell, StoreNotes } from "./SettingsShell.js";
-import { AboutSection, AgentsSection, MachineSection, ShortcutsSection } from "./settings/SectionsFacts.js";
+import { AboutSection, MachineSection, ShortcutsSection } from "./settings/SectionsFacts.js";
+import { AgentsSection } from "./settings/SectionsAgents.js";
 import { GeneralSection, SafetySection, TasksSection } from "./settings/SectionsControls.js";
 import { ProjectSection, ProjectsSection } from "./settings/SectionsProjects.js";
 
@@ -143,6 +146,15 @@ export interface SettingsPaneProps {
    * defect this pane was rebuilt to remove.
    */
   onNavigate: (scope: SettingsScope) => void;
+  /**
+   * The five calls the **Agents** page is allowed to make: declare an agent, forget one, hide one, measure
+   * one, sign one in. See `AgentActions` for why this is an interface rather than the store.
+   *
+   * Required, on the same reasoning as `onNavigate`: the agents page is the screen this product is built
+   * around, and a caller that could render it with no way to act would render four controls that do nothing
+   * — which is the defect this whole pane was rebuilt to remove.
+   */
+  agents: AgentActions;
   /**
    * Write a project's defaults. Sent **whole** rather than as a patch, because a project's defaults
    * replace: a patch carrying only a model would leave the agent for that project undefined.
@@ -331,25 +343,26 @@ function SectionPage(props: SettingsPaneProps & { section: SettingsSectionId }):
 function sectionBody(props: SettingsPaneProps & { section: SettingsSectionId }): ReactNode {
   switch (props.section) {
     case "general":
-      return <GeneralSection state={props.state} onUpdate={props.onUpdate} />;
+      return <GeneralSection state={props.state} onUpdate={props.onUpdate} agents={props.agents} />;
     case "tasks":
-      return <TasksSection state={props.state} onUpdate={props.onUpdate} />;
+      return <TasksSection state={props.state} onUpdate={props.onUpdate} agents={props.agents} />;
     case "safety":
-      return <SafetySection state={props.state} onUpdate={props.onUpdate} />;
+      return <SafetySection state={props.state} onUpdate={props.onUpdate} agents={props.agents} />;
     case "agents":
-      return <AgentsSection state={props.state} onUpdate={props.onUpdate} />;
+      return <AgentsSection state={props.state} onUpdate={props.onUpdate} agents={props.agents} />;
     case "shortcuts":
       return (
         <ShortcutsSection
           state={props.state}
           onUpdate={props.onUpdate}
+          agents={props.agents}
           shortcuts={props.shortcuts}
         />
       );
     case "machine":
-      return <MachineSection state={props.state} onUpdate={props.onUpdate} />;
+      return <MachineSection state={props.state} onUpdate={props.onUpdate} agents={props.agents} />;
     case "about":
-      return <AboutSection state={props.state} onUpdate={props.onUpdate} />;
+      return <AboutSection state={props.state} onUpdate={props.onUpdate} agents={props.agents} />;
     // The Projects section is not a page of rows at level 1: its page *is* the list of projects, one
     // level down, and the bar item opens that instead. The arm exists so the switch stays total, and it
     // renders what the bar item promises rather than a second, emptier Projects page.

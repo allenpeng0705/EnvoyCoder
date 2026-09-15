@@ -1565,6 +1565,168 @@ body {
   color: var(--text-dim, #8b8f98);
 }
 
+/* ── the agent catalogue: the recipes, each with its own measured state ──
+
+   A row is a card rather than a table line, and that is a reading decision rather than a styling one:
+   each row carries a command line, a link, sometimes an environment note and sometimes the reason a
+   check failed, and none of those fit a cell. Rows are separated by a hairline instead of a box, so
+   the eye follows the left edge down a list of thirty-eight. */
+
+.settings__catalog {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings__catalog-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border-strong, #2f3534);
+}
+
+.settings__catalog-row:first-child {
+  border-top: 0;
+}
+
+/* The version, beside the name and quieter than it: it is a caption, not a second title. */
+.settings__catalog-version {
+  font-size: 11px;
+  color: var(--text-dim, #8b8f98);
+}
+
+/* The command and its install guidance, on one line, wrapping only when the pane is narrow. */
+.settings__catalog-facts {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+}
+
+/* **A catalogue row's head is one line: chip, name, version.** The shipped agents stack theirs (the name, then
+   a sentence about what the agent is) because there are nine of them and each is worth the room; a catalogue
+   row has thirty-eight siblings, and stacking its three short facts measured 58px of a 165px row — three
+   lines where one belongs. Measured before and after: see §7.13. */
+.settings__catalog-row .settings__agent-head {
+  flex-direction: row;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+}
+
+/* One line per catalogue row's description, with the whole sentence in the `title`.
+   Measured: unclamped, one row is 220px and thirty-eight of them are eighteen screens of scrolling for a
+   list the catalogue's own documentation says is read by searching. Clamped, the row is 132px and the list
+   is legible as a list. Nothing is lost — the text is still in the document, so a screen reader reads all of
+   it, and a pointer gets it on hover. Scoped to the catalogue because a shipped agent's summary is one short
+   sentence that has room to wrap. */
+.settings__catalog-row .settings__agent-summary {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The command line, monospaced and selectable: a user copies this into a terminal to see the failure
+   themselves, which is the whole point of showing it verbatim. */
+.settings__agent-command {
+  margin: 0;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-code);
+  color: var(--text-muted, #a1a5a4);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+/* The environment variables a provider names, one per line. `--unset` is the state that matters: a
+   name the daemon does not have is why the agent is refused at launch, so it is coloured and never
+   hidden behind a tooltip. */
+.settings__agent-env {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-code);
+}
+
+.settings__env {
+  color: var(--text-dim, #8b8f98);
+}
+
+.settings__env--unset {
+  color: var(--status-warning, #c09664);
+}
+
+.settings__catalog-search {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* A labelled field: the label above the control, which is what keeps a form of five inputs readable
+   without a grid. `flex: 1` on the input is what makes the search box fill the pane's width. */
+.settings__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-3);
+  border: 0;
+  padding: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.settings__field .input {
+  width: 100%;
+}
+
+/* A label that wraps one control and nothing else. Kept apart from `.settings__field` because the field's
+   detail sentence must be *outside* the label — otherwise the sentence becomes part of the control's
+   accessible name, which is what a screen reader reads out. */
+.settings__field-label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.settings__radio {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--text, #fafafa);
+  padding: 2px 0;
+}
+
+.settings__manual {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-strong, #2f3534);
+}
+
+.settings__link {
+  color: var(--accent-bright, #7ccba0);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* A refusal on the row that earned it. `--status-danger` is the one error colour this product has
+   (`design/tokens.css` states the rule), and it is deliberately the *text* rather than a fill: a
+   failed check is information, not an alarm about the whole page. */
+.settings__note--refused {
+  color: var(--status-danger, #d8847b);
+}
+
 .settings__notes {
   font-size: 12px;
 }

@@ -35,6 +35,18 @@ const url = process.argv[2];
 const i = process.argv.indexOf("--click");
 const click = i >= 0 ? process.argv[i + 1] : undefined;
 /**
+ * `--clicks "Settings|Agents"` — a walk, for the surfaces that are more than one press deep.
+ *
+ * The settings pane is three levels down (`CargoApp`'s rail → the sections list → a section), so a tool
+ * that could only press one thing measured the *chat* surface with the settings pane's numbers and reported
+ * `present: false` for everything below it. Same shape as `preview-ui.mjs`'s flag, deliberately.
+ */
+const clicksFlag = process.argv.indexOf("--clicks");
+const walk = (clicksFlag >= 0 ? String(process.argv[clicksFlag + 1] ?? "") : "")
+  .split("|")
+  .map((part) => part.trim())
+  .filter(Boolean);
+/**
  * `--size WxH` — the window the surface is measured in.
  *
  * Added for the settings bar, whose whole layout is a question about width: the bar is a column beside
@@ -99,12 +111,12 @@ const evaluate = async (expression) =>
 
 await send("Runtime.enable");
 await sleep(3500);
-if (click) {
+for (const wanted of [...(click ? [click] : []), ...walk]) {
   // **By the words a user reads, or by the name a screen reader reads.** The rail's footer buttons carry
   // an icon glyph and an `aria-label`, so a text-only search found nothing and every measurement after
   // `--click "Settings"` reported the settings pane as absent — which is how this was found.
   const clicked = await evaluate(`(() => {
-    const wanted = ${JSON.stringify(click)};
+    const wanted = ${JSON.stringify(wanted)};
     // Interactive elements first, wrapper second — see the note in preview-ui.mjs: an \`li\` before its own
     // button is what made three screenshots identical.
     const interactive = "button, [role=button], a, input, select, textarea, .task-row";
@@ -117,7 +129,7 @@ if (click) {
     hit.click();
     return "clicked <" + hit.tagName + ">";
   })()`);
-  console.log(`click "${click}": ${clicked}`);
+  console.log(`click "${wanted}": ${clicked}`);
   await sleep(900);
 }
 
@@ -131,14 +143,43 @@ const audit = await evaluate(`(() => {
     const a = lum(rgb(fg)), b = lum(rgb(bg));
     return ((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)).toFixed(2);
   };
-  /** Walk up for the first non-transparent background, which is what a reader actually sees. */
-  const bgOf = (el) => {
-    for (let n = el; n; n = n.parentElement) {
-      const c = getComputedStyle(n).backgroundColor;
-      if (c && !c.includes("rgba(0, 0, 0, 0)")) return c;
-    }
-    return "rgb(255,255,255)";
+  /**
+   * **What is actually behind this text**, by compositing the ancestor chain.
+   *
+   * It used to return the first ancestor whose background was not rgba(0, 0, 0, 0) — which is *not* the
+   * same thing, because an rgba() chip paints over the card it sits on. Measured consequence: the blue
+   * chip--live came back at **1.03:1** (its own blue channels read as opaque against its own blue text),
+   * while the real ratio over the pane is **5.4:1**. A measurer that reports a false alarm is worse than one
+   * that reports nothing, because the next person either "fixes" a contrast that was fine or learns to
+   * ignore the column.
+   *
+   * No backticks in here — this function's source is injected into a template literal.
+   */
+  const parseColor = (value) => {
+    const parts = (String(value).match(/[\d.]+/g) || []).map(Number);
+    return { r: parts[0] || 0, g: parts[1] || 0, b: parts[2] || 0, a: parts.length > 3 ? parts[3] : 1 };
   };
+  const bgOf = (el) => {
+    const layers = [];
+    for (let node = el; node; node = node.parentElement) {
+      const colour = parseColor(getComputedStyle(node).backgroundColor);
+      if (colour.a === 0) continue;
+      layers.push(colour);
+      if (colour.a === 1) break;
+    }
+    // Front to back, at the end: start from the page's own surface and paint each layer onto it.
+    const page = parseColor(getComputedStyle(document.documentElement).backgroundColor);
+    let out = page.a === 1 ? page : { r: 24, g: 27, b: 26, a: 1 };
+    for (const layer of layers.reverse()) {
+      out = {
+        r: layer.r * layer.a + out.r * (1 - layer.a),
+        g: layer.g * layer.a + out.g * (1 - layer.a),
+        b: layer.b * layer.a + out.b * (1 - layer.a),
+      };
+    }
+    return "rgb(" + Math.round(out.r) + ", " + Math.round(out.g) + ", " + Math.round(out.b) + ")";
+  };
+
   const probe = (sel, label) => {
     const el = document.querySelector(sel);
     if (!el) return { label, missing: true };
@@ -206,6 +247,68 @@ const audit = await evaluate(`(() => {
     };
   };
 
+  /**
+   * **The agents page, measured rather than described.**
+   *
+   * Claims this slice makes in prose and cannot check by reading a diff. That a catalogue row shows its
+   * command, its version and a state chip *without* claiming a state nobody measured — the chip's own words,
+   * per row, in row order. That the two install sentences are the ones the entry's shape calls for: an npx
+   * recipe says there is nothing to install, a binary recipe names the program and where to get it. That a
+   * row is one scannable band rather than a wall of prose (its height, and how many fit a viewport). And
+   * that the small print is readable, because 11px hints are exactly where this surface has measured 3.5:1
+   * before.
+   *
+   * **No backticks in here.** This function is injected as the text of a template literal, so a nested
+   * template would end the string it lives in — which is how this was found (esbuild, column 44).
+   */
+  const catalogProbe = () => {
+    const list = document.querySelector(".settings__catalog");
+    if (!list) return { present: false };
+    const rows = [...list.querySelectorAll(".settings__catalog-row")];
+    const heights = rows.map((row) => Math.round(row.getBoundingClientRect().height)).sort((a, b) => a - b);
+    const chips = rows.map((row) => {
+      const chip = row.querySelector(".settings__agent-head .chip");
+      if (!chip) return null;
+      return {
+        text: (chip.textContent || "").trim(),
+        cls: chip.className.replace("chip ", ""),
+        contrast: contrast(getComputedStyle(chip).color, bgOf(chip)),
+      };
+    }).filter(Boolean);
+    const small = [".settings__hint", ".settings__catalog-version", ".settings__agent-command", ".settings__link"]
+      .map((sel) => probe(sel, sel));
+    const fields = [...document.querySelectorAll(".settings__manual .input")].map((el) => ({
+      w: Math.round(el.getBoundingClientRect().width),
+      h: Math.round(el.getBoundingClientRect().height),
+    }));
+    const searchEl = document.querySelector(".settings__catalog-search .input");
+    const body = document.querySelector(".settings");
+    return {
+      present: true,
+      rows: rows.length,
+      // The words a user reads in the state column, in row order — the one thing a screenshot cannot be
+      // trusted for, because a chip that says Ready and a chip that means ready look identical.
+      states: chips.map((chip) => chip.text),
+      chipClasses: [...new Set(chips.map((chip) => chip.cls))],
+      chipContrast: [...new Set(chips.map((chip) => chip.text + " " + chip.contrast))],
+      heights: heights.length ? { min: heights[0], max: heights[heights.length - 1], median: heights[Math.floor(heights.length / 2)] } : null,
+      rowsPerViewport: heights.length ? Math.floor(innerHeight / (heights.reduce((a, b) => a + b, 0) / heights.length)) : 0,
+      small,
+      fields,
+      overflowingRows: rows.filter((row) => row.scrollWidth > row.clientWidth + 1).length,
+      search: searchEl ? { w: Math.round(searchEl.getBoundingClientRect().width), h: Math.round(searchEl.getBoundingClientRect().height) } : null,
+      needsNoInstall: rows.filter((row) => (row.textContent || "").includes("Nothing to install")).length,
+      // The binary-install sentence, counted by what it *is* rather than by a phrase that a wording change
+      // would silently zero: the facts line of a row that has no "Nothing to install" on it.
+      installSteps: rows.filter((row) => {
+        const facts = row.querySelector(".settings__catalog-facts");
+        return facts !== null && !(facts.textContent || "").includes("Nothing to install");
+      }).length,
+      addButtons: list.querySelectorAll(".button--primary").length,
+      bodyScroll: body ? { scrollHeight: body.scrollHeight, clientHeight: body.clientHeight } : null,
+    };
+  };
+
   return {
     theme: document.documentElement.dataset.theme,
     viewport: { w: innerWidth, h: innerHeight },
@@ -218,6 +321,7 @@ const audit = await evaluate(`(() => {
     chip: probe(".suggestion, .chip", "chip / suggestion"),
     body: text ? { contrast: contrast(getComputedStyle(text).color, bgOf(text)), fontSize: getComputedStyle(text).fontSize, lineHeight: getComputedStyle(text).lineHeight } : { missing: true },
     settings: settingsProbe(),
+    catalog: catalogProbe(),
   };
 })()`);
 

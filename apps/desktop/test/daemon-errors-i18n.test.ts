@@ -188,6 +188,14 @@ describe("every refusal a user can read", () => {
       params: { harness: "cursor" },
       key: "error.noRunRuntime",
     },
+    {
+      // An id that names no **catalogued** entry. A bad parameter rather than a fact about a program: the
+      // alternative — answering `unknown` — would say "we could not look" about something that does not
+      // exist, which is how a typo becomes a state a user can act on.
+      method: "coder.probeCatalogAgent",
+      params: { id: "no-such-catalogued-agent" },
+      key: "error.catalogAgentMissing",
+    },
   ];
 
   it("carries a key this build knows, alongside the English sentence", async () => {

@@ -13,6 +13,7 @@
 
 import type { CoderSettings } from "@envoycoder/protocol";
 
+import type { AgentActions } from "../../state/agent-actions.js";
 import type { CoderState } from "../../state/coderStore.js";
 
 export interface SettingsSectionProps {
@@ -20,4 +21,12 @@ export interface SettingsSectionProps {
   state: CoderState;
   /** The app-scope patch. Every section page writes through this and nothing else. */
   onUpdate: (patch: Partial<CoderSettings>) => void;
+  /**
+   * The five calls the **Agents** page is allowed to make.
+   *
+   * Required rather than optional, for the rule this whole pane is built on: a control that presses into
+   * nothing is worse than no control at all. An optional bundle would let a caller render the agents page
+   * with no way to add, hide or measure an agent — and every button on it would look like it worked.
+   */
+  agents: AgentActions;
 }

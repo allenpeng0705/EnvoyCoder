@@ -934,6 +934,55 @@ export const RPC_METHODS = [
    * got busy. See `rpc.ts` for the three outcomes and the caching rules.
    */
   "coder.probeSessionOptions",
+  /**
+   * **The agents EnvoyCoder knows how to drive but has not measured on this machine** — the catalogue,
+   * served so that no client carries a copy of it.
+   *
+   * This is the list a control plane exists for. `coder.listHarnesses` answers for the nine agents we ship
+   * and `coder.listProviders` for the ones a user typed; between them they left the 38 catalogued ACP
+   * agents reachable from nowhere, so a user with Gemini CLI or Goose installed had no way to see it.
+   *
+   * ## Why it is on the wire rather than a constant in the window
+   *
+   * Two reasons, and the second is the product's whole thesis. The catalogue is authored data that lives in
+   * `@envoycoder/agent-catalog` — the same package the **daemon** launches from — so an app-side copy would
+   * be a second answer to "what does this entry run", drifting from the one the launch uses. And the phone
+   * reads this same method: a mobile client showing an agent list, or letting a user add one, must see
+   * exactly the entries the desktop window sees, including the dialect each entry states. Nothing here is
+   * desktop-only knowledge.
+   *
+   * ## What it costs: nothing
+   *
+   * Unlike every other agent method, this one **measures nothing** — no search path is walked, no process
+   * started, no package fetched. It is a projection of a static list, so a window may call it on open and a
+   * phone on every reconnect. An entry's *state* is a different question, asked one row at a time by
+   * `coder.probeCatalogAgent`, which costs something and says so.
+   */
+  "coder.listCatalog",
+  /**
+   * **One catalogued entry's state on this machine** — a method of its own because of what a probe costs.
+   *
+   * ## Why it is per-entry, and never a sweep
+   *
+   * 14 of the 38 entries are `npx -y …` recipes: the program is fetched from npm the first time it runs. A
+   * window that probed all of them while opening would spend the user's network and disk on a question
+   * nobody asked — and the quieter version of the same objection holds for the other 24, where it is 38
+   * walks of a search path done on behalf of rows a user may never look at. So this takes **one id**, the
+   * daemon caches the answer, and the answer carries `observedAt` so a window can say when it was taken and
+   * offer to take it again.
+   *
+   * ## What it actually does, stated exactly
+   *
+   * It looks for the entry's program on the daemon's **resolved search path** — the same list the launch
+   * hands to `spawn`, through the same prober the nine shipped agents go through. It does **not** start the
+   * program, open a session with it, or fetch anything. An `npx` recipe is measured by whether `npx` is
+   * present; the fact that the package arrives on the first run is entry data (`CatalogEntry.install`), not
+   * something a probe could learn without downloading it.
+   *
+   * The five states are the same five, with the same agreement rules. `unknown` means what it means
+   * everywhere else: we could not look, so nothing on this answer is a statement about the agent.
+   */
+  "coder.probeCatalogAgent",
   "coder.meshStatus",
   "coder.listPeers",
   // **`coder.offerRemoteRun` used to sit here, and it is gone on purpose.** It was a spec with no

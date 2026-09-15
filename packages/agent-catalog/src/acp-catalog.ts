@@ -29,27 +29,45 @@
  *
  * ## Adding one
  *
- * Append an entry, or let a user declare their own ACP provider in settings (same shape: a command and
- * optional `env`/`params`). Nothing here is compiled into the daemon's dispatch — it is a menu of
- * recipes, and the daemon drives whichever one the user chose.
+ * Append an entry — and **state its `transport`**, which the type will not let you leave out. That field
+ * is the one dialect fact a recipe carries; `modeParam` and `authMethodId` are not here at all, and
+ * nothing built from an entry may write one down (see `AcpAgentEntry.transport`). Or let a user declare
+ * their own ACP provider in settings (same shape: a command, optional `env` names, and a transport).
+ * Nothing here is compiled into the daemon's dispatch — it is a menu of recipes, and the daemon drives
+ * whichever one the user chose.
  *
- * **Both halves of that sentence are now real**, and the user's half is `AgentProviderConfig` in
- * `@envoycoder/protocol` — reached by `coder.listProviders` / `coder.addProvider` /
- * `coder.removeProvider`, probed by the same prober as the entries below (`./probe.ts`, through
- * `./providers.ts`) and launched by the same body
- * (`apps/desktop/src/daemon/launch.ts`'s `launchForProvider`). Two differences between the two tiers
- * are worth stating here, because this file is where a maintainer looks first:
+ * **Both halves of that sentence are now real, including the surface.** The user's half is
+ * `AgentProviderConfig` in `@envoycoder/protocol` — reached by `coder.listProviders` /
+ * `coder.addProvider` / `coder.removeProvider`, probed by the same prober as the entries below
+ * (`./probe.ts`, through `./providers.ts`) and launched by the same body
+ * (`apps/desktop/src/daemon/launch.ts`'s `launchForProvider`). The list below reaches a user through
+ * `coder.listCatalog` / `coder.probeCatalogAgent` (`apps/desktop/src/daemon/catalog.ts`), which serve
+ * *this* file rather than a copy of it, so the phone and the desktop window read the same entries.
+ * Three differences between the two tiers are worth stating here, because this file is where a
+ * maintainer looks first:
  *
  *   * **An entry's `env` carries values; a provider's carries names only.** That is not an
  *     inconsistency, it is the security decision: `AUGMENT_DISABLE_AUTO_UPDATE: "1"` is part of a
  *     *recipe we author and publish* and is not a secret, while a user's provider may need a credential
  *     — and a credential a user must supply is never stored, so the schema has no field for one.
+ *     `cataloguedProviderInput` is where that shows up as a consequence rather than a shrug: adding one
+ *     of the four entries that set a variable carries the **name**, and the row says the variable is one
+ *     to set in EnvoyCoder's own environment.
  *   * **An entry's `params` has no provider equivalent yet.** `supportsMcpServers` describes how a host
  *     should open a session; a provider declares only how to start one. When a user needs to say one, it
  *     becomes a field with a reader, not a key in a bag.
+ *   * **A provider has no install link and no version; an entry has both.** A provider is a command the
+ *     user typed, so there is nobody to ask where it comes from — which is why the install guidance on
+ *     this screen is entry data and is shown from the row rather than from the probe.
  */
 
-import { findBinary } from "@envoycoder/platform";
+import {
+  probeRecipe,
+  type HarnessInstallHints,
+  type ProbeFinding,
+  type ProbeHarnessOptions,
+  type ProbeRecipe,
+} from "./probe.js";
 
 /** One ACP agent's recipe: how to start it, and where a user gets it. */
 export interface AcpAgentEntry {
@@ -65,6 +83,38 @@ export interface AcpAgentEntry {
   installLink: string;
   /** The command to spawn. The first element is the binary the probe looks for. */
   command: readonly [string, ...string[]];
+  /**
+   * **How the daemon must speak to this program** — the only dialect fact an entry carries.
+   *
+   * ## Why it is stated per entry rather than defaulted at the call site
+   *
+   * A recipe tells you how to *start* a program and nothing about how to *talk* to it. That distinction
+   * is one this repository keeps paying for: `AgentLaunch.transport` records it for the nine agents we
+   * ship, `coder.addProvider` makes it **required** from a user, and the reason is the same in both
+   * places — a `"cli"` program is *startable and not drivable*, and something that guessed `"acp"` would
+   * send an `initialize` to a program that never answers it.
+   *
+   * Making the field required is what turns "somebody added a one-shot CLI to the ACP list" from a
+   * silent wrongness into a compile error: whoever adds entry 39 has to say which one it is, and a
+   * `"cli"` entry is then honestly reported `unsupported` by the prober (`probe.ts`, step 1) rather than
+   * offered as ready.
+   *
+   * All 38 entries are `"acp"` today, and that is not a coincidence being papered over: this file **is**
+   * the ACP catalogue, catalogued from the reference product's `acp-provider-catalog.ts`, where every
+   * entry declares `extends: "acp"`. That file is the citation — not an inference from a command line,
+   * because `sigit` (`command: ["sigit"]`) says nothing whatsoever about a protocol and is here only
+   * because the catalogue it came from says it speaks ACP.
+   *
+   * ## The dialect facts that are deliberately **not** here
+   *
+   * `AgentLaunch` records two more: `modeParam` (`"mode"` vs `"modeId"`) and `authMethodId`
+   * (`cursor_login`). **No entry states either**, so nothing built from an entry may write one down.
+   * Guessing them fails in the direction that cannot be detected: a peer that does not recognise the
+   * field name it was sent ignores it and reports success, so a wrong `modeParam` produces a mode picker
+   * that appears to work and changes nothing. A catalogue-added provider therefore carries a transport
+   * and no other dialect fact, and the probe is what tells the truth about whether the program runs.
+   */
+  transport: "acp" | "cli";
   /** Environment the agent needs to behave correctly (auto-update off, ACP mode on, …). */
   env?: Readonly<Record<string, string>>;
   /**
@@ -91,6 +141,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "1.3.6",
     installLink: "https://agoragentic.com",
     command: ["npx","-y","agoragentic-mcp@1.3.6","--acp"],
+    transport: "acp",
   },
   {
     id: "amp-acp",
@@ -100,6 +151,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "0.7.0",
     installLink: "https://github.com/tao12345666333/amp-acp",
     command: ["amp-acp"],
+    transport: "acp",
   },
   {
     id: "auggie",
@@ -109,6 +161,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "0.33.0",
     installLink: "https://www.augmentcode.com/",
     command: ["npx","-y","@augmentcode/auggie@0.33.0","--acp"],
+    transport: "acp",
     env: {"AUGMENT_DISABLE_AUTO_UPDATE":"1"},
   },
   {
@@ -119,6 +172,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "0.2.1",
     installLink: "https://www.autohand.ai/cli/",
     command: ["npx","-y","@autohandai/autohand-acp@0.2.1"],
+    transport: "acp",
   },
   {
     id: "cline",
@@ -128,6 +182,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "3.0.46",
     installLink: "https://cline.bot/cli",
     command: ["npx","-y","cline@3.0.46","--acp"],
+    transport: "acp",
   },
   {
     id: "codebuddy-code",
@@ -137,6 +192,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "manual",
     installLink: "https://www.codebuddy.cn/cli/",
     command: ["codebuddy","--acp"],
+    transport: "acp",
   },
   {
     id: "codewhale",
@@ -146,6 +202,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "0.8.55",
     installLink: "https://codewhale.net/",
     command: ["codewhale","serve","--acp"],
+    transport: "acp",
   },
   {
     id: "cortex-code",
@@ -155,6 +212,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "1.0.73",
     installLink: "https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code-cli",
     command: ["cortex","acp","serve"],
+    transport: "acp",
   },
   {
     id: "corust-agent",
@@ -164,6 +222,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "0.5.1",
     installLink: "https://github.com/Corust-ai/corust-agent-release/releases",
     command: ["corust-agent-acp"],
+    transport: "acp",
   },
   {
     id: "crow-cli",
@@ -173,6 +232,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "0.1.23",
     installLink: "https://crow-ai.dev/",
     command: ["crow-cli","acp"],
+    transport: "acp",
   },
   {
     id: "cursor",
@@ -182,6 +242,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "2026.03.30",
     installLink: "https://docs.cursor.com/en/cli/overview",
     command: ["cursor-agent","acp"],
+    transport: "acp",
   },
   {
     id: "deepagents",
@@ -191,6 +252,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "0.1.20",
     installLink: "https://docs.langchain.com/oss/javascript/deepagents/overview",
     command: ["npx","-y","deepagents-acp@0.1.20"],
+    transport: "acp",
   },
   {
     id: "devin",
@@ -200,6 +262,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "manual",
     installLink: "https://cli.devin.ai/docs",
     command: ["devin","acp"],
+    transport: "acp",
   },
   {
     id: "dimcode",
@@ -209,6 +272,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "0.2.36",
     installLink: "https://dimcode.dev/docs/acp.html",
     command: ["npx","-y","dimcode@0.2.36","acp"],
+    transport: "acp",
   },
   {
     id: "dirac",
@@ -218,6 +282,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "0.4.22",
     installLink: "https://dirac.run",
     command: ["npx","-y","dirac-cli@0.4.22","--acp"],
+    transport: "acp",
   },
   {
     id: "factory-droid",
@@ -227,6 +292,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "0.179.0",
     installLink: "https://factory.ai/product/cli",
     command: ["npx","-y","droid@0.179.0","exec","--output-format","acp-daemon"],
+    transport: "acp",
     env: {"DROID_DISABLE_AUTO_UPDATE":"true","FACTORY_DROID_AUTO_UPDATE_ENABLED":"false"},
     params: {"supportsMcpServers":false},
   },
@@ -238,6 +304,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "0.9.22",
     installLink: "https://fast-agent.ai/acp/",
     command: ["uvx","--from","fast-agent-acp==0.9.22","fast-agent-acp","-x"],
+    transport: "acp",
   },
   {
     id: "gemini",
@@ -247,6 +314,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "0.52.0",
     installLink: "https://geminicli.com",
     command: ["npx","-y","@google/gemini-cli@0.52.0","--acp"],
+    transport: "acp",
   },
   {
     id: "gjc",
@@ -256,6 +324,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "manual",
     installLink: "https://gajae-code.com",
     command: ["gjc","acp"],
+    transport: "acp",
     env: {"GJC_ACP_PERMISSION_MODE":"prompt"},
   },
   {
@@ -266,6 +335,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "1.3.0",
     installLink: "https://github.com/stefandevo/glm-acp-agent",
     command: ["npx","-y","glm-acp-agent@1.3.0"],
+    transport: "acp",
   },
   {
     id: "goose",
@@ -275,6 +345,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "1.33.1",
     installLink: "https://block.github.io/goose/",
     command: ["goose","acp"],
+    transport: "acp",
   },
   {
     id: "grok",
@@ -284,6 +355,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "0.2.11",
     installLink: "https://docs.x.ai/build/overview",
     command: ["grok","agent","stdio"],
+    transport: "acp",
   },
   {
     id: "hermes",
@@ -293,6 +365,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "manual",
     installLink: "https://hermes-agent.nousresearch.com/docs/user-guide/features/acp",
     command: ["hermes","acp"],
+    transport: "acp",
   },
   {
     id: "junie",
@@ -302,6 +375,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "1468.30.0",
     installLink: "https://junie.jetbrains.com/docs/junie-cli-acp.html",
     command: ["junie","--acp","true"],
+    transport: "acp",
   },
   {
     id: "kilo",
@@ -311,6 +385,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "7.2.40",
     installLink: "https://kilo.ai/docs/code-with-ai/platforms/cli",
     command: ["kilo","acp"],
+    transport: "acp",
   },
   {
     id: "kimi",
@@ -320,6 +395,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "0.11.0",
     installLink: "https://github.com/MoonshotAI/kimi-code",
     command: ["kimi","acp"],
+    transport: "acp",
   },
   {
     id: "kiro",
@@ -329,6 +405,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "manual",
     installLink: "https://kiro.dev/docs/cli/acp/",
     command: ["kiro-cli","acp"],
+    transport: "acp",
   },
   {
     id: "minimax-code",
@@ -338,6 +415,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "0.1.2",
     installLink: "https://agent.minimax.io",
     command: ["npx","-y","@minimax-ai/code@0.1.2","acp"],
+    transport: "acp",
   },
   {
     id: "minion-code",
@@ -347,6 +425,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "0.1.44",
     installLink: "https://github.com/femto/minion-code",
     command: ["uvx","--from","minion-code==0.1.44","minion-code","acp"],
+    transport: "acp",
   },
   {
     id: "mistral-vibe",
@@ -356,6 +435,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "2.9.3",
     installLink: "https://github.com/mistralai/mistral-vibe",
     command: ["vibe-acp"],
+    transport: "acp",
   },
   {
     id: "nova",
@@ -365,6 +445,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "1.1.29",
     installLink: "https://www.compassap.ai/portfolio/nova.html",
     command: ["npx","-y","@compass-ai/nova@1.1.29","acp"],
+    transport: "acp",
   },
   {
     id: "poolside",
@@ -374,6 +455,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "1.0.0",
     installLink: "https://docs.poolside.ai/cli/pool",
     command: ["pool","acp"],
+    transport: "acp",
   },
   {
     id: "qoder",
@@ -383,6 +465,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "1.1.4",
     installLink: "https://qoder.com",
     command: ["npx","-y","@qoder-ai/qodercli@1.1.4","--acp"],
+    transport: "acp",
   },
   {
     id: "qwen-code",
@@ -392,6 +475,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "0.20.1",
     installLink: "https://qwenlm.github.io/qwen-code-docs/en/users/overview",
     command: ["npx","-y","@qwen-code/qwen-code@0.20.1","--acp","--experimental-skills"],
+    transport: "acp",
   },
   {
     id: "sigit",
@@ -401,6 +485,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "1.0.3",
     installLink: "https://github.com/getsigit/sigit",
     command: ["sigit"],
+    transport: "acp",
   },
   {
     id: "stakpak",
@@ -410,6 +495,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "0.3.80",
     installLink: "https://stakpak.dev/",
     command: ["stakpak","acp"],
+    transport: "acp",
   },
   {
     id: "traecli",
@@ -419,6 +505,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "manual",
     installLink: "https://docs.trae.cn/cli_get-started-with-trae-cli",
     command: ["traecli","acp","serve"],
+    transport: "acp",
   },
   {
     id: "vtcode",
@@ -428,6 +515,7 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     version: "0.96.14",
     installLink: "https://github.com/vinhnx/VTCode/blob/main/docs/guides/zed-acp.md",
     command: ["vtcode","acp"],
+    transport: "acp",
     env: {"VT_ACP_ENABLED":"1","VT_ACP_ZED_ENABLED":"1"},
   },
 ];
@@ -435,81 +523,6 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
 /** Look one up by id, or `undefined` — the same question a provider config asks. */
 export function acpAgent(id: string): AcpAgentEntry | undefined {
   return ACP_AGENT_CATALOG.find((entry) => entry.id === id);
-}
-
-/**
- * What a probe found, for an entry in the **preset** catalogue above.
- *
- * `available: boolean` rather than `HarnessProbe`'s five states, and the difference is not drift: this list is
- * a recipe set (a command line and a link) with no notion of a bridge, so there is no second program to ask
- * about — "the command's binary is on `PATH`, or it is not" is the whole question. The five states exist for
- * the *harness* catalogue, where an agent and the adapter we drive it through are two different installs
- * (`AgentLaunch.agentBinaries`); a UI that renders both lists must therefore map this boolean itself, which is
- * what `apps/desktop/src/composer/agent-for.ts` does for the one list the window actually shows.
- */
-export interface AcpAgentProbe {
-  id: string;
-  available: boolean;
-  /** The binary we resolved, when we found one. */
-  binaryPath?: string;
-  /** How it was found — on PATH, or as an `npx` package we would fetch on first run. */
-  via?: "path" | "npx";
-  /** End-user wording for why it is not usable, including where to get it. */
-  reason?: string;
-}
-
-/**
- * Is this catalogued agent usable on this machine?
- *
- * Two honest outcomes, and no third one:
- *
- *   * **`available: true`** — the command's binary resolves. We still know nothing about the agent's
- *     *capabilities*; that comes from the ACP handshake at run time, which is why the UI must not
- *     promise cancel or approvals before a session exists.
- *   * **`available: false`, with a reason that names the install link** — missing, or only reachable
- *     through `npx`, which we report as `npx` rather than as present: fetching a package on first run
- *     is a different user experience from running an installed binary, and a reviewer should see
- *     which one they are choosing.
- *
- * `npx`-first commands are deliberately *not* resolved to a binary: `npx` itself is the binary, and a
- * machine without network access would look ready and then fail at run time.
- */
-export function probeAcpAgent(
-  id: string,
-  options: {
-    /** Injectable for tests, so probing needs no PATH and no filesystem. */
-    find?: (name: string) => string | null;
-  } = {},
-): AcpAgentProbe {
-  const entry = acpAgent(id);
-  if (!entry) {
-    return { id, available: false, reason: `No catalogued ACP agent has the id "${id}".` };
-  }
-
-  const [binary, ...rest] = entry.command;
-  const find = options.find ?? ((name: string) => findBinary(name));
-
-  if (binary === "npx" || binary === "npx.cmd") {
-    const resolved = find("npx");
-    return resolved
-      ? { id, available: true, binaryPath: resolved, via: "npx" }
-      : {
-          id,
-          available: false,
-          reason: `npx is not available, and ${entry.title} is installed through it. ${entry.installLink}`,
-        };
-  }
-
-  const resolved = find(binary);
-  if (resolved) return { id, available: true, binaryPath: resolved, via: "path" };
-
-  return {
-    id,
-    available: false,
-    reason:
-      `${entry.title} is not installed (looked for ${binary} on PATH). ` +
-      `${entry.installLink}${rest.length > 0 ? ` — then it runs as: ${entry.command.join(" ")}` : ""}`,
-  };
 }
 
 /**
@@ -543,4 +556,187 @@ export function overlappingAgentIds(builtInIds: readonly string[]): string[] {
 /** The ids, for a config UI or a coverage assertion. */
 export function acpAgentIds(): string[] {
   return ACP_AGENT_CATALOG.map((entry) => entry.id);
+}
+
+/* ──────────────────── from an entry to the two things a screen needs ──────────────────── */
+
+/**
+ * How an entry's program gets onto a machine, in the two shapes that need **different sentences**.
+ *
+ * Not decoration: `npx -y cline@3.0.46 --acp` needs no install at all — the package arrives on first run
+ * — while `goose acp` needs a program that is simply not there. A screen that said "install it" about
+ * the first would send a user to a download page for something that installs itself, and one that said
+ * "no install needed" about the second would leave them with a row that never becomes ready.
+ *
+ * Derived from the command's own first element, which is the only place the answer exists. `package`
+ * carries the whole `name@version` argument so a row can say *what* the first run fetches without
+ * parsing a command line — a second parser is a second answer to "what is this entry".
+ */
+export type CataloguedInstall =
+  | { readonly kind: "npx"; readonly package: string }
+  | { readonly kind: "binary"; readonly binary: string };
+
+/** The `npx`/`npx.cmd` first element that means "this is fetched on first run, not installed". */
+function isNpxBinary(binary: string): boolean {
+  return binary === "npx" || binary === "npx.cmd";
+}
+
+/**
+ * Which of the two shapes this entry is.
+ *
+ * `package` is the argument after `-y` when there is one — the spec `npx` would resolve — and the whole
+ * command after `npx` otherwise, so the field is never empty for an `npx` entry and never invents a spec
+ * that is not in the command.
+ */
+export function cataloguedInstall(entry: AcpAgentEntry): CataloguedInstall {
+  const [binary, ...rest] = entry.command;
+  if (isNpxBinary(binary)) {
+    const at = rest.indexOf("-y");
+    const spec = at >= 0 ? rest[at + 1] : rest[0];
+    return { kind: "npx", package: spec ?? entry.command.join(" ") };
+  }
+  return { kind: "binary", binary };
+}
+
+/** The command line, as one string: what a row shows and what a fix carries, from one place. */
+export function cataloguedCommandLine(entry: AcpAgentEntry): string {
+  return entry.command.join(" ");
+}
+
+/**
+ * An entry flattened into the recipe **the one prober** reads.
+ *
+ * The same `ProbeRecipe` a provider config produces (`providers.ts`) and the nine shipped agents produce
+ * (`index.ts`), so a catalogued row's state comes from the same five checks, in the same order, as
+ * everything else on the screen. Nothing here decides a state; it only states what to look for.
+ *
+ * ## The install hint, and why it is a sentence rather than a package name
+ *
+ * The fourth agreement rule of `HarnessAvailabilitySchema` is that a state asserting an absence must say
+ * what to do about it, and for a third-party tool **we cannot author an install command** — we have not
+ * read its release process and inventing `npm i -g goose` would be advice that does not run. So the hint
+ * says what is true and where the answer is: install *this tool* (the entry's own link carries the how)
+ * and then it runs as this command line. The precedent is `opencode`'s own entry in `index.ts`, whose
+ * hint is "see the project's install instructions" for exactly this reason.
+ *
+ * The `npx` case is genuinely different and gets a different sentence: what is missing there is `npx`
+ * itself, which is Node's, not the agent's.
+ */
+export function cataloguedRecipe(entry: AcpAgentEntry): ProbeRecipe {
+  const [binary] = entry.command;
+  const install: HarnessInstallHints = isNpxBinary(binary)
+    ? {
+        hint:
+          `install Node.js so that \`npx\` is on PATH — ${entry.title} itself needs no install, ` +
+          `it is fetched from npm on the first run`,
+        url: "https://nodejs.org/en/download",
+      }
+    : { hint: `install ${entry.title} — then it runs as: ${cataloguedCommandLine(entry)}`, url: entry.installLink };
+  return {
+    label: entry.title,
+    kind: "child-process",
+    // The **first element only**, which is the program the probe looks for. For an `npx` entry that is
+    // `npx`: the package name in the command is not a binary on this machine, and looking for it would
+    // report every npx recipe as missing.
+    binaries: [binary],
+    transport: entry.transport,
+    install,
+    // The user's own command line, for `notInstalledFix`: it is the one command in the world that
+    // describes what this row would run.
+    commandLine: cataloguedCommandLine(entry),
+  };
+}
+
+/** A probe about a catalogued entry: the same finding as any other, under the entry's own id. */
+export interface CataloguedAgentProbe extends ProbeFinding {
+  id: string;
+}
+
+/**
+ * Can this machine run one catalogued entry?
+ *
+ * ## What this costs, which is the whole reason it is per-entry
+ *
+ * **One search of the resolved search path per call** — the same `findBinary` the nine shipped agents go
+ * through, and *nothing else*: no process is started, no package is fetched, no session is opened. That
+ * matters more here than anywhere else in the catalogue, because 14 of these entries are `npx -y …`
+ * recipes and a probe that *ran* them would download fourteen packages onto a user's machine for asking
+ * a question. (The download is real, and it is stated on the row instead: it happens on the first run,
+ * once, which is a cost the user chose.)
+ *
+ * Even so it is not free — 38 searches is 38 sweeps of a directory list, and a screen that did it while
+ * opening would spend that on rows nobody has looked at. So the caller probes **one row, when the user
+ * asks for that row**, caches the answer, and says when it was taken. `coder.probeCatalogAgent` is where
+ * that policy lives; nothing in this module decides how often to ask.
+ *
+ * `undefined` when no entry has that id, which is a different thing from `unknown`: nothing was asked
+ * about a program that does not exist. The daemon turns it into a refusal by name.
+ */
+export function probeCatalogAgent(
+  id: string,
+  options: ProbeHarnessOptions = {},
+): CataloguedAgentProbe | undefined {
+  const entry = acpAgent(id);
+  if (!entry) return undefined;
+  return { id, ...probeRecipe(cataloguedRecipe(entry), options) };
+}
+
+/**
+ * What `coder.addProvider` is handed for one entry — **and the dialect is the entry's, not ours**.
+ *
+ * ## Why this is a function here rather than three field reads in a screen
+ *
+ * A screen that assembled these parameters would be a second place that knows what a catalogue entry
+ * means, and the first one to be wrong about the dialect. It is also the half of this product the phone
+ * needs: `coder.listCatalog` serves exactly this object per entry, so a client on any platform declares
+ * an agent by passing back what the daemon said the entry states. That is what "the catalogue is not
+ * desktop-only knowledge" means in practice, and it is why this lives in the shared package rather than
+ * in the app that happens to render it first.
+ *
+ * ## Three fields, and the two that are absent on purpose
+ *
+ *   * `command`, `args` — the entry's own argv, split at the first element. Never re-quoted, never
+ *     reordered: a recipe we catalogued from a vendor's own documentation is the last thing that should
+ *     be reinterpreted on the way to a spawn.
+ *   * `transport` — `entry.transport`, passed through. The entry states it (`AcpAgentEntry.transport`);
+ *     nothing here infers it, and nothing downstream may default it.
+ *   * **`modeParam` and `authMethodId` are not set**, because no entry states either. See
+ *     `AcpAgentEntry.transport` for why writing a plausible one is worse than writing nothing.
+ *
+ * ## `env` is names only, and this is the honest cost of it
+ *
+ * The entry's own `env` carries **values** — `AUGMENT_DISABLE_AUTO_UPDATE: "1"`, `VT_ACP_ENABLED: "1"` —
+ * because those are constants of a recipe *we* publish. A provider config cannot carry a value: its
+ * `env` is a list of names read from the daemon's own environment at spawn, which is the security
+ * decision `AgentProviderConfig` states. So what crosses is the **names**, and a screen that adds one of
+ * these entries has to say so — the variables are the ones to set in EnvoyCoder's own environment, and
+ * until they are, the row reports them unset and the launch refuses by name rather than starting an
+ * agent that cannot speak ACP. `cataloguedEnvNames` is that list, so a caller never reads `.env` keys
+ * itself.
+ */
+export interface CataloguedProviderInput {
+  readonly id: string;
+  readonly label: string;
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly env: readonly string[];
+  readonly transport: "acp" | "cli";
+}
+
+/** The environment variable **names** an entry's recipe sets. Never the values — see above. */
+export function cataloguedEnvNames(entry: AcpAgentEntry): string[] {
+  return Object.keys(entry.env ?? {});
+}
+
+/** The `coder.addProvider` parameters for one entry. See `CataloguedProviderInput` for every choice. */
+export function cataloguedProviderInput(entry: AcpAgentEntry): CataloguedProviderInput {
+  const [command, ...args] = entry.command;
+  return {
+    id: entry.id,
+    label: entry.title,
+    command,
+    args,
+    env: cataloguedEnvNames(entry),
+    transport: entry.transport,
+  };
 }

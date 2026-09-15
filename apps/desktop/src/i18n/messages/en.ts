@@ -461,6 +461,89 @@ export const en = {
   "settings.agents.note":
     "What each agent can actually do decides what EnvoyCoder offers. An agent that cannot be asked for permission is not given an approval dialog it would ignore.",
   "settings.agents.empty": "The agent list has not arrived yet.",
+
+  /* ── the catalogue: the 38 recipes, the two extra ways to get an agent, and the words that keep the
+     screen from claiming more than it measured ──
+
+     This is the product's core screen — *the control plane for coding agents* — and three of the strings
+     below exist only to stop it lying:
+
+       * `settings.agent.unchecked` is the state a catalogue row starts in. It is **not** the daemon's
+         `unknown`: that one means "we tried to look and had nothing to search", and this one means nobody
+         has looked yet. A row that rendered either of them as `ready` would be claiming a measurement
+         nobody took, and a row that rendered them as "not installed" would be claiming the opposite. */
+  "settings.agents.shipped.heading": "On this machine",
+  "settings.agents.mine.heading": "Your agents",
+  "settings.agents.mine.empty":
+    "You have not added an agent of your own yet. Anything below can be added here, and so can a program that is not on the list.",
+  "settings.agents.mine.command": "Runs as: {command}",
+  "settings.agents.mine.remove": "Remove",
+  "settings.agents.mine.remove.title": "Forget {agent}. Nothing is uninstalled, and nothing else is touched.",
+  "settings.agents.mine.env.title": "Whether EnvoyCoder's daemon has {name} set",
+  "settings.agents.mine.env.set": "{name} is set",
+  "settings.agents.mine.env.unset": "{name} is not set",
+  "settings.agents.hide": "Hide from my lists",
+  "settings.agents.show": "Show in my lists",
+  "settings.agents.hidden": "Hidden",
+  "settings.agents.hidden.title":
+    "You took this agent out of your agent lists. Everything it reports above is still what was measured — hiding a preference, not a state.",
+  "settings.agents.auth.title":
+    "Whether this agent will open a session here, which is a different question from whether its program is installed.",
+  "settings.agents.auth.needsSignin": "Needs a sign-in",
+  "settings.agents.auth.ready": "Will talk to us",
+  "settings.agents.signIn": "Sign in",
+  "settings.agents.signIn.working": "Signing in…",
+  "settings.agents.signIn.title": "Run {agent}'s own sign-in flow, and say truthfully what happened",
+  /* The three states a **catalogue** row has that the daemon's five do not: a row nobody has measured, a
+     measurement in flight, and a measurement that failed. The daemon's `unknown` is a fourth thing again,
+     and its wording is deliberately different — see the note above. */
+  "settings.agent.unchecked": "Not checked yet",
+  "settings.agent.checking": "Checking…",
+  "settings.agent.refused": "Check failed",
+  "settings.agents.olderDaemon":
+    "The daemon this window is talking to is an older build and does not have this part of the agent list, so it cannot be shown here. Restart EnvoyCoder so the window and its daemon are the same build.",
+  "settings.agents.add.heading": "Add an agent",
+  "settings.agents.add.note":
+    "These are recipes EnvoyCoder knows how to drive. Whether this machine can run one is a fact somebody has to measure, so nothing here is checked until you ask — one row at a time, because checking walks this machine's program folders and a page that did it for all of them while opening would spend your machine on agents you never looked at.",
+  "settings.agents.search.label": "Search the catalogue",
+  "settings.agents.search.placeholder": "Name, id or description",
+  "settings.agents.add.noMatches": "No catalogued agent matches “{query}”.",
+  "settings.agents.row.version": "Version {version}",
+  "settings.agents.row.check": "Check this machine",
+  "settings.agents.row.checkAgain": "Check again",
+  "settings.agents.row.check.title":
+    "Look for this agent's program on this machine. It starts nothing and downloads nothing — and the answer is remembered for ten minutes.",
+  "settings.agents.row.add": "Add",
+  "settings.agents.row.adding": "Adding…",
+  "settings.agents.row.add.title":
+    "Add {agent} to your agents. Its command line and the names of any environment variables it needs are taken from this entry, exactly as they are written above.",
+  "settings.agents.row.builtIn":
+    "EnvoyCoder already ships this agent, so it is configured in “On this machine” above rather than added a second time.",
+  "settings.agents.row.needsNoInstall":
+    "Nothing to install: {package} is fetched from npm the first time it runs.",
+  "settings.agents.row.install": "Install {agent} first",
+  "settings.agents.row.installLink": "Where to get it",
+  "settings.agents.row.installLink.title": "{agent}'s own page",
+  "settings.agents.row.recipeEnv":
+    "This recipe also sets {names} for the agent. An agent you add stores variable names only, so set these in the environment EnvoyCoder runs in — until they are set, this agent is refused at launch rather than started unable to speak ACP.",
+  "settings.agents.row.checked": "Checked {when} — the search took {ms} ms.",
+  "settings.agents.row.checked.cached":
+    "Checked {when}, and not measured again since: a result that says the agent is here is remembered for ten minutes.",
+  "settings.agents.manual.heading": "An agent that is not on the list",
+  "settings.agents.manual.note":
+    "If you already have a coding agent that speaks the Agent Client Protocol and it is not in the catalogue above, declare it here. EnvoyCoder will start it and probe it exactly as it does the others.",
+  "settings.agents.manual.label": "What to call it",
+  "settings.agents.manual.command": "Program",
+  "settings.agents.manual.args": "Arguments",
+  "settings.agents.manual.env": "Environment variable names",
+  "settings.agents.manual.env.detail":
+    "Names only, separated by commas or new lines — never the values. EnvoyCoder reads each value from the environment its daemon runs in, so a credential is never written to disk.",
+  "settings.agents.manual.transport": "How EnvoyCoder must speak to it",
+  "settings.agents.manual.transport.detail":
+    "There is no default here on purpose: guessing sends an Agent Client Protocol handshake to a program that will never answer it, or reports a working agent as unsupported. Only you can see which one it is.",
+  "settings.agents.manual.transport.acp": "Agent Client Protocol (can be run and driven)",
+  "settings.agents.manual.transport.cli": "A plain command line (startable, not yet drivable)",
+  "settings.agents.manual.submit": "Add this agent",
   /* ── the five availability states, and the bug they were written for ──
      A user with Claude Code, Codex and DeepSeek Harness all installed read **"Not installed"** for every
      one of them, because the chip had two words for five situations: an agent is not a binary, it is a
@@ -469,7 +552,10 @@ export const en = {
      `settings.agent.unknown` carries the one rule the state exists for: it must never read as
      "not installed", because it means *we could not look* and not *it is not there*. */
   "settings.agent.notInstalled": "Not installed",
-  "settings.agent.unknown": "Not checked",
+  // **The daemon's `unknown`, and deliberately not the catalogue row's "Not checked yet".** This one is an
+  // answer: we tried to look and had nothing to search (`SearchPath.searchable` is false). The other is the
+  // absence of a question. Two situations, two sentences — see the catalogue block below.
+  "settings.agent.unknown": "Could not check",
   "settings.agent.ready": "Ready",
   // Installed, and we have no adapter for the protocol it speaks. A different sentence from "not installed",
   // and a different action (there is none for the user to take — it is ours to write).
@@ -672,6 +758,11 @@ export const en = {
   // name the wrong list when a user mistyped one of the nine we ship.
   "error.agentNotFound":
     "There is no agent called \"{id}\" here. It may have been removed from another window.",
+  // An id that names no catalogued entry: a bad parameter rather than a fact about a program. Answering
+  // `unknown` instead would say "we could not look" about something that does not exist, which is how a typo
+  // becomes a state a user can act on.
+  "error.catalogAgentMissing":
+    "There is no catalogued agent called \"{id}\". The list changed since this window read it — reopen the agents page and try again.",
   // **The five answers to "sign in to this agent".** The sentence a client renders after the button, and
   // the only one of the five that means it worked is `signIn.signedIn`: the others exist because a step
   // that *returns* is not a step that *worked* — a browser-login method answers immediately and the session

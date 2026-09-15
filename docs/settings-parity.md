@@ -586,9 +586,9 @@ at all, so **ship the disabled row with the git slice, not before it.**
 
 | setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
 |---|---|---|---|---|---|
-| **Enable {provider}** (`providers[id].enabled`) | `providers-section.tsx:248-253`, per provider · `settings.providers.enableProvider` "Enable {{name}}" (`en.ts:2651`) | `true` (`:444`; daemon `server/agent/provider-registry.ts:737`) | daemon: only enabled providers get a client; disabled ⇒ `unavailable`, `listModels` throws "Provider X is disabled" (`provider-registry.ts:375-377`,`:752-754`,`:836-837`) | **the preference landed, on both agent lists, and it is deliberately not Paseo's switch.** `coder.setAgentHidden { id, hidden }` stores `CoderSettings.hiddenAgents` — one list of ids, because the two agent id spaces cannot collide (`AgentProviderConfigSchema` refuses a provider id that names a shipped agent) — and every row of `coder.listHarnesses` / `coder.listProviders` now carries `hidden` **beside** its `availability` and its `auth`. The desktop pickers filter on it (`composer/agent-for.ts`'s `pickable`). What was *not* copied is the effect: Paseo's disabled provider reports `unavailable` and its `listModels` throws, so its switch rewrites the **state**; ours moves a row out of the pickers and changes nothing else. A hidden agent that is installed still reports `ready`, still carries its `fix` when it is not, and still runs when a task already names it (§7.10) | **honour-able now** — the daemon half is in place and tested over a real socket (round trip through `coder.setAgentHidden`, a second window hearing `harnesses`, and the list surviving a restart). The control that throws the switch belongs to the picker slice below, and until it exists the two read sites are held by `settings-coverage.test.ts` — because a preference nothing reads is exactly the defect §7.1 exists to prevent |
-| **Add provider** (`providers[id]` from the ACP catalogue) | `provider-catalog-list.tsx:108-118` · `providerCatalog.actions.add` "Add" (`en.ts:1587`) | — (action) | persists `{providers:{[id]:{extends:"acp",label,description,command,env,params}}}` (`hooks/use-acp-provider-catalog.ts:11-26`) so a third-party ACP CLI becomes runnable | **the plumbing landed; the picker has not.** `AgentProviderConfig` (§7.10) is a provider's shape — id, label, command, args, the **names** of the environment variables it needs, and the dialect it speaks — and `coder.listProviders` / `coder.addProvider` / `coder.removeProvider` store them in `<state>/EnvoyCoder/providers.json` (quarantined rather than emptied when unreadable, replaced rather than merged per id, `providers` broadcast so a second window refetches). Every listed provider is **probed** by the same prober that answers for the nine shipped agents and launched through the same `launchForHarness` body, so its row carries one of the same five `availability` states. What is still absent is the surface: no control adds one, and the 38-entry catalogue is still unreachable from the window | **honour-able with work** — and the work is now one surface rather than a protocol change: a list editor and the catalogue rows, both reading methods that exist. The **security decision** is recorded rather than deferred — `env` is a list of names, so a credential cannot be expressed in the schema, written to disk or logged (§7.10) |
-| **Remove provider** (`removeProviders`) | `providers-section.tsx:155-164` (menu + confirm) · `settings.providers.actions.remove` (`en.ts:2658`) | — (action) | daemon strips the entry, its overrides **and** its `metadataGeneration.providers` entries (`daemon-config-store.ts:101-159`) | `coder.removeProvider` forgets one provider and nothing else — it refuses with `envoycoder.provider-missing` when there is nothing under that id, rather than confirming a removal that did not happen. Nothing refers to a provider today, so unlike `coder.removeProject` there are no rows to archive: a task names a `HarnessId` | **honour-able with work** — wire done and tested over a real socket; the menu item waits for the picker above |
+| **Enable {provider}** (`providers[id].enabled`) | `providers-section.tsx:248-253`, per provider · `settings.providers.enableProvider` "Enable {{name}}" (`en.ts:2651`) | `true` (`:444`; daemon `server/agent/provider-registry.ts:737`) | daemon: only enabled providers get a client; disabled ⇒ `unavailable`, `listModels` throws "Provider X is disabled" (`provider-registry.ts:375-377`,`:752-754`,`:836-837`) | **the preference landed, on both agent lists, and it is deliberately not Paseo's switch.** `coder.setAgentHidden { id, hidden }` stores `CoderSettings.hiddenAgents` — one list of ids, because the two agent id spaces cannot collide (`AgentProviderConfigSchema` refuses a provider id that names a shipped agent) — and every row of `coder.listHarnesses` / `coder.listProviders` now carries `hidden` **beside** its `availability` and its `auth`. The desktop pickers filter on it (`composer/agent-for.ts`'s `pickable`). What was *not* copied is the effect: Paseo's disabled provider reports `unavailable` and its `listModels` throws, so its switch rewrites the **state**; ours moves a row out of the pickers and changes nothing else. A hidden agent that is installed still reports `ready`, still carries its `fix` when it is not, and still runs when a task already names it (§7.10) | **shipped** — and it is deliberately not Paseo's switch. The daemon half was already in place and tested over a real socket (round trip through `coder.setAgentHidden`, a second window hearing `harnesses`, and the list surviving a restart); the control that throws the switch is the **Agents** page, on every row of all three lists (`SectionsAgents.tsx`). What it changes is still only the pickers: a hidden agent reports exactly what the probe found, keeps its install command, and still runs when a task already names it — the two facts sit side by side and neither overwrites the other. A daemon that does not serve `coder.setAgentHidden` gets the switch not at all, rather than one whose press comes back "Method not found" |
+| **Add provider** (`providers[id]` from the ACP catalogue) | `provider-catalog-list.tsx:108-118` · `providerCatalog.actions.add` "Add" (`en.ts:1587`) | — (action) | persists `{providers:{[id]:{extends:"acp",label,description,command,env,params}}}` (`hooks/use-acp-provider-catalog.ts:11-26`) so a third-party ACP CLI becomes runnable | **the plumbing landed; the picker has not.** `AgentProviderConfig` (§7.10) is a provider's shape — id, label, command, args, the **names** of the environment variables it needs, and the dialect it speaks — and `coder.listProviders` / `coder.addProvider` / `coder.removeProvider` store them in `<state>/EnvoyCoder/providers.json` (quarantined rather than emptied when unreadable, replaced rather than merged per id, `providers` broadcast so a second window refetches). Every listed provider is **probed** by the same prober that answers for the nine shipped agents and launched through the same `launchForHarness` body, so its row carries one of the same five `availability` states. What is still absent is the surface: no control adds one, and the 38-entry catalogue is still unreachable from the window | **shipped** — with a divergence that is the whole point. Paseo's Add writes the entry's `env` **values** into `config.json`; ours cannot, because `AgentProviderConfig.env` is a list of variable **names** and the value is read from the daemon's own environment at spawn (§7.10). So the catalogue serves its rows over the wire (`coder.listCatalog`, which measures nothing) and a client adds one by handing back what the entry states: its command, its argv, the names of the variables it needs, and the dialect it declares — `modeParam` and `authMethodId` are *absent* rather than defaulted, because no entry has evidence for either and a guessed `modeParam` is ignored by the peer while the run reports success. The one cost is stated on the row: the four entries whose recipe sets a constant carry the name across, and the variable is then the user's to set. `coder.probeCatalogAgent` measures one row at a time, on the user's press, because 14 of the 38 are `npx` recipes and a screen that checked them all while opening would spend the machine on rows nobody looked at |
+| **Remove provider** (`removeProviders`) | `providers-section.tsx:155-164` (menu + confirm) · `settings.providers.actions.remove` (`en.ts:2658`) | — (action) | daemon strips the entry, its overrides **and** its `metadataGeneration.providers` entries (`daemon-config-store.ts:101-159`) | `coder.removeProvider` forgets one provider and nothing else — it refuses with `envoycoder.provider-missing` when there is nothing under that id, rather than confirming a removal that did not happen. Nothing refers to a provider today, so unlike `coder.removeProject` there are no rows to archive: a task names a `HarnessId` | **shipped** — every row on the Agents page (a user's provider, and a catalogue entry they already added) carries Remove, and it is the same `coder.removeProvider`: nothing is uninstalled, and nothing a row reports changes except its disappearance from the list. Paseo's version strips the entry, its overrides and its `metadataGeneration.providers` entries, which is what a config-with-overrides shape requires; ours is a flat list of recipes, so there is nothing else to strip |
 | **Add custom model** (`providers[id].additionalModels`) | `provider-diagnostic-sheet.tsx:199-234` (modal form) · `settings.providers.models.addCustomTitle` "Add custom model" (`en.ts:2678`) | `[]` (`provider-registry.ts:735`) | merged on top of discovered models (`provider-registry.ts:383-396`,`:651`): the picker gains ids without replacing the catalogue | our catalogue ships a fixed `models` list per agent (`packages/agent-catalog/src/models.ts`) with no user additions. **Half of this row landed since it was written, and not as a settings control:** the agent is now *asked* what it offers and the answer is recorded, so `deepseek-harness`'s live catalog reaches the picker without a hand-typed id (§7.7). What is still absent is the user's own additions — ids that are not in the agent's catalog at all | **honour-able with work** — needs a per-agent model list on the settings object plus the composer reading it. Small, but it is a **protocol** addition (a `models` array on the agent's stored defaults), so it shares the Add-provider slice's schema change |
 | **Remove model** | `provider-diagnostic-sheet.tsx:114-118` · `settings.providers.models.removeModel` "Remove {{id}}" (`en.ts:2684`) | — (action) | rewrites `additionalModels` without the id (`:651-667`) | absent with the row above | **honour-able with work** — same slice |
 
@@ -1102,7 +1102,7 @@ JSX — and `test/settings-nav.test.tsx` compares the rendered names with the re
 | **General** | Language; the folder *Add project* starts in | `main.tsx:33` (the root provider re-renders every `t()`); the palette's `project.add` row seeds its text stage with `state.settings.defaultProjectPath` (`CoderApp.tsx`), `test/palette-flow.test.tsx` |
 | **New tasks** | The default agent, the default model, the agent's extra argv | `resolveTaskDefaults` (`packages/task-model/src/index.ts`) — explicit → project → app → fallback; `test/settings-store.test.ts` asserts an app default reaching a created task |
 | **Safety** | *Ask before anything destructive*; *Keep transcripts after a task ends* | the value goes to the agent as its own session policy (`session/set_policy { autoRun }`, mapped by `run-options.ts`), four cases in `test/runs.test.ts`; `appendTranscript` returns early when transcripts are off |
-| **Agents** | Every agent the machine can run: availability, its capability warnings, and the tier, modes, models and thinking levels **it published about itself** | read straight from `HarnessSummary` — the daemon's own answer. Read-only on purpose: availability here is a fact we detect, not a switch a user throws (§5.8). The *composer* can now also **ask** an agent for that list before it has ever run (§7.7); this page stays a report, and the ask lives where the choice is made |
+| **Agents** | **Three groups, and the product's core screen** (§7.12): the agents this machine has (availability, capability warnings, the tier/modes/models/thinking each **published about itself**), the agents *you* declared, and the **38-entry catalogue** — searchable, each row with its command, version, install link and a state that is measured on request rather than implied. On each row: a sign-in for an agent that wants one, a preference switch, and Remove for the ones you added | the shipped nine and your own agents are read straight from `HarnessSummary` / `AgentProviderSummary` — the daemon's own probe — and the catalogue from `coder.listCatalog`, which measures nothing. Availability is a fact we detect; hiding is a preference the user sets; they are rendered side by side and neither changes the other (§5.8). The *composer* can still **ask** an agent what it offers before it has ever run (§7.7); the ask lives where the choice is made |
 | **Projects** | The list of registered projects, one row each, opening that project's own defaults | `coder.listProjects`; the rows open scope 3, whose three controls write through `coder.updateProject` (whose defaults **replace**, hence the live-id rule of §7.5) |
 | **Keyboard shortcuts** | The keys this window is **listening for**, from the same table the key handler reads | `wiredBindings(actions)` — the table filtered by the actions the shell mounted, so `⌘⇧N`, `⇧?` and `Escape` are absent because nothing is mounted for them. A page that listed the table would advertise keys that do nothing, which is the same lie as a setting that does nothing |
 | **This machine** | The daemon's build, state folder, home folder, start time, and how many windows are attached | `coder.hello`'s own answer, all of it (`packages/protocol/src/rpc.ts:1040-1066`); the notes stay in the frame, below every page |
@@ -1118,8 +1118,8 @@ an omission. Nothing below is rendered disabled either — the argument is under
 | `projects` | **honour-able with work** (§5.2) | **yes** | the section carries no user-settable value in Paseo either: it is navigation into a per-project screen. Ours is the list plus scope 3 |
 | `connections` | **not applicable** (§5.3) | no | there is no connection list: one loopback daemon, and the remote path fails closed until a session store exists |
 | `pair-device` | **honour-able with work** (§5.4) | no | the pairing contract is written, but `coder.pairDevice` is deliberately absent from the dispatcher catalogue — minting a credential is the node's act — and the session store it needs is roadmap M1. A disabled row here would be §7.2's lesson twice: a row and a method that must be written together, against a handler |
-| `agents` | **not applicable** (§5.5) | **yes, with different contents** | four of its five rows are subsystems we do not have. Our **Agents** section is a *report* of what each agent published (tier, availability, declared modes/models/thinking, capability warnings), not Paseo's page; the row we can honour — saved agent profiles — is §8.4's work |
-| `providers` | **not applicable** (§5.8) | no | Paseo's page is credential and adapter management, and it stores API keys in plaintext `env` in `config.json` (§9). **The audit says in as many words that we should not copy it.** Our equivalent facts live in **Agents** (what is installed) and **New tasks** (which model a task starts on) |
+| `agents` | **not applicable** (§5.5) | **yes, with different contents** | four of its five rows are subsystems we do not have. Our **Agents** section began as a *report* of what each agent published, and it is now also where an agent is added, hidden, measured and signed in (§7.12) — the catalogue Paseo splits into a separate `providers` page lives here rather than beside it, because a user asking "what can this machine run" wants one list rather than two. The row we still cannot honour is saved agent profiles, which is §8.4's remaining half |
+| `providers` | **not applicable** (§5.8) | **yes, merged into Agents** | Paseo's page is credential and adapter management, and it stores API keys in plaintext `env` in `config.json` (§9). **The audit says in as many words that we should not copy it, and we did not**: the catalogue's rows carry the *names* of the variables a recipe sets and never a value, and there is no field to hold one (§7.10). What we took is the information architecture — a row per agent with a state chip and a switch, and the catalogue as rows a user can add from — and it is the third group of **Agents** rather than a section of its own |
 | `terminals` | **not applicable** (§5.10) | no | no terminal subsystem — and Paseo's own daemon never reads the terminal profiles it persists, which is the inverse of a defect we have |
 | `plugins` | **not applicable** (§5.11) | no | no plugin runtime and no extension points, and Paseo's own are explicitly unsandboxed |
 | `permissions` | **not applicable** (§4.8) | no | that section is OS permissions — microphone, screen recording — and we request none. **Our Safety section is not this one**: it is what an *agent* may do without asking, which the audit records as honour-able now and which is built |
@@ -1138,11 +1138,11 @@ different: each needs a **subsystem** that does not exist (a terminal, a plugin 
 path, an account system, a git service, a session store). A disabled control there would be a promise
 attached to work that is not settings work, which §7.2 already argued and this restructure followed.
 
-**What that leaves as future bar items, named so they are not rediscovered:** user-defined agents (§5.8's
-honour-able rows, §8.4), **the visibility switch and the sign-in button** (§5.8's `Enable {provider}` row and
-§7.11, both of which have their daemon half in place and wait on the same picker surface), a system prompt
-(§5.5 `appendSystemPrompt`, upstream first), saved agent profiles (§5.5), and `autoArchiveAfterMerge` the day
-the git service exists (§5.7). Each is a section that
+**What that leaves as future bar items, named so they are not rediscovered:** a system prompt (§5.5
+`appendSystemPrompt`, upstream first), saved agent profiles (§5.5), and `autoArchiveAfterMerge` the day
+the git service exists (§5.7). **User-defined agents, the visibility switch and the sign-in button are off
+this list as of §7.12** — all three are on the Agents page now, which is what the previous revision of this
+paragraph was waiting for. Each is a section that
 would be added to the registry above with its own contents and its own citations — which is the shape this
 document is asking the next person to follow rather than invent.
 
@@ -1528,9 +1528,13 @@ of thing when the user typed the agent's command line themselves. `coder.setAgen
 list by id, and the two id spaces cannot collide, which is what lets one list serve both (§5.8's correction
 records the design error this avoids).
 
-**What is left.** The picker: a control that adds one, a row per provider, the switch that hides either kind
-of agent, and the 38 catalogue entries (`packages/agent-catalog/src/acp-catalog.ts`) as things a user can
-pick. The RPCs, the storage, the probe, the launch path and the preference are all in place and tested.
+**What was left — the picker — is §7.12.** A control that adds one, a row per provider, the switch that hides
+either kind of agent, and the 38 catalogue entries (`packages/agent-catalog/src/acp-catalog.ts`) as things a
+user can pick: all four are on the Agents page now. The RPCs, the storage, the probe, the launch path and the
+preference were the substrate, and the two things that slice added are the two the *surface* needed —
+`coder.listCatalog` (the entries, with nothing measured about them) and `coder.probeCatalogAgent` (one row's
+state, on request) — because the catalogue had to reach the window through the daemon rather than as a second
+copy of itself in the app bundle.
 
 ### 7.11 Authentication as a state we can see, and a sign-in we can trigger
 
@@ -1611,9 +1615,191 @@ passes is honoured *only if the agent offered it*, so a value pasted into that f
 never reaches `agent-auth.json`, and is not echoed into the sentence a user reads — for the same reason
 `coder.addProvider` never echoes a refused `env` entry. `test/sign-in.test.ts` asserts the negative on bytes.
 
-**What is left.** The button. The state, the RPC and the honest failure taxonomy are in place; the row that
-renders "needs sign-in" with a *Sign in* control beside it belongs to the picker slice, which is also where
-the user-defined-agent editor and §5.8's visibility switch land.
+**The button landed in §7.12, and the five outcomes are why it needed a surface rather than a toggle.** The
+row that renders *Needs a sign-in* carries a *Sign in* control beside it, on the agents the daemon says want
+one — and the answer a user gets back is the daemon's keyed sentence for whichever of the five things
+happened, of which only "a session opened" is success. A control that reported success on four of five
+answers is the defect this whole taxonomy exists to prevent; the page renders the outcome verbatim rather
+than summarising it into a tick.
+
+### 7.12 The catalogue on screen: the 38 recipes, and the four decisions that keep it honest
+
+The owner's brief: *"We should do the same thing with paseo, we need user to see them and can enable and use
+them. That's the target of our control plane. If they are not installed, we can guide them to install."* This
+is that screen. It is the last of the four the same request produced (§7.9 availability, §7.10 the provider
+contract, §7.11 sign-in), and it is the one where the product's thesis is either true or not: **EnvoyCoder is
+the control plane for coding agents**, and a control plane that cannot show you the agents is a product with
+a catalogue nobody can read.
+
+**What it is.** Settings → **Agents** (`components/settings/SectionsAgents.tsx`, `CatalogRows.tsx`, with the
+decisions in `agent-catalog.ts`), three groups:
+
+| group | rows from | state from |
+|---|---|---|
+| **On this machine** | `coder.listHarnesses` — the nine we ship | the daemon's probe, plus each agent's own declared modes/models/thinking and its capability warnings |
+| **Your agents** | `coder.listProviders` — the ones a user declared | the same prober, plus each named variable with `set: true/false` |
+| **Add an agent** | `coder.listCatalog` — the 38 recipes | **nothing, until the user asks about a row** |
+
+and one form at the bottom for a program nobody catalogued, which is what `coder.addProvider` was written for.
+
+**1. The catalogue is served, not copied.** `@envoycoder/agent-catalog` is where the *launch* reads an
+entry's command and argv, and its entry point reaches `@envoycoder/platform`, which imports `node:fs` — so
+the window cannot import it at all. That is not an obstacle to route around: it is the constraint that makes
+"do not put catalogue knowledge in desktop-only code" a fact about the architecture. `coder.listCatalog`
+serves the rows, and the phone reads the same method and gets the same entries and the same dialect facts. It
+is also why `cataloguedProviderInput` (the entry → `coder.addProvider` parameters conversion) lives in the
+package rather than in the screen that first needed it.
+
+**2. `coder.listCatalog` measures nothing; `coder.probeCatalogAgent` measures one row.** The split is the
+whole cost story. A list call that probed while it built its rows would walk the search path 38 times
+whenever a window opened, invisibly on a developer's machine and wastefully on a user's. And the deeper
+reason: 14 of the entries are `npx -y …` recipes, so a screen that *ran* them to find out would download
+fourteen npm packages because somebody clicked Settings. The probe here does not run the program, open a
+session or fetch anything — it looks for the entry's program on the daemon's resolved search path, through
+the same prober the nine shipped agents go through. An `npx` recipe is therefore measured by whether `npx`
+is present, and the download is stated on the row as what happens on the **first run**, once, which is a cost
+the user chose.
+
+**3. The cache is not for everything.** `coder.probeCatalogAgent` remembers `ready`, `needs-bridge` and
+`unsupported` for ten minutes (`CATALOG_PROBE_STALE_MS`, the same window `session-probe.ts` uses) and
+**never** remembers `not-installed` or `unknown`. A negative answer is the one a user is about to change: a
+user who installs Goose, comes back and presses *Check again* would otherwise be shown the answer we took
+before they acted, on the row they just acted on. `unknown` is excluded for the plainer reason that nothing
+was measured. A press after the first answer sends `force: true`, which is the window's half of the same rule.
+
+**4. No entry states a dialect we do not write down, and none may be defaulted.** `AcpAgentEntry.transport`
+is a **required** field on all 38 — required so that entry 39 cannot be added without deciding, and stated
+rather than inferred because a command line says how to *start* a program and nothing about how to *talk* to
+it. Its citation is the reference product's `acp-provider-catalog.ts`, where every entry declares
+`extends: "acp"`; `sigit` (`command: ["sigit"]`) is the case that proves an inference would have been
+invention. `modeParam` and `authMethodId` are **absent from every entry**, so nothing built from one may
+write either: guessing them fails in the direction that cannot be detected, because a peer ignores a field
+name it does not recognise and reports success. `coder.addProvider`'s `transport` is required for the same
+reason, and the manual form has no default on its radio pair — an enabled *Add* with no dialect chosen is the
+guess moved from the schema into the UI, where nobody can see it.
+
+**What was copied from the reference product, and what was not.** Copied: the information architecture (a row
+per agent with a state chip and a switch; the catalogue as rows a user adds from; a search box over it), and
+the interaction of adding an entry by pressing one button. **Not copied:** its credential handling — the
+entry's `env` *values* go into its `config.json`, and here only the **names** cross (§7.10), which is why the
+four entries whose recipe sets a constant carry a name and a sentence telling the user to set it. **Not
+copied, deliberately:** its per-entry icon set, its "disabled ⇒ `unavailable` and `listModels` throws"
+effect (§5.8's correction), and its diagnostic sheet, which dumps a raw log — we render the state, the one
+sentence the daemon wrote, and the fix, all of which a user can act on.
+
+**The one real cost of adding a catalogue entry, said out loud rather than discovered.** Four recipes set **six** variables for the agent (`AUGMENT_DISABLE_AUTO_UPDATE`,
+`DROID_DISABLE_AUTO_UPDATE`, `FACTORY_DROID_AUTO_UPDATE_ENABLED`, `GJC_ACP_PERMISSION_MODE`,
+`VT_ACP_ENABLED`, `VT_ACP_ZED_ENABLED`). A
+provider config stores variable **names** and reads the value from the daemon's environment, so what crosses
+is the name; until the user sets it, the row reports it unset and the launch refuses by name rather than
+starting an agent that cannot speak ACP. The form and the row both say so. Closing it properly means a field
+that carries a *reference* to the catalogue entry rather than a value — a change to make against a launch
+that reads it, not a value map sneaked into the provider schema.
+
+**Twelve mutations, named with the test that catches each.** Every `it` in
+`apps/desktop/test/settings-agents-catalog.test.tsx` and `apps/desktop/test/catalog-rpc.test.ts` was checked
+against a deliberate break, applied with the anchor asserted **before** the write and the file restored
+byte-exact afterwards; each run was a **whole file**, never a filtered one, because a mangled `-t` filter
+once made nine mutations read green while vitest exited 0. The table:
+
+| mutation | the test that went red |
+|---|---|
+| render only the shipped agents, not the catalogue | *lists the agents this machine has and the whole catalogue, in one place* |
+| an unmeasured row defaults to `ready` | *claims nothing at all until somebody measures it* |
+| the add path drops the entry's argv | *sends the command, the arguments and the environment names the entry describes* |
+| the add path defaults the dialect to `"acp"` | *carries the dialect the row states, and never invents one* |
+| the fix a missing program carries is not rendered | *shows the install link and the exact command when the program is missing* |
+| one install sentence for both shapes (npx and binary) | *says plainly that an npx recipe needs no install…* |
+| a hidden agent reports a different state | *shows a hidden agent's own preference chip, over a state it does not touch* |
+| an older daemon's missing method is not checked first | *says so when an older daemon has no catalogue, instead of throwing the pane away* |
+| `coder.listCatalog` walks the search path while it builds rows | *serves every entry, and measures none of them* |
+| every answer is cached, absences included | *never serves an absence from cache — that is the answer a user is about to change* |
+| one probe sweeps the whole catalogue | *measures the entry it was asked about, and only that one* |
+| the recipe's environment **values** cross into the provider config | *carries the command, the args and the environment names, and nothing else* |
+
+**And the window itself was driven, not described.** `scripts/audit-ui.mjs` was pointed at the real window
+— a daemon on an isolated home, Vite, headless Chrome over CDP, the target matched **by URL** — and the
+numbers below are measured there rather than asserted here: see §7.13.
+
+
+### 7.13 The agents page, measured in a real window rather than described
+
+Driven, not asserted: a daemon on an **isolated home** (`ENVOYMESH_HOME=/tmp/envoycoder-catalog-home`,
+port 4792), `vite` on 6181 with `VITE_ENVOYCODER_DAEMON_PORT=4792`, headless Chrome over CDP with the
+target matched **by URL** (`scripts/audit-ui.mjs`, which now takes `--clicks "Settings|Agents"` and probes
+the catalogue; `scripts/preview-ui.mjs` for the pictures). The isolated home matters: the machine this was
+measured on has nine agents probed and four of them missing, which is what makes the five-state column a
+test of the vocabulary rather than of a fixture.
+
+**The list, on open.**
+
+| measurement | value |
+|---|---|
+| catalogue rows rendered | **38** |
+| distinct state chips among them | **1** — "Not checked yet" |
+| rows saying "Nothing to install" (the `npx` recipes) | **14** |
+| rows saying the binary sentence | **24** |
+| Add buttons in the list | **36** (= 38 − `cursor`, which is a shipped agent, − the one entry added during the walk) |
+| shipped agents listed | **9** — 3 Ready, 2 "Needs its adapter", 4 "Not installed", with their real install commands (`npm install -g @agentclientprotocol/claude-agent-acp`, `…codex-acp`, `npm install -g @github/copilot`) |
+| sign-in buttons | **0** — and that is the honest answer, not a gap: no agent on this machine reports `needs-signin`, and the control is rendered for that state alone rather than present-but-dead |
+
+**After one press of *Check this machine* on the first row:** the chips become `["Ready", "Not checked
+yet" × 37]`. One row measured, thirty-seven untouched — the per-row cost policy, as a number rather than a
+promise. The row's buttons become *Check again* and *Remove*; the other 37 keep *Check this machine*.
+
+**Adding one.** Pressing *Add* on a catalogue row moved it into "Your agents" as a provider with its own
+state chip, and a **separate browser session** — a second client — saw the same row in `coder.listProviders`.
+That is the phone's half of this slice demonstrated rather than argued: the catalogue is served
+(`coder.listCatalog`), the added provider travels the wire every client already reads, and no client needs
+a copy of `@envoycoder/agent-catalog`.
+
+**Hiding one.** Pressing *Hide from my lists* on a shipped agent wrote the preference, and in the next
+window the row carried the **Hidden** chip *beside* a state chip that still read **Ready** — with 8 *Hide*
+buttons and 1 *Show*. The two facts are one row apart and neither overwrote the other, which is the whole
+of §5.8's correction, measured.
+
+**Layout and contrast**, at three window sizes. All numbers are computed the way WCAG computes them.
+
+| | 1440×900 | 1280×800 | 1000×800 |
+|---|---|---|---|
+| `.settings-layout` columns | `216px 924px` | `216px 764px` | `700px` (no bar: the sections list is the page) |
+| body width | 924 | 764 | 700 |
+| catalogue row height (median / max) | 127 / 183 | 127 / 220 | 127 / 220 |
+| rows per viewport | 6 | 5 | 4 |
+| rows overflowing their column | 0 | 0 | 0 |
+| horizontal page overflow | 0 | 0 | 0 |
+
+Contrast, composited over the pane the text actually sits on: `.settings__hint` and
+`.settings__catalog-version` **8.43:1** (11px), `.settings__agent-command` **8.43:1** (12px, mono),
+`.settings__link` **10.91:1**, the "Not checked yet" chip **20.12:1**, the "Ready" chip **8.54:1**. All
+above the 4.5:1 floor for small text, and all measured rather than eyeballed.
+
+**Two compactions the first measurement forced, because "it fits" is not a measurement.** The first run of
+this audit reported a **220px** row and 3 rows per viewport: 38 entries were **eleven and a half thousand
+pixels** of scrolling, eighteen screens, for a list whose own documentation says it is read by searching.
+The breakdown said where the height was, and it was not where it looked: the head band — chip, name and
+version — was **58px of the 165px row**, because the shipped agents' head is a column (name above a
+sentence about the agent) and a catalogue row had inherited it. Made a row, with a one-line description
+clamped under it, the row is **127px**, and **six rows are visible where three were**. The whole page — nine
+shipped agents, the catalogue's 38 rows and the manual form — is a 8090px scroll in a 647px viewport, which
+is a page a user searches rather than reads. Nothing was hidden to get there: the description's whole
+sentence is in its `title` and still in the document, so a screen reader reads all of it.
+
+**The measurer was wrong before the page was.** The first run also reported the **"Ready" chip at
+1.03:1** — a failure, on a chip that has been in this product since the first slice. It was the tool:
+`bgOf` took the first ancestor whose background was not fully transparent, which for an `rgba()` chip is the
+chip *itself*, so it compared the chip's blue text against its own blue channels read as opaque. Compositing
+the ancestor chain (which is what a reader sees) gives **8.54:1**. The fix is in `audit-ui.mjs`, and it is
+recorded here because a measurer that reports a false alarm is worse than one that reports nothing: the next
+person either "fixes" a contrast that was fine or learns to ignore the column.
+
+**What was reasoned about rather than measured.** The sign-in control: no agent on this machine reports
+`needs-signin`, so no button appeared and the only evidence for it is
+`test/settings-agents-catalog.test.tsx`'s "offers the agent's own sign-in only when it says it needs one"
+and the daemon's five-outcome taxonomy (§7.11). Screenshots are in `/tmp/envoycoder-agents-*.png`
+(`-top`, `-checked`, `-search-cline`, `-added`, `-manual`, `-1000`) for a reader who can see pixels; the
+run above is what a text model can check.
+
 
 ## 8. The slice plan
 
@@ -1768,15 +1954,20 @@ because both need the same thing first — **a contract change**:
    A fork-local field here would be exactly the mistake the guide names.
 2. **Then, in this repo:** `CoderSettings.appendSystemPrompt`, a **General** row, and the effect in
    `runs.ts` where the session is opened.
-3. **Then the agents half — landed, except the UI.** An open provider id, a provider config file and
+3. **Then the agents half — done (§7.12).** An open provider id, a provider config file and
    `coder.listProviders` / `coder.addProvider` / `coder.removeProvider` all exist (§7.10), with the
-   probe and the launch path shared with the nine shipped agents. What is left of this step is the
-   picker itself, plus `defaults.models` for the custom-model rows. The schema addition was ours —
-   `@envoycoder/protocol` is this repo's package — so `check-wiring` followed rather than an upstream
-   round trip.
+   probe and the launch path shared with the nine shipped agents, and the picker is now the third group
+   of the **Agents** page: the catalogue served over the wire (`coder.listCatalog`, which measures
+   nothing), one row's state on request (`coder.probeCatalogAgent`, which costs one search of the search
+   path), and an editor for a program nobody catalogued. What is still absent is `defaults.models` for
+   the custom-model rows — a provider's model is whatever the user put in its `args`, because we have no
+   evidence about its flags. The schema addition was ours — `@envoycoder/protocol` is this repo's
+   package — so `check-wiring` followed rather than an upstream round trip.
 
 **Gate:** the upstream contract test the family requires, plus a daemon test that a configured agent
-appears in `coder.listHarnesses` and a task can be started on it.
+appears in `coder.listHarnesses` and a task can be started on it. **Met, for the step that exists:**
+`test/catalog-rpc.test.ts` drives the two catalogue methods, `test/settings-agents-catalog.test.tsx`
+drives the screen, and §7.12 records the twelve mutations each named test was checked against.
 
 ### 8.5 Slice 5 — Keyboard shortcuts, honestly
 

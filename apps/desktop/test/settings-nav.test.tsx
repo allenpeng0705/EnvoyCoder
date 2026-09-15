@@ -49,6 +49,7 @@ import { WIDE_LAYOUT_QUERY } from "../src/components/SettingsNav.js";
 import { en } from "../src/i18n/messages/en.js";
 import { I18nProvider } from "../src/i18n/context.js";
 import { SHELL_BINDINGS, wiredBindings, type ShortcutActions } from "../src/input/shortcuts.js";
+import type { AgentActions } from "../src/state/agent-actions.js";
 import type { CoderState, CoderStore } from "../src/state/coderStore.js";
 import {
   PROJECTS_SCOPE,
@@ -151,6 +152,7 @@ function stateWith(over: Partial<CoderState> = {}): CoderState {
     harnesses,
     // A window with no agents the user declared: the list the daemon serves when none exist.
     providers: [],
+  catalog: [],
     mesh: { kind: "no-node", reason: "" },
     runs: {},
     loaded: true,
@@ -176,11 +178,28 @@ function showPane(
         layout={layout}
         shortcuts={wiredBindings(WIRED)}
         onNavigate={vi.fn()}
+        agents={noAgentActions}
       />
     </I18nProvider>,
   );
   return { container };
 }
+
+/**
+ * The agents page's actions, for panes that never reach them.
+ *
+ * `SettingsPaneProps.agents` is **required**, because a caller that could render the agents page with no way
+ * to act would render four controls that do nothing — the defect this pane was rebuilt to remove. These tests
+ * assert the bar, the pages and the citations, so their bundle answers nothing; the tests that press the
+ * buttons are in `settings-agents-catalog.test.tsx`, against a fake that records what was sent.
+ */
+const noAgentActions: AgentActions = {
+  addProvider: vi.fn(),
+  removeProvider: vi.fn(),
+  setAgentHidden: vi.fn(),
+  probeCatalogAgent: vi.fn(),
+  signInAgent: vi.fn(),
+} as unknown as AgentActions;
 
 /** The bar, as a landmark. Its accessible name is the catalogue's, not a string in this file. */
 const nav = (): HTMLElement => screen.getByRole("navigation", { name: en["settings.nav.aria"] });
@@ -297,6 +316,7 @@ describe("the bar, as navigation", () => {
           scope={scope}
           layout={props.layout ?? "wide"}
           shortcuts={wiredBindings(WIRED)}
+          agents={noAgentActions}
           onNavigate={setScope}
         />
       </I18nProvider>
@@ -405,6 +425,7 @@ describe("reaching the bar from the keyboard", () => {
           scope={appScope("general")}
           layout="wide"
           shortcuts={wiredBindings(WIRED)}
+          agents={noAgentActions}
           onNavigate={(next) => navigated.push(next)}
         />
       </I18nProvider>,

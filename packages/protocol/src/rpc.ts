@@ -1328,6 +1328,110 @@ export const AgentProviderSummarySchema = z
   })
   .strict();
 
+/**
+ * **One catalogued agent**, as the catalogue states it — the row `coder.listCatalog` serves.
+ *
+ * ## Why this shape and not a `HarnessSummary` with a different id
+ *
+ * A `HarnessSummary` answers "what can this agent do", and every field of it is something we verified by
+ * running the agent: its modes, its models, its thinking levels, its capabilities. For a catalogued entry
+ * **we have run nothing** — all we hold is a recipe we catalogued from the vendor's documentation plus the
+ * reference product's list. So this carries the recipe, and the only claim about *this machine* is on
+ * `coder.probeCatalogAgent`, taken when the user asks for it. A capability field here would be a guess
+ * restated as our fact, which is the same reason `AgentProviderSummary` has none.
+ *
+ * ## The four fields that are also `coder.addProvider`'s parameters
+ *
+ * `id`, `command`, `args`, `env` and `transport` are the entry's own recipe facts, and adding the entry
+ * means handing exactly them to `coder.addProvider` under `label: title`. They travel in this row so that
+ * **no client assembles a dialect**: `transport` in particular is a fact the entry states
+ * (`AcpAgentEntry.transport`), and a window that defaulted it would produce a provider whose launch fails
+ * in a way nobody can see (the trap: a peer ignores an unknown field name and reports success).
+ *
+ * `modeParam` and `authMethodId` are **absent, on purpose**, and their absence is a statement: no entry has
+ * evidence for either, so no client may invent one.
+ *
+ * ## `env` is names, and the values are not carried
+ *
+ * Same rule as `AgentProviderConfig.env`, one tier up: four entries set a constant (`AUGMENT_DISABLE_AUTO_UPDATE`,
+ * `VT_ACP_ENABLED`, …) because the recipe is ours, and a provider can only be told the **name** — its value
+ * comes from the daemon's own environment, which is what keeps a credential out of the config file. A
+ * screen adding one of those entries therefore has to say that the variables are the user's to set, and
+ * that until they are, the agent is refused at launch rather than started unable to speak ACP.
+ */
+export const CatalogEntrySchema = z
+  .object({
+    id: z.string().min(1),
+    /** What a user sees, and the label the added provider takes. */
+    title: z.string().min(1),
+    /** The vendor's own one-line description, kept factual. */
+    description: z.string(),
+    /** The version the command pins, or `"manual"` when the tool updates itself. */
+    version: z.string().min(1),
+    /** Where a user gets it. Shown for a missing program, and shown for an `npx` recipe too. */
+    installLink: z.string(),
+    /** The program to spawn — the first element of the entry's command, exactly as catalogued. */
+    command: z.string().min(1),
+    /** The argv after it, verbatim. */
+    args: z.array(z.string()).readonly(),
+    /** How the daemon must speak to it. The entry states it; nothing infers it. */
+    transport: z.enum(["acp", "cli"]),
+    /**
+     * Every environment variable **name** the recipe sets. Never a value — see the shape's own doc.
+     */
+    env: z.array(z.string().min(1)).readonly(),
+    /**
+     * How the program gets onto a machine, in the two shapes that need different sentences.
+     *
+     * `"npx"` means it is fetched from npm on the first run and needs **no install at all** — saying
+     * "install it" there would send a user to a download page for something that installs itself. `"binary"`
+     * means a program that is simply not there yet, and `binary` is the name the probe looks for.
+     */
+    install: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("npx"), package: z.string().min(1) }).strict(),
+      z.object({ kind: z.literal("binary"), binary: z.string().min(1) }).strict(),
+    ]),
+    /**
+     * True when this id also names an agent we ship — `cursor` is the one today.
+     *
+     * Computed by the daemon rather than by each client, because the rule for the overlap is a catalogue
+     * decision with a name behind it (`resolveAgentEntry`): **a built-in wins**, because a built-in is the
+     * entry we ship driving logic for and have evidence about. A row that is both must not be offered as
+     * something to add, and the window must not be the place that decides so.
+     */
+    builtIn: z.boolean(),
+  })
+  .strict();
+
+export type CatalogEntry = z.infer<typeof CatalogEntrySchema>;
+
+/**
+ * What one entry measured on this machine, and **when**.
+ *
+ * `observedAt` is required and `cached` is required, because the one thing this answer must never be is a
+ * state with no provenance: a row is a claim about a program, and a claim a user cannot date is a claim
+ * they cannot check. `cached` says the daemon answered from a recent observation rather than walking the
+ * search path again, so a window can offer to take the measurement again knowing what it costs.
+ *
+ * `detail` is one English sentence for the log and the tests, the same as `AgentProviderSummary.detail`: the
+ * states and their `fix` are what a window renders.
+ */
+export const CatalogProbeSchema = z
+  .object({
+    id: z.string().min(1),
+    availability: HarnessAvailabilitySchema,
+    /** How many milliseconds the measurement itself took, so a row can say what it cost. */
+    costMs: z.number().int().nonnegative(),
+    /** When it was taken — the probe's own, not the moment the answer was assembled. */
+    observedAt: z.string(),
+    /** True when the daemon answered from a recent observation instead of measuring again. */
+    cached: z.boolean(),
+    detail: z.string(),
+  })
+  .strict();
+
+export type CatalogProbe = z.infer<typeof CatalogProbeSchema>;
+
 /** What a run looks like to a client: the record, plus the events it may render. */
 export const RunSnapshotSchema = z
   .object({
@@ -1639,6 +1743,39 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
   "coder.listHarnesses": {
     params: EmptyParams,
     result: z.object({ harnesses: z.array(HarnessSummarySchema).readonly() }).strict(),
+  },
+  /**
+   * The whole catalogue, and **nothing measured** — see the method's entry in `RPC_METHODS` for why this is
+   * a projection of a static list rather than a probe. One consequence worth repeating here because it is
+   * what a client does with the answer: every row is a *recipe*, so a window may render all 38 immediately
+   * and must render every state as "not checked yet" until `coder.probeCatalogAgent` says otherwise. A row
+   * that read as ready because it is in this list would be the exact claim this product refuses to make.
+   */
+  "coder.listCatalog": {
+    params: EmptyParams,
+    result: z.object({ entries: z.array(CatalogEntrySchema).readonly() }).strict(),
+  },
+  /**
+   * One entry's state, one at a time, cached — and the refusals it carries.
+   *
+   * An `id` that names no catalogued entry is refused with `envoycoder.bad-request` and a sentence naming
+   * it, because that is a bad parameter and not a fact about a program. (The other honest shape — answering
+   * `unknown` — would say "we could not look" about something that does not exist, which is how a typo turns
+   * into a state.)
+   *
+   * `force` is the same flag `coder.probeSessionOptions` takes and means the same thing: a user who presses
+   * *Check again* means it, so the cache is bypassed. Without it the daemon answers from an observation
+   * younger than its staleness window and says so with `cached: true`.
+   */
+  "coder.probeCatalogAgent": {
+    params: z
+      .object({
+        id: z.string().min(1),
+        /** Ask again rather than answering from a recent observation. Optional: absent means "your notes are fine". */
+        force: z.boolean().optional(),
+      })
+      .strict(),
+    result: CatalogProbeSchema,
   },
   "coder.probeHarness": {
     params: z.object({ harness: HarnessIdSchema }).strict(),

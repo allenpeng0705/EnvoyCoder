@@ -61,6 +61,10 @@ class FakeConnection {
     // refusal path in `loadProviders` and report a failure nobody staged.
     this.answers.set("coder.listProviders", { providers: [] });
     this.answers.set("coder.meshStatus", { mesh: { kind: "no-node", reason: "" } });
+    // The catalogue: a projection of a static list, so the healthy answer is the shape the daemon serves
+    // and the store may load it with everything else. Empty here, because a fixture with thirty-eight
+    // entries would be describing `@envoycoder/agent-catalog` a second time.
+    this.answers.set("coder.listCatalog", { entries: [] });
   }
 
   onStatus(listener: (status: ConnectionStatus) => void): () => void {
@@ -595,6 +599,86 @@ describe("what a run learned about an agent", () => {
     // Not a task refetch: nothing about the task list changed, and a client that fetched it would be
     // reading a different question's answer.
     expect(connection.calls.filter((call) => call.method === "coder.listTasks").length).toBe(tasks);
+  });
+
+  it("declares an agent with exactly the parameters it was handed, dialect included", async () => {
+    // **The mutation this fails on:** renaming a field, or defaulting `transport` on the way to the wire.
+    // The screen passes the catalogue entry's own statement of its dialect through untouched, and that
+    // property dies the moment this method reshapes the object instead of forwarding it — silently, because
+    // a defaulted `"acp"` reaches a daemon that accepts it.
+    const { store: s, connection } = await store();
+    connection.answers.set("coder.addProvider", { provider: { id: "vtcode" } });
+
+    const input = {
+      id: "vtcode",
+      label: "VT Code",
+      command: "vtcode",
+      args: ["acp", "--x"],
+      env: ["VT_ACP_ENABLED"],
+      transport: "cli" as const,
+    };
+    const result = await s.addProvider(input);
+
+    expect(result.ok).toBe(true);
+    expect(connection.calls.find((call) => call.method === "coder.addProvider")?.params).toEqual({
+      id: "vtcode",
+      label: "VT Code",
+      command: "vtcode",
+      args: ["acp", "--x"],
+      env: ["VT_ACP_ENABLED"],
+      // The unusual value, passed through: the whole point of the field is that the daemon is told what the
+      // entry states rather than what a caller assumed.
+      transport: "cli",
+    });
+  });
+
+  it("measures one catalogued row, forwards `force`, and reports a refusal as one", async () => {
+    const { store: s, connection } = await store();
+    connection.answers.set("coder.probeCatalogAgent", {
+      id: "goose",
+      availability: { state: "not-installed", fix: [{ command: "goose acp" }] },
+      costMs: 4,
+      observedAt: "2026-09-15T10:00:00.000Z",
+      cached: false,
+      detail: "…",
+    });
+
+    const measured = await s.probeCatalogAgent("goose", { force: true });
+    expect(measured.ok).toBe(true);
+    expect(connection.calls.find((call) => call.method === "coder.probeCatalogAgent")?.params).toEqual({
+      id: "goose",
+      force: true,
+    });
+    // **One row, one call.** `loadAll` already asked for the catalogue once (it is a projection, so it costs
+    // nothing); what must not happen is a *second* kind of call — a sweep — which is why the count is of the
+    // probe and not of the list.
+    expect(connection.calls.filter((call) => call.method === "coder.probeCatalogAgent")).toHaveLength(1);
+
+    // An older daemon refuses the method by name, and that arrives as a refusal rather than a throw: the row
+    // renders the sentence, which is the same deal every other write in this store makes.
+    connection.refusals.set("coder.probeCatalogAgent", "Method not found: coder.probeCatalogAgent");
+    const refused = await s.probeCatalogAgent("goose");
+    expect(refused.ok).toBe(false);
+  });
+
+  it("loads the catalogue with the other lists, and stays quiet when the daemon has none", async () => {
+    // **Silence is deliberate here and reported nowhere else.** `coder.listCatalog` is a method this build
+    // added, so a daemon one build behind refuses it — and an empty catalogue is not a lie about anything,
+    // because the page renders "this daemon is an older build" from the method list rather than from an empty
+    // array. Raising the global error banner for it would put a scary sentence over the whole window for a
+    // feature that simply is not there yet.
+    const { store: s, connection } = await store();
+    connection.answers.set("coder.listCatalog", { entries: [{ id: "goose", title: "goose" }] });
+    await s.loadAll();
+    expect(s.getSnapshot().catalog).toEqual([{ id: "goose", title: "goose" }]);
+    expect(s.getSnapshot().error).toBeUndefined();
+
+    const { store: older, connection: olderConnection } = await store();
+    olderConnection.refusals.set("coder.listCatalog", "Method not found: coder.listCatalog");
+    await older.loadAll();
+    expect(older.getSnapshot().catalog).toEqual([]);
+    // The refusal is not raised as the window's error — see the case's own doc.
+    expect(older.getSnapshot().error).toBeUndefined();
   });
 
   it("starts a run with the thinking level the composer chose, and drops the control's empty value", async () => {

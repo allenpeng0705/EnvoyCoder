@@ -32,6 +32,7 @@ import type { CoderSettings } from "@envoycoder/protocol";
 
 import { CoderSidebar } from "../src/components/CoderSidebar.js";
 import { SettingsPane } from "../src/components/SettingsPane.js";
+import type { AgentActions } from "../src/state/agent-actions.js";
 import { I18nProvider } from "../src/i18n/context.js";
 import { wiredBindings, type ShortcutActions } from "../src/input/shortcuts.js";
 import type { CoderState } from "../src/state/coderStore.js";
@@ -91,6 +92,7 @@ function stateWith(over: Partial<CoderState> = {}): CoderState {
     settings,
     harnesses: [],
     providers: [],
+  catalog: [],
     mesh: { kind: "no-node", reason: "" },
     runs: {},
     loaded: true,
@@ -106,6 +108,15 @@ function renderPane(
   scope: SettingsScope = appScope("general"),
 ) {
   const onUpdate = vi.fn();
+  // Required by `SettingsPaneProps`: this file asserts that language changes reach every string, so its
+  // bundle answers nothing — see the doc on `noAgentActions` in `settings-nav.test.tsx`.
+  const noAgentActions: AgentActions = {
+    addProvider: vi.fn(),
+    removeProvider: vi.fn(),
+    setAgentHidden: vi.fn(),
+    probeCatalogAgent: vi.fn(),
+    signInAgent: vi.fn(),
+  } as unknown as AgentActions;
   render(
     <I18nProvider preference={preference} reported={["en-US"]}>
       <SettingsPane
@@ -126,6 +137,7 @@ function renderPane(
         // the destination is a stub — `settings-nav.test.tsx` and `settings-scope.test.tsx` are where the
         // navigation itself is asserted, through the shell that owns it.
         onNavigate={vi.fn()}
+        agents={noAgentActions}
       />
     </I18nProvider>,
   );

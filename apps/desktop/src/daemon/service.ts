@@ -44,16 +44,21 @@ import {
   harnessAvailability,
   harnessDefinition,
   canApplyThinking,
+  cataloguedRecipe,
   probeHarness,
   probeProvider,
+  probeRecipe,
   resolveModelChoice,
+  type AcpAgentEntry,
   type HarnessProbe,
+  type ProbeFinding,
   type ProviderProbe,
 } from "@envoycoder/agent-catalog";
 
 import type { CoderPaths } from "@envoycoder/host-bridge";
 
 import { keyed, ref } from "./messages.js";
+import { createCatalogHandlers } from "./catalog.js";
 import { createProviderHandlers } from "./providers.js";
 import { createSignInHandlers } from "./sign-in.js";
 import type { SessionSignIn } from "./sign-in.js";
@@ -85,6 +90,16 @@ export interface CoderServiceDeps {
    * know what a provider row says must not depend on what this machine happens to have installed.
    */
   probeProvider?: (provider: AgentProviderConfig) => ProviderProbe;
+  /**
+   * The probe for one **catalogued** entry, injected on the same terms as the two above.
+   *
+   * A third injection point rather than a reuse of `probe`, because the subjects are genuinely different:
+   * a catalogue entry is a recipe rather than a `HarnessId`, and `probeHarness` cannot be asked about
+   * `goose` at all. What is *not* different is the body — the daemon's own implementation is
+   * `probeRecipe(cataloguedRecipe(entry))` over the same resolved search path, so a test that replaces this
+   * is replacing a measurement, not a rule.
+   */
+  probeCatalogEntry?: (entry: AcpAgentEntry) => ProbeFinding;
   /**
    * The environment a provider's named variables are read from.
    *
@@ -186,6 +201,18 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     // own module because the list handler, the refusals that are the user's to fix and the credential
     // decision are one subject — and because this file is a table.
     ...providerHandlers,
+    // The catalogue: the 38 ACP agents we can drive and have not measured on this machine. Two methods, one
+    // of which measures nothing at all — `catalog.ts` carries why that split is the whole cost story, and
+    // why the probe in the other one is per-row rather than a sweep.
+    ...createCatalogHandlers({
+      probe:
+        deps.probeCatalogEntry ??
+        ((entry: AcpAgentEntry) =>
+          probeRecipe(cataloguedRecipe(entry), {
+            pathDirs: search.dirs,
+            searchable: search.searchable,
+          })),
+    }),
     // The sign-in: one method whose whole subject is an agent's own authentication flow. Spread in the same
     // way the provider methods are, so this table stays the complete list of what the daemon serves.
     ...createSignInHandlers({ ...(deps.signIn ? { signIn: deps.signIn } : {}) }),

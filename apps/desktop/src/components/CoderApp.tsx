@@ -478,6 +478,9 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               // instead of four handlers that have to agree.
               onNavigate={setSettingsScope}
               onClose={closeSettings}
+              // The agents page's own five calls, handed over as the store itself: `CoderStore` satisfies
+              // `AgentActions` structurally, so there is no adapter to drift from the methods it names.
+              agents={props.actions}
               onUpdate={(patch) => void props.actions.updateSettings(patch)}
               // A project's defaults, written whole because they replace: see `coderStore.updateProject`.
               // The refusal goes to the strip rather than vanishing — a project whose defaults could not

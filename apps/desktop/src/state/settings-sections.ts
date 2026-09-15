@@ -165,14 +165,28 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     band: { kind: "sentence", key: "settings.section.agents.detail" },
     content: [
       {
-        file: "apps/desktop/src/components/settings/SectionsFacts.tsx",
+        file: "apps/desktop/src/components/settings/SectionsAgents.tsx",
         needle: "harness.capabilities",
         because: "each agent's own capabilities decide which warnings it carries",
       },
       {
-        file: "apps/desktop/src/components/settings/SectionsFacts.tsx",
+        file: "apps/desktop/src/components/settings/SectionsAgents.tsx",
         needle: "<DeclaredFacts harness={harness} />",
         because: "and the modes, models and thinking levels it published for itself",
+      },
+      {
+        file: "apps/desktop/src/components/settings/CatalogRows.tsx",
+        needle: "rowStateOf(probe)",
+        because:
+          "the catalogue's rows take their state from a measurement and from nothing else — a row nobody " +
+          "has checked reads as 'not checked yet', which is the claim this page exists to stop making",
+      },
+      {
+        file: "apps/desktop/src/components/settings/CatalogRows.tsx",
+        needle: "agents.addProvider(addInputFor(entry))",
+        because:
+          "and adding one sends the entry's own command, arguments, environment names and dialect, so no " +
+          "screen invents a dialect `coder.addProvider` would then store",
       },
     ],
   },
