@@ -3111,6 +3111,38 @@ posture. All of them need `copilot login` first, which is the owner's to do — 
 be finished in one pass and the entry's `agentMode`, `model` and `thinking` upgraded from what the session actually
 says.
 
+#### 7.22.5 The Sign in button cannot work for this agent, and that is measured
+
+Copilot advertises one auth method, `copilot-login`, whose own `_meta` says what it wants:
+
+```json
+{ "id": "copilot-login", "name": "Log in with Copilot CLI",
+  "description": "Run `copilot login` in the terminal",
+  "_meta": { "terminal-auth": { "command": "…/copilot", "args": ["login"], "label": "Copilot Login" } } }
+```
+
+Driven over stdio, the method our `coder.signInAgent` sends answers:
+
+```console
+authenticate {methodId: "copilot-login"} → { code: -32000, message: "Authentication required" }
+session/new                              → { code: -32000, message: "Authentication required" }
+```
+
+So **the press changes nothing** — the login happens in a terminal, out of band, and the agent says so once and then
+says it again. That is the case this pane's oldest law names: a control that cannot be honoured is not drawn, and the
+reason is on screen. The row therefore needs the *instruction* rather than the button:
+
+1. the observation path (`auth-observation.ts`, which already reads the method list) records the terminal command the
+   agent advertises — `_meta["terminal-auth"]` — so the fact travels with the auth state;
+2. the row renders **`Run copilot login in your terminal`** instead of **Sign in** when that fact is present, in the
+   user's language, with the command verbatim (a command is never translated);
+3. `coder.signInAgent` keeps working for every agent that *does* answer `authenticate` (Cursor, the two bridges) —
+   this is a third outcome, not a replacement.
+
+**Designed and measured, not yet built.** It is the next slice, and it is the last thing between the Copilot row and
+"simply works": everything else on that row is measured and honest today.
+
+
 ### 7.23 Fetching is not only for bridges
 
 The owner's follow-up question, from the other end of §7.22: *"But if user didn't install copilot, what will happen?"*
