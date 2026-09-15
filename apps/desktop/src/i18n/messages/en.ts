@@ -35,8 +35,6 @@ export const en = {
   "app.rail.show": "Show projects",
   "app.rail.hide": "Hide projects",
   "app.rail.toggle": "Toggle the project rail",
-  "app.windows.count": "{count} windows",
-  "app.windows.title": "This daemon serves every EnvoyCoder window",
 
   /* ── the connection, said the way a user needs it ── */
   "connection.starting": "Starting…",
@@ -780,7 +778,7 @@ export const en = {
   "settings.machine.started.title": "Started at",
   "settings.machine.started.detail": "When this daemon process started.",
   "settings.machine.windows.title": "Windows attached",
-  "settings.machine.windows.detail": "How many windows are talking to this daemon right now, including this one.",
+  "settings.machine.windows.detail": "How many windows were attached when this window connected, including this one.",
   "settings.machine.windows.one": "1 window",
   "settings.machine.windows.many": "{count} windows",
 

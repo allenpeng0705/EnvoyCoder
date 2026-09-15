@@ -621,12 +621,22 @@ function ConnectionChip(props: { state: CoderState }): JSX.Element | null {
   const t = useT();
   const { connection } = props.state;
   if (connection.state === "connected") {
-    const windows = props.state.hello?.windowCount ?? 1;
-    return windows > 1 ? (
-      <span className="chip chip--quiet" title={t("app.windows.title")}>
-        {t("app.windows.count", { count: windows })}
-      </span>
-    ) : null;
+    /**
+     * **Nothing, and a badge used to stand here.**
+     *
+     * It read `hello.windowCount` and said "2 windows" — which is where the owner's question came from, and the
+     * answer had two halves. The number was *wrong*: the window opened two sockets because `start()`'s guard did
+     * not survive its own `await`, so the daemon counted two connections from one window (`coder-store.test.ts`,
+     * "one window, one socket"). And even when right, the number is a **snapshot from connect time** — it never
+     * updates when a second window opens, or when one closes — so a badge in the title bar could contradict the
+     * truth and never correct itself. The same count is on *Settings → This machine*, where a user goes to ask
+     * "what am I attached to?" and where the row now says which moment it was read.
+     *
+     * A live badge would need the daemon to emit a change when its connection count moves and the window to
+     * re-read `hello`; that is real work for a number with nothing to act on, so it was removed rather than
+     * half-fixed.
+     */
+    return null;
   }
   const label =
     connection.state === "connecting"

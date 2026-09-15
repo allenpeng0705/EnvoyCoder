@@ -3802,6 +3802,63 @@ While doing this, the `Report` interface in that e2e file turned out to have a *
 `contrastAll` were declared twice, the second copy nested inside `fix`. It type-checked (the extra members were
 legal) and meant `fix` claimed two fields it does not have. Removed.
 
+### 7.31 "2 windows" for one window — a socket counted as a window
+
+The owner, looking at the title bar:
+
+> *"why the top bar show '2 windows'?"*
+
+Two answers, and both were defects.
+
+#### 7.31.1 The number was wrong: one window had opened two sockets
+
+`CoderStore.start()` was documented "Idempotent" and its guard was `if (this.connection) return` — checked
+*before* `await resolveEndpoint()`. Two calls arriving inside that window both get past it and both open a
+connection; the second is stored in `this.connection` and the **first is never disposed**, so its socket stays
+connected for the life of the window. The daemon counts connections (`serve.ts`: `onConnectionChange`), so it
+counted two, and the chip said two windows.
+
+Measured on the running app before the fix — one client process, two sockets:
+
+```console
+$ lsof -nP -iTCP:4770 | grep ESTABLISHED
+com.apple 59308 … TCP 127.0.0.1:54555->127.0.0.1:4770 (ESTABLISHED)
+com.apple 59308 … TCP 127.0.0.1:54556->127.0.0.1:4770 (ESTABLISHED)
+$ …coder.hello → windowCount = 3                    # the two above, plus the probe asking
+after, one restart:
+$ lsof -nP -iTCP:4770 | grep ESTABLISHED | wc -l
+1
+```
+
+The trigger is ordinary rather than exotic: `main.tsx` renders inside `<StrictMode>`, React invokes the window's
+effect twice in development, and `useCoderState`'s effect is what calls `store.start()`. One call site, one
+double-invocation, two sockets.
+
+**The guard is now the promise** (`this.starting ??= this.connectOnce()`), which survives its own `await`, and a
+*failed* start clears it so the endpoint resolution stays retryable — nothing else calls `start()` again, so a
+cached failure would have left the window permanently disconnected. `coder-store.test.ts` grew a "one window, one
+socket" describe: overlapping starts open exactly one connection (a gate on the resolver puts the test in the race
+window), a later start opens nothing, a disposed store opens a fresh one, and a failed start is retryable. A
+defensive "close whatever was there first" inside `open()` was written and then **removed**: with the guard in
+place nothing can reach it, and a branch no leg can redden is the shape this repository keeps refusing.
+
+#### 7.31.2 And the badge should not have been there at all
+
+The chip read `hello.windowCount`, which is a **snapshot taken when this window connected**. It never updates: a
+second window opening later leaves the first one showing 1, and closing it leaves whichever window saw 2 showing
+2 forever. A claim in the chrome that cannot correct itself is worse than a missing one, and the noun was wrong
+too — a paired phone is a connection, not a window.
+
+So the chip is gone, and the fact stays where a user goes to ask "what am I attached to": *Settings → This
+machine*, whose row said *"How many windows are talking to this daemon **right now**"* about a number read at
+connect. That sentence now says which moment it was read. `failure-placement.test.tsx` holds the removal — a
+title bar with a daemon reporting four windows says nothing about windows — and a mutation that puts the badge
+back reddens it.
+
+A **live** badge is the alternative and was declined rather than half-done: it needs the daemon to emit a change
+when its connection count moves and the window to re-read `hello` (a new event kind plus a refetch), which is real
+work for a number with nothing to act on. Recorded here so the next reader knows it was a decision.
+
 ## 8. The slice plan
 
 Ordered, and ordered by *cheapness times usefulness* rather than by Paseo's section order. Each slice

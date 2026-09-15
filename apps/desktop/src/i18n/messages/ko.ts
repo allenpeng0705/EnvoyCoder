@@ -38,8 +38,6 @@ export const ko: Catalogue = {
   "app.rail.show": "프로젝트 표시",
   "app.rail.hide": "프로젝트 숨기기",
   "app.rail.toggle": "프로젝트 레일 표시 전환",
-  "app.windows.count": "창 {count}개",
-  "app.windows.title": "이 서비스는 모든 EnvoyCoder 창에 연결을 제공합니다",
 
   /* ── the connection, said the way a user needs it ── */
   "connection.starting": "시작 중…",
@@ -458,7 +456,7 @@ export const ko: Catalogue = {
   "settings.machine.started.title": "시작 시각",
   "settings.machine.started.detail": "이 서비스 프로세스가 시작된 시각입니다.",
   "settings.machine.windows.title": "연결된 창",
-  "settings.machine.windows.detail": "지금 이 서비스와 이야기하고 있는 창의 수입니다(이 창 포함).",
+  "settings.machine.windows.detail": "이 창이 연결되었을 때 연결되어 있던 창 수입니다(이 창 포함).",
   "settings.machine.windows.one": "창 1개",
   "settings.machine.windows.many": "창 {count}개",
   "settings.about.note": "두 부분은 함께 빌드되므로 버전이 같아야 합니다.",

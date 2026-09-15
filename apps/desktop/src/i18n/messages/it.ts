@@ -38,8 +38,6 @@ export const it: Catalogue = {
   "app.rail.show": "Mostra i progetti",
   "app.rail.hide": "Nascondi i progetti",
   "app.rail.toggle": "Mostra o nascondi la barra dei progetti",
-  "app.windows.count": "{count} finestre",
-  "app.windows.title": "Questo servizio serve tutte le finestre di EnvoyCoder",
 
   /* ── the connection, said the way a user needs it ── */
   "connection.starting": "Avvio…",
@@ -460,7 +458,7 @@ export const it: Catalogue = {
   "settings.machine.started.title": "Avviato",
   "settings.machine.started.detail": "Quando è partito questo processo del servizio.",
   "settings.machine.windows.title": "Finestre collegate",
-  "settings.machine.windows.detail": "Quante finestre stanno parlando con questo servizio in questo momento, compresa questa.",
+  "settings.machine.windows.detail": "Quante finestre erano collegate quando questa finestra si è collegata, questa inclusa.",
   "settings.machine.windows.one": "1 finestra",
   "settings.machine.windows.many": "{count} finestre",
   "settings.about.note": "Le due metà sono compilate insieme: le versioni dovrebbero coincidere.",

@@ -205,6 +205,12 @@ export class CoderStore {
   /** Coalesces a burst of change events into one refetch. See `scheduleRefresh`. */
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   /**
+   * The in-flight `start()`, which is what makes "one socket per window" true.
+   *
+   * A promise rather than a boolean because the guard has to survive its own `await` — see `start()`.
+   */
+  private starting: Promise<void> | undefined;
+  /**
    * The methods the connected daemon says it has — its own build's catalogue, from `hello`.
    *
    * Empty until a daemon describes itself, and empty *means* "no idea": an older daemon that sends an
@@ -226,9 +232,29 @@ export class CoderStore {
 
   getSnapshot = (): CoderState => this.state;
 
-  /** Resolve the endpoint, open the connection, and load. Idempotent. */
+  /**
+   * Resolve the endpoint, open the connection, and load. **Idempotent — including while the first call is
+   * still in flight**, which is what it was not.
+   *
+   * The guard used to be `if (this.connection) return`, and `this.connection` is only assigned *after*
+   * `await resolveEndpoint()`. Two calls that arrive inside that window both get past the check and both open a
+   * socket; the second is stored in `this.connection` and the first is never disposed, so its socket stays
+   * connected for the life of the window. Nothing in the window can see it, and the daemon counts two.
+   *
+   * That is not theoretical and it is what the owner was looking at: `main.tsx` renders inside
+   * `<StrictMode>`, React invokes the window's effect twice in development, and the title bar said
+   * **"2 windows"** for one window. The daemon was telling the truth about *sockets*; the window was lying
+   * about *windows*.
+   *
+   * So the guard is the promise rather than the result. A failed attempt clears it: the endpoint resolution can
+   * fail (no shell, no claim file) and that must stay retryable, which a cached rejected promise would not.
+   */
   async start(): Promise<void> {
-    if (this.connection) return;
+    this.starting ??= this.connectOnce();
+    return this.starting;
+  }
+
+  private async connectOnce(): Promise<void> {
     try {
       const resolved = await (this.options.resolveEndpoint ?? resolveDaemonEndpoint)();
       this.set({ resolved, error: undefined });
@@ -249,6 +275,9 @@ export class CoderStore {
           reason: error instanceof Error ? error.message : String(error),
         },
       });
+      // **Retryable.** Nothing else will call `start()` again, so a failure that cached its promise would leave
+      // the window permanently disconnected with no way back short of a reload.
+      this.starting = undefined;
     }
   }
 
@@ -260,6 +289,12 @@ export class CoderStore {
   dispose(): void {
     if (this.refreshTimer) clearTimeout(this.refreshTimer);
     this.refreshTimer = undefined;
+    this.starting = undefined;
+    this.closeConnection();
+  }
+
+  /** Close the socket and drop every listener that belonged to it. */
+  private closeConnection(): void {
     for (const dispose of this.disposers.splice(0)) dispose();
     this.connection?.dispose();
     this.connection = undefined;
@@ -267,6 +302,15 @@ export class CoderStore {
 
   /* ────────────────────────────── reading ────────────────────────────── */
 
+  /**
+   * Open the connection and wire everything the window listens to.
+   *
+   * **Reached once per window, and the guard that makes that true is `start()`'s promise.** A defensive
+   * "close whatever was there first" was written here and then removed: with `start()` guarded it cannot be
+   * reached — a disposed store has already closed its socket — so it was a branch no test could redden, which is
+   * the shape this repository keeps refusing. One mechanism, one leg that fails when it goes
+   * (`coder-store.test.ts`, "one window, one socket").
+   */
   private open(resolved: ResolvedEndpoint): void {
     const connection =
       this.options.connect?.(resolved) ??

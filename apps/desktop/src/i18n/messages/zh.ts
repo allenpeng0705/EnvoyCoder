@@ -38,8 +38,6 @@ export const zh: Catalogue = {
   "app.rail.show": "显示项目",
   "app.rail.hide": "隐藏项目",
   "app.rail.toggle": "切换项目栏",
-  "app.windows.count": "{count} 个窗口",
-  "app.windows.title": "该服务为所有 EnvoyCoder 窗口提供连接",
 
   /* ── the connection, said the way a user needs it ── */
   "connection.starting": "正在启动…",
@@ -454,7 +452,7 @@ export const zh: Catalogue = {
   "settings.machine.started.title": "启动于",
   "settings.machine.started.detail": "这个服务进程启动的时间。",
   "settings.machine.windows.title": "已连接的窗口",
-  "settings.machine.windows.detail": "当前正在与这个服务通信的窗口数，包括这一个。",
+  "settings.machine.windows.detail": "这个窗口连接时已连接的窗口数（包含它自己）。",
   "settings.machine.windows.one": "1 个窗口",
   "settings.machine.windows.many": "{count} 个窗口",
   "settings.about.note": "两半一起构建，版本应当一致。",

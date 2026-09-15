@@ -38,8 +38,6 @@ export const ja: Catalogue = {
   "app.rail.show": "プロジェクトを表示",
   "app.rail.hide": "プロジェクトを隠す",
   "app.rail.toggle": "プロジェクトバーの表示を切り替え",
-  "app.windows.count": "{count} 個のウィンドウ",
-  "app.windows.title": "このサービスはすべての EnvoyCoder ウィンドウに接続を提供します",
 
   /* ── the connection, said the way a user needs it ── */
   "connection.starting": "起動中…",
@@ -458,7 +456,7 @@ export const ja: Catalogue = {
   "settings.machine.started.title": "開始時刻",
   "settings.machine.started.detail": "このサービスプロセスが開始した時刻です。",
   "settings.machine.windows.title": "接続中のウィンドウ",
-  "settings.machine.windows.detail": "いまこのサービスと通信しているウィンドウの数です（これを含みます）。",
+  "settings.machine.windows.detail": "このウィンドウが接続した時点で接続していたウィンドウ数（このウィンドウを含む）。",
   "settings.machine.windows.one": "1 個のウィンドウ",
   "settings.machine.windows.many": "{count} 個のウィンドウ",
   "settings.about.note": "2 つは一緒にビルドされるので、バージョンは一致するはずです。",

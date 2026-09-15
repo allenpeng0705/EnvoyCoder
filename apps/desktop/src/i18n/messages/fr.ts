@@ -38,8 +38,6 @@ export const fr: Catalogue = {
   "app.rail.show": "Afficher les projets",
   "app.rail.hide": "Masquer les projets",
   "app.rail.toggle": "Afficher ou masquer le volet des projets",
-  "app.windows.count": "{count} fenêtres",
-  "app.windows.title": "Ce service dessert toutes les fenêtres EnvoyCoder",
 
   /* ── the connection, said the way a user needs it ── */
   "connection.starting": "Démarrage…",
@@ -460,7 +458,7 @@ export const fr: Catalogue = {
   "settings.machine.started.title": "Démarré le",
   "settings.machine.started.detail": "Quand ce processus de service a démarré.",
   "settings.machine.windows.title": "Fenêtres connectées",
-  "settings.machine.windows.detail": "Combien de fenêtres parlent à ce service en ce moment, celle-ci comprise.",
+  "settings.machine.windows.detail": "Combien de fenêtres étaient connectées au moment où cette fenêtre s'est connectée, celle-ci incluse.",
   "settings.machine.windows.one": "1 fenêtre",
   "settings.machine.windows.many": "{count} fenêtres",
   "settings.about.note": "Les deux moitiés sont compilées ensemble : leurs versions devraient correspondre.",

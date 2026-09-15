@@ -38,8 +38,6 @@ export const de: Catalogue = {
   "app.rail.show": "Projekte einblenden",
   "app.rail.hide": "Projekte ausblenden",
   "app.rail.toggle": "Projektleiste ein- oder ausblenden",
-  "app.windows.count": "{count} Fenster",
-  "app.windows.title": "Dieser Dienst versorgt alle EnvoyCoder-Fenster",
 
   /* ── the connection, said the way a user needs it ── */
   "connection.starting": "Startet…",
@@ -460,7 +458,7 @@ export const de: Catalogue = {
   "settings.machine.started.title": "Gestartet",
   "settings.machine.started.detail": "Wann dieser Dienstprozess gestartet ist.",
   "settings.machine.windows.title": "Verbundene Fenster",
-  "settings.machine.windows.detail": "Wie viele Fenster gerade mit diesem Dienst sprechen, dieses eingeschlossen.",
+  "settings.machine.windows.detail": "Wie viele Fenster verbunden waren, als dieses Fenster sich verbunden hat — dieses eingeschlossen.",
   "settings.machine.windows.one": "1 Fenster",
   "settings.machine.windows.many": "{count} Fenster",
   "settings.about.note": "Beide Hälften werden zusammen gebaut, ihre Versionen sollten gleich sein.",

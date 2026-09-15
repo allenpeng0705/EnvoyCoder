@@ -152,6 +152,90 @@ function runEvent(payload: Record<string, unknown>): RunEvent {
 
 /* ────────────────────────────── the tests ────────────────────────────── */
 
+describe("one window, one socket", () => {
+  /**
+   * **The bug the title bar was reporting.** `main.tsx` renders inside `<StrictMode>`, so React invokes the
+   * window's effect twice in development — and `start()`'s guard was `if (this.connection) return`, checked
+   * *before* `await resolveEndpoint()`. Both calls got past it, both opened a socket, and the second replaced the
+   * first in `this.connection` while the first stayed connected for the life of the window. The daemon counted
+   * two, and the chip in the title bar said **"2 windows"** for one window.
+   *
+   * The instrument is a `connect` factory that counts, and an endpoint resolver that takes a turn of the event
+   * loop — which is exactly the window the race lived in.
+   */
+  async function started(over: { resolve?: () => Promise<ResolvedEndpoint> } = {}) {
+    const connections: FakeConnection[] = [];
+    const created = createCoderStore({
+      resolveEndpoint: over.resolve ?? (async () => endpoint),
+      connect: () => {
+        const connection = new FakeConnection();
+        connections.push(connection);
+        return connection as unknown as CoderConnection;
+      },
+    });
+    return { store: created, connections };
+  }
+
+  it("opens exactly one connection when two starts overlap, as StrictMode makes them", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { store: created, connections } = await started({
+      resolve: async () => {
+        await gate;
+        return endpoint;
+      },
+    });
+
+    // Both calls arrive before the endpoint is resolved: the second must join the first rather than start again.
+    const first = created.start();
+    const second = created.start();
+    release?.();
+    await Promise.all([first, second]);
+
+    expect(connections).toHaveLength(1);
+    // And the socket that exists is connected, not merely present.
+    expect(created.getSnapshot().connection.state).toBe("connected");
+  });
+
+  it("opens nothing on a later start, and a fresh one only after a dispose", async () => {
+    const { store: created, connections } = await started();
+    await created.start();
+    await created.start();
+    expect(connections).toHaveLength(1);
+
+    // A disposed store is a window that has gone: its socket closes, and a start after that is a new one — the
+    // same path a reload takes, and the reason `open()` closes whatever was there before it opens more.
+    created.dispose();
+    expect(connections[0]?.status.state).toBe("idle");
+    await created.start();
+    expect(connections).toHaveLength(2);
+    expect(connections[1]?.status.state).toBe("connected");
+  });
+
+  it("keeps a failed start retryable instead of caching the failure", async () => {
+    // The endpoint resolution fails when there is no shell and no claim file. Nothing else calls `start()` again,
+    // so a promise cached across a failure would leave the window disconnected for the life of the process.
+    let attempts = 0;
+    const { store: created, connections } = await started({
+      resolve: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("no daemon claim file");
+        return endpoint;
+      },
+    });
+
+    await created.start();
+    expect(connections).toHaveLength(0);
+    expect(created.getSnapshot().connection.state).toBe("disconnected");
+
+    await created.start();
+    expect(attempts).toBe(2);
+    expect(connections).toHaveLength(1);
+  });
+});
+
 describe("the store's connection to the daemon", () => {
   it("subscribes to what it renders, once, and loads what it needs", async () => {
     const { connection, state } = await store();

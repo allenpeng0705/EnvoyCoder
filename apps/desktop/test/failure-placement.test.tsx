@@ -81,6 +81,20 @@ const otherTask: Task = {
   updatedAt: "2026-09-01T10:05:00.000Z",
 };
 
+/** The daemon's own handshake, with a window count a titlebar badge would have shown. */
+const HELLO = {
+  product: "EnvoyCoder",
+  version: "0.1.0",
+  instanceId: "test",
+  home: "/home/you/.envoymesh",
+  stateDir: "/home/you/.envoymesh/EnvoyCoder",
+  startedAt: "2026-09-14T00:00:00.000Z",
+  windowCount: 1,
+  methods: [],
+  mesh: { kind: "no-node" as const },
+  notes: [],
+};
+
 const settings: CoderSettings = {
   defaults: { harness: "envoy-harness" },
   requireApprovalForDestructive: true,
@@ -246,6 +260,18 @@ describe("a refused press is read where it was made", () => {
     expect(document.querySelector(".composer__notice")).toBeNull();
     expect(timesOnScreen()).toBe(0);
     expect(banner()).toBeNull();
+  });
+
+  it("says nothing in the title bar about how many windows are attached", () => {
+    // **Where the owner's question came from.** A chip used to stand in the title bar reading
+    // `hello.windowCount`, and it said "2 windows" for one window — because the window opened two sockets
+    // (`coder-store.test.ts`, "one window, one socket"). The badge is gone rather than half-fixed: the number is a
+    // **snapshot from connect time**, so it can never correct itself when a second window opens or closes, and a
+    // claim in the chrome that contradicts the truth is the class of thing this repository refuses. The count is
+    // still on *Settings → This machine*, where the row says which moment it was read.
+    show({ hello: { ...HELLO, windowCount: 4 } });
+    expect(document.querySelector(".titlebar")?.textContent ?? "").not.toContain("4 window");
+    expect(document.body.textContent ?? "").not.toContain("windows");
   });
 
   it("still raises the bar for what the *window* could not do", () => {
