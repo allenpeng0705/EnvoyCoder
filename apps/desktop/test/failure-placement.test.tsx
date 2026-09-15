@@ -274,6 +274,19 @@ describe("a refused press is read where it was made", () => {
     expect(document.body.textContent ?? "").not.toContain("windows");
   });
 
+  it("shows the app's own logo in the top bar, beside the name", () => {
+    // The mark the product ships (`apps/desktop/assets/logo.png`), rendered at 18px from the 128px copy — a window
+    // should not decode a megabyte for a slot this size. Decorative, because the name is right beside it: a screen
+    // reader that read both would say the product twice.
+    show();
+    const logo = document.querySelector("img.titlebar__logo") as HTMLImageElement | null;
+    expect(logo).toBeTruthy();
+    expect(logo?.getAttribute("alt")).toBe("");
+    expect(logo?.getAttribute("width")).toBe("18");
+    // It is bundled by Vite rather than linked from a path on disk, which is what makes it survive `tauri build`.
+    expect(logo?.getAttribute("src") ?? "").not.toBe("");
+  });
+
   it("still raises the bar for what the *window* could not do", () => {
     // The boundary. A read that failed is not about a control and has no row to live in, so it keeps the bar —
     // and `error.daemonTooOld` is the case that must never become silent, because the fix it names is a restart.

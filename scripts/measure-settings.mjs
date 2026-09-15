@@ -491,6 +491,29 @@ for (const step of flags("open")) {
 }
 
 /**
+ * `--type "<text>"` — **put words in the message field**, which is what makes the send action exist.
+ *
+ * The composer's send button is drawn only when there is something to send (the reference product's
+ * `resolvePrimaryActionKind`: with content the send action, with an empty field none at all), so a measurement of
+ * the resting composer cannot see it — and *"when inputting, the icon button displayed"* is precisely the state a
+ * user asked about. Typing through the DOM has to go through the native setter and an `input` event, because the
+ * field is React-controlled: assigning `.value` leaves React's copy stale and the button never appears.
+ */
+const typeText = flag("type");
+if (typeText !== undefined) {
+  const typed = await evaluate(`(() => {
+    const field = document.querySelector(".composer__input");
+    if (field === null) return "no message field on this page";
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+    setter.call(field, ${JSON.stringify(typeText)});
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    return field.value === ${JSON.stringify(typeText)} ? "ok" : "the field did not take the text";
+  })()`);
+  console.log(`  type into the message field: ${String(typed)}`);
+  await sleep(400);
+}
+
+/**
  * **What a command said, when a press left it saying something.**
  *
  * Printed rather than measured: this is the palette's own line, which is where a refused command is read now
@@ -993,6 +1016,25 @@ const report = await evaluate(`(() => {
     groups,
     contrast: { worst, below45: contrast.filter((c) => c.ratio < 4.5).length, gradients },
     /**
+     * **The product mark in the top bar, and whether it actually loaded.**
+     *
+     * An image element whose source 404s is still an element — a broken-image glyph in the chrome, which no DOM
+     * assertion and no contrast scan can see. naturalWidth is the number that separates the two: zero for an image
+     * the browser could not decode, and only a real window can produce it. The path is checked because the logo is
+     * imported through the bundler, and a build that stopped carrying the assets directory would show up here.
+     */
+    logo: (() => {
+      const node = document.querySelector("img.titlebar__logo");
+      if (node === null) return null;
+      return {
+        present: true,
+        loaded: node.complete && node.naturalWidth > 0,
+        naturalWidth: node.naturalWidth,
+        alt: node.getAttribute("alt"),
+        width: Math.round(node.getBoundingClientRect().width),
+      };
+    })(),
+    /**
      * **The composer's prose, counted** — because that is the thing the owner complained about, in numbers.
      *
      * *"There are too many texts like … These texts are usless, but make the chats inputting messy."* A character
@@ -1037,6 +1079,26 @@ const report = await evaluate(`(() => {
         // A border is what made the old row read as a form: the reference product draws none.
         border: getComputedStyle(node).borderTopWidth,
       })),
+      /**
+       * **The send action, which exists only while there is something to send.**
+       *
+       * A null is the honest answer for an empty field — the state in which the reference product draws no primary
+       * action at all — and when it is drawn, visibleText must be empty: the glyph is the button and the name is a
+       * visually-hidden sentence for a screen reader.
+       */
+      send: (() => {
+        const button = document.querySelector(".composer__toolbar-actions button");
+        if (button === null) return null;
+        const hidden = button.querySelector(".visually-hidden");
+        const box = button.getBoundingClientRect();
+        return {
+          name: hidden === null ? "" : (hidden.textContent ?? "").trim(),
+          visibleText: (button.textContent ?? "").replace(hidden?.textContent ?? "", "").trim(),
+          glyph: button.querySelector("svg") !== null,
+          width: Math.round(box.width),
+          height: Math.round(box.height),
+        };
+      })(),
       actionsSameRowAsChips: (() => {
         const chips = [...document.querySelectorAll(".composer__chip")];
         const send = document.querySelector(".composer__toolbar-actions button");

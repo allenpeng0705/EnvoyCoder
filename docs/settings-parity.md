@@ -3993,6 +3993,67 @@ The row is now three chips and a button; everything else it used to say is on th
 retired or moved: four picker keys (`queue`, `steer`, `mode.aria`, `mode.title`) deleted from all seven catalogues,
 one added (`task.composer.send.queued`), 450/450 complete.
 
+### 7.34 The send action is a glyph drawn when there is something to send, and the app has a logo
+
+The owner:
+
+> *"can we use the same send button style, no text, no send button, when inputting, the icon button displayed. can we
+> use '../EnvoyCoder/apps/desktop/assets/logo.png' as app's logo, also display on the Tauri app's top bar."*
+
+#### 7.34.1 The send action: a glyph, and only while the field has something in it
+
+Our button carried a glyph **and** a word ("Send"/"Start"). The reference product's rule is
+`composer/input/input.tsx`'s `resolvePrimaryActionKind`: with sendable content the send action is drawn, with an
+empty field and a turn running its *cancel* control takes that place, and otherwise **nothing at all**. So:
+
+* the button is drawn only when `text.trim() !== ""` — whitespace is not content, and a leg asserts both;
+* when drawn it is a 28px round glyph button (`button--icon` plus a fixed box), matching the chips beside it;
+* the sentence a screen reader reads is still there — a `visually-hidden` span inside the button — and it is the
+  accessible name, so "no text" means *no drawn word*, not "no name";
+* the tooltip stays, because it is where *"the agent finishes the turn it is on, then reads this"* is said (§7.33).
+
+Measured in a real window, which needed a new instrument option — `--type "<text>"`, typing through the native setter
+and an `input` event, because the field is React-controlled and assigning `.value` would leave React's copy stale and
+the button absent:
+
+```console
+$ node scripts/measure-settings.mjs --section work --seed --type "Add a health check endpoint" …
+composer.send: { name: "Start", visibleText: "", glyph: true, width: 28, height: 28 }
+composer.actionsSameRowAsChips: true
+```
+
+#### 7.34.2 The logo, in the top bar and in every bundle
+
+`apps/desktop/assets/logo.png` (1024², RGBA) is the product's mark now:
+
+* **the top bar** draws it at 18px from a **128px copy** (`logo-128.png`, made with `sips`), because a window should
+  not decode a megabyte for a slot that size. It is imported through Vite, so the built app carries the file rather
+  than pointing at a path on disk, and it is `alt=""` — decorative, because the name is right beside it and a screen
+  reader must not read the product twice.
+* **the bundles** use it for every icon the three desktop targets need: `npx tauri icon apps/desktop/assets/logo.png`
+  generated `icon.icns` (macOS), `icon.ico` (Windows, and the resource embedded in the executable that supplies the
+  window and taskbar icon), and the PNG set (Linux). `bundle.icon` lists them instead of the single placeholder
+  `icons/icon.png`. The iOS/Android icon trees and the Windows Store logos were generated too and **deleted**: this
+  is a desktop product and forty unused files are not.
+
+What that means in practice, said plainly rather than implied: the top bar shows the mark in `tauri dev` and in a
+built app; the Dock, taskbar, installer and file-manager icon come from the *bundle*, so they appear when the app is
+built (`tauri build`), not in a dev run — which shows the terminal's icon on macOS.
+
+#### 7.34.3 How the logo is verified
+
+An `img` whose source 404s is still an `img`: a broken-image glyph in the chrome, invisible to a DOM query and to a
+contrast scan alike. So the instrument reports the mark's **`naturalWidth`** — zero for an image the browser could not
+decode — and the e2e leg asserts it is greater than zero, that `alt` is empty, and that the rendered width is 18px.
+The class-level guard (a bundler that stopped carrying `assets/`) is the same number.
+
+#### 7.34.4 And the backtick trap, caught this time
+
+Writing the instrument's new comments put an unescaped backtick inside a page script **again** — twice in one edit —
+and `npm run scripts:check` (added in §7.32.4) reported *"1 of 15 script(s) failed to parse"* before either run
+happened. That is the gate doing exactly what it was added for: the class of mistake that shipped a dead
+`audit-ui.mjs` now costs a second instead of a debugging session.
+
 ## 8. The slice plan
 
 Ordered, and ordered by *cheapness times usefulness* rather than by Paseo's section order. Each slice

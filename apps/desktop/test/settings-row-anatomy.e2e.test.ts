@@ -110,6 +110,11 @@ interface Report {
   /** Which palette these numbers describe — `--theme`. */
   theme: string;
   /**
+   * The product mark in the top bar, and **whether it loaded**. An image whose source 404s is still an element,
+   * so presence is not the claim worth testing: `naturalWidth` is zero for one the browser could not decode.
+   */
+  logo: { present: boolean; loaded: boolean; naturalWidth: number; alt: string | null; width: number } | null;
+  /**
    * **The composer's prose, as the lines it draws** — the thing the owner complained about, in numbers:
    * *"These texts are usless, but make the chats inputting messy."* Zero lines for a task with nothing running.
    */
@@ -119,6 +124,8 @@ interface Report {
     fieldWidth: number | null;
     cardWidth: number | null;
     chips: readonly { label: string; height: number; border: string }[];
+    /** The send action, or `null` when the field is empty — the state in which none is drawn. */
+    send: { name: string; visibleText: string; glyph: boolean; width: number; height: number } | null;
     actionsSameRowAsChips: boolean | null;
   };
   /**
@@ -238,10 +245,18 @@ const lightReport: Report = enabled ? await measure(["--theme", "light"]) : (und
  */
 const SEEDED_TASK = "the task the tool measures";
 function measureWork(theme: "dark" | "light"): Promise<Report> {
-  // The task first (so the composer is on screen), then the palette — which is left **open**, so its rows are part
-  // of the scan. They are the elements that measured 1.04:1 in the light palette: white text on a near-white
-  // panel, because the row is a `button` with no `color` of its own and took the platform's `buttontext`.
-  return measure(["--seed", "--theme", theme, "--open", SEEDED_TASK, "--open", "Command Center"], "work");
+  // The task first (so the composer is on screen), then words in the message field, then the palette — which is
+  // left **open**, so its rows are part of the scan. They are the elements that measured 1.04:1 in the light
+  // palette: white text on a near-white panel, because the row is a `button` with no `color` of its own and took
+  // the platform's `buttontext`.
+  //
+  // The typing matters for the send action: it is drawn only when there is something to send, which is the state
+  // the owner asked about (*"when inputting, the icon button displayed"*), and a measurement of the resting
+  // composer could not see it at all.
+  return measure(
+    ["--seed", "--theme", theme, "--open", SEEDED_TASK, "--type", "Add a health check endpoint", "--open", "Command Center"],
+    "work",
+  );
 }
 const workReport: Report = enabled ? await measureWork("dark") : (undefined as unknown as Report);
 const workLightReport: Report = enabled ? await measureWork("light") : (undefined as unknown as Report);
@@ -417,6 +432,20 @@ describeWhen("the work surface, measured in a real window", () => {
   });
 });
 
+describeWhen("the chrome, measured in a real window", () => {
+  it("shows the product's own mark in the top bar, and the file really loads", () => {
+    // The logo is imported through Vite, so the claim has two halves and only a browser can check either: the
+    // element is in the bar, and the bundler carried a file the webview could decode. A broken path renders a
+    // broken-image glyph, which is invisible to a DOM query and to a contrast scan.
+    expect(workReport.logo).not.toBeNull();
+    expect(workReport.logo?.loaded).toBe(true);
+    expect(workReport.logo?.naturalWidth).toBeGreaterThan(0);
+    // Decorative: the name is right beside it, so a screen reader must not read the product twice.
+    expect(workReport.logo?.alt).toBe("");
+    expect(workReport.logo?.width).toBe(18);
+  });
+});
+
 describeWhen("the composer, measured in a real window", () => {
   it("is a 28px toolbar under the field, with no prose of its own", () => {
     // The measurement boots its own daemon with a seeded project and task, opens it, and counts the lines the
@@ -436,6 +465,15 @@ describeWhen("the composer, measured in a real window", () => {
       expect(chip.border, `${chip.label} draws a border`).toBe("0px");
     }
     expect(workReport.composer.actionsSameRowAsChips).toBe(true);
+    // **The send action: a glyph, no words, and only because the field has something in it.** A mutation that puts
+    // the visible label back reddens `visibleText`; one that draws it with an empty field cannot be seen from here
+    // (that state is `task-pane.test.tsx`'s), which is why both exist.
+    const send = workReport.composer.send;
+    expect(send).not.toBeNull();
+    expect(send?.visibleText).toBe("");
+    expect(send?.glyph).toBe(true);
+    expect(send?.width).toBe(28);
+    expect(send?.height).toBe(28);
     console.log(
       `· composer measured: ${String(workReport.composer.notes.length)} note line(s) above the field, ` +
         `${String(workReport.composer.notes.reduce((n, line) => n + line.length, 0))} characters`,

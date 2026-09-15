@@ -257,7 +257,9 @@ describe("an approval, inline", () => {
   it("refuses to send a message while the agent is waiting on an answer", () => {
     renderPane([approval]);
     // Queueing behind a prompt strands the words, so the composer says so rather than accepting
-    // them and dropping them behind a decision that has not been made.
+    // them and dropping them behind a decision that has not been made. The button exists because there is text in
+    // the field — that is the rule the icon follows (`resolvePrimaryActionKind`'s shape) — and it is disabled.
+    fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "and now the tests" } });
     const send = screen.getByRole("button", { name: "Send" });
     expect((send as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByLabelText("Message the agent").getAttribute("placeholder")).toMatch(
@@ -295,6 +297,8 @@ describe("the composer", () => {
 
   it("says on the button what pressing it will do, instead of offering the words Queue and Steer", () => {
     renderPane([], { runLive: true });
+    // Nothing in the field yet: no primary action is drawn at all (see the leg below), so this one types first.
+    fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "and then this" } });
     const send = screen.getByRole("button", { name: "Send" });
     expect(send.getAttribute("title")).toBe("The agent finishes the turn it is on, then reads this.");
     // And the picker is gone: one fewer control on the row, and no unexplained vocabulary on it.
@@ -388,10 +392,33 @@ describe("the new chat, which is where a session starts", () => {
 
   it("keeps the field and the send action in one card, so the composer reads as one control", () => {
     renderPane([], { runLive: false });
+    fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "Add a health check" } });
     const card = document.querySelector(".composer__card");
     expect(card).toBeTruthy();
     expect(card?.contains(screen.getByLabelText("Message the agent"))).toBe(true);
     expect(card?.contains(screen.getByRole("button", { name: "Start" }))).toBe(true);
+  });
+
+  it("draws no send action at all until there is something to send, and then draws a glyph", () => {
+    // **The owner's second style ask**: *"no text, no send button, when inputting, the icon button displayed"* —
+    // the reference product's own rule (`resolvePrimaryActionKind`: `hasSendableContent` → the send action, and
+    // nothing otherwise). The button carries no visible text: its name is a `visually-hidden` sentence, so a
+    // screen reader still reads "Send" and the row draws only a glyph.
+    renderPane([], { runLive: true });
+    expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "x" } });
+    const send = screen.getByRole("button", { name: "Send" });
+    // A glyph and a hidden sentence: no visible word at all.
+    expect(send.textContent).toBe("Send");
+    expect(send.querySelector("svg")).toBeTruthy();
+    expect(send.querySelector(".visually-hidden")?.textContent).toBe("Send");
+
+    // Whitespace is not content: a field holding only spaces draws nothing.
+    cleanup();
+    renderPane([], { runLive: true });
+    fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "   " } });
+    expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
   });
 
   it("draws the user's own turn as a bubble, not a row with a coloured rule", () => {

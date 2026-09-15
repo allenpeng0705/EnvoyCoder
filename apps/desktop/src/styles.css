@@ -234,6 +234,16 @@ body {
 }
 
 
+/* The app's mark, in the top bar. Square, and small: it says which product this is, beside the name that says it
+   in words. The 2px radius keeps it from reading as a raw image pasted into the chrome. */
+.titlebar__logo {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
 .titlebar__title {
   font-weight: 600;
   letter-spacing: 0.2px;
@@ -1063,6 +1073,17 @@ body {
 /* The action side of the button row: the queue/steer picker while a turn is running, the keyboard hint, and the
    button. `margin-left: auto` is what puts the chips' column on the left and this on the right — the whole layout
    of Paseo's `buttonRow`. */
+/* The send action: a round glyph button, sized like the chips beside it. `button--icon` drops the horizontal
+   padding a worded button needs, and the fixed box is what keeps the row's height steady whether or not the button
+   is drawn at all. */
+.composer__send {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  justify-content: center;
+  border-radius: var(--radius-full);
+}
+
 .composer__toolbar-actions {
   display: flex;
   align-items: center;

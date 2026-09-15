@@ -46,6 +46,10 @@ import { MeshStatusBar } from "./MeshStatusBar.js";
 import { SettingsPane } from "./SettingsPane.js";
 import { useSettingsLayout } from "./SettingsNav.js";
 import type { CoderState } from "../state/coderStore.js";
+// The logo, bundled by Vite: one import, and the built app carries the file with it (the Tauri build copies the
+// frontend `dist` into the bundle, so an image the window shows has to come through the bundler, not from a path
+// on disk).
+import logo from "../../assets/logo-128.png";
 import type { CoderStore } from "../state/coderStore.js";
 import {
   PROJECTS_SCOPE,
@@ -409,6 +413,11 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
         >
           ▤
         </button>
+        {/* **The app's own mark, from the asset the product ships** (`apps/desktop/assets/logo.png`, rendered at
+            18px from a 128px copy so a window does not decode a megabyte for a favicon-sized slot). It is
+            decorative — `alt=""` — because the name is right beside it and a screen reader that read both would
+            say the product twice. */}
+        <img className="titlebar__logo" src={logo} alt="" width={18} height={18} data-tauri-drag-region />
         <span className="titlebar__title" data-tauri-drag-region>{t("app.name")}</span>
         <span className="titlebar__spacer" data-tauri-drag-region />
         <ConnectionChip state={state} />

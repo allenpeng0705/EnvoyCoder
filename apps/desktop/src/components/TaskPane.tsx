@@ -526,37 +526,49 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                 says so in its tooltip. `steer` (interrupt the turn and send this instead) is still on the wire;
                 a *setting* for which one is the default is where that choice belongs (§8.3).
                 The keyboard contract went with it, off the row and onto the field's own tooltip. */}
-            <button
-              type="button"
-              className="button button--primary"
-              onClick={submit}
-              disabled={text.trim() === "" || approvalOpen}
-              title={
-                approvalOpen
-                  ? t("task.composer.submit.blocked")
-                  : running
-                    ? // **What pressing it will do**, since the picker that used to say it is gone: the message
-                      // waits for the turn in flight and is read next.
-                      t("task.composer.send.queued")
-                    : t("task.composer.start")
-              }
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
+            {/* **An icon, and only while there is something to send.**
+                The owner: *"can we use the same send button style, no text, no send button, when inputting, the icon
+                button displayed."* That is the reference product's rule exactly
+                (`composer/input/input.tsx`, `resolvePrimaryActionKind`): with something in the field the send action
+                is drawn — as a glyph, not as a word — and with an empty field there is no primary action at all
+                (Paseo draws its cancel control there; ours is the header's Stop). A worded button at the end of
+                every row is a label the user has read a thousand times, and the glyph is the one meaning every
+                message box on every platform already teaches.
+
+                The name a screen reader reads is still a sentence — `visually-hidden`, so it is announced and not
+                drawn — and the tooltip stays: it is where "this queues behind the turn in flight" is said
+                (§7.33). */}
+            {text.trim() === "" ? null : (
+              <button
+                type="button"
+                className="button button--primary button--icon composer__send"
+                onClick={submit}
+                disabled={approvalOpen}
+                title={
+                  approvalOpen
+                    ? t("task.composer.submit.blocked")
+                    : running
+                      ? t("task.composer.send.queued")
+                      : t("task.composer.start")
+                }
               >
-                <path d="M5 12h13" />
-                <path d="m12 5 7 7-7 7" />
-              </svg>
-              {running ? t("task.composer.send") : t("task.composer.start")}
-            </button>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M5 12h13" />
+                  <path d="m12 5 7 7-7 7" />
+                </svg>
+                <span className="visually-hidden">{running ? t("task.composer.send") : t("task.composer.start")}</span>
+              </button>
+            )}
             </div>
           </div>
         </div>
