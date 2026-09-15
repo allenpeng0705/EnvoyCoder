@@ -132,6 +132,22 @@ export interface CoderPaths {
    * is the enforcement rather than a rule beside it.
    */
   providersFile: string;
+  /**
+   * What the daemon last established about each agent's **authentication** — the fact beside availability.
+   *
+   * Its own file rather than a field on `sessionOptionsFile`, and the reason is the rule that file's own doc
+   * gives for being a collection rather than a document: a probe that could not open a session **does** have
+   * something to record here (`state: "unknown"`, with the reason), while the session-options record
+   * deliberately writes nothing when it could not ask. Folding the two together would mean either that a
+   * failed probe erased the user's model list, or that an auth failure could not be recorded at all — and
+   * both of those are states a window has to render.
+   *
+   * **It never holds a credential.** The only string in it is a method id the agent itself advertised
+   * (`AgentAuthObservation`); the session state a sign-in produces belongs to the agent, which keeps it
+   * wherever it keeps it — `cursor-agent` writes `~/.cursor/acp-config.json`, which this product neither
+   * reads nor writes.
+   */
+  agentAuthFile: string;
   runsDir: string;
   transcriptsDir: string;
   logsDir: string;
@@ -170,6 +186,7 @@ export function coderPaths(home: string = resolveHomeDir()): CoderPaths {
     settingsFile: join(stateDir, "settings.json"),
     sessionOptionsFile: join(stateDir, "session-options.json"),
     providersFile: join(stateDir, "providers.json"),
+    agentAuthFile: join(stateDir, "agent-auth.json"),
     runsDir: join(stateDir, "runs"),
     transcriptsDir: join(stateDir, "transcripts"),
     logsDir: join(stateDir, "logs"),

@@ -111,6 +111,10 @@ function harnessFor(
     thinking: harnessThinking(id),
     capabilities,
     availability: { state: "ready" as const, binary: "/usr/local/bin/agent" },
+    // The two fields this slice added, at the values a running daemon sends: nothing hidden, and an auth state
+    // nothing has probed yet. `...over` still comes last, so a test that wants either one changed can say so.
+    hidden: false,
+    auth: { state: "unknown" as const },
     evidence: "cited in `@envoycoder/agent-catalog`",
     ...over,
   };

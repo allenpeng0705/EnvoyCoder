@@ -668,6 +668,31 @@ export const en = {
   // — so the sentence states the rule rather than presuming which of the two happened.
   "error.providerIdInvalid":
     "\"{name}\" cannot be an id for a provider. A provider id is lowercase letters, digits and dashes, starting with a letter or a digit.",
+  // The union of the two agent lists, which is why it needs its own key: `error.providerNotFound` would
+  // name the wrong list when a user mistyped one of the nine we ship.
+  "error.agentNotFound":
+    "There is no agent called \"{id}\" here. It may have been removed from another window.",
+  // **The five answers to "sign in to this agent".** The sentence a client renders after the button, and
+  // the only one of the five that means it worked is `signIn.signedIn`: the others exist because a step
+  // that *returns* is not a step that *worked* — a browser-login method answers immediately and the session
+  // still refuses until the human has finished in the browser.
+  "signIn.already":
+    "{agent} opened a session without needing a sign-in, so there was nothing to do.",
+  // The proof, stated as the proof: a session opened afterwards, not "the agent accepted the call".
+  "signIn.signedIn": "{agent} accepted the sign-in and opened a session.",
+  // The agent's own refusal, quoted as a value: an `env_var` method says which variable is unset, and that
+  // is more use to a user than anything we could write.
+  "signIn.refused": "{agent} refused the sign-in step: {reason}",
+  // Two situations in one sentence on purpose — a browser step nobody has finished, and an agent that never
+  // answered. In both, nothing was signed in, and "not yet, try again" is the honest thing to say.
+  "signIn.notCompleted":
+    "{agent} accepted the sign-in step but no session opened yet, so the sign-in has not finished: {reason} If the agent opened a browser or a terminal, finish there and try again.",
+  // `{methods}` is the **agent's own** list of ids, never the caller's string: what a client sent in that
+  // field is not echoed back, for the same reason a refused `env` entry is not (it is often the credential).
+  "signIn.noMethod":
+    "{agent} will not open a session here and did not name a sign-in method EnvoyCoder may send. It offers: {methods}. Sign in with the agent's own command, then ask again.",
+  "signIn.unavailable":
+    "{agent} could not be started, so nothing was signed in: {reason}",
   "error.notConnected": "EnvoyCoder is not connected to its daemon yet.",
   "error.notConnectedChange": "EnvoyCoder is not connected to its daemon, so that change was not saved.",
   "error.connectionClosed": "The connection was closed.",

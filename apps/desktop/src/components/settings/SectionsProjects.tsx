@@ -30,7 +30,7 @@ import type { JSX } from "react";
 
 import type { HarnessId, Project, TaskDefaults } from "@envoycoder/protocol";
 
-import { knownMissing } from "../../composer/agent-for.js";
+import { pickable } from "../../composer/agent-for.js";
 import { useI18n } from "../../i18n/context.js";
 import type { SettingsScope } from "../../state/settings-scope.js";
 import { projectScope } from "../../state/settings-scope.js";
@@ -119,7 +119,7 @@ export function ProjectsSection(props: ProjectSectionProps): JSX.Element {
 export function ProjectSection(props: ProjectSectionProps & { project: Project }): JSX.Element {
   const { t } = useI18n();
   const { project, state } = props;
-  const available = state.harnesses.filter((harness) => !knownMissing(harness));
+  const available = state.harnesses.filter((harness) => pickable(harness));
   const defaults = project.defaults ?? {};
   // The project's own agent decides which models it offers, exactly as the composer reads a task's.
   const harness = defaults.harness ?? state.settings.defaults.harness ?? "envoy-harness";

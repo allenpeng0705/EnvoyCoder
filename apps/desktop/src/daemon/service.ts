@@ -36,6 +36,7 @@ import {
   ENVOYCODER_PRODUCT_NAME,
   RPC_METHODS,
   coderError,
+  isHarnessId,
   parseRpcParams,
 } from "@envoycoder/protocol";
 import {
@@ -54,6 +55,8 @@ import type { CoderPaths } from "@envoycoder/host-bridge";
 
 import { keyed, ref } from "./messages.js";
 import { createProviderHandlers } from "./providers.js";
+import { createSignInHandlers } from "./sign-in.js";
+import type { SessionSignIn } from "./sign-in.js";
 import { summarize } from "./summaries.js";
 import type { RunManager } from "./runs.js";
 import type { SessionProbe } from "./session-probe.js";
@@ -107,6 +110,14 @@ export interface CoderServiceDeps {
    * than answering with an outcome nothing produced.
    */
   probeSession?: SessionProbe;
+  /**
+   * The sign-in flow: triggering the agent's own `authenticate` step, on a user's request.
+   *
+   * Optional on the same terms again, and the fourth member of one list: a daemon with no agent runtime
+   * cannot run a task, cannot ask an agent what it offers and cannot sign one in. See `sign-in.ts` for the
+   * five outcomes and why only one of them is success.
+   */
+  signIn?: SessionSignIn;
 }
 
 /** One handler: parameters already parsed, result not yet validated. */
@@ -156,11 +167,28 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     env: deps.env ?? process.env,
   });
 
+  /**
+   * **The user's preference over their own pickers**, read once per list call.
+   *
+   * One function because two handlers need the same answer and there is only one rule: `hidden` is a filter
+   * over what a picker offers, and the *only* thing it may change. It is passed to the projection as a flag
+   * *beside* the probed state rather than folded into it — that separation is the whole point of
+   * `CoderSettings.hiddenAgents`, and `docs/settings-parity.md` §5.8 records the audit that got it wrong.
+   *
+   * A `Set` built per call rather than cached on the instance: a settings write must be visible to the very
+   * next list call, and a cache is how a window hides an agent and then still sees it in a picker.
+   */
+  const hiddenAgents = (): ReadonlySet<string> =>
+    new Set(deps.store.settings().hiddenAgents ?? []);
+
   const handlers: Partial<Record<RpcMethod, CoderHandler>> = {
     // The agents a user declared: three methods whose whole subject is `AgentProviderConfig`, kept in their
     // own module because the list handler, the refusals that are the user's to fix and the credential
     // decision are one subject — and because this file is a table.
     ...providerHandlers,
+    // The sign-in: one method whose whole subject is an agent's own authentication flow. Spread in the same
+    // way the provider methods are, so this table stays the complete list of what the daemon serves.
+    ...createSignInHandlers({ ...(deps.signIn ? { signIn: deps.signIn } : {}) }),
 
     /* ────────────────── who am I talking to ────────────────── */
     "coder.hello": async (params) => {
@@ -489,9 +517,21 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     /* ────────────────── agents ────────────────── */
     "coder.listHarnesses": async (params) => {
       parseRpcParams("coder.listHarnesses", params);
+      const hidden = hiddenAgents();
       return {
         harnesses: ALL_HARNESSES.map((id) =>
-          summarize(id, probe, deps.store.sessionOptions(id)),
+          summarize(
+            id,
+            probe,
+            deps.store.sessionOptions(id),
+            // **The preference, as a flag.** An agent the user hid still answers with everything the probe
+            // found — its five-state availability, its observed models, and now its auth state — because
+            // hiding is a filter over what a picker offers rather than a statement about the agent.
+            hidden.has(id),
+            // …and the auth record, which is a *measurement* and therefore never affected by the preference
+            // above. The two neighbours on this call are the two facts this slice keeps apart.
+            deps.store.agentAuth(id),
+          ),
         ),
       };
     },
@@ -589,6 +629,49 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
       };
       const settings = await deps.store.updateSettings(input.settings);
       return { settings };
+    },
+
+    /**
+     * Put an agent in the user's pickers, or take it out — **the preference, and nothing else**.
+     *
+     * ## Why this is not part of `coder.updateSettings`
+     *
+     * The preference *is* stored in the settings document (`CoderSettings.hiddenAgents`), so a whole-array
+     * patch through the method above would look natural — and it would lose a toggle. Two windows hiding two
+     * agents at once would each write a list read before the other's change landed, and the loser would
+     * disappear without anything reporting it. Here the read and the write both happen inside the store's
+     * serialised chain, so both land and the second one sees the first. `rpc.ts`'s spec says the same thing
+     * from the client's side.
+     *
+     * ## The id is checked against both lists before anything is stored
+     *
+     * `envoycoder.agent-missing` for an id that names neither one of the nine we ship nor a provider the user
+     * declared. The alternative — storing whatever a client sent — makes a typo permanent and invisible: the
+     * list would grow a string matching no row, and no control could remove it, because every control is
+     * rendered from a row.
+     *
+     * ## What is deliberately *not* here
+     *
+     * No probe, no launch, no state. This method cannot change what any row reports about the machine, and
+     * that is a property of the code rather than a promise in a doc: the only thing it writes is the
+     * preference, and the only thing that reads it is `hiddenAgents()` above — the filter over the pickers.
+     */
+    "coder.setAgentHidden": async (params) => {
+      const input = parseRpcParams("coder.setAgentHidden", params) as { id: string; hidden: boolean };
+      if (!isHarnessId(input.id) && !deps.store.findProvider(input.id)) {
+        throw coderError(
+          ENVOYCODER_ERRORS.agentMissing,
+          `There is no agent called "${input.id}" here. It may have been removed from another window.`,
+          ref("error.agentNotFound", { id: input.id }),
+        );
+      }
+      const settings = await deps.store.setAgentHidden(input.id, input.hidden);
+      return {
+        id: input.id,
+        hidden: input.hidden,
+        // The whole resulting list, so a client can update every row it is showing without a second call.
+        hiddenAgents: [...(settings.hiddenAgents ?? [])],
+      };
     },
   };
 

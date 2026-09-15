@@ -414,6 +414,17 @@ export const it: Catalogue = {
     "\"{id}\" è l'identificativo di un agente che EnvoyCoder fornisce già, quindi il tuo provider non è stato aggiunto. Dagli un altro nome.",
   "error.providerIdInvalid":
     "\"{name}\" non può essere un identificativo di provider. Un identificativo di provider usa lettere minuscole, cifre e trattini e inizia con una lettera o una cifra.",
+  "error.agentNotFound":
+    "Qui non c'è nessun agente chiamato \"{id}\". Potrebbe essere stato rimosso da un'altra finestra.",
+  "signIn.already":
+    "{agent} ha aperto una sessione senza bisogno di un accesso, quindi non c'era nulla da fare.",
+  "signIn.signedIn": "{agent} ha accettato l'accesso e ha aperto una sessione.",
+  "signIn.refused": "{agent} ha rifiutato il passo di accesso: {reason}",
+  "signIn.notCompleted":
+    "{agent} ha accettato il passo di accesso ma non è ancora stata aperta alcuna sessione, quindi l'accesso non è concluso: {reason} Se l'agente ha aperto un browser o un terminale, concludi lì e riprova.",
+  "signIn.noMethod":
+    "{agent} non aprirà una sessione qui e non ha indicato un metodo di accesso che EnvoyCoder possa inviare. Offre: {methods}. Accedi con il comando dell'agente stesso, poi riprova.",
+  "signIn.unavailable": "{agent} non è stato avviato, quindi non è stato eseguito alcun accesso: {reason}",
   "error.notConnected": "EnvoyCoder non è ancora connesso al suo servizio.",
   "error.notConnectedChange": "EnvoyCoder non è connesso al suo servizio, quindi quella modifica non è stata salvata.",
   "error.connectionClosed": "La connessione è stata chiusa.",

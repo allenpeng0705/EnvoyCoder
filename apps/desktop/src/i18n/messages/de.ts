@@ -414,6 +414,18 @@ export const de: Catalogue = {
     "\"{id}\" ist die Kennung eines Agenten, den EnvoyCoder bereits mitliefert, deshalb wurde dein Anbieter nicht hinzugefügt. Gib deinem Anbieter einen anderen Namen.",
   "error.providerIdInvalid":
     "\"{name}\" kann keine Kennung für einen Anbieter sein. Eine Anbieter-Kennung besteht aus Kleinbuchstaben, Ziffern und Bindestrichen und beginnt mit einem Buchstaben oder einer Ziffer.",
+  "error.agentNotFound":
+    "Es gibt hier keinen Agenten namens \"{id}\". Vielleicht wurde er in einem anderen Fenster entfernt.",
+  "signIn.already":
+    "{agent} hat eine Sitzung geöffnet, ohne eine Anmeldung zu brauchen — es gab also nichts zu tun.",
+  "signIn.signedIn": "{agent} hat die Anmeldung akzeptiert und eine Sitzung geöffnet.",
+  "signIn.refused": "{agent} hat den Anmeldeschritt abgelehnt: {reason}",
+  "signIn.notCompleted":
+    "{agent} hat den Anmeldeschritt akzeptiert, aber es wurde noch keine Sitzung geöffnet — die Anmeldung ist also nicht abgeschlossen: {reason} Wenn der Agent einen Browser oder ein Terminal geöffnet hat, schließe es dort ab und versuche es erneut.",
+  "signIn.noMethod":
+    "{agent} öffnet hier keine Sitzung und hat keine Anmeldemethode genannt, die EnvoyCoder senden darf. Angeboten wird: {methods}. Melde dich mit dem eigenen Befehl des Agenten an und frage dann erneut.",
+  "signIn.unavailable":
+    "{agent} konnte nicht gestartet werden, es wurde also nichts angemeldet: {reason}",
   "error.notConnected": "EnvoyCoder ist noch nicht mit seinem Dienst verbunden.",
   "error.notConnectedChange": "EnvoyCoder ist nicht mit seinem Dienst verbunden, deshalb wurde diese Änderung nicht gespeichert.",
   "error.connectionClosed": "Die Verbindung wurde geschlossen.",

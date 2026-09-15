@@ -172,6 +172,22 @@ describe("every refusal a user can read", () => {
       params: { id: "no-such-provider" },
       key: "error.providerNotFound",
     },
+    {
+      // The preference, refused when the id names no agent — one code for the **union** of the two agent
+      // lists, because the id space is shared and `provider-missing` would be a sentence about the wrong list
+      // when the user mistyped one of the nine we ship.
+      method: "coder.setAgentHidden",
+      params: { id: "no-such-agent", hidden: true },
+      key: "error.agentNotFound",
+    },
+    {
+      // A daemon built without an agent runtime cannot start an agent, so it cannot sign one in either: the
+      // same key `coder.startRun` and `coder.probeSessionOptions` carry, because one missing runtime is one
+      // situation rather than three problems.
+      method: "coder.signInAgent",
+      params: { harness: "cursor" },
+      key: "error.noRunRuntime",
+    },
   ];
 
   it("carries a key this build knows, alongside the English sentence", async () => {

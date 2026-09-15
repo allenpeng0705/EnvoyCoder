@@ -26,19 +26,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { HarnessId, ObservedSessionOptions } from "@envoycoder/protocol";
+import type { AgentAuthObservation, HarnessId, ObservedSessionOptions } from "@envoycoder/protocol";
 import { parseMessageRef } from "@envoycoder/protocol";
 import { coderPaths } from "@envoycoder/host-bridge";
 
 import { isMessageKey } from "../src/i18n/messages/en.js";
 import { localizeText } from "../src/i18n/notice.js";
 import { createTranslator } from "../src/i18n/translate.js";
-import {
-  PROBE_STALE_MS,
-  SessionProbe,
-  type ProbedSession,
-  type SessionProbeDeps,
-} from "../src/daemon/session-probe.js";
+import type { ProbedAgent } from "../src/daemon/agent-processes.js";
+import { PROBE_STALE_MS, SessionProbe, type SessionProbeDeps } from "../src/daemon/session-probe.js";
 import { CoderStore } from "../src/daemon/store.js";
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -48,18 +44,47 @@ afterEach(async () => {
 });
 
 /**
- * A scripted agent session.
+ * A scripted agent, **and the script is now three lines long** because the probe's question is three
+ * questions.
  *
- * `configOptions` is what this session published, in the agent's own shape — not ours: it is the option
- * list an ACP agent answers `session/new` with. Empty is the case `envoy-harness` genuinely produces.
+ * `configOptions` is what its session published, in the agent's own shape — not ours: it is the option list an
+ * ACP agent answers `session/new` with, and empty is the case `envoy-harness` genuinely produces.
+ *
+ * `authMethods` is what its `initialize` advertised, and `refuseSession` is what it does when asked for a
+ * session: the two inputs the auth fact is decided from. A scripted agent whose `refuseSession` is set and
+ * whose `authMethods` is non-empty is `cursor-agent acp` on a fresh installation, and that case cannot be
+ * produced by the real binary on a machine that has already been signed in — which is why it is a fixture.
  */
-function scriptedSession(
+function scriptedAgent(
   configOptions: readonly unknown[],
-  hooks: { onStop?: () => void | Promise<void> } = {},
-): { session: ProbedSession; stops: () => number } {
+  hooks: {
+    onStop?: () => void | Promise<void>;
+    /** What the agent advertises in `initialize`. Empty for the agents that need nothing. */
+    authMethods?: readonly string[];
+    /** Refuse `session/new` the way a real agent refuses it, with the same `-32000` and sentence. */
+    refuseSession?: string;
+    /** Refuse the `authenticate` step itself, for the sign-in flow's own tests. */
+    refuseSignIn?: string;
+  } = {},
+): { agent: ProbedAgent; stops: () => number; opened: () => number } {
   let stops = 0;
+  let opened = 0;
   return {
-    session: {
+    agent: {
+      authMethods: () => hooks.authMethods ?? [],
+      signIn: async (methodId) => {
+        if (hooks.refuseSignIn !== undefined) {
+          throw new Error(hooks.refuseSignIn);
+        }
+        void methodId;
+      },
+      openSession: async () => {
+        opened += 1;
+        if (hooks.refuseSession !== undefined) {
+          throw new Error(hooks.refuseSession);
+        }
+        return "session-from-the-scripted-agent";
+      },
       sessionId: "session-from-the-scripted-agent",
       sessionConfigOptions: () => configOptions,
       stop: async () => {
@@ -70,6 +95,7 @@ function scriptedSession(
       },
     },
     stops: () => stops,
+    opened: () => opened,
   };
 }
 
@@ -123,6 +149,16 @@ interface Bench {
   recorded: (harness: HarnessId) => ObservedSessionOptions | undefined;
   /** The raw file, so "nothing was written" can be asserted on bytes rather than through a reader. */
   file: () => Promise<string>;
+  /**
+   * The **auth** record, read the way `coder.listHarnesses` reads it.
+   *
+   * A second reader because it is a second file: the whole reason `AgentAuthObservation` is not a field on
+   * the session-options record is that this one is written when nothing could be established and that one
+   * deliberately is not. Both readers exist here so a test can tell which file moved.
+   */
+  recordedAuth: (harness: HarnessId) => AgentAuthObservation | undefined;
+  /** The auth file's raw bytes, for "a failed probe still recorded what it learned". */
+  authFile: () => Promise<string>;
 }
 
 async function bench(
@@ -135,7 +171,7 @@ async function bench(
   let now = Date.parse("2026-09-14T10:00:00.000Z");
   let spawns = 0;
   const launches: { harness: HarnessId; cwd: string }[] = [];
-  let script: SessionProbeDeps["startClient"] = async () => scriptedSession(DSH_OPTIONS).session;
+  let script: SessionProbeDeps["startClient"] = async () => scriptedAgent(DSH_OPTIONS).agent;
   const builds = new Map<HarnessId, string>();
 
   const probe = new SessionProbe({
@@ -187,6 +223,14 @@ async function bench(
         return "";
       }
     },
+    recordedAuth: (harness) => store.agentAuth(harness),
+    authFile: async () => {
+      try {
+        return await readFile(paths.agentAuthFile, "utf8");
+      } catch {
+        return "";
+      }
+    },
   };
 }
 
@@ -226,7 +270,7 @@ describe("what asking an agent can come back as", () => {
   it("records a session that published nothing as a fact about the agent", async () => {
     const b = await bench();
     // What `envoy-harness` answers: `{sessionId}` with no `configOptions` at all.
-    b.script(async () => scriptedSession([]).session);
+    b.script(async () => scriptedAgent([]).agent);
 
     const answer = await b.probe.probe("envoy-harness");
 
@@ -279,7 +323,7 @@ describe("what the window will render for each outcome", () => {
   it("carries a catalogue key this build has, for the two outcomes a window draws", async () => {
     const b = await bench();
 
-    b.script(async () => scriptedSession([]).session);
+    b.script(async () => scriptedAgent([]).agent);
     const none = await b.probe.probe("envoy-harness");
     b.advance(PROBE_STALE_MS + 1);
     b.script(async () => {
@@ -377,7 +421,7 @@ describe("a probe is a process, so it is spent deliberately", () => {
 
     // The user installs the agent and asks again — no `force`, and no waiting out a staleness window that
     // would have been describing a failure.
-    b.script(async () => scriptedSession(DSH_OPTIONS).session);
+    b.script(async () => scriptedAgent(DSH_OPTIONS).agent);
     const answer = await b.probe.probe("deepseek-harness");
 
     expect(b.spawns()).toBe(2);
@@ -399,7 +443,7 @@ describe("a probe is a process, so it is spent deliberately", () => {
     b.script(async () => {
       reachedAgent();
       await gate;
-      return scriptedSession(DSH_OPTIONS).session;
+      return scriptedAgent(DSH_OPTIONS).agent;
     });
 
     const first = b.probe.probe("deepseek-harness");
@@ -426,7 +470,7 @@ describe("a probe is a process, so it is spent deliberately", () => {
       // An agent that took the process and then said nothing at all: a wedged binary, which is exactly
       // what the outer budget is for. This never settles, so the probe has to walk away from it.
       await new Promise<void>(() => undefined);
-      return scriptedSession(DSH_OPTIONS).session;
+      return scriptedAgent(DSH_OPTIONS).agent;
     });
 
     const answer = await b.probe.probe("deepseek-harness");
@@ -450,13 +494,13 @@ describe("a probe is a process, so it is spent deliberately", () => {
       releaseTeardown = resolve;
     });
     b.script(async () =>
-      scriptedSession(DSH_OPTIONS, {
+      scriptedAgent(DSH_OPTIONS, {
         onStop: async () => {
           stops += 1;
           teardownBegan();
           await hold;
         },
-      }).session,
+      }).agent,
     );
 
     const probing = b.probe.probe("deepseek-harness");
@@ -470,5 +514,160 @@ describe("a probe is a process, so it is spent deliberately", () => {
     await Promise.all([probing, shuttingDown]);
 
     expect(stops).toBe(1);
+  }, 20_000);
+});
+
+/* ────────────────────────────── the auth fact ────────────────────────────── */
+
+/**
+ * **Can this agent open a session, or does it want a sign-in first** — the fact beside availability.
+ *
+ * The two real cases are a machine that has already signed in and one that has not, and only the second is
+ * the one a row has to be able to say something about — which is exactly the case a warm development machine
+ * cannot produce from the real binary (`cursor-agent`'s requirement is stateful; its own entry records both
+ * observations). So it is a fixture here, and `acp-agent-support.test.ts` drives the real binary for the other
+ * half: that the probe learns *something* about it rather than guessing.
+ */
+describe("what a probe learns about authentication, on the way to asking about options", () => {
+  it("says ready when a session opens, and records it with the time it looked", async () => {
+    const b = await bench();
+
+    const answer = await b.probe.probe("deepseek-harness");
+
+    expect(answer.auth.state).toBe("ready");
+    // No method id with `ready`: the schema refuses one, and the reason is that a method id beside this state
+    // would claim a step is still needed by an agent that just opened a session.
+    expect(answer.auth.methodId).toBeUndefined();
+    // Recorded with a timestamp, so a row can say *when* rather than presenting an observation as current.
+    const record = b.recordedAuth("deepseek-harness");
+    expect(record?.state).toBe("ready");
+    expect(record?.observedAt).toBe("2026-09-14T10:00:00.000Z");
+  }, 20_000);
+
+  it("reports needs-signin, with the method the agent named, when a session is refused", async () => {
+    const b = await bench();
+    // `cursor-agent acp` on a fresh installation, verbatim: the refusal is its own sentence and code, and the
+    // method is one it advertised in `initialize` — which is what makes this evidence rather than prose.
+    b.script(async () =>
+      scriptedAgent(DSH_OPTIONS, {
+        authMethods: ["cursor_login"],
+        refuseSession:
+          "Authentication required. Please run 'agent login' first, then call authenticate() with " +
+          "methodId 'cursor_login'.",
+      }).agent,
+    );
+
+    // `cursor` declares `cursor_login` in the catalogue, which is how a fresh install is one press away.
+    const answer = await b.probe.probe("cursor");
+
+    expect(answer.auth.state).toBe("needs-signin");
+    expect(answer.auth.methodId).toBe("cursor_login");
+    // The outcome of the *session-options* question is unchanged and still honest: we could not ask what it
+    // offers, so nothing was recorded as though the agent had answered.
+    expect(answer.outcome).toBe("unreachable");
+    expect(b.recorded("cursor")).toBeUndefined();
+    // …and the auth record is where the truth about this probe lives.
+    const record = b.recordedAuth("cursor");
+    expect(record?.state).toBe("needs-signin");
+    expect(record?.methodId).toBe("cursor_login");
+    expect(record?.detail).toContain("cursor_login");
+  }, 20_000);
+
+  it("names no method when the agent offers several and the catalogue declares none", async () => {
+    const b = await bench();
+    // `@agentclientprotocol/codex-acp`, which advertises two `env_var` methods and a browser login. Choosing
+    // between them is the one thing this must not do: a browser method would open a window the user did not
+    // ask for, and an `env_var` one would fail with a sentence about a variable.
+    b.script(async () =>
+      scriptedAgent(DSH_OPTIONS, {
+        authMethods: ["api-key", "chat-gpt", "browser-login"],
+        refuseSession: "-32000 Authentication required.",
+      }).agent,
+    );
+
+    const answer = await b.probe.probe("codex");
+
+    // The state is still honest — the agent advertised sign-in methods and would not open a session — and the
+    // method is simply absent, which is a real answer rather than a gap.
+    expect(answer.auth.state).toBe("needs-signin");
+    expect(answer.auth.methodId).toBeUndefined();
+    expect(b.recordedAuth("codex")?.methodId).toBeUndefined();
+  }, 20_000);
+
+  it("stays unknown when a session fails and the agent offers no way to sign in", async () => {
+    const b = await bench();
+    // An agent that advertised nothing and will not open a session has not told us a login would help. Saying
+    // `needs-signin` here is the invention this state exists to refuse: it would send a user to perform a step
+    // that changes nothing.
+    b.script(async () =>
+      scriptedAgent(DSH_OPTIONS, { refuseSession: "Internal error: workspace is not writable" }).agent,
+    );
+
+    const answer = await b.probe.probe("deepseek-harness");
+
+    expect(answer.auth.state).toBe("unknown");
+    expect(answer.auth.methodId).toBeUndefined();
+    // The reason is kept, so a maintainer reading the file learns *why* we could not tell.
+    expect(b.recordedAuth("deepseek-harness")?.detail).toContain("not writable");
+  }, 20_000);
+
+  it("does not authenticate on the way to asking, because that would change what it measures", async () => {
+    const b = await bench();
+    let signIns = 0;
+    let askedInitializeOnly: boolean | undefined;
+    b.script(async (options) => {
+      askedInitializeOnly = options.initializeOnly;
+      const scripted = scriptedAgent(DSH_OPTIONS);
+      return {
+        ...scripted.agent,
+        signIn: async () => {
+          signIns += 1;
+        },
+      };
+    });
+
+    await b.probe.probe("cursor");
+
+    // **The whole reason the probe is allowed near an agent that needs a sign-in.** A probe that sent the
+    // step would be measuring its own side effect, and for a browser-login method it would open a window on
+    // the user's desktop that nobody asked for. The flag is how the client is told to stop after the
+    // handshake, and `cursor` is the entry that declares a method — so a probe that ignored this would
+    // authenticate here.
+    expect(askedInitializeOnly).toBe(true);
+    expect(signIns).toBe(0);
+  }, 20_000);
+
+  it("writes the auth record while leaving the session-options record untouched", async () => {
+    const b = await bench();
+    b.script(async () => scriptedAgent(DSH_OPTIONS, { refuseSession: "-32000 Authentication required." }).agent);
+
+    await b.probe.probe("deepseek-harness");
+
+    // Two files, and each says what it is entitled to say. The session-options one is empty — "we could not
+    // ask what you offer" is not an answer the agent gave — while the auth one holds a real observation: a
+    // session did not open. That split is why this is its own collection rather than a field.
+    expect(await b.file()).toBe("");
+    expect(await b.authFile()).toContain("\"harness\": \"deepseek-harness\"");
+  }, 20_000);
+
+  it("replaces a stale needs-signin with unknown once the agent cannot be started at all", async () => {
+    const b = await bench();
+    b.script(async () =>
+      scriptedAgent(DSH_OPTIONS, { authMethods: ["cursor_login"], refuseSession: "-32000 Authentication required." }).agent,
+    );
+    await b.probe.probe("cursor");
+    expect(b.recordedAuth("cursor")?.state).toBe("needs-signin");
+
+    // The user uninstalled the agent. Leaving the previous answer in front of them would be a stale fact
+    // presented as a current one — and the honest replacement is "we could not tell", not a sign-in prompt
+    // for a program that is gone.
+    b.advance(PROBE_STALE_MS + 1);
+    b.script(async () => {
+      throw new Error("spawn ENOENT");
+    });
+    const answer = await b.probe.probe("cursor");
+
+    expect(answer.auth.state).toBe("unknown");
+    expect(b.recordedAuth("cursor")?.state).toBe("unknown");
   }, 20_000);
 });

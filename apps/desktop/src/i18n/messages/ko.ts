@@ -414,6 +414,16 @@ export const ko: Catalogue = {
     "\"{id}\"은(는) EnvoyCoder가 이미 함께 제공하는 에이전트의 ID이므로 공급자가 추가되지 않았습니다. 다른 이름을 사용하세요.",
   "error.providerIdInvalid":
     "\"{name}\"은(는) 공급자 ID가 될 수 없습니다. 공급자 ID는 소문자 영문, 숫자, 하이픈으로 이루어지며 영문자나 숫자로 시작합니다.",
+  "error.agentNotFound":
+    "여기에 \"{id}\"라는 에이전트가 없습니다. 다른 창에서 제거되었을 수 있습니다.",
+  "signIn.already": "{agent}이(가) 로그인 없이 세션을 열었으므로 할 일이 없었습니다.",
+  "signIn.signedIn": "{agent}이(가) 로그인을 받아들여 세션을 열었습니다.",
+  "signIn.refused": "{agent}이(가) 로그인 단계를 거부했습니다: {reason}",
+  "signIn.notCompleted":
+    "{agent}이(가) 로그인 단계를 받아들였지만 아직 세션이 열리지 않았으므로 로그인이 끝나지 않았습니다: {reason} 에이전트가 브라우저나 터미널을 열었다면 거기서 마친 뒤 다시 시도하세요.",
+  "signIn.noMethod":
+    "{agent}은(는) 여기서 세션을 열지 않고 EnvoyCoder가 보낼 수 있는 로그인 방법도 밝히지 않았습니다. 제공하는 방법: {methods}. 에이전트 자체 명령으로 로그인한 뒤 다시 시도하세요.",
+  "signIn.unavailable": "{agent}을(를) 시작할 수 없어 아무것도 로그인되지 않았습니다: {reason}",
   "error.notConnected": "EnvoyCoder가 아직 서비스에 연결되지 않았습니다.",
   "error.notConnectedChange": "EnvoyCoder가 서비스에 연결되어 있지 않아 그 변경은 저장되지 않았습니다.",
   "error.connectionClosed": "연결이 닫혔습니다.",

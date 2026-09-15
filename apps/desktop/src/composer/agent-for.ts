@@ -85,6 +85,41 @@ export function knownMissing(summary: HarnessSummary | undefined): boolean {
   return stateOf(summary) === "not-installed";
 }
 
+/**
+ * Has the **user** taken this agent out of their pickers?
+ *
+ * ## The other reason a picker may drop a row, and the only one that is not a measurement
+ *
+ * `knownMissing` above is a fact we established. This is a preference the user expressed, and keeping the two
+ * apart is the whole design of `CoderSettings.hiddenAgents` — *availability is ours to detect, preference is
+ * theirs to set*. `docs/settings-parity.md` §5.8 records the audit that first ruled Paseo's "Enable
+ * {provider}" row out as "not applicable as a setting", because it read the switch as a way to hide a working
+ * agent. It is not: it is how a user describes their own machine, and the correction is that a hidden agent
+ * still **reports** everything true about itself.
+ *
+ * `=== true` rather than a truthy read, and that is the compatibility rule: a daemon built before this field
+ * existed sends no `hidden` at all, and absence means "not hidden" — an older daemon cannot be hiding
+ * anything, because it had no way to.
+ */
+export function hiddenAgent(summary: { hidden?: boolean } | undefined): boolean {
+  return summary?.hidden === true;
+}
+
+/**
+ * **May a picker offer this agent?** — the one function every agent picker filters with.
+ *
+ * Two reasons to drop a row, deliberately not folded into one: an agent we established is *absent* (a fact
+ * about the machine) and an agent the *user* took out of their list (a preference). Everything else stays,
+ * `unknown` included — a list that quietly dropped an agent nobody has looked at yet would be deciding on the
+ * user's behalf, which is the mistake this pair of functions exists to keep apart.
+ *
+ * A picker that inlined `!knownMissing(h) && !hiddenAgent(h)` would work today and would be the place a third
+ * reason gets added without the other pickers hearing about it, so both settings pickers call this instead.
+ */
+export function pickable(summary: HarnessSummary | undefined): boolean {
+  return !knownMissing(summary) && !hiddenAgent(summary);
+}
+
 export function agentFor(
   harness: HarnessId,
   summary: HarnessSummary | undefined,

@@ -414,6 +414,18 @@ export const fr: Catalogue = {
     "\"{id}\" est l'identifiant d'un agent qu'EnvoyCoder fournit déjà, donc votre fournisseur n'a pas été ajouté. Donnez-lui un autre nom.",
   "error.providerIdInvalid":
     "\"{name}\" ne peut pas être un identifiant de fournisseur. Un identifiant de fournisseur est composé de lettres minuscules, de chiffres et de tirets, et commence par une lettre ou un chiffre.",
+  "error.agentNotFound":
+    "Aucun agent nommé \"{id}\" ici. Il a peut-être été supprimé depuis une autre fenêtre.",
+  "signIn.already":
+    "{agent} a ouvert une session sans avoir besoin d'une connexion : il n'y avait donc rien à faire.",
+  "signIn.signedIn": "{agent} a accepté la connexion et a ouvert une session.",
+  "signIn.refused": "{agent} a refusé l'étape de connexion : {reason}",
+  "signIn.notCompleted":
+    "{agent} a accepté l'étape de connexion, mais aucune session ne s'est encore ouverte : la connexion n'est donc pas terminée : {reason} Si l'agent a ouvert un navigateur ou un terminal, terminez-y l'opération puis réessayez.",
+  "signIn.noMethod":
+    "{agent} n'ouvrira pas de session ici et n'a indiqué aucune méthode de connexion qu'EnvoyCoder puisse envoyer. Il propose : {methods}. Connectez-vous avec la propre commande de l'agent, puis réessayez.",
+  "signIn.unavailable":
+    "{agent} n'a pas pu être démarré, donc rien n'a été connecté : {reason}",
   "error.notConnected": "EnvoyCoder n'est pas encore connecté à son service.",
   "error.notConnectedChange": "EnvoyCoder n'est pas connecté à son service, cette modification n'a donc pas été enregistrée.",
   "error.connectionClosed": "La connexion a été fermée.",

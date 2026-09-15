@@ -125,6 +125,30 @@ const READERS: Readonly<Record<string, readonly ReadSite[]>> = {
       because: "`appendTranscript` returns before touching the disk when the record is not wanted",
     },
   ],
+  /**
+   * The preference over the pickers, and the two readers that make it more than a stored value.
+   *
+   * Both are in the **daemon**, and that placement is the design rather than tidiness: the preference is read
+   * where the *rows* are built, so the flag a picker filters on arrives on the same answer as the state it
+   * may not change. A pane that read `settings.hiddenAgents` for itself would be a second place the rule
+   * lives — and the first one to go stale, because the rows it draws come from `coder.listHarnesses`.
+   */
+  hiddenAgents: [
+    {
+      file: "apps/desktop/src/daemon/service.ts",
+      needle: "new Set(deps.store.settings().hiddenAgents ?? [])",
+      because:
+        "`coder.listHarnesses` turns it into the `hidden` flag on each row — beside the probed " +
+        "availability, never in place of it, which is the distinction `docs/settings-parity.md` §5.8 records",
+    },
+    {
+      file: "apps/desktop/src/daemon/providers.ts",
+      needle: "new Set(deps.store.settings().hiddenAgents ?? [])",
+      because:
+        "`coder.listProviders` does the same for a user-declared agent: one preference and two lists, " +
+        "because the user hid an *agent* rather than a kind of agent",
+    },
+  ],
 };
 
 /**

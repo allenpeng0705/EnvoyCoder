@@ -23,11 +23,14 @@
  */
 
 import {
+  type AgentAuthObservation,
   type AgentProviderConfig,
   type AgentProviderSummary,
+  type HarnessAuth,
   type HarnessId,
   type HarnessSummary,
   type ObservedSessionOptions,
+  unknownAuth,
 } from "@envoycoder/protocol";
 import {
   canApplyModel,
@@ -41,7 +44,20 @@ import {
   type ProviderProbe,
 } from "@envoycoder/agent-catalog";
 
-/** A catalogue entry plus what this machine can actually do with it. */
+/**
+ * A catalogue entry plus what this machine can actually do with it.
+ *
+ * ## The two facts this row keeps apart, on purpose
+ *
+ * `availability` and `auth` are ours to detect; `hidden` is the user's to set. They travel together in one
+ * summary because a row needs all three, and they are **three separate fields because they are three
+ * separate facts** — collapsing the preference into the state is the design error `docs/settings-parity.md`
+ * §5.8 corrects, and it fails in the direction that matters: a preference written into `availability`
+ * would be us reporting a *measurement* we did not make, which is the one thing this product never does.
+ *
+ * Everything below is therefore a projection of evidence plus one flag that is not evidence at all, and
+ * the flag is passed in rather than read here so that this function stays a function of its arguments.
+ */
 export function summarize(
   id: HarnessId,
   probe: (harness: HarnessId) => HarnessProbe,
@@ -53,6 +69,20 @@ export function summarize(
    * whole "observed, not promised" story turns on.
    */
   observed: ObservedSessionOptions | undefined,
+  /**
+   * Whether the user has taken this agent out of their pickers, and **not** part of the state above.
+   *
+   * Defaulted to `false` so every caller that has no opinion (an older test, a projection built before the
+   * preference existed) says "not hidden", which is the same thing a daemon that never had the field says.
+   */
+  hidden = false,
+  /**
+   * What the daemon last established about this agent's authentication, if anything ever has.
+   *
+   * `undefined` is rendered as `unknown` — see `unknownAuth`, which exists so the daemon and a client
+   * tolerating an older daemon produce the same three words rather than two similar ones.
+   */
+  auth: AgentAuthObservation | undefined = undefined,
 ): HarnessSummary {
   const definition = harnessDefinition(id);
   const result = probe(id);
@@ -119,7 +149,34 @@ export function summarize(
     // projection and `HarnessAvailabilitySchema` re-checks its five agreement rules on every answer, so a
     // catalogue change that produced a self-contradicting state fails a test rather than reaching a window.
     availability: harnessAvailability(result),
+    // **The user's preference, beside the facts above and never mixed into them.** A hidden agent still
+    // reports whatever the probe found — `ready` for one that is installed, with its `fix` intact when it is
+    // not — and this flag is what a picker filters on. The doc on `HarnessSummary.hidden` carries the
+    // argument; `docs/settings-parity.md` §5.8 carries the correction that produced it.
+    hidden,
+    // And the third fact: whether it will talk to us, or wants a sign-in first. `authOf` is the one place
+    // that turns a record — or the absence of one — into the three-state answer.
+    auth: authOf(auth),
     evidence: definition.evidence,
+  };
+}
+
+/**
+ * What the wire says about one agent's authentication, from a record we may not have.
+ *
+ * Two inputs and three outputs, and the honesty is in the second branch: **no record at all** becomes
+ * `unknown` with no timestamp, which is the same answer a *failed* probe records — a client cannot act
+ * differently on "nothing has looked" and "something looked and could not tell", so the wire does not ask it
+ * to. What it must never become is `needs-signin`, which is why `unknownAuth()` is a function in the
+ * protocol rather than a literal at each call site: a second spelling of "we do not know" is how one of them
+ * drifts into a claim.
+ */
+export function authOf(record: AgentAuthObservation | undefined): HarnessAuth {
+  if (!record) return unknownAuth();
+  return {
+    state: record.state,
+    ...(record.methodId !== undefined ? { methodId: record.methodId } : {}),
+    observedAt: record.observedAt,
   };
 }
 
@@ -140,6 +197,13 @@ export function summarizeProvider(
   provider: AgentProviderConfig,
   probe: (provider: AgentProviderConfig) => ProviderProbe,
   env: NodeJS.ProcessEnv,
+  /**
+   * Whether the user has taken this provider out of their pickers — **the same preference the nine
+   * shipped agents carry**, which is why the field exists on both summary types and nowhere else in this
+   * projection. A preference about an agent does not become a different kind of thing because the user
+   * typed the agent themselves.
+   */
+  hidden = false,
 ): AgentProviderSummary {
   const result = probe(provider);
   return {
@@ -150,6 +214,7 @@ export function summarizeProvider(
     env: providerEnvState(provider, env),
     transport: provider.transport,
     availability: harnessAvailability(result),
+    hidden,
     // The probe's own sentence when it is not ready, and the resolved path when it is — the same wording
     // `coder.probeHarness` uses, so one agent's diagnosis reads the same whichever tier it came from.
     detail:

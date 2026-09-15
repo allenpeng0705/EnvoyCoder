@@ -586,18 +586,40 @@ at all, so **ship the disabled row with the git slice, not before it.**
 
 | setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
 |---|---|---|---|---|---|
-| **Enable {provider}** (`providers[id].enabled`) | `providers-section.tsx:248-253`, per provider · `settings.providers.enableProvider` "Enable {{name}}" (`en.ts:2651`) | `true` (`:444`; daemon `server/agent/provider-registry.ts:737`) | daemon: only enabled providers get a client; disabled ⇒ `unavailable`, `listModels` throws "Provider X is disabled" (`provider-registry.ts:375-377`,`:752-754`,`:836-837`) | our equivalent is the ACP catalogue: the pickers filter on `knownMissing()` (`composer/agent-for.ts`, used by `SettingsPane.tsx:40` and the project defaults) and list every catalogue entry except one established to be absent | **not applicable as a *setting*** — availability in EnvoyCoder is a fact we detect (`HarnessSummary.availability.state`, five states: §7.9), not a switch the user throws. Making it a switch would let a user hide a working agent for no reason |
+| **Enable {provider}** (`providers[id].enabled`) | `providers-section.tsx:248-253`, per provider · `settings.providers.enableProvider` "Enable {{name}}" (`en.ts:2651`) | `true` (`:444`; daemon `server/agent/provider-registry.ts:737`) | daemon: only enabled providers get a client; disabled ⇒ `unavailable`, `listModels` throws "Provider X is disabled" (`provider-registry.ts:375-377`,`:752-754`,`:836-837`) | **the preference landed, on both agent lists, and it is deliberately not Paseo's switch.** `coder.setAgentHidden { id, hidden }` stores `CoderSettings.hiddenAgents` — one list of ids, because the two agent id spaces cannot collide (`AgentProviderConfigSchema` refuses a provider id that names a shipped agent) — and every row of `coder.listHarnesses` / `coder.listProviders` now carries `hidden` **beside** its `availability` and its `auth`. The desktop pickers filter on it (`composer/agent-for.ts`'s `pickable`). What was *not* copied is the effect: Paseo's disabled provider reports `unavailable` and its `listModels` throws, so its switch rewrites the **state**; ours moves a row out of the pickers and changes nothing else. A hidden agent that is installed still reports `ready`, still carries its `fix` when it is not, and still runs when a task already names it (§7.10) | **honour-able now** — the daemon half is in place and tested over a real socket (round trip through `coder.setAgentHidden`, a second window hearing `harnesses`, and the list surviving a restart). The control that throws the switch belongs to the picker slice below, and until it exists the two read sites are held by `settings-coverage.test.ts` — because a preference nothing reads is exactly the defect §7.1 exists to prevent |
 | **Add provider** (`providers[id]` from the ACP catalogue) | `provider-catalog-list.tsx:108-118` · `providerCatalog.actions.add` "Add" (`en.ts:1587`) | — (action) | persists `{providers:{[id]:{extends:"acp",label,description,command,env,params}}}` (`hooks/use-acp-provider-catalog.ts:11-26`) so a third-party ACP CLI becomes runnable | **the plumbing landed; the picker has not.** `AgentProviderConfig` (§7.10) is a provider's shape — id, label, command, args, the **names** of the environment variables it needs, and the dialect it speaks — and `coder.listProviders` / `coder.addProvider` / `coder.removeProvider` store them in `<state>/EnvoyCoder/providers.json` (quarantined rather than emptied when unreadable, replaced rather than merged per id, `providers` broadcast so a second window refetches). Every listed provider is **probed** by the same prober that answers for the nine shipped agents and launched through the same `launchForHarness` body, so its row carries one of the same five `availability` states. What is still absent is the surface: no control adds one, and the 38-entry catalogue is still unreachable from the window | **honour-able with work** — and the work is now one surface rather than a protocol change: a list editor and the catalogue rows, both reading methods that exist. The **security decision** is recorded rather than deferred — `env` is a list of names, so a credential cannot be expressed in the schema, written to disk or logged (§7.10) |
 | **Remove provider** (`removeProviders`) | `providers-section.tsx:155-164` (menu + confirm) · `settings.providers.actions.remove` (`en.ts:2658`) | — (action) | daemon strips the entry, its overrides **and** its `metadataGeneration.providers` entries (`daemon-config-store.ts:101-159`) | `coder.removeProvider` forgets one provider and nothing else — it refuses with `envoycoder.provider-missing` when there is nothing under that id, rather than confirming a removal that did not happen. Nothing refers to a provider today, so unlike `coder.removeProject` there are no rows to archive: a task names a `HarnessId` | **honour-able with work** — wire done and tested over a real socket; the menu item waits for the picker above |
 | **Add custom model** (`providers[id].additionalModels`) | `provider-diagnostic-sheet.tsx:199-234` (modal form) · `settings.providers.models.addCustomTitle` "Add custom model" (`en.ts:2678`) | `[]` (`provider-registry.ts:735`) | merged on top of discovered models (`provider-registry.ts:383-396`,`:651`): the picker gains ids without replacing the catalogue | our catalogue ships a fixed `models` list per agent (`packages/agent-catalog/src/models.ts`) with no user additions. **Half of this row landed since it was written, and not as a settings control:** the agent is now *asked* what it offers and the answer is recorded, so `deepseek-harness`'s live catalog reaches the picker without a hand-typed id (§7.7). What is still absent is the user's own additions — ids that are not in the agent's catalog at all | **honour-able with work** — needs a per-agent model list on the settings object plus the composer reading it. Small, but it is a **protocol** addition (a `models` array on the agent's stored defaults), so it shares the Add-provider slice's schema change |
 | **Remove model** | `provider-diagnostic-sheet.tsx:114-118` · `settings.providers.models.removeModel` "Remove {{id}}" (`en.ts:2684`) | — (action) | rewrites `additionalModels` without the id (`:651-667`) | absent with the row above | **honour-able with work** — same slice |
 
-**Section verdict: `not applicable`.** Paseo's `providers` page is a *credential and adapter*
-management surface — a provider there is an agent-runtime adapter plus the environment it is spawned
-with, and Paseo stores its API keys in plaintext `env` in `config.json` (§9). EnvoyCoder has no such
-accounts: our agents are ACP programs in a static catalogue and the model credentials belong to the
-agent CLI the user installed. The two honour-able rows above are *not* that page — they are
-"user-defined agents", and they belong in our Settings pane as a catalogue-management group.
+**Section verdict: `not applicable` — with one row that is now honoured, and one correction to record.**
+
+Paseo's `providers` page is a *credential and adapter* management surface — a provider there is an
+agent-runtime adapter plus the environment it is spawned with, and Paseo stores its API keys in plaintext
+`env` in `config.json` (§9). EnvoyCoder has no such accounts: our agents are ACP programs in a static
+catalogue and the model credentials belong to the agent CLI the user installed. The honour-able rows above
+are *not* that page — they are "user-defined agents", and they belong in our Settings pane as a
+catalogue-management group.
+
+**The correction, because this section argued the opposite for a while and the mistake is instructive.**
+The `Enable {provider}` row used to read *"not applicable as a **setting** — availability in EnvoyCoder is a
+fact we detect, not a switch the user throws. Making it a switch would let a user hide a working agent for no
+reason."* The first half is right and the conclusion does not follow, because it treats **one** fact where
+there are **two**:
+
+* **Availability is ours to detect.** `HarnessSummary.availability.state`'s five states, with their `fix`
+  lists, are measurements, and nothing a user does may rewrite one (§7.9).
+* **Preference is theirs to set.** A user with four agents installed and two they use is not making a claim
+  about the other two by taking them out of a picker; they are describing their machine the way they work on
+  it.
+
+The design error the old verdict was protecting against is real, and the guard is not "no switch" but **"a
+switch that cannot reach the state"**: `hidden` is a separate field from `availability`, it is stored as a
+list of ids rather than as a per-row flag, it is read in exactly one place (the daemon's projection, which
+puts it *beside* the probed facts), and it is consumed in exactly one place (the pickers' `pickable` filter).
+`test/agent-preference.test.ts` asserts the property directly: an installed agent that has been hidden still
+reports `ready`, with its `fix` intact when it is not — two facts, both true, renderable side by side as
+"Installed · hidden from your pickers".
 
 ### 5.9 `usage`
 
@@ -1117,8 +1139,10 @@ path, an account system, a git service, a session store). A disabled control the
 attached to work that is not settings work, which §7.2 already argued and this restructure followed.
 
 **What that leaves as future bar items, named so they are not rediscovered:** user-defined agents (§5.8's
-two honour-able rows, §8.4), a system prompt (§5.5 `appendSystemPrompt`, upstream first), saved agent
-profiles (§5.5), and `autoArchiveAfterMerge` the day the git service exists (§5.7). Each is a section that
+honour-able rows, §8.4), **the visibility switch and the sign-in button** (§5.8's `Enable {provider}` row and
+§7.11, both of which have their daemon half in place and wait on the same picker surface), a system prompt
+(§5.5 `appendSystemPrompt`, upstream first), saved agent profiles (§5.5), and `autoArchiveAfterMerge` the day
+the git service exists (§5.7). Each is a section that
 would be added to the registry above with its own contents and its own citations — which is the shape this
 document is asking the next person to follow rather than invent.
 
@@ -1289,7 +1313,10 @@ be supported.
   ways; the entry's `evidence` records the difference). The method is declared in the catalogue and sent
   idempotently, because choosing one is not something the client may do on the user's behalf: the other
   ACP agents offer `type: "env_var"` methods that fail when a variable is unset and a browser-login method
-  a user did not ask for.
+  a user did not ask for. **Since §7.11 this is also a state a user can see and a step they can trigger**:
+  the probe records whether the agent opens a session (writing nothing that changes it), `HarnessSummary.auth`
+  carries `ready | needs-signin | unknown`, and `coder.signInAgent` sends the agent's own method and reports
+  five outcomes of which only one means success.
 
 **The gates, and which half of each claim they hold.** `packages/agent-catalog/test/drivable.test.ts`
 pins the split (five drivable, four not, every mode-claiming entry declaring its field, exactly one entry
@@ -1487,15 +1514,106 @@ the user's own command line, because nobody can author an install step for someb
 (`probe.ts`'s `notInstalledFix` records the choice; the schema requires *some* fix of a state that
 asserts an absence).
 
-**What a provider deliberately does not have.** No `capabilities`, `modes`, `models` or `thinking`:
-we have never opened a session with this program, so every one of those would be the user's guess
-handed back as our fact. The composer's pickers stay off for one, with the reason on screen, until a
-session exists to ask. There is also no model support: a provider's model is whatever the user put in
-`args`.
+**What a provider deliberately does not have.** No `capabilities`, `modes`, `models`, `thinking` or
+`auth`: we have never opened a session with this program, so every one of those would be the user's guess
+handed back as our fact — and for `auth` specifically, no task can run on a provider yet, so there is no
+session probe to produce a state and the field would read `unknown` forever, which is a statement about us
+dressed as one about the program (§7.11). The composer's pickers stay off for one, with the reason on
+screen, until a session exists to ask. There is also no model support: a provider's model is whatever the
+user put in `args`.
 
-**What is left.** The picker: a control that adds one, a row per provider, and the 38 catalogue entries
-(`packages/agent-catalog/src/acp-catalog.ts`) as things a user can pick. The RPCs, the storage, the
-probe and the launch path are all in place and tested.
+**One thing a provider *does* carry, added with the preference, and it is the same field the nine shipped
+agents carry.** `AgentProviderSummary.hidden` — because a preference about an agent is not a different kind
+of thing when the user typed the agent's command line themselves. `coder.setAgentHidden` addresses either
+list by id, and the two id spaces cannot collide, which is what lets one list serve both (§5.8's correction
+records the design error this avoids).
+
+**What is left.** The picker: a control that adds one, a row per provider, the switch that hides either kind
+of agent, and the 38 catalogue entries (`packages/agent-catalog/src/acp-catalog.ts`) as things a user can
+pick. The RPCs, the storage, the probe, the launch path and the preference are all in place and tested.
+
+### 7.11 Authentication as a state we can see, and a sign-in we can trigger
+
+`cursor-agent acp` answers `session/new` with `-32000 Authentication required … call authenticate() with
+methodId 'cursor_login'` on a fresh installation, and opens a session once that step has been sent. That is a
+fact about a real agent, and §7.8 recorded it per entry as a *launch* detail. This is the slice that turns it
+into something a user can see and act on — and the interesting part is what it refuses to do.
+
+**The fact, and the three answers.** `HarnessSummary.auth` is required, and it is one of:
+
+| state | what it means | how it is established |
+|---|---|---|
+| `ready` | the agent opened a session here; nothing is needed from the user | a session opened |
+| `needs-signin` | it will not open one **and advertises a sign-in method of its own** (with `methodId` when exactly one candidate is unambiguous) | a session was refused *and* `initialize` advertised `authMethods` |
+| `unknown` | nothing has established anything: no probe has run, or the last one could not get an answer | the default, and the honest replacement for a stale state |
+
+Three design decisions are worth stating in as many words, because each of them is a way of *not* lying:
+
+* **`needs-signin` is decided by evidence rather than by prose.** An agent that advertises auth methods and
+  will not open a session is telling us, in its own protocol's vocabulary, that it wants one. We do not scan
+  a refusal for the word "authentication": that would work for exactly the agents whose wording we happened
+  to read, and break silently on the next release. An agent that advertises nothing and fails is `unknown`,
+  because nothing in that exchange says a login would help.
+* **`methodId` is optional.** When several methods are advertised and the catalogue declares none of them —
+  `@agentclientprotocol/codex-acp` offers two `env_var` methods and a browser login — choosing one is us
+  picking a sign-in flow on the user's behalf, and the browser one would open a window they never asked for.
+  A row that says "this agent wants a sign-in and EnvoyCoder cannot tell you which" is honest and actionable;
+  a row that quietly sent the wrong method is neither.
+* **The schema refuses the two contradictions** the shape would otherwise allow (`HarnessAuthSchema`):
+  a `methodId` beside `ready` claims a step that will never happen, and beside `unknown` it asserts a
+  requirement nobody established. `observedAt` travels with the state, so a screen can say *when* rather than
+  presenting an observation as current — the rule `AgentModels.observedAt` already follows.
+
+**It is never asserted without a probe, and a probe never signs anything in.** The pre-flight probe
+(`SessionProbe`) now does what a run does up to the session and then stops: `initialize` (read `authMethods`)
+→ `session/new` (open it, or be refused) → close. It is started with `AcpClientOptions.initializeOnly`, so
+the `authMethodId` the catalogue declares is **not** sent on its behalf — a probe that authenticated would be
+measuring its own side effect, and for a browser-login method it would put a window on the user's desktop
+nobody asked for. The result is written where `coder.listHarnesses` can read it: `AgentAuthObservation` in
+`<state>/EnvoyCoder/agent-auth.json`, keyed per agent, newest wins, quarantined rather than emptied when
+unreadable, and broadcast under the store's `harnesses` change kind.
+
+**Why a second file, when the session-options record already exists.** Because the two disagree about what a
+failure means, and that is a fact about their *subjects* rather than about storage. "What does this agent
+offer" has no answer when we could not ask, so the session-options record deliberately writes nothing then.
+"Can it open a session here" *does* have an answer — *we could not tell* — and a record that kept a previous
+`needs-signin` in front of a user whose agent has since been uninstalled would be a stale fact presented as a
+current one. Folding them into one file would force one of those two behaviours on both.
+
+**The trigger: `coder.signInAgent { harness, methodId? }`.** It starts the agent the same way a probe does
+(one injection point, one launch resolver), then sends `authenticate` with a method taken from the agent's own
+advertised list, then **opens a session to see whether it worked**. Five outcomes, and only one of them is
+success:
+
+* `signed-in` — a session opened afterwards, either because the step made it possible or because it already
+  was (the sentence says which). **Not** "the step returned": a browser-login method answers `{}` immediately.
+* `refused` — the agent answered the step with an error; its own sentence travels as a value, because an
+  `env_var` method says which variable is unset better than we can.
+* `not-completed` — the step was accepted, or never answered, and no session opened. The browser case and the
+  wedged case together, and deliberately one state: in both, **nothing was signed in**, and "not yet — finish
+  it there and ask again" is the honest thing to say.
+* `no-method` — there is no step we may send (nothing advertised, or the caller named one the agent does not
+  offer). Nothing is sent and nothing is stored from the caller's string.
+* `unavailable` — we never got as far as an answer: the program is missing, this build cannot drive it, there
+  was no search path, or the handshake died. The *launch's* own keyed refusal is embedded as the value, so the
+  outer sentence is the only string a translator writes.
+
+The attempt is bounded (`SIGN_IN_TIMEOUT_MS`, an outer ceiling over `AcpClient`'s own per-request budgets) and
+the agent it started is stopped in a `finally` — through the same once-only teardown the probe uses
+(`agent-processes.ts`), because two concurrent teardowns of one process is the `ERR_STREAM_WRITE_AFTER_END`
+§7.8 already records.
+
+**And still no credential anywhere.** The sign-in is the *agent's* flow: its session state lives where the
+agent puts it (`cursor-agent` writes `~/.cursor/acp-config.json`, which this product neither reads nor
+writes), and what this daemon owns is the attempt and the report. The rule that makes that more than a
+promise is **the only place a method id can come from is what the agent advertised**: a `methodId` a caller
+passes is honoured *only if the agent offered it*, so a value pasted into that field never reaches the agent,
+never reaches `agent-auth.json`, and is not echoed into the sentence a user reads — for the same reason
+`coder.addProvider` never echoes a refused `env` entry. `test/sign-in.test.ts` asserts the negative on bytes.
+
+**What is left.** The button. The state, the RPC and the honest failure taxonomy are in place; the row that
+renders "needs sign-in" with a *Sign in* control beside it belongs to the picker slice, which is also where
+the user-defined-agent editor and §5.8's visibility switch land.
 
 ## 8. The slice plan
 

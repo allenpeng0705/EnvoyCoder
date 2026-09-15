@@ -49,6 +49,7 @@ import { createCoderEventBus, createCoderSocketMethods, createNodeService } from
 import { clearDaemonClaim, writeDaemonClaim } from "./lock.js";
 import { RunManager } from "./runs.js";
 import { SessionProbe } from "./session-probe.js";
+import { SessionSignIn } from "./sign-in.js";
 import { createCoderHandlers } from "./service.js";
 import { CoderStore } from "./store.js";
 
@@ -67,7 +68,13 @@ export interface StartCoderDaemonOptions {
   /** Injected so a test does not depend on which agents happen to be installed. */
   mesh?: () => CoderMeshStatus;
   isDirectory?: (path: string) => Promise<boolean>;
-  /** Injected by tests that must not spawn real agent processes. */
+  /**
+   * Injected by tests that must not spawn real agent processes.
+   *
+   * One seam for three flows — a run (`RunManager`), the pre-flight probe and the sign-in — which is the
+   * point of it being one option rather than three: a fixture agent is driven by the production path, so
+   * what a test proves about the handshake is what a user gets.
+   */
   startClient?: typeof AcpClient.start;
   resolveLaunch?: (input: {
     harness: import("@envoycoder/protocol").HarnessId;
@@ -149,11 +156,28 @@ export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): P
     ...(options.platform ? { platform: options.platform } : {}),
   });
 
+  /**
+   * The sign-in flow: the same two injections, the same launch resolver, the same client constructor.
+   *
+   * Built here beside the probe because they are siblings — two short-lived agent processes that belong to
+   * the daemon rather than to a task — and **started by nothing**: the only caller is `coder.signInAgent`,
+   * which a window or a phone sends when a user presses a button. Nothing signs anything in at boot, which
+   * is the property that keeps a daemon from opening a browser on somebody's desktop by itself.
+   */
+  const signIn = new SessionSignIn({
+    paths,
+    store,
+    ...(options.startClient ? { startClient: options.startClient } : {}),
+    ...(options.resolveLaunch ? { resolveLaunch: options.resolveLaunch } : {}),
+    ...(options.platform ? { platform: options.platform } : {}),
+  });
+
   const handlers = createCoderHandlers({
     store,
     paths,
     runs,
     probeSession,
+    signIn,
     instance: { instanceId, version, startedAt: new Date().toISOString(), connectionCount: () => connections },
     mesh: () => mesh,
     ...(options.isDirectory ? { isDirectory: options.isDirectory } : {}),
@@ -247,7 +271,7 @@ export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): P
       // leaves agents writing to a user's working tree with nobody watching them. A probe's agent is a
       // child process too — short-lived, but a daemon that exited out from under one would leave it
       // waiting on a pipe nobody will ever answer.
-      await Promise.all([runs.stopAll(), probeSession.stopAll()]);
+      await Promise.all([runs.stopAll(), probeSession.stopAll(), signIn.stopAll()]);
       host.stop();
       await clearDaemonClaim(paths, instanceId);
     },

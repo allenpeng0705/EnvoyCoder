@@ -105,10 +105,17 @@ export function createProviderHandlers(
      */
     "coder.listProviders": async (params) => {
       parseRpcParams("coder.listProviders", params);
+      // The same preference the nine shipped agents carry, read from the same place and applied the same
+      // way: as a flag **beside** the probed state. A user who hid a provider still gets its five-state
+      // availability and its per-variable `set` flags, because hiding says something about the user's list
+      // and nothing about the program.
+      const hidden = new Set(deps.store.settings().hiddenAgents ?? []);
       return {
         providers: deps.store
           .providers()
-          .map((provider) => summarizeProvider(provider, deps.probe, deps.env)),
+          .map((provider) =>
+            summarizeProvider(provider, deps.probe, deps.env, hidden.has(provider.id)),
+          ),
       };
     },
 

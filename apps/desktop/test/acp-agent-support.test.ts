@@ -36,6 +36,8 @@ import { coderPaths } from "@envoycoder/host-bridge";
 
 import { AcpClient, type AcpUpdate } from "../src/daemon/acp/client.js";
 import { launchForHarness } from "../src/daemon/launch.js";
+import { SessionProbe } from "../src/daemon/session-probe.js";
+import { CoderStore } from "../src/daemon/store.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FAKE_AGENT = join(here, "fixtures", "fake-acp-agent.mjs");
@@ -253,4 +255,76 @@ describe("the protocol steps the catalogue declares", () => {
       AcpClient.start({ ...fixture({}), agentModeId: "plan" }),
     ).rejects.toThrow(/which parameter/);
   }, 40_000);
+});
+
+/**
+ * **The auth fact, against the real binary** — and which half of it this machine can prove.
+ *
+ * ## Why there are two legs and they are not the same leg
+ *
+ * A probe reads one of three states, and only `unknown` is cheap to produce on any machine. The interesting
+ * one, `needs-signin`, requires an agent that will not open a session until it has been signed in — and
+ * `cursor-agent`'s requirement is **stateful**, which that entry's `evidence` records from both directions: on
+ * a fresh installation `session/new` answers `-32000 Authentication required … methodId 'cursor_login'`, and
+ * once the step has run the same binary opens sessions without it. A machine that has already been through it
+ * therefore cannot demonstrate the refusal, which is why:
+ *
+ *   * **the deterministic proof of `needs-signin` is a scripted agent** (`session-probe.test.ts`, with
+ *     `FAKE_ACP_REQUIRE_AUTH`), where the refusal is produced on demand;
+ *   * **this leg proves the other half**: that against the real binary the probe *learns* a state instead of
+ *     guessing one. That is a real assertion and it can fail — an implementation that stopped reading
+ *     `authMethods`, or that reported `unknown` for every failed session, goes red here on a warm machine and
+ *     a cold one alike.
+ *
+ * The observation this machine produced when the leg was written is recorded in the report that accompanied
+ * this slice, not here: a test that asserted which state a particular laptop is in would be a test about the
+ * laptop.
+ */
+describe("what a probe learns about the real cursor-agent's authentication", () => {
+  const probe = probeHarness("cursor");
+
+  describe.skipIf(probe.state !== "ready")("cursor-agent acp, asked rather than believed", () => {
+    it("reports one of the two states it can be in, and never 'we could not tell'", async () => {
+      const cwd = await mkdtemp(join(tmpdir(), "envoycoder-auth-probe-"));
+      const home = await mkdtemp(join(tmpdir(), "envoycoder-auth-probe-home-"));
+      cleanups.push(async () => {
+        await rm(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+        await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+      });
+
+      const paths = coderPaths(home);
+      const store = await CoderStore.open({ paths });
+      const sessionProbe = new SessionProbe({
+        paths,
+        store,
+        // The production resolution, so this is the same launch a run and the sign-in flow make.
+        resolveLaunch: (input) => launchForHarness({ harness: input.harness, cwd, paths }),
+        // Both generous: `cursor-agent acp`'s own startup is seconds of work, and the step it may want takes
+        // longer still.
+        handshakeTimeoutMs: 60_000,
+        timeoutMs: 90_000,
+      });
+      cleanups.push(async () => sessionProbe.stopAll());
+
+      const answer = await sessionProbe.probe("cursor");
+
+      // **The assertion that can fail.** `unknown` is what a probe reports when it could not get an answer, and
+      // this binary answers: it either opens a session (`ready`, the state of a warm machine) or refuses one and
+      // advertises the method it wants (`needs-signin`, the state of a fresh installation). Anything else means
+      // the probe stopped reading what the agent told it.
+      expect(["ready", "needs-signin"]).toContain(answer.auth.state);
+      // …and the record says the same thing as the answer, because `coder.listHarnesses` reads the record.
+      expect(store.agentAuth("cursor")?.state).toBe(answer.auth.state);
+      if (answer.auth.state === "needs-signin") {
+        // The cold-machine half, which only a fresh installation can reach: the method must be one the agent
+        // itself advertised — never one we chose.
+        expect(answer.auth.methodId).toBe("cursor_login");
+      } else {
+        // The warm-machine half, and the reason this leg is not vacuous: a session really did open, so the state
+        // is a measurement rather than a default.
+        expect(answer.outcome).toBe("listed");
+        expect(answer.auth.methodId).toBeUndefined();
+      }
+    }, 150_000);
+  });
 });

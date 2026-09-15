@@ -27,6 +27,7 @@ import {
   ENVOYCODER_ERRORS,
   RPC_METHODS,
   RPC_SPECS,
+  HarnessAuthSchema,
   HarnessAvailabilitySchema,
   RUN_EVENT_KINDS,
   RunEventSchema,
@@ -357,12 +358,29 @@ describe("the thinking level an agent offers, and what 'no list' means", () => {
         approvalPolicy: true,
       },
       availability: { state: "ready", binary: "/usr/local/bin/agent" },
+      // The two fields this slice added, and both are required for the reason the block below asserts:
+      // `hidden` is the user's preference (beside the state, never instead of it) and `auth` is what a probe
+      // established about whether the agent will open a session.
+      hidden: false,
+      auth: { state: "unknown" },
       evidence: "…",
       ...over,
     });
     expect(spec.result.safeParse({ harnesses: [harness({})] }).success).toBe(true);
     const { thinking: _t, ...withoutFact } = harness({}) as Record<string, unknown>;
     expect(spec.result.safeParse({ harnesses: [withoutFact] }).success).toBe(false);
+    // **The preference and the auth fact, both required.** An absent `hidden` would be read as one of the
+    // two answers by a client that had to guess — and guessing "hidden" would drop a working agent out of a
+    // picker, which is precisely the failure the field is documented against. An absent `auth` would be read
+    // as "this agent needs a sign-in" by the same kind of client, which is worse: it sends a user to perform
+    // a login that changes nothing.
+    for (const field of ["hidden", "auth"]) {
+      const { [field]: _dropped, ...withoutField } = harness({}) as Record<string, unknown>;
+      expect(
+        spec.result.safeParse({ harnesses: [withoutField] }).success,
+        `a summary without ${field} was accepted`,
+      ).toBe(false);
+    }
     // And the fourth flag's absence, which is the one that decides whether the approvals row is a live
     // switch or a disabled row with a reason. A client left to guess would guess "enabled" often enough
     // to ship a control the agent is never told about, which is the defect this flag exists to end.
@@ -383,6 +401,40 @@ describe("the thinking level an agent offers, and what 'no list' means", () => {
    * both travel on the wire and a client reads whichever it trusts. Every case below is a real mistake a
    * catalogue change could make — the first being the original bug, restated as a schema violation.
    */
+  it("rejects an auth state that disagrees with itself, and accepts the one that says nothing", () => {
+    // The same discipline the availability rules above apply to the neighbouring question, and the reason is
+    // the same: these are claims that travel, and a claim contradicting another is worse than a missing one.
+    const ok = {
+      // The ordinary case: an agent that opens sessions and needs nothing.
+      ready: { state: "ready" },
+      // An agent that named the sign-in it wants — `cursor-agent acp`'s measured case.
+      named: { state: "needs-signin", methodId: "cursor_login", observedAt: "2026-09-14T10:00:00.000Z" },
+      // **And without a method, which is a real answer rather than a gap.** An agent that advertises several
+      // methods while our catalogue declares none leaves us unable to name one without choosing on the
+      // user's behalf — `@agentclientprotocol/codex-acp` offers two `env_var` methods and a browser login.
+      unnamed: { state: "needs-signin" },
+      // The answer that asserts nothing, which is what a row says before anything has looked.
+      unknown: { state: "unknown" },
+      // Time is what makes a fact an observation rather than a current claim, so it may accompany any state.
+      observed: { state: "needs-signin", methodId: "cursor_login", observedAt: "2026-09-14T10:00:00.000Z" },
+    };
+    for (const [name, value] of Object.entries(ok)) {
+      expect(HarnessAuthSchema.safeParse(value).success, name).toBe(true);
+    }
+
+    const rejects = (value: unknown, why: string) => {
+      expect(HarnessAuthSchema.safeParse(value).success, why).toBe(false);
+    };
+    // The one rule the schema enforces, in the two directions it can be broken: a method id beside a state
+    // that says nothing is needed would claim a step that will never happen, and beside `unknown` it would be
+    // a requirement we never established — the invention `unknown` exists to refuse.
+    rejects({ state: "ready", methodId: "cursor_login" }, "a method id with ready");
+    rejects({ state: "unknown", methodId: "cursor_login" }, "a method id with unknown");
+    // The three states are the whole vocabulary: a fourth spelling is a state no client can render.
+    rejects({ state: "needs-login" }, "a state that is not one of the three");
+    rejects({}, "no state at all");
+  });
+
   it("rejects an availability that disagrees with itself, on all five rules", () => {
     const ok = {
       ready: { state: "ready", binary: "/usr/local/bin/dsh" },
@@ -528,6 +580,8 @@ describe("the agent's mode, and a task's folder", () => {
       thinking: { kind: "none", options: [], source: "…" },
       capabilities,
       availability: { state: "ready", binary: "/usr/local/bin/agent" },
+      hidden: false,
+      auth: { state: "unknown" },
       evidence: "…",
     });
     const full = {

@@ -414,6 +414,15 @@ export const zh: Catalogue = {
     "\"{id}\" 是 EnvoyCoder 已经自带的某个智能体的标识，因此你的提供方没有被添加。请换一个名字。",
   "error.providerIdInvalid":
     "\"{name}\" 不能作为提供方的标识。提供方标识由小写字母、数字和连字符组成，并以字母或数字开头。",
+  "error.agentNotFound": "这里没有名为“{id}”的智能体。它可能已在另一个窗口中被移除。",
+  "signIn.already": "{agent} 无需登录就直接打开了会话，因此没有需要做的事。",
+  "signIn.signedIn": "{agent} 接受了登录并打开了会话。",
+  "signIn.refused": "{agent} 拒绝了登录步骤：{reason}",
+  "signIn.notCompleted":
+    "{agent} 接受了登录步骤，但还没有打开会话，因此登录尚未完成：{reason} 如果该智能体打开了浏览器或终端，请在那里完成后重试。",
+  "signIn.noMethod":
+    "{agent} 在这里不会打开会话，也没有给出 EnvoyCoder 可以发送的登录方式。它提供的是：{methods}。请先用该智能体自己的命令登录，然后再试一次。",
+  "signIn.unavailable": "{agent} 无法启动，因此没有进行任何登录：{reason}",
   "error.notConnected": "EnvoyCoder 还没有连接到它的服务。",
   "error.notConnectedChange": "EnvoyCoder 未连接到它的服务，因此该更改没有被保存。",
   "error.connectionClosed": "连接已关闭。",

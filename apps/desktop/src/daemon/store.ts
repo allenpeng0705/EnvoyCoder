@@ -29,6 +29,8 @@ import { mkdir } from "node:fs/promises";
 import { basename } from "node:path";
 
 import {
+  type AgentAuthObservation,
+  AgentAuthObservationSchema,
   type AgentProviderConfig,
   AgentProviderConfigSchema,
   type CoderSettings,
@@ -41,6 +43,7 @@ import {
   ProjectSchema,
   type Task,
   TaskSchema,
+  isHarnessId,
   withoutRetiredSettingsKeys,
 } from "@envoycoder/protocol";
 import type { CoderPaths } from "@envoycoder/host-bridge";
@@ -162,6 +165,16 @@ export class CoderStore {
    * read in the path of a window's first paint.
    */
   private providersState: AgentProviderConfig[] = [];
+  /**
+   * What each agent's authentication was the last time a probe or a sign-in looked, one entry per agent.
+   *
+   * In memory as well as on disk, for the third time and the same reason as the two collections above:
+   * `coder.listHarnesses` reads it on every call, and a daemon that parsed the file per request would put a
+   * filesystem read in the path of a window's first paint. Unlike the session-options record, this one is
+   * also written when nothing could be established (`state: "unknown"`), because "we could not tell" is an
+   * answer about an agent that has changed since the last one — see `AgentAuthObservation`.
+   */
+  private agentAuthState: AgentAuthObservation[] = [];
 
   private readonly listeners = new Set<(change: StoreChange) => void>();
 
@@ -227,6 +240,16 @@ export class CoderStore {
     if (providers.skipped.length > 0) {
       await store.files.writeJsonAtomic(store.paths.providersFile, providers.items);
     }
+
+    // And the authentication facts, through the same collection helper — for the same two properties, plus
+    // one this file has that none of the others does: what it holds is a *measurement* of somebody else's
+    // program, so losing it to a parse error would leave a row asserting nothing at all where it used to
+    // assert something true.
+    const auth = await store.files.readCollection(store.paths.agentAuthFile, AgentAuthObservationSchema);
+    store.agentAuthState = auth.items;
+    if (auth.skipped.length > 0) {
+      await store.files.writeJsonAtomic(store.paths.agentAuthFile, auth.items);
+    }
     return store;
   }
 
@@ -268,6 +291,19 @@ export class CoderStore {
 
   findProvider(id: string): AgentProviderConfig | undefined {
     return this.providersState.find((provider) => provider.id === id);
+  }
+
+  /**
+   * What this agent's authentication was the last time anything looked, if anything ever has.
+   *
+   * `undefined` is the answer for an agent no probe has reached, and it is deliberately different from a
+   * record whose `state` is `"unknown"`: the first says nothing has ever looked, the second says something
+   * looked and could not tell. `summarize` renders both as `unknown` on the wire — a client cannot act
+   * differently on the two — but the difference is kept here because the file is the record and a
+   * maintainer reading it must be able to tell "never probed" from "probed, no answer".
+   */
+  agentAuth(harness: HarnessId): AgentAuthObservation | undefined {
+    return this.agentAuthState.find((entry) => entry.harness === harness);
   }
 
   notes(): StoreNotes {
@@ -595,6 +631,88 @@ private async readSettings(): Promise<CoderSettings> {
     this.providersState = this.providersState.filter((provider) => provider.id !== id);
     await this.persistProviders([id]);
     return { removed: id };
+  }
+
+  /* ────────────────────────────── authentication ────────────────────────────── */
+
+  /**
+   * Record what one agent's authentication is — the newest observation replaces the oldest, per agent.
+   *
+   * ## A *record*, not a cache, and why a failed look is written too
+   *
+   * `coder.listHarnesses` must answer without starting anything, so the fact a probe learned has to
+   * outlive the probe; that is the same argument `recordSessionOptions` makes. The difference between the
+   * two is what happens when nothing could be established, and it is a difference in subject rather than a
+   * change of rule:
+   *
+   *   * the session-options record **writes nothing** then, because "what does this agent offer" has no
+   *     answer if we could not ask, and an entry would be a claim about somebody else's product;
+   *   * this record **writes `unknown` with the reason**, because "can it open a session here" *does* have
+   *     an answer when we tried and failed — *we could not tell* — and keeping a previous `needs-signin` in
+   *     front of a user whose agent has since been uninstalled would be a stale fact presented as current.
+   *
+   * The change kind is `harnesses`, the same one a session observation emits and for the same reason: what
+   * moved is the answer about an *agent*, so a client that refetched its task list here would fetch the
+   * wrong list.
+   */
+  async recordAgentAuth(observation: AgentAuthObservation): Promise<void> {
+    const parsed = AgentAuthObservationSchema.parse(observation);
+    const others = this.agentAuthState.filter((entry) => entry.harness !== parsed.harness);
+    this.agentAuthState = [...others, parsed];
+    await this.enqueue(
+      () => this.files.writeJsonAtomic(this.paths.agentAuthFile, this.agentAuthState),
+      () =>
+        this.emit({
+          kind: "harnesses",
+          at: this.now().toISOString(),
+          ids: [parsed.harness],
+        }),
+    );
+  }
+
+  /**
+   * Hide an agent from the user's pickers, or bring it back — **and change nothing else**.
+   *
+   * ## Why the read and the write both happen here
+   *
+   * A client that toggled one agent by sending the whole list would be doing a read-modify-write from its
+   * own copy, so two windows hiding two agents in the same second would produce one survivor and no report
+   * of the loss. Here the list is written inside the store's serialised chain (`enqueue`), so both toggles
+   * land and the second one sees the first. `coder.setAgentHidden`'s spec records this as the reason the
+   * method exists rather than a field on `coder.updateSettings`.
+   *
+   * ## Two notifications, because two things moved
+   *
+   * `settings` keeps a client that renders the stored preference truthful, and `harnesses`/`providers`
+   * is the list a window is actually drawing the row from — the store's rule is that an event says *what*
+   * moved so a client refetches exactly that, and here the row it must redraw lives in an agent list rather
+   * than in the settings document. Which of the two list kinds is decided by the id itself: the two agent
+   * lists cannot collide, so the id says which one holds the row.
+   *
+   * Sorted on write, so the file is stable and a diff of it is readable. Empty means "nothing hidden" rather
+   * than an empty list, so an absent key and a cleared preference are the same stored document.
+   */
+  async setAgentHidden(id: string, hidden: boolean): Promise<CoderSettings> {
+    const current = this.settingsState.hiddenAgents ?? [];
+    const next = hidden
+      ? [...new Set([...current, id])].sort()
+      : current.filter((entry) => entry !== id);
+    this.settingsState = CoderSettingsSchema.parse({
+      ...this.settingsState,
+      hiddenAgents: next.length > 0 ? next : undefined,
+    });
+    await this.enqueue(
+      () => this.files.writeJsonAtomic(this.paths.settingsFile, this.settingsState),
+      () => {
+        this.emit({ kind: "settings", at: this.now().toISOString() });
+        this.emit({
+          kind: isHarnessId(id) ? "harnesses" : "providers",
+          at: this.now().toISOString(),
+          ids: [id],
+        });
+      },
+    );
+    return this.settingsState;
   }
 
   /* ────────────────────────────── reading ────────────────────────────── */

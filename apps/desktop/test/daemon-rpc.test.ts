@@ -1707,7 +1707,10 @@ describe("asking an agent what it offers, before any run", () => {
   async function probeBench(): Promise<{
     client: JsonRpcClient;
     spawns: () => number;
+    /** Where what an agent *offers* is recorded, when a session opened and published something. */
     stateFile: string;
+    /** Where what an agent's **authentication** is gets recorded, which happens even when nothing opened. */
+    authFile: string;
   }> {
     const home = await mkdtemp(join(tmpdir(), "envoycoder-probe-rpc-"));
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
@@ -1740,7 +1743,12 @@ describe("asking an agent what it offers, before any run", () => {
 
     const client = await connect(daemon.port);
     cleanups.push(async () => client.close());
-    return { client, spawns: () => spawns, stateFile: coderPaths(home).sessionOptionsFile };
+    return {
+      client,
+      spawns: () => spawns,
+      stateFile: coderPaths(home).sessionOptionsFile,
+      authFile: coderPaths(home).agentAuthFile,
+    };
   }
 
   it("publishes what a session published, and nothing about a session that did not open", async () => {
@@ -1827,19 +1835,32 @@ describe("asking an agent what it offers, before any run", () => {
     expect(Number.isNaN(Date.parse(envoy?.thinking.observedAt ?? ""))).toBe(false);
   }, 60_000);
 
-  it("says it could not ask, and writes nothing down", async () => {
-    const { client, stateFile } = await probeBench();
+  it("says it could not ask, writes nothing about the options, and records what it does know", async () => {
+    const { client, stateFile, authFile } = await probeBench();
 
     const answer = (await client.call("coder.probeSessionOptions", {
       harness: "opencode",
     })) as { outcome: string; detail: string };
 
     // **The distinction the whole feature turns on.** A spawn that failed is our failure, not the agent's
-    // answer, so it is not recorded — a window that rendered it as "publishes none" would be making a
-    // claim about somebody else's product from evidence it does not have.
+    // answer, so nothing about what it *offers* is recorded — a window that rendered it as "publishes none"
+    // would be making a claim about somebody else's product from evidence it does not have.
     expect(answer.outcome).toBe("unreachable");
     expect(answer.detail).toContain("could not ask");
     await expect(readFile(stateFile, "utf8")).rejects.toThrow();
+
+    // **And the other question this probe answers *is* recorded**, which is why it is a second file rather than
+    // a field on the first: "can this agent open a session" has an answer even when the attempt failed — *we
+    // could not tell* — and a row that kept a previous "needs sign-in" in front of a user whose agent has since
+    // gone would be presenting a stale fact as a current one. The two halves are asserted together here
+    // because reading either alone is what makes them look contradictory.
+    const recorded = JSON.parse(await readFile(authFile, "utf8")) as { state: string; harness: string }[];
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({ harness: "opencode", state: "unknown" });
+    const listed = (await client.call("coder.listHarnesses", undefined)) as {
+      harnesses: { id: string; auth: { state: string } }[];
+    };
+    expect(listed.harnesses.find((row) => row.id === "opencode")?.auth.state).toBe("unknown");
   }, 60_000);
 
   it("answers a repeated ask without starting a second agent", async () => {
@@ -1852,5 +1873,119 @@ describe("asking an agent what it offers, before any run", () => {
     // …and a forced ask is the user pressing the button, which means it.
     await client.call("coder.probeSessionOptions", { harness: "deepseek-harness", force: true });
     expect(spawns()).toBe(2);
+  }, 60_000);
+});
+
+/**
+ * **The user's own list of agents** — the preference, over a socket, with two windows listening.
+ *
+ * ## Why this is here rather than in the unit test beside it
+ *
+ * `agent-preference.test.ts` pins the shape, the filter and the quarantine rule as functions. What it cannot
+ * reach is the three things that only exist on the wire:
+ *
+ *   * the preference **round-trips through a real daemon** — a client calls `coder.setAgentHidden`, and the
+ *     *next* `coder.listHarnesses` from a *different* connection carries the flag;
+ *   * a second window **hears about it** without polling, through the store's own change event, and the event
+ *     names the list that actually moved (`harnesses`, not `settings`) — a client that refetched the settings
+ *     document would keep drawing the row the user just hid;
+ *   * and it **survives the daemon dying**, which is what makes it a preference rather than a UI state.
+ *
+ * The assertion about availability is deliberately *relative*: hiding must leave the row's state exactly as it
+ * was, whatever this machine's probe says about these agents.
+ */
+describe("the agents in the user's own list, and the ones they hid", () => {
+  it("round-trips through the daemon, and a second window hears which list moved", async () => {
+    const home = await mkdtemp(join(tmpdir(), "envoycoder-hidden-rpc-"));
+    cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+    const daemon = await startCoderDaemon({ port: 0, home, paths: coderPaths(home), skipMeshAttach: true });
+    cleanups.push(async () => daemon.stop());
+
+    // Two windows on one daemon, which is the normal case (and the phone is a third).
+    const first = await connect(daemon.port);
+    const second = await connect(daemon.port);
+    cleanups.push(async () => first.close());
+    cleanups.push(async () => second.close());
+    await second.subscribe(["coder:state-changed"]);
+
+    const rows = async (client: JsonRpcClient): Promise<{ id: string; hidden: boolean; state: string }[]> => {
+      const answer = (await client.call("coder.listHarnesses", undefined)) as {
+        harnesses: { id: string; hidden: boolean; availability: { state: string }; auth: { state: string } }[];
+      };
+      return answer.harnesses.map((row) => ({
+        id: row.id,
+        hidden: row.hidden,
+        state: row.availability.state,
+      }));
+    };
+
+    const before = await rows(second);
+    // Every row says "not hidden" to begin with, which is the shipped state: nothing is hidden until a user
+    // says so, and the field is present on every row rather than absent (a client must never have to read
+    // absence as one of the two answers).
+    expect(before.every((row) => row.hidden === false)).toBe(true);
+
+    const announced = second.waitForEvent(
+      "coder:state-changed",
+      (data) =>
+        (data as { kind?: string }).kind === "harnesses" &&
+        Array.isArray((data as { ids?: unknown }).ids),
+    );
+    const toggled = (await first.call("coder.setAgentHidden", { id: "opencode", hidden: true })) as {
+      id: string;
+      hidden: boolean;
+      hiddenAgents: string[];
+    };
+    expect(toggled).toEqual({ id: "opencode", hidden: true, hiddenAgents: ["opencode"] });
+
+    // **The second window's own answer**, not the first window's echo: it refetched when it heard the event,
+    // and the row it is drawing now carries the preference.
+    const after = await rows(second);
+    const hiddenRow = after.find((row) => row.id === "opencode");
+    expect(hiddenRow?.hidden).toBe(true);
+    // **And the state beside it is untouched.** A hidden agent is not a broken one: whatever this machine
+    // reported about `opencode` a moment ago it still reports, because the preference is a filter over what a
+    // picker offers and nothing else.
+    expect(hiddenRow?.state).toBe(before.find((row) => row.id === "opencode")?.state);
+    // Every other row is untouched too — this is a preference about one agent, not a mode.
+    expect(after.filter((row) => row.id !== "opencode")).toEqual(before.filter((row) => row.id !== "opencode"));
+
+    // The event names the list a client must refetch. `settings` would have left the row on screen wrong, which
+    // is why the store emits both: the preference lives in the settings document and the *row* lives in an
+    // agent list.
+    expect(await announced).toMatchObject({ kind: "harnesses", ids: ["opencode"] });
+
+    // And it is on disk, so the next daemon — and the phone talking to it — starts from the same list.
+    const stored = JSON.parse(await readFile(coderPaths(home).settingsFile, "utf8")) as {
+      hiddenAgents?: string[];
+    };
+    expect(stored.hiddenAgents).toEqual(["opencode"]);
+
+    // Bringing it back is the same call with `false`, and the list comes back empty rather than holding an
+    // empty entry.
+    const restored = (await first.call("coder.setAgentHidden", { id: "opencode", hidden: false })) as {
+      hiddenAgents: string[];
+    };
+    expect(restored.hiddenAgents).toEqual([]);
+    expect((await rows(first)).find((row) => row.id === "opencode")?.hidden).toBe(false);
+  }, 60_000);
+
+  it("refuses an id that names no agent, in the user's language", async () => {
+    const { daemon, home } = await bootDaemon();
+    cleanups.push(async () => {
+      await daemon.stop();
+      await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    });
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+
+    const wire = await refusalOfCall(client, "coder.setAgentHidden", { id: "no-such-agent", hidden: true });
+
+    // `envoycoder.agent-missing` rather than `provider-missing`: the id space is shared, so the refusal has to
+    // answer about the union of the two lists — and it carries a key, because a user reads this one.
+    expect(coderErrorCode(wire)).toBe(ENVOYCODER_ERRORS.agentMissing);
+    expect(coderErrorRef(wire)?.key).toBe("error.agentNotFound");
+    expect(isMessageKey(coderErrorRef(wire)?.key ?? "")).toBe(true);
+    expect(coderErrorMessage(wire)).toContain("no-such-agent");
   }, 60_000);
 });

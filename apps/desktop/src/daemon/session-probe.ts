@@ -85,17 +85,32 @@
  * would answer a question about a run that does not exist.
  */
 
-import { mkdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { stat } from "node:fs/promises";
 
-import type { HarnessId, ProbeOutcome } from "@envoycoder/protocol";
-import { coderErrorMessage } from "@envoycoder/protocol";
-import { harnessDefinition, observeSessionOptions, probeHarness } from "@envoycoder/agent-catalog";
+import {
+  type HarnessAuth,
+  type HarnessId,
+  type ProbeOutcome,
+  coderErrorMessage,
+} from "@envoycoder/protocol";
+import { harnessAcpFacts, harnessDefinition, observeSessionOptions, probeHarness } from "@envoycoder/agent-catalog";
 import { currentSearchPath, type PlatformId } from "@envoycoder/platform";
 import type { CoderPaths } from "@envoycoder/host-bridge";
 
 import { AcpClient, type AcpLaunch } from "./acp/client.js";
+import {
+  OwnedClients,
+  agentScratchDir,
+  withDeadline,
+  type ProbedAgent,
+  type StartSession,
+} from "./agent-processes.js";
+// The shared rule for "what is this agent's authentication", used by the sign-in flow too.
+import { observeAuth } from "./auth-observation.js";
 import { launchForHarness } from "./launch.js";
+// The one projection of an auth record onto the wire — shared with `coder.listHarnesses`, so this answer and
+// the store's cannot be two spellings of one fact.
+import { authOf } from "./summaries.js";
 import { keyed } from "./messages.js";
 import type { CoderStore } from "./store.js";
 
@@ -128,28 +143,6 @@ export const PROBE_STALE_MS = 10 * 60_000;
 
 /** How long a shutdown waits for answers in flight before giving up on them. */
 const PROBE_STOP_BUDGET_MS = 5_000;
-
-/**
- * What the probe needs from a **started agent**, as a port rather than `AcpClient` itself.
- *
- * `AcpClient`'s members are private, which makes the class nominal in TypeScript: a fake cannot be
- * assigned to it, so a test that wanted to drive the probe's decisions without a process would need a
- * cast. A port states what the probe actually uses — the session id, what that session published, and
- * `stop` — so the fake is an ordinary object, the real client satisfies it as it stands, and the seam
- * documents itself.
- */
-export interface ProbedSession {
-  readonly sessionId: string | undefined;
-  sessionConfigOptions(): readonly unknown[];
-  stop(): Promise<void>;
-}
-
-/** How to start one, with the two budgets the probe imposes. `AcpClient.start` satisfies this. */
-export type StartSession = (options: {
-  launch: AcpLaunch;
-  handshakeTimeoutMs: number;
-  requestTimeoutMs: number;
-}) => Promise<ProbedSession>;
 
 export interface SessionProbeDeps {
   paths: CoderPaths;
@@ -190,6 +183,15 @@ export interface ProbeAnswer {
   outcome: ProbeOutcome;
   /** The evidence, or the reason we could not ask. A keyed English sentence. */
   detail: string;
+  /**
+   * **Whether this agent will open a session here, or wants a sign-in first** — measured by this probe.
+   *
+   * The fourth thing a probe learns, and the first one that is not about the session it opened. It travels
+   * on the answer as well as into the store because the two callers differ: the handler returns the outcome
+   * to the window that asked, while `coder.listHarnesses` reads the record for every other window and for
+   * the phone. Same fact, two readers, one measurement.
+   */
+  auth: HarnessAuth;
 }
 
 interface CacheEntry {
@@ -206,10 +208,13 @@ export class SessionProbe {
   private readonly cache = new Map<HarnessId, CacheEntry>();
   /** One probe per agent at a time: a second ask joins the first rather than spawning again. */
   private readonly inflight = new Map<HarnessId, Promise<ProbeAnswer>>();
-  /** The clients this probe owns right now, so a daemon shutdown can stop them. */
-  private readonly live = new Set<ProbedSession>();
-  /** Teardowns already under way, so a second `stop` joins rather than racing. See the module doc. */
-  private readonly stopping = new Map<ProbedSession, Promise<void>>();
+  /**
+   * The agents this probe owns right now, and the once-only teardown they all go through.
+   *
+   * Shared with the sign-in flow rather than written twice — see `./agent-teardown.js`, which is where the
+   * rule (and the `ERR_STREAM_WRITE_AFTER_END` that produced it) is documented.
+   */
+  private readonly clients = new OwnedClients<ProbedAgent>();
 
   constructor(deps: SessionProbeDeps) {
     this.deps = deps;
@@ -255,7 +260,7 @@ export class SessionProbe {
 
   /** Stop every agent this probe owns, and wait — bounded — for the answers in flight to land. */
   async stopAll(): Promise<void> {
-    await Promise.allSettled([...this.live].map((client) => this.stopClient(client)));
+    await this.clients.stopAll();
     await Promise.race([
       Promise.allSettled([...this.inflight.values()]),
       new Promise((resolve) => setTimeout(resolve, PROBE_STOP_BUDGET_MS)),
@@ -312,9 +317,9 @@ export class SessionProbe {
 
   private async run(harness: HarnessId): Promise<ProbeAnswer> {
     const label = harnessDefinition(harness).label;
-    let client: ProbedSession | undefined;
+    let client: ProbedAgent | undefined;
     try {
-      const cwd = await this.probeDir(harness);
+      const cwd = await agentScratchDir(this.deps.paths, harness);
       const launch = this.deps.resolveLaunch
         ? this.deps.resolveLaunch({ harness, cwd })
         : launchForHarness({
@@ -324,7 +329,46 @@ export class SessionProbe {
             ...(this.deps.platform ? { platform: this.deps.platform } : {}),
           });
 
+      // **Two steps, not one, and the split is what makes the auth fact measurable.** The agent is started
+      // with `initializeOnly`, so nothing on the way here has changed what we are about to look at: no
+      // `authenticate` is sent even for an entry that declares one — a probe that signed in would be
+      // measuring its own side effect, and for a browser-login method it would open a window on the user's
+      // desktop that nobody asked for. Then the session is asked for *here*, where a refusal is an answer
+      // rather than a failure.
       client = await this.acquire(launch);
+      const authMethods = client.authMethods();
+      let sessionError: unknown;
+      try {
+        await client.openSession();
+      } catch (error) {
+        sessionError = error;
+      }
+      const auth = await this.recordAuth(harness, {
+        opened: sessionError === undefined,
+        authMethods,
+        sessionError,
+      });
+
+      if (sessionError !== undefined) {
+        // **Nothing is written to the session-options record.** This is the existing rule and it survives
+        // the change intact: "we could not ask what you offer" is not an answer the agent gave, and writing
+        // it would turn a refusal into a claim about somebody else's product. The auth record above is the
+        // other half — it knows something real (which of the three states it is in), and it says so.
+        const reason = coderErrorMessage(
+          sessionError instanceof Error ? sessionError.message : String(sessionError),
+        );
+        return {
+          harness,
+          outcome: "unreachable",
+          detail: keyed(
+            "task.composer.probe.failed",
+            `EnvoyCoder could not ask ${label} what it offers: ${reason} Nothing you see has changed.`,
+            { agent: label, reason },
+          ),
+          auth,
+        };
+      }
+
       // The options the agent published, **verbatim** — normalized by `observeSessionOptions`, which is
       // the same function a run goes through, so the record on disk has one shape whichever path
       // produced it. Read straight off the client, so nothing can happen between the session opening
@@ -350,6 +394,7 @@ export class SessionProbe {
               detail:
                 `${label} opened a session and published ${observation.options.length} option(s): ` +
                 `${observation.options.map((option) => option.configId).join(", ")}.`,
+              auth,
             }
           : {
               harness,
@@ -360,6 +405,7 @@ export class SessionProbe {
                   `type a value it documents, or pick one after the first run.`,
                 { agent: label },
               ),
+              auth,
             };
 
       this.cache.set(harness, {
@@ -369,11 +415,22 @@ export class SessionProbe {
       });
       return answer;
     } catch (error) {
-      // **Nothing is written.** See the module doc: "we could not ask" is not an answer the agent gave,
-      // and recording it would turn our failure into a claim about somebody else's product. The reason is
-      // put through `coderErrorMessage`, so a keyed refusal from `launch.ts` is embedded as the plain
-      // sentence it carries rather than with its own marker (the outer sentence is the one keyed here).
+      // **Nothing is written to the session-options record** — see the module doc: "we could not ask" is not
+      // an answer the agent gave, and recording it would turn our failure into a claim about somebody else's
+      // product. The *auth* record is different and is written from here too, because this failure is an
+      // answer to a different question: we tried to open a session and did not get one. It is `unknown`
+      // unless the failure was the agent's own refusal with a sign-in method on offer, which `recordAuth` is
+      // what decides. The reason is put through `coderErrorMessage`, so a keyed refusal from `launch.ts` is
+      // embedded as the plain sentence it carries rather than with its own marker (the outer sentence is the
+      // one keyed here).
       const reason = coderErrorMessage(error instanceof Error ? error.message : String(error));
+      const auth = await this.recordAuth(harness, {
+        opened: false,
+        // Nothing was advertised to us if we never got a handshake, which is the honest input for this
+        // branch: an agent we could not start has told us nothing about how it would like to sign in.
+        authMethods: [],
+        sessionError: error,
+      });
       return {
         harness,
         outcome: "unreachable",
@@ -382,10 +439,57 @@ export class SessionProbe {
           `EnvoyCoder could not ask ${label} what it offers: ${reason} Nothing you see has changed.`,
           { agent: label, reason },
         ),
+        auth,
       };
     } finally {
-      await this.stopClient(client);
+      await this.clients.stop(client);
     }
+  }
+
+  /**
+   * Turn this probe's two observations into the auth state, **record it**, and hand it back.
+   *
+   * ## The rule, and why it is evidence rather than prose
+   *
+   *   * a session opened → `ready`. Nothing is needed from the user, and this is where every agent that
+   *     needs no authentication lands.
+   *   * a session did not open **and the agent advertised a sign-in method** → `needs-signin`. That is the
+   *     agent telling us, in its own protocol's vocabulary, that it wants one; `cursor-agent acp`'s
+   *     `-32000 Authentication required … methodId 'cursor_login'` is the measured case. The method named
+   *     is the catalogue's declared one **when the agent offers it**, else the only one it advertised, else
+   *     nothing at all — because picking between several advertised methods would be us choosing a sign-in
+   *     flow for the user, and the ACP agents here really do offer several.
+   *   * anything else → `unknown`, with the reason. An agent that would not open a session and named no way
+   *     to authenticate has not told us that a login would help, and saying `needs-signin` there would send
+   *     a user to perform a step that changes nothing. Matching on the words "authentication" or "login" in
+   *     a refusal would work for exactly the agents whose wording we happened to read.
+   *
+   * The record is written in **every** branch, including `unknown`. That is the one place this differs from
+   * the session-options record, which writes nothing when it could not ask; `AgentAuthObservation` carries
+   * the argument, and the short version is that a stale `needs-signin` about an agent that has since been
+   * uninstalled is worse than an honest "we could not tell".
+   */
+  private async recordAuth(
+    harness: HarnessId,
+    input: { opened: boolean; authMethods: readonly string[]; sessionError?: unknown },
+  ): Promise<HarnessAuth> {
+    // The classification itself is **not** decided here: `./auth-observation.js` owns the rule about which
+    // of the three states this is, and the sign-in flow asks it the same question. What this method adds is
+    // the two things only a probe has — the clock, and the place the answer is kept.
+    const observation = observeAuth({
+      harness,
+      observedAt: this.now(),
+      opened: input.opened,
+      authMethods: input.authMethods,
+      declared: harnessAcpFacts(harness).authMethodId,
+      reason: coderErrorMessage(
+        input.sessionError instanceof Error ? input.sessionError.message : String(input.sessionError ?? ""),
+      ),
+    });
+    await this.deps.store.recordAgentAuth(observation);
+    // Projected by the same function `coder.listHarnesses` uses, so what this answer carries and what the
+    // store serves cannot be two spellings of one fact.
+    return authOf(observation);
   }
 
   /**
@@ -397,7 +501,7 @@ export class SessionProbe {
    * stopped here rather than abandoned. If it rejects, `AcpClient.start` has already stopped it
    * internally, and the rejection is swallowed.
    */
-  private async acquire(launch: AcpLaunch): Promise<ProbedSession> {
+  private async acquire(launch: AcpLaunch): Promise<ProbedAgent> {
     const startClient = this.deps.startClient ?? AcpClient.start;
     const budget = this.deps.timeoutMs ?? PROBE_TIMEOUT_MS;
     const pending = startClient({
@@ -406,76 +510,27 @@ export class SessionProbe {
       // The probe sends no prompt. This is set anyway so that a future probe which does cannot inherit
       // the half-hour turn budget `AcpClient` defaults to.
       requestTimeoutMs: budget,
+      // Handshake only: the probe opens the session itself, which is what lets a refusal be an answer. See
+      // `AcpClientOptions.initializeOnly` for why a probe must not authenticate on the way here.
+      initializeOnly: true,
     });
     try {
-      const client = await Promise.race([
+      const client = await withDeadline(
         pending,
-        new Promise<never>((_, reject) => {
-          setTimeout(
-            () => reject(new Error(`The agent did not answer within ${Math.round(budget / 1000)}s.`)),
-            budget,
-          );
-        }),
-      ]);
+        budget,
+        `The agent did not answer within ${Math.round(budget / 1000)}s.`,
+      );
       // Registered as ours **before** anything can read it, so a shutdown arriving at this instant finds
       // the process rather than a client nobody knows about.
-      this.live.add(client);
+      this.clients.add(client);
       return client;
     } catch (error) {
       // The race is over — by the budget above, or because `start` itself refused. Whether the abandoned
       // promise rejects (the client stopped the half-started child itself) or resolves very late, its
       // outcome is one nobody is waiting for — and a client nobody stops is a leaked agent process.
-      void pending.then((client) => this.stopClient(client)).catch(() => undefined);
+      void pending.then((client) => this.clients.stop(client)).catch(() => undefined);
       throw error;
     }
-  }
-
-  /**
-   * Stop one client, **once**, whoever asks.
-   *
-   * The guard is the point: this probe's own `finally` and a daemon shutdown can both fire, and two
-   * concurrent teardowns would write to a stdin the first one has already ended — which is exactly the
-   * `ERR_STREAM_WRITE_AFTER_END` the module doc describes. The second caller gets the first's promise.
-   */
-  private stopClient(client: ProbedSession | undefined): Promise<void> {
-    if (client === undefined) return Promise.resolve();
-    const existing = this.stopping.get(client);
-    if (existing) return existing;
-    const stopping = client
-      .stop()
-      .catch(() => undefined)
-      .then(() => {
-        this.live.delete(client);
-        this.stopping.delete(client);
-      });
-    this.stopping.set(client, stopping);
-    return stopping;
-  }
-
-  /* ────────────────────────────── where the probe runs ────────────────────────────── */
-
-  /**
-   * The directory the probe's session is opened in.
-   *
-   * **Its own scratch directory, not the user's project.** A probe is not the user's work: opening a
-   * session inside their repository would make the agent look at (and possibly index, or run `git` in) a
-   * tree nobody asked it to touch, and two tasks in one project would collide over it. The facts a probe
-   * reads — the models a credential set makes available, the thinking levels a resolved model offers —
-   * are properties of the agent's own installation rather than of the working directory.
-   *
-   * That is also this probe's honest limit, recorded where the choice is made: **if an agent's option
-   * list ever becomes a function of the working directory**, this answer describes the probe directory
-   * rather than the task's, and this is the line to revisit. The record carries the session id and the
-   * timestamp, so a maintainer can tell which session produced what they are reading.
-   */
-  private async probeDir(harness: HarnessId): Promise<string> {
-    const dir = join(
-      this.deps.paths.stateDir,
-      "agent-probe",
-      harness.replace(/[^A-Za-z0-9._-]/g, "_"),
-    );
-    await mkdir(dir, { recursive: true });
-    return dir;
   }
 
   private nowMs(): number {

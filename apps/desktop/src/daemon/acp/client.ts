@@ -134,6 +134,25 @@ export interface AcpClientOptions {
    * posture it is not in. Throwing fails the run with the agent's own words instead.
    */
   sessionPolicy?: { autoRun: AcpAutoRunPolicy };
+  /**
+   * Stop after `initialize`, and let the caller drive the rest — **for the two callers whose question is
+   * about the agent rather than about a session.**
+   *
+   * A run wants the whole thing: handshake, the sign-in its entry declares, a session, the session's own
+   * configuration. Two other callers want the agent:
+   *
+   *   * the **pre-flight probe**, whose question is "can this agent open a session here, and if not, does it
+   *     want a sign-in?" — it must send nothing that changes the answer, and a declared `authMethodId` sent
+   *     on its behalf would both change what it is measuring and, for a browser-login method, put a window
+   *     on the user's desktop that nobody asked for;
+   *   * the **sign-in flow**, which has to see the agent's own `authMethods` and send the one step itself, so
+   *     that it can tell a refusal of that step from a session that still would not open.
+   *
+   * So the flag means exactly one thing: **send `initialize` and nothing else.** No `authenticate`, no
+   * session, no configuration. The caller owns the process from then on and must stop it — which both of
+   * those callers do in a `finally`.
+   */
+  initializeOnly?: boolean;
 }
 
 type Pending = {
@@ -248,13 +267,18 @@ export class AcpClient {
     try {
       const info = await client.initialize();
       client.agentInfoValue = info;
+      // **The one exit before the session.** A probe and a sign-in stop here and drive the next two steps
+      // themselves; see `AcpClientOptions.initializeOnly`, which is also where the reason a probe must not
+      // authenticate lives. Returning rather than throwing is deliberate: the client is started, the caller
+      // owns it, and the `catch` below would have stopped the very process the caller is about to use.
+      if (options.initializeOnly === true) return client;
       // **After `initialize`, before anything that touches a session** — the only order that works: the
       // agent advertises its methods in the first call and refuses `session/new` until one has been used.
       if (options.launch.authMethodId !== undefined) {
-        await client.authenticate(options.launch.authMethodId);
+        await client.signIn(options.launch.authMethodId);
       }
       if (options.resumeSessionId) await client.resume(options.resumeSessionId);
-      else await client.newSession();
+      else await client.openSession();
       // **Order matters, and it is the agent's.** The model goes first because it is the more
       // fundamental of the two — the mode changes what the agent may *do*, the model changes what is
       // doing it, and the thinking levels an agent offers are derived from the model it resolved — and
@@ -282,6 +306,22 @@ export class AcpClient {
 
   get sessionId(): string | undefined {
     return this.sessionIdValue;
+  }
+
+  /**
+   * The sign-in methods the agent advertised in its `initialize` answer — **its own ids, verbatim**.
+   *
+   * Read by the two callers that decide what to authenticate with (`SessionProbe` and `SessionSignIn`), and
+   * kept here because this object is the only thing that saw the handshake. Both start with
+   * `initializeOnly`, because the decision has to be made *before* the step is sent — after a normal `start`
+   * the question is already answered, one way or the other.
+   *
+   * Empty for every agent that needs no authentication, which is most of them — and empty is an answer
+   * rather than a gap: it is what lets the daemon report "this agent refused a session and named no way to
+   * sign in" instead of choosing a method for the user.
+   */
+  authMethods(): readonly string[] {
+    return this.agentInfoValue?.authMethods ?? [];
   }
 
   /**
@@ -353,9 +393,15 @@ export class AcpClient {
   /**
    * Authenticate with one of the methods the agent advertised.
    *
+   * Public because two callers outside a run send this step themselves: `SessionSignIn`, which has to tell
+   * a refusal of *this* call from a session that would not open, and nothing else. A run reaches it through
+   * `start`, which sends the method its catalogue entry declares.
+   *
    * `{methodId}` is ACP's shape (`agentclientprotocol.com/protocol/initialization`), and the id is the
    * agent's own — passed through verbatim, like a mode id or a session-config value, because a
-   * prettified one is one the agent refuses.
+   * prettified one is one the agent refuses. A caller that supplies an id **must** have taken it from
+   * `authMethods()` rather than from its own parameters: this method has no way to check, and a string
+   * invented by a client would reach somebody else's program.
    *
    * **Awaited, and not best-effort**, for the same reason `setMode` is: an agent that needed
    * authentication and did not get it answers `session/new` with a refusal whose sentence names the
@@ -363,11 +409,18 @@ export class AcpClient {
    * of ours. A failure here also cannot be "mostly fine": every session on this process is opened after
    * it, so there is nothing to fall back to.
    */
-  private async authenticate(methodId: string): Promise<void> {
+  async signIn(methodId: string): Promise<void> {
     await this.request("authenticate", { methodId }, this.options.handshakeTimeoutMs ?? 30_000);
   }
 
-  private async newSession(): Promise<string> {
+  /**
+   * Open a session on this process — the step that proves the agent will talk to us.
+   *
+   * Public for the same two callers as `signIn`, and it is the half that makes an auth report honest: a
+   * sign-in is successful only if a session opens *afterwards*, and a probe learns "it wants a sign-in" by
+   * being refused one. `start` calls it once, in the ordinary course of a run.
+   */
+  async openSession(): Promise<string> {
     const result = (await this.request(
       "session/new",
       // `mcpServers: []` is not decoration: the field is required, and an agent that assumed a

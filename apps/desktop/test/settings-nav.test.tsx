@@ -96,6 +96,10 @@ const WIRED: ShortcutActions = {
 
 const harnesses: CoderState["harnesses"] = (["envoy-harness", "deepseek-harness"] as const).map((id) => ({
   id,
+  // The preference and the auth fact, at their shipped values: nothing is hidden until the user says so, and
+  // nothing has been probed yet — see `HarnessSummary` for why neither may be absent.
+  hidden: false,
+  auth: { state: "unknown" as const },
   label: id === "envoy-harness" ? "Envoy Harness" : "DeepSeek Harness",
   tier: id === "envoy-harness" ? ("built-in" as const) : ("catalogued" as const),
   summary: "…",

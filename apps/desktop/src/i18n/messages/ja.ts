@@ -414,6 +414,16 @@ export const ja: Catalogue = {
     "\"{id}\" は EnvoyCoder がすでに同梱しているエージェントの ID です。そのため、あなたのプロバイダーは追加されませんでした。別の名前にしてください。",
   "error.providerIdInvalid":
     "\"{name}\" はプロバイダーの ID にはできません。プロバイダーの ID は小文字の英字・数字・ハイフンで構成し、英字または数字で始めます。",
+  "error.agentNotFound":
+    "ここに「{id}」というエージェントはありません。別のウィンドウで削除された可能性があります。",
+  "signIn.already": "{agent} はサインインを必要とせずにセッションを開きました。行うことはありませんでした。",
+  "signIn.signedIn": "{agent} はサインインを受け入れ、セッションを開きました。",
+  "signIn.refused": "{agent} はサインインの手順を拒否しました: {reason}",
+  "signIn.notCompleted":
+    "{agent} はサインインの手順を受け入れましたが、まだセッションが開いていないため、サインインは完了していません: {reason} エージェントがブラウザーやターミナルを開いた場合は、そこで完了してからもう一度お試しください。",
+  "signIn.noMethod":
+    "{agent} はここでセッションを開かず、EnvoyCoder が送信できるサインイン方法も示していません。提供している方法: {methods}。エージェント自身のコマンドでサインインしてから、もう一度お試しください。",
+  "signIn.unavailable": "{agent} を起動できなかったため、サインインは行われていません: {reason}",
   "error.notConnected": "EnvoyCoder はまだサービスに接続していません。",
   "error.notConnectedChange": "EnvoyCoder がサービスに接続していないため、その変更は保存されませんでした。",
   "error.connectionClosed": "接続が閉じられました。",

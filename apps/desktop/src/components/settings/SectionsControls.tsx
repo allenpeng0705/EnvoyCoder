@@ -25,7 +25,7 @@ import { useState } from "react";
 
 import type { CoderSettings, HarnessId } from "@envoycoder/protocol";
 
-import { knownMissing } from "../../composer/agent-for.js";
+import { pickable } from "../../composer/agent-for.js";
 import { useI18n } from "../../i18n/context.js";
 import { LOCALES, LOCALE_LABELS } from "../../i18n/locales.js";
 import { FolderSetting, SettingRow, TextSetting } from "../SettingsRows.js";
@@ -121,7 +121,7 @@ export function GeneralSection(props: SettingsSectionProps): JSX.Element {
 export function TasksSection(props: SettingsSectionProps): JSX.Element {
   const { t } = useI18n();
   const { settings } = props.state;
-  const available = props.state.harnesses.filter((harness) => !knownMissing(harness));
+  const available = props.state.harnesses.filter((harness) => pickable(harness));
   const defaultHarness = settings.defaults.harness ?? "envoy-harness";
 
   return (

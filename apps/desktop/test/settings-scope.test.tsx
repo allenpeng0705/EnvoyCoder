@@ -132,6 +132,9 @@ const otherProject: Project = {
 /** Two agents, so the scope's agent picker has something to switch between. */
 const harnesses: CoderState["harnesses"] = (["envoy-harness", "deepseek-harness"] as const).map((id) => ({
   id,
+  // Not hidden, and nothing probed: the two values a daemon that has just started sends.
+  hidden: false,
+  auth: { state: "unknown" as const },
   label: id === "envoy-harness" ? "Envoy Harness" : "DeepSeek Harness",
   tier: id === "envoy-harness" ? ("built-in" as const) : ("catalogued" as const),
   summary: "…",
@@ -253,6 +256,28 @@ describe("a project's settings on the project's own row", () => {
     expect(screen.getByLabelText("The agent new tasks here start with")).toBeTruthy();
     // And the app scope is not what is on screen: its own heading group is absent.
     expect(screen.queryByRole("heading", { name: "Safety" })).toBeNull();
+  });
+
+  it("drops an agent the user hid from the picker, and keeps one it merely has not looked at", () => {
+    // **The rendered half of "hiding is a filter over what the pickers offer"**, as opposed to the unit
+    // assertion about `pickable` in `agent-preference.test.ts`: this is the control a user actually opens.
+    // `deepseek-harness` is hidden and `envoy-harness` only *unexamined* — a daemon that has not probed it yet
+    // — and the two must be treated differently: a hidden agent leaves the list, and one nobody has looked at
+    // stays, because dropping it would make a decision on the user's behalf.
+    show({
+      harnesses: harnesses.map((harness) =>
+        harness.id === "deepseek-harness"
+          ? { ...harness, hidden: true }
+          : { ...harness, availability: { state: "unknown" as const }, auth: { state: "unknown" as const } },
+      ),
+    });
+    openProject("api");
+
+    const picker = screen.getByLabelText("The agent new tasks here start with");
+    const offered = [...picker.querySelectorAll("option")].map((option) => option.textContent ?? "");
+
+    expect(offered.some((label) => label.includes("DeepSeek Harness"))).toBe(false);
+    expect(offered.some((label) => label.includes("Envoy Harness"))).toBe(true);
   });
 
   it("writes the chosen agent through to the daemon, with the project's id", async () => {
