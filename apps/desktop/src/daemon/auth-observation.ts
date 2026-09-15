@@ -99,6 +99,14 @@ export function observeAuth(input: {
   authMethods: readonly string[];
   /** What the catalogue declares, if anything — the first candidate `signInMethod` considers. */
   declared?: string | undefined;
+  /**
+   * The command the agent wants run in a **terminal**, when it advertises one.
+   *
+   * Measured, not decorative: Copilot's `authenticate {copilot-login}` answers `-32000 Authentication required`
+   * and a session keeps refusing, so for that agent the row must carry the instruction rather than a button. The
+   * fact is stored with the observation because it is part of *what this machine established* about signing in.
+   */
+  terminal?: string | undefined;
   reason: string;
 }): AgentAuthObservation {
   const state = authStateOf({ opened: input.opened, authMethods: input.authMethods });
@@ -126,6 +134,7 @@ export function observeAuth(input: {
     observedAt: input.observedAt,
     state,
     ...(methodId !== undefined ? { methodId } : {}),
+    ...(input.terminal !== undefined ? { terminal: input.terminal } : {}),
     detail:
       `This agent would not open a session and advertises ${input.authMethods.join(", ")}, so it wants a ` +
       `sign-in: ${input.reason}`,

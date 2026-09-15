@@ -320,6 +320,7 @@ export const zh: Catalogue = {
   "settings.agents.signIn": "登录",
   "settings.agents.signIn.working": "正在登录…",
   "settings.agents.signIn.title": "运行 {agent} 自己的登录流程，并如实说明发生了什么",
+  "settings.agents.signIn.terminal": "要登录，请在终端中运行：",
   "settings.agents.olderDaemon": "这个窗口连接的守护进程版本较旧，没有这部分智能体列表，因此无法在这里显示。请重启 EnvoyCoder，让窗口和守护进程来自同一个构建。",
   "settings.agents.catalog.heading": "目录",
   "settings.agents.catalog.browse": "浏览目录",

@@ -188,6 +188,8 @@ export function authOf(record: AgentAuthObservation | undefined): HarnessAuth {
   return {
     state: record.state,
     ...(record.methodId !== undefined ? { methodId: record.methodId } : {}),
+    // The terminal instruction, when the agent says a terminal is how it signs in — see `HarnessAuth.terminal`.
+    ...(record.terminal !== undefined ? { terminal: record.terminal } : {}),
     observedAt: record.observedAt,
   };
 }

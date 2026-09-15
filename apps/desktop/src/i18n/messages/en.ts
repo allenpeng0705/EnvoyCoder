@@ -472,6 +472,15 @@ export const en = {
   "settings.agents.signIn": "Sign in",
   "settings.agents.signIn.working": "Signing in…",
   "settings.agents.signIn.title": "Run {agent}'s own sign-in flow, and say truthfully what happened",
+  /**
+   * **The agent that signs in through a terminal.**
+   *
+   * Copilot advertises `copilot-login` with ACP's `_meta["terminal-auth"]` and answers `authenticate` with
+   * `-32000 Authentication required` (measured), so a **Sign in** button for it would be a press that changes
+   * nothing. The row shows the instruction and the command instead — the command verbatim, because a translated
+   * command is a command that does not run.
+   */
+  "settings.agents.signIn.terminal": "To sign in, run this in your terminal:",
   "settings.agents.olderDaemon":
     "The daemon this window is talking to is an older build and does not have this part of the agent list, so it cannot be shown here. Restart EnvoyCoder so the window and its daemon are the same build.",
   /**

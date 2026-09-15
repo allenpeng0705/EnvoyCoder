@@ -61,6 +61,14 @@ export interface ProbedAgent {
   /** The sign-in methods the agent advertised in `initialize`, verbatim. Empty for most agents. */
   authMethods(): readonly string[];
   /**
+   * **The command a terminal would run to sign this agent in**, when it advertises one (`_meta["terminal-auth"]`).
+   *
+   * On this interface rather than only on `AcpClient`, because both flows that record an auth observation hold a
+   * `ProbedAgent` — and the fact belongs to the same answer they are recording: Copilot's protocol step cannot
+   * perform its login, so a row without this would offer a **Sign in** button that changes nothing.
+   */
+  authTerminalCommand(methodId?: string): string | undefined;
+  /**
    * Send the agent's own `authenticate` step (`AcpClient.signIn`).
    *
    * On the port rather than only on the client because it is what a **sign-in** is, and the two flows share

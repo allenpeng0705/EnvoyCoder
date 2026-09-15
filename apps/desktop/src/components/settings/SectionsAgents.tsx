@@ -388,7 +388,16 @@ function ShippedAgent(props: {
       lineIsCommand={verdict.lineIsCommand}
       {...(verdict.lineTitle !== undefined ? { lineTitle: verdict.lineTitle } : {})}
       actions={
-        props.canSignIn && harness.auth?.state === "needs-signin" ? (
+        /*
+         * **A press only where a press can work.**
+         *
+         * `props.canSignIn` says the daemon serves the method; `harness.auth.terminal` says the *agent* signs in
+         * through a terminal — Copilot advertises `copilot-login` with ACP's `_meta["terminal-auth"]` and answers
+         * `authenticate` with `-32000 Authentication required` (measured 2026-09-15). Drawing the button there would
+         * be a control that cannot be honoured, which is the one thing this pane forbids; the instruction lives in
+         * the disclosure instead (`SignInInstruction` below), with the command verbatim.
+         */
+        props.canSignIn && harness.auth?.state === "needs-signin" && harness.auth.terminal === undefined ? (
           <button
             type="button"
             className="button button--secondary button--small"
@@ -409,6 +418,19 @@ function ShippedAgent(props: {
             <GuideBlock guide={verdict.guide} {...(props.onRunFix !== undefined ? { run: props.onRunFix } : {})} />
           ) : null}
           <FactsBlock facts={facts} />
+          {/* **The way in, for an agent that signs in through a terminal.** The command is shown verbatim — a
+              translated command is a command that does not run — and it is selectable, so the user copies what this
+              machine actually needs rather than what a sentence says. */}
+          {harness.auth?.terminal !== undefined ? (
+            <div className="settings__agent-fix">
+              <p className="settings__agent-fact settings__agent-fact--lead">
+                {t("settings.agents.signIn.terminal")}
+              </p>
+              <p className="settings__agent-steps settings__agent-step">
+                <code className="settings__agent-command">{harness.auth.terminal}</code>
+              </p>
+            </div>
+          ) : null}
           {/* **The install command stays on a fetched row, with the press beside it.**
               The owner's requirement: *"we should keep the command text, but also provide the exec button. Not to
               remove the text. The user can install it by himself."* A row delivered by `npx` is `Ready` — so the

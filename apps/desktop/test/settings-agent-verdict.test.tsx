@@ -733,6 +733,62 @@ describe("checking this machine again", () => {
   });
 });
 
+/* ────────────────────────── an agent that signs in through a terminal ────────────────────────── */
+
+/**
+ * **The press that cannot work, replaced by the instruction that does.**
+ *
+ * Copilot advertises `copilot-login` with ACP's `_meta["terminal-auth"]` and answers our `authenticate` with
+ * `-32000 Authentication required` (measured 2026-09-15), so a **Sign in** button on that row would be a control
+ * that cannot be honoured — the one thing this pane forbids. The observation carries the command instead, and the
+ * row renders it verbatim (a translated command is a command that does not run).
+ */
+describe("signing in where only a terminal can", () => {
+  const TERMINAL = "/Users/you/.npm-global/lib/node_modules/@github/copilot/copilot login";
+
+  it("shows the command instead of the button", () => {
+    const { container } = show({
+      harnesses: [
+        harness({
+          id: "copilot",
+          label: "GitHub Copilot",
+          auth: { state: "needs-signin", methodId: "copilot-login", terminal: TERMINAL },
+        }),
+      ],
+    });
+    const row = rowOf(container, "GitHub Copilot");
+    // No Sign in press anywhere on the row …
+    expect(
+      [...row.querySelectorAll("button")].some(
+        (candidate) => candidate.textContent === en["settings.agents.signIn"],
+      ),
+    ).toBe(false);
+    // … and the command is on screen, verbatim, where a user can copy it.
+    const panel = openDetails(row);
+    expect(textOf(panel)).toContain(en["settings.agents.signIn.terminal"]);
+    expect(textOf(panel)).toContain(TERMINAL);
+  });
+
+  it("keeps the button for an agent whose sign-in really is a protocol step", () => {
+    // Cursor and both bridges answer `authenticate`; nothing about their rows may change.
+    const { container } = show({
+      harnesses: [
+        harness({
+          id: "cursor",
+          label: "Cursor Agent",
+          auth: { state: "needs-signin", methodId: "cursor_login" },
+        }),
+      ],
+    });
+    const row = rowOf(container, "Cursor Agent");
+    expect(
+      [...row.querySelectorAll("button")].some(
+        (candidate) => candidate.textContent === en["settings.agents.signIn"],
+      ),
+    ).toBe(true);
+  });
+});
+
 /* ────────────────────────── installed, or fetched by npx ────────────────────────── */
 
 /**

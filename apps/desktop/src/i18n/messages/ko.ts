@@ -320,6 +320,7 @@ export const ko: Catalogue = {
   "settings.agents.signIn": "로그인",
   "settings.agents.signIn.working": "로그인 중…",
   "settings.agents.signIn.title": "{agent} 자체의 로그인 절차를 실행하고 무슨 일이 있었는지 사실대로 알립니다",
+  "settings.agents.signIn.terminal": "로그인하려면 터미널에서 다음을 실행하세요:",
   "settings.agents.olderDaemon": "이 창이 연결된 데몬은 이전 빌드이고 에이전트 목록의 이 부분이 없어서 여기에 표시할 수 없습니다. 창과 데몬이 같은 빌드가 되도록 EnvoyCoder를 다시 시작하세요.",
   "settings.agents.catalog.heading": "카탈로그",
   "settings.agents.catalog.browse": "카탈로그 보기",

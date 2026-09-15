@@ -320,6 +320,7 @@ export const fr: Catalogue = {
   "settings.agents.signIn": "Se connecter",
   "settings.agents.signIn.working": "Connexion…",
   "settings.agents.signIn.title": "Lancer le parcours de connexion de {agent} et dire honnêtement ce qui s’est passé",
+  "settings.agents.signIn.terminal": "Pour te connecter, exécute ceci dans ton terminal :",
   "settings.agents.olderDaemon": "Le démon auquel cette fenêtre parle est une version plus ancienne et n’a pas cette partie de la liste des agents : elle ne peut donc pas être affichée ici. Redémarrez EnvoyCoder pour que la fenêtre et son démon soient de la même version.",
   "settings.agents.catalog.heading": "Catalogue",
   "settings.agents.catalog.browse": "Parcourir le catalogue",

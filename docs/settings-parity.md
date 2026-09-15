@@ -3139,8 +3139,29 @@ reason is on screen. The row therefore needs the *instruction* rather than the b
 3. `coder.signInAgent` keeps working for every agent that *does* answer `authenticate` (Cursor, the two bridges) —
    this is a third outcome, not a replacement.
 
-**Designed and measured, not yet built.** It is the next slice, and it is the last thing between the Copilot row and
-"simply works": everything else on that row is measured and honest today.
+**Built, and verified live.** The client picks the command out of `initialize`'s `_meta["terminal-auth"]`
+(`AcpClient.authTerminalCommand`), the discovery travels on `ProbedAgent` so both flows that record an auth
+observation carry it, `AgentAuthObservation.terminal` stores it and `HarnessAuth.terminal` serves it, and the row
+renders the instruction **instead of** the button — the command verbatim, because a translated command is a command
+that does not run. A sign-in that fails against such an agent records the command too, so the next window says what to
+do rather than offering the press that just failed.
+
+Measured on the running daemon, after forcing the probe the app's own *Ask again* performs:
+
+```console
+copilot auth: { "state": "needs-signin", "methodId": "copilot-login",
+                "terminal": "…/copilot-darwin-arm64/copilot login" }
+```
+
+Two legs in `settings-agent-verdict.test.tsx` pin both directions — *shows the command instead of the button* and
+*keeps the button for an agent whose sign-in really is a protocol step* (Cursor) — and the row rule was mutation-checked
+(drawing the button anyway reddens the first). Gates before commit: 888 passed / 7 skipped, 12 Rust tests.
+
+**One thing the live run caught that the tests had not:** `AgentAuthObservationSchema` was still strict about the new
+field, so the first observation carrying it failed to parse and the row fell back to `unknown`. The unit legs were green
+throughout, because nothing in them stored an observation through the schema — the daemon did, and the error appeared as
+`unrecognized_keys: ["terminal"]` on the probe's own answer. It is fixed and the schema rule is the same one
+`HarnessAuthSchema` carries: `terminal` belongs to `needs-signin` alone.
 
 
 ### 7.23 Fetching is not only for bridges

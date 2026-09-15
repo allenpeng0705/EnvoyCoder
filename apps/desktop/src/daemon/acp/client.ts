@@ -387,7 +387,31 @@ export class AcpClient {
             )
             .filter((id): id is string => id !== undefined)
         : [],
+      /**
+       * **The command an agent wants run in a terminal**, keyed by method id, when it advertises one.
+       *
+       * ACP lets a method carry `_meta["terminal-auth"]` — Copilot's does: `{"command": "…/copilot", "args":
+       * ["login"], "label": "Copilot Login"}` beside the description *"Run `copilot login` in the terminal"*. That
+       * is not decoration: measured on 2026-09-15, `authenticate {methodId: "copilot-login"}` answers `-32000
+       * Authentication required` and a session still refuses, so a **Sign in** button for that agent is a press
+       * that changes nothing. The command is the way in, and this is where it is picked up.
+       */
+      authTerminal: authTerminalCommands(result.authMethods),
     };
+  }
+
+  /**
+   * **What to run in a terminal to sign this agent in**, when it says a terminal is the way.
+   *
+   * `undefined` for an agent whose methods are all answerable over the protocol (Cursor, both bridges) — and that
+   * `undefined` is what keeps the Sign in button on their rows and off Copilot's.
+   */
+  authTerminalCommand(methodId?: string): string | undefined {
+    const terminal = this.agentInfoValue?.authTerminal;
+    if (terminal === undefined) return undefined;
+    // The method `authenticate` would be sent to, when the caller names one; otherwise the only method offered.
+    const wanted = methodId !== undefined ? terminal.get(methodId) : undefined;
+    return wanted ?? [...terminal.values()][0];
   }
 
   /**
@@ -794,4 +818,28 @@ export class AcpClient {
 function isPromptShapeRefusal(error: unknown): boolean {
   if (!(error instanceof AcpRequestError) || error.code !== INVALID_PARAMS) return false;
   return /text|content|prompt/i.test(error.message);
+}
+
+/**
+ * **The terminal commands an agent advertises in `initialize`**, keyed by method id.
+ *
+ * `_meta["terminal-auth"]` is the only place a client learns that a login happens *outside* the protocol, and an
+ * agent that says so is telling the truth: Copilot's `authenticate` answers `-32000 Authentication required` and
+ * keeps refusing a session. The command is joined into the line a user would type — `pathForWire` is not applied
+ * because this string is displayed and copied, not spawned by us.
+ */
+function authTerminalCommands(raw: unknown): ReadonlyMap<string, string> {
+  const out = new Map<string, string>();
+  if (!Array.isArray(raw)) return out;
+  for (const method of raw) {
+    const entry = method as { id?: unknown; _meta?: unknown } | null;
+    const id = typeof entry?.id === "string" ? entry.id : undefined;
+    const terminal = (entry?._meta as { "terminal-auth"?: unknown } | undefined)?.["terminal-auth"] as
+      | { command?: unknown; args?: unknown }
+      | undefined;
+    if (id === undefined || typeof terminal?.command !== "string") continue;
+    const args = Array.isArray(terminal.args) ? terminal.args.filter((a): a is string => typeof a === "string") : [];
+    out.set(id, [terminal.command, ...args].join(" "));
+  }
+  return out;
 }

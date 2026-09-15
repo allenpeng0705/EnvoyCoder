@@ -320,6 +320,7 @@ export const it: Catalogue = {
   "settings.agents.signIn": "Accedi",
   "settings.agents.signIn.working": "Accesso in corso…",
   "settings.agents.signIn.title": "Avvia il flusso di accesso di {agent} e riferisci con verità cos’è successo",
+  "settings.agents.signIn.terminal": "Per accedere, esegui questo nel tuo terminale:",
   "settings.agents.olderDaemon": "Il daemon a cui è collegata questa finestra è una build precedente e non ha questa parte dell’elenco degli agenti, quindi non può essere mostrata qui. Riavvia EnvoyCoder perché finestra e daemon siano la stessa build.",
   "settings.agents.catalog.heading": "Catalogo",
   "settings.agents.catalog.browse": "Sfoglia il catalogo",

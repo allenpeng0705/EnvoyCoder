@@ -61,6 +61,8 @@ function scriptedAgent(
     onStop?: () => void | Promise<void>;
     /** What the agent advertises in `initialize`. Empty for the agents that need nothing. */
     authMethods?: readonly string[];
+    /** The command a terminal would run, for an agent that advertises one — see `HarnessAuth.terminal`. */
+    authTerminal?: string;
     /** Refuse `session/new` the way a real agent refuses it, with the same `-32000` and sentence. */
     refuseSession?: string;
     /** Refuse the `authenticate` step itself, for the sign-in flow's own tests. */
@@ -72,6 +74,8 @@ function scriptedAgent(
   return {
     agent: {
       authMethods: () => hooks.authMethods ?? [],
+      // No terminal instruction: this double stands for an agent whose sign-in is a protocol step.
+      authTerminalCommand: () => hooks.authTerminal,
       signIn: async (methodId) => {
         if (hooks.refuseSignIn !== undefined) {
           throw new Error(hooks.refuseSignIn);

@@ -102,6 +102,14 @@ export interface HarnessAuth {
    * is enforced rather than trusted.
    */
   methodId?: string;
+  /**
+   * **The command to run in a terminal to sign in**, when the agent advertises one.
+   *
+   * Present exactly with `needs-signin`. A window shows the instruction instead of a **Sign in** button for it:
+   * Copilot's `authenticate` answers `-32000 Authentication required` (measured 2026-09-15) and a session keeps
+   * refusing, so that button would be a press that changes nothing.
+   */
+  terminal?: string;
   /** When the daemon established this, ISO 8601 on its own clock. Absent when it never has. */
   observedAt?: string;
 }
@@ -110,10 +118,20 @@ export const HarnessAuthSchema = z
   .object({
     state: HarnessAuthStateSchema,
     methodId: z.string().min(1).optional(),
+    terminal: z.string().min(1).optional(),
     observedAt: z.string().min(1).optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
+    if (value.terminal !== undefined && value.state !== "needs-signin") {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          `terminal is the sign-in an agent is still waiting for, so it belongs to "needs-signin" alone ` +
+          `— not "${value.state}"`,
+        path: ["terminal"],
+      });
+    }
     if (value.methodId !== undefined && value.state !== "needs-signin") {
       ctx.addIssue({
         code: "custom",
@@ -169,6 +187,15 @@ export interface AgentAuthObservation {
   state: HarnessAuthState;
   /** Present only for `needs-signin`, and only ever a method the agent advertised. */
   methodId?: string;
+  /**
+   * **The command to run in a terminal to sign in**, when the agent says a terminal is the way.
+   *
+   * Copilot's only method carries ACP's `_meta["terminal-auth"]` with the exact command, and its protocol step
+   * cannot perform the login — measured: `authenticate {copilot-login}` → `-32000 Authentication required`, and a
+   * session keeps refusing. A row offering *Sign in* for that agent would be offering a press that changes nothing,
+   * so the instruction travels instead of the button.
+   */
+  terminal?: string;
   /** What we were told, or why we could not tell. */
   detail?: string;
 }
@@ -179,10 +206,18 @@ export const AgentAuthObservationSchema = z
     observedAt: z.string().min(1),
     state: HarnessAuthStateSchema,
     methodId: z.string().min(1).optional(),
+    terminal: z.string().min(1).optional(),
     detail: z.string().optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
+    if (value.terminal !== undefined && value.state !== "needs-signin") {
+      ctx.addIssue({
+        code: "custom",
+        message: `terminal belongs to "needs-signin" alone, not "${value.state}"`,
+        path: ["terminal"],
+      });
+    }
     if (value.methodId !== undefined && value.state !== "needs-signin") {
       ctx.addIssue({
         code: "custom",

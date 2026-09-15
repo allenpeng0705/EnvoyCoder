@@ -219,6 +219,14 @@ export class SessionSignIn {
   ): Promise<SignInAnswer> {
     const advertised = client.authMethods();
     const declared = harnessAcpFacts(harness).authMethodId;
+    /**
+     * **What a terminal would run, kept for the record.**
+     *
+     * A sign-in that fails against an agent which only knows how to log in through a terminal (Copilot, measured)
+     * must leave the row able to say so: the observation this flow writes carries the command, and the next window
+     * renders the instruction instead of the button that just failed.
+     */
+    const terminal = client.authTerminalCommand(declared);
     const methodId = this.methodFor(options.methodId, declared, advertised);
 
     if (methodId === undefined) {
@@ -229,6 +237,7 @@ export class SessionSignIn {
         return this.finish(harness, "signed-in", {
           opened: true,
           authMethods: advertised,
+          ...(terminal !== undefined ? { terminal } : {}),
           reason: "",
           detail: keyed(
             "signIn.already",
@@ -240,6 +249,7 @@ export class SessionSignIn {
       return this.finish(harness, "no-method", {
         opened: false,
         authMethods: advertised,
+          ...(terminal !== undefined ? { terminal } : {}),
         reason: opened.reason,
         // The agent's own ids travel as a value, never the caller's string: a method id a client supplied is
         // not quoted back, for the same reason `coder.addProvider` never echoes a refused `env` entry — what
@@ -272,6 +282,7 @@ export class SessionSignIn {
         // rather than an assumption — the method the agent wants is the one it just named.
         opened: false,
         authMethods: advertised,
+          ...(terminal !== undefined ? { terminal } : {}),
         reason,
         detail: keyed(
           refused ? "signIn.refused" : "signIn.notCompleted",
@@ -288,6 +299,7 @@ export class SessionSignIn {
       return this.finish(harness, "signed-in", {
         opened: true,
         authMethods: advertised,
+          ...(terminal !== undefined ? { terminal } : {}),
         reason: "",
         detail: keyed(
           "signIn.signedIn",
@@ -302,6 +314,7 @@ export class SessionSignIn {
     return this.finish(harness, "not-completed", {
       opened: false,
       authMethods: advertised,
+          ...(terminal !== undefined ? { terminal } : {}),
       reason: opened.reason,
       detail: keyed(
         "signIn.notCompleted",
@@ -362,7 +375,13 @@ export class SessionSignIn {
    */
   private async record(
     harness: HarnessId,
-    input: { opened: boolean; authMethods: readonly string[]; reason: string },
+    input: {
+      opened: boolean;
+      authMethods: readonly string[];
+      reason: string;
+      /** The command a terminal would run, when the agent advertises one — see `HarnessAuth.terminal`. */
+      terminal?: string;
+    },
   ): Promise<HarnessAuth> {
     const observation = observeAuth({
       harness,
@@ -370,6 +389,7 @@ export class SessionSignIn {
       opened: input.opened,
       authMethods: input.authMethods,
       declared: harnessAcpFacts(harness).authMethodId,
+      ...(input.terminal !== undefined ? { terminal: input.terminal } : {}),
       reason: input.reason,
     });
     await this.deps.store.recordAgentAuth(observation);

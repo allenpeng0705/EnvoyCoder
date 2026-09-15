@@ -86,6 +86,15 @@ export interface AcpAgentInfo {
    * for every agent that needs no authentication, which is most of them.
    */
   authMethods: readonly string[];
+  /**
+   * **The command to run in a terminal, per auth method**, when the agent advertises one.
+   *
+   * ACP's `_meta["terminal-auth"]`: Copilot's method carries `{command, args, label}` and the description *"Run
+   * `copilot login` in the terminal"*, and measured on 2026-09-15 the protocol step cannot do that login for it
+   * (`authenticate` → `-32000 Authentication required`, and a session still refuses). So the row needs the
+   * instruction rather than a button, and this is the fact it is drawn from.
+   */
+  authTerminal?: ReadonlyMap<string, string>;
 }
 
 /**

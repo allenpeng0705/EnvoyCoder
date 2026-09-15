@@ -320,6 +320,7 @@ export const ja: Catalogue = {
   "settings.agents.signIn": "サインイン",
   "settings.agents.signIn.working": "サインイン中…",
   "settings.agents.signIn.title": "{agent} 自身のサインイン手順を実行し、起きたことを正直に伝えます",
+  "settings.agents.signIn.terminal": "サインインするには、ターミナルで次を実行してください:",
   "settings.agents.olderDaemon": "このウィンドウが接続しているデーモンは古いビルドで、エージェント一覧のこの部分を持っていないため、ここには表示できません。ウィンドウとデーモンが同じビルドになるよう EnvoyCoder を再起動してください。",
   "settings.agents.catalog.heading": "カタログ",
   "settings.agents.catalog.browse": "カタログを見る",

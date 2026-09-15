@@ -320,6 +320,7 @@ export const de: Catalogue = {
   "settings.agents.signIn": "Anmelden",
   "settings.agents.signIn.working": "Anmeldung läuft…",
   "settings.agents.signIn.title": "Den eigenen Anmeldeablauf von {agent} starten und wahrheitsgemäß berichten, was passiert ist",
+  "settings.agents.signIn.terminal": "Zum Anmelden führe dies in deinem Terminal aus:",
   "settings.agents.olderDaemon": "Der Daemon, mit dem dieses Fenster spricht, ist ein älterer Build und hat diesen Teil der Agentenliste nicht; er kann hier deshalb nicht angezeigt werden. Starte EnvoyCoder neu, damit Fenster und Daemon derselbe Build sind.",
   "settings.agents.catalog.heading": "Katalog",
   "settings.agents.catalog.browse": "Katalog durchsehen",

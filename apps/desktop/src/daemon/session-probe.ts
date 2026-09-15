@@ -356,6 +356,11 @@ export class SessionProbe {
         opened: sessionError === undefined,
         authMethods,
         sessionError,
+        // **What the agent says a terminal would do.** Copilot's method carries it and its protocol step cannot
+        // perform the login, so the row renders the command instead of a Sign in button that would change nothing.
+        ...(client.authTerminalCommand(harnessAcpFacts(harness).authMethodId) !== undefined
+          ? { terminal: client.authTerminalCommand(harnessAcpFacts(harness).authMethodId) }
+          : {}),
       });
 
       if (sessionError !== undefined) {
@@ -480,7 +485,7 @@ export class SessionProbe {
    */
   private async recordAuth(
     harness: HarnessId,
-    input: { opened: boolean; authMethods: readonly string[]; sessionError?: unknown },
+    input: { opened: boolean; authMethods: readonly string[]; sessionError?: unknown; terminal?: string },
   ): Promise<HarnessAuth> {
     // The classification itself is **not** decided here: `./auth-observation.js` owns the rule about which
     // of the three states this is, and the sign-in flow asks it the same question. What this method adds is
@@ -491,6 +496,7 @@ export class SessionProbe {
       opened: input.opened,
       authMethods: input.authMethods,
       declared: harnessAcpFacts(harness).authMethodId,
+      ...(input.terminal !== undefined ? { terminal: input.terminal } : {}),
       reason: coderErrorMessage(
         input.sessionError instanceof Error ? input.sessionError.message : String(input.sessionError ?? ""),
       ),

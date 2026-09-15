@@ -54,6 +54,8 @@ afterEach(async () => {
 interface AgentScript {
   /** What `initialize` advertises. Empty for the agents that need nothing. */
   authMethods?: readonly string[];
+  /** The terminal command the agent advertises, for the agents whose sign-in is not a protocol step. */
+  authTerminal?: string;
   /** Throw this from `authenticate`. An `Error` becomes a timeout-shaped failure; `AcpRequestError` a refusal. */
   signInFails?: Error;
   /** Throw this from `session/new`. Set it to model an agent that will not open a session. */
@@ -65,6 +67,8 @@ function scriptedAgent(script: AgentScript = {}): ProbedAgent {
   let sessionOpened = false;
   const agent: ProbedAgent = {
     authMethods: () => script.authMethods ?? [],
+    // No terminal instruction unless the script asks for one (an agent that logs in through a terminal).
+    authTerminalCommand: () => script.authTerminal,
     signIn: async () => {
       if (script.signInFails) throw script.signInFails;
       // The real agents set their own session state here; ours only needs to remember that the step landed,
