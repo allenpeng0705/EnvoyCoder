@@ -3631,6 +3631,15 @@ every other claim in this document rests on. `audit-ui.mjs` is repaired, and it 
 the click-the-container trap (`--click "<task title>"` clicked the `.task-row` wrapper, which selects nothing) —
 the same trap that made this slice's first work-surface walk measure the empty pane and report a cheerful zero.
 
+**What the repaired tool still has not measured.** `audit-ui.mjs` is the instrument for `docs/design-tokens.md`'s
+claims about the *chat* surface — the 820px content measure, its centring, the content type size and leading, the
+composer card's radius — and repairing it does not verify them: the walk needs a window with a task open, and it
+runs against a *given* URL rather than booting its own daemon and Vite the way `measure-settings.mjs` does. Pointed
+at the running window it walks the chrome correctly (`--clicks "Settings|Agents"` lands on the Agents page) and
+reports `missing` for every chat element, because the pane on screen is the empty state. Recorded as a limit rather
+than implied by the tool existing again; the contrast half of the chat surface *is* covered, by the work-surface
+scan above.
+
 #### 7.28.3 The mutations
 
 Three, each reddening the leg it belongs to: `--text-faint` back to `#717574` (8 elements at 3.48:1 in the dark
