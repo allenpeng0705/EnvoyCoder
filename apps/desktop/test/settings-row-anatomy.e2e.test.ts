@@ -107,22 +107,34 @@ interface Report {
   rowCount: number;
   anatomy: Anatomy;
   contrast: { below45: number; worst: readonly { cls: string; ratio: number }[] };
+  /**
+   * **The fix block, measured with the disclosures open.** Empty numbers (`blocks: 0`) when nothing was
+   * opened, which is the honest reading for a closed page rather than a zero that looks like a failure.
+   */
+  fix: {
+    blocks: number;
+    commands: number;
+    copyButtons: number;
+    commandsOverflowing: number;
+    copyHeight: number;
+    copySqueezed: number;
+    contrast: { below45: number; worst: readonly { cls: string; ratio: number }[] };
+  };
 }
 
-/** Run the measurement tool on the real Settings page, with the catalogue open (the widest rows). */
-function measure(): Promise<Report> {
+/**
+ * Run the measurement tool on the real Settings page.
+ *
+ * The arguments are the *state* being measured, and there are two of them here for the reason the tool's own doc
+ * gives: the page as it opens and the page with a group unfolded are two different and equally honest numbers.
+ * `extra: []` is the second state — the agents list with every Not-ready row's way-out panel open — and it is the
+ * only place the **fix block** exists to be measured at all.
+ */
+function measure(extra: readonly string[] = ["--open", "Browse the catalogue"]): Promise<Report> {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(
       process.execPath,
-      [
-        join(root, "scripts/measure-settings.mjs"),
-        "--section",
-        "agents",
-        "--open",
-        "Browse the catalogue",
-        "--out",
-        outDir,
-      ],
+      [join(root, "scripts/measure-settings.mjs"), "--section", "agents", ...extra, "--out", outDir],
       { cwd: root, stdio: ["ignore", "pipe", "pipe"] },
     );
     let stdout = "";
@@ -158,6 +170,16 @@ function measure(): Promise<Report> {
  * Only taken when the leg is enabled, so the skipped case costs nothing.
  */
 const report: Report = enabled ? await measure() : (undefined as unknown as Report);
+
+/**
+ * The same page, with **every Not-ready row's panel open** — the state in which the fix block exists.
+ *
+ * Opening them by the accessible name (`Not ready — …`) rather than by position is what makes this precise: the
+ * Ready rows have nothing to open, and a click by index would open whatever happened to be first.
+ */
+const fixReport: Report = enabled
+  ? await measure(["--open-aria", "Not ready —"])
+  : (undefined as unknown as Report);
 
 describeWhen("the agent rows, measured in a real window", () => {
   it("is measured on this machine's real page, with the counts the page claims", () => {
@@ -222,5 +244,46 @@ describeWhen("the agent rows, measured in a real window", () => {
     expect(report.horizontalOverflow).toBe(false);
     // Contrast: the family's 4.5:1 floor, on every chip and piece of small print the row draws.
     expect(report.contrast.below45, JSON.stringify(report.contrast.worst.slice(0, 3))).toBe(0);
+  });
+
+  it("sets the fix apart, legibly, in the one place a user goes to resolve a Not-ready row", () => {
+    // **The owner's ask, measured rather than described:** *"can we highlight the info on each agent … we want
+    // to highlight it and let user know how to resolve it."* The block is only in the DOM once a disclosure is
+    // open, so this is the second measurement above — and when a machine has no Not-ready row with a fix there is
+    // nothing here to look at, which is said out loud rather than passed quietly.
+    if (fixReport.fix.blocks === 0) {
+      console.log(
+        "· fix block: not measured — this machine has no Not-ready row carrying a fix, so every assertion " +
+          "below would have been about an empty page.",
+      );
+      return;
+    }
+
+    // One block per panel opened, with the command in it.
+    expect(fixReport.fix.blocks).toBeGreaterThanOrEqual(1);
+    expect(fixReport.fix.commands).toBeGreaterThanOrEqual(fixReport.fix.blocks);
+    // **Copy is offered where a command is shown.** This is the leg that would have caught a webview without a
+    // clipboard path: `canCopyText()` is asked before the control is rendered, so a zero here means a user is
+    // looking at a command they must retype — which is a decision for a human, not a silent regression.
+    expect(
+      fixReport.fix.copyButtons,
+      "a command is shown with no Copy control on a browser that can copy",
+    ).toBe(fixReport.fix.commands);
+    // A real target, and a label that fits inside it.
+    expect(fixReport.fix.copyHeight).toBeGreaterThanOrEqual(24);
+    expect(fixReport.fix.copySqueezed).toBe(0);
+    // A long command wraps inside its block rather than escaping it.
+    expect(fixReport.fix.commandsOverflowing).toBe(0);
+    // And the highlight is legible: the family's 4.5:1 floor still holds inside the block, whose surface is not
+    // the page's own.
+    expect(
+      fixReport.fix.contrast.below45,
+      JSON.stringify(fixReport.fix.contrast.worst),
+    ).toBe(0);
+    console.log(
+      `· fix block measured: ${fixReport.fix.blocks} block(s), ${fixReport.fix.commands} command(s), ` +
+        `${fixReport.fix.copyButtons} Copy control(s) at ${fixReport.fix.copyHeight}px, worst contrast ` +
+        `${String(fixReport.fix.contrast.worst[0]?.ratio)}:1`,
+    );
   });
 });

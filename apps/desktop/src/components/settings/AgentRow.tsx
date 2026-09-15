@@ -38,6 +38,12 @@
  * are *properties*: they are in `verdictFacts` and they render inside `details`, and this component has no
  * prop through which one could reach the face of a row.
  *
+ * **The command on the line is the one thing set apart from the prose, and that is not a chip.** When a row's
+ * fix is a command line, the sentence and the command share the line — and the command carries a tint and a
+ * radius (`settings__agent-cmd--fix`) so a reader scanning the left edge sees *which rows have something to
+ * run* before reading a word. It stays one line, one `<p>`, one left edge; what changed is that the half a
+ * user acts on is no longer dressed as the half they only read.
+ *
  * ## Why one component and not three similar lists
  *
  * The page has three lists — the nine agents we ship, the ones a user declared, and the 38 recipes — and
@@ -151,16 +157,29 @@ export function AgentRow(props: AgentRowProps): JSX.Element {
             {props.name}
           </strong>
           <p
-            className={`settings__agent-line${props.lineIsCommand === true ? " settings__agent-line--command" : ""}`}
+            className={`settings__agent-line${
+              props.lineIsCommand === true ? " settings__agent-line--command" : ""
+            }`}
             {...(props.lineTitle !== undefined ? { title: props.lineTitle } : {})}
           >
-            {props.line}
-            {props.command !== undefined ? (
+            {/* **A line that *is* a command gets the same tinted face as a command that follows prose.** It is
+                the same fact — *this is the thing to run* — and a page where one row's command is set apart and
+                the next row's is not would look like an oversight rather than a distinction. The tint is an
+                inline box, so the row keeps the height it had (the anatomy test asserts one height for every
+                row, and vertical padding on a block element is exactly how that assertion breaks). */}
+            {props.lineIsCommand === true ? (
+              <code className="settings__agent-cmd settings__agent-cmd--fix">{props.line}</code>
+            ) : (
               <>
-                {" "}
-                <code className="settings__agent-cmd">{props.command}</code>
+                {props.line}
+                {props.command !== undefined ? (
+                  <>
+                    {" "}
+                    <code className="settings__agent-cmd settings__agent-cmd--fix">{props.command}</code>
+                  </>
+                ) : null}
               </>
-            ) : null}
+            )}
           </p>
         </div>
         {/* **The verdict column**, and the row's only chip. Right-aligned inside a fixed track so the chips

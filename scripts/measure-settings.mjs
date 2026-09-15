@@ -339,6 +339,27 @@ if (open !== undefined) {
 }
 
 /**
+ * `--open-aria "<prefix>"` — press **every** control whose accessible name starts with the prefix.
+ *
+ * The Agents page needs this one too, and for the reason the fix block exists: a Not-ready row's way out is
+ * *inside* its disclosure, and eight rows' worth of disclosures is a different page from the one that opens.
+ * Matching on the accessible name is what makes it precise — every Not-ready chip carries
+ * `Not ready for <agent>`, so the prefix picks the rows that have a fix and leaves the Ready rows closed.
+ */
+const openAria = flag("open-aria");
+if (openAria !== undefined) {
+  const pressed = await evaluate(`(() => {
+    const prefix = ${JSON.stringify(openAria)};
+    const hits = [...document.querySelectorAll("button, [role=button]")].filter((node) =>
+      (node.getAttribute("aria-label") ?? "").startsWith(prefix));
+    for (const hit of hits) hit.click();
+    return hits.length;
+  })()`);
+  console.log(`  panels opened by aria prefix "${openAria}": ${pressed}`);
+  await sleep(1400);
+}
+
+/**
  * The measurement itself, run inside the page.
  *
  * `ROW_SELECTOR` is the set of classes this pane draws a *row* with. It is deliberately a selector list
@@ -462,6 +483,46 @@ const report = await evaluate(`(() => {
   });
   const worst = contrast.slice().sort((a, b) => a.ratio - b.ratio).slice(0, 6);
   const gradients = all.filter((n) => getComputedStyle(n).backgroundImage !== "none").length;
+
+  /**
+   * **The fix block, as geometry and contrast** — the numbers behind *"highlight the info on each agent …
+   * we want to highlight it and let user know how to resolve it."*
+   *
+   * Empty when no disclosure is open, which is the honest answer for a closed page rather than a zero that
+   * reads like a failure. With --open-aria "Not ready for" it reports what the highlight actually is: the
+   * command's contrast on the block's own surface (the composited background, via bgOf), whether
+   * any command overflows its block, and the Copy control's rendered size — a 24px target, or a squeezed one.
+   */
+  const fixBlocks = [...body.querySelectorAll(".settings__agent-fix")];
+  const fixParts = fixBlocks.flatMap((block) => [...block.querySelectorAll("*")]);
+  const fixContrast = fixParts
+    .filter((node) => ownText(node).length > 0 && node.children.length === 0)
+    .map((node) => ({
+      cls: node.className,
+      sample: ownText(node).slice(0, 50),
+      size: Math.round(parseFloat(getComputedStyle(node).fontSize) * 10) / 10,
+      ratio: ratio(getComputedStyle(node).color, bgOf(node)),
+    }));
+  const copies = fixBlocks.flatMap((block) => [...block.querySelectorAll(".settings__agent-copy")]);
+  const fix = {
+    blocks: fixBlocks.length,
+    commands: fixBlocks.reduce((n, block) => n + block.querySelectorAll(".settings__agent-command").length, 0),
+    copyButtons: copies.length,
+    commandsOverflowing: fixParts.filter(
+      (node) => node.classList.contains("settings__agent-command")
+        && node.scrollWidth > Math.ceil(node.getBoundingClientRect().width) + 1,
+    ).length,
+    // The smallest Copy target on the page, and whether its label is squeezed inside it — the two ways a
+    // control in a fixed-height row fails quietly.
+    copyHeight: copies.length === 0 ? 0 : Math.min(...copies.map((n) => Math.round(n.getBoundingClientRect().height))),
+    copySqueezed: copies.filter(
+      (n) => n.scrollWidth > Math.ceil(n.getBoundingClientRect().width) + 1,
+    ).length,
+    contrast: {
+      worst: fixContrast.slice().sort((a, b) => a.ratio - b.ratio).slice(0, 4),
+      below45: fixContrast.filter((c) => c.ratio < 4.5).length,
+    },
+  };
 
   /**
    * **The row's anatomy, as geometry.** The fifth number this tool did not have, and the reason it exists:
@@ -641,6 +702,7 @@ const report = await evaluate(`(() => {
     headings: headings.map((h) => ownText(h)),
     groups,
     contrast: { worst, below45: contrast.filter((c) => c.ratio < 4.5).length, gradients },
+    fix,
     anatomy,
     verdicts,
   };

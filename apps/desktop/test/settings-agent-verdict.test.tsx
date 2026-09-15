@@ -27,7 +27,7 @@
  */
 
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -416,8 +416,14 @@ describe("a Not ready row says what is wrong, and how to fix it", () => {
     expect(lead).toContain("Codex is installed");
     expect(lead).toBe(tEn("settings.agent.verdict.connector.why", { agent: "Codex" }));
     // The fix is the first thing in the panel, and it is the entry's own command, verbatim.
-    const steps = [...panel.querySelectorAll(".settings__agent-steps li")].map((li) => textOf(li));
-    expect(steps).toEqual([ADAPTER]);
+    //
+    // Read from the `<code>` rather than from the `<li>`: the list item now also holds the command's Copy
+    // control, so `textOf(li)` would be the command followed by the word *Copy* — an assertion about the
+    // control dressed up as an assertion about the command. The intent is unchanged and now precise: the fix
+    // is this exact command, and there is exactly one step.
+    expect([...panel.querySelectorAll(".settings__agent-steps code")].map((code) => textOf(code))).toEqual([
+      ADAPTER,
+    ]);
     // **The panel *starts* with the fix**, asserted on the panel rather than inside the guide. The first
     // version of this line checked that the lead paragraph sits before the command list — which is true of the
     // guide's internal order and stays true when the whole guide is moved *below* the facts, so it passed on a
@@ -471,6 +477,9 @@ describe("a Not ready row says what is wrong, and how to fix it", () => {
     expect(panel.querySelectorAll(".settings__agent-steps")).toHaveLength(0);
     expect(panel.querySelectorAll("a").length).toBe(0);
     expect(textOf(panel)).not.toMatch(/npm install/);
+    // **And no fix block.** The block is the highlight a user learns to read as *here is what to run*, so
+    // drawing it around our own gap would teach them that our missing adapter is a job for them.
+    expect(panel.querySelector(".settings__agent-fix")).toBeNull();
   });
 
   it("names the unset variable on the row and says where the value comes from", () => {
@@ -655,5 +664,173 @@ describe("the facts that are not problems, and the ones that cannot be known che
     );
     const publishes = facts.find((fact) => fact.label === en["settings.agent.fact.publishes"]);
     expect(publishes?.value).toBe(tEn("settings.agent.notDeclared", { agent: "Codex" }));
+  });
+});
+
+/* ────────────────────────── the fix, highlighted and copyable ────────────────────────── */
+
+/**
+ * **The owner's second report on this page:** *"can we highlight the info on each agent … we want to highlight
+ * it and let user know how to resolve it."* Three facts, and each is a DOM fact rather than an adjective:
+ *
+ *   1. the fix is a **block** (`settings__agent-fix`), and it is drawn **exactly when** there is something for
+ *      the user to do — never around our own gap, which is what the earlier slice's "our gap is not your
+ *      install" rule would otherwise lose to a pretty callout;
+ *   2. the command inside it is the command, verbatim, in the element the stylesheet sets apart;
+ *   3. **Copy** is offered, and it tells the truth in both directions — the label says *Copied* only when the
+ *      clipboard actually received the text, and says so plainly when it did not. A tick over a command that
+ *      is not on the clipboard is the mutation the failure leg exists to fail.
+ */
+describe("the fix is highlighted, and it can be copied", () => {
+  /** Put a clipboard on `navigator`, and record what was written. Removed after each leg. */
+  function stubClipboard(write: (text: string) => Promise<void>): { written: string[] } {
+    const written: string[] = [];
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: (text: string) => {
+          written.push(text);
+          return write(text);
+        },
+      },
+    });
+    return { written };
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, "clipboard");
+  });
+
+  it("draws the block exactly when there is something to do, and never for our own gap", () => {
+    // The invariant, driven from both sides in one place: a callout that says *here is what to run* must not be
+    // drawn around our own gap, or the layout stops distinguishing "there is a fix" from "there is nothing you
+    // can do" — the distinction the earlier slice bought with words and lost the moment it was a matter of taste.
+    const cases: { what: string; availability: HarnessSummary["availability"]; block: boolean }[] = [
+      { what: "ready", availability: { state: "ready", binary: "/usr/local/bin/codex" }, block: false },
+      {
+        what: "needs its connector",
+        availability: { state: "needs-bridge", agentBinary: "/usr/local/bin/codex", fix: [{ command: ADAPTER }] },
+        block: true,
+      },
+      {
+        what: "not installed",
+        availability: { state: "not-installed", fix: [{ command: INSTALL_GOOSE }] },
+        block: true,
+      },
+      {
+        what: "undrivable by us",
+        availability: { state: "unsupported", binary: "/usr/local/bin/codex" },
+        block: false,
+      },
+      { what: "unchecked", availability: { state: "unknown" }, block: false },
+    ];
+
+    for (const one of cases) {
+      const { container } = show({
+        harnesses: [harness({ id: "codex", label: "Codex", availability: one.availability })],
+      });
+      const panel = openDetails(rowOf(container, "Codex"));
+      expect(panel.querySelector(".settings__agent-fix") !== null, `the ${one.what} case`).toBe(one.block);
+      cleanup();
+    }
+  });
+
+  it("puts the lead, the verbatim command and Copy inside one highlighted block", () => {
+    const { container } = show({
+      harnesses: [
+        harness({
+          id: "codex",
+          label: "Codex",
+          availability: { state: "needs-bridge", agentBinary: "/usr/local/bin/codex", fix: [{ command: ADAPTER }] },
+        }),
+      ],
+    });
+    const panel = openDetails(rowOf(container, "Codex"));
+    const block = panel.querySelector(".settings__agent-fix");
+    if (!(block instanceof HTMLElement)) throw new Error("no fix block");
+
+    // The sentence that explains the state is the block's headline, not a footnote beside it.
+    expect(textOf(block.querySelector(".settings__agent-fact--lead"))).toBe(
+      tEn("settings.agent.verdict.connector.why", { agent: "Codex" }),
+    );
+    // The command, verbatim, in the element the sheet sets apart.
+    const command = block.querySelector(".settings__agent-fix .settings__agent-command");
+    expect(textOf(command)).toBe(ADAPTER);
+    // And the block sits before the properties: the way out first, the facts second, which is the order the
+    // panel was already built in and the one a reader needs.
+    expect(panel.firstElementChild?.className).toBe("settings__agent-guide");
+  });
+
+  it("copies the command, and says Copied only once the clipboard has it", async () => {
+    const { written } = stubClipboard(async () => undefined);
+    const { container } = show({
+      harnesses: [
+        harness({
+          id: "codex",
+          label: "Codex",
+          availability: { state: "needs-bridge", agentBinary: "/usr/local/bin/codex", fix: [{ command: ADAPTER }] },
+        }),
+      ],
+    });
+    const panel = openDetails(rowOf(container, "Codex"));
+    const copy = panel.querySelector(".settings__agent-copy");
+    if (!(copy instanceof HTMLButtonElement)) throw new Error("no Copy control");
+
+    // The accessible name begins with the printed word (WCAG 2.5.3) and names exactly what will be copied —
+    // eight buttons all called *Copy* is a list a voice-control user cannot navigate.
+    expect(copy.textContent).toBe(en["settings.agents.fix.copy"]);
+    expect(copy.getAttribute("aria-label")).toBe(tEn("settings.agents.fix.copy.aria", { command: ADAPTER }));
+
+    fireEvent.click(copy);
+    await waitFor(() => expect(copy.textContent).toBe(en["settings.agents.fix.copied"]));
+    expect(written).toEqual([ADAPTER]);
+  });
+
+  it("says the copy failed rather than showing a tick over a command that is not on the clipboard", async () => {
+    // The mutation: `void navigator.clipboard.writeText(…)` with an unconditional *Copied* label. On a machine
+    // where the write is refused — an insecure context, a denied permission — that is a control telling the
+    // user something untrue about their own machine, which is the one thing this product's rules forbid
+    // everywhere else.
+    const { written } = stubClipboard(async () => {
+      throw new Error("clipboard refused");
+    });
+    const { container } = show({
+      harnesses: [
+        harness({
+          id: "codex",
+          label: "Codex",
+          availability: { state: "needs-bridge", agentBinary: "/usr/local/bin/codex", fix: [{ command: ADAPTER }] },
+        }),
+      ],
+    });
+    const panel = openDetails(rowOf(container, "Codex"));
+    const copy = panel.querySelector(".settings__agent-copy");
+    if (!(copy instanceof HTMLButtonElement)) throw new Error("no Copy control");
+
+    fireEvent.click(copy);
+    await waitFor(() => expect(copy.textContent).toBe(en["settings.agents.fix.failed"]));
+    expect(copy.textContent).not.toBe(en["settings.agents.fix.copied"]);
+    expect(written).toEqual([ADAPTER]);
+    // The command is still on screen and still selectable — the fallback a user has when a copy fails.
+    expect(textOf(panel.querySelector(".settings__agent-command"))).toBe(ADAPTER);
+  });
+
+  it("offers no Copy where copying cannot work, and still shows the command", () => {
+    // jsdom has neither `navigator.clipboard` nor `execCommand`, which is exactly the state this leg needs:
+    // the control is not rendered rather than rendered dead, and the command a user would type is still there.
+    const { container } = show({
+      harnesses: [
+        harness({
+          id: "codex",
+          label: "Codex",
+          availability: { state: "needs-bridge", agentBinary: "/usr/local/bin/codex", fix: [{ command: ADAPTER }] },
+        }),
+      ],
+    });
+    const panel = openDetails(rowOf(container, "Codex"));
+    const block = panel.querySelector(".settings__agent-fix");
+    if (!(block instanceof HTMLElement)) throw new Error("no fix block");
+    expect(block.querySelectorAll("button")).toHaveLength(0);
+    expect(textOf(block.querySelector(".settings__agent-command"))).toBe(ADAPTER);
   });
 });

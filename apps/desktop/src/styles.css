@@ -1592,6 +1592,26 @@ body {
   user-select: text;
 }
 
+/* **The command, set apart from the prose that explains it.**
+
+   The owner's second report on this page: *"can we highlight the info on each agent … we want to highlight it
+   and let user know how to resolve it."* The sentence that says what is missing was already right; it was the
+   command — the half a user *acts* on — that wore the same clothes as the half they only read.
+
+   **Horizontal padding only.** The tint is painted by an inline box, and an inline box does not change the
+   line's height, so every row keeps the one height `settings-row-anatomy.e2e.test.ts` asserts. Vertical
+   padding here would grow exactly the rows that carry a command and leave the rest — the ragged list the
+   owner's earlier report was about, arriving through a new door. */
+.settings__agent-cmd--fix {
+  padding: 0 var(--space-1-5);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  /* `--foreground` and not the `--text` used above: `--text` is defined once, dark, in this file's own
+     `:root` (the light-palette gap recorded in `docs/envoycoder-ui.md`), while `--foreground` is themed. The
+     two are the same value in dark mode, so this changes nothing there and is readable in light mode. */
+  color: var(--foreground);
+}
+
 /* **The properties column.** Right-aligned for the reason the table above gives, and the state chip is the
    last chip in the DOM so *it* owns the column's edge: verdict chips hang inward from it. */
 .settings__agent-props {
@@ -1816,6 +1836,95 @@ body {
   color: var(--text-muted, #a1a5a4);
   overflow-wrap: anywhere;
   user-select: text;
+}
+
+/* ── **the fix**, which is the one block a Not-ready row exists to hand over ──────────────────────
+
+   The shape is this app's existing *something needs doing* callout (`.approval`): a 1px frame, the large
+   radius, the amber rule down the left, on a raised surface. What is new is only that the commands inside it
+   are set to be noticed, and each carries a Copy control.
+
+   Amber and not the accent: the accent is this app's one action colour (Send, Allow once), and a callout
+   wearing it would compete with the primary button on the same screen. Amber and not red: destructive is a
+   colour that only appears inside a confirmation, which is a rule this sheet states at the top. */
+.settings__agent-fix {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-1) 0 var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--status-warning);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+}
+
+/* The lead inside the block is the row's own sentence, so it keeps the class the tests and the reading order
+   already know; it is only brighter here, because inside the fix it is the headline rather than a footnote. */
+.settings__agent-fix .settings__agent-fact--lead {
+  color: var(--foreground);
+}
+
+/* The steps, numbered, because the lead reads *run these in the order they are listed* and a list that says so
+   should be countable at a glance. `list-style: none` plus a counter rather than the native marker: the
+   marker of a `display: list-item` cannot sit inside the flex row the command and its Copy button need. */
+.settings__agent-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: agent-step;
+}
+
+.settings__agent-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings__agent-steps--ordered > li::before {
+  counter-increment: agent-step;
+  content: counter(agent-step);
+  min-width: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-code);
+  color: var(--foreground-muted);
+  text-align: right;
+}
+
+/* Inside the fix the command is the loudest thing on the block: full-strength text on the raised surface, and
+   it takes the free space so the Copy buttons line up down the block rather than following each command's
+   length. */
+.settings__agent-fix .settings__agent-command {
+  flex: 1 1 auto;
+  color: var(--foreground);
+}
+
+.settings__agent-copy {
+  flex: none;
+}
+
+/* A copy that did not land says so in the one colour this sheet uses for *needs you* — and never shows the
+   tick, which is the whole reason `copyText` reports a boolean instead of throwing. */
+.settings__agent-copy--failed {
+  color: var(--status-warning);
+}
+
+/* Off-screen but readable by a screen reader. Used for the result of an action whose *visible* signal is a
+   button label changing, which assistive technology does not announce on its own. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* The environment variables a provider names, one per line. `--unset` is the state that matters: a

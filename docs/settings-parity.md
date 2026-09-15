@@ -2617,6 +2617,96 @@ above is numeric and therefore stronger than an eyeball for alignment, and *noth
 the page reads well, whether 144px looks balanced, or whether the two verdicts are the right words to put in
 front of a person. Those are the owner's, and the pictures are there for them.
 
+### 7.18 The fix, set apart: a block a reader lands on, and a Copy control
+
+The owner's third report on this page, verbatim: *"On the Agents page, can we highlight the info on each agent like
+"Claude Code is installed. EnvoyCoder needs its connector to drive it, and that is the one piece that is missing:
+npm install -g @agentclientprotocol/claude-agent-acp". we want to highlight it and let user know how to resolve
+it."*
+
+The words were already right — §7.16 and §7.17 were about the wording, and the quoted sentence is the one those
+slices wrote. What the owner is describing is what that sentence **looked like**: a lead paragraph in the same
+`--text-dim` as the metadata, and the command in a `<code>` set to `--text-muted`, in a disclosure whose only
+structure was a default-styled `<ol>`. The half a user *acts* on was dressed as the half they only read.
+
+#### 7.18.1 What changed, and the two things that deliberately did not
+
+| element | before | after |
+|---|---|---|
+| the way out (disclosure) | lead paragraph, then a bare `<ol>` | a `.settings__agent-fix` block: 1px frame, `--radius-lg` and a 3px `--status-warning` rule — the shape `.approval` already uses for *something needs doing* — on `--surface-1` |
+| the command | `--text-muted`, no background | `--foreground` on the block, and on a row's line a tinted pill (`--surface-2`, `--radius-sm`) |
+| the control | none | **Copy** per command, with a two-second *Copied*, a `role="status"` line for screen readers, and a `Copy failed` state that is never a tick |
+| the steps | an unstyled `<ol>` | numbered by a CSS counter, because the lead reads *run these in the order they are listed* |
+
+Two rules hold the change in place, and both are asserted:
+
+* **The block is drawn exactly when there is something for the user to run** (`steps` and `environment` guides —
+  installs and unset variables). `nothing` and `app` keep the plain shape, so the layout continues to carry §7.17's
+  distinction between *there is a fix* and *there is nothing you can do*; a callout around our own gap would teach
+  a user that our missing adapter is a job for them.
+* **The tint costs no height.** It is an inline box with `padding: 0 <horizontal>`, and the reason is the previous
+  report: vertical padding would grow exactly the rows that carry a command and leave the rest, which is the ragged
+  list *"Align the texts"* was about. `settings-row-anatomy.e2e.test.ts` asserts one height for every row, so this
+  is a rule a browser enforces rather than a comment.
+
+Colour, for the record: amber and **not** the accent (the accent is this app's one action colour, and a callout
+wearing it would compete with the Run button on the same screen) and **not** `--destructive` (destructive is a
+colour that only appears inside a confirmation). The new rules use `--foreground`/`--foreground-muted` rather than
+the neighbouring `--text`/`--text-dim`, because those two are defined once, dark, in `styles.css`'s own `:root` —
+the light-palette gap `docs/envoycoder-ui.md` records — while the `--foreground` family is themed. They are the same
+values in dark mode, so nothing moved there and the block is legible in light mode.
+
+#### 7.18.2 What cannot be assumed, and is therefore asked
+
+`navigator.clipboard` needs a **secure context**, and this app is loaded from three different ones (Vite's loopback
+in development, Tauri's protocol in the bundle, WebKitGTK's on Linux). So `canCopyText()` is asked **before the
+control is rendered**: a machine with neither the modern API nor `execCommand` gets the command and no button —
+degraded and honest, rather than a control that cannot work. The write itself tries the modern API and falls back to
+`execCommand("copy")` inside the click (a clipboard write after an `await` loses the gesture WebKit requires), and
+returns a boolean: a caller that ignored it would render *Copied* over a command that is not on the clipboard, which
+is the one outcome worth writing code to avoid.
+
+**The escape hatch, named rather than discovered later:** if a future webview refuses both paths, the answer is
+Tauri's `clipboard-manager` plugin — a Rust dependency plus a capability permission (`clipboard-manager:allow-write-text`),
+the class of change this product has already paid for once (the missing `core:window:allow-start-dragging`).
+
+#### 7.18.3 Measured in a real window
+
+Taken by `scripts/measure-settings.mjs`, extended for this slice with `--open-aria "<prefix>"` (press every control
+whose accessible name starts with the prefix) and a `fix` section in its report. The numbers below are from the
+machine that has the owner's own states — Claude Code and Codex `needs-bridge`, six Not-ready rows carrying a fix,
+measured on the real page in headless Chrome with all six disclosures open:
+
+| measurement | value |
+|---|---|
+| fix blocks / commands / Copy controls | 6 / 6 / 6 — one per Not-ready row with a fix |
+| Copy control height | **24px** (the design's control height, and `copySqueezed: 0`) |
+| commands overflowing their block | **0** |
+| worst contrast **inside** the block | **6.52:1** (the Copy label on the block's surface), floor 4.5:1 |
+| page contrast below 4.5:1, panels open | **0** |
+| name 15px/600, chip-right spread, actions-right spread | unchanged: **0px** spread, one height for all 48 rows |
+
+The e2e leg that spends these numbers is honest about its own emptiness: on a machine with no Not-ready row carrying
+a fix, there is nothing to measure, and it says so out loud instead of passing quietly.
+
+**What was measured, and what was reasoned about.** Measured: every number in §7.18.3; the five mutations below, each
+one reddening the named test. Reasoned about rather than measured: that *Copy* is a better label here than a
+clipboard icon (the row is being read, not recognised); that one control per command is the right count for a
+two-step fix; and that a `Copy failed` label is preferable to a silent no-op. **Not verified at all:** the clipboard
+path inside the shipped WKWebView and WebView2 — the harness drives Chrome, `execCommand` is the documented path in
+both shipping engines, and the fallback is exactly what a browser without the modern API takes. That is the one claim
+in this slice a packaged build should confirm on each OS at M6.
+
+#### 7.18.4 The mutations
+
+| mutation | the test that reddens |
+|---|---|
+| the fix block is never drawn | 7 legs, including *draws the block exactly when there is something to do* and the two §7.17 guide legs |
+| the row-face command loses its tint | *tints the command on a row whose fix is a command, and leaves a Ready row alone* |
+| the copy label always claims success | *says the copy failed rather than showing a tick over a command that is not on the clipboard* |
+| Copy is offered where it cannot work | *offers no Copy where copying cannot work, and still shows the command* |
+| the tint adds vertical padding | *gives the tint no vertical padding, so every row keeps the height the page measured* |
+
 
 ## 8. The slice plan
 

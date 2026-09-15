@@ -515,6 +515,18 @@ export const en = {
     "EnvoyCoder already ships this agent, so it is configured in “On this machine” above rather than added a second time.",
   "settings.agents.row.installLink": "Where to get it",
   "settings.agents.row.installLink.title": "{agent}'s own page",
+  /**
+   * **The fix block's one control.** Copy, and the two things that can happen when it is pressed.
+   *
+   * The command is never translated — a translated `npm install -g …` is a command that does not run — so
+   * these four strings are all the copy control ever says. `copy.aria` names exactly what will be copied,
+   * because a list of eight buttons called *Copy* is a list a voice-control user cannot navigate; and it
+   * begins with the printed word, which is what WCAG 2.5.3 asks of a label that repeats down a list.
+   */
+  "settings.agents.fix.copy": "Copy",
+  "settings.agents.fix.copied": "Copied",
+  "settings.agents.fix.failed": "Copy failed",
+  "settings.agents.fix.copy.aria": "Copy {command}",
   "settings.agents.manual.open": "Add a program of my own",
   "settings.agents.manual.open.title":
     "If you already have a coding agent that speaks the Agent Client Protocol and it is not in the catalogue, declare it here. EnvoyCoder will start it and probe it exactly as it does the others.",

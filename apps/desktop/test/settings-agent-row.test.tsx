@@ -395,3 +395,80 @@ describe("the name is the row's most prominent text", () => {
     expect(textOf(details!)).toContain(en["settings.agent.provisional.npx"]);
   });
 });
+
+/* ────────────────────────── the command is the part set apart ────────────────────────── */
+
+/**
+ * **The half of the owner's report that was about the row's face:** *"can we highlight the info on each agent …
+ * we want to highlight it and let user know how to resolve it."*
+ *
+ * The row was already carrying the fix — the sentence, then the command in its own monospaced face — and a
+ * reader scanning nine rows met it as one more grey line. So the command now carries a tint, and these legs
+ * pin the two things that make the tint mean something:
+ *
+ *   * it appears **only where there is a command to run** (a Ready row has none, so the highlight is a signal
+ *     rather than decoration);
+ *   * it costs **no height** — the tint is an inline box, and `settings-row-anatomy.e2e.test.ts` asserts that
+ *     every row on the page is the same height. Vertical padding here would grow exactly the rows that carry a
+ *     fix and leave the rest, which is the ragged list the owner's *"Align the texts"* report was about.
+ */
+describe("the command is the one part of a row set apart", () => {
+  it("tints the command on a row whose fix is a command, and leaves a Ready row alone", () => {
+    const container = show();
+
+    // The connector case: the sentence leads, the command is set apart on the same line, in one `<p>`.
+    const codex = rowOf(container, "Codex");
+    const code = codex.querySelector(".settings__agent-cmd");
+    expect(code?.textContent).toBe(ADAPTER);
+    expect(code?.classList.contains("settings__agent-cmd--fix")).toBe(true);
+    const sentence = codex.querySelector(".settings__agent-line");
+    if (sentence === null) throw new Error("no line on the Codex row");
+    expect(textOf(sentence)).toBe(`${en["settings.agent.verdict.connector.lead"]} ${ADAPTER}`);
+
+    // The absent case: the line *is* the command, and it gets the same face rather than a different one — the
+    // fact is the same, so a page that highlighted one and not the other would look arbitrary.
+    const copilot = rowOf(container, "GitHub Copilot");
+    const line = copilot.querySelector(".settings__agent-line");
+    if (line === null) throw new Error("no line on the Copilot row");
+    expect(textOf(line)).toBe("npm install -g @github/copilot");
+    const command = line.querySelector(".settings__agent-cmd--fix");
+    if (command === null) throw new Error("the command on the Copilot row is not set apart");
+    expect(textOf(command)).toBe("npm install -g @github/copilot");
+
+    // A Ready row has nothing to run, and therefore no tint to explain.
+    const ready = rowOf(container, "DeepSeek Harness");
+    expect(ready.querySelectorAll(".settings__agent-cmd")).toHaveLength(0);
+    expect(ready.querySelectorAll(".settings__agent-cmd--fix")).toHaveLength(0);
+  });
+
+  it("gives the tint no vertical padding, so every row keeps the height the page measured", () => {
+    // The cascade cannot be resolved in jsdom, so this reads the declaration instead — the one property that
+    // decides whether the highlight is paint or layout. `padding: 0 <horizontal>` is the shape; a vertical
+    // value here is a row that grows, and the height assertion in the e2e leg is what would catch it a browser
+    // later, after the review that did not.
+    const pill = ruleBody(STYLES, ".settings__agent-cmd--fix");
+    const padding = declared(pill, "padding").split(/\s+/);
+    expect(padding[0], "the tinted command declares vertical padding").toBe("0");
+    for (const property of ["padding-top", "padding-bottom", "padding-block"]) {
+      expect(() => declared(pill, property), `the tinted command sets ${property}`).toThrow();
+    }
+    // And it is a tint on the raised surface rather than a second colour: the page's own surface token, so the
+    // pill is legible in both palettes without a new colour being invented for it.
+    expect(declared(pill, "background")).toBe("var(--surface-2)");
+  });
+
+  it("frames the fix in amber, never in the accent and never in the destructive colour", () => {
+    // **The design laws, as declarations.** One accent, used for the one primary action in view — so a callout
+    // wearing it would compete with the Run button on the same screen. Destructive is a colour that only
+    // appears inside a confirmation — a fix a user has not decided on yet is not a confirmation. What is left
+    // is the status colour this sheet already uses for *something needs doing* (`.approval`), which is exactly
+    // what the block is.
+    const block = ruleBody(STYLES, ".settings__agent-fix");
+    expect(declared(block, "border-left")).toContain("var(--status-warning)");
+    expect(block).not.toContain("var(--accent)");
+    expect(block).not.toContain("--destructive");
+    // A frame and a raised surface, like every other inline callout in this app.
+    expect(declared(block, "background")).toBe("var(--surface-1)");
+    expect(declared(block, "border-radius")).toBe("var(--radius-lg)");
+  });
+});
