@@ -40,7 +40,7 @@ export interface AcpLaunch {
    * that needs them, and awaited rather than best-effort: an agent that wanted authentication and did not
    * get it answers `session/new` with a refusal naming the method, and that refusal is the sentence a
    * user should read. `cursor-agent acp` is the one agent here that needs it; `AgentLaunch.authMethodId`
-   * in `@envoycoder/agent-catalog` carries the evidence, including the fact that the requirement is
+   * in `@envoydev/agent-catalog` carries the evidence, including the fact that the requirement is
    * stateful, and why the *catalogue* rather than this client chooses a method.
    */
   authMethodId?: string;
@@ -49,7 +49,7 @@ export interface AcpLaunch {
    * specification's `modeId`.
    *
    * **Declared, never discovered.** The two contracts are cited on `AgentLaunch.modeParam` in
-   * `@envoycoder/agent-catalog`, and the reason this is a fact rather than a runtime fallback is worth
+   * `@envoydev/agent-catalog`, and the reason this is a fact rather than a runtime fallback is worth
    * repeating next to the field it governs: the built-in harness **accepts** a `modeId` by ignoring it and
    * answering success, so a client that "tried one and fell back on a refusal" would report a mode it
    * never applied. Absent means "nobody has read this agent's mode method", and the client refuses to send

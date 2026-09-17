@@ -33,7 +33,7 @@ import {
   unknownAuth,
   type AgentDelivery,
   type AvailabilityFix,
-} from "@envoycoder/protocol";
+} from "@envoydev/protocol";
 import {
   canApplyModel,
   canApplyThinking,
@@ -44,7 +44,7 @@ import {
   type HarnessProbe,
   type ProbeFinding,
   type ProviderProbe,
-} from "@envoycoder/agent-catalog";
+} from "@envoydev/agent-catalog";
 
 /**
  * A catalogue entry plus what this machine can actually do with it.
@@ -115,13 +115,13 @@ export function summarize(
     // hardcoded list. Empty means "the agent declares none here", which for `deepseek-harness` is the
     // answer rather than a gap: its ACP surface has no `session/set_mode`, so it has nothing to offer.
     // (This said the real answer "arrives in the `session/new` response" — it does not, for either
-    // harness. See the citations on `agentMode` in `@envoycoder/agent-catalog`.)
+    // harness. See the citations on `agentMode` in `@envoydev/agent-catalog`.)
     modes: definition.modes,
     // The models this agent publishes — **and what an empty list means**, which is the half a list
     // alone cannot carry. `deepseek-harness` publishes none we can read before a run exists and still
     // takes one, so its `kind` is `"free-text"`; once a run has happened, the list that run reported
     // replaces it (`observedAt` says when). Rendering an empty list as "no model" would be a claim
-    // about somebody else's product. The rules and their citations live in `@envoycoder/agent-catalog`.
+    // about somebody else's product. The rules and their citations live in `@envoydev/agent-catalog`.
     models: facts.models,
     // The thinking level, on the same terms one step further: it is knowable *only* from a session, so
     // this is `"session"` (we have not seen one), `"listed"` (we have) or `"none"` (the agent offers

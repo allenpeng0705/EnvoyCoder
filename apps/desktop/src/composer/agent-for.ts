@@ -25,7 +25,7 @@ import type {
   HarnessId,
   HarnessState,
   HarnessSummary,
-} from "@envoycoder/protocol";
+} from "@envoydev/protocol";
 
 import { harnessLabel } from "./harness-label.js";
 import type { ComposerAgent } from "./controls.js";
@@ -35,7 +35,7 @@ import type { ComposerAgent } from "./controls.js";
  *
  * ## The compatibility consequence of widening the field, in one function
  *
- * `availability` replaced `available: boolean | "unknown"`. Both halves of EnvoyCoder ship together, but a
+ * `availability` replaced `available: boolean | "unknown"`. Both halves of EnvoyDev ship together, but a
  * **running** daemon can be a build behind — this repository already learned that the hard way when a
  * required field's absence crashed the settings page — so the window has to render the old answer rather
  * than pretend it did not arrive. The mapping is the interesting part, and it is deliberately *lossy in one

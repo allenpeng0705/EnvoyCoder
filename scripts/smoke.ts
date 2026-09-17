@@ -19,9 +19,9 @@ import { networkInterfaces, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveRunningNode } from "@envoymesh/node-core";
-import { HARNESS_IDS } from "@envoycoder/protocol";
-import { probeHarness } from "@envoycoder/agent-catalog";
-import { currentSearchPath } from "@envoycoder/platform";
+import { HARNESS_IDS } from "@envoydev/protocol";
+import { probeHarness } from "@envoydev/agent-catalog";
+import { currentSearchPath } from "@envoydev/platform";
 import {
   attachToMeshNode,
   checkPairingCode,
@@ -29,7 +29,7 @@ import {
   coderSessionIdentity,
   createCoderDaemonHost,
   createCoderDispatcher,
-} from "@envoycoder/host-bridge";
+} from "@envoydev/host-bridge";
 
 // The window's own halves, not a hand-written client: the flow this exercises is the window's, and a
 // smoke test that re-implemented it would pass while the window stayed broken.
@@ -47,6 +47,7 @@ async function callFrom(
   port: number,
   path: string,
   method: string,
+  params: Record<string, unknown> = {},
 ): Promise<{ result?: unknown; error?: { code?: string; message?: string } }> {
   const { WebSocket } = (await import("ws")) as unknown as {
     WebSocket: new (url: string) => {
@@ -75,7 +76,7 @@ async function callFrom(
       resolve(value);
     };
     socket.on("open", () =>
-      socket.send(JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: {} })),
+      socket.send(JSON.stringify({ jsonrpc: "2.0", id: 1, method, params })),
     );
     socket.on("message", (raw: unknown) => {
       try {
@@ -169,7 +170,7 @@ function step(name: string, run: () => Promise<string> | string): void {
 }
 
 step("product state lives under the shared home", () => {
-  const home = mkdtempSync(join(tmpdir(), "envoycoder-smoke-"));
+  const home = mkdtempSync(join(tmpdir(), "envoydev-smoke-"));
   try {
     const paths = coderPaths(home);
     if (!paths.stateDir.startsWith(home)) throw new Error(`${paths.stateDir} escaped ${home}`);
@@ -194,7 +195,7 @@ step("a pairing code carries this app's name, and another app's is refused", () 
     });
     const accepted = checkPairingCode(mine);
     if (!accepted.ok) throw new Error(`our own code was refused: ${accepted.message}`);
-    const theirs = mine.replace("app=EnvoyCoder", "app=EnvoyMesh");
+    const theirs = mine.replace("app=EnvoyDev", "app=EnvoyMesh");
     const refused = checkPairingCode(theirs);
     if (refused.ok) throw new Error("a code from another app was accepted");
     return refused.message;
@@ -211,7 +212,7 @@ step("a pairing code carries this app's name, and another app's is refused", () 
  * delivery wrote to whoever was subscribed. Measured on the real transport, a tokenless client on the
  * LAN received the node's handshake, its status and every broadcast — on a socket whose first RPC was
  * correctly refused. Fixed upstream (`@envoymesh/host-connect`); this leg keeps it fixed from the
- * consumer's side: an EnvoyCoder window must still subscribe over loopback, and a stranger must get
+ * consumer's side: an EnvoyDev window must still subscribe over loopback, and a stranger must get
  * nothing at all — not a refusal followed by a stream.
  */
 step("refuses an event subscription from the LAN, and pushes it nothing", async () => {
@@ -260,7 +261,7 @@ step("refuses an event subscription from the LAN, and pushes it nothing", async 
  * not running the social app.
  *
  * What it proves when it does run: discovery found a node whose identity was **verified**, the
- * product session came back scoped to `product:EnvoyCoder` (not the owner's), and a refusal would
+ * product session came back scoped to `product:EnvoyDev` (not the owner's), and a refusal would
  * have been reported rather than swallowed.
  */
 step("attaches to a running EnvoyMesh node, as a product, over loopback", async () => {
@@ -354,6 +355,115 @@ step("refuses a tokenless call from the LAN, while loopback is trusted", async (
 });
 
 /**
+ * **The other half of the pairing claim, and the one the phone depends on.**
+ *
+ * The step above proves a tokenless caller from the LAN is refused. That is necessary and nowhere
+ * near sufficient: the whole product is "start it at the desk, watch it from the phone", and until a
+ * *minted* token is actually answered, the phone has no working dial path at all. This was the plan's
+ * Phase A acceptance and it had no evidence — neither leg of it.
+ *
+ * Measured from the LAN rather than from loopback on purpose: loopback is trusted without a token, so
+ * a loopback probe would pass whether or not the token was read, which is a test that agrees with the
+ * bug. The socket dials the machine's own non-loopback address so the transport sees a peer that must
+ * authenticate.
+ *
+ * Revocation is the last leg because it is the one a user acts on: "who can reach this machine" has
+ * to have an answer that takes effect, not one that only removes a row from a list.
+ */
+step("a paired phone's token is answered from the LAN, and revoking it stops being answered", async () => {
+  const address = firstLanAddress();
+  if (!address) return "no non-loopback interface on this machine — the paired-device leg could not run";
+
+  const home = mkdtempSync(join(tmpdir(), "envoydev-smoke-paired-"));
+  const daemon = await startCoderDaemon({
+    port: 0,
+    home,
+    paths: coderPaths(home),
+    // No node on a test machine, and the attach is not what this step is about.
+    skipMeshAttach: true,
+  });
+
+  const withToken = (token: string): string =>
+    `${daemon.path}?token=${encodeURIComponent(token)}`;
+
+  try {
+    // Minted from loopback, which is where the owner's own machine mints — and where the desktop's
+    // "Pair a phone" button will call from.
+    const minted = await callFrom("127.0.0.1", daemon.port, daemon.path, "coder.mintPairing");
+    if (minted.error) {
+      throw new Error(`minting from loopback was refused: ${JSON.stringify(minted.error)}`);
+    }
+    const { uri, device } = minted.result as { uri?: string; device?: { id?: string } };
+    if (typeof uri !== "string" || typeof device?.id !== "string") {
+      throw new Error(`minting answered without a code and a device: ${JSON.stringify(minted.result)}`);
+    }
+
+    const code = checkPairingCode(uri);
+    if (!code.ok) {
+      throw new Error(`the daemon minted a code its own window would refuse: ${code.message}`);
+    }
+
+    // **Leg 1 — the phone's call is answered.** This is the assertion the whole mobile milestone
+    // rests on.
+    const answered = await callFrom(address, daemon.port, withToken(code.token), "coder.hello");
+    if (answered.error) {
+      throw new Error(
+        `a paired device at ${address} was refused: ${JSON.stringify(answered.error)} — ` +
+          "the phone has no working dial path until this is answered",
+      );
+    }
+
+    // **Leg 2 — a token nobody minted is not answered.** Without this, "answered" could have been
+    // "the token was never looked at".
+    const stranger = await callFrom(address, daemon.port, withToken("not-a-token"), "coder.hello");
+    if (!stranger.error) {
+      throw new Error(
+        `an invented token at ${address} was ANSWERED — the resolver is not reading the token at all`,
+      );
+    }
+
+    // **Leg 3 — the paired device cannot mint another one.** The module that owns pairing said this
+    // was loopback-only long before it was: the dispatcher never handed the caller to a handler, so
+    // nothing could tell a phone from the owner's window, and a phone could mint itself a fresh token
+    // that outlived the revocation of its own. This leg is the difference between a sentence and a
+    // rule.
+    const phoneMints = await callFrom(address, daemon.port, withToken(code.token), "coder.mintPairing");
+    if (!phoneMints.error) {
+      throw new Error(
+        "a paired device minted another pairing code — a token is not allowed to outlive its own revocation",
+      );
+    }
+    // Our own codes travel in the **message**, not in `error.code`: the transport sets `code` only for
+    // its own closed catalogue and answers `ERROR` for everything else (`@envoydev/protocol`'s
+    // `coderError` documents why). Asserting on `code` here would have been asserting the transport's
+    // vocabulary for our refusal.
+    if (!String(phoneMints.error.message).includes("envoydev.unauthorized")) {
+      throw new Error(`expected our unauthorized code for a paired device minting, got ${JSON.stringify(phoneMints.error)}`);
+    }
+
+    // **Leg 4 — revoking the device stops the token working**, with the same token that just worked.
+    const revoked = await callFrom("127.0.0.1", daemon.port, daemon.path, "coder.revokePairedDevice", {
+      id: device.id,
+    });
+    if (revoked.error) {
+      throw new Error(`revoking from loopback was refused: ${JSON.stringify(revoked.error)}`);
+    }
+    const afterRevoke = await callFrom(address, daemon.port, withToken(code.token), "coder.hello");
+    if (!afterRevoke.error) {
+      throw new Error("a revoked device's token was still answered — revocation does not reach the dial path");
+    }
+
+    return (
+      `${address} → paired token answered; invented token ${stranger.error.code}; ` +
+      `paired device minting refused; after revoke ${afterRevoke.error.code}`
+    );
+  } finally {
+    await daemon.stop();
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+/**
  * The daemon as the desktop app actually starts it: the bundle, as a child process.
  *
  * The unit suite boots the daemon in-process, which proves the handlers and the store. This proves
@@ -367,14 +477,14 @@ step("the bundled daemon starts as a child process and answers over its own sock
   const { readFile, rm } = await import("node:fs/promises");
   const { existsSync } = await import("node:fs");
 
-  const home = mkdtempSync(join(tmpdir(), "envoycoder-smoke-daemon-"));
+  const home = mkdtempSync(join(tmpdir(), "envoydev-smoke-daemon-"));
   const entry = join(root, "apps", "desktop", "dist-daemon", "main.mjs");
   if (!existsSync(entry)) {
     throw new Error("apps/desktop/dist-daemon/main.mjs is missing — run `npm run daemon:build`");
   }
 
   const child = spawn(process.execPath, [entry], {
-    env: { ...process.env, ENVOYMESH_HOME: home, ENVOYCODER_DAEMON_PORT: "0" },
+    env: { ...process.env, ENVOYMESH_HOME: home, ENVOYDEV_DAEMON_PORT: "0" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";
@@ -384,7 +494,7 @@ step("the bundled daemon starts as a child process and answers over its own sock
   try {
     // The claim is written after the bind, so waiting for it is waiting for a *reachable* daemon
     // rather than for a process that exists.
-    const claimPath = join(home, "EnvoyCoder", "daemon.json");
+    const claimPath = join(home, "EnvoyDev", "daemon.json");
     const deadline = Date.now() + 20_000;
     let claim: { port: number; path: string; instanceId: string; pid: number } | undefined;
     while (Date.now() < deadline && !claim) {
@@ -405,11 +515,11 @@ step("the bundled daemon starts as a child process and answers over its own sock
       instanceId?: string;
       stateDir?: string;
     };
-    if (hello?.product !== "EnvoyCoder") throw new Error(`hello said product=${String(hello?.product)}`);
+    if (hello?.product !== "EnvoyDev") throw new Error(`hello said product=${String(hello?.product)}`);
     if (hello?.instanceId !== claim.instanceId) {
       throw new Error("the daemon answered with a different instance id than its claim carries");
     }
-    if (hello?.stateDir !== join(home, "EnvoyCoder")) {
+    if (hello?.stateDir !== join(home, "EnvoyDev")) {
       throw new Error(`hello said stateDir=${String(hello?.stateDir)}`);
     }
 
@@ -433,15 +543,15 @@ step("a second daemon refuses to start while one owns the machine", async () => 
   const { spawn } = await import("node:child_process");
   const { rm } = await import("node:fs/promises");
 
-  const home = mkdtempSync(join(tmpdir(), "envoycoder-smoke-second-"));
+  const home = mkdtempSync(join(tmpdir(), "envoydev-smoke-second-"));
   const entry = join(root, "apps", "desktop", "dist-daemon", "main.mjs");
 
   const first = spawn(process.execPath, [entry], {
-    env: { ...process.env, ENVOYMESH_HOME: home, ENVOYCODER_DAEMON_PORT: "0" },
+    env: { ...process.env, ENVOYMESH_HOME: home, ENVOYDEV_DAEMON_PORT: "0" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   try {
-    const claimPath = join(home, "EnvoyCoder", "daemon.json");
+    const claimPath = join(home, "EnvoyDev", "daemon.json");
     const deadline = Date.now() + 20_000;
     const { existsSync } = await import("node:fs");
     while (Date.now() < deadline && !existsSync(claimPath)) {
@@ -450,7 +560,7 @@ step("a second daemon refuses to start while one owns the machine", async () => 
     if (!existsSync(claimPath)) throw new Error("the first daemon never published a claim");
 
     const second = spawn(process.execPath, [entry], {
-      env: { ...process.env, ENVOYMESH_HOME: home, ENVOYCODER_DAEMON_PORT: "0" },
+      env: { ...process.env, ENVOYMESH_HOME: home, ENVOYDEV_DAEMON_PORT: "0" },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let text = "";
@@ -525,8 +635,8 @@ step("every agent in the catalogue can be probed, and missing ones say how to in
  * the state the rail draws from, with a second window seeing it too.
  */
 step("a project added through the window's store reaches the rail, and a second window sees it", async () => {
-  const home = await mkdtemp(join(tmpdir(), "envoycoder-smoke-rail-"));
-  const projectDir = await mkdtemp(join(tmpdir(), "envoycoder-smoke-project-"));
+  const home = await mkdtemp(join(tmpdir(), "envoydev-smoke-rail-"));
+  const projectDir = await mkdtemp(join(tmpdir(), "envoydev-smoke-project-"));
   const daemon = await startCoderDaemon({ port: 0, home, paths: coderPaths(home), skipMeshAttach: true });
   const window = (): ReturnType<typeof createCoderStore> =>
     createCoderStore({

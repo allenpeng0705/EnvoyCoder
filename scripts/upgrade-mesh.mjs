@@ -1,5 +1,5 @@
 /**
- * Upgrade the EnvoyMesh packages EnvoyCoder links.
+ * Upgrade the EnvoyMesh packages EnvoyDev links.
  *
  * This is the executable form of `docs/upgrading.md` §2 — the procedure is written out there, and this
  * script is what runs it, so nobody has to remember the order. Read that section if a step fails.

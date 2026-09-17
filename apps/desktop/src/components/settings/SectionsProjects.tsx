@@ -28,7 +28,7 @@
 
 import type { JSX } from "react";
 
-import type { HarnessId, Project, TaskDefaults } from "@envoycoder/protocol";
+import type { HarnessId, Project, TaskDefaults } from "@envoydev/protocol";
 
 import { offeredAgents } from "../../composer/agent-for.js";
 import { useI18n } from "../../i18n/context.js";

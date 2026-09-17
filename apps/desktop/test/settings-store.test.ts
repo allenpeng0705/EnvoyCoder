@@ -34,8 +34,8 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { DEFAULT_CODER_SETTINGS } from "@envoycoder/protocol";
-import { coderPaths, type CoderPaths } from "@envoycoder/host-bridge";
+import { DEFAULT_CODER_SETTINGS } from "@envoydev/protocol";
+import { coderPaths, type CoderPaths } from "@envoydev/host-bridge";
 
 import { CoderStore } from "../src/daemon/store.js";
 
@@ -52,7 +52,7 @@ async function bench(): Promise<{
   settingsFile: () => Promise<string>;
   projectsFile: () => Promise<string>;
 }> {
-  const home = await mkdtemp(join(tmpdir(), "envoycoder-settings-"));
+  const home = await mkdtemp(join(tmpdir(), "envoydev-settings-"));
   const paths = coderPaths(home);
   cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
   const store = await CoderStore.open({ paths });
@@ -189,7 +189,7 @@ describe("a settings file this build does not fully recognise", () => {
     store: CoderStore;
     settingsFile: () => Promise<string>;
   }> {
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-tolerant-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-tolerant-"));
     const paths = coderPaths(home);
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     await CoderStore.open({ paths });
@@ -291,7 +291,7 @@ describe("a settings file this build does not fully recognise", () => {
   it("leaves the dropped key on disk, because a newer build is likelier than garbage", async () => {
     // **The mutation this fails on:** copying `readCollection`'s rewrite-after-skip. The list reader
     // rewrites so a warning is not repeated every launch, and copying that here would delete a setting a
-    // *newer* EnvoyCoder reads — a user who runs a newer build in another window, or who downgrades and
+    // *newer* EnvoyDev reads — a user who runs a newer build in another window, or who downgrades and
     // upgrades again, would find the value gone. So the note repeats, and the bytes stay.
     const document = JSON.stringify({ ...KNOWN_AND_SET, zzNotAField: 1 });
     const { store, settingsFile } = await reopened(document);

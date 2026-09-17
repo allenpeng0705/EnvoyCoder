@@ -1,17 +1,17 @@
 /**
- * EnvoyCoder's domain: the nouns the daemon, the window and the phone all agree on.
+ * EnvoyDev's domain: the nouns the daemon, the window and the phone all agree on.
  *
  * ## Why this is a separate protocol from EnvoyMesh's
  *
  * EnvoyMesh's JSON-RPC surface is the *mesh's* — identity, bonds, chat, discovery. It belongs
- * to the host node and every product shares it. EnvoyCoder's own surface is about projects,
+ * to the host node and every product shares it. EnvoyDev's own surface is about projects,
  * tasks and agent runs, which no other product has an opinion about.
  *
  * The two meet in exactly two places, and both are imported rather than redefined:
  *
- *   * the **pairing claim** (`app=EnvoyCoder`), so a QR is refused by the wrong app — the
+ *   * the **pairing claim** (`app=EnvoyDev`), so a QR is refused by the wrong app — the
  *     builder/parser live in `@envoymesh/protocol` and this package only carries the name;
- *   * the **mesh attach**, where EnvoyCoder presents a product session to a running EnvoyMesh
+ *   * the **mesh attach**, where EnvoyDev presents a product session to a running EnvoyMesh
  *     node and may call the methods that node grants it (`@envoymesh/host-connect`).
  *
  * Everything else here is single-product: if EnvoyMesh changed its chat schema tomorrow,
@@ -29,28 +29,28 @@
 import { z } from "zod";
 
 /** The product name this app states in every pairing code and product session. */
-export const ENVOYCODER_PRODUCT_NAME = "EnvoyCoder";
+export const ENVOYDEV_PRODUCT_NAME = "EnvoyDev";
 
 /**
  * Environment variable a launcher may set instead of hard-coding the name.
  *
- * The guide's pre-flight for this product says `ENVOYMESH_APP_NAME=EnvoyCoder` (§9), so the launcher
+ * The guide's pre-flight for this product says `ENVOYMESH_APP_NAME=EnvoyDev` (§9), so the launcher
  * states it once and every surface — pairing codes, product sessions, logs — uses that value. The
  * fallback is **our own** name rather than the family default: `resolveAppName()` would answer
  * "EnvoyMesh" when the variable is unset, which is the one wrong answer for this app.
  */
-export const ENVOYCODER_APP_NAME_ENV = "ENVOYMESH_APP_NAME";
+export const ENVOYDEV_APP_NAME_ENV = "ENVOYMESH_APP_NAME";
 
 export function coderProductName(env: NodeJS.ProcessEnv = process.env): string {
-  const raw = env[ENVOYCODER_APP_NAME_ENV]?.trim();
-  return raw && raw.length > 0 ? raw : ENVOYCODER_PRODUCT_NAME;
+  const raw = env[ENVOYDEV_APP_NAME_ENV]?.trim();
+  return raw && raw.length > 0 ? raw : ENVOYDEV_PRODUCT_NAME;
 }
 
 /**
  * The capability this product exists to use, owner-granted on the node that hosts it.
  *
  * The guide is blunt about the default (§4.7): until the owner runs
- * `updateNodeConfig({ productGrants: { EnvoyCoder: ["coding"] } })`, the node refuses this product
+ * `updateNodeConfig({ productGrants: { EnvoyDev: ["coding"] } })`, the node refuses this product
  * the coding surface it exists for. The read fails closed, so a product must treat "not granted" as
  * a normal state to report — not as an error to retry.
  */
@@ -62,9 +62,9 @@ export const CAPABILITY_CODING = "coding";
  * `0` is a legal value and means "let the OS choose", which is how the tests and the smoke run: a
  * fixed port in a test is a test that fails when something else on the machine happens to use it.
  */
-export const ENVOYCODER_DAEMON_PORT_ENV = "ENVOYCODER_DAEMON_PORT";
+export const ENVOYDEV_DAEMON_PORT_ENV = "ENVOYDEV_DAEMON_PORT";
 
-/** Default port for the EnvoyCoder daemon's WebSocket endpoint. */
+/** Default port for the EnvoyDev daemon's WebSocket endpoint. */
 export const DEFAULT_DAEMON_PORT = 4770;
 
 /** Default path the daemon serves its RPC on. */
@@ -76,12 +76,12 @@ export const DEFAULT_SSH_PORT = 22;
 /* ────────────────────────────── agents (harnesses) ───────────────────────────── */
 
 /**
- * A coding agent EnvoyCoder can drive.
+ * A coding agent EnvoyDev can drive.
  *
  * Two tiers, and the tier is a promise about who maintains the integration:
  *
  *   * `native` — shipped and understood by this project (`envoy-harness`, `deepseek-harness`);
- *   * `external` — a third-party CLI that EnvoyCoder knows how to launch and stream from. The
+ *   * `external` — a third-party CLI that EnvoyDev knows how to launch and stream from. The
  *     list mirrors what Paseo supports, because that is the baseline users expect, and the
  *     integration is ours: we launch their binary and parse their output.
  */
@@ -100,7 +100,7 @@ export const HARNESS_IDS = [
 export type HarnessId = (typeof HARNESS_IDS)[number];
 
 /**
- * The agents EnvoyCoder **ships and stands behind**.
+ * The agents EnvoyDev **ships and stands behind**.
  *
  * One, deliberately: `envoy-harness` is the agent that lives in this product — no external install, no
  * third-party release cadence, and the one whose capabilities we can state because we run it. Everything
@@ -376,7 +376,7 @@ export const AgentProviderConfigSchema = z
     const fail = (message: string, path: string) => ctx.addIssue({ code: "custom", message, path: [path] });
     if (isHarnessId(value.id)) {
       fail(
-        `"${value.id}" is the id of an agent EnvoyCoder already ships, and a provider may not take it — ` +
+        `"${value.id}" is the id of an agent EnvoyDev already ships, and a provider may not take it — ` +
           `the two rows would be indistinguishable wherever an id is the key`,
         "id",
       );
@@ -408,7 +408,7 @@ export const AgentProviderConfigSchema = z
  * A **project** is a registered root — a directory on a host that the user has said "this is
  * somewhere I work". It carries the defaults new tasks inherit.
  *
- * The naming and the relationship are inherited deliberately (see `docs/envoycoder-ui.md`):
+ * The naming and the relationship are inherited deliberately (see `docs/envoydev-ui.md`):
  * a project is a *place*, a task is a *task in that place*. Keeping them distinct is what
  * makes the sidebar legible when ten agents are running across four repositories.
  */
@@ -638,9 +638,9 @@ export interface AgentRun {
 /**
  * The event stream a client subscribes to.
  *
- * EnvoyCoder streams *runs*, not raw stdout: a client renders a transcript, an approval prompt
+ * EnvoyDev streams *runs*, not raw stdout: a client renders a transcript, an approval prompt
  * and a diff, and the daemon is the only thing that knows which harness produced them. This is
- * the same shape Paseo's daemon exposes to its clients (see `docs/envoycoder-paseo-inheritance.md`),
+ * the same shape Paseo's daemon exposes to its clients (see `docs/envoydev-paseo-inheritance.md`),
  * which is what lets a thin mobile client show a rich run.
  */
 export const RUN_EVENT_KINDS = [
@@ -790,26 +790,26 @@ export type RunEvent =
  *
  * These are the *client-facing* catalogue, so they are stable strings rather than exception
  * classes: a mobile client on another OS must be able to branch on them without importing our
- * TypeScript. Codes are `envoycoder.*` so they cannot collide with the mesh's own catalogue.
+ * TypeScript. Codes are `envoydev.*` so they cannot collide with the mesh's own catalogue.
  */
-export const ENVOYCODER_ERRORS = {
+export const ENVOYDEV_ERRORS = {
   /** No daemon is listening where the client expected one. */
-  daemonUnreachable: "envoycoder.daemon-unreachable",
+  daemonUnreachable: "envoydev.daemon-unreachable",
   /** The client's token is missing, expired or from another host. */
-  unauthorized: "envoycoder.unauthorized",
+  unauthorized: "envoydev.unauthorized",
   /**
    * Something is listening where the daemon should be, but it is not this daemon.
    *
    * Distinct from `daemonUnreachable` on purpose: "nobody is home" and "a stranger is" call for
    * different words in front of a user, and only the second is worth being careful about.
    */
-  notOurDaemon: "envoycoder.not-our-daemon",
+  notOurDaemon: "envoydev.not-our-daemon",
   /** A call arrived with parameters this build cannot use — the caller's bug, said out loud. */
-  badRequest: "envoycoder.bad-request",
+  badRequest: "envoydev.bad-request",
   /** A pairing code was minted by a different app in the family. */
-  appMismatch: "envoycoder.app-mismatch",
+  appMismatch: "envoydev.app-mismatch",
   /** The harness binary is not installed (or not on PATH). */
-  harnessMissing: "envoycoder.harness-missing",
+  harnessMissing: "envoydev.harness-missing",
   /**
    * We could not *check* whether this agent is usable, so we will not start it and will not claim it is absent.
    *
@@ -820,14 +820,14 @@ export const ENVOYCODER_ERRORS = {
    * "not installed, install it and try again" would send a user to reinstall a program they already have.
    * Reached from `launchForHarness` when the probe's state is `unknown`; see `HarnessAvailability` in `rpc.ts`.
    */
-  harnessUnknown: "envoycoder.harness-unknown",
+  harnessUnknown: "envoydev.harness-unknown",
   /**
    * The agent exists and is installed, but speaks a protocol this product cannot drive yet.
    *
    * Distinct from `harness-missing` on purpose: "install it" is wrong advice for an agent that is
    * already there, and the two failures send a user to different places.
    */
-  harnessUnsupported: "envoycoder.harness-unsupported",
+  harnessUnsupported: "envoydev.harness-unsupported",
   /**
    * This agent's connector cannot be fetched — there is no npm package for it, so `npx` is not a route it can
    * take.
@@ -837,32 +837,32 @@ export const ENVOYCODER_ERRORS = {
    * agent whose first run would fail. The seven agents we ship whose adapters are in this repository are exactly
    * this case.
    */
-  connectorNotFetchable: "envoycoder.connector-not-fetchable",
+  connectorNotFetchable: "envoydev.connector-not-fetchable",
   /** The harness refused to start (bad config, unsupported arg). */
-  harnessFailed: "envoycoder.harness-failed",
+  harnessFailed: "envoydev.harness-failed",
   /**
    * A directory the call named is gone, or is not a directory.
    *
    * Four different refusals used to ride on `taskMissing` — this, plus a missing task, a missing
    * project and a missing run — which made the code useless to the caller it exists for: the family's
-   * transport flattens `error.code` to `"ERROR"`, so a client branches on the leading `envoycoder.*`
+   * transport flattens `error.code` to `"ERROR"`, so a client branches on the leading `envoydev.*`
    * token, and `task-missing` coming back from `coder.addProject` says the wrong thing about what to do
    * next ("pick another folder" is not "reload the list").
    */
-  pathMissing: "envoycoder.path-missing",
+  pathMissing: "envoydev.path-missing",
   /** No task with that id. */
-  taskMissing: "envoycoder.task-missing",
+  taskMissing: "envoydev.task-missing",
   /** No project with that id. */
-  projectMissing: "envoycoder.project-missing",
+  projectMissing: "envoydev.project-missing",
   /**
    * No provider the user declared has that id.
    *
    * `projectMissing`'s twin, and separate from it for the reason that family exists: the family's
-   * transport flattens `error.code` to `"ERROR"`, so a client branches on the leading `envoycoder.*`
+   * transport flattens `error.code` to `"ERROR"`, so a client branches on the leading `envoydev.*`
    * token, and "no agent provider by that name" leads somewhere different from "no project by that
    * name" — one is a list the user edits, the other is the rail.
    */
-  providerMissing: "envoycoder.provider-missing",
+  providerMissing: "envoydev.provider-missing",
   /**
    * The id a user asked to add names an agent we already ship.
    *
@@ -870,7 +870,7 @@ export const ENVOYCODER_ERRORS = {
    * what was intended, and the answer is "that name is taken" — which the window renders as a sentence
    * beside the field the user typed into, in their language, rather than as a bug report.
    */
-  providerIdTaken: "envoycoder.provider-id-taken",
+  providerIdTaken: "envoydev.provider-id-taken",
   /**
    * A provider needs an environment variable this daemon does not have.
    *
@@ -879,25 +879,25 @@ export const ENVOYCODER_ERRORS = {
    * about somebody else's product for a fact about our environment. It names the variable and never a
    * value; see `AgentProviderConfig.env`.
    */
-  providerEnvUnset: "envoycoder.provider-env-unset",
+  providerEnvUnset: "envoydev.provider-env-unset",
   /** No run with that id — typically a daemon that restarted under a window that was still open. */
-  runMissing: "envoycoder.run-missing",
+  runMissing: "envoydev.run-missing",
   /** The mesh node refused the product session, or granted it fewer methods. */
-  meshRefused: "envoycoder.mesh-refused",
+  meshRefused: "envoydev.mesh-refused",
   /** We asked a peer to run something and the peer declined. */
-  peerRefused: "envoycoder.peer-refused",
+  peerRefused: "envoydev.peer-refused",
   /** The operation is not supported on this platform. */
-  unsupportedPlatform: "envoycoder.unsupported-platform",
+  unsupportedPlatform: "envoydev.unsupported-platform",
 } as const;
 
-export type EnvoyCoderErrorCode = (typeof ENVOYCODER_ERRORS)[keyof typeof ENVOYCODER_ERRORS];
+export type EnvoyDevErrorCode = (typeof ENVOYDEV_ERRORS)[keyof typeof ENVOYDEV_ERRORS];
 
 /* ────────────────────────────── pairing ───────────────────────────── */
 
 /**
  * The connection information a mobile client needs, as carried in an EnvoyMesh pairing code.
  *
- * EnvoyCoder does not invent a QR format. It uses the family's (`@envoymesh/protocol`), so one
+ * EnvoyDev does not invent a QR format. It uses the family's (`@envoymesh/protocol`), so one
  * camera path works for every app and the `app` claim is what keeps them apart.
  */
 export interface CoderHostDescriptor {
@@ -905,7 +905,7 @@ export interface CoderHostDescriptor {
   endpoint: string;
   /** Owner identity the daemon belongs to, so a client can refuse a stranger's code. */
   ownerId: string;
-  /** Product name, always `EnvoyCoder` for this app. */
+  /** Product name, always `EnvoyDev` for this app. */
   app: string;
   /** Optional SSH hop for machines that are not directly reachable. */
   ssh?: { host: string; port: number; user?: string };
@@ -982,7 +982,7 @@ export const RPC_METHODS = [
    * otherwise the only one the agent offered, otherwise nothing at all (see `SignInOutcome`'s `no-method`;
    * choosing between several methods on the user's behalf is exactly what this product refuses to do).
    *
-   * EnvoyCoder stores no credential, no token and no session: the flow belongs to the agent and its state
+   * EnvoyDev stores no credential, no token and no session: the flow belongs to the agent and its state
    * lives wherever the agent puts it (`cursor-agent` writes `~/.cursor/acp-config.json`). What this method
    * owns is the *attempt* and the honest report of it — the result is one of `SIGN_IN_OUTCOMES`, and the
    * only member that means success is the one that opened a session.
@@ -1005,7 +1005,7 @@ export const RPC_METHODS = [
    */
   "coder.probeSessionOptions",
   /**
-   * **The agents EnvoyCoder knows how to drive but has not measured on this machine** — the catalogue,
+   * **The agents EnvoyDev knows how to drive but has not measured on this machine** — the catalogue,
    * served so that no client carries a copy of it.
    *
    * This is the list a control plane exists for. `coder.listHarnesses` answers for the nine agents we ship
@@ -1015,7 +1015,7 @@ export const RPC_METHODS = [
    * ## Why it is on the wire rather than a constant in the window
    *
    * Two reasons, and the second is the product's whole thesis. The catalogue is authored data that lives in
-   * `@envoycoder/agent-catalog` — the same package the **daemon** launches from — so an app-side copy would
+   * `@envoydev/agent-catalog` — the same package the **daemon** launches from — so an app-side copy would
    * be a second answer to "what does this entry run", drifting from the one the launch uses. And the phone
    * reads this same method: a mobile client showing an agent list, or letting a user add one, must see
    * exactly the entries the desktop window sees, including the dialect each entry states. Nothing here is
@@ -1073,6 +1073,18 @@ export const RPC_METHODS = [
   // a peer directory (`coder.listPeers` returns an empty list today), the session store that makes the
   // remote path reachable, and a broker decision — then the method and its params are written together,
   // against a handler.
+  /**
+   * Mint a pairing code for a phone (or other remote client).
+   *
+   * Writes a token into the paired-device store and returns an `envoy://pair?…` URI the desktop shows
+   * as a QR. The token *is* the session credential — `coderSessionIdentity` resolves it for remote
+   * callers. Loopback-only: a phone must not mint further phones.
+   */
+  "coder.mintPairing",
+  /** Who may reach this daemon with a pairing token — labels and timestamps, never the tokens. */
+  "coder.listPairedDevices",
+  /** Stop accepting a paired device's token. */
+  "coder.revokePairedDevice",
   "coder.getSettings",
   "coder.updateSettings",
 ] as const;
@@ -1272,7 +1284,7 @@ export interface DroppedSettingsKey {
   readonly path: string;
   /**
    * True when this build *used to* have the key (it is in `RETIRED_SETTINGS_KEYS`), false when no build
-   * of EnvoyCoder ever shipped it. Two causes, two sentences — see the constant's doc.
+   * of EnvoyDev ever shipped it. Two causes, two sentences — see the constant's doc.
    */
   readonly retired: boolean;
 }

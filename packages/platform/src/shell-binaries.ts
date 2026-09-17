@@ -60,7 +60,7 @@ import { type PlatformId, detectPlatform, isPosix } from "./index.js";
  * One line per name, so a name whose answer is empty (the shell could not find it) is *stated* rather than
  * inferred from an absence — the same reason the `PATH` probe prints its value behind a marker.
  */
-export const LOGIN_SHELL_BINARY_MARKER = "__ENVOYCODER_LOGIN_BINARY__=";
+export const LOGIN_SHELL_BINARY_MARKER = "__ENVOYDEV_LOGIN_BINARY__=";
 
 /** How long one shell may take to answer for every name before we stop waiting. */
 export const LOGIN_SHELL_BINARY_TIMEOUT_MS = 2500;

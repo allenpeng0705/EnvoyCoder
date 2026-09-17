@@ -37,7 +37,7 @@
  * whichever one the user chose.
  *
  * **Both halves of that sentence are now real, including the surface.** The user's half is
- * `AgentProviderConfig` in `@envoycoder/protocol` — reached by `coder.listProviders` /
+ * `AgentProviderConfig` in `@envoydev/protocol` — reached by `coder.listProviders` /
  * `coder.addProvider` / `coder.removeProvider`, probed by the same prober as the entries below
  * (`./probe.ts`, through `./providers.ts`) and launched by the same body
  * (`apps/desktop/src/daemon/launch.ts`'s `launchForProvider`). The list below reaches a user through

@@ -45,7 +45,7 @@ describe("coder.hello", () => {
     // open a socket and never say hello.
     expect(() =>
       parseRpcParams("coder.hello", {
-        client: { name: "envoycoder-mobile", platform: "ios" },
+        client: { name: "envoydev-mobile", platform: "ios" },
       }),
     ).not.toThrow();
 

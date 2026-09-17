@@ -31,8 +31,8 @@ import process from "node:process";
 
 import WebSocket from "ws";
 
-import { isHarnessId, type HarnessId, type RunEvent } from "@envoycoder/protocol";
-import { coderPaths } from "@envoycoder/host-bridge";
+import { isHarnessId, type HarnessId, type RunEvent } from "@envoydev/protocol";
+import { coderPaths } from "@envoydev/host-bridge";
 
 import { startCoderDaemon } from "../apps/desktop/src/daemon/serve.js";
 
@@ -56,7 +56,7 @@ function parseArgs(argv: readonly string[]): Args {
   }
   const harness = get("--harness") ?? "deepseek-harness";
   if (!isHarnessId(harness)) {
-    console.error(`"${harness}" is not an agent EnvoyCoder knows. Try one of: envoy-harness, deepseek-harness, claudecode, codex, copilot, opencode, cursor, pi.`);
+    console.error(`"${harness}" is not an agent EnvoyDev knows. Try one of: envoy-harness, deepseek-harness, claudecode, codex, copilot, opencode, cursor, pi.`);
     process.exit(2);
   }
   const timeout = Number.parseInt(get("--timeout-ms") ?? "600000", 10);
@@ -154,8 +154,8 @@ function describeEvent(event: RunEvent): string {
 }
 
 const args = parseArgs(process.argv.slice(2));
-const home = await mkdtemp(join(tmpdir(), "envoycoder-run-"));
-const workDir = args.dir ?? (await mkdtemp(join(tmpdir(), "envoycoder-work-")));
+const home = await mkdtemp(join(tmpdir(), "envoydev-run-"));
+const workDir = args.dir ?? (await mkdtemp(join(tmpdir(), "envoydev-work-")));
 const daemon = await startCoderDaemon({ port: 0, home, paths: coderPaths(home), skipMeshAttach: true });
 
 let exitCode = 0;

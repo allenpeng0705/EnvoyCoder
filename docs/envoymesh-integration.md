@@ -1,6 +1,6 @@
 # Living next to EnvoyMesh
 
-**Rule of thumb:** EnvoyCoder *links* the mesh and *clones* the harness. It vendors neither.
+**Rule of thumb:** EnvoyDev *links* the mesh and *clones* the harness. It vendors neither.
 
 Four kinds of code and prose come from the family, and they arrive in four different ways. The
 difference is deliberate: it follows ownership — whoever owns a thing decides when its upgrade lands.
@@ -53,7 +53,7 @@ Two consequences worth knowing:
 ## 2. What must be cloned, never linked through EnvoyMesh
 
 `@envoymesh/envoy-harness*` is a **peer** of every product in the family, not a package EnvoyMesh
-distributes (EnvoyMesh design **D4**, guide §7.5). EnvoyCoder therefore clones or copies the harness
+distributes (EnvoyMesh design **D4**, guide §7.5). EnvoyDev therefore clones or copies the harness
 itself:
 
 ```bash
@@ -65,7 +65,7 @@ git clone <envoy-harness> ../envoy-harness        # or into ./vendor/envoy-harne
 prerequisite the tree does not use should not block unrelated work, and a prerequisite it *does* use
 must not be a footnote.
 
-Why the rule exists at all: if EnvoyCoder reached the harness *through* EnvoyMesh, it would depend on
+Why the rule exists at all: if EnvoyDev reached the harness *through* EnvoyMesh, it would depend on
 that repo for someone else's package and inherit its release cadence for code it does not own. What
 EnvoyMesh owes us instead is a failure that says what is missing and how to get it — which is what its
 `check-peer-deps.mjs` does on its side and ours does on this one.
@@ -76,7 +76,7 @@ EnvoyMesh owes us instead is a failure that says what is missing and how to get 
 |---|---|
 | **Shared home** | resolve it with `@envoymesh/node-core`'s `resolveHomeDir` + `profileDirIn`, so `ENVOYMESH_HOME`, the per-OS default and legacy `~/.envoymesh` adoption all behave identically in both apps |
 | **Kernel state** (`profile/`) | **read only, and only through a granted session.** Identity, trust, node config and the vault index belong to the node |
-| **Our state** | `<home>/EnvoyCoder/` — projects, tasks, runs, transcripts, settings. Built in exactly one place (`coderPaths`) |
+| **Our state** | `<home>/EnvoyDev/` — projects, tasks, runs, transcripts, settings. Built in exactly one place (`coderPaths`) |
 | **Product attach** | `attachLocalProduct` over loopback, pre-auth by design; we take the token and use only what the owner granted |
 
 Another product must not be able to read which repositories you have opened, and we must not be able
@@ -84,7 +84,7 @@ to read anyone's chat transcripts. Both are enforced by path, not by convention.
 
 ## 4. When a contract change is needed
 
-If EnvoyCoder needs a symbol that lives in EnvoyMesh's **product-bound** half, the answer is not a
+If EnvoyDev needs a symbol that lives in EnvoyMesh's **product-bound** half, the answer is not a
 fork or a copy. The family's procedure (guide §7.4):
 
 1. move the *contract* symbol into a core package — `@envoymesh/protocol` for wire/CONTRACT types,
@@ -153,7 +153,7 @@ code being tested is not the family code on disk.
 cd ../EnvoyMesh && git pull && npm install
 npx tsc -b packages/protocol packages/identity packages/vault packages/api \
            packages/node-core packages/harness packages/host-connect packages/reuse-host
-cd ../EnvoyCoder && npm install && npm run gates && npm run smoke
+cd ../EnvoyDev && npm install && npm run gates && npm run smoke
 ```
 
 `peers:check` now **warns** when a linked package is out of date, names it, and prints the exact rebuild
@@ -189,7 +189,7 @@ What actually breaks, in the order it breaks:
 first, `file:` second, registry third) is what we move to **when we ship**. The reason is not
 convenience: pinning means holding a copy, and a copy goes stale *silently* — the family has already
 paid for exactly that, in the incident in §1 where a vendored `@envoymesh/protocol` four modules behind
-kept the suite green while the node could not start. While EnvoyCoder is pre-1.0 and still asking for
+kept the suite green while the node could not start. While EnvoyDev is pre-1.0 and still asking for
 contract changes upstream (we made one today: the `relayWsUrls` fix), a live link detects breakage
 instead of freezing it.
 
@@ -245,7 +245,7 @@ the protocol does not provide — applied to somebody else's release schedule, a
 | `node scripts/check-src-clean.mjs` | no build output inside a `src/` tree, and no build-info outside an output dir — a stale `src/index.js` shadows the real source in tests, and a misplaced `tsconfig.tsbuildinfo` makes `tsc -b` a silent no-op |
 | `npx tsc -b` | project references, so a consumer that forgot its reference fails here |
 | `npm test` | 67 tests over the model, the platform layer, the catalogue, the bridge and the rail |
-| `npm run build -w @envoycoder/desktop` | the UI *bundles* — a green suite has never proved that |
+| `npm run build -w @envoydev/desktop` | the UI *bundles* — a green suite has never proved that |
 | `npm run smoke` | a real host on a real port, a real pairing code, and a real probe of your installed agents |
 | `npm run mobile:check` | the Flutter app still has the files a build needs |
 
@@ -292,12 +292,12 @@ projects. A test asserts the variable is honoured.
 
 ### 7.4 Attach instead of competing (§4.5)
 
-`resolveRunningNode` → verified node → `requestProductSession` with `product: "EnvoyCoder"` and
+`resolveRunningNode` → verified node → `requestProductSession` with `product: "EnvoyDev"` and
 `version: ENVOYMESH_VERSION`; the endpoint comes from the node's descriptor, with its URL as a
 fallback. An **owner-scoped** token is refused rather than used, and a refusal is a normal outcome.
 
 **Verified against a real node** (guide §8): with an EnvoyMesh node running on this machine, the
-smoke test attaches over loopback and reports `product:EnvoyCoder at ws://127.0.0.1:4180/ws?token=…`.
+smoke test attaches over loopback and reports `product:EnvoyDev at ws://127.0.0.1:4180/ws?token=…`.
 
 ### 7.5 The dispatcher (§4.6) and the family's security claim (§8)
 
@@ -324,7 +324,7 @@ a silence.
 ### 7.6 Capabilities are granted (§4.7)
 
 `CAPABILITY_CODING` names what this product exists to use, and the docs say what the guide says: until
-the owner runs `updateNodeConfig({ productGrants: { EnvoyCoder: ["coding"] } })`, the node refuses it,
+the owner runs `updateNodeConfig({ productGrants: { EnvoyDev: ["coding"] } })`, the node refuses it,
 the read fails closed, and "not granted" is a state to report rather than retry.
 
 ### 7.6b The shared engine lock (§7.6), and the conventions the family added with it
@@ -333,7 +333,7 @@ The guide gained §7.6 while this repo was being built: `acquireEngineLock` / `r
 **engine asset root** (`resolveEngineRoot(…).dir`, normally `<home>/runtime/envoy-local`), never the
 home, or the lock lands where no runtime looks and two products each believe they own the engine.
 
-**It does not apply to us yet, and that is a state worth stating rather than assuming**: EnvoyCoder never
+**It does not apply to us yet, and that is a state worth stating rather than assuming**: EnvoyDev never
 calls the engine lock, because it never starts the shared local engine — the *node* owns it, and a
 product that wants a local model asks the node. The rule becomes ours the day our built-in harness runs
 against the local engine, and `grep -rn "engineLock\|resolveEngineRoot" packages apps` returning nothing
@@ -343,14 +343,14 @@ Two conventions came in the same update and *are* ours, because they govern any 
 
 * **Exit codes**: a damaged profile exits **4** with a readable message, and **2** stays reserved for the
   family's `exitForNodeSupervisor` handshake (a supervisor may respawn on it, so a product that reuses it
-  makes the supervisor loop on a state no restart fixes). EnvoyCoder's daemon adopts both: `boot.ts`
+  makes the supervisor loop on a state no restart fixes). EnvoyDev's daemon adopts both: `boot.ts`
   returns 4 for damaged, never 2, and a test asserts that for every state.
 * **Attach, never compete**: when another family app owns the home, a product attaches as itself. Our
   daemon reports the holder in the family's own words and requests a product session rather than starting
   a second mesh — and when *our own* port is taken, that is a client that has not noticed yet, not a
   failure (exit 0, "a window will attach to the one that is already there").
 
-The daemon's own boot story lives in `docs/envoycoder-networking.md` §2.
+The daemon's own boot story lives in `docs/envoydev-networking.md` §2.
 
 ### 7.7 Pairing (§5.2, §5.3)
 
@@ -378,9 +378,9 @@ its `api`/`reuse-host`/`protocol` suites pass with the change.
 
 | Guide item | State |
 |---|---|
-| §8 "your stores grouped, 0 ungated" | N/A yet: the daemon does not persist stores; the analogue here is `coderPaths()` returning paths under `<home>/EnvoyCoder/` |
+| §8 "your stores grouped, 0 ungated" | N/A yet: the daemon does not persist stores; the analogue here is `coderPaths()` returning paths under `<home>/EnvoyDev/` |
 | §8 four EnvoyMesh-repo gates (classify/boundary/inventory/core-surface) | those check *EnvoyMesh's* tree; this repo's analogues are `wiring:check`, `check-src-clean`, `peers:check` |
 | §4.6 "your product scope is refused by default" | our daemon does not yet consult `productGrants` — it does not call the mesh at all beyond attaching |
 | remote clients of our own daemon | **refused, deliberately**: loopback windows are trusted (the family's model for a desktop UI), and a phone or another machine needs a token we cannot yet resolve (roadmap M1). Recorded rather than papered over with a token format of our own |
 | §8 "no new anonymous path … no shared key" | holds today (loopback-or-session is the transport's, and we add no path), but it is asserted by the smoke, not by a unit test |
-| §9 "biggest open question: what a product may call" | open by design; `docs/envoycoder-design.md` §7 lists it among the undecided |
+| §9 "biggest open question: what a product may call" | open by design; `docs/envoydev-design.md` §7 lists it among the undecided |

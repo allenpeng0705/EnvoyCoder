@@ -36,8 +36,8 @@ import {
   harnessModelDelivery,
   resolveModelChoice,
   thinkingDelivery,
-} from "@envoycoder/agent-catalog";
-import { ENVOYCODER_ERRORS, type HarnessId, coderError } from "@envoycoder/protocol";
+} from "@envoydev/agent-catalog";
+import { ENVOYDEV_ERRORS, type HarnessId, coderError } from "@envoydev/protocol";
 
 import type { AcpAutoRunPolicy } from "./acp/client.js";
 import { ref } from "./messages.js";
@@ -54,7 +54,7 @@ import { ref } from "./messages.js";
  * catalogue — the same source the window renders its picker from, which is what keeps the two ends
  * telling the user the same story.
  *
- * Two refusals, and the code tells them apart the way `ENVOYCODER_ERRORS` says to: the **cause** is
+ * Two refusals, and the code tells them apart the way `ENVOYDEV_ERRORS` says to: the **cause** is
  * the harness when its protocol has no way to be put into a mode, and the **caller's** mistake when
  * the id is one this agent never declared. A client that has just been told "this agent cannot do
  * modes" offers the user something different from one told "that mode name is not one of its".
@@ -69,14 +69,14 @@ export function resolveAgentMode(harness: HarnessId, requested: string | undefin
 
   if (!definition.capabilities.agentMode) {
     throw coderError(
-      ENVOYCODER_ERRORS.harnessUnsupported,
-      `${definition.label} cannot be put into a mode over the protocol EnvoyCoder speaks to it, so the run was not started. Leave the mode unset to run ${definition.label} in its own default.`,
+      ENVOYDEV_ERRORS.harnessUnsupported,
+      `${definition.label} cannot be put into a mode over the protocol EnvoyDev speaks to it, so the run was not started. Leave the mode unset to run ${definition.label} in its own default.`,
       ref("error.agentModeUnsupported", { harness: definition.label }),
     );
   }
   if (!definition.modes.some((mode) => mode.id === requested)) {
     throw coderError(
-      ENVOYCODER_ERRORS.badRequest,
+      ENVOYDEV_ERRORS.badRequest,
       `${definition.label} does not offer a mode called "${requested}", so the run was not started. Pick one of its modes and try again.`,
       ref("error.agentModeUnknown", { harness: definition.label, mode: requested }),
     );
@@ -114,8 +114,8 @@ export function resolveModelDelivery(
   if (!resolved.ok) {
     throw coderError(
       resolved.code === "noModelSupport"
-        ? ENVOYCODER_ERRORS.harnessUnsupported
-        : ENVOYCODER_ERRORS.badRequest,
+        ? ENVOYDEV_ERRORS.harnessUnsupported
+        : ENVOYDEV_ERRORS.badRequest,
       `${resolved.reason} The run was not started.`,
       ref(
         resolved.code === "noModelSupport"
@@ -174,8 +174,8 @@ export function resolveThinkingDelivery(
   const delivery = thinkingDelivery(harness);
   if (delivery === undefined) {
     throw coderError(
-      ENVOYCODER_ERRORS.harnessUnsupported,
-      `${label} cannot be given a thinking level over the protocol EnvoyCoder speaks to it, so the run was not started. Leave the thinking level unset to run ${label} the way it decides for itself.`,
+      ENVOYDEV_ERRORS.harnessUnsupported,
+      `${label} cannot be given a thinking level over the protocol EnvoyDev speaks to it, so the run was not started. Leave the thinking level unset to run ${label} the way it decides for itself.`,
       ref("error.thinkingUnsupported", { harness: label }),
     );
   }

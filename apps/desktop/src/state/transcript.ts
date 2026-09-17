@@ -9,7 +9,7 @@
  * untestable and unreviewable at the same time. Here they are a function from events to rows, so
  * "why does this bubble say that?" has one answer, in one place, with tests.
  *
- * Same principle as the rail: `@envoycoder/task-model` owns "which row, in what order"; this
+ * Same principle as the rail: `@envoydev/task-model` owns "which row, in what order"; this
  * owns "which line, joined how". Components render.
  *
  * ## The four folding rules, each of which is a visible bug when it is wrong
@@ -23,13 +23,13 @@
  *      never completes stays visible as `running` rather than disappearing.
  *   3. **An approval belongs to the call that raised it.** It is rendered *in place*, at the point
  *      in the transcript where the agent paused — never as a modal, which would hide the context a
- *      user needs to decide (`docs/envoycoder-ui.md` §6).
+ *      user needs to decide (`docs/envoydev-ui.md` §6).
  *   4. **Gaps are reported, not hidden.** `seq` is monotonic per run, so a missing sequence number
  *      means this client dropped a frame. Saying so is the honest alternative to rendering a
  *      transcript that silently skips the sentence explaining the change.
  */
 
-import type { RunEvent, TaskStatus } from "@envoycoder/protocol";
+import type { RunEvent, TaskStatus } from "@envoydev/protocol";
 
 import { localNotice, type Notice } from "../i18n/notice.js";
 
@@ -295,9 +295,9 @@ export function buildTranscript(events: readonly RunEvent[]): Transcript {
  * The last line of a transcript, in the user's words rather than the status bucket's.
  *
  * Note what is *not* here: a count of how many rows need the user. The rail already computes that
- * from task statuses (`attentionSummary` in `@envoycoder/task-model`), and a second
+ * from task statuses (`attentionSummary` in `@envoydev/task-model`), and a second
  * computation over run events would be a second number — the specific way a control plane teaches
- * users to trust neither (`docs/envoycoder-ui.md` §4). What the transcript owns is the *card*, and
+ * users to trust neither (`docs/envoydev-ui.md` §4). What the transcript owns is the *card*, and
  * `pendingApprovalId` is what tells the pane to keep it on screen.
  */
 function endNote(status: TaskStatus): Notice {

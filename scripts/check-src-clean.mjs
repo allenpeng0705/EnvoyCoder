@@ -5,7 +5,7 @@
  *
  * `tsc` emitting beside the sources is not a style issue. Vite resolves `src/index.js` **before**
  * `src/index.ts`, so a stale emitted copy silently shadows the real source in tests — the suite
- * runs against code nobody is editing. EnvoyMesh hit exactly this (its rule R5), and EnvoyCoder hit
+ * runs against code nobody is editing. EnvoyMesh hit exactly this (its rule R5), and EnvoyDev hit
  * it within the hour: a `tsc -b` run left `packages/platform/src/index.js` behind, and three
  * platform tests failed against the old copy while the source was already fixed.
  *

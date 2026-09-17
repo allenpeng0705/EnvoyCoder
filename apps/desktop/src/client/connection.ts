@@ -33,12 +33,12 @@ import {
   CODER_SUBSCRIBE_METHOD,
   type CoderEventMessage,
   type CoderRpcResponse,
-  ENVOYCODER_ERRORS,
+  ENVOYDEV_ERRORS,
   coderError,
   coderErrorCode,
   coderErrorMessage,
   withMessageRef,
-} from "@envoycoder/protocol";
+} from "@envoydev/protocol";
 
 import { messageRef } from "../i18n/notice.js";
 
@@ -186,7 +186,7 @@ export class CoderConnection {
    * Call one method.
    *
    * Rejects with a `CoderRpcError`-shaped `Error` whose message begins with the daemon's
-   * `envoycoder.*` code, so `coderErrorCode(error.message)` works at the call site. Callers that
+   * `envoydev.*` code, so `coderErrorCode(error.message)` works at the call site. Callers that
    * want the code should use `rpcErrorCode(error)` below rather than reaching into the message.
    */
   async call(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
@@ -194,10 +194,10 @@ export class CoderConnection {
     if (!socket || socket.readyState !== OPEN) {
       // Coded *and* keyed: the code is what a caller branches on, the key is what a German user
       // reads. Both ride in the message, which is the only channel that survives the family's
-      // transport (`coderError` in `@envoycoder/protocol` explains why).
+      // transport (`coderError` in `@envoydev/protocol` explains why).
       throw coderError(
-        ENVOYCODER_ERRORS.daemonUnreachable,
-        "EnvoyCoder is not connected to its daemon yet.",
+        ENVOYDEV_ERRORS.daemonUnreachable,
+        "EnvoyDev is not connected to its daemon yet.",
         messageRef("error.notConnected"),
       );
     }
@@ -254,7 +254,7 @@ export class CoderConnection {
   private async onOpen(): Promise<void> {
     try {
       const hello = await this.callTyped<HelloResult>("coder.hello", {
-        client: { name: this.options.client?.name ?? "EnvoyCoder window", ...(this.options.client?.version ? { version: this.options.client.version } : {}) },
+        client: { name: this.options.client?.name ?? "EnvoyDev window", ...(this.options.client?.version ? { version: this.options.client.version } : {}) },
       });
       this.verifyIdentity(hello);
       this.helloValue = hello;
@@ -278,18 +278,18 @@ export class CoderConnection {
    * protocol can answer *who* is behind them.
    */
   private verifyIdentity(hello: HelloResult): void {
-    if (hello.product !== "EnvoyCoder") {
+    if (hello.product !== "EnvoyDev") {
       throw coderError(
-        ENVOYCODER_ERRORS.notOurDaemon,
-        `Something is answering on the daemon's port, but it says it is "${hello.product}". EnvoyCoder did not connect to it.`,
+        ENVOYDEV_ERRORS.notOurDaemon,
+        `Something is answering on the daemon's port, but it says it is "${hello.product}". EnvoyDev did not connect to it.`,
         messageRef("error.notOurDaemon.product", { product: hello.product }),
       );
     }
     const expected = this.options.endpoint.instanceId;
     if (expected && hello.instanceId !== expected) {
       throw coderError(
-        ENVOYCODER_ERRORS.notOurDaemon,
-        `The daemon on port ${this.options.endpoint.port} is not the one this window was started for. Another EnvoyCoder daemon may have replaced it — reopen the window.`,
+        ENVOYDEV_ERRORS.notOurDaemon,
+        `The daemon on port ${this.options.endpoint.port} is not the one this window was started for. Another EnvoyDev daemon may have replaced it — reopen the window.`,
         messageRef("error.notOurDaemon.instance", { port: this.options.endpoint.port }),
       );
     }
@@ -357,7 +357,7 @@ export class CoderConnection {
     this.helloValue = undefined;
     // The daemon forgets our subscriptions when the socket dies, so our memory of them must die too.
     this.subscribed.clear();
-    this.rejectAll(new Error(`${ENVOYCODER_ERRORS.daemonUnreachable}: ${reason}`));
+    this.rejectAll(new Error(`${ENVOYDEV_ERRORS.daemonUnreachable}: ${reason}`));
     this.scheduleReconnect(reason);
   }
 
@@ -392,7 +392,7 @@ export class CoderConnection {
   }
 }
 
-/** The `envoycoder.*` code in an error, when there is one. Convenience over message parsing. */
+/** The `envoydev.*` code in an error, when there is one. Convenience over message parsing. */
 export function rpcErrorCode(error: unknown): string | null {
   const message = error instanceof Error ? error.message : String(error);
   return coderErrorCode(message);

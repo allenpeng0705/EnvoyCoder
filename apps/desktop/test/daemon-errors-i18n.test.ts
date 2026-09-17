@@ -21,8 +21,8 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { ENVOYCODER_ERRORS, coderErrorCode, coderErrorMessage, coderErrorRef } from "@envoycoder/protocol";
-import { coderPaths } from "@envoycoder/host-bridge";
+import { ENVOYDEV_ERRORS, coderErrorCode, coderErrorMessage, coderErrorRef } from "@envoydev/protocol";
+import { coderPaths } from "@envoydev/host-bridge";
 
 import { CATALOGUES } from "../src/i18n/catalogues.js";
 import { en, isMessageKey, type MessageKey } from "../src/i18n/messages/en.js";
@@ -38,7 +38,7 @@ afterEach(async () => {
 
 /** The daemon's handler table over a throwaway home, with `isDirectory` answering "no". */
 async function handlersThatRefuse(): Promise<Record<string, CoderHandler>> {
-  const home = await mkdtemp(join(tmpdir(), "envoycoder-i18n-"));
+  const home = await mkdtemp(join(tmpdir(), "envoydev-i18n-"));
   const paths = coderPaths(home);
   const store = await CoderStore.open({ paths });
   cleanups.push(async () => {
@@ -71,7 +71,7 @@ async function refusalOf(
   params: Record<string, unknown>,
 ): Promise<string> {
   try {
-    await handlers[method]?.(params);
+    await handlers[method]?.(params, { session: undefined });
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }
@@ -92,7 +92,7 @@ describe("every refusal a user can read", () => {
     {
       // The acceptance criterion's own example: a path that is not a directory on this machine.
       method: "coder.addProject",
-      params: { path: "/tmp/envoycoder-does-not-exist" },
+      params: { path: "/tmp/envoydev-does-not-exist" },
       key: "error.addProject.notDirectory",
     },
     {
@@ -116,7 +116,7 @@ describe("every refusal a user can read", () => {
       // (The other half of the check below — that the English matches byte for byte — is what stops
       // this sentence and `en.ts` drifting apart, and it is only *this* test that can see both.)
       method: "coder.updateTask",
-      params: { id: "w1", cwd: "/tmp/envoycoder-does-not-exist" },
+      params: { id: "w1", cwd: "/tmp/envoydev-does-not-exist" },
       key: "error.updateTask.notDirectory",
     },
     {
@@ -192,7 +192,7 @@ describe("every refusal a user can read", () => {
       // looking translated in review.
       expect(isMessageKey(ref?.key ?? ""), `${testCase.method} key "${ref?.key}" is unknown`).toBe(true);
       // …and the English sentence is untouched: it is the fallback and the log line.
-      expect(coderErrorMessage(message)).not.toContain("envoycoder.key");
+      expect(coderErrorMessage(message)).not.toContain("envoydev.key");
       expect(coderErrorCode(message)).not.toBeNull();
     }
   });
@@ -208,7 +208,7 @@ describe("every refusal a user can read", () => {
       const rendered = localize(german, notice) ?? "";
       expect(rendered, testCase.method).not.toBe("");
       expect(rendered, testCase.method).not.toBe(english);
-      expect(rendered, testCase.method).not.toContain("envoycoder.");
+      expect(rendered, testCase.method).not.toContain("envoydev.");
 
       // English: byte-identical to the daemon's own sentence. A user who never opens the language
       // setting must not see this milestone at all.
@@ -221,7 +221,7 @@ describe("every refusal a user can read", () => {
     // The values are what make a translated refusal *useful*: "kein Verzeichnis" without the path is
     // a sentence a user cannot act on.
     const handlers = await handlersThatRefuse();
-    const path = "/tmp/envoycoder-does-not-exist";
+    const path = "/tmp/envoydev-does-not-exist";
     const wire = await refusalOf(handlers, "coder.addProject", { path });
     const rendered = localize(german, noticeOf(wire)) ?? "";
     expect(rendered).toContain(path);
@@ -247,7 +247,7 @@ describe("every refusal a user can read", () => {
     // bad call — a bug report, not a sentence to translate.
     const handlers = await handlersThatRefuse();
     const wire = await refusalOf(handlers, "coder.addProject", { path: "" });
-    expect(coderErrorCode(wire)).toBe(ENVOYCODER_ERRORS.badRequest);
+    expect(coderErrorCode(wire)).toBe(ENVOYDEV_ERRORS.badRequest);
     expect(coderErrorRef(wire)).toBeUndefined();
     expect(noticeOf(wire)?.key).toBeUndefined();
     // Which means a user reads it in English — the honest outcome for a message addressed to us.

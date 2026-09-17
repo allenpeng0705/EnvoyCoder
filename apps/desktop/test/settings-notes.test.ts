@@ -15,7 +15,7 @@
  *   1. **A dropped key is named.** Not "some settings were ignored" — the *key*, because the whole
  *      point of the note is that a user can go and look at the line it names.
  *   2. **`retired` and `never shipped` are different sentences.** They are different facts about the
- *      world, and only one of them is a fact about EnvoyCoder. A single sentence for both would be
+ *      world, and only one of them is a fact about EnvoyDev. A single sentence for both would be
  *      wrong for whichever half it was not written for.
  *   3. **The sentence travels with a key this build knows**, so the German window renders it in German.
  *      That is the daemon/window contract every other note follows (`daemon/messages.ts`), and it is the

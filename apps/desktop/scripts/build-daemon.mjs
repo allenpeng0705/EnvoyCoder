@@ -12,7 +12,7 @@
  *
  * ## Why the dependencies are *not* bundled
  *
- * `packages: "external"` keeps `@envoymesh/*` and `@envoycoder/*` as imports, resolved by Node from
+ * `packages: "external"` keeps `@envoymesh/*` and `@envoydev/*` as imports, resolved by Node from
  * the checkout at run time. That is deliberately the *development* arrangement, and it is honest
  * about what it is: those packages are siblings on disk (`../EnvoyMesh`, linked by `npm install`),
  * and bundling them here would embed one revision of the mesh into a build whose whole point is that
@@ -22,7 +22,7 @@
  * the bundle there embeds its dependencies, or the app ships a `node_modules` beside the daemon.
  * Saying so here is cheaper than a reader discovering it from a stack trace in a DMG.
  *
- * Usage: `npm run daemon:build` (from the repository root, or `-w @envoycoder/desktop`).
+ * Usage: `npm run daemon:build` (from the repository root, or `-w @envoydev/desktop`).
  */
 
 import { mkdir, rm, stat } from "node:fs/promises";

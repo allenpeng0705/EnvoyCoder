@@ -27,7 +27,7 @@
  *
  * ## Three outcomes, never two
  *
- * `PROBE_OUTCOMES` in `@envoycoder/protocol` is the type; this is what produces each one, and the
+ * `PROBE_OUTCOMES` in `@envoydev/protocol` is the type; this is what produces each one, and the
  * distinction is the whole reason the type exists:
  *
  *   * **`listed`** — the session opened and published options. Recorded.
@@ -92,10 +92,10 @@ import {
   type HarnessId,
   type ProbeOutcome,
   coderErrorMessage,
-} from "@envoycoder/protocol";
-import { harnessAcpFacts, harnessDefinition, observeSessionOptions, probeHarness } from "@envoycoder/agent-catalog";
-import { currentSearchPath, type PlatformId } from "@envoycoder/platform";
-import type { CoderPaths } from "@envoycoder/host-bridge";
+} from "@envoydev/protocol";
+import { harnessAcpFacts, harnessDefinition, observeSessionOptions, probeHarness } from "@envoydev/agent-catalog";
+import { currentSearchPath, type PlatformId } from "@envoydev/platform";
+import type { CoderPaths } from "@envoydev/host-bridge";
 
 import { AcpClient, type AcpLaunch } from "./acp/client.js";
 import {
@@ -376,7 +376,7 @@ export class SessionProbe {
           outcome: "unreachable",
           detail: keyed(
             "task.composer.probe.failed",
-            `EnvoyCoder could not ask ${label} what it offers: ${reason} Nothing you see has changed.`,
+            `EnvoyDev could not ask ${label} what it offers: ${reason} Nothing you see has changed.`,
             { agent: label, reason },
           ),
           auth,
@@ -450,7 +450,7 @@ export class SessionProbe {
         outcome: "unreachable",
         detail: keyed(
           "task.composer.probe.failed",
-          `EnvoyCoder could not ask ${label} what it offers: ${reason} Nothing you see has changed.`,
+          `EnvoyDev could not ask ${label} what it offers: ${reason} Nothing you see has changed.`,
           { agent: label, reason },
         ),
         auth,

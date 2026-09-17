@@ -1,5 +1,5 @@
 {
-  "name": "@envoycoder/task-model",
+  "name": "@envoydev/task-model",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,6 +12,6 @@
     }
   },
   "dependencies": {
-    "@envoycoder/protocol": "0.1.0"
+    "@envoydev/protocol": "0.1.0"
   }
 }

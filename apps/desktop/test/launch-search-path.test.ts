@@ -35,9 +35,9 @@ import {
   fetchablePackage,
   probeHarness,
   probeProvider,
-} from "@envoycoder/agent-catalog";
-import { ENVOYCODER_ERRORS, coderErrorCode, coderErrorRef, type AgentProviderConfig } from "@envoycoder/protocol";
-import { coderPaths } from "@envoycoder/host-bridge";
+} from "@envoydev/agent-catalog";
+import { ENVOYDEV_ERRORS, coderErrorCode, coderErrorRef, type AgentProviderConfig } from "@envoydev/protocol";
+import { coderPaths } from "@envoydev/host-bridge";
 import {
   composeSearchPath,
   LOGIN_SHELL_BINARY_MARKER,
@@ -45,7 +45,7 @@ import {
   provisionalCacheOf,
   resetSearchPathCacheForTests,
   resetShellBinaryCacheForTests,
-} from "@envoycoder/platform";
+} from "@envoydev/platform";
 
 import { launchForHarness, launchForProvider } from "../src/daemon/launch.js";
 
@@ -103,10 +103,10 @@ async function pathSeenByChild(
 
 describe("probing and spawning use the same PATH", () => {
   it("resolves the program from the given list, and hands the same list to the child", async () => {
-    const binDir = await tempDir("envoycoder-search-bin-");
+    const binDir = await tempDir("envoydev-search-bin-");
     await bridgeIn(binDir);
-    const cwd = await tempDir("envoycoder-search-cwd-");
-    const home = await tempDir("envoycoder-search-home-");
+    const cwd = await tempDir("envoydev-search-cwd-");
+    const home = await tempDir("envoydev-search-home-");
 
     // The probe finds it in the *given* list. Nothing about this machine matters: the directory is a temp one.
     const probe = probeHarness("claudecode", { pathDirs: [binDir] });
@@ -133,11 +133,11 @@ describe("probing and spawning use the same PATH", () => {
     // The realistic shape: the bridge is in one directory and the CLI it spawns is in another, and the child
     // needs both. A launch that passed only the resolved program's directory would start the bridge and then
     // lose the agent — "it is installed and it cannot run", which is the failure this rule prevents.
-    const bridgeDir = await tempDir("envoycoder-search-bridge-");
-    const agentDir = await tempDir("envoycoder-search-agent-");
+    const bridgeDir = await tempDir("envoydev-search-bridge-");
+    const agentDir = await tempDir("envoydev-search-agent-");
     await bridgeIn(bridgeDir);
-    const cwd = await tempDir("envoycoder-search-cwd-");
-    const home = await tempDir("envoycoder-search-home-");
+    const cwd = await tempDir("envoydev-search-cwd-");
+    const home = await tempDir("envoydev-search-home-");
 
     const launch = launchForHarness({
       harness: "claudecode",
@@ -154,10 +154,10 @@ describe("probing and spawning use the same PATH", () => {
     // fix **and** make the launch refuse with that sentence — not resolve optimistically and then fail at
     // `spawn`. `needs-bridge` here because the fixture also holds a `claude`, which is the reported bug's shape:
     // the agent is installed and the adapter is not.
-    const binDir = await tempDir("envoycoder-search-agentonly-");
+    const binDir = await tempDir("envoydev-search-agentonly-");
     await bridgeIn(binDir, "claude");
-    const cwd = await tempDir("envoycoder-search-cwd-");
-    const home = await tempDir("envoycoder-search-home-");
+    const cwd = await tempDir("envoydev-search-cwd-");
+    const home = await tempDir("envoydev-search-home-");
 
     const probe = probeHarness("claudecode", { pathDirs: [binDir] });
     expect(probe.state).toBe("needs-bridge");
@@ -188,9 +188,9 @@ describe("probing and spawning use the same PATH", () => {
    * prose, because the prose is the half a translated window never shows.
    */
   it("refuses an undrivable, an absent and an unverifiable agent with three different codes", async () => {
-    const cwd = await tempDir("envoycoder-refusal-cwd-");
-    const home = await tempDir("envoycoder-refusal-home-");
-    const empty = await tempDir("envoycoder-refusal-empty-");
+    const cwd = await tempDir("envoydev-refusal-cwd-");
+    const home = await tempDir("envoydev-refusal-home-");
+    const empty = await tempDir("envoydev-refusal-empty-");
     const called = (harm: "claudecode" | "opencode", dirs: readonly string[]): Error => {
       try {
         launchForHarness({ harness: harm, cwd, paths: coderPaths(home), searchDirs: dirs });
@@ -205,17 +205,17 @@ describe("probing and spawning use the same PATH", () => {
     // `copilot` was this leg's example until 2026-09-15, when its own `--acp` server was measured and it became
     // drivable — the state this leg asserts is "installed, and we have no adapter", which has to be shown by an
     // agent that really is undrivable.
-    const undrivableDir = await tempDir("envoycoder-refusal-undrivable-");
+    const undrivableDir = await tempDir("envoydev-refusal-undrivable-");
     await bridgeIn(undrivableDir, "opencode");
     const undrivable = called("opencode", [undrivableDir]);
-    expect(coderErrorCode(undrivable.message)).toBe(ENVOYCODER_ERRORS.harnessUnsupported);
+    expect(coderErrorCode(undrivable.message)).toBe(ENVOYDEV_ERRORS.harnessUnsupported);
     expect(coderErrorRef(undrivable.message)?.key).toBe("error.harnessUnsupported");
     // And not the sentence that tells them to install what they already have.
     expect(coderErrorRef(undrivable.message)?.key).not.toBe("error.harnessMissing");
 
     // 2. Absent, over a search that ran: the agent's own CLI and its adapter are both missing.
     const missing = called("claudecode", [empty]);
-    expect(coderErrorCode(missing.message)).toBe(ENVOYCODER_ERRORS.harnessMissing);
+    expect(coderErrorCode(missing.message)).toBe(ENVOYDEV_ERRORS.harnessMissing);
     expect(coderErrorRef(missing.message)?.key).toBe("error.harnessMissing");
     // The English detail — the half that reaches the log — names both install steps.
     expect(missing.message).toContain("npm install -g @agentclientprotocol/claude-agent-acp");
@@ -224,7 +224,7 @@ describe("probing and spawning use the same PATH", () => {
     //    searched and found nothing". A **different** code, because "we could not look" must never be
     //    translated as "it is not installed" — the one claim requirement this state exists for.
     const unverifiable = called("claudecode", []);
-    expect(coderErrorCode(unverifiable.message)).toBe(ENVOYCODER_ERRORS.harnessUnknown);
+    expect(coderErrorCode(unverifiable.message)).toBe(ENVOYDEV_ERRORS.harnessUnknown);
     expect(coderErrorRef(unverifiable.message)?.key).toBe("error.harnessUnknown");
     expect(coderErrorRef(unverifiable.message)?.key).not.toBe("error.harnessMissing");
     // And the three codes really are three: no two of these refusals can be mistaken for one another.
@@ -241,7 +241,7 @@ describe("probing and spawning use the same PATH", () => {
     // The bug in one assertion. A machine *with* the bridge on the ambient `PATH` and *without* it in the given
     // list must report it missing: an implementation that merged the two would say "ready" here, which is
     // exactly what a GUI-launched daemon did about every agent the user had installed.
-    const empty = await tempDir("envoycoder-search-empty-");
+    const empty = await tempDir("envoydev-search-empty-");
     // `PATH` is deliberately the real one, which on any machine that has the bridge would resolve it.
     const probe = probeHarness("claudecode", { pathDirs: [empty], env: process.env });
     expect(probe.state).not.toBe("ready");
@@ -277,10 +277,10 @@ describe("a program only the user's own shell resolves", () => {
   // returns `not-posix` on Windows, where the registry `PATH` already reaches a GUI process). It says so rather
   // than passing vacuously.
   posixOnly("reads as installed, not missing — and the launch runs exactly what the probe found", async () => {
-    const dir = await tempDir("envoycoder-shell-only-");
+    const dir = await tempDir("envoydev-shell-only-");
     await bridgeIn(dir, "only-in-my-shell");
-    const cwd = await tempDir("envoycoder-shell-cwd-");
-    const home = await tempDir("envoycoder-shell-home-");
+    const cwd = await tempDir("envoydev-shell-cwd-");
+    const home = await tempDir("envoydev-shell-home-");
 
     // A shell that names a program nothing else on this machine can find: not on the daemon's `PATH`, not in a
     // well-known directory, not in a tool cache. `command -v` is the only thing that knows about it, which is
@@ -335,11 +335,11 @@ describe("a program only the user's own shell resolves", () => {
     // **The reported row.** The fixture is the real layout — `<home>/.npm/_npx/<hash>/node_modules/.bin/dsh` —
     // and the search list is composed from a home in which that is the *only* place `dsh` exists. The probe
     // reports `ready` with the provenance the window renders as its warning chip, and the launch runs the file.
-    const home = await tempDir("envoycoder-npx-home-");
+    const home = await tempDir("envoydev-npx-home-");
     const binDir = join(home, ".npm", "_npx", "1e7f6d9597241db0", "node_modules", ".bin");
     await mkdirRecursive(binDir);
     await bridgeIn(binDir, "dsh");
-    const cwd = await tempDir("envoycoder-npx-cwd-");
+    const cwd = await tempDir("envoydev-npx-cwd-");
 
     resetShellBinaryCacheForTests();
     resetSearchPathCacheForTests();
@@ -368,11 +368,11 @@ describe("a program only the user's own shell resolves", () => {
     // The other two rows of the report: measured correctly, and they must stay that way. The agent's CLI is
     // present and its ACP adapter is not, so the state names the missing *half* — and the fix is the adapter's
     // install step, never the agent's (which would tell a user to install what they already have).
-    const dir = await tempDir("envoycoder-needsbridge-");
+    const dir = await tempDir("envoydev-needsbridge-");
     await bridgeIn(dir, "codex");
     await bridgeIn(dir, "claude");
-    const cwd = await tempDir("envoycoder-needsbridge-cwd-");
-    const home = await tempDir("envoycoder-needsbridge-home-");
+    const cwd = await tempDir("envoydev-needsbridge-cwd-");
+    const home = await tempDir("envoydev-needsbridge-home-");
 
     resetShellBinaryCacheForTests();
     resetSearchPathCacheForTests();
@@ -413,7 +413,7 @@ describe("a connector that is fetched rather than installed", () => {
   posixOnly("launches `npx -y <package>`, resolved through the search path", async () => {
     resetSearchPathCacheForTests();
     resetShellBinaryCacheForTests();
-    const dir = await mkdtemp(join(tmpdir(), "envoycoder-npx-"));
+    const dir = await mkdtemp(join(tmpdir(), "envoydev-npx-"));
     cleanups.push(() => rm(dir, { recursive: true, force: true }));
     // A stand-in for `npx`, and nothing else: what is asserted is the argv, not npm's behaviour.
     await writeFile(join(dir, "npx"), "#!/bin/sh\nexit 0\n");
@@ -439,7 +439,7 @@ describe("a connector that is fetched rather than installed", () => {
     // A delivery is a claim about what will run. With no `npx` there is no route, and the refusal is the *missing*
     // one — the program the probe looked for is absent — not a launch that fails later with a confusing error.
     resetSearchPathCacheForTests();
-    const dir = await mkdtemp(join(tmpdir(), "envoycoder-no-npx-"));
+    const dir = await mkdtemp(join(tmpdir(), "envoydev-no-npx-"));
     cleanups.push(() => rm(dir, { recursive: true, force: true }));
 
     // `coderErrorCode` reads the *message*, which is the wire's form of a coded refusal (see its own doc).
@@ -455,7 +455,7 @@ describe("a connector that is fetched rather than installed", () => {
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
     }
-    expect(coderErrorCode(message)).toBe(ENVOYCODER_ERRORS.harnessMissing);
+    expect(coderErrorCode(message)).toBe(ENVOYDEV_ERRORS.harnessMissing);
     resetSearchPathCacheForTests();
   });
 

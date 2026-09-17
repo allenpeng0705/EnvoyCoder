@@ -35,7 +35,7 @@
  * they carry a *pointer* to values we published.
  */
 
-import type { AgentProviderConfig, AgentProviderEnvState } from "@envoycoder/protocol";
+import type { AgentProviderConfig, AgentProviderEnvState } from "@envoydev/protocol";
 
 import { acpAgent, cataloguedEnvNames, type AcpAgentEntry } from "./acp-catalog.js";
 import { splitArgs } from "./args.js";

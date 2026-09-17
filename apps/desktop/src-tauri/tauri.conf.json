@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "EnvoyCoder",
+  "productName": "EnvoyDev",
   "version": "0.1.0",
-  "identifier": "sh.envoymesh.envoycoder",
+  "identifier": "sh.envoymesh.envoydev",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://127.0.0.1:6173",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "EnvoyCoder",
+        "title": "EnvoyDev",
         "width": 1280,
         "height": 820,
         "minWidth": 900,
@@ -48,7 +48,7 @@
     ],
     "category": "DeveloperTool",
     "shortDescription": "Run coding agents on your machines",
-    "longDescription": "EnvoyCoder drives coding agents across your own machines: a project tree, parallel agents, and the EnvoyMesh network so a task can run where the code and the hardware are.",
+    "longDescription": "EnvoyDev drives coding agents across your own machines: a project tree, parallel agents, and the EnvoyMesh network so a task can run where the code and the hardware are.",
     "macOS": {
       "minimumSystemVersion": "11.0"
     },

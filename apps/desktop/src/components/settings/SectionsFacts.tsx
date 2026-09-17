@@ -14,7 +14,7 @@
  *   * **This machine** is the daemon's own `hello` answer: which build it is, where it keeps its files,
  *     when it started, and how many windows are attached to it.
  *   * **About** is the one comparison a control plane needs: **this window's build against the
- *     daemon's**. Both halves of EnvoyCoder are built together, so a mismatch means one of them is a
+ *     daemon's**. Both halves of EnvoyDev are built together, so a mismatch means one of them is a
  *     build behind — and a daemon a build behind can refuse settings this window writes (the wire
  *     asymmetry `docs/settings-parity.md` §7.2 records). That is a fact worth one row, and the row is
  *     the reason this page exists rather than being folded into a chip.
@@ -35,6 +35,9 @@
  */
 
 import type { JSX } from "react";
+
+import { useCallback, useEffect, useState } from "react";
+import QRCode from "qrcode";
 
 import { APP_VERSION } from "../../app-version.js";
 import { useI18n } from "../../i18n/context.js";
@@ -112,17 +115,52 @@ export function ShortcutsSection(props: SettingsSectionProps & {
  * **This machine** — the daemon this window is attached to, as it described itself.
  *
  * Everything here is `coder.hello`'s answer, and the page is the long form of two chips that are already
- * in the pane's header on every page (the state folder and the build). The overlap is deliberate and
- * stated: a chip answers *"which daemon am I talking to"* at a glance while a user is reading a
- * different page, and this page is where the facts that do not fit in a chip live — the home folder, the
- * start time, and how many windows are attached to it.
+ * in the pane's header on every page (the state folder and the build). **Pair a phone** lives here too:
+ * minting a pairing QR is a fact about *this* daemon (who may reach it), not a preference.
  */
 export function MachineSection(props: SettingsSectionProps): JSX.Element {
   const { t, locale } = useI18n();
   const { hello } = props.state;
+  const [uri, setUri] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [pairError, setPairError] = useState<string | null>(null);
+  const [devices, setDevices] = useState<
+    | readonly {
+        id: string;
+        deviceLabel: string;
+        createdAt: string;
+        expiresAt: string;
+        revokedAt?: string;
+        lastSeenAt?: string;
+      }[]
+    | null
+  >(null);
+
+  const refreshDevices = useCallback(async () => {
+    const result = await props.agents.listPairedDevices();
+    if (result.ok) setDevices(result.devices);
+  }, [props.agents]);
+
+  useEffect(() => {
+    void refreshDevices();
+  }, [refreshDevices]);
+
+  useEffect(() => {
+    if (!uri) {
+      setQrDataUrl(null);
+      return;
+    }
+    let cancelled = false;
+    void QRCode.toDataURL(uri, { margin: 1, width: 220 }).then((url) => {
+      if (!cancelled) setQrDataUrl(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [uri]);
 
   if (hello === undefined) {
-    // Not an empty box: with no daemon there is nothing to report, and that is the sentence.
     return <p className="settings__note">{t("settings.machine.noDaemon")}</p>;
   }
 
@@ -171,14 +209,114 @@ export function MachineSection(props: SettingsSectionProps): JSX.Element {
         detail={t("settings.machine.windows.detail")}
         developerNote="hello.windowCount"
       >
-        {/* Two forms rather than a `{count} windows` template: "1 windows" is the form every language
-            gets wrong, and a translator needs the singular as a sentence of its own. */}
         <span className="chip chip--quiet">
           {hello.windowCount === 1
             ? t("settings.machine.windows.one")
             : t("settings.machine.windows.many", { count: hello.windowCount })}
         </span>
       </SettingRow>
+
+      <SettingRow
+        title={t("settings.machine.pair.title")}
+        detail={t("settings.machine.pair.detail")}
+        developerNote="coder.mintPairing"
+      >
+        <button
+          type="button"
+          className="button button--secondary"
+          onClick={() => {
+            setPairError(null);
+            void props.agents.mintPairing({ deviceLabel: "Phone" }).then(async (result) => {
+              if (!result.ok) {
+                setPairError(result.message);
+                return;
+              }
+              setUri(result.uri);
+              setCopied(false);
+              await refreshDevices();
+            });
+          }}
+        >
+          {t("settings.machine.pair.action")}
+        </button>
+      </SettingRow>
+
+      {pairError ? <p className="settings__note">{pairError}</p> : null}
+
+      {uri ? (
+        <div className="settings__pairing" data-testid="pairing-panel">
+          {qrDataUrl ? (
+            <img className="settings__pairing-qr" src={qrDataUrl} alt={t("settings.machine.pair.title")} />
+          ) : null}
+          <label className="settings__pairing-label">
+            {t("settings.machine.pair.uriLabel")}
+            <textarea className="settings__pairing-uri" readOnly value={uri} rows={3} />
+          </label>
+          <div className="settings__pairing-actions">
+            <button
+              type="button"
+              className="button button--secondary"
+              onClick={() => {
+                void navigator.clipboard.writeText(uri).then(() => setCopied(true));
+              }}
+            >
+              {copied ? t("settings.machine.pair.copied") : t("settings.machine.pair.copy")}
+            </button>
+            <button
+              type="button"
+              className="button"
+              onClick={() => {
+                setUri(null);
+                setCopied(false);
+              }}
+            >
+              {t("settings.machine.pair.close")}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <SettingRow
+        title={t("settings.machine.paired.title")}
+        detail={t("settings.machine.paired.detail")}
+        developerNote="coder.listPairedDevices"
+      >
+        <span className="chip chip--quiet">{devices === null ? "…" : String(devices.length)}</span>
+      </SettingRow>
+
+      {devices !== null && devices.length === 0 ? (
+        <p className="settings__note">{t("settings.machine.paired.empty")}</p>
+      ) : null}
+
+      {devices !== null && devices.length > 0 ? (
+        <ul className="settings__paired-list">
+          {devices.map((device) => (
+            <li key={device.id} className="settings__paired-row">
+              <div>
+                <strong>{device.deviceLabel}</strong>
+                <div className="settings__note">
+                  {device.revokedAt
+                    ? t("settings.machine.paired.revoked")
+                    : t("settings.machine.paired.expires", { when: formatWhen(device.expiresAt, locale) })}
+                </div>
+              </div>
+              {device.revokedAt ? null : (
+                <button
+                  type="button"
+                  className="button button--secondary"
+                  onClick={() => {
+                    void props.agents.revokePairedDevice(device.id).then((result) => {
+                      if (result.ok) void refreshDevices();
+                    });
+                  }}
+                >
+                  {t("settings.machine.paired.revoke")}
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </>
   );
 }
@@ -215,7 +353,7 @@ export function AboutSection(props: SettingsSectionProps): JSX.Element {
       <SettingRow
         title={t("settings.about.window.title")}
         detail={t("settings.about.window.detail")}
-        developerNote="__ENVOYCODER_VERSION__"
+        developerNote="__ENVOYDEV_VERSION__"
       >
         <span className="chip chip--quiet">
           {window_ ?? t("settings.about.noVersion")}

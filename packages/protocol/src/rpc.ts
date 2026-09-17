@@ -3,7 +3,7 @@
  *
  * ## The envelope is the family's, not ours
  *
- * EnvoyCoder's daemon is hosted by `@envoymesh/reuse-host`, whose transport
+ * EnvoyDev's daemon is hosted by `@envoymesh/reuse-host`, whose transport
  * (`@envoymesh/host-connect`'s `WsServer`) already fixes the framing:
  *
  * ```
@@ -31,8 +31,8 @@
  *
  * The family's transport derives `error.code` from a *closed catalogue* of its own tokens
  * (`@envoymesh/host-connect/src/rpc-error-code.ts:14-36`) and answers `"ERROR"` for anything else,
- * so an `envoycoder.*` code cannot ride in `error.code`. It rides in the message as a leading
- * token — `"envoycoder.path-missing: /x/y is gone"` — which is exactly the convention that
+ * so an `envoydev.*` code cannot ride in `error.code`. It rides in the message as a leading
+ * token — `"envoydev.path-missing: /x/y is gone"` — which is exactly the convention that
  * helper implements for EnvoyMesh's own catalogue. `coderError()` produces that string and
  * `coderErrorCode()` reads it back, so both ends agree by construction rather than by everyone
  * remembering the format.
@@ -47,8 +47,8 @@ import {
   type CoderSettings,
   CoderLanguageSchema,
   CoderSettingsSchema,
-  ENVOYCODER_ERRORS,
-  type EnvoyCoderErrorCode,
+  ENVOYDEV_ERRORS,
+  type EnvoyDevErrorCode,
   type HarnessId,
   HarnessIdSchema,
   looksLikeCredentialEnvName,
@@ -113,7 +113,7 @@ export const TRANSPORT_UNSUBSCRIBE_METHOD = "off";
  * The message *is* the wire format: `<code>: <message>`. Throwing anything else loses the code —
  * the transport would answer `"ERROR"` and the client could only pattern-match on prose.
  */
-export function coderError(code: EnvoyCoderErrorCode, message: string, ref?: CoderMessageRef): Error {
+export function coderError(code: EnvoyDevErrorCode, message: string, ref?: CoderMessageRef): Error {
   return new Error(withMessageRef(`${code}: ${message}`, ref));
 }
 
@@ -141,14 +141,14 @@ export interface CoderMessageRef {
  * (`@envoymesh/host-connect/src/ws-server.ts:1157`) — from a thrown `Error`'s `message` alone, so
  * anything else attached to the error is dropped before it reaches the socket. The message is the
  * one channel a product controls end to end, which is why the code already rides there
- * (`envoycoder.path-missing: …`) and why the key rides beside it.
+ * (`envoydev.path-missing: …`) and why the key rides beside it.
  *
  * So the convention is: `<code>: <english sentence> <marker> <json>`. Everything before the marker
  * is exactly the sentence a user reads today — a log line, a `toContain` assertion and a client
  * that has never heard of this convention all keep working. Only a client that knows the marker
  * ever looks past it.
  */
-const MESSAGE_REF_MARKER = " [envoycoder.key] ";
+const MESSAGE_REF_MARKER = " [envoydev.key] ";
 
 /** Attach a key to a sentence. Used by the daemon, and by the app for the prose it authors itself. */
 export function withMessageRef(text: string, ref?: CoderMessageRef): string {
@@ -192,7 +192,7 @@ export function parseMessageRef(text: string): { text: string; ref?: CoderMessag
 
 /** Everything a client can read out of a failed call: the code, the sentence, and the key. */
 export interface ParsedCoderError {
-  code: EnvoyCoderErrorCode | null;
+  code: EnvoyDevErrorCode | null;
   /** The English sentence, with the code prefix and any key marker removed. */
   message: string;
   ref?: CoderMessageRef;
@@ -207,11 +207,11 @@ export interface ParsedCoderError {
 export function parseCoderError(message: string): ParsedCoderError {
   const colon = message.indexOf(":");
   const head = colon > 0 ? message.slice(0, colon).trim() : "";
-  const coded = colon > 0 && head.startsWith("envoycoder.");
+  const coded = colon > 0 && head.startsWith("envoydev.");
   const body = coded ? message.slice(colon + 1).trim() : message;
   const { text, ref } = parseMessageRef(body);
   return {
-    code: coded ? (head as EnvoyCoderErrorCode) : null,
+    code: coded ? (head as EnvoyDevErrorCode) : null,
     message: text,
     ...(ref ? { ref } : {}),
   };
@@ -239,7 +239,7 @@ export function readRpcError(error: { code?: string; message: string }): CoderRp
 }
 
 /** The code a failed call carried, or `null` when it did not carry one of ours. */
-export function coderErrorCode(message: string): EnvoyCoderErrorCode | null {
+export function coderErrorCode(message: string): EnvoyDevErrorCode | null {
   return parseCoderError(message).code;
 }
 
@@ -537,13 +537,27 @@ export const RunEventSchema: z.ZodType<RunEvent> = z.discriminatedUnion("kind", 
 /**
  * What the mesh looks like from inside the daemon.
  *
- * Declared here rather than imported from `@envoycoder/host-bridge` for the same reason the mesh
+ * Declared here rather than imported from `@envoydev/host-bridge` for the same reason the mesh
  * types are not imported from EnvoyMesh: a client — the phone especially — must render this
  * without pulling the mesh's attach client into its bundle. `host-bridge` maps its own outcome onto
  * this shape, and that mapping is the one place the two can drift.
  */
 export type CoderMeshStatus =
   | { kind: "attached"; scopeKey: string; ownerId: string; peerCount?: number }
+  /**
+   * **We are the node** — this machine hosts its own peer, and this is how to reach it.
+   *
+   * The three other variants are all written from a client's point of view looking for *somebody
+   * else's* node, so a healthy self-hosting desktop had no honest value to report: the attach probe
+   * found nothing and the daemon said `no-node` while its own peer was listening and dialable.
+   * `multiaddrs` and `relayHints` are the addresses a peer (a paired phone) dials; `peerCount` is
+   * how many peers are currently connected.
+   *
+   * (Rejected alternative: an optional `self: true` on `attached`. A client that only understands
+   * the old shape would then read our own identity as the node we attached to — the precise
+   * confusion this variant exists to prevent.)
+   */
+  | { kind: "hosting"; peerId: string; multiaddrs: string[]; relayHints: string[]; peerCount?: number }
   | { kind: "no-node"; reason: string }
   | { kind: "refused"; code: string; reason: string };
 
@@ -553,6 +567,15 @@ export const CoderMeshStatusSchema = z.discriminatedUnion("kind", [
       kind: z.literal("attached"),
       scopeKey: z.string().min(1),
       ownerId: z.string(),
+      peerCount: z.number().int().nonnegative().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("hosting"),
+      peerId: z.string().min(1),
+      multiaddrs: z.array(z.string()),
+      relayHints: z.array(z.string()),
       peerCount: z.number().int().nonnegative().optional(),
     })
     .strict(),
@@ -621,7 +644,7 @@ export const AgentModelSchema = z
  *   * `"listed"` — the agent publishes the models it accepts, and `options` is that list. Non-empty by
  *     construction (see the refinement on the schema below), because a list we can show is the only
  *     reason to say `"listed"`.
- *   * `"free-text"` — the agent accepts a model but publishes **no** list EnvoyCoder can read before a
+ *   * `"free-text"` — the agent accepts a model but publishes **no** list EnvoyDev can read before a
  *     session exists. `options` is empty **and the control is still usable**: it takes what the user
  *     types. This is the state `deepseek-harness` is in, and reporting it as `"none"` would be a claim
  *     about somebody else's product that we are in no position to make.
@@ -888,7 +911,7 @@ export const ProbeOutcomeSchema = z.enum(PROBE_OUTCOMES);
  * sentence rather than silence. **Decided by the path, never by how the program was found**: a `dsh` the
  * user's own login shell names *and* that lives in an `npx` cache is still `provisional`, because what the
  * warning is about is that the directory has a hash in it and `npm cache clean` removes it — not who
- * asked. See `provisionalCacheOf` in `@envoycoder/platform`.
+ * asked. See `provisionalCacheOf` in `@envoydev/platform`.
  */
 export const HARNESS_STATES = [
   "ready",
@@ -1155,7 +1178,7 @@ export interface HarnessSummary {
    * a state **without inventing one**. That mapping is the interesting half — a legacy `false` becomes
    * `unknown`, never `not-installed`, because a daemon that never asked about the agent's own program
    * cannot support the claim, and it sends no `fix` for the same reason. The user is told the daemon is a
-   * build behind and to restart EnvoyCoder, which is the action that fixes it, rather than being told a
+   * build behind and to restart EnvoyDev, which is the action that fixes it, rather than being told a
    * program they installed is missing.
    */
   availability: HarnessAvailability;
@@ -1770,7 +1793,7 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
         /**
          * Identity of this *process*, not of the product.
          *
-         * Two different daemons both answer `product: "EnvoyCoder"`, so the product name cannot
+         * Two different daemons both answer `product: "EnvoyDev"`, so the product name cannot
          * tell the shell's daemon from a squatter on the same port. The shell writes this value
          * into the lock file before the window connects, and the window refuses a hello that does
          * not carry it — "something is listening" and "our daemon is listening" are different
@@ -2039,7 +2062,7 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
     result: z.object({ harness: HarnessIdSchema, delivery: AgentDeliverySchema }).strict(),
   },
   /**
-   * **Run the fix a row is showing** — the answer to *"can we support run the commands in EnvoyCoder?"*
+   * **Run the fix a row is showing** — the answer to *"can we support run the commands in EnvoyDev?"*
    *
    * ## The property this method exists to keep
    *
@@ -2177,7 +2200,7 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
    *
    * This is a **new method**, not a new field on an existing result. An older daemon refuses it by name,
    * which is the skew the window already handles (`missingMethods`/`coder.hello`'s `methods`, and the
-   * "restart EnvoyCoder so both come from one build" sentence) — so the open asymmetry §7.2 of
+   * "restart EnvoyDev so both come from one build" sentence) — so the open asymmetry §7.2 of
    * `docs/settings-parity.md` records for a *stricter result schema* is not widened here: nothing in an
    * older daemon's answers changes shape.
    */
@@ -2240,10 +2263,10 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
    *
    * ## The refusals it carries
    *
-   *   * an `id` that names one of the nine agents we ship → `envoycoder.provider-id-taken` with a
+   *   * an `id` that names one of the nine agents we ship → `envoydev.provider-id-taken` with a
    *     translated sentence, because the parameters were exactly what the user meant;
    *   * an `env` entry that is a **value** rather than an environment variable name →
-   *     `envoycoder.bad-request` with `error.providerEnvNotAName`, the same refusal shape
+   *     `envoydev.bad-request` with `error.providerEnvNotAName`, the same refusal shape
    *     `AgentProviderConfigSchema` enforces in the file. The name of the *variable* is quoted in the
    *     sentence; the thing the user pasted is never echoed, because a refused value is still a secret.
    */
@@ -2345,6 +2368,77 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
     result: z.object({ peers: z.array(CoderPeerSchema).readonly() }).strict(),
   },
 
+  /* — paired phones — */
+  "coder.mintPairing": {
+    params: z
+      .object({
+        /** Shown in Settings → This machine. Defaults to "Phone". */
+        deviceLabel: z.string().min(1).max(80).optional(),
+        /**
+         * Reachable host for the QR's `wsUrl` (LAN IP, tailnet, or public). Absent → first non-loopback
+         * address, then `127.0.0.1` (useful only for same-machine tests).
+         */
+        host: z.string().min(1).optional(),
+        /** Preferable LAN address for `lanWsUrl`. */
+        lanHost: z.string().min(1).optional(),
+      })
+      .strict(),
+    result: z
+      .object({
+        /** Full `envoy://pair?…` URI — contains the secret token; show as QR, never log. */
+        uri: z.string().min(1),
+        device: z
+          .object({
+            id: z.string().min(1),
+            deviceLabel: z.string().min(1),
+            createdAt: z.string().min(1),
+            expiresAt: z.string().min(1),
+            revokedAt: z.string().min(1).optional(),
+            lastSeenAt: z.string().min(1).optional(),
+          })
+          .strict(),
+      })
+      .strict(),
+  },
+  "coder.listPairedDevices": {
+    params: EmptyParams,
+    result: z
+      .object({
+        devices: z
+          .array(
+            z
+              .object({
+                id: z.string().min(1),
+                deviceLabel: z.string().min(1),
+                createdAt: z.string().min(1),
+                expiresAt: z.string().min(1),
+                revokedAt: z.string().min(1).optional(),
+                lastSeenAt: z.string().min(1).optional(),
+              })
+              .strict(),
+          )
+          .readonly(),
+      })
+      .strict(),
+  },
+  "coder.revokePairedDevice": {
+    params: z.object({ id: z.string().min(1) }).strict(),
+    result: z
+      .object({
+        device: z
+          .object({
+            id: z.string().min(1),
+            deviceLabel: z.string().min(1),
+            createdAt: z.string().min(1),
+            expiresAt: z.string().min(1),
+            revokedAt: z.string().min(1).optional(),
+            lastSeenAt: z.string().min(1).optional(),
+          })
+          .strict(),
+      })
+      .strict(),
+  },
+
   /* — settings — */
   "coder.getSettings": {
     params: EmptyParams,
@@ -2401,7 +2495,7 @@ export function parseRpcParams(method: RpcMethod, params: unknown): unknown {
   const issue = parsed.error.issues[0];
   const where = issue && issue.path.length > 0 ? issue.path.join(".") : "params";
   throw coderError(
-    ENVOYCODER_ERRORS.badRequest,
+    ENVOYDEV_ERRORS.badRequest,
     `${method} was called with an unusable "${where}": ${issue?.message ?? "invalid"}`,
   );
 }

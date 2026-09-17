@@ -9,7 +9,7 @@
  * resolve it itself: two windows on one daemon may be in different languages, and the daemon has no
  * business knowing which user is looking.
  *
- * So the two travel together (`withMessageRef` in `@envoycoder/protocol` puts the key inside the
+ * So the two travel together (`withMessageRef` in `@envoydev/protocol` puts the key inside the
  * message, which is the only field the family's transport preserves).
  *
  * ## Why the key is typed
@@ -24,7 +24,7 @@
  * the daemon sends keys, and the window is what knows what they say.
  */
 
-import { withMessageRef, type CoderMessageRef } from "@envoycoder/protocol";
+import { withMessageRef, type CoderMessageRef } from "@envoydev/protocol";
 
 import type { MessageKey } from "../i18n/messages/en.js";
 

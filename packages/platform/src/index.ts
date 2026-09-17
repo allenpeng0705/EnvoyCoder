@@ -3,7 +3,7 @@
  *
  * ## Why this is a package and not a `if (process.platform === "win32")` in three files
  *
- * EnvoyCoder drives **other people's CLI programs** as child processes, on three operating
+ * EnvoyDev drives **other people's CLI programs** as child processes, on three operating
  * systems, and each of those facts multiplies: how you find a binary on `PATH`, how you quote
  * an argument, how you kill a process *tree*, whether signals exist at all, and whether a
  * pseudo-terminal is available. The EnvoyMesh codebase learned this the expensive way — a lock
@@ -113,7 +113,7 @@ export const PLATFORM_MATRIX: Record<PlatformId, PlatformCapabilities> = {
     signals: false,
     killTree: "taskkill",
     // ConPTY, available from Windows 10 1809. We do not try to detect the build: a failure to
-    // open a pty is reported as `envoycoder.unsupported-platform` with that explanation.
+    // open a pty is reported as `envoydev.unsupported-platform` with that explanation.
     pty: "conpty",
     // Symlinks need Developer Mode or elevation on Windows, so anything that *requires* one has
     // to fall back (copy instead of link) rather than fail.
@@ -149,17 +149,17 @@ export function capabilitiesFor(platform: PlatformId = detectPlatform()): Platfo
 export function platformRefusal(
   need: keyof PlatformCapabilities,
   platform: PlatformId = detectPlatform(),
-): { code: "envoycoder.unsupported-platform"; message: string } | null {
+): { code: "envoydev.unsupported-platform"; message: string } | null {
   const caps = capabilitiesFor(platform);
   if (!caps.supported) {
     return {
-      code: "envoycoder.unsupported-platform",
-      message: `${platform} is not a platform EnvoyCoder ships for. Supported: ${SUPPORTED_PLATFORMS.join(", ")}.`,
+      code: "envoydev.unsupported-platform",
+      message: `${platform} is not a platform EnvoyDev ships for. Supported: ${SUPPORTED_PLATFORMS.join(", ")}.`,
     };
   }
   if (need === "sshClient" && !caps.sshClient) {
     return {
-      code: "envoycoder.unsupported-platform",
+      code: "envoydev.unsupported-platform",
       message:
         `Connecting over SSH needs an ssh client, and none was found on ${platform}. ` +
         "Install OpenSSH (Windows: Settings → Apps → Optional features → OpenSSH Client), " +
@@ -168,7 +168,7 @@ export function platformRefusal(
   }
   if (need === "signals" && !caps.signals) {
     return {
-      code: "envoycoder.unsupported-platform",
+      code: "envoydev.unsupported-platform",
       message: `Graceful signals are not available on ${platform}; a cancelled run is terminated rather than asked to stop.`,
     };
   }
@@ -482,8 +482,8 @@ export function hasSshClient(
 /**
  * The per-user data directory for a product on this OS.
  *
- * This mirrors the family's rule (`docs/envoycoder-platforms.md`) rather than inventing a
- * second one: an EnvoyCoder home must be findable by the same logic EnvoyMesh uses, because
+ * This mirrors the family's rule (`docs/envoydev-platforms.md`) rather than inventing a
+ * second one: an EnvoyDev home must be findable by the same logic EnvoyMesh uses, because
  * both apps share it. Kept here as well so the platform package has no dependency on the mesh
  * and can be used by the CLI before any mesh code is loaded.
  */

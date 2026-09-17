@@ -23,7 +23,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { HarnessId } from "@envoycoder/protocol";
+import type { HarnessId } from "@envoydev/protocol";
 
 import {
   ALL_HARNESSES,

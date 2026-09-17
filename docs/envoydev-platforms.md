@@ -6,11 +6,11 @@
 
 ## 1. Why this is a package
 
-EnvoyCoder drives *other people's CLI programs* on three operating systems. Each of those facts
+EnvoyDev drives *other people's CLI programs* on three operating systems. Each of those facts
 multiplies: how you find a binary on `PATH`, how you quote an argument, how you kill a process
 *tree*, whether signals exist at all, and whether a pseudo-terminal is available.
 
-Every function in `@envoycoder/platform` takes the platform as a parameter (defaulted to the real
+Every function in `@envoydev/platform` takes the platform as a parameter (defaulted to the real
 one), so **the Windows branch is exercised on macOS** by the test suite. That is not a stylistic
 preference: the EnvoyMesh codebase paid for the alternative twice in one afternoon — a lock that
 assumed `ps` and `/proc`, and a shell snippet that assumed `setsid` (which does not exist on macOS),
@@ -145,9 +145,9 @@ What the shell owns, and why (`apps/desktop/src-tauri/src/main.rs`):
 
    Recorded because it cost a wrong diagnosis first (2026-09-15): the shell's rule used mere existence,
    a shared `runtime/` created the default root, and from then on the daemon published its claim in
-   `~/.envoymesh/EnvoyCoder/daemon.json` while the shell looked for it in
-   `~/Library/Application Support/EnvoyMesh/EnvoyCoder/daemon.json`. Every window then reported a daemon
-   that "exited immediately" — that was the second daemon `daemon_endpoint` spawned, printing "EnvoyCoder
+   `~/.envoymesh/EnvoyDev/daemon.json` while the shell looked for it in
+   `~/Library/Application Support/EnvoyMesh/EnvoyDev/daemon.json`. Every window then reported a daemon
+   that "exited immediately" — that was the second daemon `daemon_endpoint` spawned, printing "EnvoyDev
    is already running on this machine" and exiting 0 — while a healthy daemon served on 4770. Restarting
    cannot fix a disagreement about a *path*, which is why `scripts/restart-app.mjs` stops a daemon whose
    claim it finds in **any** home the rule can choose and prints the home it resolves.
@@ -161,7 +161,7 @@ What the shell owns, and why (`apps/desktop/src-tauri/src/main.rs`):
    Two identification traps cost a restart each, and both are recorded because neither is visible in the
    process list a person looks at:
 
-   * **A command line is not a program.** Cargo starts the dev shell as `target/debug/envoycoder` *relative*
+   * **A command line is not a program.** Cargo starts the dev shell as `target/debug/envoydev` *relative*
      to its own directory, so a pattern matching the absolute path matched nothing — the window survived a
      "stop everything" while the daemon under it was killed. The window is therefore identified by its
      **executable** (`lsof -a -d txt`), which is an absolute path or nothing, and which also keeps a sibling

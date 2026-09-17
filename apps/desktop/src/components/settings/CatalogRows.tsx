@@ -45,7 +45,7 @@
  * statement of how the program is spoken to. The dialect has no default because a default would be us
  * choosing on the user's behalf for a program we cannot see, and both answers are wrong in a way nobody can
  * detect. The form says the same thing about the environment field that the schema enforces: **names, never
- * values**, because the value is read from the environment EnvoyCoder's daemon runs in and a credential must
+ * values**, because the value is read from the environment EnvoyDev's daemon runs in and a credential must
  * never be written down.
  */
 
@@ -53,7 +53,7 @@ import type { JSX } from "react";
 
 import { useCallback, useMemo, useState } from "react";
 
-import type { CatalogEntry } from "@envoycoder/protocol";
+import type { CatalogEntry } from "@envoydev/protocol";
 
 import { useI18n } from "../../i18n/context.js";
 import { localize, type Notice } from "../../i18n/notice.js";

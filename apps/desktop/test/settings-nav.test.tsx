@@ -41,9 +41,10 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CoderSettings, Project } from "@envoycoder/protocol";
+import type { CoderSettings, Project } from "@envoydev/protocol";
 
 import { CoderApp } from "../src/components/CoderApp.js";
+import { stubAgentActions } from "./fixtures/agent-actions.js";
 import { SettingsPane } from "../src/components/SettingsPane.js";
 import { WIDE_LAYOUT_QUERY } from "../src/components/SettingsNav.js";
 import { en } from "../src/i18n/messages/en.js";
@@ -134,11 +135,11 @@ function stateWith(over: Partial<CoderState> = {}): CoderState {
     connection: { state: "connected", endpoint: { host: "127.0.0.1", port: 4770, path: "/ws" } },
     resolved: undefined,
     hello: {
-      product: "EnvoyCoder",
+      product: "EnvoyDev",
       version: "0.1.0",
       instanceId: "test",
       home: "/home/you/.envoymesh",
-      stateDir: "/home/you/.envoymesh/EnvoyCoder",
+      stateDir: "/home/you/.envoymesh/EnvoyDev",
       startedAt: "2026-09-14T00:00:00.000Z",
       windowCount: 2,
       methods: [],
@@ -191,13 +192,12 @@ function showPane(
  * `SettingsPaneProps.agents` is **required**, because a caller that could render the agents page with no way
  * to act would render four controls that do nothing — the defect this pane was rebuilt to remove. These tests
  * assert the bar, the pages and the citations, so their bundle answers nothing; the tests that press the
- * buttons are in `settings-agents-catalog.test.tsx`, against a fake that records what was sent.
+ * buttons are in `settings-agents-catalog.test.tsx`, against a fake that records what was sent. The stub
+ * comes from the shared fixture rather than a local object cast `as unknown as AgentActions`, because
+ * that cast is how `listPairedDevices` went missing here and turned an unwired actions bundle into an
+ * unhandled `TypeError` beside a passing test.
  */
-const noAgentActions: AgentActions = {
-  addProvider: vi.fn(),
-  removeProvider: vi.fn(),
-  signInAgent: vi.fn(),
-} as unknown as AgentActions;
+const noAgentActions: AgentActions = stubAgentActions();
 
 /** The bar, as a landmark. Its accessible name is the catalogue's, not a string in this file. */
 const nav = (): HTMLElement => screen.getByRole("navigation", { name: en["settings.nav.aria"] });
@@ -607,7 +607,7 @@ describe("the pages the bar opens", () => {
     // rather than as wording, because the wording is the catalogue's business.
     showPane(appScope("machine"));
     expect(screen.getByText("0.1.0")).toBeTruthy();
-    expect(screen.getByText("…/.envoymesh/EnvoyCoder")).toBeTruthy();
+    expect(screen.getByText("…/.envoymesh/EnvoyDev")).toBeTruthy();
     expect(screen.getByText("2 windows")).toBeTruthy();
   });
 
@@ -642,7 +642,7 @@ describe("the pages the bar opens", () => {
     expect(screen.getByRole("navigation", { name: en["settings.nav.aria"] })).toBeTruthy();
     // **The whole sentence is one press in, and the row's own line carries the action.** That split is this
     // slice's change: the sentence was four lines of prose per row on the page, and the fact a user acts on is
-    // "restart EnvoyCoder". Both are asserted, because asserting only the disclosed half would pass on a page
+    // "restart EnvoyDev". Both are asserted, because asserting only the disclosed half would pass on a page
     // that told a user nothing until they opened a disclosure they had no reason to open.
     expect(screen.getAllByText(en["settings.agents.row.restart"])).toHaveLength(older.length);
     for (const name of screen.getAllByRole("button", { name: /^Details for / })) {

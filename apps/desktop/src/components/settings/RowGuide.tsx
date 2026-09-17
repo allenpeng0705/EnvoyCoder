@@ -23,7 +23,7 @@
  * the mono face on its own tinted line, and **Copy** beside it.
  *
  * **And the block is where a row becomes resolvable.** `run` (FixRunner) is the press that executes the
- * commands the block just showed — the answer to *"can we support run the commands in EnvoyCoder?"* — and it
+ * commands the block just showed — the answer to *"can we support run the commands in EnvoyDev?"* — and it
  * is passed in only by a caller that can name a target (a harness id, a catalogue id, a provider id) and only
  * when the daemon serves the method. There is no command here for an `environment` guide to run, so that kind
  * keeps the block and gets no button.
@@ -61,7 +61,7 @@ import { FixRunner, type FixRunAnswer } from "./FixRunner.js";
  * A list of commands rather than a paragraph, because the whole point of the count is that a user can count:
  * a bridged agent's fix is two commands, and a running sentence is how the second one gets missed.
  * `environment` is the same list shape for the same reason, holding variable **names** — which is all
- * EnvoyCoder is ever allowed to know about a credential.
+ * EnvoyDev is ever allowed to know about a credential.
  *
  * **`nothing` and `app` keep the plain shape on purpose.** Our gap is not an install and a restart is not a
  * command line, so neither gets the block; giving them one would make the layout stop meaning *"there is
@@ -124,7 +124,7 @@ export function GuideBlock(props: {
       ) : (
         <>
           <p className="settings__agent-fact settings__agent-fact--lead">{guide.lead}</p>
-          {/* An instruction that is not a command line — *Restart EnvoyCoder*. Prose rather than a `<code>`,
+          {/* An instruction that is not a command line — *Restart EnvoyDev*. Prose rather than a `<code>`,
               because a button cannot be pressed from inside a disclosure and a monospaced "command" the user
               cannot type would be worse than the sentence. */}
           {guide.action !== undefined ? <p className="settings__agent-fact">{guide.action}</p> : null}

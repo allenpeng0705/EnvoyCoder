@@ -1,7 +1,7 @@
 [package]
-name = "envoycoder"
+name = "envoydev"
 version = "0.1.0"
-description = "EnvoyCoder — the control plane for coding agents"
+description = "EnvoyDev — the control plane for coding agents"
 edition = "2021"
 rust-version = "1.77"
 

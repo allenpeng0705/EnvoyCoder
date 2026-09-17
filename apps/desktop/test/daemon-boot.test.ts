@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { CoderHomeFacts } from "@envoycoder/host-bridge";
+import type { CoderHomeFacts } from "@envoydev/host-bridge";
 import {
   EXIT_DAMAGED_HOME,
   EXIT_OK,
@@ -132,6 +132,6 @@ describe("what a failed bind means", () => {
   it("reports a real failure as one, and names the way out", () => {
     const outcome = serveFailureOutcome(4770, new Error("permission denied"));
     expect(outcome.exitCode).toBe(1);
-    expect(outcome.detail.join(" ")).toContain("ENVOYCODER_DAEMON_PORT");
+    expect(outcome.detail.join(" ")).toContain("ENVOYDEV_DAEMON_PORT");
   });
 });

@@ -35,8 +35,8 @@ import process from "node:process";
 
 import WebSocket from "ws";
 
-import { coderErrorMessage, coderErrorRef, type CoderSettings } from "@envoycoder/protocol";
-import { coderPaths } from "@envoycoder/host-bridge";
+import { coderErrorMessage, coderErrorRef, type CoderSettings } from "@envoydev/protocol";
+import { coderPaths } from "@envoydev/host-bridge";
 
 import { CATALOGUES } from "../apps/desktop/src/i18n/catalogues.js";
 import { LOCALE_LABELS, resolveLocale, type LocalePreference } from "../apps/desktop/src/i18n/locales.js";
@@ -51,9 +51,9 @@ function flag(name: string, fallback: string): string {
 }
 
 const language = flag("language", "de");
-const missingPath = flag("path", join(tmpdir(), "envoycoder-this-folder-does-not-exist"));
+const missingPath = flag("path", join(tmpdir(), "envoydev-this-folder-does-not-exist"));
 
-const home = await mkdtemp(join(tmpdir(), "envoycoder-language-"));
+const home = await mkdtemp(join(tmpdir(), "envoydev-language-"));
 const daemon = await startCoderDaemon({ port: 0, home, paths: coderPaths(home), skipMeshAttach: true });
 
 let exitCode = 0;
@@ -142,9 +142,9 @@ try {
   const german = locale === "en" ? true : rendered !== english && rendered !== "";
   console.log(`\n── verdict ──`);
   console.log(`  the client's text differs from the wire's English: ${rendered !== english}`);
-  console.log(`  the client's text contains no key or code:        ${!rendered.includes("envoycoder.") && !rendered.includes("envoycoder.key")}`);
+  console.log(`  the client's text contains no key or code:        ${!rendered.includes("envoydev.") && !rendered.includes("envoydev.key")}`);
   console.log(`  the client's text is not English:                 ${german}`);
-  if (locale !== "en" && (rendered === english || rendered.includes("envoycoder."))) {
+  if (locale !== "en" && (rendered === english || rendered.includes("envoydev."))) {
     console.log("\nFAILED: the window answered in the daemon's language, not the user's.");
     exitCode = 1;
   } else {

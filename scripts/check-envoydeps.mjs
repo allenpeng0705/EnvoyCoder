@@ -1,9 +1,9 @@
 /**
- * EnvoyCoder needs the EnvoyMesh family's core packages and its own copy of the harness.
+ * EnvoyDev needs the EnvoyMesh family's core packages and its own copy of the harness.
  *
  * ## Why this check exists, and what it is not
  *
- * EnvoyCoder links the mesh surface from a **sibling checkout** (`../EnvoyMesh/packages/*`) and, by
+ * EnvoyDev links the mesh surface from a **sibling checkout** (`../EnvoyMesh/packages/*`) and, by
  * the family's rule, its **own** copy of the harness — EnvoyMesh is not a distribution channel for
  * the harness (EnvoyMesh design D4, guide §7.5). A product clones or copies `envoy-harness`
  * itself.
@@ -147,7 +147,7 @@ if (!existsSync(meshSibling)) {
   problems.push(
     `The EnvoyMesh checkout is missing.\n` +
       `    expected at:  ${meshSibling}\n` +
-      `    EnvoyCoder links the family's core packages from there (see docs/envoymesh-integration.md).\n` +
+      `    EnvoyDev links the family's core packages from there (see docs/envoymesh-integration.md).\n` +
       `    fix:          git clone <EnvoyMesh> ${meshSibling} && (cd ${meshSibling} && npm install)`,
   );
 } else {
@@ -203,12 +203,12 @@ const harnessPresent =
   existsSync(harnessLocal) || existsSync(harnessLinked) || existsSync(harnessSibling);
 if (!harnessPresent && harnessRequired) {
   problems.push(
-    `The Envoy Harness — EnvoyCoder's built-in agent — is not present.\n` +
+    `The Envoy Harness — EnvoyDev's built-in agent — is not present.\n` +
       `    EnvoyMesh does not distribute it (design D4): each product clones or copies it.\n` +
       `    fix:          git clone <envoy-harness> ${harnessLocal}\n` +
       `                  then point this repo's package.json at it (file:./vendor/envoy-harness),\n` +
       `                  or clone it to ${harnessSibling} and link that.\n` +
-      `    note:         the built-in agent is one of EnvoyCoder's two native harnesses; without it\n` +
+      `    note:         the built-in agent is one of EnvoyDev's two native harnesses; without it\n` +
       `                  the app still starts and offers the external agents.`,
   );
 }
@@ -251,10 +251,10 @@ const harnessState = harnessDir ? gitState(harnessDir) : null;
 
 // ── 3. reported, never silently tolerated ──────────────────────────────────────────────
 if (problems.length > 0) {
-  console.error("\nEnvoyCoder cannot run: dependencies it does not vendor are missing.\n");
+  console.error("\nEnvoyDev cannot run: dependencies it does not vendor are missing.\n");
   for (const problem of problems) console.error(`  ${problem}\n`);
   console.error(
-    "These are prerequisites, not accidents: EnvoyCoder deliberately does not copy the mesh layer\n" +
+    "These are prerequisites, not accidents: EnvoyDev deliberately does not copy the mesh layer\n" +
       "or the harness into itself (see docs/envoymesh-integration.md).\n",
   );
   process.exit(1);

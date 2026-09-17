@@ -30,7 +30,7 @@
  * place the choice existed. The select is gone (§7.33) and so is the chain.)
  */
 
-import type { HarnessAvailability } from "@envoycoder/protocol";
+import type { HarnessAvailability } from "@envoydev/protocol";
 
 import { isMessageKey, type MessageKey } from "../i18n/messages/en.js";
 
@@ -582,11 +582,11 @@ export function composerControls(
     const fix = agent.availability.fix?.[0]?.command;
     notes.push(
       agent.availability.state === "unknown"
-        ? `EnvoyCoder could not tell whether ${agent.label} is installed — nothing here is a statement about the agent.`
+        ? `EnvoyDev could not tell whether ${agent.label} is installed — nothing here is a statement about the agent.`
         : agent.availability.state === "unsupported"
-          ? `${agent.label} is installed, but it speaks a protocol EnvoyCoder cannot drive yet.`
+          ? `${agent.label} is installed, but it speaks a protocol EnvoyDev cannot drive yet.`
           : agent.availability.state === "needs-bridge"
-            ? `${agent.label} is installed, but the program EnvoyCoder drives it through is missing` +
+            ? `${agent.label} is installed, but the program EnvoyDev drives it through is missing` +
               (fix ? `: ${fix}` : ".")
             : `${agent.label} is not installed on this machine.` + (fix ? ` ${fix}` : ""),
     );
@@ -682,7 +682,7 @@ export function composerControls(
       : agent.thinkingApplicable !== true
         ? `Choosing how much ${agent.label} thinks is not wired up yet, so the control is off rather than silently ignored.`
         : thinkingKind === "session"
-          ? `EnvoyCoder has not opened a session with ${agent.label} yet, and ${agent.label} only lists its thinking levels inside a session — so there is nothing to choose from until it has run once.`
+          ? `EnvoyDev has not opened a session with ${agent.label} yet, and ${agent.label} only lists its thinking levels inside a session — so there is nothing to choose from until it has run once.`
           : undefined;
   const thinkingReasonKey: MessageKey | undefined = thinking === undefined
     ? undefined
@@ -700,7 +700,7 @@ export function composerControls(
     notes.push(`${agent.label} can ask you before it acts.`);
   }
   if (!capabilities.cancel) {
-    notes.push(`EnvoyCoder cannot stop ${agent.label} once it starts.`);
+    notes.push(`EnvoyDev cannot stop ${agent.label} once it starts.`);
   }
 
   /* ── the controls the agent's capabilities allow ── */

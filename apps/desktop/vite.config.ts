@@ -23,7 +23,7 @@ const { version } = JSON.parse(readFileSync(new URL("package.json", import.meta.
  */
 export default defineConfig({
   plugins: [react()],
-  define: { __ENVOYCODER_VERSION__: JSON.stringify(version) },
+  define: { __ENVOYDEV_VERSION__: JSON.stringify(version) },
   clearScreen: false,
   server: {
     /**

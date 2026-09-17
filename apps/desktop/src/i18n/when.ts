@@ -3,7 +3,7 @@
  *
  * ## Why this is `Intl` and not a format string
  *
- * The window now shows *when* something was observed — "these are the models EnvoyCoder saw this agent
+ * The window now shows *when* something was observed — "these are the models EnvoyDev saw this agent
  * publish, on 14 September 2026 at 13:23" — and that sentence has to be readable in all seven
  * languages this product speaks. `14.09.2026` and `September 14, 2026` are the same fact written for two
  * readers, and a hand-rolled `YYYY-MM-DD HH:mm` would be wrong for six of the seven: it is not merely
@@ -69,7 +69,7 @@ const AGO_MAX_DAYS = 7;
  * ## Why this is `Intl.RelativeTimeFormat` and not a translated template
  *
  * The agent pane now says *"Verified 4 minutes ago"* on a row, which is the sentence the mandate asks for:
- * a deep fact that arrives as a property **with its time**, so the user learns when EnvoyCoder last looked
+ * a deep fact that arrives as a property **with its time**, so the user learns when EnvoyDev last looked
  * without having to press something. Seven languages times a unit times a plural is exactly the kind of
  * template a hand-written catalogue gets wrong — `1 minutes ago` reads as a bug in every one of them — and
  * the platform already owns the pluralisation and the wording in all seven (`mins ago`, `vor 4 Minuten`,

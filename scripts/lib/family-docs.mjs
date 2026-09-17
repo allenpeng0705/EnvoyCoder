@@ -3,7 +3,7 @@
  *
  * ## Why copies exist at all
  *
- * EnvoyCoder is built to a standard that lives in **another repository** (`EnvoyMesh/docs/`). A
+ * EnvoyDev is built to a standard that lives in **another repository** (`EnvoyMesh/docs/`). A
  * developer working here should not have to keep a second checkout open to read the rules they are
  * being held to, so the three documents that govern this product are copied in.
  *
@@ -18,7 +18,7 @@
  *     sync. `check-family-docs.mjs` fails.
  *   - **The source moved.** The body still matches what was copied, but EnvoyMesh's file has changed
  *     since. That is normal life in a two-repo family, and it must **not** red-line this repo's CI —
- *     a doc edit in EnvoyMesh is not a reason EnvoyCoder's build stops. The check reports it and
+ *     a doc edit in EnvoyMesh is not a reason EnvoyDev's build stops. The check reports it and
  *     exits 0; `--strict` (meant for a release, not for a PR) turns it into a failure.
  *
  * The authority rule is the one from the family guide (§7.4): **the source wins, and a fix belongs
@@ -54,13 +54,13 @@ export const FAMILY_DOCS = [
     why:
       "The standard this repo is built to, and the checklist its CI implements (§4.1 wiring, §4.4 the " +
       "shared home, §4.5 attach, §4.6 the dispatcher, §8 definition of done). Read this first: it is " +
-      "the only document here that is about *how to build EnvoyCoder*.",
+      "the only document here that is about *how to build EnvoyDev*.",
   },
   {
     name: "envoymesh-multi-product-design.md",
     title: "What happens when two products share one machine",
     why:
-      "The rules EnvoyCoder must not break: one node owner at a time and everyone else attaches (D2), " +
+      "The rules EnvoyDev must not break: one node owner at a time and everyone else attaches (D2), " +
       "share the local engine and never the cloud (D3), and the harness is a peer each product " +
       "clones rather than something EnvoyMesh distributes (D4). Its measurements (a node costs " +
       "~650 MB) are also the reason this product runs its own host rather than borrowing the social one.",
@@ -70,8 +70,8 @@ export const FAMILY_DOCS = [
     title: "EnvoyMesh's own refactor, and the part of it this product consumes",
     why:
       "Background, not product design: EnvoyMesh's plan for splitting its modules into reusable and " +
-      "product-bound halves. It is here because the split *is* the interface EnvoyCoder consumes — " +
-      "which packages are safe to link, and why `@envoymesh/api/core` exists. EnvoyCoder appears in it " +
+      "product-bound halves. It is here because the split *is* the interface EnvoyDev consumes — " +
+      "which packages are safe to link, and why `@envoymesh/api/core` exists. EnvoyDev appears in it " +
       "only as motivation (§1, §11), never as a plan.",
   },
 ];

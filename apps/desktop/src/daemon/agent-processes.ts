@@ -33,8 +33,8 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { HarnessId } from "@envoycoder/protocol";
-import type { CoderPaths } from "@envoycoder/host-bridge";
+import type { HarnessId } from "@envoydev/protocol";
+import type { CoderPaths } from "@envoydev/host-bridge";
 
 import type { AcpLaunch } from "./acp/client.js";
 

@@ -4,10 +4,10 @@
  *
  * ## What this page is for
  *
- * The product's claim is that EnvoyCoder is the control plane for coding agents, and this is the screen
+ * The product's claim is that EnvoyDev is the control plane for coding agents, and this is the screen
  * that has to make that true: the nine agents we ship, the ones a user declared, and the 38 recipes in the
  * catalogue — **in one place, searchable**, each row carrying a **verdict** that was measured rather than a
- * state a list implies. Before this page the catalogue existed in `@envoycoder/agent-catalog` and no
+ * state a list implies. Before this page the catalogue existed in `@envoydev/agent-catalog` and no
  * surface read it, so a user with Gemini CLI installed had a product that supported it and no way to find
  * out.
  *
@@ -92,7 +92,7 @@ import type { JSX } from "react";
 
 import { useCallback, useState } from "react";
 
-import type { AgentDelivery, HarnessAvailability, HarnessId, HarnessSummary } from "@envoycoder/protocol";
+import type { AgentDelivery, HarnessAvailability, HarnessId, HarnessSummary } from "@envoydev/protocol";
 
 import type { MessageKey } from "../../i18n/messages/en.js";
 import type { Refusal } from "../../i18n/notice.js";
@@ -186,7 +186,7 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
       {/* **The heading carries the count, and the count is the point.** Three groups with their sizes on them
           are three facts; three groups with names only are three invitations to scroll and find out. */}
       {/* **The count and the control that can change it, on one line.** *"After I run npm install -g … how do we
-          let EnvoyCoder know that without restarting?"* — the daemon re-measures every row on the read, and the
+          let EnvoyDev know that without restarting?"* — the daemon re-measures every row on the read, and the
           two inputs it captures once per process need asking again, so the page gets one press that does that
           and re-reads. It sits beside the number it invalidates rather than in a toolbar: a page-level gesture
           with one meaning, and no per-row *Check* (which is the chore this page already removed). */}
@@ -297,7 +297,7 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
  * And it no longer carries **caveat chips**. `No approvals`, `Cannot be cancelled`, `Temporary copy` and
  * `Needs a sign-in` were chips beside the state, which is how nine rows carried eighteen chips and how the
  * one word a user needs had to be picked out of them. They are properties now (`verdictFacts`), rendered
- * inside the disclosure with the rest — including the time EnvoyCoder last looked, which is the half of the
+ * inside the disclosure with the rest — including the time EnvoyDev last looked, which is the half of the
  * deep facts that makes them observations rather than promises.
  *
  * ## The one control, and why this row has exactly one
@@ -349,7 +349,7 @@ function ShippedAgent(props: {
       label: harness.label,
       availability: legacyDaemon ? undefined : availability,
       // What the row says when there is nothing to fix. The tier is the honest answer for an agent that is
-      // simply working: there is no action, and "Ships with EnvoyCoder" is a fact rather than a filler — and
+      // simply working: there is no action, and "Ships with EnvoyDev" is a fact rather than a filler — and
       // for a daemon that could not answer, it is the action instead, in four words.
       // **`Ready` and how.** For an agent whose connector is fetched, the line says so: the tier is a fact about
       // where the recipe came from, and the delivery is a fact about what will run — and when they differ the
@@ -476,7 +476,7 @@ function ShippedAgent(props: {
  * that looks like a bug in the app. `rowVerdict` takes the unset names as an argument and makes it *Not ready*,
  * naming the variable on the row's own line, because that is what a user has to act on.
  *
- * A recipe's own constants can never do this: `AgentProviderEnvState.from === "catalogue"` means EnvoyCoder
+ * A recipe's own constants can never do this: `AgentProviderEnvState.from === "catalogue"` means EnvoyDev
  * supplies the value, so such a name is excluded from the missing list and rendered as a plain fact.
  */
 function ProviderRow(props: {

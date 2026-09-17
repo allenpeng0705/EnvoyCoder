@@ -1,4 +1,4 @@
-/// EnvoyCoder design tokens — mobile (Flutter).
+/// EnvoyDev design tokens — mobile (Flutter).
 ///
 /// The **same design** as the desktop app, in Flutter's own idiom: Paseo's values, our code. The
 /// desktop sheet is `apps/desktop/src/design/tokens.css`; this file is its twin, and the two must be

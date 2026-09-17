@@ -38,7 +38,7 @@
  *
  * Both are recorded in the transcript as `run.message` with a `delivered` field, so "did it join or
  * wait?" is answerable afterwards — the reason the distinction is a control rather than a hidden
- * policy (`docs/envoycoder-ui.md` §5).
+ * policy (`docs/envoydev-ui.md` §5).
  *
  * ## One run per task
  *
@@ -53,21 +53,21 @@ import { randomUUID } from "node:crypto";
 import {
   type AgentRun,
   type CoderSettings,
-  ENVOYCODER_ERRORS,
+  ENVOYDEV_ERRORS,
   type HarnessId,
   type RunEvent,
   type RunMode,
   type TaskStatus,
   coderError,
-} from "@envoycoder/protocol";
+} from "@envoydev/protocol";
 // Only what this file uses: the three delivery helpers (`harnessModelDelivery`, `resolveModelChoice`,
 // `thinkingDelivery`) are `run-options.ts`'s, and were imported here without being read — dead
 // references the compiler does not flag because `noUnusedLocals` is off. Removed while this import
 // block was already being edited.
-import { harnessDefinition, observeSessionOptions } from "@envoycoder/agent-catalog";
-import type { PlatformId } from "@envoycoder/platform";
+import { harnessDefinition, observeSessionOptions } from "@envoydev/agent-catalog";
+import type { PlatformId } from "@envoydev/platform";
 
-import type { CoderPaths } from "@envoycoder/host-bridge";
+import type { CoderPaths } from "@envoydev/host-bridge";
 
 import { AcpClient, type AcpAutoRunPolicy, type AcpLaunch, type AcpPermissionRequest, type AcpUpdate } from "./acp/client.js";
 import { launchForHarness } from "./launch.js";
@@ -251,14 +251,14 @@ export class RunManager {
     const task = this.deps.store.findTask(input.taskId);
     if (!task) {
       throw coderError(
-        ENVOYCODER_ERRORS.taskMissing,
+        ENVOYDEV_ERRORS.taskMissing,
         `There is no task called "${input.taskId}", so there is nowhere to run an agent.`,
         ref("error.taskForRunMissing", { taskId: input.taskId }),
       );
     }
     if (this.liveFor(input.taskId)) {
       throw coderError(
-        ENVOYCODER_ERRORS.harnessFailed,
+        ENVOYDEV_ERRORS.harnessFailed,
         `"${task.title}" is already running. Send it a message instead — starting a second agent in one directory is how two of them come to edit the same file.`,
         ref("error.taskAlreadyRunning", { task: task.title }),
       );
@@ -579,7 +579,7 @@ export class RunManager {
    * The task becomes `needs-attention` **before** the event is emitted, so a window that reacts
    * to the event and refetches the rail already sees the row in the right state. `needs-attention`
    * is deliberately not `running`: an agent waiting on a human is not making progress
-   * (`docs/envoycoder-ui.md` §4).
+   * (`docs/envoydev-ui.md` §4).
    */
   private onPermissionRequest(live: LiveRun, request: AcpPermissionRequest): Promise<string | null> {
     const requestId = request.toolCall?.toolCallId ?? randomUUID();
@@ -644,7 +644,7 @@ export class RunManager {
     const live = this.active.get(runId);
     if (!live || live.settled) {
       throw coderError(
-        ENVOYCODER_ERRORS.harnessFailed,
+        ENVOYDEV_ERRORS.harnessFailed,
         "That run has already finished, so there is nothing to send to it. Start a new task instead.",
         ref("error.runFinished"),
       );
@@ -653,7 +653,7 @@ export class RunManager {
       // Queueing behind an approval prompt strands the message: the prompt must be answered before
       // anything else can happen, and the user would be waiting on words the agent never received.
       throw coderError(
-        ENVOYCODER_ERRORS.harnessFailed,
+        ENVOYDEV_ERRORS.harnessFailed,
         "The agent is waiting for an answer before it can go on. Answer that first — a message sent now would sit behind it.",
         ref("error.approvalPending"),
       );

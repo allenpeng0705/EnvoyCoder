@@ -178,7 +178,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
         needle: "<FactsBlock facts={facts} />",
         because:
           "and everything that is a *property* rather than a verdict — its capabilities, the modes, models " +
-          "and thinking levels it published, and when EnvoyCoder last verified them — lives in the " +
+          "and thinking levels it published, and when EnvoyDev last verified them — lives in the " +
           "disclosure as plain facts, with a time, instead of as a chip on the row's face",
       },
       {
@@ -248,6 +248,11 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
         file: "apps/desktop/src/components/settings/SectionsFacts.tsx",
         needle: "hello.windowCount",
         because: "and how many windows are attached to it, which is a number no chip can hold",
+      },
+      {
+        file: "apps/desktop/src/components/settings/SectionsFacts.tsx",
+        needle: "coder.mintPairing",
+        because: "pairing a phone is a fact about this daemon — who may reach it",
       },
     ],
   },

@@ -2,8 +2,8 @@
 // refused with the shared sentence, a code this app minted is accepted, and the token never leaks
 // into anything a user can see or a log can capture.
 
-import 'package:envoycoder_mobile/models/host.dart';
-import 'package:envoycoder_mobile/services/pairing_service.dart';
+import 'package:envoydev_mobile/models/host.dart';
+import 'package:envoydev_mobile/services/pairing_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -12,6 +12,9 @@ void main() {
       wsUrl: 'ws://192.168.1.20:4770/ws',
       token: 't0ken-secret',
       ownerId: 'envoy:owner:abc',
+      lanWsUrl: 'ws://192.168.1.20:4770/ws',
+      relayWsUrl: 'wss://relay.example/ws',
+      relayWsUrls: ['wss://relay-b.example/ws'],
     );
 
     test('accepts this app\'s code and reads the endpoint', () {
@@ -19,9 +22,22 @@ void main() {
       expect(result.ok, isTrue, reason: result.refusal ?? '');
       final host = result.host!;
       expect(host.endpoint, '192.168.1.20:4770');
-      expect(host.app, 'EnvoyCoder');
+      expect(host.app, 'EnvoyDev');
       expect(host.ownerId, 'envoy:owner:abc');
       expect(host.secure, isFalse);
+      expect(host.lanWsUrl, 'ws://192.168.1.20:4770/ws');
+      expect(host.relayWsUrl, 'wss://relay.example/ws');
+      expect(host.relayWsUrls, ['wss://relay-b.example/ws']);
+    });
+
+    test('drops a relay that is just a copy of the primary wsUrl', () {
+      final code = buildPairingCode(
+        wsUrl: 'ws://10.0.0.1:4770/ws',
+        token: 't',
+        ownerId: 'o',
+      );
+      final host = parsePairingCode(code).host!;
+      expect(host.relayWsUrl, isNull);
     });
 
     test('refuses another app\'s code in the family\'s words', () {
@@ -34,21 +50,15 @@ void main() {
       final result = parsePairingCode(theirs);
       expect(result.ok, isFalse);
       expect(result.refusal, contains('made by EnvoyMesh'));
-      expect(result.refusal, contains('this is EnvoyCoder'));
+      expect(result.refusal, contains('this is EnvoyDev'));
     });
 
     test('accepts the shared contract\'s paste-friendly forms', () {
-      // The family's parser accepts the canonical URI, a compact `?pairing=` code, and the Social
-      // paste-box form `invite?token=…`. What it does *not* accept is a bare `wsUrl=…` query, which
-      // this app used to allow before it delegated — asserted here so the difference is visible
-      // rather than discovered by a user.
       expect(parsePairingCode(ours).ok, isTrue);
       expect(parsePairingCode(ours.split('?').last).ok, isFalse);
     });
 
     test('refuses an unreadable code with something a user can act on', () {
-      // Wording belongs to the shared contract, so these assert that a refusal happens, is
-      // explained, and is never silent — the property this app is responsible for.
       for (final bad in ['', 'envoy://pair?token=t', 'envoy://pair?wsUrl=ws://h:1/ws', 'nonsense']) {
         final result = parsePairingCode(bad);
         expect(result.ok, isFalse, reason: bad);
@@ -61,7 +71,6 @@ void main() {
     test('never puts the token in a label a user or a log can see', () {
       final host = parsePairingCode(ours).host!;
       expect(describeHost(host), isNot(contains('t0ken-secret')));
-      // …and it is present where it belongs: on the socket URL.
       expect(host.wsUri.toString(), contains('t0ken-secret'));
     });
   });
@@ -76,16 +85,21 @@ void main() {
     });
   });
 
-  group('host list', () {
-    test('round-trips through storage without dropping the token or the hop', () {
+  group('host list metadata', () {
+    test('round-trips metadata without writing the token into prefs JSON', () {
       final host = parsePairingCode(buildPairingCode(
         wsUrl: 'ws://10.0.0.5:4770/ws',
         token: 'tok',
         ownerId: 'envoy:owner:x',
+        lanWsUrl: 'ws://10.0.0.5:4770/ws',
       )).host!;
       final encoded = encodeHosts([host]);
       expect(encoded, contains('10.0.0.5:4770'));
-      expect(encoded, contains('tok'));
+      expect(encoded, isNot(contains('tok')));
+      expect(encoded, contains('lanWsUrl'));
+      final decoded = decodeHosts(encoded, tokens: {host.id: 'tok'});
+      expect(decoded.single.token, 'tok');
+      expect(decoded.single.lanWsUrl, 'ws://10.0.0.5:4770/ws');
     });
   });
 }

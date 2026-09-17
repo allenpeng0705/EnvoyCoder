@@ -1,21 +1,21 @@
 /**
- * The bridge between EnvoyCoder and the EnvoyMesh family.
+ * The bridge between EnvoyDev and the EnvoyMesh family.
  *
  * ## Two directions, and they are not the same relationship
  *
- * **EnvoyCoder is a host to its own clients.** Its daemon serves the app's windows and the mobile
- * app, exactly as Paseo's daemon serves its clients (`docs/envoycoder-paseo-inheritance.md`). That
- * surface is EnvoyCoder's own protocol, on its own port, with its own tokens.
+ * **EnvoyDev is a host to its own clients.** Its daemon serves the app's windows and the mobile
+ * app, exactly as Paseo's daemon serves its clients (`docs/envoydev-paseo-inheritance.md`). That
+ * surface is EnvoyDev's own protocol, on its own port, with its own tokens.
  *
- * **EnvoyCoder is a *client* of the mesh.** When an EnvoyMesh node is running on this machine,
- * EnvoyCoder attaches to it as a **product** and gets a scoped session — `product:EnvoyCoder` —
+ * **EnvoyDev is a *client* of the mesh.** When an EnvoyMesh node is running on this machine,
+ * EnvoyDev attaches to it as a **product** and gets a scoped session — `product:EnvoyDev` —
  * that can only call the methods that node's owner granted. This is the family's model
  * (`docs/envoymesh-multi-product-design.md` D2) and it is deliberately the opposite of a
  * bearer-capability URL: a product session is *issued*, scoped, and revocable, and a QR code is
  * not by itself authority to run anything.
  *
  * The distinction matters for distributed mode: "run this task on my other machine" is a *mesh*
- * operation between two EnvoyCoder daemons, not a hole in the local daemon's auth.
+ * operation between two EnvoyDev daemons, not a hole in the local daemon's auth.
  *
  * ## What this module refuses to own
  *
@@ -67,11 +67,28 @@ import {
  *
  * Re-exported rather than reached for in `@envoymesh/host-connect` directly, for the same reason
  * `createReuseHost` re-exports them: a product should depend on one package for the host contract.
- * They are needed here because EnvoyCoder's daemon publishes events from its own bus and serves a
- * per-connection subscription — see `CODER_EVENTS` in `@envoycoder/protocol` for why the transport's
+ * They are needed here because EnvoyDev's daemon publishes events from its own bus and serves a
+ * per-connection subscription — see `CODER_EVENTS` in `@envoydev/protocol` for why the transport's
  * broadcast table is not the mechanism that works.
  */
 export type { HostNodeService, SocketMethodPort } from "@envoymesh/reuse-host";
+
+/**
+ * The **mesh transport** for the host contract EnvoyDev already implements.
+ *
+ * Re-exported rather than imported from `@envoymesh/host-connect` directly, for the reason the
+ * transport ports above are: a product depends on the family's product-facing surface, not on the
+ * package's internals. This is the second transport for `createCoderDaemonHost`'s contract — a
+ * WebSocket on the local network, and a libp2p stream (direct, or through the shared relay) from
+ * anywhere else — so the daemon's authentication, routing and subscription rules apply to a phone
+ * without a second host being written (see `docs/envoydev-mesh-transport.md`).
+ */
+export {
+  createMeshHostTransport,
+  createProxyCloseRegistry,
+  type FramedDuplex,
+  type MeshHostTransportOptions,
+} from "@envoymesh/reuse-host";
 
 import { ENVOYMESH_VERSION } from "@envoymesh/api/core";
 import { pairingAppMismatch } from "@envoymesh/protocol";
@@ -79,23 +96,23 @@ import {
   type CoderHostDescriptor,
   DEFAULT_DAEMON_PATH,
   DEFAULT_DAEMON_PORT,
-  ENVOYCODER_ERRORS,
-  ENVOYCODER_PRODUCT_NAME,
+  ENVOYDEV_ERRORS,
+  ENVOYDEV_PRODUCT_NAME,
   type RpcMethod,
   coderProductName,
   isRpcMethod,
-} from "@envoycoder/protocol";
+} from "@envoydev/protocol";
 
 /* ────────────────────────────── product state on disk ───────────────────────────── */
 
 /**
- * EnvoyCoder's state directory, inside the shared home.
+ * EnvoyDev's state directory, inside the shared home.
  *
  * The family's rule (design §5): a shared home holds **kernel** state that every product reads —
  * identity, trust, node config, the vault index — and each product keeps its own state in
- * `<home>/<product>/`. For EnvoyCoder that means projects, tasks, run transcripts and
- * per-project settings live in `<home>/EnvoyCoder/` and nowhere else: another product must not be
- * able to read which repositories this user has opened, and EnvoyCoder must not be able to read
+ * `<home>/<product>/`. For EnvoyDev that means projects, tasks, run transcripts and
+ * per-project settings live in `<home>/EnvoyDev/` and nowhere else: another product must not be
+ * able to read which repositories this user has opened, and EnvoyDev must not be able to read
  * anyone else's chat transcripts.
  *
  * The home itself is resolved by `@envoymesh/node-core` (`resolveHomeDir`), so
@@ -184,7 +201,7 @@ export function coderPaths(home: string = resolveHomeDir()): CoderPaths {
   // `homedir()` directly would ignore all three — inventing a second home and, with it, a second
   // set of projects for a user who set `ENVOYMESH_HOME`. `productDirIn` keeps the segment rule in
   // one place rather than re-implementing it here.
-  const stateDir = productDirIn(home, ENVOYCODER_PRODUCT_NAME);
+  const stateDir = productDirIn(home, ENVOYDEV_PRODUCT_NAME);
   return {
     home,
     stateDir,
@@ -243,7 +260,7 @@ export interface CoderHomeFacts {
 /**
  * Inspect the shared home and describe it the way the family would.
  *
- * `canCreate: false` on purpose: EnvoyCoder's daemon starts because *something* asked it to — a
+ * `canCreate: false` on purpose: EnvoyDev's daemon starts because *something* asked it to — a
  * window, or the user — and the family's design puts the create/choose decision in a dialog, not in
  * a background process. What a daemon may do is refuse clearly, and that is what this enables.
  */
@@ -352,7 +369,7 @@ function endpointFromWsUrl(wsUrl: string): { port: number; path: string } | null
  * Ask the local EnvoyMesh node for a product session.
  *
  * Refuses rather than degrades: if there is no *verified* node — one whose endpoint answers and
- * whose advertised identity matches the profile on disk — EnvoyCoder does not attach. "Something
+ * whose advertised identity matches the profile on disk — EnvoyDev does not attach. "Something
  * answers on that port" is not the same question, and the attach call is the one that hands out a
  * credential, so a stale endpoint must not be handed a token.
  */
@@ -364,7 +381,7 @@ export async function attachToMeshNode(
   if (!isValidProductName(product)) {
     return {
       kind: "refused",
-      code: ENVOYCODER_ERRORS.meshRefused,
+      code: ENVOYDEV_ERRORS.meshRefused,
       reason: `"${product}" is not a usable product name for the mesh (letters, digits, dash and underscore).`,
     };
   }
@@ -377,7 +394,7 @@ export async function attachToMeshNode(
       status: node.status === "none" ? "none" : (node.status as "unverified" | "stale"),
       reason:
         node.status === "none"
-          ? "EnvoyMesh is not running on this machine, so there is no mesh to attach to. EnvoyCoder works on its own until it is."
+          ? "EnvoyMesh is not running on this machine, so there is no mesh to attach to. EnvoyDev works on its own until it is."
           : `Something is listening where EnvoyMesh's node was expected, but it did not identify itself as the node for this profile${
               node.reason ? ` (${node.reason})` : ""
             }. Not attaching.`,
@@ -394,8 +411,8 @@ export async function attachToMeshNode(
   if (!endpoint) {
     return {
       kind: "refused",
-      code: ENVOYCODER_ERRORS.meshRefused,
-      reason: `The node published an endpoint EnvoyCoder cannot read (${node.wsUrl}).`,
+      code: ENVOYDEV_ERRORS.meshRefused,
+      reason: `The node published an endpoint EnvoyDev cannot read (${node.wsUrl}).`,
     };
   }
 
@@ -413,10 +430,10 @@ export async function attachToMeshNode(
     const grant = await requestSession(endpoint);
     if (!isProductScope(grant.scopeKey)) {
       // A token that is not product-scoped is the owner's token, and holding one would mean
-      // EnvoyCoder could do anything the owner can. Refuse it loudly rather than use it.
+      // EnvoyDev could do anything the owner can. Refuse it loudly rather than use it.
       return {
         kind: "refused",
-        code: ENVOYCODER_ERRORS.meshRefused,
+        code: ENVOYDEV_ERRORS.meshRefused,
         reason: `The node issued a "${grant.scopeKey}" session instead of ${productScopeKey(product)}. Refusing to use an owner-scoped token.`,
       };
     }
@@ -432,9 +449,9 @@ export async function attachToMeshNode(
     const message = error instanceof Error ? error.message : String(error);
     return {
       kind: "refused",
-      code: ENVOYCODER_ERRORS.meshRefused,
+      code: ENVOYDEV_ERRORS.meshRefused,
       reason:
-        `EnvoyMesh is running, but it did not grant EnvoyCoder a session: ${message}. ` +
+        `EnvoyMesh is running, but it did not grant EnvoyDev a session: ${message}. ` +
         `The node's owner can grant it in EnvoyMesh → Settings → apps.`,
     };
   }
@@ -449,7 +466,7 @@ export interface CoderDaemonHostOptions extends Omit<ReuseHostOptions, "port"> {
    * The node surface the transport subscribes to.
    *
    * The transport wires one listener per event in the disposition table (including the product's
-   * own, passed as `eventDispositions`), and calls `nodeService.on(name, …)` for each. EnvoyCoder's
+   * own, passed as `eventDispositions`), and calls `nodeService.on(name, …)` for each. EnvoyDev's
    * events come from a bus rather than from a mesh node, so the daemon passes its own — this is the
    * seam that lets a product with no mesh publish events at all, and the default
    * (`createShellHostNodeService()`) is the right answer only for a host that publishes nothing.
@@ -480,6 +497,20 @@ export interface CoderDaemonHost {
     relayPeerId?: string;
     relayWsUrls?: readonly string[];
     ssh?: CoderHostDescriptor["ssh"];
+    /**
+     * This daemon's **own** libp2p identity — the third route to it, after the LAN socket and SSH.
+     *
+     * Passed straight through as the contract's `homeNodePeerId` / `bootstrapPeers` rather than under
+     * new names: `pairing-contract.ts` already names both concepts, and a synonym here would be a
+     * second truth the phone's parser does not know.
+     *
+     * `meshMultiaddrs` is expected to carry the relay-**circuit** addresses when a reservation exists,
+     * not just the local ones — a bare relay hint without this peer's id in it does not reach us.
+     * `meshRelayHints` is added as well, so a phone can seed the relays it may later need.
+     */
+    meshPeerId?: string;
+    meshMultiaddrs?: readonly string[];
+    meshRelayHints?: readonly string[];
     secure?: boolean;
   }): string;
   /** What a client needs to connect, without the secret. */
@@ -488,17 +519,17 @@ export interface CoderDaemonHost {
 }
 
 /**
- * EnvoyCoder's own host: a second product serving *its* clients.
+ * EnvoyDev's own host: a second product serving *its* clients.
  *
  * `createReuseHost` comes from the family's reusable surface and takes exactly two ports — session
  * identity and dispatch — so this does not touch a profile directory, a store or an identity
- * model. Everything that is genuinely EnvoyCoder's (which RPC methods exist, what a token means,
+ * model. Everything that is genuinely EnvoyDev's (which RPC methods exist, what a token means,
  * where its state lives) arrives through those ports, which is what keeps the family's transport
  * reusable and this product's behaviour auditable.
  */
 export function createCoderDaemonHost(
   options: CoderDaemonHostOptions,
-  product: string = ENVOYCODER_PRODUCT_NAME,
+  product: string = ENVOYDEV_PRODUCT_NAME,
 ): CoderDaemonHost {
   const host: ReuseHost = createReuseHost({
     ...options,
@@ -525,12 +556,24 @@ export function createCoderDaemonHost(
     },
     pairingUri(input) {
       const wsUrl = `${input.secure ? "wss" : "ws"}://${input.host}:${host.port}${host.path}`;
+      // One deduped list, because `bootstrapPeers` *is* the multiaddr half of the payload — the
+      // contract describes it as the addresses a phone seeds its peer store with. Our own addresses
+      // come first so a direct dial is attempted before a relay circuit, and an empty list is omitted
+      // rather than sent as `[]`: a phone that read an empty list would conclude we are directly
+      // reachable and stop looking.
+      const meshBootstrapPeers = [
+        ...new Set(
+          [...(input.meshMultiaddrs ?? []), ...(input.meshRelayHints ?? [])]
+            .map((addr) => addr.trim())
+            .filter((addr) => addr.length > 0),
+        ),
+      ];
       return buildPairingUri({
         wsUrl,
         token: input.token,
         ownerPublicKey: input.ownerPublicKey,
         ownerId: input.ownerId,
-        // The `app` claim is the whole reason a code from another family member is refused
+        // The `app` claim is the whole reason a code from another app in the family is refused
         // instead of silently connecting to the wrong daemon.
         app: product,
         ...(input.lanHost ? { lanWsUrl: `ws://${input.lanHost}:${host.port}${host.path}` } : {}),
@@ -540,6 +583,8 @@ export function createCoderDaemonHost(
         ...(input.relayWsUrls && input.relayWsUrls.length > 0
           ? { relayWsUrls: [...input.relayWsUrls] }
           : {}),
+        ...(input.meshPeerId ? { homeNodePeerId: input.meshPeerId } : {}),
+        ...(meshBootstrapPeers.length > 0 ? { bootstrapPeers: meshBootstrapPeers } : {}),
       });
     },
     descriptor,
@@ -559,13 +604,13 @@ export type PairingCheck =
  * Read a pairing code the way a client must: refuse another app's code, with the family's sentence.
  *
  * `pairingAppMismatch` is shared with every other app in the family, so all of them refuse each
- * other's codes in the same words — "That code was made by EnvoyMesh, and this is EnvoyCoder.
+ * other's codes in the same words — "That code was made by EnvoyMesh, and this is EnvoyDev.
  * Open EnvoyMesh and show its pairing code, or install EnvoyMesh here." A per-product variation of
  * that sentence would be a UX bug, which is why it lives in `@envoymesh/protocol` and not here.
  */
 export function checkPairingCode(
   input: string,
-  product: string = ENVOYCODER_PRODUCT_NAME,
+  product: string = ENVOYDEV_PRODUCT_NAME,
 ): PairingCheck {
   let parsed: ReturnType<typeof parsePairingUri>;
   try {
@@ -573,19 +618,19 @@ export function checkPairingCode(
   } catch (error) {
     return {
       ok: false,
-      code: ENVOYCODER_ERRORS.daemonUnreachable,
+      code: ENVOYDEV_ERRORS.daemonUnreachable,
       message: `That does not look like a pairing code: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
   if (!parsed) {
     return {
       ok: false,
-      code: ENVOYCODER_ERRORS.daemonUnreachable,
+      code: ENVOYDEV_ERRORS.daemonUnreachable,
       message: "That pairing code is empty or could not be read.",
     };
   }
   const mismatch = pairingAppMismatch(parsed.app, product);
-  if (mismatch) return { ok: false, code: ENVOYCODER_ERRORS.appMismatch, message: mismatch };
+  if (mismatch) return { ok: false, code: ENVOYDEV_ERRORS.appMismatch, message: mismatch };
   return {
     ok: true,
     wsUrl: parsed.wsUrl,
@@ -606,10 +651,10 @@ export function checkPairingCode(
  *     hole: it is how the family treats a desktop UI, which is the user's own window on their own
  *     machine and carries no token. Our daemon keeps the same rule, and the transport still refuses a
  *     tokenless call from anywhere but loopback (proven by the smoke's LAN leg).
- *   * **A remote caller must present a token**, and today we can resolve none: there is no session
- *     store yet (roadmap M1). So `resolveSession` answers `null` and the transport refuses — fail
- *     closed, deliberately. A daemon that invented its own token format here would be the anonymous
- *     path the guide's §8 forbids, and it would not interoperate with anything else in the family.
+ *   * **A remote caller must present a token**, resolved against the paired-device store (roadmap M4).
+ *     `resolveSession` answers `null` for unknown / expired / revoked tokens and the transport refuses —
+ *     fail closed, deliberately. A daemon that invented its own anonymous path here would be the hole
+ *     the guide's §8 forbids.
  *
  * It is one exported function so production and the smoke test cannot disagree about it. The smoke
  * previously passed a bare `() => undefined` for this port, which typechecked nowhere because
@@ -643,8 +688,20 @@ export function coderSessionIdentity(
  * The identity is resolved by the transport (`@envoymesh/host-connect`): this function only decides
  * *what* may be called, never *who* is calling.
  */
+/**
+ * A product method: the parsed parameters, and **who is calling**.
+ *
+ * The second argument is the whole reason this type is declared here rather than inline: a handler
+ * that cannot see the caller cannot enforce a rule about them, and EnvoyDev's pairing methods are
+ * loopback-only. `service.ts`'s `CoderCallContext` is the shape this arrives as.
+ */
+export type CoderProductHandler = (
+  params: unknown,
+  context: { session: unknown },
+) => Promise<unknown> | unknown;
+
 export interface CoderDispatcherDeps {
-  handlers?: Partial<Record<RpcMethod, (params: unknown) => Promise<unknown> | unknown>>;
+  handlers?: Partial<Record<RpcMethod, CoderProductHandler>>;
   /** What to say when a method exists but this build does not serve it yet. */
   unimplementedHint?: string;
 }
@@ -677,6 +734,43 @@ export function createCoderDispatcher(deps: CoderDispatcherDeps = {}): CoderDisp
           (deps.unimplementedHint ? ` — ${deps.unimplementedHint}` : "."),
       );
     }
-    return await handler(params);
+    // The caller goes to the handler, because "who is asking" is the only way a product method can
+    // hold a rule the transport does not know about — EnvoyDev's pairing methods are loopback-only,
+    // and a handler that cannot see the session cannot enforce that.
+    return await handler(params, { session: _session });
   };
 }
+
+/* ────────────────────────────── our own mesh peer ────────────────────────────── */
+
+/**
+ * EnvoyDev as a **peer**, not a product attached to a running node.
+ *
+ * The daemon is its own libp2p home node on the family's shared network, so a paired phone reaches
+ * `coder.*` over the mesh without any EnvoyMesh process on the machine. It lives in its own module
+ * because it owns a lifecycle (start/stop) and a network surface the rest of this file has no
+ * business knowing about; re-exported here so a product still imports one package to be a host.
+ */
+export {
+  CODER_MESH_RELAY_HINTS,
+  coderMeshOptions,
+  createCoderMeshPeer,
+  type CoderMeshNodeFactory,
+  type CoderMeshPeer,
+  type CoderMeshPeerErrorCode,
+  type CoderMeshPeerNode,
+  type CoderMeshPeerOptions,
+  type CoderMeshProxyPorts,
+} from "./mesh-peer.js";
+
+/**
+ * The peer's own identity: where the key file lives, and the fs-backed loader that honours it.
+ *
+ * Re-exported beside the peer because a caller building `coderMeshOptions(identity)` needs both; the
+ * loader is what makes the identity survive a restart.
+ */
+export {
+  loadOrCreateMeshIdentity,
+  meshIdentityPath,
+  type CoderMeshPrivateKey,
+} from "./mesh-identity.js";

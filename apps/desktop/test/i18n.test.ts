@@ -14,7 +14,7 @@
  *      invisible to a type checker.
  *   4. **English still says what the app already said.** The catalogue is the source of truth for
  *      wording now, so the strings the rest of the app grew up with — `statusLabel` in
- *      `@envoycoder/task-model` — must read the same, word for word: this was a language pass, not a
+ *      `@envoydev/task-model` — must read the same, word for word: this was a language pass, not a
  *      rewrite.
  *   5. **Daemon prose reaches a German user in German**, and an unknown key falls back to the English
  *      sentence rather than to the key.
@@ -27,8 +27,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import { CODER_LANGUAGES } from "@envoycoder/protocol";
-import { statusLabel } from "@envoycoder/task-model";
+import { CODER_LANGUAGES } from "@envoydev/protocol";
+import { statusLabel } from "@envoydev/task-model";
 
 import { CATALOGUES } from "../src/i18n/catalogues.js";
 import {
@@ -171,7 +171,7 @@ describe("the catalogues", () => {
 
 describe("the wording the app already had", () => {
   it("is what the catalogue says now, word for word", () => {
-    // The status words moved out of `@envoycoder/task-model`'s `statusLabel` into the catalogue so
+    // The status words moved out of `@envoydev/task-model`'s `statusLabel` into the catalogue so
     // they can be translated. The English must not have moved with them: a user who never opens the
     // language setting is not supposed to see a single character change.
     for (const status of [
@@ -190,7 +190,7 @@ describe("the wording the app already had", () => {
   it("keeps the daemon's English identical to the sentences it sends", () => {
     // The `error.*` entries are the same sentences the daemon puts on the wire. They are duplicated
     // on purpose — neither side can import the other's catalogue — so the pair is pinned here.
-    expect(en["error.notConnected"]).toBe("EnvoyCoder is not connected to its daemon yet.");
+    expect(en["error.notConnected"]).toBe("EnvoyDev is not connected to its daemon yet.");
     expect(en["error.approvalPending"]).toContain("The agent is waiting for an answer");
     expect(en["approval.question.generic"]).toBe("Allow the agent to continue?");
   });
@@ -201,11 +201,11 @@ describe("daemon prose, as the window reads it", () => {
     // The shape `coderError(code, message, ref)` produces: code, sentence and key in one string,
     // because the family's transport preserves nothing else of a rejected call.
     const wire =
-      'envoycoder.path-missing: /tmp/gone is not a directory on this machine. Pick a folder that exists — EnvoyCoder runs agents in it, so the path has to be real. [envoycoder.key] {"key":"error.addProject.notDirectory","values":{"path":"/tmp/gone"}}';
+      'envoydev.path-missing: /tmp/gone is not a directory on this machine. Pick a folder that exists — EnvoyDev runs agents in it, so the path has to be real. [envoydev.key] {"key":"error.addProject.notDirectory","values":{"path":"/tmp/gone"}}';
     const notice = noticeOf(wire);
     expect(notice?.message).toBe(
       "/tmp/gone is not a directory on this machine. " +
-        "Pick a folder that exists — EnvoyCoder runs agents in it, so the path has to be real.",
+        "Pick a folder that exists — EnvoyDev runs agents in it, so the path has to be real.",
     );
     expect(notice?.key).toBe("error.addProject.notDirectory");
 
@@ -213,15 +213,15 @@ describe("daemon prose, as the window reads it", () => {
     const rendered = localize(german, notice);
     expect(rendered).toContain("/tmp/gone");
     expect(rendered).toContain("kein Verzeichnis");
-    expect(rendered).not.toContain("envoycoder.");
-    expect(rendered).not.toContain("[envoycoder.key]");
+    expect(rendered).not.toContain("envoydev.");
+    expect(rendered).not.toContain("[envoydev.key]");
   });
 
   it("falls back to the English sentence for a key this build does not have", () => {
     // A daemon one version ahead, or a key renamed in a release. The user reads English — never
     // `error.brand.new.key`.
     const wire =
-      'envoycoder.harness-failed: Something brand new went wrong. [envoycoder.key] {"key":"error.brand.new.key"}';
+      'envoydev.harness-failed: Something brand new went wrong. [envoydev.key] {"key":"error.brand.new.key"}';
     const notice = noticeOf(wire);
     expect(notice?.key).toBeUndefined();
     const german = createTranslator("de", CATALOGUES.de).t;

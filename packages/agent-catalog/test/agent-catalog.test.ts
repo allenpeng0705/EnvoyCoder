@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { HARNESS_IDS, BUILT_IN_HARNESSES, isHarnessId, isBuiltInHarness } from "@envoycoder/protocol";
+import { HARNESS_IDS, BUILT_IN_HARNESSES, isHarnessId, isBuiltInHarness } from "@envoydev/protocol";
 import {
   ALL_HARNESSES,
   HARNESS_CATALOG,

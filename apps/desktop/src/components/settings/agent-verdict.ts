@@ -28,11 +28,11 @@
  *
  * | case | what the row says | what the detail leads with |
  * |---|---|---|
- * | `connector` | *Installed — its connector is missing* + the command | **what is present first** — *"{agent} is installed. EnvoyCoder needs its connector to drive it:"* — then the exact `npm install -g …` |
+ * | `connector` | *Installed — its connector is missing* + the command | **what is present first** — *"{agent} is installed. EnvoyDev needs its connector to drive it:"* — then the exact `npm install -g …` |
  * | `absent` | the first install step, verbatim | the entry's install steps **in the order to run them**, and its own link |
  * | `env` | *"{NAME} is not set"* | the variable's name(s) and where the value comes from — which is always the user |
- * | `our-gap` | *EnvoyCoder cannot drive this agent yet* | that this is **our** gap and there is nothing to install |
- * | `unlooked` | *EnvoyCoder could not check this machine* | that this is our gap too, and the one action that re-measures (`Restart EnvoyCoder`) |
+ * | `our-gap` | *EnvoyDev cannot drive this agent yet* | that this is **our** gap and there is nothing to install |
+ * | `unlooked` | *EnvoyDev could not check this machine* | that this is our gap too, and the one action that re-measures (`Restart EnvoyDev`) |
  * | **`npx`** | **not a Not-ready case at all** | an `npx -y …` recipe is fetched on the first run, so it is **Ready** and the row says so |
  *
  * The `connector` case is the one that produced the report this slice exists for — *"Some agents I have
@@ -55,7 +55,7 @@
  *
  * Whether an agent **speaks ACP**, what it publishes and whether it wants a sign-in cannot be known without
  * starting it, and fourteen of the catalogue's recipes would download a package to be started. So none of
- * that is a verdict: those facts travel as **properties with the time EnvoyCoder observed them**
+ * that is a verdict: those facts travel as **properties with the time EnvoyDev observed them**
  * (`verdictFacts`), they are recorded when a session happens, and no row ever reads "not checked" as its
  * state. See `docs/settings-parity.md` §7.17.
  */
@@ -65,7 +65,7 @@ import type {
   AgentProviderSummary,
   HarnessAvailability,
   HarnessSummary,
-} from "@envoycoder/protocol";
+} from "@envoydev/protocol";
 
 // The one rule about labels, kept where it was: a value **we** wrote carries a catalogue key and is
 // translated, and a value the **agent** wrote is shown as the agent wrote it — a model label has no key in
@@ -151,7 +151,7 @@ export interface VerdictGuide {
    */
   href?: string;
   /**
-   * An instruction that is not a command line, for the one kind that has one: *Restart EnvoyCoder*.
+   * An instruction that is not a command line, for the one kind that has one: *Restart EnvoyDev*.
    *
    * A separate field from `href` rather than a URL-shaped string in the same slot, because reusing one field
    * for two kinds of thing is how a renderer ends up putting an `href` on a sentence — and this file exists
@@ -198,7 +198,7 @@ export interface VerdictInput {
    *
    * Only ever non-empty for a program the user declared: a catalogue recipe's own constants are supplied by
    * the daemon (`AgentProviderEnvState.from === "catalogue"`), so they can never be the reason a row is not
-   * ready, and a row that claimed so would send a user to export something EnvoyCoder already provides.
+   * ready, and a row that claimed so would send a user to export something EnvoyDev already provides.
    */
   missingEnv?: readonly string[];
   /** Where a user gets this program, when the row names a page. Offered only when there is an install to do. */
@@ -490,9 +490,9 @@ export interface FactInput {
  * ## The deep facts, and the time they carry
  *
  * *"whether an agent needs a sign-in require starting it"* — so none of it is a verdict, and all of it carries
- * the time EnvoyCoder observed it: `Verified` is `formatAgo`, which is the platform's own relative-time
+ * the time EnvoyDev observed it: `Verified` is `formatAgo`, which is the platform's own relative-time
  * formatter in the user's language (`4 minutes ago`), falling back to an absolute localised timestamp for
- * anything older than a week. When nothing has been observed the value says **why** — that EnvoyCoder learns
+ * anything older than a week. When nothing has been observed the value says **why** — that EnvoyDev learns
  * this by starting the agent, which happens on a run rather than on this page — so a user is never invited to
  * hunt for a button that would tell them.
  */
@@ -577,7 +577,7 @@ export function verdictFacts(input: FactInput, t: Translate): RowFact[] {
    * **What the agent publishes about itself** — the deep facts, as properties.
    *
    * These are the facts that cannot be known without starting the agent, so they are here rather than on the
-   * row, and the `Verified` fact below says when EnvoyCoder last looked. Three of the four keep a distinction
+   * row, and the `Verified` fact below says when EnvoyDev last looked. Three of the four keep a distinction
    * the protocol makes and a renderer must not lose: `AgentThinking.kind === "session"` is *not* "none" — it
    * means the agent publishes its levels only inside a session and none has run yet — and
    * `AgentModels.kind === "free-text"` is not "no models" but "any model you type".
@@ -624,7 +624,7 @@ export function verdictFacts(input: FactInput, t: Translate): RowFact[] {
 
   // **The deep facts' time**, from the observations the daemon actually made. `models` and `thinking` carry
   // their own `observedAt` only when a *session* produced them (`AgentModels`), so the newest of the three is
-  // the honest answer to "when did EnvoyCoder last look at what this agent publishes".
+  // the honest answer to "when did EnvoyDev last look at what this agent publishes".
   if (input.harness !== undefined) {
     const observed = [
       (input.harness.models as typeof input.harness.models | undefined)?.observedAt,

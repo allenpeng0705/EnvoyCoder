@@ -20,14 +20,14 @@ const { version } = JSON.parse(
  * start. Source resolution in tests is the smaller lie.
  */
 export default defineConfig({
-  define: { __ENVOYCODER_VERSION__: JSON.stringify(version) },
+  define: { __ENVOYDEV_VERSION__: JSON.stringify(version) },
   resolve: {
     alias: {
-      "@envoycoder/protocol": `${here}packages/protocol/src/index.ts`,
-      "@envoycoder/platform": `${here}packages/platform/src/index.ts`,
-      "@envoycoder/task-model": `${here}packages/task-model/src/index.ts`,
-      "@envoycoder/agent-catalog": `${here}packages/agent-catalog/src/index.ts`,
-      "@envoycoder/host-bridge": `${here}packages/host-bridge/src/index.ts`,
+      "@envoydev/protocol": `${here}packages/protocol/src/index.ts`,
+      "@envoydev/platform": `${here}packages/platform/src/index.ts`,
+      "@envoydev/task-model": `${here}packages/task-model/src/index.ts`,
+      "@envoydev/agent-catalog": `${here}packages/agent-catalog/src/index.ts`,
+      "@envoydev/host-bridge": `${here}packages/host-bridge/src/index.ts`,
     },
   },
   test: {

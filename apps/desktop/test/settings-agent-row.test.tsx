@@ -35,9 +35,10 @@ import { readFileSync } from "node:fs";
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { HarnessSummary } from "@envoycoder/protocol";
+import type { HarnessSummary } from "@envoydev/protocol";
 
 import { SettingsPane } from "../src/components/SettingsPane.js";
+import { stubAgentActions } from "./fixtures/agent-actions.js";
 import { rowVerdict } from "../src/components/settings/agent-verdict.js";
 import { en } from "../src/i18n/messages/en.js";
 import { SOURCE_LOCALE } from "../src/i18n/locales.js";
@@ -84,11 +85,11 @@ const state: CoderState = {
   connection: { state: "connected", endpoint: { host: "127.0.0.1", port: 4770, path: "/ws" } },
   resolved: undefined,
   hello: {
-    product: "EnvoyCoder",
+    product: "EnvoyDev",
     version: "0.1.0",
     instanceId: "test",
     home: "/home/you",
-    stateDir: "/home/you/.envoycoder",
+    stateDir: "/home/you/.envoydev",
     startedAt: "2026-09-14T00:00:00.000Z",
     windowCount: 1,
     methods: ["coder.hello", "coder.listHarnesses", "coder.listProviders", "coder.listCatalog", "coder.signInAgent"],
@@ -132,11 +133,7 @@ const state: CoderState = {
   notes: [],
 };
 
-const noActions = {
-  addProvider: vi.fn(),
-  removeProvider: vi.fn(),
-  signInAgent: vi.fn(),
-} as never;
+const noActions = stubAgentActions();
 
 /** The source translator, so a pure-function assertion reads the same English a row renders. */
 const { t: tEn } = createTranslator(SOURCE_LOCALE);
@@ -223,7 +220,7 @@ describe("a row for an agent that is here without its adapter", () => {
         {
           label: "Codex",
           availability: { state: "needs-bridge", agentBinary: "/usr/local/bin/codex", fix: [{ command }] },
-          readyLine: "Ships with EnvoyCoder",
+          readyLine: "Ships with EnvoyDev",
         },
         tEn,
         80,
@@ -256,7 +253,7 @@ describe("a row for an agent that is here without its adapter", () => {
           agentBinary: "/usr/local/bin/codex",
           fix: [{ command: ADAPTER }, { command: "npm install -g @openai/codex" }],
         },
-        readyLine: "Ships with EnvoyCoder",
+        readyLine: "Ships with EnvoyDev",
       },
       tEn,
       80,

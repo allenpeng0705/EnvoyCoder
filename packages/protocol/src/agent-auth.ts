@@ -90,7 +90,7 @@ export const HarnessAuthStateSchema = z.enum(HARNESS_AUTH_STATES);
  * a gap: when an agent advertises several methods and the catalogue declares none of them, choosing one
  * would be us picking a sign-in flow on the user's behalf — and the ACP agents here really do offer
  * several (`@agentclientprotocol/codex-acp` advertises two `env_var` methods and a browser login). A row
- * that says "this agent wants a sign-in and EnvoyCoder cannot tell you which" is honest and actionable
+ * that says "this agent wants a sign-in and EnvoyDev cannot tell you which" is honest and actionable
  * (sign in with the agent's own command); a row that quietly sent the first advertised method and failed
  * is not.
  */

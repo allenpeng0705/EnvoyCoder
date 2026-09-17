@@ -37,7 +37,7 @@ import type { JSX } from "react";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { Project } from "@envoycoder/protocol";
+import type { Project } from "@envoydev/protocol";
 
 import { useI18n } from "../i18n/context.js";
 import type { Translator } from "../i18n/translate.js";

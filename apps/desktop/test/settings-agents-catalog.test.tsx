@@ -31,8 +31,8 @@ import type {
   CatalogEntry,
   HarnessAvailability,
   HarnessSummary,
-} from "@envoycoder/protocol";
-import { ALL_HARNESSES, harnessDefinition } from "@envoycoder/agent-catalog";
+} from "@envoydev/protocol";
+import { ALL_HARNESSES, harnessDefinition } from "@envoydev/agent-catalog";
 
 import { SettingsPane } from "../src/components/SettingsPane.js";
 import { addInputFor } from "../src/components/settings/agent-catalog.js";
@@ -180,11 +180,11 @@ const state: CoderState = {
   connection: { state: "connected", endpoint: { host: "127.0.0.1", port: 4770, path: "/ws" } },
   resolved: undefined,
   hello: {
-    product: "EnvoyCoder",
+    product: "EnvoyDev",
     version: "0.1.0",
     instanceId: "test",
     home: "/home/u",
-    stateDir: "/home/u/.envoycoder",
+    stateDir: "/home/u/.envoydev",
     startedAt: "2026-09-14T00:00:00.000Z",
     windowCount: 1,
     // **The methods the page gates on, present.** A daemon that served none of them is the older-daemon case
@@ -596,7 +596,7 @@ describe("what a catalogue row's verdict is", () => {
 
   it("carries the recipe's own constants as facts rather than as something the user owes", () => {
     // `§7.10`'s rule, kept: the entry's constants travel with the reference, so a row says which variables the
-    // recipe supplies. A row that asked the user to export them would send them to set something EnvoyCoder is
+    // recipe supplies. A row that asked the user to export them would send them to set something EnvoyDev is
     // already providing.
     show();
     const vtcode = row("VT Code");
@@ -863,7 +863,7 @@ describe("declaring an agent that is not in the catalogue", () => {
     const { actions: recording, calls } = agentActions({
       addRefusal: {
         ok: false,
-        message: "EnvoyCoder stores the names of the environment variables an agent needs, never their values.",
+        message: "EnvoyDev stores the names of the environment variables an agent needs, never their values.",
         key: "error.providerEnvNotAName",
         values: { position: 1 },
       } as unknown as Refusal,

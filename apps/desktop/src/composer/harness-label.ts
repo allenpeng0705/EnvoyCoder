@@ -12,7 +12,7 @@
  * whose name on screen is its id in lower case.
  */
 
-import type { HarnessId } from "@envoycoder/protocol";
+import type { HarnessId } from "@envoydev/protocol";
 
 export function harnessLabel(harness: HarnessId): string {
   switch (harness) {

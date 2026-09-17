@@ -28,7 +28,7 @@ import {
   resolveAgentEntry,
   ALL_HARNESSES,
 } from "../src/index.js";
-import { CatalogEnvConstantSchema, looksLikeCredentialEnvName } from "@envoycoder/protocol";
+import { CatalogEnvConstantSchema, looksLikeCredentialEnvName } from "@envoydev/protocol";
 
 describe("the catalogued ACP agents", () => {
   it("carries every entry Paseo ships, and nothing malformed", () => {

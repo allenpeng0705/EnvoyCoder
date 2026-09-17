@@ -56,13 +56,13 @@ the window the only thing that can read its own log line, and gives the terminal
 So the daemon's message carries both. The line below is real output from `npm run verify:language`,
 wrapped to fit — the code, the English sentence and the marker, in the order they travel:
 
-    envoycoder.path-missing: /tmp/envoycoder-this-folder-does-not-exist is not a directory on this
-    machine. Pick a folder that exists — EnvoyCoder runs agents in it, so the path has to be real.
-    [envoycoder.key] {"key":"error.addProject.notDirectory","values":{"path":"/tmp/…"}}
+    envoydev.path-missing: /tmp/envoydev-this-folder-does-not-exist is not a directory on this
+    machine. Pick a folder that exists — EnvoyDev runs agents in it, so the path has to be real.
+    [envoydev.key] {"key":"error.addProject.notDirectory","values":{"path":"/tmp/…"}}
 
 - the **English sentence** is what the log, the CLI and `npm run smoke` show — legible with no
   translation available;
-- the **`[envoycoder.key]` marker** is what the window renders in the user's language.
+- the **`[envoydev.key]` marker** is what the window renders in the user's language.
 
 `noticeOf()` splits the marker off, `localize()` looks the key up, and an unknown key (a daemon one
 version ahead) falls back to the English sentence — never to `error.brand.new.key`. That is the property

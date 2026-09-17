@@ -61,7 +61,7 @@
  * rather than something a component computes.
  */
 
-import type { Project } from "@envoycoder/protocol";
+import type { Project } from "@envoydev/protocol";
 
 import { DEFAULT_SECTION_ID, type SettingsSectionId } from "./settings-sections.js";
 

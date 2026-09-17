@@ -6,7 +6,7 @@
  * The guide lists **seven** places a new package must be declared, and warns that missing one
  * produces a *misleading* failure — `TS6059` on unrelated files, a package that resolves only
  * because npm hoists, source resolution that silently falls back to built output, or a package one
- * manager cannot see. EnvoyCoder is a separate repo with its own layout, so two of the seven do not
+ * manager cannot see. EnvoyDev is a separate repo with its own layout, so two of the seven do not
  * apply, and the rest are checked here rather than in EnvoyMesh's tree:
  *
  * | Guide | Applies here? | How |
@@ -20,9 +20,9 @@
  * | 6. `vitest.config.ts` alias | yes | R6 |
  * | 7. `pnpm-workspace.yaml` | **not used** | reported, not skipped silently |
  *
- * **Why `paths` is absent.** Mapping `@envoycoder/*` to another package's *source* cannot be
+ * **Why `paths` is absent.** Mapping `@envoydev/*` to another package's *source* cannot be
  * combined with `composite`/`rootDir` — TypeScript rejects it with `TS6059`/`TS6307` ("not under
- * rootDir"), which is exactly the confusing failure the guide describes. EnvoyCoder instead lets
+ * rootDir"), which is exactly the confusing failure the guide describes. EnvoyDev instead lets
  * npm workspace links resolve the package names, with project references doing the ordering, and
  * keeps source resolution where it belongs: the vitest aliases (R6), which are checked.
  *
@@ -119,7 +119,7 @@ function importedPackages(dir) {
       let match;
       while ((match = specifier.exec(source))) {
         const spec = match[1];
-        if (!spec.startsWith("@envoycoder/") && !spec.startsWith("@envoymesh/")) continue;
+        if (!spec.startsWith("@envoydev/") && !spec.startsWith("@envoymesh/")) continue;
         const name = spec.startsWith("@envoymesh/")
           ? spec.split("/").slice(0, 2).join("/")
           : spec;

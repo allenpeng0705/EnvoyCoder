@@ -4,7 +4,7 @@
  *
  * ## What the owner asked, and what the shape answers
  *
- * *"…or can we support run the commands in EnvoyCoder?"* The row already shows the exact command and a Copy
+ * *"…or can we support run the commands in EnvoyDev?"* The row already shows the exact command and a Copy
  * control (§7.18); this is the press that runs it, which is the difference between *"here is what to type in a
  * terminal"* and *"resolved"*.
  *
@@ -47,24 +47,24 @@ import {
   processGroupTarget,
   spawnTreeOptions,
   type PlatformId,
-} from "@envoycoder/platform";
+} from "@envoydev/platform";
 import {
   ACP_AGENT_CATALOG,
   cataloguedRecipe,
   harnessAvailability,
   probeRecipe,
-} from "@envoycoder/agent-catalog";
-import type { AcpAgentEntry, ProbeFinding } from "@envoycoder/agent-catalog";
-import { parseRpcParams } from "@envoycoder/protocol";
+} from "@envoydev/agent-catalog";
+import type { AcpAgentEntry, ProbeFinding } from "@envoydev/agent-catalog";
+import { parseRpcParams } from "@envoydev/protocol";
 import type {
   AgentProviderConfig,
   HarnessId,
   FixTarget,
   RpcMethod,
-} from "@envoycoder/protocol";
+} from "@envoydev/protocol";
 
-import type { HarnessProbe } from "@envoycoder/agent-catalog";
-import type { ProviderProbe } from "@envoycoder/agent-catalog";
+import type { HarnessProbe } from "@envoydev/agent-catalog";
+import type { ProviderProbe } from "@envoydev/agent-catalog";
 
 import type { CoderHandler } from "./service.js";
 

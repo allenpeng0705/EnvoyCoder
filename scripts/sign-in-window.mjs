@@ -26,7 +26,7 @@
  *      `needs-signin` because an agent really refused a session.
  *      `claude-agent-acp` is chosen because it is absent on a normal machine, so the fixture cannot be
  *      shadowed by a real install the way a fixture named `cursor-agent` would be.
- *   2. **Real window.** Vite serves the app on its own port with `VITE_ENVOYCODER_DAEMON_PORT` pointing at the
+ *   2. **Real window.** Vite serves the app on its own port with `VITE_ENVOYDEV_DAEMON_PORT` pointing at the
  *      isolated daemon, and headless Chrome is driven over CDP with the target matched **by URL** — the rule
  *      `audit-ui.mjs` records, and the reason a previous measurement silently reported another app's numbers.
  *   3. **The press is the window's, not ours.** The probe that plants the state is a socket call
@@ -38,7 +38,7 @@
  * ## What it leaves behind
  *
  * Two PNGs — before the press and after it — in `--out`, which defaults to a **stable** path
- * (`<tmp>/envoycoder-signin-window`) rather than a fresh random directory, because the picture is for a
+ * (`<tmp>/envoydev-signin-window`) rather than a fresh random directory, because the picture is for a
  * human and a path nobody can guess is a picture nobody opens. The run directory is created fresh each time
  * so a stale picture cannot be mistaken for this run's. Nothing is written inside the repository: a PNG
  * committed by accident is worse than one in the temp directory, and `daemon.log` lives beside the pictures
@@ -81,7 +81,7 @@ const keep = has("keep");
  * a human opens them, and a random path per run is a path nobody can find twice. Cleaning first is what
  * makes it safe — a stale picture left from a previous run cannot be mistaken for this one's evidence.
  */
-const outDir = resolve(flag("out") ?? join(tmpdir(), "envoycoder-signin-window"));
+const outDir = resolve(flag("out") ?? join(tmpdir(), "envoydev-signin-window"));
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
@@ -148,7 +148,7 @@ process.on("exit", stopAll);
 
 /* ────────────────────── the isolated home, the fixture, and the daemon ────────────────────── */
 
-const home = mkdtempSync(join(tmpdir(), "envoycoder-signin-home-"));
+const home = mkdtempSync(join(tmpdir(), "envoydev-signin-home-"));
 const binDir = join(home, "bin");
 mkdirSync(binDir, { recursive: true });
 const daemonPort = await freePort();
@@ -177,7 +177,7 @@ const daemon = track(
     env: {
       ...process.env,
       ENVOYMESH_HOME: home,
-      ENVOYCODER_DAEMON_PORT: String(daemonPort),
+      ENVOYDEV_DAEMON_PORT: String(daemonPort),
       // The one line that makes a real daemon find a scripted agent. Prepended, so it wins over anything a
       // login shell answers with — and the name is one no real install occupies.
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
@@ -196,7 +196,7 @@ daemon.stderr.on("data", (chunk) => {
 writeFileSync(daemonLog, "");
 
 /** The daemon's claim file is written **after** it is listening, which is what makes it a readiness signal. */
-const claimFile = join(home, "EnvoyCoder", "daemon.json");
+const claimFile = join(home, "EnvoyDev", "daemon.json");
 async function waitForClaim() {
   for (let i = 0; i < 120; i += 1) {
     if (existsSync(claimFile)) {
@@ -263,7 +263,7 @@ const probe = await call("coder.probeSessionOptions", { harness: "claudecode", f
 check(
   "the daemon started the fixture, and its refusal travelled back in the agent's own words",
   String(probe.detail).includes("Authentication required") && String(probe.detail).includes(METHOD_ID),
-  { outcome: probe.outcome, detail: String(probe.detail).split(" [envoycoder.key]")[0] },
+  { outcome: probe.outcome, detail: String(probe.detail).split(" [envoydev.key]")[0] },
 );
 
 const listed = await call("coder.listHarnesses");
@@ -292,7 +292,7 @@ const uiUrl = `http://127.0.0.1:${vitePort}/`;
 const vite = track(
   spawn(process.execPath, [join(root, "node_modules/vite/bin/vite.js"), "--port", String(vitePort), "--strictPort"], {
     cwd: join(root, "apps/desktop"),
-    env: { ...process.env, VITE_ENVOYCODER_DAEMON_PORT: String(daemonPort) },
+    env: { ...process.env, VITE_ENVOYDEV_DAEMON_PORT: String(daemonPort) },
     stdio: ["ignore", "pipe", "pipe"],
   }),
   "vite",
@@ -322,7 +322,7 @@ console.log(`window: ${uiUrl} (dashboard against daemon ${daemonPort})`);
 
 /* ────────────────────── headless Chrome, matched by URL ────────────────────── */
 
-const profile = mkdtempSync(join(tmpdir(), "envoycoder-signin-chrome-"));
+const profile = mkdtempSync(join(tmpdir(), "envoydev-signin-chrome-"));
 const chrome = track(
   spawn(
     CHROME,

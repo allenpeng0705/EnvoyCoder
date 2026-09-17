@@ -27,16 +27,16 @@
  * first place. What this module knows is: a thing happened, and this is its name.
  */
 
-import type { HostNodeService, SocketMethodPort } from "@envoycoder/host-bridge";
+import type { HostNodeService, SocketMethodPort } from "@envoydev/host-bridge";
 
 import {
   CODER_EVENTS,
   CODER_SUBSCRIBE_METHOD,
   type CoderEventName,
   coderError,
-  ENVOYCODER_ERRORS,
+  ENVOYDEV_ERRORS,
   isCoderEventName,
-} from "@envoycoder/protocol";
+} from "@envoydev/protocol";
 
 export interface CoderEventBus {
   /** Publish an event. Never throws, and never blocks. */
@@ -87,9 +87,9 @@ export function createCoderEventBus(): CoderEventBus {
  * Four of the five members are honest no-ops, and each says why:
  *
  *   * `getNodeStatus` — this host *is* running; that is what serving means. It is not reporting the
- *     mesh node's state, because an EnvoyCoder daemon serves its windows whether or not a mesh node
+ *     mesh node's state, because an EnvoyDev daemon serves its windows whether or not a mesh node
  *     exists on this machine (a refusal to attach is a state to report, not a failure to start).
- *   * `getConnectionStatus` — empty, deliberately. EnvoyCoder has no peer id of its own: when it
+ *   * `getConnectionStatus` — empty, deliberately. EnvoyDev has no peer id of its own: when it
  *     attaches to the mesh it holds a *product session*, and advertising the node's peer id as ours
  *     would claim an identity the node owns.
  *   * `onCallEvent` — voice/video signalling, which this product does not have. Returning a no-op
@@ -125,7 +125,7 @@ export function createNodeService(bus: CoderEventBus): HostNodeService {
  * The transport's broadcast path needs an event-disposition table, and the surface a product is told
  * to use does not forward one — `@envoymesh/reuse-host`'s `createReuseHost` drops
  * `eventDispositions` on the floor (`packages/reuse-host/src/index.ts:242-252`). The full reasoning,
- * with the citation, is in `@envoycoder/protocol`'s `CODER_EVENTS` doc; the short version is that
+ * with the citation, is in `@envoydev/protocol`'s `CODER_EVENTS` doc; the short version is that
  * `socketMethods` **is** forwarded, so this is the port that works, and a client subscribing to what
  * it renders is what we wanted anyway.
  *
@@ -167,7 +167,7 @@ export function createCoderSocketMethods(bus: CoderEventBus): SocketMethodPort {
         // identifiers, which is worse than the sentence an engineer can act on. The refusals a *user*
         // can read all carry keys — see `messages.ts`.
         throw coderError(
-          ENVOYCODER_ERRORS.badRequest,
+          ENVOYDEV_ERRORS.badRequest,
           `${CODER_SUBSCRIBE_METHOD} was asked for an event this daemon does not publish. It publishes: ${CODER_EVENTS.join(", ")}.`,
         );
       }

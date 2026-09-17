@@ -8,7 +8,7 @@ the UI renders from fixtures, the mobile pairing logic passes its Dart tests, an
 operating systems. *Proves:* the shape is buildable and the claims in `docs/` are anchored to code.
 
 **M1 — the daemon serves projects and tasks.** Implement `coder.listProjects`, `addProject`,
-`listTasks`, `createTask` over the existing host; persist to `<home>/EnvoyCoder/`.
+`listTasks`, `createTask` over the existing host; persist to `<home>/EnvoyDev/`.
 *Proves:* a world with two windows attached to one daemon, and the state surviving a restart.
 *Acceptance:* the UI stops using fixtures (`apps/desktop/src/data/sample.ts` deleted in the same
 commit), and a second window shows the first window's changes without a refresh.
@@ -110,6 +110,14 @@ continues; the same escalation with the SDK profile is shown as the reason the r
 list with honest connection states, and the run list. *Proves:* a task started at the desk is
 visible and answerable from the phone over the mesh, and the app refuses another family app's code
 in the family's words. *Acceptance:* a recorded sequence of the phone answering an approval.
+
+> **Status: landed (automated half).** Daemon paired-device sessions (`coder.mintPairing` /
+> `listPairedDevices` / `revokePairedDevice`) resolve remote tokens; Settings → This machine shows
+> a QR; the Flutter app (`apps/mobile`) stores tokens in Keychain/Keystore, dials
+> lan → primary → SSH → relay candidates, lists tasks/runs, and answers approvals over `coder.*`.
+> Evidence: `apps/desktop/test/daemon-rpc.test.ts` (paired-device), `apps/mobile` Flutter tests (21),
+> and the host-connect access-gate fix so non-owner sessions can still call product RPC when
+> `socketMethods` is configured. A live phone recording answering an approval remains a manual check.
 
 **M5 — distributed runs.** A task offered to a peer, accepted or refused by policy, with the events
 streamed back to the origin. *Proves:* D2 — the work happens where the code is, and the origin can

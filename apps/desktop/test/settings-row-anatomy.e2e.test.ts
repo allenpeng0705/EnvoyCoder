@@ -69,7 +69,7 @@ const actionsTrack = ((): number => {
   return Number(match[1]);
 })();
 
-const outDir = mkdtempSync(join(tmpdir(), "envoycoder-anatomy-test-"));
+const outDir = mkdtempSync(join(tmpdir(), "envoydev-anatomy-test-"));
 afterAll(() => rmSync(outDir, { recursive: true, force: true }));
 
 interface Anatomy {

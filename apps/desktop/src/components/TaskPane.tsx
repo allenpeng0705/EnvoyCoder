@@ -34,7 +34,7 @@
 import type { JSX } from "react";
 
 import { useEffect, useRef, useState } from "react";
-import type { HarnessId, HarnessSummary, ProbeOutcome, Project, RunEvent, Task } from "@envoycoder/protocol";
+import type { HarnessId, HarnessSummary, ProbeOutcome, Project, RunEvent, Task } from "@envoydev/protocol";
 
 import { hasShellPicker, pickFolder } from "../client/folder-picker.js";
 import { agentFor } from "../composer/agent-for.js";
@@ -649,7 +649,7 @@ function TranscriptRow(props: {
 
     case "thought":
       // Collapsed by default: reasoning is usually long and often irrelevant, and hiding it behind a
-      // summary is what keeps the answer readable (`docs/envoycoder-ui.md` §7).
+      // summary is what keeps the answer readable (`docs/envoydev-ui.md` §7).
       return (
         <li className="row row--thought">
           <details>
@@ -737,7 +737,7 @@ function ApprovalCard(props: {
               key={option.id}
               type="button"
               // The one primary action per view is the *permissive* one; a destructive colour appears
-              // only here, inside a decision, never on a row (`docs/envoycoder-ui.md` §7).
+              // only here, inside a decision, never on a row (`docs/envoydev-ui.md` §7).
               className={`button ${option.destructive ? "button--danger" : "button--primary"}`}
               onClick={() => void props.onAnswer(entry.requestId, option.id)}
             >

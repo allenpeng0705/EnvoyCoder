@@ -27,7 +27,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { HarnessAvailability } from "@envoycoder/protocol";
+import type { HarnessAvailability } from "@envoydev/protocol";
 
 import { WARM_GAP_MS, startDeepWarm, warmPlan, type WarmCandidate } from "../src/daemon/deep-warm.js";
 

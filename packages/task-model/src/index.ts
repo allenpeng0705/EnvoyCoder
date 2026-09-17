@@ -25,7 +25,7 @@ import {
   type TaskStatus,
   statusIsActive,
   statusNeedsHuman,
-} from "@envoycoder/protocol";
+} from "@envoydev/protocol";
 
 /* ────────────────────────────── ids ───────────────────────────── */
 

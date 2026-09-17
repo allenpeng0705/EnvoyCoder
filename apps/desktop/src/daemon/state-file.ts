@@ -17,7 +17,7 @@
  *
  * It was five private methods on `CoderStore`, which was right while there were three collections and
  * wrong the moment there were five: the class crossed `AGENTS.md`'s eight-hundred-line rule, and the
- * thing that had grown was not the store's subject (what EnvoyCoder remembers) but this one — how a JSON
+ * thing that had grown was not the store's subject (what EnvoyDev remembers) but this one — how a JSON
  * document is read, written and, when it cannot be, set aside. `CoderStore` owns the state directory and
  * the write chain; this owns the file.
  *
@@ -28,7 +28,7 @@
 
 import { readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import type { DroppedSettingsKey } from "@envoycoder/protocol";
+import type { DroppedSettingsKey } from "@envoydev/protocol";
 import type { z } from "zod";
 
 /** What a read could not use, in end-user words. Reported at `coder.hello`. */

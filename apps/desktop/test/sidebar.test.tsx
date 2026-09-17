@@ -13,7 +13,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CoderSidebar } from "../src/components/CoderSidebar.js";
-import type { Project, Task } from "@envoycoder/protocol";
+import type { Project, Task } from "@envoydev/protocol";
 
 /**
  * Fixtures, local to this test.

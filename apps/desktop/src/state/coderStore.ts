@@ -8,7 +8,7 @@
  *   1. **One connection, many components.** The rail, the pane and the status line all want the same
  *      lists. Three independent fetchers means three copies that disagree — the rail saying "Working"
  *      while the pane says "Needs your answer" — which is precisely the failure the design warns
- *      about when it insists one function computes the attention count (`docs/envoycoder-ui.md` §4).
+ *      about when it insists one function computes the attention count (`docs/envoydev-ui.md` §4).
  *   2. **A push-driven cache, not a poll.** The daemon says *what* changed; the store refetches the
  *      affected list. That keeps "the second window updates without a refresh" a property of the
  *      architecture rather than of a timer.
@@ -47,9 +47,9 @@ import type {
   SignInOutcome,
   Task,
   TaskDefaults,
-} from "@envoycoder/protocol";
-import { DEFAULT_CODER_SETTINGS, ENVOYCODER_ERRORS, coderErrorCode, missingMethods } from "@envoycoder/protocol";
-import type { AgentDelivery as AgentDeliveryWire, FixRunResult as FixRunResultWire } from "@envoycoder/protocol";
+} from "@envoydev/protocol";
+import { DEFAULT_CODER_SETTINGS, ENVOYDEV_ERRORS, coderErrorCode, missingMethods } from "@envoydev/protocol";
+import type { AgentDelivery as AgentDeliveryWire, FixRunResult as FixRunResultWire } from "@envoydev/protocol";
 
 import { localNotice, noticeFromError, type Notice, type Refusal } from "../i18n/notice.js";
 import { buildTranscript, type Transcript } from "./transcript.js";
@@ -60,6 +60,9 @@ import { resolveDaemonEndpoint, type ResolvedEndpoint } from "../client/endpoint
 /** The mesh, as the daemon last reported it. Mirrors `CoderMeshStatus` in the protocol. */
 export type MeshStatus =
   | { kind: "attached"; scopeKey: string; ownerId: string; peerCount?: number }
+  // We are the node: this machine hosts its own peer, and `multiaddrs`/`relayHints` are how a paired
+  // phone reaches it. The three older variants all describe looking for somebody else's node.
+  | { kind: "hosting"; peerId: string; multiaddrs: string[]; relayHints: string[]; peerCount?: number }
   | { kind: "no-node"; reason: string }
   | { kind: "refused"; code: string; reason: string };
 
@@ -215,7 +218,7 @@ export class CoderStore {
    *
    * Empty until a daemon describes itself, and empty *means* "no idea": an older daemon that sends an
    * empty list is not a daemon with no methods, so nothing is skipped and the calls speak for
-   * themselves. See `missingMethods` in `@envoycoder/protocol` for why this exists.
+   * themselves. See `missingMethods` in `@envoydev/protocol` for why this exists.
    */
   private advertised = new Set<string>();
 
@@ -314,7 +317,7 @@ export class CoderStore {
   private open(resolved: ResolvedEndpoint): void {
     const connection =
       this.options.connect?.(resolved) ??
-      new CoderConnection({ endpoint: resolved.endpoint, client: { name: "EnvoyCoder window" } });
+      new CoderConnection({ endpoint: resolved.endpoint, client: { name: "EnvoyDev window" } });
     this.connection = connection;
 
     this.disposers.push(
@@ -650,11 +653,11 @@ export class CoderStore {
        *
        * A task's `runId` is the daemon's own record, and a daemon that has restarted since knows nothing about it
        * (`docs/settings-parity.md` §7.35: the owner's task listed a run whose transcript the daemon answered with
-       * `envoycoder.run-missing`). The task is fine and its next message starts a new run, so the bar stays quiet
+       * `envoydev.run-missing`). The task is fine and its next message starts a new run, so the bar stays quiet
        * — and the record is marked **ended** rather than left absent, because absence is what made the window treat
        * a run it had never heard of as a run that was still going.
        */
-      if (coderErrorCode(error instanceof Error ? error.message : String(error)) === ENVOYCODER_ERRORS.runMissing) {
+      if (coderErrorCode(error instanceof Error ? error.message : String(error)) === ENVOYDEV_ERRORS.runMissing) {
         this.markRunEnded(runId);
         return;
       }
@@ -852,7 +855,7 @@ export class CoderStore {
 
   /**
    * **Look at this machine again** — the page's *Check again*, and the answer to *"I installed the bridge in
-   * my terminal; how does EnvoyCoder find out without a restart?"*
+   * my terminal; how does EnvoyDev find out without a restart?"*
    *
    * The daemon re-measures every row on the read, so the list itself is never stale *if* something asks it.
    * What cannot be right on its own is the two inputs the daemon captures once per process — the login shell's
@@ -1035,6 +1038,61 @@ export class CoderStore {
         return { ok: true as const, outcome: answer.outcome, detail: answer.detail };
       },
     );
+  }
+
+  /** Mint an `envoy://pair` URI for the phone. The URI carries the secret — never log it. */
+  async mintPairing(input: { deviceLabel?: string } = {}): Promise<
+    | { ok: true; uri: string; device: { id: string; deviceLabel: string; createdAt: string; expiresAt: string } }
+    | Refusal
+  > {
+    return this.mutate("coder.mintPairing", { ...(input.deviceLabel ? { deviceLabel: input.deviceLabel } : {}) }, (result) => {
+      const answer = result as {
+        uri: string;
+        device: { id: string; deviceLabel: string; createdAt: string; expiresAt: string };
+      };
+      return { ok: true as const, uri: answer.uri, device: answer.device };
+    });
+  }
+
+  async listPairedDevices(): Promise<
+    | {
+        ok: true;
+        devices: readonly {
+          id: string;
+          deviceLabel: string;
+          createdAt: string;
+          expiresAt: string;
+          revokedAt?: string;
+          lastSeenAt?: string;
+        }[];
+      }
+    | Refusal
+  > {
+    return this.mutate("coder.listPairedDevices", {}, (result) => {
+      const answer = result as {
+        devices: readonly {
+          id: string;
+          deviceLabel: string;
+          createdAt: string;
+          expiresAt: string;
+          revokedAt?: string;
+          lastSeenAt?: string;
+        }[];
+      };
+      return { ok: true as const, devices: answer.devices };
+    });
+  }
+
+  async revokePairedDevice(id: string): Promise<
+    | { ok: true; device: { id: string; deviceLabel: string; createdAt: string; expiresAt: string; revokedAt?: string } }
+    | Refusal
+  > {
+    return this.mutate("coder.revokePairedDevice", { id }, (result) => {
+      const answer = result as {
+        device: { id: string; deviceLabel: string; createdAt: string; expiresAt: string; revokedAt?: string };
+      };
+      return { ok: true as const, device: answer.device };
+    });
   }
 
   async updateSettings(patch: Partial<CoderSettings>): Promise<{ ok: true } | Refusal> {

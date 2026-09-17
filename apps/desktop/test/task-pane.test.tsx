@@ -18,10 +18,10 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { HarnessSummary, Project, RunEvent, Task } from "@envoycoder/protocol";
-import { withMessageRef } from "@envoycoder/protocol";
+import type { HarnessSummary, Project, RunEvent, Task } from "@envoydev/protocol";
+import { withMessageRef } from "@envoydev/protocol";
 
-import { canApplyModel, canApplyThinking, harnessModels, harnessThinking, HARNESS_CATALOG } from "@envoycoder/agent-catalog";
+import { canApplyModel, canApplyThinking, harnessModels, harnessThinking, HARNESS_CATALOG } from "@envoydev/agent-catalog";
 
 import { TaskPane } from "../src/components/TaskPane.js";
 
@@ -114,7 +114,7 @@ function harnessFor(
     // The auth fact, at the value a running daemon sends before anything has probed: `unknown`, which asserts
     // nothing. `...over` still comes last, so a test that wants it changed can say so.
     auth: { state: "unknown" as const },
-    evidence: "cited in `@envoycoder/agent-catalog`",
+    evidence: "cited in `@envoydev/agent-catalog`",
     ...over,
   };
 }
@@ -225,7 +225,7 @@ describe("an approval, inline", () => {
 
     const card = screen.getByRole("alertdialog", { name: "The agent needs your answer" });
     // In the transcript, next to the call that raised it — a modal would block the window and hide
-    // the context the user needs to decide (`docs/envoycoder-ui.md` §6).
+    // the context the user needs to decide (`docs/envoydev-ui.md` §6).
     expect(within(screen.getByTestId("transcript")).getByRole("alertdialog")).toBeTruthy();
     expect(within(card).getByText("Allow the agent to run “shell”?")).toBeTruthy();
     // The labels are the agent's, not ones we invented: two surfaces wording one decision
@@ -907,7 +907,7 @@ describe("the thinking control", () => {
       harnesses: [harnessFor("deepseek-harness", { thinking: LEVELS })],
       runLive: false,
     });
-    const note = screen.getByText(/thinking levels DeepSeek Harness offered when EnvoyCoder last opened a session/);
+    const note = screen.getByText(/thinking levels DeepSeek Harness offered when EnvoyDev last opened a session/);
     expect(note.textContent).toMatch(/2026/);
     // Not the refusal sentences: nothing here is being refused.
     expect(screen.queryByText(/does not offer a thinking level/)).toBeNull();
@@ -1057,7 +1057,7 @@ describe("the model control when the list came from a session", () => {
     // The agent's own provider id, decoded from its opaque value — `deepseek-official`, not `deepseek`,
     // which is the name a catalogue list would have got wrong.
     expect([...picker.options][1]?.value).toBe("deepseek-official/deepseek-v4-flash");
-    expect(screen.getByText(/models DeepSeek Harness listed when EnvoyCoder last opened a session/)).toBeTruthy();
+    expect(screen.getByText(/models DeepSeek Harness listed when EnvoyDev last opened a session/)).toBeTruthy();
     // The free-text instruction is gone, because there is no longer a field to type into.
     expect(screen.queryByText(/publishes its models only inside a running session/)).toBeNull();
   });
@@ -1166,7 +1166,7 @@ describe("asking the agent what it offers, before the first run", () => {
       outcome: "unreachable" as const,
       detail: daemonSaid(
         "task.composer.probe.failed",
-        "EnvoyCoder could not ask DeepSeek Harness what it offers: spawn ENOENT Nothing you see has changed.",
+        "EnvoyDev could not ask DeepSeek Harness what it offers: spawn ENOENT Nothing you see has changed.",
         { agent: "DeepSeek Harness", reason: "spawn ENOENT" },
       ),
     }));

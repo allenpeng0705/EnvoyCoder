@@ -1,6 +1,6 @@
 name: ci
 
-# Three operating systems, because EnvoyCoder claims all three and a claim is only as good as the
+# Three operating systems, because EnvoyDev claims all three and a claim is only as good as the
 # lane that checks it. The Windows and Linux legs are the point: this product spawns other people's
 # CLI programs, and the differences that break it (PATH resolution, `.cmd` shims, process-tree kill
 # semantics, file modes that do nothing) are exactly the ones a macOS-only CI would never see.
@@ -26,7 +26,7 @@ jobs:
           node-version: 22
 
       # The mesh core and the harness are **not** vendored here (docs/envoymesh-integration.md):
-      # EnvoyCoder links them from sibling checkouts, by design. CI has to place them the same way a
+      # EnvoyDev links them from sibling checkouts, by design. CI has to place them the same way a
       # developer does, or the lanes would test a layout nobody uses.
       - name: Clone the mesh sibling (EnvoyMesh)
         shell: bash
@@ -69,7 +69,7 @@ jobs:
       # A green suite does not prove a bundle builds. This is the family's rule and it has earned
       # its place: the web build once failed on an alias while every test passed.
       - name: Desktop UI bundle
-        run: npm run build -w @envoycoder/desktop
+        run: npm run build -w @envoydev/desktop
 
       - name: Smoke (real host, real pairing code, real ports)
         run: npm run smoke

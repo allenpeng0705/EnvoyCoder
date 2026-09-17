@@ -18,16 +18,15 @@
  *
  * ```bash
  * npm run daemon                            # port 4770
- * ENVOYCODER_DAEMON_PORT=0 npm run daemon   # let the OS choose
+ * ENVOYDEV_DAEMON_PORT=0 npm run daemon   # let the OS choose
  * ```
  *
  * ## The one deliberately unfinished thing
  *
- * **Remote callers cannot authenticate yet.** A loopback window is trusted, as the family treats its
- * own desktop UI, but a phone needs a token and there is no session store to resolve one against
- * (roadmap M4). The resolver answers `null` and the transport refuses, which is the fail-closed
- * behaviour the family's guide §8 asks for. It is printed at boot rather than papered over with a
- * token format of our own invention.
+ * **Remote callers authenticate with a paired-device token** (roadmap M4). Loopback windows stay
+ * trusted without a token; a phone presents the token from its pairing QR, and `coderSessionIdentity`
+ * resolves it against `<home>/EnvoyDev/paired-devices.json`. Unknown / expired / revoked tokens are
+ * refused. The daemon still prints the rule at boot so a log reader is not surprised.
  *
  * ## Language, and why this file has none
  *
@@ -36,7 +35,7 @@
  * because the shell routes this output to a log file. There is no user to ask (the language setting
  * lives in the store this process may be failing to open) and no client to render a key on. `boot.ts`
  * carries the same note for the same reasons. The user-facing half of every one of these situations
- * is in the window's own catalogue — "EnvoyCoder cannot reach its daemon", the connection chip, the
+ * is in the window's own catalogue — "EnvoyDev cannot reach its daemon", the connection chip, the
  * mesh status line — which is where the language setting can actually apply.
  *
  * The daemon's *refusals* are a different matter and are all translated: see `messages.ts`.
@@ -44,8 +43,8 @@
 
 import process from "node:process";
 
-import { DEFAULT_DAEMON_PORT, ENVOYCODER_DAEMON_PORT_ENV } from "@envoycoder/protocol";
-import { coderPaths, inspectCoderHome } from "@envoycoder/host-bridge";
+import { DEFAULT_DAEMON_PORT, ENVOYDEV_DAEMON_PORT_ENV } from "@envoydev/protocol";
+import { coderPaths, inspectCoderHome } from "@envoydev/host-bridge";
 
 import { alreadyRunningOutcome, decideBoot, serveFailureOutcome } from "./boot.js";
 import { readDaemonClaim } from "./lock.js";
@@ -64,7 +63,7 @@ import { startCoderDaemon } from "./serve.js";
  * documentation. `0` is the only value that disables it: an unset variable, an empty one, or anything else a
  * shell might hand a GUI-launched process all mean **on**, which is the safe direction for a *product* default.
  */
-const WARM_ENV = "ENVOYCODER_WARM_AGENTS";
+const WARM_ENV = "ENVOYDEV_WARM_AGENTS";
 
 /** Whether this process should look at what the ready agents publish. See `WARM_ENV`. */
 function warmAgents(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -76,7 +75,7 @@ const VERSION = "0.1.0";
 
 /** The configured port, or the product default. `0` is honoured: the OS then chooses one. */
 function readPort(env: NodeJS.ProcessEnv = process.env): number {
-  const raw = env[ENVOYCODER_DAEMON_PORT_ENV]?.trim();
+  const raw = env[ENVOYDEV_DAEMON_PORT_ENV]?.trim();
   if (!raw) return DEFAULT_DAEMON_PORT;
   const parsed = Number.parseInt(raw, 10);
   return Number.isInteger(parsed) && parsed >= 0 && parsed <= 65_535 ? parsed : DEFAULT_DAEMON_PORT;
@@ -91,7 +90,7 @@ const paths = coderPaths();
 const facts = await inspectCoderHome(paths.home);
 
 say([
-  `EnvoyCoder daemon — ${facts.headline}`,
+  `EnvoyDev daemon — ${facts.headline}`,
   `  home:     ${facts.home}`,
   `  profile:  ${facts.profileDir} (${facts.state})`,
   `  state:    ${paths.stateDir}`,
@@ -152,14 +151,18 @@ say([
   "  mesh:     " +
     (mesh.kind === "attached"
       ? `attached as ${mesh.scopeKey}`
-      : mesh.kind === "refused"
-        ? `refused (${mesh.code}) — ${mesh.reason}`
-        : `not attached — ${mesh.reason}`),
+      : mesh.kind === "hosting"
+        ? // We are the node: name the peer, and count what a phone would dial. The addresses are the
+          // honest reason this line exists — "hosting" alone does not say whether anyone can reach us.
+          `hosting as ${mesh.peerId} — ${mesh.multiaddrs.length} address(es), ${mesh.relayHints.length} relay hint(s)`
+        : mesh.kind === "refused"
+          ? `refused (${mesh.code}) — ${mesh.reason}`
+          : `not attached — ${mesh.reason}`),
   "",
   `  serving:  ws://127.0.0.1:${daemon.port}${daemon.path}`,
   `  claim:    ${paths.daemonFile}`,
   "  windows connect without a token (loopback is trusted, as in the rest of the family);",
-  "  remote clients are refused until EnvoyCoder has a session store (roadmap M4).",
+  "  remote clients present a pairing token (Settings → This machine → Pair a phone).",
   "  stop with Ctrl+C.",
 ]);
 

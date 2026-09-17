@@ -23,7 +23,7 @@ import type { JSX } from "react";
 
 import { useState } from "react";
 
-import type { CoderSettings, HarnessId } from "@envoycoder/protocol";
+import type { CoderSettings, HarnessId } from "@envoydev/protocol";
 
 import { offeredAgents } from "../../composer/agent-for.js";
 import { useI18n } from "../../i18n/context.js";

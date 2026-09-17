@@ -22,8 +22,8 @@
  */
 
 /** Injected by `vite.config.ts` (`define`) and by `vitest.config.ts` for the same reason. */
-declare const __ENVOYCODER_VERSION__: string | undefined;
+declare const __ENVOYDEV_VERSION__: string | undefined;
 
 /** The window's own build, or `undefined` when nothing inlined one. */
 export const APP_VERSION: string | undefined =
-  typeof __ENVOYCODER_VERSION__ === "string" ? __ENVOYCODER_VERSION__ : undefined;
+  typeof __ENVOYDEV_VERSION__ === "string" ? __ENVOYDEV_VERSION__ : undefined;

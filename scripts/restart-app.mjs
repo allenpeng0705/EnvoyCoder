@@ -1,5 +1,5 @@
 /**
- * Restart EnvoyCoder: stop whatever is running, then start it again.
+ * Restart EnvoyDev: stop whatever is running, then start it again.
  *
  * ## Why this exists
  *
@@ -11,7 +11,7 @@
  *      use" — which reads as the app failing to start.
  *   2. **A leftover daemon holds 4770.** The shell spawns one, finds the port taken, and exits — the
  *      window then has no host.
- *   3. **A claim file naming a dead pid.** `<home>/EnvoyCoder/daemon.json` is how the window finds its
+ *   3. **A claim file naming a dead pid.** `<home>/EnvoyDev/daemon.json` is how the window finds its
  *      daemon; a claim from a crashed run makes the shell think a host exists when none does.
  *   4. **A daemon whose claim the shell cannot see.** The shell (Rust) and the daemon (TypeScript) each
  *      resolve the shared home, and the day those two answers differ the daemon publishes its claim in
@@ -63,7 +63,7 @@ const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
  */
 const HOME_MARKERS = ["envoymesh.json", "profile", "profile.json"];
 const LEGACY_HOME_DIRNAME = ".envoymesh";
-const PRODUCT = "EnvoyCoder";
+const PRODUCT = "EnvoyDev";
 
 /** The conventional root for this OS, exactly as `node-core`'s `defaultHomeDir` computes it. */
 function defaultHome(home) {
@@ -168,7 +168,7 @@ function processState(pid) {
  * parent of the daemon it spawns, so a daemon killed while the window is still up is a zombie until the window
  * notices, and a script that read that as "still running" refused to start the app over a process holding
  * neither a port nor a claim. It is the same question `apps/desktop/src/daemon/lock.ts` asks in TypeScript, and
- * the two must agree for the reason the home resolution must (`docs/envoycoder-platforms.md` §5).
+ * the two must agree for the reason the home resolution must (`docs/envoydev-platforms.md` §5).
  */
 function isAlive(pid) {
   try {
@@ -252,7 +252,7 @@ function readClaim(file) {
 /* ── 1. the window and the shell it spawned ─────────────────────────────────────────────────────── */
 
 const home = resolvedHome();
-console.log("Stopping EnvoyCoder…");
+console.log("Stopping EnvoyDev…");
 console.log(
   `  home: ${home}` +
     (looksLikeHome(home) ? "" : ` (no install there yet — the app will create it)`),
@@ -260,7 +260,7 @@ console.log(
 
 if (isWindows) {
   // The shells we own, by image name; `taskkill /T` takes the daemon with the shell.
-  for (const image of ["envoycoder.exe"]) {
+  for (const image of ["envoydev.exe"]) {
     try {
       execFileSync("taskkill", ["/IM", image, "/T", "/F"], { stdio: "ignore" });
       console.log(`  stopped ${image}`);
@@ -269,11 +269,11 @@ if (isWindows) {
     }
   }
 } else {
-  // **By the executable, not by the command line.** Cargo starts the dev shell as `target/debug/envoycoder`
+  // **By the executable, not by the command line.** Cargo starts the dev shell as `target/debug/envoydev`
   // from its own working directory, so the absolute path this script knows appears nowhere in the process's
   // command line — and a pattern looking for it matched nothing, which is how a "restart" once left the window
   // running while the daemon underneath it was killed and became a zombie.
-  for (const binary of ["target/debug/envoycoder", "target/release/envoycoder"]) {
+  for (const binary of ["target/debug/envoydev", "target/release/envoydev"]) {
     for (const pid of pidsRunningExecutable(path.join(root, "apps/desktop/src-tauri", binary))) {
       await stopProcess(pid, "the window");
     }

@@ -38,7 +38,7 @@ const size = flag("size") ?? "1440,900";
 /** `--port N` — the Chrome debugging port. See `audit-ui.mjs` for why it is overridable. */
 const port = Number(flag("port") ?? 9222);
 
-const profile = mkdtempSync(join(tmpdir(), "envoycoder-shot-"));
+const profile = mkdtempSync(join(tmpdir(), "envoydev-shot-"));
 const chrome = spawn(
   CHROME,
   [

@@ -1,9 +1,9 @@
-# EnvoyCoder
+# EnvoyDev
 
 **The control plane for coding agents.** Run agents in parallel across your own machines — your
 desk, your workstation, your server — and reach them from a window or a phone.
 
-EnvoyCoder is a member of the **EnvoyMesh apps group**: it shares the mesh (identity, discovery,
+EnvoyDev is a member of the **EnvoyMesh apps group**: it shares the mesh (identity, discovery,
 relay) and the pairing experience with the rest of the family, and keeps its own state to itself.
 
 ---
@@ -15,7 +15,7 @@ relay) and the pairing experience with the rest of the family, and keeps its own
 | **A control plane, not another agent** | It drives agents — yours (`envoy-harness`), DeepSeek's (`dsh`), and the CLIs the world already uses (`claude`, `codex`, `copilot`, `opencode`, `cursor-agent`, `pi`). It does not try to be one. |
 | **Projects are places, tasks are units of work** | A project is a directory you work in; a task is one unit of work in it, with its own branch, agent and model. The left rail is that tree, because "which repo is this in?" is the question a control plane must answer without a click. |
 | **Local first, distributed when you want it** | Agents run on the machine where the code is. With the mesh attached, a task can run on another of your machines — the same relationship EnvoyMesh has with its peers. |
-| **Your credentials stay yours** | Model keys live with the agent that uses them. EnvoyCoder never proxies your provider credentials, and it never asks for an account. |
+| **Your credentials stay yours** | Model keys live with the agent that uses them. EnvoyDev never proxies your provider credentials, and it never asks for an account. |
 | **macOS, Windows and Linux** | All three are first-class: the platform layer is a package with the differences written down and tested, not `if (win32)` scattered through the code. |
 
 ## Quickstart
@@ -41,7 +41,7 @@ cd apps/mobile && flutter pub get && flutter test
 ```
 apps/desktop/        Tauri shell + the window UI (project rail, task pane, composer)
 apps/mobile/         Flutter app: pair with a desktop, check on running work
-packages/protocol/   EnvoyCoder's own wire contract (projects, tasks, run events, errors)
+packages/protocol/   EnvoyDev's own wire contract (projects, tasks, run events, errors)
 packages/platform/   everything that differs per OS: PATH, shells, quoting, process trees, ssh
 packages/task-model/       the project → task model and the sidebar's queries
 packages/agent-catalog/    which agents we drive, how, and what each one can actually do
@@ -54,9 +54,9 @@ docs/family/         copies of the EnvoyMesh documents that govern this product
 
 1. `docs/family/envoymesh-new-app-guide.md` — the family's standard for an app, and the checklist this
    repo's gates implement. **A copy**: read it here, fix it in EnvoyMesh, refresh with `docs:sync`.
-2. `docs/envoycoder-design.md` — what the product is and the decisions already taken.
-3. `docs/envoycoder-networking.md` — how it joins the EnvoyMesh family (and what it may not do).
-4. `docs/envoycoder-platforms.md` — the three operating systems and their traps.
+2. `docs/envoydev-design.md` — what the product is and the decisions already taken.
+3. `docs/envoydev-networking.md` — how it joins the EnvoyMesh family (and what it may not do).
+4. `docs/envoydev-platforms.md` — the three operating systems and their traps.
 5. `docs/envoymesh-integration.md` — how this repo relates to EnvoyMesh: what it links, what it
    must clone, and how contract changes travel upstream.
 6. `docs/upgrading.md` — how to move the linked EnvoyMesh packages and the harness forward, and how to
@@ -65,7 +65,7 @@ docs/family/         copies of the EnvoyMesh documents that govern this product
 ## Status
 
 **M1, M2 and M3 landed: the desktop app runs agents and answers them.** The daemon serves the project, task, settings
-and *run* methods over the family's WebSocket host and persists them to `<home>/EnvoyCoder/`; the
+and *run* methods over the family's WebSocket host and persists them to `<home>/EnvoyDev/`; the
 Tauri shell starts and supervises the daemon; the window renders the daemon's state and a live
 transcript rather than fixtures; and a task started in the window drives a real agent process over the
 Agent Client Protocol, with normalized events, an inline approval card, cancel, queue/steer and resume.

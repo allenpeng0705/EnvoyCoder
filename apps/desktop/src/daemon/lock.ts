@@ -34,9 +34,9 @@ import { readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import process from "node:process";
 
-import { ENVOYCODER_PRODUCT_NAME } from "@envoycoder/protocol";
+import { ENVOYDEV_PRODUCT_NAME } from "@envoydev/protocol";
 
-import type { CoderPaths } from "@envoycoder/host-bridge";
+import type { CoderPaths } from "@envoydev/host-bridge";
 
 /** The claim a running daemon leaves behind. Everything here is safe to show a user. */
 export interface DaemonDescriptor {
@@ -77,7 +77,7 @@ export function daemonDescriptorPath(paths: CoderPaths): string {
  *     daemon refuse to start ("already running") and the window report a daemon that never answers.
  *     The same rule is implemented in the shell (`main.rs`, `is_alive`) because the two answer the
  *     same question for the same claim, and a rule that is *nearly* the same on both sides is how
- *     this product lost an afternoon to two homes (`docs/envoycoder-platforms.md` §5).
+ *     this product lost an afternoon to two homes (`docs/envoydev-platforms.md` §5).
  */
 export function isProcessAlive(
   pid: number,
@@ -152,16 +152,16 @@ export async function readDaemonClaim(
     typeof descriptor.port !== "number" ||
     typeof descriptor.instanceId !== "string" ||
     descriptor.instanceId === "" ||
-    descriptor.product !== ENVOYCODER_PRODUCT_NAME
+    descriptor.product !== ENVOYDEV_PRODUCT_NAME
   ) {
     return {
       state: "unreadable",
-      reason: "it does not describe an EnvoyCoder daemon (product, pid, port and instanceId must all be present)",
+      reason: "it does not describe an EnvoyDev daemon (product, pid, port and instanceId must all be present)",
     };
   }
 
   const complete = {
-    product: ENVOYCODER_PRODUCT_NAME,
+    product: ENVOYDEV_PRODUCT_NAME,
     instanceId: descriptor.instanceId,
     pid: descriptor.pid,
     host: descriptor.host ?? "127.0.0.1",

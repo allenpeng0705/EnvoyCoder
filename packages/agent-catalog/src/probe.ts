@@ -37,8 +37,8 @@ import {
   type AvailabilityFix,
   type HarnessState,
   type ToolCache,
-} from "@envoycoder/protocol";
-import { type PlatformId, detectPlatform, findBinary, provisionalCacheOf } from "@envoycoder/platform";
+} from "@envoydev/protocol";
+import { type PlatformId, detectPlatform, findBinary, provisionalCacheOf } from "@envoydev/platform";
 
 // The same arrangement `index.ts` uses for its two filesystem questions: `require` rather than a static
 // import, so nothing here pulls `node:fs` into a client bundle that only reads the catalogue.
@@ -225,7 +225,7 @@ export function probeRecipe(recipe: ProbeRecipe, options: ProbeHarnessOptions = 
     if (options.moduleAvailable === undefined) {
       return {
         state: "unknown",
-        reason: `EnvoyCoder has not checked whether ${recipe.label}'s runtime (${recipe.module}) is present.`,
+        reason: `EnvoyDev has not checked whether ${recipe.label}'s runtime (${recipe.module}) is present.`,
       };
     }
     const isAvailable = options.moduleAvailable(recipe.module ?? "");
@@ -234,7 +234,7 @@ export function probeRecipe(recipe: ProbeRecipe, options: ProbeHarnessOptions = 
       ...(isAvailable
         ? {}
         : {
-            reason: `${recipe.label} is built into EnvoyCoder, but its runtime (${recipe.module}) is not present. Run \`npm run peers:check\` for the exact fix.`,
+            reason: `${recipe.label} is built into EnvoyDev, but its runtime (${recipe.module}) is not present. Run \`npm run peers:check\` for the exact fix.`,
             ...(fixFor("agent") ? { fix: fixFor("agent") } : {}),
           }),
     };
@@ -262,7 +262,7 @@ export function probeRecipe(recipe: ProbeRecipe, options: ProbeHarnessOptions = 
         binaryPath: resolved,
         via: "path",
         ...(provisional ? { provisional } : {}),
-        reason: `${recipe.label} is installed at ${resolved}, but it speaks a protocol EnvoyCoder cannot drive yet.`,
+        reason: `${recipe.label} is installed at ${resolved}, but it speaks a protocol EnvoyDev cannot drive yet.`,
       };
     }
     return {
@@ -284,7 +284,7 @@ export function probeRecipe(recipe: ProbeRecipe, options: ProbeHarnessOptions = 
         ...(fixFor("bridge") ? { fix: fixFor("bridge") } : {}),
         reason:
           `${recipe.label} is installed at ${resolved}, but the Agent Client Protocol adapter ` +
-          `EnvoyCoder drives it through (${recipe.binaries.join(", ")}) is not installed` +
+          `EnvoyDev drives it through (${recipe.binaries.join(", ")}) is not installed` +
           (recipe.install?.bridge ? `. ${recipe.install.bridge.hint}` : "."),
       };
     }
@@ -302,7 +302,7 @@ export function probeRecipe(recipe: ProbeRecipe, options: ProbeHarnessOptions = 
     return {
       state: "unknown",
       reason:
-        `EnvoyCoder could not tell whether ${recipe.label} is installed: it has no search path to ` +
+        `EnvoyDev could not tell whether ${recipe.label} is installed: it has no search path to ` +
         `look on (no PATH from this process, no answer from a login shell, and no tool directory it ` +
         `could find). Nothing on this row is a statement about the agent.`,
     };

@@ -26,8 +26,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useShortcuts, type ShortcutActions } from "../input/useShortcuts.js";
 import { wiredBindings } from "../input/shortcuts.js";
-import type { Project, Task } from "@envoycoder/protocol";
-import { taskTitleFromPrompt } from "@envoycoder/task-model";
+import type { Project, Task } from "@envoydev/protocol";
+import { taskTitleFromPrompt } from "@envoydev/task-model";
 
 import { startWindowDrag } from "../client/window-drag.js";
 import { useT } from "../i18n/context.js";
@@ -393,7 +393,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
           projectId: task.projectId,
         })),
         onAddProject: async (path) => {
-          // **A success says nothing.** The banner used to announce "Added EnvoyCoder." across the top of
+          // **A success says nothing.** The banner used to announce "Added EnvoyDev." across the top of
           // the window, which told the user what they had just watched themselves do and made the strip
           // a thing to dismiss rather than a thing to read. The project appearing in the rail *is* the
           // confirmation. Only a refusal speaks — and it speaks **in the palette**, which stays open with the

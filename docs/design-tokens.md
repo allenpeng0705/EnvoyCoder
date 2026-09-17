@@ -1,11 +1,11 @@
 # Design tokens, and where they come from
 
-EnvoyCoder **looks like Paseo** — the same surfaces, the same green, the same two-band status system,
+EnvoyDev **looks like Paseo** — the same surfaces, the same green, the same two-band status system,
 the same scales and the same words for the same things. It does not *use* Paseo.
 
 That distinction is worth writing down, because the two halves have different rules:
 
-| | Paseo | EnvoyCoder |
+| | Paseo | EnvoyDev |
 |---|---|---|
 | Desktop UI | React Native + `react-native-web` (Expo Router), styled with `react-native-unistyles` | React DOM + Vite inside a **Tauri** shell, plain CSS |
 | Mobile UI | the same Expo codebase | **Flutter**, its own codebase |

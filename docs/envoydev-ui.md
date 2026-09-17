@@ -28,7 +28,7 @@ window and a phone — agree without a handshake.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
-│ titlebar   ▤   EnvoyCoder                        [2 windows]  Command Center│
+│ titlebar   ▤   EnvoyDev                        [2 windows]  Command Center│
 ├───────────────────┬───────────────────────────────────────────────────────┤
 │ rail              │ pane                                                  │
 │  + Add project    │  title  [status] [agent] [model] [project] [branch]   │
@@ -223,7 +223,7 @@ wrong:
   (`packages/desktop/src/daemon/local-transport.ts:122-128`); §4 of the inheritance doc says why we
   do not.
 * **The rail's logic is still not in the components.** Grouping, ordering, counting, filtering and
-  the status wording live in `@envoycoder/task-model` — pure and tested — so "why is this row
+  the status wording live in `@envoydev/task-model` — pure and tested — so "why is this row
   above that one?" has exactly one answer regardless of where the rows came from.
 * **A window that cannot reach its daemon says so.** "No projects yet" and "I could not ask" are
   different sentences, and showing the first for the second is how a user concludes the app lost

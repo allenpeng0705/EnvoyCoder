@@ -88,7 +88,7 @@
 
 import type { JSX, ReactNode } from "react";
 
-import type { CoderSettings, Project, TaskDefaults } from "@envoycoder/protocol";
+import type { CoderSettings, Project, TaskDefaults } from "@envoydev/protocol";
 
 import type { AgentActions } from "../state/agent-actions.js";
 

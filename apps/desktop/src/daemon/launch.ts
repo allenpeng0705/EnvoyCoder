@@ -18,7 +18,7 @@
  * one of them refusing a missing program with a different code. So the resolution is a single function
  * over a **subject** — the launch facts plus two small callbacks — and the two exported entry points
  * (`launchForHarness`, `launchForProvider`) differ only in what they hand it. The first divergence would
- * be a fact about an agent that is false: "EnvoyCoder says my agent is not installed, but the same command
+ * be a fact about an agent that is false: "EnvoyDev says my agent is not installed, but the same command
  * works when I declare it as a provider."
  *
  * ## What it decides, and what it refuses
@@ -32,7 +32,7 @@
  *     we would spawn them and wait for a handshake that can never come — after the picker had already
  *     offered them as ready. A provider says which dialect it speaks, and a `"cli"` one is refused for
  *     exactly the same reason rather than for a new one.
- *   * **A home of its own**, per agent, so EnvoyCoder never writes into the state a user's own `dsh`
+ *   * **A home of its own**, per agent, so EnvoyDev never writes into the state a user's own `dsh`
  *     install owns.
  *   * **The same `PATH` the probe searched.** This is the newest decision here and it is a consequence of
  *     the resize: the daemon's inherited `PATH` is not the user's (`./search-path.ts`), so the probe asks a
@@ -51,11 +51,11 @@
 import { join } from "node:path";
 
 import {
-  ENVOYCODER_ERRORS,
+  ENVOYDEV_ERRORS,
   type AgentProviderConfig,
   type HarnessId,
   coderError,
-} from "@envoycoder/protocol";
+} from "@envoydev/protocol";
 import {
   harnessAcpFacts,
   harnessDefinition,
@@ -69,9 +69,9 @@ import {
   splitArgs,
   type ProbeFinding,
   type ProbeRecipe,
-} from "@envoycoder/agent-catalog";
-import { capabilitiesFor, currentSearchPath, detectPlatform, type PlatformId } from "@envoycoder/platform";
-import type { CoderPaths } from "@envoycoder/host-bridge";
+} from "@envoydev/agent-catalog";
+import { capabilitiesFor, currentSearchPath, detectPlatform, type PlatformId } from "@envoydev/platform";
+import type { CoderPaths } from "@envoydev/host-bridge";
 
 import type { AcpLaunch } from "./acp/client.js";
 import { ref } from "./messages.js";
@@ -198,7 +198,7 @@ export function launchForHarness(input: LaunchInput): AcpLaunch {
       // Both of these are **protocol** facts about the agent rather than ways to start it, and they travel
       // on this one channel because this is the only one the daemon and the catalogue share.
       acp: harnessAcpFacts(harness),
-      // A home of our own per agent, so EnvoyCoder never writes into the state a user's own `dsh` install
+      // A home of our own per agent, so EnvoyDev never writes into the state a user's own `dsh` install
       // owns — and so sessions the control plane starts are separable from the ones they started by hand.
       env: definition.id === "deepseek-harness" ? { DSH_HOME: join(input.paths.stateDir, "agents", "dsh") } : {},
       // The catalogue's own wording for this gap, and it is **unchanged** on purpose: `drivable.test.ts`
@@ -235,7 +235,7 @@ export function launchForProvider(input: ProviderLaunchInput): AcpLaunch {
        * so this is not a bug fix for a failure anybody has seen: it is the difference between *"the probe
        * verified this file"* and *"something on that list probably answers to this name"*, and it is what keeps
        * the two tiers from being two answers to one question. The first divergence would be a fact about an
-       * agent that is false — "EnvoyCoder says my agent is at one path and starts another" — and it is asserted
+       * agent that is false — "EnvoyDev says my agent is at one path and starts another" — and it is asserted
        * in `test/launch-search-path.test.ts` for exactly that reason.
        *
        * The user's own extra arguments for *this task* are still appended through the same splitter the
@@ -260,7 +260,7 @@ export function launchForProvider(input: ProviderLaunchInput): AcpLaunch {
        */
       provider,
       unsupportedAdvice:
-        `EnvoyCoder drives agents over ACP, and this provider is declared as a command-line program — ` +
+        `EnvoyDev drives agents over ACP, and this provider is declared as a command-line program — ` +
         `if it does speak ACP, declare its dialect as ACP and try again.`,
       unsupported: { key: "error.providerUnsupported", values: { provider: provider.label } },
     },
@@ -353,15 +353,15 @@ function resolveLaunch(subject: LaunchSubject, location: LaunchLocation): AcpLau
    * For an entry whose `transport` is not ACP, "install it" is wrong advice — installing a program we have no
    * adapter for lands the user on the same refusal with more software on their disk. Checking the protocol
    * before the installation makes that refusal the one they get whether or not they have installed it, which
-   * is what `ENVOYCODER_ERRORS.harnessUnsupported`'s own doc says it is for. (Before the availability field this
+   * is what `ENVOYDEV_ERRORS.harnessUnsupported`'s own doc says it is for. (Before the availability field this
    * happened by accident: the old boolean was `true` for an installed non-ACP agent, so this branch was
    * reached. Widening the state to `unsupported` would have moved those agents into "missing" — telling a user
    * with `copilot` installed that it is not installed, which is the bug report this whole change answers.)
    */
   if (!(subject.recipe.kind === "child-process" && subject.recipe.transport === "acp")) {
     throw coderError(
-      ENVOYCODER_ERRORS.harnessUnsupported,
-      `${subject.label} speaks a protocol EnvoyCoder cannot drive yet (this adapter drives ACP agents only). ` +
+      ENVOYDEV_ERRORS.harnessUnsupported,
+      `${subject.label} speaks a protocol EnvoyDev cannot drive yet (this adapter drives ACP agents only). ` +
         subject.unsupportedAdvice,
       ref(subject.unsupported.key, subject.unsupported.values),
     );
@@ -378,7 +378,7 @@ function resolveLaunch(subject: LaunchSubject, location: LaunchLocation): AcpLau
     // agent's install steps.
     const unknown = probe.state === "unknown";
     throw coderError(
-      unknown ? ENVOYCODER_ERRORS.harnessUnknown : ENVOYCODER_ERRORS.harnessMissing,
+      unknown ? ENVOYDEV_ERRORS.harnessUnknown : ENVOYDEV_ERRORS.harnessMissing,
       probe.reason ?? `${subject.label} is not available on this machine.`,
       unknown
         ? ref("error.harnessUnknown", { harness: subject.label })
@@ -432,7 +432,7 @@ function resolveLaunch(subject: LaunchSubject, location: LaunchLocation): AcpLau
  * get wrong. The user's export always wins, so a recipe's default never overrides the one thing they can
  * control.
  *
- * An **empty** value counts as unset, and the rule is `isSet` from `@envoycoder/agent-catalog` rather
+ * An **empty** value counts as unset, and the rule is `isSet` from `@envoydev/agent-catalog` rather
  * than a second copy of it here: `FOO=` exports nothing, and passing it on is how an agent authenticates
  * with an empty string while every row says a credential is present.
  */
@@ -452,14 +452,14 @@ function providerEnv(
   // and what keeps an English user's text unchanged by the presence of a translation.
   const one = missing.length === 1;
   const sentence = one
-    ? `${label} needs the environment variable ${missing[0]} to be set for EnvoyCoder's daemon, and it is ` +
-      `not set, so the run was not started. EnvoyCoder stores the names of the variables an agent needs, ` +
-      `never their values — set it where the daemon is started, then restart EnvoyCoder.`
-    : `${label} needs these environment variables to be set for EnvoyCoder's daemon, and they are not set: ` +
-      `${missing.join(", ")}. The run was not started. EnvoyCoder stores the names of the variables an ` +
-      `agent needs, never their values — set them where the daemon is started, then restart EnvoyCoder.`;
+    ? `${label} needs the environment variable ${missing[0]} to be set for EnvoyDev's daemon, and it is ` +
+      `not set, so the run was not started. EnvoyDev stores the names of the variables an agent needs, ` +
+      `never their values — set it where the daemon is started, then restart EnvoyDev.`
+    : `${label} needs these environment variables to be set for EnvoyDev's daemon, and they are not set: ` +
+      `${missing.join(", ")}. The run was not started. EnvoyDev stores the names of the variables an ` +
+      `agent needs, never their values — set them where the daemon is started, then restart EnvoyDev.`;
   throw coderError(
-    ENVOYCODER_ERRORS.providerEnvUnset,
+    ENVOYDEV_ERRORS.providerEnvUnset,
     sentence,
     one
       ? ref("error.providerEnvUnset.one", { provider: label, name: missing[0] ?? "" })

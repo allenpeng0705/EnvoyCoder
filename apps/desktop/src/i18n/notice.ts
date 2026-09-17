@@ -11,7 +11,7 @@
  *     whose window is German and whose refusal is English is exactly the failure this module exists
  *     to prevent: the daemon cannot know which language the window is in (two windows may differ),
  *     but it *can* say which catalogue key its sentence corresponds to — `messageKey` /
- *     `messageValues` on the wire (`@envoycoder/protocol`'s `CoderRpcError`).
+ *     `messageValues` on the wire (`@envoydev/protocol`'s `CoderRpcError`).
  *
  * So daemon prose is carried as a `Notice`: the English sentence *and* the key. The sentence is what
  * a user sees when the key is not one this build knows (**never** the raw key), and the key is what
@@ -25,9 +25,9 @@
  * each sentence, so the two ends cannot drift into saying different things in English.
  */
 
-import type { TaskStatus } from "@envoycoder/protocol";
+import type { TaskStatus } from "@envoydev/protocol";
 
-import { parseCoderError, type CoderMessageRef } from "@envoycoder/protocol";
+import { parseCoderError, type CoderMessageRef } from "@envoydev/protocol";
 
 import { en, isMessageKey, type MessageKey } from "./messages/en.js";
 import type { Translator } from "./translate.js";
@@ -66,7 +66,7 @@ export function messageRef(key: MessageKey, values?: Record<string, string | num
 /**
  * A notice for a string that came over the wire — a refusal, a note, a connection reason.
  *
- * The code prefix is stripped (`envoycoder.path-missing: …` never reaches a user), and the key is
+ * The code prefix is stripped (`envoydev.path-missing: …` never reaches a user), and the key is
  * kept only when this build actually has it.
  */
 export function noticeOf(text: string | undefined): Notice | undefined {
@@ -158,7 +158,7 @@ export function localizeText(t: Translator["t"], text: string | undefined): stri
 /**
  * The catalogue key for a task status.
  *
- * The wording lives in the catalogue rather than in `@envoycoder/task-model`'s `statusLabel` because
+ * The wording lives in the catalogue rather than in `@envoydev/task-model`'s `statusLabel` because
  * it is *language*: the rail, the pane and the phone all show the same bucket, and each renders it
  * in its own user's language. `statusLabel` stays the English source (`"Needs your answer"`), which
  * is what the English catalogue entry repeats word for word — asserted by a test, so the two cannot

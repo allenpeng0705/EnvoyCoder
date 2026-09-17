@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { RunEvent } from "@envoycoder/protocol";
+import type { RunEvent } from "@envoydev/protocol";
 
 import { buildTranscript } from "../src/state/transcript.js";
 

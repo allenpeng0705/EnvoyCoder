@@ -3,7 +3,7 @@
  *
  * ## Why this is separate from the dispatcher
  *
- * `createCoderDispatcher` (`@envoycoder/host-bridge`) decides **what may be called** — an unknown
+ * `createCoderDispatcher` (`@envoydev/host-bridge`) decides **what may be called** — an unknown
  * method is refused, a known-but-unimplemented one is refused by name, and the dispatcher never
  * mints credentials. This module decides **what happens**, and nothing else: no sockets, no
  * transport, no identity. That split is what lets every behaviour here be tested by calling a
@@ -12,14 +12,14 @@
  *
  * ## Failures carry codes
  *
- * Every refusal here is a `coderError(...)`, whose message begins with an `envoycoder.*` token, so
+ * Every refusal here is a `coderError(...)`, whose message begins with an `envoydev.*` token, so
  * a client can branch on it after the family's transport has flattened `error.code` to `"ERROR"`.
  * `rpc.ts` explains why that is necessary rather than lazy. The rule for choosing one: **the code
  * says what happened, the message says what to do about it** — a code that needs prose to be
  * actionable is a code that was chosen wrong.
  */
 
-import { currentSearchPath, normalizeUserPath } from "@envoycoder/platform";
+import { currentSearchPath, normalizeUserPath } from "@envoydev/platform";
 import { stat } from "node:fs/promises";
 
 import {
@@ -32,13 +32,13 @@ import {
   type RpcMethod,
   type RunEvent,
   type CoderMeshStatus,
-  ENVOYCODER_ERRORS,
-  ENVOYCODER_PRODUCT_NAME,
+  ENVOYDEV_ERRORS,
+  ENVOYDEV_PRODUCT_NAME,
   RPC_METHODS,
   coderError,
   isHarnessId,
   parseRpcParams,
-} from "@envoycoder/protocol";
+} from "@envoydev/protocol";
 import {
   ALL_HARNESSES,
   harnessAvailability,
@@ -56,9 +56,9 @@ import {
   fetchableCovers,
   fetchablePackage,
   fetchedRecipe,
-} from "@envoycoder/agent-catalog";
+} from "@envoydev/agent-catalog";
 
-import type { CoderPaths } from "@envoycoder/host-bridge";
+import type { CoderPaths } from "@envoydev/host-bridge";
 
 import { keyed, ref } from "./messages.js";
 import { createCatalogHandlers } from "./catalog.js";
@@ -174,8 +174,27 @@ export interface CoderServiceDeps {
   signIn?: SessionSignIn;
 }
 
-/** One handler: parameters already parsed, result not yet validated. */
-export type CoderHandler = (params: unknown) => Promise<unknown>;
+/**
+ * Who is calling, as much as a handler is allowed to know.
+ *
+ * **`session === undefined` means the owner's own window.** The transport refuses a tokenless caller
+ * that is not on this machine (`ws-server.ts`, the auth gate), so a request that reaches a handler
+ * without a session came from loopback — the desktop's own pane. A session present means a **paired
+ * device**, which is a different thing with fewer rights.
+ *
+ * This exists because a module claimed a restriction the code did not enforce: `pairing.ts` said
+ * "loopback-only for mint/revoke/list: a paired phone must not mint further phones", while the
+ * dispatcher called `handler(params)` and never handed the session over — so a phone holding a valid
+ * token could mint itself another one, indefinitely, past the revocation of the first. A guard that
+ * cannot see the caller is not a guard, and the sentence above it was worse than nothing.
+ */
+export interface CoderCallContext {
+  /** `undefined` for the owner's own window; the resolved session for a paired device. */
+  session: unknown;
+}
+
+/** One handler: parameters already parsed, result not yet validated, and who asked. */
+export type CoderHandler = (params: unknown, context: CoderCallContext) => Promise<unknown>;
 
 /**
  * Build the handler table.
@@ -190,7 +209,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
   /**
    * The daemon's own probe: the catalogue's, over **the resolved search path** rather than the inherited one.
    *
-   * `currentSearchPath()` is synchronous and never spawns a shell (see `@envoycoder/platform`): the login
+   * `currentSearchPath()` is synchronous and never spawns a shell (see `@envoydev/platform`): the login
    * shell's answer, when it arrives, is already cached by `primeSearchPath()` at boot. Passing the list here
    * is what makes a GUI-launched daemon able to see `~/.local/bin` at all, and `launchForHarness` passes the
    * same list to the child so the two cannot disagree. `searchable` travels with it, because a list that
@@ -209,7 +228,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
    * The same list, the same folder of facts, for an agent the user declared.
    *
    * Note what is *not* different: `probeProvider` is the same prober `probeHarness` wraps, over the same
-   * resolved search path — see `@envoycoder/agent-catalog`'s `probe.ts` for why there is one body rather
+   * resolved search path — see `@envoydev/agent-catalog`'s `probe.ts` for why there is one body rather
    * than two, and `launch.ts` for why one *spawn* body is the other half of the same claim.
    */
   const providerHandlers = createProviderHandlers({
@@ -270,7 +289,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
       parseRpcParams("coder.hello", params);
       const notes = deps.store.notes();
       return {
-        product: ENVOYCODER_PRODUCT_NAME,
+        product: ENVOYDEV_PRODUCT_NAME,
         version: deps.instance.version,
         instanceId: deps.instance.instanceId,
         home: deps.paths.home,
@@ -305,8 +324,8 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
       // project row pointing at a directory that does not exist is a row whose every task fails.
       if (!(await isDirectory(path))) {
         throw coderError(
-          ENVOYCODER_ERRORS.pathMissing,
-          `${path} is not a directory on this machine. Pick a folder that exists — EnvoyCoder runs agents in it, so the path has to be real.`,
+          ENVOYDEV_ERRORS.pathMissing,
+          `${path} is not a directory on this machine. Pick a folder that exists — EnvoyDev runs agents in it, so the path has to be real.`,
           ref("error.addProject.notDirectory", { path }),
         );
       }
@@ -359,7 +378,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
       const cwd = input.cwd ?? project.path;
       if (!(await isDirectory(cwd))) {
         throw coderError(
-          ENVOYCODER_ERRORS.pathMissing,
+          ENVOYDEV_ERRORS.pathMissing,
           `${cwd} is not a directory on this machine, so there is nowhere to run the agent. It was the working directory for "${input.title}".`,
           ref("error.createTask.notDirectory", { path: cwd, title: input.title }),
         );
@@ -393,7 +412,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         cwd = normalizeUserPath(input.cwd, deps.paths.home);
         if (!(await isDirectory(cwd))) {
           throw coderError(
-            ENVOYCODER_ERRORS.pathMissing,
+            ENVOYDEV_ERRORS.pathMissing,
             `${cwd} is not a directory on this machine, so the agent would have nowhere to run. The task's folder is unchanged.`,
             ref("error.updateTask.notDirectory", { path: cwd }),
           );
@@ -665,7 +684,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         const pkg = fetchablePackage(harness);
         if (pkg === undefined) {
           throw coderError(
-            ENVOYCODER_ERRORS.connectorNotFetchable,
+            ENVOYDEV_ERRORS.connectorNotFetchable,
             `${harnessDefinition(harness).label} has no connector published on npm, so it cannot be fetched.`,
             ref("error.connectorNotFetchable", { harness: harnessDefinition(harness).label }),
           );
@@ -812,7 +831,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
 function requireRuns(deps: CoderServiceDeps): RunManager {
   if (!deps.runs) {
     throw coderError(
-      ENVOYCODER_ERRORS.harnessFailed,
+      ENVOYDEV_ERRORS.harnessFailed,
       "This daemon was started without an agent runtime, so it cannot run tasks.",
       ref("error.noRunRuntime"),
     );
@@ -831,7 +850,7 @@ function requireRuns(deps: CoderServiceDeps): RunManager {
 function requireProbeSession(deps: CoderServiceDeps): SessionProbe {
   if (!deps.probeSession) {
     throw coderError(
-      ENVOYCODER_ERRORS.harnessFailed,
+      ENVOYDEV_ERRORS.harnessFailed,
       "This daemon was started without an agent runtime, so it cannot run tasks.",
       ref("error.noRunRuntime"),
     );
@@ -855,7 +874,7 @@ function snapshot(runs: RunManager, runId: string, sinceSeq: number): {
   const run = runs.get(runId);
   if (!run) {
     throw coderError(
-      ENVOYCODER_ERRORS.runMissing,
+      ENVOYDEV_ERRORS.runMissing,
       `There is no run called "${runId}". It may have been started by a daemon that has since restarted.`,
       ref("error.runNotFound", { runId }),
     );
@@ -883,7 +902,7 @@ function notFound(kind: "project" | "task", id: string): Error {
   // The code follows the noun too, for the same reason the key does: a caller that has just been told
   // its project is gone and one that has been told its task is gone do different things next.
   return coderError(
-    kind === "project" ? ENVOYCODER_ERRORS.projectMissing : ENVOYCODER_ERRORS.taskMissing,
+    kind === "project" ? ENVOYDEV_ERRORS.projectMissing : ENVOYDEV_ERRORS.taskMissing,
     sentence,
     kind === "project"
       ? ref("error.projectNotFound", { id })
@@ -921,12 +940,12 @@ export function describeStoreNotes(notes: {
       entry.movedTo
         ? keyed(
             "note.quarantined.moved",
-            `EnvoyCoder could not read ${name}, so it moved it aside to ${entry.movedTo} and started that list empty. (${entry.reason})`,
+            `EnvoyDev could not read ${name}, so it moved it aside to ${entry.movedTo} and started that list empty. (${entry.reason})`,
             { name, movedTo: entry.movedTo, reason: entry.reason },
           )
         : keyed(
             "note.quarantined.left",
-            `EnvoyCoder could not read ${name} and could not move it aside, so it left it untouched and started that list empty. (${entry.reason})`,
+            `EnvoyDev could not read ${name} and could not move it aside, so it left it untouched and started that list empty. (${entry.reason})`,
             { name, reason: entry.reason },
           ),
     );
@@ -936,7 +955,7 @@ export function describeStoreNotes(notes: {
      * **One sentence per key, and the difference between the two is a deletion rather than a typo.**
      *
      * A key this build used to have is worth a word of its own: "we removed this" is a fact about
-     * EnvoyCoder, and it tells a user the value is not coming back and there is nothing to re-add. A key
+     * EnvoyDev, and it tells a user the value is not coming back and there is nothing to re-add. A key
      * no build of ours ever shipped — a typo, a hand-edit, another program's file — is not ours to
      * explain, and the sentence says only what happened.
      *
@@ -952,8 +971,8 @@ export function describeStoreNotes(notes: {
         keyed(
           dropped.retired ? "note.settings.retired" : "note.settings.unknown",
           dropped.retired
-            ? `${entry.file} had ${dropped.path}, which this build no longer has. EnvoyCoder dropped it and kept every other setting.`
-            : `${entry.file} had ${dropped.path}, which this build does not recognise. EnvoyCoder dropped it and kept every other setting.`,
+            ? `${entry.file} had ${dropped.path}, which this build no longer has. EnvoyDev dropped it and kept every other setting.`
+            : `${entry.file} had ${dropped.path}, which this build does not recognise. EnvoyDev dropped it and kept every other setting.`,
           { file: entry.file, key: dropped.path },
         ),
       );

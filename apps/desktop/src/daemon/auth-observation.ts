@@ -21,7 +21,7 @@
  * that is already signed in cannot produce.
  */
 
-import type { AgentAuthObservation, HarnessAuthState, HarnessId } from "@envoycoder/protocol";
+import type { AgentAuthObservation, HarnessAuthState, HarnessId } from "@envoydev/protocol";
 
 /**
  * The sign-in method to name for an agent that wants one — **or nothing, when naming one would be a guess.**

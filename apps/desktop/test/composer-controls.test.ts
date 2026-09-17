@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { ALL_HARNESSES, HARNESS_CATALOG, canApplyModel } from "@envoycoder/agent-catalog";
+import { ALL_HARNESSES, HARNESS_CATALOG, canApplyModel } from "@envoydev/agent-catalog";
 
 import {
   composerControls,
@@ -566,7 +566,7 @@ describe("the controls follow the agent's capabilities", () => {
       }),
       idle,
     );
-    expect(bridged.notes.join(" ")).toMatch(/is installed, but the program EnvoyCoder drives it through is missing/);
+    expect(bridged.notes.join(" ")).toMatch(/is installed, but the program EnvoyDev drives it through is missing/);
     expect(bridged.notes.join(" ")).toContain("npm install -g @agentclientprotocol/claude-agent-acp");
     expect(bridged.notes.join(" ")).not.toMatch(/is not installed on this machine/);
   });
@@ -580,7 +580,7 @@ describe("the controls follow the agent's capabilities", () => {
       agent({ availability: { state: "unsupported", binary: "/usr/bin/copilot" } }),
       idle,
     );
-    expect(undrivable.notes.join(" ")).toMatch(/speaks a protocol EnvoyCoder cannot drive yet/);
+    expect(undrivable.notes.join(" ")).toMatch(/speaks a protocol EnvoyDev cannot drive yet/);
     expect(undrivable.notes.join(" ")).not.toMatch(/is not installed/);
   });
 });
@@ -589,7 +589,7 @@ describe("the controls follow the agent's capabilities", () => {
  * The wording of a mode, and the keys that carry it across a language boundary.
  *
  * A mode's `label` and `description` are prose. When *we* wrote them — the three `envoy-harness` modes
- * are its `ModeKind`, labelled in `@envoycoder/agent-catalog` — a German window must not read English,
+ * are its `ModeKind`, labelled in `@envoydev/agent-catalog` — a German window must not read English,
  * so the catalogue entry carries `labelKey`/`descriptionKey` and this module resolves them. A mode a
  * third-party agent named itself arrives with neither, and is shown exactly as the agent wrote it:
  * the same rule the approval prompt's option labels follow, because rewording another product's

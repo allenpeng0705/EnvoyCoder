@@ -1,6 +1,6 @@
 # Agents: the catalogue, and how each one is driven
 
-**Code:** `packages/agent-catalog` · **Contract:** `@envoycoder/protocol` (`HarnessId`) ·
+**Code:** `packages/agent-catalog` · **Contract:** `@envoydev/protocol` (`HarnessId`) ·
 **Status:** two native harnesses, six external CLIs, each with its evidence recorded.
 
 ---
@@ -48,7 +48,7 @@ catalogue.
   rather than a surface, which the family guide §4.2 forbids. The CLI flag is the public route to the
   same server, so **one ACP client drives both native harnesses** and a third-party agent that speaks
   ACP needs no new code at all.
-* **Where it comes from:** a **peer** of the family, not a package EnvoyMesh distributes. EnvoyCoder
+* **Where it comes from:** a **peer** of the family, not a package EnvoyMesh distributes. EnvoyDev
   clones or copies it itself (EnvoyMesh design **D4**; guide §7.5). `npm run peers:check` says so in
   the error message when it is missing.
 * **Why it exists:** a control plane needs at least one agent whose every event it understands. The
@@ -83,7 +83,7 @@ Read the source before wiring this one, because three facts change the integrati
 | Permission mode | `DSH_PERMISSION_MODE`; `danger-full-access` sets policy to `never`. We do **not** set it by default: the whole point of driving ACP is that escalations reach the user |
 | Teardown | stdin EOF → SIGTERM → SIGKILL |
 
-**Platform differences (see `docs/envoycoder-platforms.md` §4):** `bash` on macOS/Linux, `pwsh` on
+**Platform differences (see `docs/envoydev-platforms.md` §4):** `bash` on macOS/Linux, `pwsh` on
 Windows; sandbox enforcement is `partial` on Windows (ACL restricted token) and *fails closed* when
 no runner is usable; `chmod 0600` on credentials is skipped on Windows; SIGTERM is not distinct from
 force-kill there.
@@ -109,7 +109,7 @@ and `pi` do not.
 
 ## 6. Adding an agent
 
-1. Add the id to `HARNESS_IDS` in `@envoycoder/protocol` (it is the wire type).
+1. Add the id to `HARNESS_IDS` in `@envoydev/protocol` (it is the wire type).
 2. Add the entry to `HARNESS_CATALOG`, with `evidence` naming where the argv came from.
 3. If it speaks ACP, prefer that over a bespoke adapter — and set `approvals: true` only because the
    protocol provides `session/request_permission`, not because the agent is "probably fine".

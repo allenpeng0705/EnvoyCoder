@@ -30,17 +30,20 @@ import process from "node:process";
 
 import {
   type CoderMeshStatus,
+  CODER_EVENTS,
   DEFAULT_DAEMON_PATH,
   DEFAULT_DAEMON_PORT,
-  ENVOYCODER_PRODUCT_NAME,
-} from "@envoycoder/protocol";
+  ENVOYDEV_PRODUCT_NAME,
+} from "@envoydev/protocol";
 import {
+  type CoderMeshPeer,
   type CoderPaths,
   coderPaths,
   coderSessionIdentity,
   createCoderDaemonHost,
   createCoderDispatcher,
-} from "@envoycoder/host-bridge";
+  createCoderMeshPeer,
+} from "@envoydev/host-bridge";
 import {
   currentSearchPath,
   primeSearchPath,
@@ -48,7 +51,7 @@ import {
   reaskShellBinaries,
   refreshSearchPath,
   type SearchPath,
-} from "@envoycoder/platform";
+} from "@envoydev/platform";
 import {
   ALL_HARNESSES,
   acpAgent,
@@ -57,7 +60,7 @@ import {
   probeHarness,
   probeableBinaryNames,
   type HarnessProbe,
-} from "@envoycoder/agent-catalog";
+} from "@envoydev/agent-catalog";
 
 import type { AcpLaunch } from "./acp/client.js";
 import { AcpClient } from "./acp/client.js";
@@ -70,6 +73,9 @@ import { SessionSignIn } from "./sign-in.js";
 import { createCoderHandlers } from "./service.js";
 import { CoderStore } from "./store.js";
 import { AgentDeliveries } from "./deliveries.js";
+import { createPairingHandlers } from "./pairing.js";
+import { PairedDeviceStore, pairedDevicesFile, readPairingIdentity } from "./paired-devices.js";
+import type { CoderDaemonHost } from "@envoydev/host-bridge";
 
 export interface StartCoderDaemonOptions {
   /** `0` lets the OS choose, which is what tests use. */
@@ -108,12 +114,12 @@ export interface StartCoderDaemonOptions {
    */
   warm?: boolean;
   resolveLaunch?: (input: {
-    harness: import("@envoycoder/protocol").HarnessId;
+    harness: import("@envoydev/protocol").HarnessId;
     cwd: string;
     extraArgs?: string;
     model?: string;
   }) => AcpLaunch;
-  platform?: import("@envoycoder/platform").PlatformId;
+  platform?: import("@envoydev/platform").PlatformId;
 }
 
 export interface StartedCoderDaemon {
@@ -169,21 +175,28 @@ export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): P
   await deliveries.load();
   const bus = createCoderEventBus();
 
-  // Resolved once, at boot, and reported as a state rather than retried in a loop: the mesh is
-  // optional and its answer changes what the status line says, not whether the daemon serves. The
-  // attach is injected by tests, which have no node to attach to and should not wait for one.
-  const mesh: CoderMeshStatus = options.mesh
+  // The mesh used to be an **attach**: we looked for somebody else's EnvoyMesh node and reported what
+  // it said. Under the chosen topology there is no such node — this daemon *is* the peer, and it
+  // reuses the family's network layer to be one (`createCoderMeshPeer`). An attach probe would now
+  // answer `no-node` while our own peer is up and dialable, which is the one answer that is certainly
+  // wrong, so the probe is gone rather than kept as a fallback.
+  //
+  // The binding is mutable because the peer cannot be built here: it needs the same dispatcher the
+  // host gets, and that dispatcher is built from the handlers below, which read this. Reading it
+  // lazily is what breaks that cycle without standing up a placeholder peer — and until `start()`
+  // answers, the honest status is "not started yet", never "hosting".
+  let mesh: CoderMeshStatus = options.mesh
     ? options.mesh()
-    : options.skipMeshAttach
-      ? {
-          kind: "no-node",
-          reason: "Mesh attach was skipped for this daemon (it was started without one).",
-        }
-      : ((await meshAttach(paths.home)) as CoderMeshStatus);
+    : {
+        kind: "no-node",
+        reason: options.skipMeshAttach
+          ? "The mesh was skipped for this daemon (it was started without one)."
+          : "The mesh peer has not started yet.",
+      };
 
   // Every run event goes onto the bus, and each subscribed connection receives it. That is the only
   // path by which a transcript reaches a window: the daemon never sends a client a frame it did not
-  // ask for (`CODER_EVENTS` in `@envoycoder/protocol` explains why subscription works this way).
+  // ask for (`CODER_EVENTS` in `@envoydev/protocol` explains why subscription works this way).
   const runs = new RunManager({
     // The same lookup the list and the launch use: one answer to "how is this agent delivered".
     deliveryOf: (harness) => deliveries.of(harness),
@@ -242,7 +255,7 @@ export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): P
    * at construction so that the login shell's answers — which land a moment after the daemon starts
    * listening — are included, which is the whole reason `primeSearchPath()` exists.
    */
-  const harnessProbe = (harness: import("@envoycoder/protocol").HarnessId): HarnessProbe => {
+  const harnessProbe = (harness: import("@envoydev/protocol").HarnessId): HarnessProbe => {
     const search = currentSearchPath();
     return probeHarness(harness, {
       pathDirs: search.dirs,
@@ -294,7 +307,19 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
   return age >= 0 && age < WARM_STALE_MS;
 }
 
-  const handlers = createCoderHandlers({
+  // The store answers *who* a token belongs to, so it is given the machine's owner identity — read,
+  // never created, because authenticating a token is not the place to mint an identity.
+  const pairedDevices = new PairedDeviceStore(pairedDevicesFile(paths), {
+    ownerId: async () => (await readPairingIdentity(paths))?.ownerId ?? null,
+  });
+  let hostRef: CoderDaemonHost | null = null;
+  // Declared here and assigned only after the socket answers. The pairing handlers read it at **mint**
+  // time, so a `const` further down the function would sit in the temporal dead zone for any mint that
+  // arrived first — and the failure would be a thrown ReferenceError in the one flow a new user runs.
+  let meshPeer: CoderMeshPeer | null = null;
+
+  const handlers = {
+    ...createCoderHandlers({
     store,
     paths,
     runs,
@@ -311,29 +336,85 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
     deliveries: { of: (harness) => deliveries.of(harness), set: (harness, next) => deliveries.set(harness, next) },
     onHarnessesChanged: () => bus.emit("coder:state-changed", { kind: "harnesses", at: new Date().toISOString() }),
     ...(options.isDirectory ? { isDirectory: options.isDirectory } : {}),
+  }),
+    ...createPairingHandlers({
+      store: pairedDevices,
+      paths,
+      getHost: () => {
+        if (!hostRef) {
+          throw new Error("pairing called before the daemon host was ready");
+        }
+        return hostRef;
+      },
+      // Read at **mint** time rather than at boot: a code minted after the relay reservation lands
+      // carries the circuit address, and one minted a second earlier would otherwise be permanently
+      // poorer than a later code for no reason the user could see.
+      mesh: () => ({
+        ...(meshPeer?.peerId ? { peerId: meshPeer.peerId } : {}),
+        multiaddrs: meshPeer?.multiaddrs ?? [],
+        relayHints: meshPeer?.relayHints ?? [],
+      }),
+    }),
+  };
+
+  // Built once and shared: the mesh peer authenticates through the same session resolver and
+  // dispatches through **the same** dispatcher the WebSocket host uses. A second dispatcher for the
+  // mesh would be two authorization surfaces that could drift, and the drift would stay invisible
+  // until somebody tried the one method that differed.
+  const sessionIdentity = coderSessionIdentity({
+    resolveSession: (token) => pairedDevices.resolveSession(token),
   });
+  const dispatch = createCoderDispatcher({ handlers });
 
   const host = createCoderDaemonHost({
     port: options.port ?? DEFAULT_DAEMON_PORT,
     path: options.path ?? DEFAULT_DAEMON_PATH,
-    sessionIdentity: coderSessionIdentity(),
-    dispatch: createCoderDispatcher({ handlers }),
+    sessionIdentity,
+    dispatch,
     nodeService: createNodeService(bus),
     // Subscription is per connection, through the one port `createReuseHost` actually forwards.
     // `eventDispositions` is *not* that port — it is dropped silently, and the daemon would look
-    // perfectly healthy while never delivering an event. `@envoycoder/protocol`'s `CODER_EVENTS`
+    // perfectly healthy while never delivering an event. `@envoydev/protocol`'s `CODER_EVENTS`
     // documents the gap with its citation; `createCoderSocketMethods` explains the handling rules.
     socketMethods: createCoderSocketMethods(bus),
     onConnectionChange: (count) => {
       connections = Math.max(1, count);
     },
   });
+  hostRef = host;
 
   await host.serve();
 
+  // The peer starts **after** the socket answers, for the same reason the claim is written only then:
+  // a daemon that has not accepted its first window must not be sitting in a network handshake. A peer
+  // that fails to start is a state to report (`refused`, with its code) — never a failure to serve.
+  //
+  // Built only when neither seam was used, so the tests that inject a status still never construct a
+  // node. That is the same guard the old probe had, now around a real peer.
+  meshPeer =
+    options.mesh || options.skipMeshAttach
+      ? null
+      : createCoderMeshPeer({
+          paths,
+          sessionIdentity,
+          dispatch,
+          // Every mesh connection hears the events a window hears, from the same bus and the same event
+          // list. The transport subscribes each connection for us, so this *is* the mesh broadcast path
+          // — and a second path that could disagree with the socket one is the bug this prevents.
+          subscribe: (send) => {
+            const offs = CODER_EVENTS.map((event) => bus.on(event, (data) => send(event, data)));
+            return () => {
+              for (const off of offs) off();
+            };
+          },
+        });
+  if (meshPeer) {
+    mesh = await meshPeer.start();
+  }
+
   // Only now is the port answering, so only now is the claim worth anything.
   await writeDaemonClaim(paths, {
-    product: ENVOYCODER_PRODUCT_NAME,
+    product: ENVOYDEV_PRODUCT_NAME,
     instanceId,
     pid: process.pid,
     host: "127.0.0.1",
@@ -357,7 +438,7 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
    *
    * `currentSearchPath()` — what `coder.listHarnesses` and every spawn use — answers synchronously from what
    * has already landed: the daemon's own environment plus the well-known tool directories
-   * (`@envoycoder/platform`). This call is what *upgrades* that answer with the login shell's, which is the
+   * (`@envoydev/platform`). This call is what *upgrades* that answer with the login shell's, which is the
    * only source that includes what the user's rc files add.
    *
    * Three things about the shape, and each is deliberate:
@@ -375,7 +456,7 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
    */
   const searchPathPrimed = primeSearchPath().then((resolved) => {
     process.stderr.write(
-      `[envoycoder] agent search path from ${resolved.source}: ${resolved.dirs.length} director` +
+      `[envoydev] agent search path from ${resolved.source}: ${resolved.dirs.length} director` +
         `${resolved.dirs.length === 1 ? "y" : "ies"}` +
         `${resolved.added.length > 0 ? `, ${resolved.added.length} added from the well-known list` : ""}` +
         `${resolved.cached.length > 0 ? `, ${resolved.cached.length} from a tool cache` : ""}\n`,
@@ -404,7 +485,7 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
   ).then((answers) => {
     if (answers.size > 0) {
       process.stderr.write(
-        `[envoycoder] the login shell resolved ${answers.size} program` +
+        `[envoydev] the login shell resolved ${answers.size} program` +
           `${answers.size === 1 ? "" : "s"} by name — a lookup, which can differ from its own PATH answer\n`,
       );
       bus.emit("coder:state-changed", { kind: "harnesses", at: new Date().toISOString() });
@@ -483,27 +564,18 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
       // waiting on a pipe nobody will ever answer.
       await Promise.all([runs.stopAll(), probeSession.stopAll(), signIn.stopAll()]);
       host.stop();
+      // The peer's stop never rejects, so it is awaited unconditionally: a shutdown that could throw
+      // here would skip the claim removal below and leave the next window talking to nobody.
+      await meshPeer?.stop();
       await clearDaemonClaim(paths, instanceId);
     },
   };
 }
 
-/**
- * Ask the mesh, without letting its answer decide whether we serve.
- *
- * Kept here rather than in `service.ts` because it is a boot-time fact: the mesh is attached once,
- * and what it said is what the status line reports until the process restarts. A per-call attach
- * would be a network round trip per `coder.meshStatus`, on the one surface that must answer
- * instantly.
+/*
+ * The `meshAttach` probe that used to live here is gone, and its absence is the point: it asked a
+ * *different* process — a running EnvoyMesh node — to vouch for us, and reported `no-node` when there
+ * was none. EnvoyDev no longer has a node to attach to; it is one (`createCoderMeshPeer`). Keeping the
+ * probe as a fallback would have let a healthy daemon report itself unreachable, which is worse than
+ * reporting nothing.
  */
-async function meshAttach(home: string): Promise<CoderMeshStatus> {
-  const { attachToMeshNode } = await import("@envoycoder/host-bridge");
-  const attach = await attachToMeshNode(home);
-  if (attach.kind === "attached") {
-    return { kind: "attached", scopeKey: attach.scopeKey, ownerId: attach.ownerId };
-  }
-  if (attach.kind === "refused") {
-    return { kind: "refused", code: attach.code, reason: attach.reason };
-  }
-  return { kind: "no-node", reason: attach.reason };
-}

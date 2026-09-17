@@ -39,8 +39,9 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { CoderSettings, HarnessAvailability, HarnessState, HarnessSummary, Project } from "@envoycoder/protocol";
+import type { CoderSettings, HarnessAvailability, HarnessState, HarnessSummary, Project } from "@envoydev/protocol";
 
+import { stubAgentActions } from "./fixtures/agent-actions.js";
 import { SettingsPane } from "../src/components/SettingsPane.js";
 import { I18nProvider } from "../src/i18n/context.js";
 import { en } from "../src/i18n/messages/en.js";
@@ -156,11 +157,10 @@ function stateWith(over: Partial<CoderState> = {}): CoderState {
   };
 }
 
-const noAgentActions = {
-  addProvider: vi.fn(),
-  removeProvider: vi.fn(),
-  signInAgent: vi.fn(),
-} as unknown as AgentActions;
+// The shared, **typed** stub: it answers a refusal to every action, so a page that reaches one renders
+// a state instead of calling `undefined`. A local object cast to the interface is what let this list
+// fall behind the interface once already.
+const noAgentActions: AgentActions = stubAgentActions();
 
 /** Render one page of the pane, in English, and hand back nothing — every assertion reads the screen. */
 function show(scope: ReturnType<typeof appScope>, over: Partial<CoderState> = {}): void {

@@ -7,10 +7,9 @@
 /// makes the rail read as a separate plane).
 library;
 
+import 'package:envoydev_mobile/theme/tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import '../lib/theme/tokens.dart';
 
 void main() {
   test('the accent is the product green, in both schemes', () {

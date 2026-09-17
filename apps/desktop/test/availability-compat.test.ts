@@ -4,7 +4,7 @@
  * ## Why this needs its own file rather than a line in a component
  *
  * `HarnessSummary.available: boolean | "unknown"` became `HarnessSummary.availability`, and a daemon built
- * before that change is not hypothetical: both halves of EnvoyCoder ship together but a *running* daemon is
+ * before that change is not hypothetical: both halves of EnvoyDev ship together but a *running* daemon is
  * whichever build owns the port, and this repository already learned this the hard way — a required field's
  * absence once threw inside the settings page and took the whole window down with it (the crash
  * `settings-nav.test.tsx` now guards).
@@ -19,7 +19,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { HarnessSummary } from "@envoycoder/protocol";
+import type { HarnessSummary } from "@envoydev/protocol";
 
 import { availabilityOf, canRun, stateOf } from "../src/composer/agent-for.js";
 

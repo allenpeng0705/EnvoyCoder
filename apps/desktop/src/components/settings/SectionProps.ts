@@ -11,7 +11,7 @@
  * about.
  */
 
-import type { CoderSettings } from "@envoycoder/protocol";
+import type { CoderSettings } from "@envoydev/protocol";
 
 import type { WriteFailure } from "../../i18n/notice.js";
 import type { AgentActions } from "../../state/agent-actions.js";

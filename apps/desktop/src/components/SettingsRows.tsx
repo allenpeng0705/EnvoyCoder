@@ -4,7 +4,7 @@
  *
  * ## Why a row is a component and not four `<p>`s per setting
  *
- * The pane's rule is one sentence in `docs/envoycoder-ui.md`: a control is never a dead switch, and a
+ * The pane's rule is one sentence in `docs/envoydev-ui.md`: a control is never a dead switch, and a
  * control that cannot be honoured says **why** on screen. That makes three parts mandatory on every
  * row — what it is, what it does, and (when relevant) the reason it is off — and a row that forgot the
  * third would be indistinguishable from a row that has nothing to say. One component is what makes the

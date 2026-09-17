@@ -1,10 +1,10 @@
 /**
- * The daemon's own state: projects, tasks and settings, on disk under `<home>/EnvoyCoder/`.
+ * The daemon's own state: projects, tasks and settings, on disk under `<home>/EnvoyDev/`.
  *
  * ## Why JSON files and not a database
  *
  * Five small collections that a human may need to read, fix or back up — and the reference product
- * reached the same conclusion for the same data (`docs/envoycoder-paseo-inheritance.md` §2 cites its
+ * reached the same conclusion for the same data (`docs/envoydev-paseo-inheritance.md` §2 cites its
  * `projects/projects.json`; Paseo's daemon state is JSON under one home directory, with no database
  * anywhere in it). A database here would buy transactions we do not need and cost the property we
  * do: a user can `cat` what this app remembers about their repositories.
@@ -44,9 +44,9 @@ import {
   type Task,
   TaskSchema,
   readCoderSettingsDocument,
-} from "@envoycoder/protocol";
-import type { CoderPaths } from "@envoycoder/host-bridge";
-import { projectIdFor, resolveTaskDefaults, taskIdFor } from "@envoycoder/task-model";
+} from "@envoydev/protocol";
+import type { CoderPaths } from "@envoydev/host-bridge";
+import { projectIdFor, resolveTaskDefaults, taskIdFor } from "@envoydev/task-model";
 
 import { StateFiles, type FileNotes } from "./state-file.js";
 
@@ -361,7 +361,7 @@ export class CoderStore {
    * on every launch. Deliberately **not** copied here, because the situations are not the same shape. A
    * skipped row is a row this build cannot represent, and keeping it in the file means keeping something
    * that will never load. An unknown *settings* key is far more often a key from a **newer** build —
-   * the user ran a newer EnvoyCoder, then an older one — and rewriting the file would delete that
+   * the user ran a newer EnvoyDev, then an older one — and rewriting the file would delete that
    * setting permanently, from a version that does read it. So the bytes are left exactly as they are,
    * the note is repeated until the user's next settings write (which necessarily drops the key, because
    * what is written is the parsed object), and nothing is destroyed behind their back.

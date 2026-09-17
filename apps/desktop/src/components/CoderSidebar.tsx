@@ -27,7 +27,7 @@
  *
  * ## What this component does *not* do
  *
- * No filtering logic, no sorting, no counting: all of that is `@envoycoder/task-model`, which
+ * No filtering logic, no sorting, no counting: all of that is `@envoydev/task-model`, which
  * is pure and unit-tested. This file is a renderer, so "why is this row above that one?" has one
  * answer in one place.
  */
@@ -43,14 +43,14 @@ import {
   type Project,
   type Task,
   statusNeedsHuman,
-} from "@envoycoder/protocol";
+} from "@envoydev/protocol";
 import {
   type ProjectGroup,
   type SearchFilters,
   attentionSummary,
   filterRows,
   groupByProject,
-} from "@envoycoder/task-model";
+} from "@envoydev/task-model";
 
 import { useT } from "../i18n/context.js";
 import { localize, statusKey, type Notice } from "../i18n/notice.js";

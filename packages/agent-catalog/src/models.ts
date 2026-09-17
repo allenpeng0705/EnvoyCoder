@@ -43,7 +43,7 @@
  *     the two versions it was verified in.
  */
 
-import type { AgentModel, AgentModels, HarnessId } from "@envoycoder/protocol";
+import type { AgentModel, AgentModels, HarnessId } from "@envoydev/protocol";
 
 /** Re-exported so a caller reads the model facts and the model types from one place. */
 export type { AgentModel, AgentModels };
@@ -73,7 +73,7 @@ const PROVIDER_LABELS: Readonly<Record<string, string>> = {
  * **Copied, not imported**, and that is a decision worth stating. The peer publishes this table
  * "public so callers can show them in help text"
  * (`../envoy-harness/packages/envoy-harness/src/llm/index.ts:110-120`), which is exactly what we do
- * with it — but this package links only `@envoycoder/protocol` and `@envoycoder/platform`
+ * with it — but this package links only `@envoydev/protocol` and `@envoydev/platform`
  * (`packages/agent-catalog/package.json`), and adding a `file:` dependency on the peer checkout would
  * make the whole catalogue unloadable on a machine that has not cloned it. The family's rule is that
  * the harness is a peer a product clones, not a package it vendors; the catalogue's job is to *record*

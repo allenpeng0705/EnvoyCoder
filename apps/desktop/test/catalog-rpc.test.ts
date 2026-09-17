@@ -20,8 +20,8 @@
  *     asking would be the *"Not checked yet"* screen coming back.
  *   * the same test counts **child processes** — `spawn`, `execFile`, `exec`, `fork` — across the whole read
  *     and requires **zero**. That is the mandate's *"assert that loading the page spawns no process — a test,
- *     not an intention"*, at the layer where a spawn would actually happen: `@envoycoder/agent-catalog`'s
- *     prober reaches `@envoycoder/platform`, which is where a program is looked for, and a probe that ever
+ *     not an intention"*, at the layer where a spawn would actually happen: `@envoydev/agent-catalog`'s
+ *     prober reaches `@envoydev/platform`, which is where a program is looked for, and a probe that ever
  *     shells out to ask the user's login shell would show up here as a count of one.
  *
  * ## Why the handlers and not a socket
@@ -73,9 +73,9 @@ for (const name of ["spawn", "spawnSync", "exec", "execSync", "execFile", "execF
 }
 
 
-import type { AcpAgentEntry, ProbeFinding } from "@envoycoder/agent-catalog";
-import { acpAgent, cataloguedProviderInput, cataloguedRecipe, probeRecipe } from "@envoycoder/agent-catalog";
-import { HarnessAvailabilitySchema } from "@envoycoder/protocol";
+import type { AcpAgentEntry, ProbeFinding } from "@envoydev/agent-catalog";
+import { acpAgent, cataloguedProviderInput, cataloguedRecipe, probeRecipe } from "@envoydev/agent-catalog";
+import { HarnessAvailabilitySchema } from "@envoydev/protocol";
 
 import { createCatalogHandlers } from "../src/daemon/catalog.js";
 import type { CoderHandler } from "../src/daemon/service.js";
@@ -131,7 +131,7 @@ type Row = {
 };
 
 async function rowsOf(handlers: Record<string, CoderHandler>): Promise<Row[]> {
-  const { entries } = (await handlers["coder.listCatalog"]?.({})) as { entries: Row[] };
+  const { entries } = (await handlers["coder.listCatalog"]?.({}, { session: undefined })) as { entries: Row[] };
   return entries;
 }
 
@@ -141,7 +141,7 @@ describe("the catalogue, as a list", () => {
     // field from `rowOf` — or replacing the prober with a constant — makes `probed` shorter than the row
     // count and takes the verdict off every row, which is the *"Not checked yet"* screen the owner reported.
     const { handlers, probed } = handlersWith();
-    const answer = (await handlers["coder.listCatalog"]?.({})) as { entries: Row[] };
+    const answer = (await handlers["coder.listCatalog"]?.({}, { session: undefined })) as { entries: Row[] };
 
     expect(answer.entries).toHaveLength(38);
     // Every row was asked about. A list of 38 verdicts that measured fewer than 38 rows is a list with rows
@@ -157,7 +157,7 @@ describe("the catalogue, as a list", () => {
     // mean 38 shells.
     processes.count = 0;
     const handlers = handlersOverFind((name) => (name === "npx" ? "/usr/bin/npx" : null));
-    const result = (await handlers["coder.listCatalog"]?.({})) as { entries: Row[] };
+    const result = (await handlers["coder.listCatalog"]?.({}, { session: undefined })) as { entries: Row[] };
     // Asserted only after the read resolved, so a throw cannot leave a zero that reads as a pass.
     expect(result.entries).toHaveLength(38);
     expect(processes.count).toBe(0);
@@ -269,11 +269,11 @@ describe("the catalogue, as a list", () => {
 
   it("answers for a daemon that sends no parameters at all — it takes none", async () => {
     const { handlers } = handlersWith();
-    await expect(handlers["coder.listCatalog"]?.(undefined)).resolves.toBeTruthy();
+    await expect(handlers["coder.listCatalog"]?.(undefined, { session: undefined })).resolves.toBeTruthy();
   });
 
   it("refuses parameters the schema does not describe", async () => {
     const { handlers } = handlersWith();
-    await expect(handlers["coder.listCatalog"]?.({ depth: 3 })).rejects.toThrow();
+    await expect(handlers["coder.listCatalog"]?.({ depth: 3 }, { session: undefined })).rejects.toThrow();
   });
 });

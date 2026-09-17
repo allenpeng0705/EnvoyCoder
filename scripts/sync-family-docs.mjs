@@ -78,6 +78,6 @@ for (const doc of FAMILY_DOCS) {
 console.log(`\nfamily documents ${dryRun ? "that would be refreshed" : "refreshed"} (${FAMILY_DOCS.length}):\n`);
 for (const line of lines) console.log(`  ${line}`);
 console.log(
-  "\nThe source is authoritative: if EnvoyCoder needs a different wording, the change belongs in\n" +
+  "\nThe source is authoritative: if EnvoyDev needs a different wording, the change belongs in\n" +
     "EnvoyMesh and comes back here as a refresh (family guide §7.4).\n",
 );

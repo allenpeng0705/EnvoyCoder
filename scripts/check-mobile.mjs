@@ -29,8 +29,8 @@ if (missing.length > 0) {
 
 const pubspec = readFileSync(path.join(mobile, "pubspec.yaml"), "utf8");
 const name = /^name:\s*(\S+)/m.exec(pubspec)?.[1];
-if (name !== "envoycoder_mobile") {
-  console.error(`pubspec.yaml names the app "${name}", expected "envoycoder_mobile".`);
+if (name !== "envoydev_mobile") {
+  console.error(`pubspec.yaml names the app "${name}", expected "envoydev_mobile".`);
   process.exit(1);
 }
 

@@ -1,5 +1,5 @@
 {
-  "name": "@envoycoder/desktop",
+  "name": "@envoydev/desktop",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -15,23 +15,25 @@
     "daemon:build": "node scripts/build-daemon.mjs"
   },
   "dependencies": {
-    "@envoycoder/agent-catalog": "0.1.0",
-    "@envoycoder/host-bridge": "0.1.0",
-    "@envoycoder/platform": "0.1.0",
-    "@envoycoder/protocol": "0.1.0",
-    "@envoycoder/task-model": "0.1.0",
+    "@envoydev/agent-catalog": "0.1.0",
+    "@envoydev/host-bridge": "0.1.0",
+    "@envoydev/platform": "0.1.0",
+    "@envoydev/protocol": "0.1.0",
+    "@envoydev/task-model": "0.1.0",
+    "qrcode": "^1.5.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.1.0",
+    "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.1.0",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "esbuild": "^0.28.2",
     "jsdom": "^25.0.1",
-    "vite": "^6.0.7",
-    "@testing-library/dom": "^10.4.0",
-    "esbuild": "^0.28.2"
+    "vite": "^6.0.7"
   }
 }

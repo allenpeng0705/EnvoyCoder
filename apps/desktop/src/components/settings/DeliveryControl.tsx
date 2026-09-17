@@ -22,7 +22,7 @@
 import { useCallback, useState } from "react";
 import type { JSX } from "react";
 
-import type { AgentDelivery, HarnessId } from "@envoycoder/protocol";
+import type { AgentDelivery, HarnessId } from "@envoydev/protocol";
 
 import { useI18n } from "../../i18n/context.js";
 import { localize, type Refusal } from "../../i18n/notice.js";

@@ -35,8 +35,8 @@ import {
   CoderSettingsSchema,
   RETIRED_SETTINGS_KEYS,
   readCoderSettingsDocument,
-} from "@envoycoder/protocol";
-import type { HarnessAvailability, HarnessState, HarnessSummary } from "@envoycoder/protocol";
+} from "@envoydev/protocol";
+import type { HarnessAvailability, HarnessState, HarnessSummary } from "@envoydev/protocol";
 
 import { availabilityOf, knownMissing, offeredAgents, stateOf } from "../src/composer/agent-for.js";
 

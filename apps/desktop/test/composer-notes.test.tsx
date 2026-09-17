@@ -176,13 +176,13 @@ describe("the composer's notes", () => {
       running: true,
       // A message with no key, which is what a daemon from an older build sends: `localize` falls back to the
       // sentence rather than to the key.
-      probeNote: { message: "EnvoyCoder has not been told what Envoy Harness offers yet." },
+      probeNote: { message: "EnvoyDev has not been told what Envoy Harness offers yet." },
       probeAction: { key: "task.composer.probe.ask", enabled: true },
       onProbeAgent: vi.fn(),
     });
     const lines = notes();
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain("EnvoyCoder has not been told what Envoy Harness offers yet.");
+    expect(lines[0]).toContain("EnvoyDev has not been told what Envoy Harness offers yet.");
     expect(screen.getByRole("button", { name: en["task.composer.probe.ask"].replace("{agent}", "Envoy Harness") })).toBeTruthy();
   });
 

@@ -1,5 +1,5 @@
 {
-  "name": "@envoycoder/agent-catalog",
+  "name": "@envoydev/agent-catalog",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
     }
   },
   "dependencies": {
-    "@envoycoder/platform": "0.1.0",
-    "@envoycoder/protocol": "0.1.0"
+    "@envoydev/platform": "0.1.0",
+    "@envoydev/protocol": "0.1.0"
   }
 }

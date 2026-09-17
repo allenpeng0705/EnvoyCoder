@@ -22,9 +22,9 @@
 
 import { z } from "zod";
 
-import { HARNESS_IDS, type HarnessId } from "@envoycoder/protocol";
+import { HARNESS_IDS, type HarnessId } from "@envoydev/protocol";
 
-import type { CoderPaths } from "@envoycoder/host-bridge";
+import type { CoderPaths } from "@envoydev/host-bridge";
 
 import type { StateFiles } from "./state-file.js";
 

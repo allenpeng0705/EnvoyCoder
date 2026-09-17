@@ -28,7 +28,7 @@
 import { useCallback, useState } from "react";
 import type { JSX } from "react";
 
-import type { FixRunResult } from "@envoycoder/protocol";
+import type { FixRunResult } from "@envoydev/protocol";
 
 import { useI18n } from "../../i18n/context.js";
 import { localize, type Refusal } from "../../i18n/notice.js";

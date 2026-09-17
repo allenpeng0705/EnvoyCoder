@@ -1,5 +1,5 @@
 {
-  "name": "@envoycoder/host-bridge",
+  "name": "@envoydev/host-bridge",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,12 +12,15 @@
     }
   },
   "dependencies": {
-    "@envoycoder/platform": "0.1.0",
-    "@envoycoder/protocol": "0.1.0",
+    "@envoydev/platform": "0.1.0",
+    "@envoydev/protocol": "0.1.0",
+    "@libp2p/crypto": "5.1.18",
+    "@libp2p/interface": "3.2.2",
     "@envoymesh/protocol": "file:../../../EnvoyMesh/packages/protocol",
     "@envoymesh/identity": "file:../../../EnvoyMesh/packages/identity",
     "@envoymesh/vault": "file:../../../EnvoyMesh/packages/vault",
     "@envoymesh/api": "file:../../../EnvoyMesh/packages/api",
+    "@envoymesh/network": "file:../../../EnvoyMesh/packages/network",
     "@envoymesh/node-core": "file:../../../EnvoyMesh/packages/node-core",
     "@envoymesh/harness": "file:../../../EnvoyMesh/packages/harness",
     "@envoymesh/host-connect": "file:../../../EnvoyMesh/packages/host-connect",

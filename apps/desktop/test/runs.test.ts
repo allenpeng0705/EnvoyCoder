@@ -21,9 +21,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { HarnessId, RunEvent } from "@envoycoder/protocol";
-import { coderErrorCode, coderErrorMessage, coderErrorRef } from "@envoycoder/protocol";
-import { coderPaths } from "@envoycoder/host-bridge";
+import type { HarnessId, RunEvent } from "@envoydev/protocol";
+import { coderErrorCode, coderErrorMessage, coderErrorRef } from "@envoydev/protocol";
+import { coderPaths } from "@envoydev/host-bridge";
 
 import { en, isMessageKey } from "../src/i18n/messages/en.js";
 import type { AcpLaunch } from "../src/daemon/acp/client.js";
@@ -65,7 +65,7 @@ afterEach(async () => {
 async function bench(
   options: { harness?: HarnessId; agentEnv?: Record<string, string> } = {},
 ): Promise<Bench> {
-  const home = await mkdtemp(join(tmpdir(), "envoycoder-m2-"));
+  const home = await mkdtemp(join(tmpdir(), "envoydev-m2-"));
   const paths = coderPaths(home);
   const store = await CoderStore.open({ paths });
   const project = await store.addProject({ path: join(home, "repo") });
@@ -226,7 +226,7 @@ describe("approvals", () => {
     expect(requested.question).toContain("shell");
 
     // The run is blocked: a human decision, not progress. This is the whole reason
-    // `needs-attention` is not folded into `running` (`docs/envoycoder-ui.md` §4).
+    // `needs-attention` is not folded into `running` (`docs/envoydev-ui.md` §4).
     expect(b.store.findTask(b.taskId)?.status).toBe("needs-attention");
     expect(b.manager.isLive(kinds(b.events, "run.started")[0]?.runId ?? "")).toBe(true);
 
@@ -239,7 +239,7 @@ describe("approvals", () => {
 
     await b.until((events) => kinds(events, "run.ended").length === 1, "the run to continue and end");
     // It continued rather than being denied — the failure mode the harness doc warns about for an
-    // agent whose surface cannot answer (`docs/envoycoder-harness.md` §1).
+    // agent whose surface cannot answer (`docs/envoydev-harness.md` §1).
     expect(
       kinds(b.events, "run.output").some(
         (event) => event.kind === "run.output" && event.text.includes("permission: allow-once"),
@@ -939,7 +939,7 @@ describe("the record of what agents published, on disk", () => {
   const AT = "2026-09-14T05:23:00.000Z";
 
   it("is readable by the next process, which is the only reason it is written down", async () => {
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-observed-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-observed-"));
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     const paths = coderPaths(home);
 
@@ -974,7 +974,7 @@ describe("the record of what agents published, on disk", () => {
   });
 
   it("replaces an agent's record rather than merging it, so a dropped level stops being offered", async () => {
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-observed-replace-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-observed-replace-"));
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     const store = await CoderStore.open({ paths: coderPaths(home) });
 
@@ -1009,7 +1009,7 @@ describe("the record of what agents published, on disk", () => {
     // The store's own rule, applied to this file: what it holds is *evidence* about other products, so
     // silently overwriting a corrupt one would leave a user with a text field where a picker used to be
     // and no explanation. The bytes are kept, beside the original, under a name a backup tool includes.
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-observed-corrupt-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-observed-corrupt-"));
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     const paths = coderPaths(home);
     await CoderStore.open({ paths });

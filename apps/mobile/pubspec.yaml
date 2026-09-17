@@ -1,20 +1,22 @@
-name: envoycoder_mobile
-description: EnvoyCoder mobile — check on coding agents running on your machines.
+name: envoydev_mobile
+description: EnvoyDev mobile — check on coding agents running on your machines.
 publish_to: "none"
 version: 0.1.0+1
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
 
-# Dependencies are kept to the Flutter SDK plus one WebSocket-free HTTP stack on purpose: the app
-# talks to a daemon the user already trusts (host:port, over the mesh, or through an SSH tunnel),
-# so it needs no SDK of ours and no plugin that would slow every checkout down. Camera/pairing
-# scanning and secure storage are the two additions the roadmap calls for; both are declared there
-# rather than pulled in before they are used.
+# Dependencies stay deliberate: the phone talks to a daemon the user already trusts (LAN, mesh, or
+# an SSH hop), so it needs no product SDK. Camera, secure storage, prefs, and SSH are the four
+# additions M4 needs; nothing else rides along.
 dependencies:
   flutter:
     sdk: flutter
   http: ^1.2.2
+  flutter_secure_storage: ^9.2.2
+  shared_preferences: ^2.3.3
+  mobile_scanner: ^6.0.2
+  dartssh2: ^2.22.0
   # The family's pairing contract, in Dart — the twin of `@envoymesh/protocol`.
   #
   # This is the guide's §5.2 rule made structural: the parser and the refusal sentence live in one
@@ -27,6 +29,41 @@ dependencies:
   # of repos that sit next to each other, and neither vendoring nor publishing is part of the plan.
   envoy_thin_client:
     path: ../../../EnvoyMesh/packages/envoy-thin-client-dart
+  # Level-2 libp2p adapters: the shared `Libp2pNode` host, which is the **dialer** the direct peer
+  # rung needs. `envoy_thin_client`'s candidate walk can order a P2P rung, but ordering is not
+  # dialling — without this package the rung would be inert, and an inert rung that a screen names is
+  # a capability claim the code does not provide. It rides on `dart_libp2p`, so it is the only
+  # heavyweight dependency the phone takes for a route it actually uses.
+  envoy_mesh_libp2p:
+    path: ../../../EnvoyMesh/packages/envoy-mesh-libp2p-dart
+
+# `dart_libp2p` pins `mdns_dart ^2.0.1` → 2.2.1, which fails to compile on Dart 3.13+
+# (`InternetAddress` vs `InterfaceAddress`); 2.2.2 is the fix. Overrides are only honoured from the
+# pub root, so the phone — like `apps/envoygo` — has to carry it. Not a choice: without it
+# `flutter pub get` resolves a version this SDK cannot build.
+#
+# `pointycastle` is the collision between the two halves of this app. `dart_libp2p` 1.0.3 pins
+# `^3.7.3` and `dart_libp2p_kad_dht` 1.2.0 pins `^3.7.0` — both the latest releases, so there is
+# nothing to upgrade to, and dropping the DHT package would not help because `dart_libp2p` itself pins
+# 3.x. `dartssh2 >= 2.15` (the first line that compiles on Dart 3.13) requires `^4.0.0`, so the libp2p
+# side runs against pointycastle 4. A family-level override cannot reach here — overrides are honoured
+# only from the pub root, the limitation the family records for `mdns_dart` in
+# `EnvoyMesh/packages/envoy-mesh-libp2p-dart/pubspec.yaml:18-26`. The real guard is
+# `test/libp2p_route_test.dart`: it starts a real `Libp2pNode` home, points the walk at it with a dead
+# LAN endpoint, requires `p2p-direct` to win, and carries `coder.*` RPCs over that stream.
+#
+# `dart_libp2p` is also the family's one *patched* dependency. 1.0.3's yamux `openStream` waited for
+# an explicit ACK before it would write the multistream-select proposal, and
+# `@chainsafe/libp2p-yamux` emits that ACK lazily on its first write — so this app could not open
+# *any* stream to the TypeScript desktop, relayed or loopback-direct. The fork lives once in
+# `EnvoyMesh/vendor/dart_libp2p/` (`PATCHES.md` records the one-hunk change and the re-apply rule on
+# the next upstream bump); the phone, like `apps/envoygo`, repoints at it because overrides are only
+# honoured from the pub root. The acceptance test is `test/libp2p_relay_e2e_test.dart` (`RUN_E2E=1`).
+dependency_overrides:
+  mdns_dart: 2.2.2
+  pointycastle: ^4.0.0
+  dart_libp2p:
+    path: ../../../EnvoyMesh/vendor/dart_libp2p
 
 dev_dependencies:
   flutter_test:

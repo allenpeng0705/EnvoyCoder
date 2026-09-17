@@ -14,7 +14,7 @@
  * that reuses `2` for something else makes the supervisor loop on a state no restart can fix.
  */
 
-import type { CoderHomeFacts } from "@envoycoder/host-bridge";
+import type { CoderHomeFacts } from "@envoydev/host-bridge";
 
 /** Nothing to do and nothing wrong — also the code for "another daemon already serves this machine". */
 export const EXIT_OK = 0;
@@ -37,7 +37,7 @@ export type BootDecision =
  * something they can see and fix later:
  *
  *   * `found` — the normal case.
- *   * `missing` — no EnvoyMesh profile on this machine yet. Our own state (`<home>/EnvoyCoder/`) does
+ *   * `missing` — no EnvoyMesh profile on this machine yet. Our own state (`<home>/EnvoyDev/`) does
  *     not need it, and refusing here would mean a product that cannot start before another product
  *     has. The mesh features simply report themselves as unavailable.
  *   * `in-use` — another family app owns the mesh identity. That is *expected*, not a conflict: under
@@ -57,7 +57,7 @@ export type BootDecision =
  * the store whose files may be exactly what is damaged, and a process that has printed its last line
  * and exited cannot render a key a client would resolve.
  *
- * The *situations* are translated where a user actually meets them, in the window: "EnvoyCoder
+ * The *situations* are translated where a user actually meets them, in the window: "EnvoyDev
  * cannot reach its daemon" plus the connection chip (`work.offline.*`, `connection.*`), which is what
  * a user sees when the shell's spawn failed or the daemon is not answering. So this is a
  * classification, not an omission — a log line is developer-facing output, and the developer is
@@ -74,7 +74,7 @@ export function decideBoot(facts: CoderHomeFacts): BootDecision {
       // the product's name, and the fact that this process stopped.
       detail: [
         facts.detail,
-        "Fix or move that folder, or restore a backup, then start EnvoyCoder again.",
+        "Fix or move that folder, or restore a backup, then start EnvoyDev again.",
       ],
     };
   }
@@ -83,7 +83,7 @@ export function decideBoot(facts: CoderHomeFacts): BootDecision {
   if (facts.state === "missing") {
     notes.push(
       "There is no EnvoyMesh profile on this machine yet, so the mesh features are unavailable — " +
-        "EnvoyCoder's own projects and tasks do not need one.",
+        "EnvoyDev's own projects and tasks do not need one.",
     );
   }
   if (facts.state === "in-use" && facts.holder) {
@@ -91,7 +91,7 @@ export function decideBoot(facts: CoderHomeFacts): BootDecision {
     // saying, because "close that app" is poor advice for something that may already be shutting down.
     const held = facts.holder.verified === false ? "claims (but is not answering on) " : "owns ";
     notes.push(
-      `${facts.holder.app} ${held}this machine's mesh identity, so EnvoyCoder attaches to it as a ` +
+      `${facts.holder.app} ${held}this machine's mesh identity, so EnvoyDev attaches to it as a ` +
         "product rather than starting a second one.",
     );
   }
@@ -116,7 +116,7 @@ export function serveFailureOutcome(
   if (code === "EADDRINUSE" || /EADDRINUSE|address already in use/i.test(message)) {
     return {
       exitCode: EXIT_OK,
-      headline: `EnvoyCoder is already running on this machine (port ${port}).`,
+      headline: `EnvoyDev is already running on this machine (port ${port}).`,
       detail: [
         "Only one service runs per machine: two would fight over the same projects and tasks.",
         "Open a window and it will attach to the one that is already there.",
@@ -125,10 +125,10 @@ export function serveFailureOutcome(
   }
   return {
     exitCode: EXIT_FAILED,
-    headline: `EnvoyCoder could not start on port ${port}.`,
+    headline: `EnvoyDev could not start on port ${port}.`,
     detail: [
       message,
-      "If another program is using that port, set ENVOYCODER_DAEMON_PORT to a free one.",
+      "If another program is using that port, set ENVOYDEV_DAEMON_PORT to a free one.",
     ],
   };
 }
@@ -153,7 +153,7 @@ export function alreadyRunningOutcome(descriptor: {
 }): { exitCode: number; headline: string; detail: string[] } {
   return {
     exitCode: EXIT_OK,
-    headline: "EnvoyCoder is already running on this machine.",
+    headline: "EnvoyDev is already running on this machine.",
     detail: [
       `Daemon pid ${descriptor.pid}, on port ${descriptor.port}, started ${descriptor.startedAt} (version ${descriptor.version}).`,
       "One daemon serves this machine, so that a task keeps running when you close a window.",

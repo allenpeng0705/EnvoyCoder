@@ -11,7 +11,7 @@
  *
  * ## A credential cannot be expressed, and that is the type rather than a rule
  *
- * `AgentProviderConfig.env` (`@envoycoder/protocol`) is a list of environment variable **names**. This
+ * `AgentProviderConfig.env` (`@envoydev/protocol`) is a list of environment variable **names**. This
  * project deliberately refused to copy the reference product's `providers` page, partly because that page
  * keeps API keys as plaintext `env` *values* in a config file, so the schema here has no field for a
  * value: no caller, no control and no migration can write one to disk. What travels to a window is
@@ -43,16 +43,16 @@ import {
   type AgentProviderEnvState,
   type RpcMethod,
   AgentProviderConfigSchema,
-  ENVOYCODER_ERRORS,
+  ENVOYDEV_ERRORS,
   PROVIDER_ENV_NAME_PATTERN,
   PROVIDER_ID_PATTERN,
   coderError,
   isHarnessId,
   parseRpcParams,
-} from "@envoycoder/protocol";
-import type { ProviderProbe } from "@envoycoder/agent-catalog";
-import { acpAgent, agreesWithEntry } from "@envoycoder/agent-catalog";
-import { primeShellBinaries } from "@envoycoder/platform";
+} from "@envoydev/protocol";
+import type { ProviderProbe } from "@envoydev/agent-catalog";
+import { acpAgent, agreesWithEntry } from "@envoydev/agent-catalog";
+import { primeShellBinaries } from "@envoydev/platform";
 
 import { summarizeProvider } from "./summaries.js";
 
@@ -151,7 +151,7 @@ export function createProviderHandlers(
         // could not be made from.
         const shown = input.id ?? input.label;
         throw coderError(
-          ENVOYCODER_ERRORS.badRequest,
+          ENVOYDEV_ERRORS.badRequest,
           `"${shown}" cannot be an id for a provider. A provider id is lowercase letters, digits and dashes, starting with a letter or a digit.`,
           ref("error.providerIdInvalid", { name: shown }),
         );
@@ -161,8 +161,8 @@ export function createProviderHandlers(
       // language rather than as a Zod message about a regular expression.
       if (isHarnessId(id)) {
         throw coderError(
-          ENVOYCODER_ERRORS.providerIdTaken,
-          `"${id}" is the id of an agent EnvoyCoder already ships, so your provider was not added. Give your provider another name.`,
+          ENVOYDEV_ERRORS.providerIdTaken,
+          `"${id}" is the id of an agent EnvoyDev already ships, so your provider was not added. Give your provider another name.`,
           ref("error.providerIdTaken", { id }),
         );
       }
@@ -175,8 +175,8 @@ export function createProviderHandlers(
       const notAName = envNames.findIndex((name) => !PROVIDER_ENV_NAME_PATTERN.test(name));
       if (notAName >= 0) {
         throw coderError(
-          ENVOYCODER_ERRORS.badRequest,
-          `EnvoyCoder stores the names of the environment variables an agent needs, never their values, ` +
+          ENVOYDEV_ERRORS.badRequest,
+          `EnvoyDev stores the names of the environment variables an agent needs, never their values, ` +
             `and entry ${notAName + 1} of this provider's environment list is not a variable name. A name ` +
             `is letters, digits and underscores, and does not start with a digit. The provider was not added.`,
           ref("error.providerEnvNotAName", { position: notAName + 1 }),
@@ -219,7 +219,7 @@ export function createProviderHandlers(
           );
         if (!agrees) {
           throw coderError(
-            ENVOYCODER_ERRORS.badRequest,
+            ENVOYDEV_ERRORS.badRequest,
             `"${catalogEntryId}" is a catalogued agent whose recipe is not the one this request describes, ` +
               `so the agent was not added. Reopen the agents page and add the row again.`,
             ref("error.providerCatalogMismatch", { entry: catalogEntryId }),
@@ -246,7 +246,7 @@ export function createProviderHandlers(
       const parsed = AgentProviderConfigSchema.safeParse(candidate);
       if (!parsed.success) {
         throw coderError(
-          ENVOYCODER_ERRORS.badRequest,
+          ENVOYDEV_ERRORS.badRequest,
           `coder.addProvider was given a provider this build cannot store: ${parsed.error.issues[0]?.message ?? "invalid"}`,
         );
       }
@@ -256,7 +256,7 @@ export function createProviderHandlers(
        * list the boot prime asked about. Fire-and-forget and bounded like every other shell ask in this
        * daemon: the answer joins the search path when it lands, and a shell that is absent or slow leaves the
        * ordinary search to decide. A provider whose command is not a plain name (an absolute path, say) is
-       * skipped by `@envoycoder/platform` rather than quoted into a script — the rule for user-controlled
+       * skipped by `@envoydev/platform` rather than quoted into a script — the rule for user-controlled
        * strings, and the reason this call needs no escaping here.
        */
       void primeShellBinaries([provider.command]);
@@ -274,7 +274,7 @@ export function createProviderHandlers(
       const result = await deps.store.removeProvider(id);
       if (!result) {
         throw coderError(
-          ENVOYCODER_ERRORS.providerMissing,
+          ENVOYDEV_ERRORS.providerMissing,
           `There is no agent provider called "${id}" here. It may have been removed from another window.`,
           ref("error.providerNotFound", { id }),
         );

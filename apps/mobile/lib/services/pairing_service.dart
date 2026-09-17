@@ -18,7 +18,7 @@ import 'dart:convert';
 import '../models/host.dart';
 
 /// The name this app claims in every code it mints or accepts.
-const String kAppName = 'EnvoyCoder';
+const String kAppName = 'EnvoyDev';
 
 class PairingResult {
   const PairingResult.accepted(this.host) : refusal = null;
@@ -71,6 +71,17 @@ PairingResult parsePairingCode(String input) {
   }
   final endpoint = parsed.hasPort ? '${parsed.host}:${parsed.port}' : parsed.host;
 
+  // The shared parser falls `relayWsUrl` back to `wsUrl` when the code omitted a relay. That is
+  // useful for EnvoyMesh's candidate list; here a duplicate of the primary address would only burn
+  // a dial attempt, so keep it only when it differs.
+  final primaryWs = data.wsUrl;
+  final relayWsUrl = data.relayWsUrl.trim().isEmpty || data.relayWsUrl == primaryWs
+      ? null
+      : data.relayWsUrl;
+  final relayWsUrls = data.relayWsUrls
+      ?.where((url) => url.trim().isNotEmpty && url != primaryWs && url != relayWsUrl)
+      .toList();
+
   return PairingResult.accepted(
     CoderHost(
       id: '${data.ownerId ?? endpoint}::$endpoint',
@@ -80,10 +91,21 @@ PairingResult parsePairingCode(String input) {
       app: data.app ?? kAppName,
       token: data.token,
       secure: parsed.scheme == 'wss',
+      lanWsUrl: data.lanWsUrl,
+      // The desktop's own peer id, when the code carries one. The family parser has always exposed
+      // it (`PairingData.homeNodePeerId`); this app stored only the *relay's* id, so the direct-libp2p
+      // rung had nothing to dial even on a code that named the desktop. Optional and additive: a code
+      // without the field leaves it null, and the rung is then dropped rather than guessed at.
+      homePeerId: data.homeNodePeerId,
+      // The addresses that make that peer id reachable. The family parser reads them from the code
+      // (`bootstrapPeers`) and from the compact token's `bp` key; without them the id alone names the
+      // desktop and cannot be dialled, so the rung stays out of the ladder instead of failing in it.
+      bootstrapPeers: data.bootstrapPeers,
       // Carried through from the shared contract: the family's relay roster is how a phone that is
       // not on the LAN still reaches this machine, and a product does not invent its own.
       relayPeerId: data.relayPeerId,
-      relayWsUrl: data.relayWsUrl,
+      relayWsUrl: relayWsUrl,
+      relayWsUrls: (relayWsUrls == null || relayWsUrls.isEmpty) ? null : relayWsUrls,
     ),
   );
 }
@@ -104,17 +126,31 @@ String buildPairingCode({
   required String token,
   required String ownerId,
   String app = kAppName,
+  String? lanWsUrl,
+  String? homePeerId,
+  List<String>? bootstrapPeers,
+  String? relayWsUrl,
+  List<String>? relayWsUrls,
 }) {
-  final query = {
+  final query = <String, String>{
     'wsUrl': wsUrl,
     'token': token,
     'ownerId': ownerId,
     'app': app,
+    if (lanWsUrl != null) 'lanWsUrl': lanWsUrl,
+    if (homePeerId != null) 'homeNodePeerId': homePeerId,
+    if (bootstrapPeers != null && bootstrapPeers.isNotEmpty)
+      'bootstrapPeers': bootstrapPeers.join(','),
+    if (relayWsUrl != null) 'relayWsUrl': relayWsUrl,
+    if (relayWsUrls != null && relayWsUrls.isNotEmpty) 'rels': relayWsUrls.join(','),
   };
   return 'envoy://pair?${query.entries.map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}').join('&')}';
 }
 
-/// Base64-free JSON of the host list, so a stored profile survives a restart without a plugin.
+/// Host **metadata** for shared_preferences — never the token.
+///
+/// Tokens live only in flutter_secure_storage (`HostStore`). Keeping them out of this JSON is what
+/// stops a prefs dump / backup from walking away with the credential.
 String encodeHosts(List<CoderHost> hosts) => jsonEncode(
       hosts
           .map((host) => {
@@ -123,12 +159,74 @@ String encodeHosts(List<CoderHost> hosts) => jsonEncode(
                 'endpoint': host.endpoint,
                 'ownerId': host.ownerId,
                 'app': host.app,
-                'token': host.token,
                 'secure': host.secure,
+                if (host.lanWsUrl != null) 'lanWsUrl': host.lanWsUrl,
+                if (host.homePeerId != null) 'homePeerId': host.homePeerId,
+                if (host.bootstrapPeers != null && host.bootstrapPeers!.isNotEmpty)
+                  'bootstrapPeers': host.bootstrapPeers,
                 if (host.relayPeerId != null) 'relayPeerId': host.relayPeerId,
                 if (host.relayWsUrl != null) 'relayWsUrl': host.relayWsUrl,
+                if (host.relayWsUrls != null && host.relayWsUrls!.isNotEmpty)
+                  'relayWsUrls': host.relayWsUrls,
+                if (host.lastSeenAt != null) 'lastSeenAt': host.lastSeenAt!.toIso8601String(),
                 if (host.ssh != null)
-                  'ssh': {'host': host.ssh!.host, 'port': host.ssh!.port, if (host.ssh!.user != null) 'user': host.ssh!.user},
+                  'ssh': {
+                    'host': host.ssh!.host,
+                    'port': host.ssh!.port,
+                    if (host.ssh!.user != null) 'user': host.ssh!.user,
+                  },
               })
           .toList(),
     );
+
+/// Inverse of [encodeHosts]. Tokens are filled later by [HostStore].
+List<CoderHost> decodeHosts(String json, {Map<String, String> tokens = const {}}) {
+  final decoded = jsonDecode(json);
+  if (decoded is! List) return const [];
+  final hosts = <CoderHost>[];
+  for (final entry in decoded) {
+    if (entry is! Map) continue;
+    final map = Map<String, dynamic>.from(entry);
+    final id = map['id'] as String?;
+    final endpoint = map['endpoint'] as String?;
+    if (id == null || endpoint == null) continue;
+    final sshMap = map['ssh'];
+    SshHop? ssh;
+    if (sshMap is Map) {
+      final sshHost = sshMap['host'] as String?;
+      if (sshHost != null && sshHost.isNotEmpty) {
+        ssh = SshHop(
+          host: sshHost,
+          port: (sshMap['port'] as num?)?.toInt() ?? 22,
+          user: sshMap['user'] as String?,
+        );
+      }
+    }
+    final relayList = map['relayWsUrls'];
+    hosts.add(
+      CoderHost(
+        id: id,
+        label: (map['label'] as String?) ?? endpoint,
+        endpoint: endpoint,
+        ownerId: (map['ownerId'] as String?) ?? '',
+        app: (map['app'] as String?) ?? kAppName,
+        token: tokens[id] ?? '',
+        secure: map['secure'] == true,
+        lanWsUrl: map['lanWsUrl'] as String?,
+        homePeerId: map['homePeerId'] as String?,
+        // Read back as a list, because that is what it is in the contract. Persisted hosts must keep
+        // it: a phone that forgot the addresses on restart would silently lose the direct peer route
+        // while still showing the peer id in its own record.
+        bootstrapPeers: (map['bootstrapPeers'] as List?)?.whereType<String>().toList(),
+        relayPeerId: map['relayPeerId'] as String?,
+        relayWsUrl: map['relayWsUrl'] as String?,
+        relayWsUrls: relayList is List
+            ? relayList.whereType<String>().where((u) => u.isNotEmpty).toList()
+            : null,
+        ssh: ssh,
+        lastSeenAt: map['lastSeenAt'] is String ? DateTime.tryParse(map['lastSeenAt'] as String) : null,
+      ),
+    );
+  }
+  return hosts;
+}

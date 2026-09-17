@@ -37,7 +37,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { CoderSettings, Project, Task } from "@envoycoder/protocol";
+import type { CoderSettings, Project, Task } from "@envoydev/protocol";
 
 import { CoderApp } from "../src/components/CoderApp.js";
 import { I18nProvider } from "../src/i18n/context.js";
@@ -48,7 +48,7 @@ import type { CoderState } from "../src/state/coderStore.js";
 afterEach(cleanup);
 
 /** The daemon's sentence, as a refusal. Deliberately unlike any catalogue string: it must be *the wire's*. */
-const REFUSED = "envoycoder.no-space: there is no space left on the device";
+const REFUSED = "envoydev.no-space: there is no space left on the device";
 
 const project: Project = {
   id: "local::/work/api",
@@ -83,11 +83,11 @@ const otherTask: Task = {
 
 /** The daemon's own handshake, with a window count a titlebar badge would have shown. */
 const HELLO = {
-  product: "EnvoyCoder",
+  product: "EnvoyDev",
   version: "0.1.0",
   instanceId: "test",
   home: "/home/you/.envoymesh",
-  stateDir: "/home/you/.envoymesh/EnvoyCoder",
+  stateDir: "/home/you/.envoymesh/EnvoyDev",
   startedAt: "2026-09-14T00:00:00.000Z",
   windowCount: 1,
   methods: [],

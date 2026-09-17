@@ -30,9 +30,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { HarnessId } from "@envoycoder/protocol";
-import { harnessAcpFacts, harnessDefinition, probeHarness } from "@envoycoder/agent-catalog";
-import { coderPaths } from "@envoycoder/host-bridge";
+import type { HarnessId } from "@envoydev/protocol";
+import { harnessAcpFacts, harnessDefinition, probeHarness } from "@envoydev/agent-catalog";
+import { coderPaths } from "@envoydev/host-bridge";
 
 import { AcpClient, type AcpUpdate } from "../src/daemon/acp/client.js";
 import { launchForHarness } from "../src/daemon/launch.js";
@@ -110,8 +110,8 @@ for (const { id, categories } of VERIFIED_AGENTS) {
        * together; a test that assembled its own `AcpLaunch` would keep passing after the entry changed.
        */
       async function launch(): Promise<StartOptions["launch"]> {
-        const cwd = await mkdtemp(join(tmpdir(), "envoycoder-acp-agent-"));
-        const home = await mkdtemp(join(tmpdir(), "envoycoder-acp-agent-home-"));
+        const cwd = await mkdtemp(join(tmpdir(), "envoydev-acp-agent-"));
+        const home = await mkdtemp(join(tmpdir(), "envoydev-acp-agent-home-"));
         cleanups.push(async () => {
           await rm(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
           await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
@@ -285,8 +285,8 @@ describe("what a probe learns about the real cursor-agent's authentication", () 
 
   describe.skipIf(probe.state !== "ready")("cursor-agent acp, asked rather than believed", () => {
     it("reports one of the two states it can be in, and never 'we could not tell'", async () => {
-      const cwd = await mkdtemp(join(tmpdir(), "envoycoder-auth-probe-"));
-      const home = await mkdtemp(join(tmpdir(), "envoycoder-auth-probe-home-"));
+      const cwd = await mkdtemp(join(tmpdir(), "envoydev-auth-probe-"));
+      const home = await mkdtemp(join(tmpdir(), "envoydev-auth-probe-home-"));
       cleanups.push(async () => {
         await rm(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
         await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });

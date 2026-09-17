@@ -15,7 +15,7 @@
  * ## Two honest limitations, stated rather than hidden
  *
  *   * **It skips when `dsh` is not installed**, because an agent is the *user's* install
- *     (`docs/envoycoder-harness.md`), not something this repository vendors. The skip is loud in the
+ *     (`docs/envoydev-harness.md`), not something this repository vendors. The skip is loud in the
  *     output; a skipped test that looks like a pass is worse than no test.
  *   * **A successful model turn is not asserted**, because it needs credentials this machine does
  *     not have. What *is* asserted is the failure path — and that path is not a consolation prize:
@@ -29,9 +29,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { findBinary } from "@envoycoder/platform";
-import { probeHarness, resolveHarnessCommand, sessionFacts } from "@envoycoder/agent-catalog";
-import { coderPaths } from "@envoycoder/host-bridge";
+import { findBinary } from "@envoydev/platform";
+import { probeHarness, resolveHarnessCommand, sessionFacts } from "@envoydev/agent-catalog";
+import { coderPaths } from "@envoydev/host-bridge";
 
 import { AcpClient, type AcpUpdate } from "../src/daemon/acp/client.js";
 import { launchForHarness, launchForProvider } from "../src/daemon/launch.js";
@@ -59,8 +59,8 @@ afterEach(async () => {
 });
 
 async function workdir(): Promise<{ cwd: string; dshHome: string; cleanup: () => Promise<void> }> {
-  const cwd = await mkdtemp(join(tmpdir(), "envoycoder-acp-work-"));
-  const dshHome = await mkdtemp(join(tmpdir(), "envoycoder-acp-home-"));
+  const cwd = await mkdtemp(join(tmpdir(), "envoydev-acp-work-"));
+  const dshHome = await mkdtemp(join(tmpdir(), "envoydev-acp-home-"));
   const cleanup = async (): Promise<void> => {
     await rm(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     await rm(dshHome, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
@@ -79,7 +79,7 @@ describe.skipIf(!dsh)("the ACP client, against the real dsh binary", () => {
         command: dsh as string,
         args: ["--profile", "acp"],
         cwd,
-        // A home of our own: EnvoyCoder must never write into the state a user's own `dsh` owns.
+        // A home of our own: EnvoyDev must never write into the state a user's own `dsh` owns.
         env: { DSH_HOME: dshHome },
       },
       onUpdate: (update) => updates.push(update),
@@ -112,7 +112,7 @@ describe.skipIf(!dsh)("the ACP client, against the real dsh binary", () => {
     const { cwd, dshHome } = await workdir();
     const paths = coderPaths(cwd);
     // The one path the catalogue's entry needs and the provider does not: a state directory of ours, so
-    // EnvoyCoder never writes into the state a user's own `dsh` install owns.
+    // EnvoyDev never writes into the state a user's own `dsh` install owns.
     await mkdir(join(paths.stateDir, "agents", "dsh"), { recursive: true });
 
     const fromCatalogue = launchForHarness({ harness: "deepseek-harness", cwd, paths });
@@ -216,7 +216,7 @@ describe.skipIf(!dsh)("the ACP client, against the real dsh binary", () => {
         requestTimeoutMs: 120_000,
         // The encoding the catalogue builds: a JSON array of provider and model
         // (`model-control.ts:235-237`). The provider here is one no catalog has, so the agent must say so.
-        sessionConfigs: [{ configId: "model", value: JSON.stringify(["envoycoder", "no-such-model"]) }],
+        sessionConfigs: [{ configId: "model", value: JSON.stringify(["envoydev", "no-such-model"]) }],
       });
       cleanups.push(async () => client.stop());
     } catch (caught) {
@@ -289,7 +289,7 @@ describe.skipIf(!dsh)("the ACP client, against the real dsh binary", () => {
       const client = await AcpClient.start({
         launch: { command: dsh as string, args: ["--profile", "acp"], cwd, env: { DSH_HOME: dshHome } },
         requestTimeoutMs: 60_000,
-        sessionConfigs: [{ configId: "reasoning_effort", value: "envoycoder-not-a-level" }],
+        sessionConfigs: [{ configId: "reasoning_effort", value: "envoydev-not-a-level" }],
       });
       cleanups.push(async () => client.stop());
     } catch (caught) {
@@ -430,13 +430,13 @@ describe("the probe, against the real agents", () => {
     store: CoderStore;
     stateFile: string;
   }> {
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-probe-real-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-probe-real-"));
     const paths = coderPaths(home);
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     const store = await CoderStore.open({ paths });
     // No `resolveLaunch`, on purpose: this is the production path — `launchForHarness`, the same function
     // `RunManager` calls — so the probe is proved to start the real binary with the real argv, including the
-    // `DSH_HOME` of its own that keeps EnvoyCoder out of the user's `dsh` state.
+    // `DSH_HOME` of its own that keeps EnvoyDev out of the user's `dsh` state.
     const probe = new SessionProbe({ paths, store });
     cleanups.push(async () => probe.stopAll());
     return { probe, store, stateFile: paths.sessionOptionsFile };

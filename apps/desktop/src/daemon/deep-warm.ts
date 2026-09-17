@@ -41,7 +41,7 @@
  * warmed by default.
  */
 
-import type { HarnessAvailability, HarnessId } from "@envoycoder/protocol";
+import type { HarnessAvailability, HarnessId } from "@envoydev/protocol";
 
 /**
  * How long the warmer waits between two agents.
@@ -58,7 +58,7 @@ export const WARM_GAP_MS = 3_000;
  * The in-memory cache (`SessionProbe`'s, ten minutes) is what makes a second pass in one session free. This is
  * the bound across *sessions*, and it is here because a daemon is started far more often than an agent's
  * published surface changes: without it, launching the app would start nine agents every time, and a person
- * who opens and closes EnvoyCoder a dozen times a day would pay for that a dozen times over.
+ * who opens and closes EnvoyDev a dozen times a day would pay for that a dozen times over.
  *
  * Six hours is chosen against what the facts *are*: the models and modes an agent publishes change when the
  * agent is upgraded, and the sign-in requirement changes when a credential expires — neither is a
@@ -180,7 +180,7 @@ export function startDeepWarm(deps: DeepWarmDeps): DeepWarm {
     }
     if (planned.length > 0) {
       deps.note?.(
-        `[envoycoder] looked at what ${asked.length} of ${planned.length} agent` +
+        `[envoydev] looked at what ${asked.length} of ${planned.length} agent` +
           `${planned.length === 1 ? "" : "s"} publish, in the background and one at a time\n`,
       );
     }

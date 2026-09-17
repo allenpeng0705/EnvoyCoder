@@ -1,10 +1,10 @@
 /**
  * The status line, and the one place the mesh is always visible.
  *
- * Paseo's equivalent shows the daemon you are talking to. EnvoyCoder has one more thing worth
- * showing permanently: **whether this machine is attached to the mesh, and as whom**. That single
- * line decides whether "run it on the workstation" is even possible, and a user who has to open
- * Settings to find out will instead assume the feature is broken.
+ * Paseo's equivalent shows the daemon you are talking to. EnvoyDev has one more thing worth
+ * showing permanently: **what this machine is on the mesh** — attached to somebody else's node, or
+ * hosting its own. That single line decides whether "run it on the workstation" is even possible,
+ * and a user who has to open Settings to find out will instead assume the feature is broken.
  *
  * The wording rule is the family's: a sentence a user can act on, with the developer detail
  * (scope key, owner id) only in the tooltip.
@@ -20,8 +20,34 @@ import type { MeshStatus } from "../state/useCoderState.js";
 export function MeshStatusBar(props: { mesh: MeshStatus }): JSX.Element {
   const t = useT();
   const { mesh } = props;
-  const tone = mesh.kind === "attached" ? "ok" : mesh.kind === "refused" ? "warn" : "quiet";
+  // `hosting` is healthy, not a fallback: our own peer is listening, which is exactly what a phone
+  // needs. Only `refused` is a warning; `no-node` is quiet — nothing is wrong, there is simply no node.
+  const tone =
+    mesh.kind === "attached" || mesh.kind === "hosting"
+      ? "ok"
+      : mesh.kind === "refused"
+        ? "warn"
+        : "quiet";
   const line = describe(t, mesh);
+  /**
+   * The developer detail in the tooltip beside the line: whose session we are in (`attached`), or
+   * which peer we *are* (`hosting`). `peerId` is the identity a client pairs against, so it belongs
+   * here and not in the sentence — the same rule that keeps `scopeKey` out of it.
+   *
+   * `multiaddrs` and `relayHints` are deliberately not rendered: they are dial addresses for a peer,
+   * they can run to a dozen lines, and a status bar is not where a user reads them. The phone gets
+   * them from `coder.meshStatus`, which is where they are actionable.
+   */
+  const detail =
+    mesh.kind === "attached"
+      ? t("mesh.scope.title", { scope: mesh.scopeKey })
+      : mesh.kind === "hosting"
+        ? t("mesh.hosting.title", { peerId: mesh.peerId })
+        : undefined;
+  const peers =
+    (mesh.kind === "attached" || mesh.kind === "hosting") && mesh.peerCount !== undefined
+      ? t("mesh.peers", { count: mesh.peerCount })
+      : "";
   return (
     <footer className="statusbar">
       <span className={`dot dot--${tone}`} aria-hidden />
@@ -30,11 +56,11 @@ export function MeshStatusBar(props: { mesh: MeshStatus }): JSX.Element {
       <span className="statusbar__text" title={line.detail}>
         {line.text}
       </span>
-      {mesh.kind === "attached" ? (
-        <span className="statusbar__detail" title={t("mesh.scope.title", { scope: mesh.scopeKey })}>
-          {mesh.peerCount === undefined ? "" : t("mesh.peers", { count: mesh.peerCount })}
+      {detail === undefined ? null : (
+        <span className="statusbar__detail" title={detail}>
+          {peers}
         </span>
-      ) : null}
+      )}
       <span className="statusbar__spacer" />
       <span className="statusbar__detail">{t("mesh.agentsHere")}</span>
     </footer>
@@ -58,11 +84,20 @@ function describe(t: Translator["t"], mesh: MeshStatus): { text: string; detail?
             ? t("mesh.attached.peers", { count: mesh.peerCount })
             : t("mesh.attached.none"),
       };
+    case "hosting":
+      // The headline says the thing that changed for a self-hosting desktop: this machine *is* the
+      // node a phone connects to, rather than a client of somebody else's.
+      return {
+        text:
+          mesh.peerCount && mesh.peerCount > 0
+            ? t("mesh.hosting.peers", { count: mesh.peerCount })
+            : t("mesh.hosting.none"),
+      };
     case "no-node":
       return { text: t("mesh.noNode"), detail: localizeText(t, mesh.reason) };
     case "refused":
       return { text: t("mesh.refused"), detail: localizeText(t, mesh.reason) };
   }
-  // No `default`: the three cases above are the whole union, so a fourth state added to the protocol
+  // No `default`: the four cases above are the whole union, so a fifth state added to the protocol
   // becomes a compile error here rather than a status line that silently says nothing.
 }

@@ -21,7 +21,7 @@
  *     can mistake it for the real thing.
  */
 
-import { withMessageRef } from "@envoycoder/protocol";
+import { withMessageRef } from "@envoydev/protocol";
 
 import { messageRef } from "../i18n/notice.js";
 
@@ -48,7 +48,7 @@ export const DEFAULT_WINDOW_DAEMON_PORT = 4770;
 /**
  * Ask whoever is in charge.
  *
- * `VITE_ENVOYCODER_DAEMON_PORT` exists because the browser dev server has no shell to ask; it is a
+ * `VITE_ENVOYDEV_DAEMON_PORT` exists because the browser dev server has no shell to ask; it is a
  * *development* affordance and is not read inside the shell, where the answer must come from the
  * same place the supervisor got it.
  */
@@ -69,7 +69,7 @@ export async function resolveDaemonEndpoint(): Promise<ResolvedEndpoint> {
       if (/not allowed|command not found/i.test(raw)) {
         throw new Error(
           withMessageRef(
-            "EnvoyCoder's window could not ask the shell where the daemon is. Rebuild the desktop app (the shell permission list is out of date).",
+            "EnvoyDev's window could not ask the shell where the daemon is. Rebuild the desktop app (the shell permission list is out of date).",
             messageRef("error.shellEndpointFailed"),
           ),
         );
@@ -79,7 +79,7 @@ export async function resolveDaemonEndpoint(): Promise<ResolvedEndpoint> {
     if (typeof answer?.port !== "number") {
       throw new Error(
         withMessageRef(
-          "The EnvoyCoder shell did not say where its daemon is. This window cannot connect without it.",
+          "The EnvoyDev shell did not say where its daemon is. This window cannot connect without it.",
           messageRef("error.shellEndpointMissing"),
         ),
       );
@@ -96,7 +96,7 @@ export async function resolveDaemonEndpoint(): Promise<ResolvedEndpoint> {
   }
 
   const raw = (import.meta.env as Record<string, string | undefined> | undefined)
-    ?.VITE_ENVOYCODER_DAEMON_PORT;
+    ?.VITE_ENVOYDEV_DAEMON_PORT;
   const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
   return {
     endpoint: {

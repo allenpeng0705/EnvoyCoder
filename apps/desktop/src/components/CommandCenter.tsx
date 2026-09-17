@@ -22,7 +22,7 @@
  * No plugins, no per-pane contributions, no fuzzy subsequence matching — the reference product
  * turned subsequence matching *off* in its own search for this surface
  * (`command-center/results.ts:129`), and this app has eight commands, not eight hundred. When the
- * list outgrows one screen, ranking moves into `@envoycoder/task-model` where it can be tested
+ * list outgrows one screen, ranking moves into `@envoydev/task-model` where it can be tested
  * like the rest of the rail's logic.
  */
 
@@ -46,7 +46,7 @@ async function pickFolderUnavailableReason(
 }
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Project } from "@envoycoder/protocol";
+import type { Project } from "@envoydev/protocol";
 
 import { useT } from "../i18n/context.js";
 import { localize, type WriteFailure } from "../i18n/notice.js";

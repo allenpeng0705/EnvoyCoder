@@ -7,15 +7,15 @@
 
 ## 1. Two directions that must not be confused
 
-| | EnvoyCoder as a **host** | EnvoyCoder as a **client of the mesh** |
+| | EnvoyDev as a **host** | EnvoyDev as a **client of the mesh** |
 |---|---|---|
 | Serves | its own windows and the paired phone | nothing |
-| Protocol | EnvoyCoder's own (`@envoycoder/protocol`) | EnvoyMesh's product RPC, as granted |
-| Credential | a token *we* issue | a session token **the node** issues, scoped to `product:EnvoyCoder` |
+| Protocol | EnvoyDev's own (`@envoydev/protocol`) | EnvoyMesh's product RPC, as granted |
+| Credential | a token *we* issue | a session token **the node** issues, scoped to `product:EnvoyDev` |
 | Lifetime | as long as the desktop app runs | as long as the node lets it |
 
 Direction one is Paseo's architecture. Direction two is the family's, and it is the reason a phone
-paired with EnvoyCoder can also reach the mesh without EnvoyCoder inventing identity, discovery or
+paired with EnvoyDev can also reach the mesh without EnvoyDev inventing identity, discovery or
 NAT traversal.
 
 ## 2. Attaching to the local node
@@ -24,7 +24,7 @@ NAT traversal.
 resolveRunningNode(home)        → "running" only for a *verified* node (endpoint answers AND
                                   names the owner the descriptor claims)
 endpointFromWsUrl(node.wsUrl)   → { port, path } taken from the URL the node published
-requestProductSession(...)      → → { token, scopeKey: "product:EnvoyCoder", ownerId, wsUrl }
+requestProductSession(...)      → → { token, scopeKey: "product:EnvoyDev", ownerId, wsUrl }
 ```
 
 Four rules, each with a reason:
@@ -35,18 +35,18 @@ Four rules, each with a reason:
 2. **The endpoint comes from the node's own `wsUrl`.** Not rebuilt from a port number: a product that
    reassembles the URL is one config change away from dialling somewhere the node is not.
 3. **The session must be product-scoped.** A token without a `product:` scope is the *owner's* token;
-   holding one would mean EnvoyCoder can do anything the owner can. `attachToMeshNode` refuses it
+   holding one would mean EnvoyDev can do anything the owner can. `attachToMeshNode` refuses it
    loudly rather than using it — `test/host-bridge.test.ts` asserts this.
 4. **Refusal is a normal outcome.** No node, an unverified node, or a node whose owner has not granted
    the product anything all produce a typed outcome with end-user wording; the app keeps working
    locally. Nothing is escalated, and nothing is retried in a loop.
 
 What the node grants is the node owner's decision (`NodeConfig.productGrants`, default none,
-fail-closed). EnvoyCoder asks for what it needs when it needs it and works without it.
+fail-closed). EnvoyDev asks for what it needs when it needs it and works without it.
 
 ### The daemon's boot, and the two exit codes it must not invent
 
-`npm run daemon` starts it (`apps/desktop/src/daemon/main.ts`, port 4770 or `ENVOYCODER_DAEMON_PORT`,
+`npm run daemon` starts it (`apps/desktop/src/daemon/main.ts`, port 4770 or `ENVOYDEV_DAEMON_PORT`,
 `0` for "let the OS choose"). The order is deliberate, and each step's failure mode is reported rather
 than thrown:
 
@@ -54,7 +54,7 @@ than thrown:
 |---|---|---|
 | read the shared home | `coderPaths()` — the family's resolution, so `ENVOYMESH_HOME` means here what it means everywhere | — |
 | describe the home | the family's own `describeProfileSituation` wording, shown as-is | **damaged profile → exit 4**, saying so and changing nothing. Writing into a half-readable profile is how a user loses contacts and bonds without being told |
-| attach to the mesh | `attachToMeshNode` as `product:EnvoyCoder` | a refusal is reported and the daemon serves on: "not granted" is a state, not an error |
+| attach to the mesh | `attachToMeshNode` as `product:EnvoyDev` | a refusal is reported and the daemon serves on: "not granted" is a state, not an error |
 | serve our surface | `createCoderDaemonHost` + `coderSessionIdentity()` | a **taken port is exit 0**, not an error: one daemon serves a machine, and a second one starting is a window that has not noticed yet |
 
 Two codes are reserved and `boot.ts` never returns them: **`2`** belongs to the family's supervisor
@@ -63,11 +63,11 @@ fixes) and **`1`** means an unclassified failure. A test asserts the reserved pa
 state, which is cheaper than hoping.
 
 **Who may call it.** A loopback window is trusted and carries no token — the family's own model for a
-desktop UI. A remote caller must present one, and today the resolver answers `null` (no session store
-yet, roadmap M1), so the transport refuses; the daemon prints that at boot rather than implying a
-security property it does not have. The port still binds `0.0.0.0` (the transport's choice), and the
-smoke's LAN leg is what holds that honest: a tokenless call from the local network must come back
-`UNAUTHORIZED`, while loopback is answered.
+desktop UI. A remote caller must present a token, resolved against the paired-device store under
+`<home>/EnvoyDev/paired-devices.json` (Settings → This machine → Pair a phone). Unknown /
+expired / revoked tokens are refused. The port still binds `0.0.0.0` (the transport's choice),
+and the smoke's LAN leg still holds the tokenless case honest: a call from the local network
+without a token must come back `UNAUTHORIZED`, while loopback is answered.
 
 ## 3. Multi-window
 
@@ -77,7 +77,7 @@ instead of starting a competing one, discovered through the daemon's own **claim
 one set of tasks is corruption, not sharing. A competing daemon would also mean two agents on
 one file, which is worse.
 
-The daemon publishes `<home>/EnvoyCoder/daemon.json` **after** its socket is listening
+The daemon publishes `<home>/EnvoyDev/daemon.json` **after** its socket is listening
 (`apps/desktop/src/daemon/lock.ts`), carrying the pid, the bound port, the path and an
 `instanceId`; the shell reads it to decide between attaching and starting, and the daemon reads it
 at boot to notice that a previous run left a claim behind. The port being bound is *not* the
@@ -109,7 +109,7 @@ events. It is worth raising upstream — forwarding `eventDispositions` (and `lo
 a two-line change, and §7.4 of the family guide says contract changes go upstream rather than into a
 workaround.
 
-EnvoyCoder publishes through the port that **is** forwarded: `socketMethods`, whose context hands a
+EnvoyDev publishes through the port that **is** forwarded: `socketMethods`, whose context hands a
 product method the live connection and a `send(event, data)` for it (`ws-server.ts:1086-1097`).
 `coder.subscribe` registers that connection against the daemon's bus and pushes to it alone — which
 is also the behaviour a phone on metered data wants, since it never receives a desktop's transcript
@@ -117,13 +117,24 @@ traffic. The full reasoning, with citations, is in `packages/protocol/src/rpc.ts
 
 ## 4. Pairing, and why ours is not Paseo's
 
-EnvoyCoder uses the family's pairing code (`envoy://pair?…`, minted by `@envoymesh/protocol`) and the
-family's **`app` claim**, so one camera path works for every app and a code from another member is
-refused with the shared sentence — byte-for-byte the wording `pairingAppMismatch()` produces, on
-every platform and in every language of the app.
+**Pairing in EnvoyDev is *owner* pairing.** There is one owner — the person at the machine — and a
+pairing code attaches another of *their* devices to *their* daemon. There is no family-member concept
+in this product: no member identity, no per-member grants, and no "join the family" step. A paired
+phone is the owner's own device and stands where the desktop window stands
+(`PairedSession` in `apps/desktop/src/daemon/paired-devices.ts` says so, and says why the earlier
+`isOwnerScope: false` was the family's model leaking in).
+
+What we borrow is the **format**, not the relationship: the family's pairing code
+(`envoy://pair?…`, minted by `@envoymesh/protocol`) and the family's **`app` claim**, so one camera
+path works for every app and a code minted by *another app* is refused with the shared sentence —
+byte-for-byte the wording `pairingAppMismatch()` produces, on every platform and in every language of
+the app. That is a claim about **which program** the code belongs to, never about which person.
 
 What the code carries: the endpoint, a token, the owner identity, and the app name. What it is
-**not**: authority to run anything.
+**not**: authority to run anything. And what a paired device still cannot do is decided by *where the
+call is made*, not by who makes it: a pairing code is minted at the machine that will be paired, so
+minting is refused from anywhere else — a rule that applies to a second desktop window on another
+machine just as much as to a phone.
 
 That distinction is the design's sharpest disagreement with the reference product. Paseo's pairing
 link is an unsigned, unexpiring bearer capability — whoever holds it can connect, and on the relay
@@ -160,7 +171,7 @@ operations the daemon's protocol gives it.
 D2 fixes *where* work runs: on the machine with the code. What is still open is **who brokers it**,
 and the design doc lists that as an open decision. The two candidate shapes:
 
-* **daemon-to-daemon** — EnvoyCoder on machine A offers a run to EnvoyCoder on machine B over the
+* **daemon-to-daemon** — EnvoyDev on machine A offers a run to EnvoyDev on machine B over the
   mesh; each daemon is sovereign, and the node is only a transport;
 * **through the node** — the run is a product RPC on B's node, which A calls with its product
   session. Simpler, and it inherits the node's policy, but it makes the node a broker of workloads
@@ -174,7 +185,7 @@ is a run), and **a peer may always refuse** with a reason that names the policy,
 
 | Purpose | Default | Override |
 |---|---|---|
-| EnvoyCoder daemon WS | 4770 (`DEFAULT_DAEMON_PORT`) | `ENVOYCODER_DAEMON_PORT`, or `port: 0` for the OS to choose |
+| EnvoyDev daemon WS | 4770 (`DEFAULT_DAEMON_PORT`) | `ENVOYDEV_DAEMON_PORT`, or `port: 0` for the OS to choose |
 | Endpoint path | `/ws` | `DEFAULT_DAEMON_PATH` |
 | SSH | 22 | per-host `SshHop.port` |
 | EnvoyMesh node | whatever the node published | `resolveRunningNode`, never assumed |

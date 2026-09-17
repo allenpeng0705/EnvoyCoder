@@ -26,9 +26,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { AgentAuthObservation, HarnessId, ObservedSessionOptions } from "@envoycoder/protocol";
-import { parseMessageRef } from "@envoycoder/protocol";
-import { coderPaths } from "@envoycoder/host-bridge";
+import type { AgentAuthObservation, HarnessId, ObservedSessionOptions } from "@envoydev/protocol";
+import { parseMessageRef } from "@envoydev/protocol";
+import { coderPaths } from "@envoydev/host-bridge";
 
 import { isMessageKey } from "../src/i18n/messages/en.js";
 import { localizeText } from "../src/i18n/notice.js";
@@ -168,7 +168,7 @@ interface Bench {
 async function bench(
   overrides: { timeoutMs?: number; handshakeTimeoutMs?: number } = {},
 ): Promise<Bench> {
-  const home = await mkdtemp(join(tmpdir(), "envoycoder-probe-"));
+  const home = await mkdtemp(join(tmpdir(), "envoydev-probe-"));
   const paths = coderPaths(home);
   const store = await CoderStore.open({ paths });
 

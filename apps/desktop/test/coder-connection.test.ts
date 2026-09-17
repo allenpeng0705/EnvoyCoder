@@ -18,7 +18,7 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { CODER_SUBSCRIBE_METHOD, ENVOYCODER_ERRORS } from "@envoycoder/protocol";
+import { CODER_SUBSCRIBE_METHOD, ENVOYDEV_ERRORS } from "@envoydev/protocol";
 
 import { CoderConnection, type WebSocketLike } from "../src/client/connection.js";
 
@@ -78,11 +78,11 @@ class FakeSocket implements WebSocketLike {
 }
 
 const HERO = {
-  product: "EnvoyCoder",
+  product: "EnvoyDev",
   version: "0.1.0",
   instanceId: "instance-1",
   home: "/home/dev/.envoymesh",
-  stateDir: "/home/dev/.envoymesh/EnvoyCoder",
+  stateDir: "/home/dev/.envoymesh/EnvoyDev",
   startedAt: "2026-09-13T10:00:00.000Z",
   windowCount: 1,
   methods: ["coder.hello"],
@@ -134,14 +134,14 @@ describe("the window's connection", () => {
   it("refuses a daemon that is not the one the shell named", async () => {
     const { socket: fake, connection: client } = connect({ instanceId: "the-one-we-started" });
     fake.open();
-    // A different process, answering on our port, calling itself EnvoyCoder. This is the case the
+    // A different process, answering on our port, calling itself EnvoyDev. This is the case the
     // shell cannot see and the window must not wave through.
     fake.reply(fake.idFor("coder.hello"), { ...HERO, instanceId: "somebody-else" });
     await settle();
 
     expect(client.status.state).toBe("disconnected");
     expect(client.status.state === "disconnected" ? client.status.code : undefined).toBe(
-      ENVOYCODER_ERRORS.notOurDaemon,
+      ENVOYDEV_ERRORS.notOurDaemon,
     );
     expect(client.hello).toBeUndefined();
   });
@@ -153,7 +153,7 @@ describe("the window's connection", () => {
     await settle();
     expect(client.status.state).toBe("disconnected");
     const status = client.status;
-    expect(status.state === "disconnected" ? status.reason : "").toContain(ENVOYCODER_ERRORS.notOurDaemon);
+    expect(status.state === "disconnected" ? status.reason : "").toContain(ENVOYDEV_ERRORS.notOurDaemon);
   });
 
   it("re-subscribes after a reconnect, before it reports itself connected", async () => {
@@ -210,7 +210,7 @@ describe("the window's connection", () => {
 
   it("fails a call fast when the socket is not open, rather than hanging", async () => {
     const { connection: client } = connect();
-    await expect(client.call("coder.listProjects")).rejects.toThrow(/envoycoder\.daemon-unreachable/);
+    await expect(client.call("coder.listProjects")).rejects.toThrow(/envoydev\.daemon-unreachable/);
   });
 
   it("rejects an in-flight call when the connection drops", async () => {

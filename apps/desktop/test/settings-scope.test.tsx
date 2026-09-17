@@ -81,7 +81,7 @@ import type { JSX } from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { CoderSettings, Project } from "@envoycoder/protocol";
+import type { CoderSettings, Project } from "@envoydev/protocol";
 
 import { CoderApp } from "../src/components/CoderApp.js";
 import { I18nProvider } from "../src/i18n/context.js";

@@ -43,7 +43,7 @@
  * ```
  * node scripts/measure-settings.mjs --section agents
  * node scripts/measure-settings.mjs --section agents --open "Browse the catalogue"
- * node scripts/measure-settings.mjs --section general --out /tmp/envoycoder-measure
+ * node scripts/measure-settings.mjs --section general --out /tmp/envoydev-measure
  * node scripts/measure-settings.mjs --section agents --theme light
  * node scripts/measure-settings.mjs --section tasks --select "The agent new tasks start with"
  * node scripts/measure-settings.mjs --section general --open "Command Center" --open "Pair a phone"
@@ -123,7 +123,7 @@ const theme = flag("theme") ?? "dark";
 /** The window the picture and the numbers are taken in. */
 const size = flag("size") ?? "1440,900";
 const keep = has("keep");
-const outDir = resolve(flag("out") ?? join(tmpdir(), "envoycoder-measure"));
+const outDir = resolve(flag("out") ?? join(tmpdir(), "envoydev-measure"));
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
@@ -171,7 +171,7 @@ process.on("exit", stopAll);
 
 const home = keep
   ? join(outDir, "home")
-  : mkdtempSync(join(tmpdir(), "envoycoder-measure-home-"));
+  : mkdtempSync(join(tmpdir(), "envoydev-measure-home-"));
 if (keep) mkdirSync(home, { recursive: true });
 const daemonPort = await freePort();
 const vitePort = await freePort();
@@ -179,9 +179,9 @@ const debugPort = await freePort();
 const daemonLog = join(outDir, "daemon.log");
 
 if (seed) {
-  const stateDir = join(home, "EnvoyCoder");
+  const stateDir = join(home, "EnvoyDev");
   mkdirSync(stateDir, { recursive: true });
-  const projectId = "local::/tmp/envoycoder-measure-repo";
+  const projectId = "local::/tmp/envoydev-measure-repo";
   const at = "2026-09-01T09:00:00.000Z";
   writeFileSync(
     join(stateDir, "projects.json"),
@@ -189,7 +189,7 @@ if (seed) {
       [
         {
           id: projectId,
-          path: "/tmp/envoycoder-measure-repo",
+          path: "/tmp/envoydev-measure-repo",
           label: "measure-repo",
           hostId: "local",
           addedAt: at,
@@ -207,7 +207,7 @@ if (seed) {
         {
           id: `${projectId}::task::1`,
           projectId,
-          cwd: "/tmp/envoycoder-measure-repo",
+          cwd: "/tmp/envoydev-measure-repo",
           title: "the task the tool measures",
           harness: "envoy-harness",
           status: "idle",
@@ -224,7 +224,7 @@ if (seed) {
 const daemon = track(
   spawn(process.execPath, ["--import", "tsx", DAEMON_ENTRY], {
     cwd: root,
-    // **`ENVOYCODER_WARM_AGENTS=0`: the instrument must not pull the trigger.**
+    // **`ENVOYDEV_WARM_AGENTS=0`: the instrument must not pull the trigger.**
     //
     // This tool drives the *production* entry point, which by default looks at what each ready agent publishes
     // in the background — a pass that starts the owner's own coding agents, one at a time, and is right for a
@@ -234,8 +234,8 @@ const daemon = track(
     env: {
       ...process.env,
       ENVOYMESH_HOME: home,
-      ENVOYCODER_DAEMON_PORT: String(daemonPort),
-      ENVOYCODER_WARM_AGENTS: "0",
+      ENVOYDEV_DAEMON_PORT: String(daemonPort),
+      ENVOYDEV_WARM_AGENTS: "0",
     },
     stdio: ["ignore", "pipe", "pipe"],
   }),
@@ -244,7 +244,7 @@ let daemonOutput = "";
 daemon.stdout.on("data", (c) => (daemonOutput += String(c)));
 daemon.stderr.on("data", (c) => (daemonOutput += String(c)));
 
-const claimFile = join(home, "EnvoyCoder", "daemon.json");
+const claimFile = join(home, "EnvoyDev", "daemon.json");
 let claim = null;
 for (let i = 0; i < 160 && claim === null; i += 1) {
   if (existsSync(claimFile)) {
@@ -274,7 +274,7 @@ const vite = track(
     [join(root, "node_modules/vite/bin/vite.js"), "--port", String(vitePort), "--strictPort"],
     {
       cwd: join(root, "apps/desktop"),
-      env: { ...process.env, VITE_ENVOYCODER_DAEMON_PORT: String(daemonPort) },
+      env: { ...process.env, VITE_ENVOYDEV_DAEMON_PORT: String(daemonPort) },
       stdio: ["ignore", "pipe", "pipe"],
     },
   ),
@@ -290,7 +290,7 @@ for (let i = 0; i < 120 && !viteOutput.includes("ready in"); i += 1) {
   await sleep(250);
 }
 
-const profile = mkdtempSync(join(tmpdir(), "envoycoder-measure-chrome-"));
+const profile = mkdtempSync(join(tmpdir(), "envoydev-measure-chrome-"));
 const chrome = track(
   spawn(
     CHROME,
@@ -398,7 +398,7 @@ const sectionTitle = {
  * `pgrep -P` rather than `ps`: it is one call, it exits non-zero when there are none (which is the answer we
  * want), and it needs no parsing of a table whose columns differ between platforms.
  *
- * **What this cannot see, printed rather than implied:** the daemon is started with `ENVOYCODER_WARM_AGENTS=0`
+ * **What this cannot see, printed rather than implied:** the daemon is started with `ENVOYDEV_WARM_AGENTS=0`
  * (see the spawn above), because this tool drives the production entry point and the production entry point
  * looks at what every ready agent publishes in the background. That pass starts real agents on the owner's
  * machine, one at a time, on purpose — and a *measurement* must not pull that trigger. So what this number

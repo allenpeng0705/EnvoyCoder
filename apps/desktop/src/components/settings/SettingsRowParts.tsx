@@ -19,7 +19,7 @@
 
 import type { JSX } from "react";
 
-import type { HarnessId, HarnessSummary } from "@envoycoder/protocol";
+import type { HarnessId, HarnessSummary } from "@envoydev/protocol";
 
 import { agentFor } from "../../composer/agent-for.js";
 import { composerControls, modelNote, modelOffReason } from "../../composer/controls.js";

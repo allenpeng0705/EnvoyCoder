@@ -50,13 +50,13 @@ import {
   CODER_EVENTS,
   HarnessAvailabilitySchema,
   DEFAULT_DAEMON_PATH,
-  ENVOYCODER_ERRORS,
+  ENVOYDEV_ERRORS,
   coderErrorCode,
   coderErrorMessage,
   coderErrorRef,
-} from "@envoycoder/protocol";
-import { coderPaths } from "@envoycoder/host-bridge";
-import { resetSearchPathCacheForTests } from "@envoycoder/platform";
+} from "@envoydev/protocol";
+import { coderPaths } from "@envoydev/host-bridge";
+import { resetSearchPathCacheForTests } from "@envoydev/platform";
 
 import { AcpClient } from "../src/daemon/acp/client.js";
 import { readDaemonClaim } from "../src/daemon/lock.js";
@@ -96,8 +96,13 @@ interface JsonRpcClient {
  * format directly (`{id, method, params}` → `{id, result|error}`, events as `{event, data}`), which
  * is what "the contract" means.
  */
-async function connect(port: number, path = DEFAULT_DAEMON_PATH): Promise<JsonRpcClient> {
-  const socket = new WebSocket(`ws://127.0.0.1:${port}${path}`);
+async function connect(
+  port: number,
+  path = DEFAULT_DAEMON_PATH,
+  options: { token?: string } = {},
+): Promise<JsonRpcClient> {
+  const suffix = options.token ? `?token=${encodeURIComponent(options.token)}` : "";
+  const socket = new WebSocket(`ws://127.0.0.1:${port}${path}${suffix}`);
   await new Promise<void>((resolve, reject) => {
     socket.once("open", () => resolve());
     socket.once("error", reject);
@@ -200,7 +205,7 @@ async function refusalOfCall(
 
 /** Boot a daemon under a throwaway home, and return it with its state directory. */
 async function bootDaemon(): Promise<{ daemon: StartedCoderDaemon; home: string }> {
-  const home = await mkdtemp(join(tmpdir(), "envoycoder-m1-"));
+  const home = await mkdtemp(join(tmpdir(), "envoydev-m1-"));
   const daemon = await startCoderDaemon({
     port: 0,
     home,
@@ -244,12 +249,12 @@ describe("the daemon over a socket", () => {
       windowCount: number;
     };
 
-    expect(hello.product).toBe("EnvoyCoder");
+    expect(hello.product).toBe("EnvoyDev");
     // The instance id is what tells this daemon from a squatter on the same port; a client that
     // cannot compare it cannot tell them apart.
     expect(hello.instanceId).toBe(daemon.instanceId);
     expect(hello.home).toBe(home);
-    expect(hello.stateDir).toBe(join(home, "EnvoyCoder"));
+    expect(hello.stateDir).toBe(join(home, "EnvoyDev"));
     expect(hello.methods).toContain("coder.addProject");
     expect(hello.mesh.kind).toBe("no-node");
     expect(hello.windowCount).toBeGreaterThanOrEqual(1);
@@ -289,7 +294,7 @@ describe("the daemon over a socket", () => {
   });
 
   it("survives a restart with its projects and tasks intact", async () => {
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-m1-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-m1-"));
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
 
     const first = await startCoderDaemon({
@@ -340,7 +345,7 @@ describe("the daemon over a socket", () => {
       harness: "envoy-harness",
       delivery: "npx",
     });
-    expect(coderErrorCode(first)).toBe(ENVOYCODER_ERRORS.connectorNotFetchable);
+    expect(coderErrorCode(first)).toBe(ENVOYDEV_ERRORS.connectorNotFetchable);
     // And nothing was stored: the list still says this agent is delivered the ordinary way.
     const before = (await client.call("coder.listHarnesses", {})) as {
       harnesses: { id: string; delivery?: { kind: string }; installFix?: unknown }[];
@@ -386,7 +391,7 @@ describe("the daemon over a socket", () => {
 
   it("looks at the machine again when a window asks, and tells every window the answer may have changed", async () => {
     // **The owner's question, as a wire fact:** *"After I run `npm install -g @agentclientprotocol/codex-acp`,
-    // how do we let EnvoyCoder know that without restarting?"* The daemon re-measures every row on the read, so
+    // how do we let EnvoyDev know that without restarting?"* The daemon re-measures every row on the read, so
     // the list is never stale *if* something asks it — this method is the asking, and the broadcast is what makes
     // an already-open page current. Both halves are asserted here: the call, and an event a client can act on.
     const { daemon, home } = await bootDaemon();
@@ -432,7 +437,7 @@ describe("the daemon over a socket", () => {
     // English the moment it reconnected to a daemon that had never been told. This asserts the two
     // halves that make it a per-user setting rather than a per-window preference — accepted at the
     // wire, and still there after the process it was written by is gone.
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-m1-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-m1-"));
     const paths = coderPaths(home);
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
 
@@ -475,7 +480,7 @@ describe("the daemon over a socket", () => {
   });
 
   it("quarantines an unreadable file instead of overwriting it, and says so at hello", async () => {
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-m1-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-m1-"));
     const paths = coderPaths(home);
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
 
@@ -505,7 +510,7 @@ describe("the daemon over a socket", () => {
   });
 
   it("keeps the valid rows when one row is unusable", async () => {
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-m1-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-m1-"));
     const paths = coderPaths(home);
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
 
@@ -543,7 +548,7 @@ describe("the daemon over a socket", () => {
     cleanups.push(async () => client.close());
 
     await expect(client.call("coder.addProject", { path: "/definitely/not/here" })).rejects.toThrow(
-      /envoycoder\.path-missing/,
+      /envoydev\.path-missing/,
     );
   });
 
@@ -579,9 +584,9 @@ describe("the daemon over a socket", () => {
     // conditions, three different next steps for a caller ("reload the list", "pick another folder").
     // The codes used to be one, which is why these two tests name them separately.
     await expect(client.call("coder.createTask", { projectId: "nope", title: "x" })).rejects.toThrow(
-      /envoycoder\.project-missing/,
+      /envoydev\.project-missing/,
     );
-    await expect(client.call("coder.addProject", {})).rejects.toThrow(/envoycoder\.bad-request/);
+    await expect(client.call("coder.addProject", {})).rejects.toThrow(/envoydev\.bad-request/);
   });
 
   it("tells a second client about a change the first one made — the multi-window rule", async () => {
@@ -640,8 +645,8 @@ describe("the daemon over a socket", () => {
   it.skipIf(process.platform === "win32")(
     "does not mistake the boot search-path broadcast for the change the test made",
     async () => {
-      const dir = await mkdtemp(join(tmpdir(), "envoycoder-race-shell-"));
-      const home = await mkdtemp(join(tmpdir(), "envoycoder-race-home-"));
+      const dir = await mkdtemp(join(tmpdir(), "envoydev-race-shell-"));
+      const home = await mkdtemp(join(tmpdir(), "envoydev-race-home-"));
       cleanups.push(async () => {
         await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
       });
@@ -745,7 +750,7 @@ describe("the daemon over a socket", () => {
   it.skipIf(process.platform === "win32")(
     "tells clients the agent list may have changed when the search path resolves",
     async () => {
-      const dir = await mkdtemp(join(tmpdir(), "envoycoder-slow-shell-"));
+      const dir = await mkdtemp(join(tmpdir(), "envoydev-slow-shell-"));
       const slowShell = join(dir, "slow-shell");
       await writeFile(slowShell, `#!/bin/sh\nsleep 0.4\nexec /bin/sh "$@"\n`);
       await chmod(slowShell, 0o755);
@@ -876,7 +881,7 @@ describe("the daemon over a socket", () => {
     await client.call("coder.addProvider", {
       id: "absent",
       label: "Absent Agent",
-      command: "envoycoder-not-a-real-binary",
+      command: "envoydev-not-a-real-binary",
       args: ["--acp"],
       transport: "acp",
     });
@@ -908,7 +913,7 @@ describe("the daemon over a socket", () => {
     // The fix for a program we have never heard of is the command the user wrote: nobody can author an
     // install step for somebody else's tool, and the schema refuses an absence that names nothing to do.
     expect(byId.get("absent")?.availability.fix).toEqual([
-      { command: "envoycoder-not-a-real-binary --acp" },
+      { command: "envoydev-not-a-real-binary --acp" },
     ]);
 
     // Removing one leaves the others, and removing it twice is a refusal with a code a client can branch
@@ -918,7 +923,7 @@ describe("the daemon over a socket", () => {
     const after = (await client.call("coder.listProviders")) as { providers: { id: string }[] };
     expect(after.providers.map((entry) => entry.id)).toEqual(["real-program", "absent"]);
     await expect(client.call("coder.removeProvider", { id: "one-shot" })).rejects.toThrow(
-      /envoycoder\.provider-missing/,
+      /envoydev\.provider-missing/,
     );
   });
 
@@ -939,7 +944,7 @@ describe("the daemon over a socket", () => {
       command: "my-codex",
       transport: "acp",
     });
-    expect(coderErrorCode(taken)).toBe(ENVOYCODER_ERRORS.providerIdTaken);
+    expect(coderErrorCode(taken)).toBe(ENVOYDEV_ERRORS.providerIdTaken);
     expect(coderErrorRef(taken)?.key).toBe("error.providerIdTaken");
 
     const notAName = await refusalOfCall(client, "coder.addProvider", {
@@ -966,9 +971,9 @@ describe("the daemon over a socket", () => {
     // no field for a value is what makes this pass; a `Record<string, string>` of values is what would make
     // it fail, and that is the shape this project refused to copy from the reference product.
     const secret = "sk-live-9c31-do-not-store-me";
-    process.env.ENVOYCODER_TEST_SECRET = secret;
+    process.env.ENVOYDEV_TEST_SECRET = secret;
     cleanups.push(async () => {
-      delete process.env.ENVOYCODER_TEST_SECRET;
+      delete process.env.ENVOYDEV_TEST_SECRET;
     });
 
     const { daemon, home } = await bootDaemon();
@@ -983,13 +988,13 @@ describe("the daemon over a socket", () => {
       id: "with-credential",
       label: "With Credential",
       command: process.execPath,
-      env: ["ENVOYCODER_TEST_SECRET"],
+      env: ["ENVOYDEV_TEST_SECRET"],
       transport: "acp",
     });
 
     const paths = coderPaths(home);
     const stored = await readFile(paths.providersFile, "utf8");
-    expect(stored).toContain("ENVOYCODER_TEST_SECRET");
+    expect(stored).toContain("ENVOYDEV_TEST_SECRET");
     expect(stored.includes(secret), "the value reached the file on disk").toBe(false);
 
     // The wire answer carries the name and a boolean — never the value — and it is the *daemon's* answer
@@ -997,7 +1002,7 @@ describe("the daemon over a socket", () => {
     const list = (await client.call("coder.listProviders")) as {
       providers: { env: { name: string; set: boolean }[] }[];
     };
-    expect(list.providers[0]?.env).toEqual([{ name: "ENVOYCODER_TEST_SECRET", set: true }]);
+    expect(list.providers[0]?.env).toEqual([{ name: "ENVOYDEV_TEST_SECRET", set: true }]);
     expect(JSON.stringify(list).includes(secret), "the value reached the wire").toBe(false);
   });
 
@@ -1017,14 +1022,14 @@ describe("the daemon over a socket", () => {
       id: "needs-a-credential",
       label: "Needs A Credential",
       command: process.execPath,
-      env: ["ENVOYCODER_DEFINITELY_NOT_SET"],
+      env: ["ENVOYDEV_DEFINITELY_NOT_SET"],
       transport: "acp",
     });
 
     const list = (await client.call("coder.listProviders")) as {
       providers: { env: { name: string; set: boolean }[]; availability: { state: string } }[];
     };
-    expect(list.providers[0]?.env).toEqual([{ name: "ENVOYCODER_DEFINITELY_NOT_SET", set: false }]);
+    expect(list.providers[0]?.env).toEqual([{ name: "ENVOYDEV_DEFINITELY_NOT_SET", set: false }]);
     // The *program* is present, so the state stays `ready`: what is missing is a credential, which is a
     // different sentence and a different action. The refusal is at launch, where `providers.test.ts`
     // asserts it names the variable and never a value.
@@ -1032,7 +1037,7 @@ describe("the daemon over a socket", () => {
   });
 
   it("quarantines an unreadable providers file instead of emptying the user's agents", async () => {
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-m1-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-m1-"));
     const paths = coderPaths(home);
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
 
@@ -1108,7 +1113,7 @@ describe("the daemon over a socket", () => {
  */
 describe("a run, driven over the socket", () => {
   it("streams normalized events to a subscribed client, and answers getRun from the same log", async () => {
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-m2-wire-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-m2-wire-"));
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
 
     const daemon = await startCoderDaemon({
@@ -1171,7 +1176,7 @@ describe("a run, driven over the socket", () => {
     // survives the daemon, and comes back out of the *agent's* mouth. Anything less — asserting the
     // request was sent, or that the task remembers the id — would pass on a daemon that never calls
     // `session/set_mode` at all, which is exactly the state this milestone started from.
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-m2-mode-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-m2-mode-"));
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
 
     const daemon = await startCoderDaemon({
@@ -1225,7 +1230,7 @@ describe("a run, driven over the socket", () => {
   }, 30_000);
 
   it("refuses a mode an agent cannot take, and starts nothing", async () => {
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-m2-nomode-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-m2-nomode-"));
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
 
     const daemon = await startCoderDaemon({
@@ -1274,7 +1279,7 @@ describe("a run, driven over the socket", () => {
  */
 describe("changing the folder a task runs in", () => {
   it("normalises what a person types, and keeps the task's own row", async () => {
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-m2-cwd-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-m2-cwd-"));
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
 
     const wanted = join(home, "work", "api");
@@ -1330,7 +1335,7 @@ describe("changing the folder a task runs in", () => {
   }, 30_000);
 
   it("refuses a folder that is not there, and leaves the task where it was", async () => {
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-m2-badcwd-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-m2-badcwd-"));
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
 
     const daemon = await startCoderDaemon({
@@ -1411,7 +1416,7 @@ describe("changing the folder a task runs in", () => {
  */
 describe("changing which agent a task uses", () => {
   it("forgets a mode the new agent cannot take, so the task does not become unrunnable", async () => {
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-m2-switch-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-m2-switch-"));
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
 
     const daemon = await startCoderDaemon({
@@ -1482,7 +1487,7 @@ describe("the model a task runs on", () => {
     client: JsonRpcClient;
     taskId: string;
   }> {
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-m2-model-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-m2-model-"));
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
 
     const daemon = await startCoderDaemon({
@@ -1637,9 +1642,9 @@ describe("the model a task runs on", () => {
       .then(() => "")
       .catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
     // The code, the sentence and the key, in that order of specificity: the transport carries a coded
-    // string (`ENVOYCODER_ERRORS` prefixed onto the prose), the prose is what a log shows, and the key
+    // string (`ENVOYDEV_ERRORS` prefixed onto the prose), the prose is what a log shows, and the key
     // is what a translated window renders instead of the English.
-    expect(coderErrorCode(refusal)).toBe(ENVOYCODER_ERRORS.badRequest);
+    expect(coderErrorCode(refusal)).toBe(ENVOYDEV_ERRORS.badRequest);
     expect(coderErrorMessage(refusal)).toContain("does not publish a model");
     const ref_ = coderErrorRef(refusal);
     expect(ref_?.key).toBe("error.modelUnknown");
@@ -1720,7 +1725,7 @@ describe("the thinking level a task runs at", () => {
     client: JsonRpcClient;
     taskId: string;
   }> {
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-m2-thinking-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-m2-thinking-"));
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
 
     const daemon = await startCoderDaemon({
@@ -1946,7 +1951,7 @@ describe("asking an agent what it offers, before any run", () => {
     /** Where what an agent's **authentication** is gets recorded, which happens even when nothing opened. */
     authFile: string;
   }> {
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-probe-rpc-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-probe-rpc-"));
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
 
     let spawns = 0;
@@ -2108,4 +2113,49 @@ describe("asking an agent what it offers, before any run", () => {
     await client.call("coder.probeSessionOptions", { harness: "deepseek-harness", force: true });
     expect(spawns()).toBe(2);
   }, 60_000);
+});
+
+describe("paired-device sessions (M4)", () => {
+  it("mints a pairing URI a remote client can use, and refuses without a token", async () => {
+    const { daemon, home } = await bootDaemon();
+    cleanups.push(async () => {
+      await daemon.stop();
+      await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    });
+
+    const window = await connect(daemon.port);
+    cleanups.push(async () => window.close());
+
+    const minted = (await window.call("coder.mintPairing", { deviceLabel: "Test phone" })) as {
+      uri: string;
+      device: { id: string; deviceLabel: string };
+    };
+    expect(minted.device.deviceLabel).toBe("Test phone");
+    expect(minted.uri).toContain("envoy://pair?");
+    expect(minted.uri).toContain("app=EnvoyDev");
+    expect(minted.uri).toContain("token=");
+
+    const token = new URL(minted.uri).searchParams.get("token");
+    expect(token).toBeTruthy();
+
+    const listed = (await window.call("coder.listPairedDevices", {})) as {
+      devices: { id: string; deviceLabel: string }[];
+    };
+    expect(listed.devices.some((d) => d.id === minted.device.id)).toBe(true);
+    expect(JSON.stringify(listed)).not.toContain(token);
+
+    const phone = await connect(daemon.port, DEFAULT_DAEMON_PATH, { token: token! });
+    cleanups.push(async () => phone.close());
+    const hello = (await phone.call("coder.hello", { client: { name: "envoydev-mobile", platform: "test" } })) as {
+      product: string;
+    };
+    expect(hello.product).toBe("EnvoyDev");
+
+    await window.call("coder.revokePairedDevice", { id: minted.device.id });
+    const revoked = await connect(daemon.port, DEFAULT_DAEMON_PATH, { token: token! });
+    cleanups.push(async () => revoked.close());
+    await expect(
+      revoked.call("coder.hello", { client: { name: "envoydev-mobile", platform: "test" } }),
+    ).rejects.toThrow(/UNAUTHORIZED|unauthorized|Authentication/i);
+  }, 30_000);
 });

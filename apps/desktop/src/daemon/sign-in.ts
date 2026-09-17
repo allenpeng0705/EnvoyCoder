@@ -40,16 +40,16 @@
  * both are reported as `not-completed`, which is the state that does not claim anything happened.
  */
 
-import type { HarnessAuth, HarnessId, RpcMethod, SignInOutcome } from "@envoycoder/protocol";
+import type { HarnessAuth, HarnessId, RpcMethod, SignInOutcome } from "@envoydev/protocol";
 import {
-  ENVOYCODER_ERRORS,
+  ENVOYDEV_ERRORS,
   coderError,
   coderErrorMessage,
   parseRpcParams,
-} from "@envoycoder/protocol";
-import { harnessAcpFacts, harnessDefinition } from "@envoycoder/agent-catalog";
-import type { PlatformId } from "@envoycoder/platform";
-import type { CoderPaths } from "@envoycoder/host-bridge";
+} from "@envoydev/protocol";
+import { harnessAcpFacts, harnessDefinition } from "@envoydev/agent-catalog";
+import type { PlatformId } from "@envoydev/platform";
+import type { CoderPaths } from "@envoydev/host-bridge";
 
 import { AcpClient, AcpRequestError, type AcpLaunch } from "./acp/client.js";
 import {
@@ -256,7 +256,7 @@ export class SessionSignIn {
         // reaches that field is very often the credential itself, and a refusal reaches a log.
         detail: keyed(
           "signIn.noMethod",
-          `${label} will not open a session here and did not name a sign-in method EnvoyCoder may send` +
+          `${label} will not open a session here and did not name a sign-in method EnvoyDev may send` +
             (advertised.length > 0 ? `. It offers: ${advertised.join(", ")}.` : ".") +
             ` Sign in with the agent's own command, then ask again.`,
           {
@@ -480,7 +480,7 @@ export function createSignInHandlers(deps: SignInHandlerDeps): Partial<Record<Rp
 export function requireSignIn(signIn: SessionSignIn | undefined): SessionSignIn {
   if (!signIn) {
     throw coderError(
-      ENVOYCODER_ERRORS.harnessFailed,
+      ENVOYDEV_ERRORS.harnessFailed,
       "This daemon was started without an agent runtime, so it cannot run tasks.",
       { key: "error.noRunRuntime" },
     );

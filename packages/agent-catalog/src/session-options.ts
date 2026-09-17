@@ -56,7 +56,7 @@ import type {
   HarnessId,
   ObservedSessionOption,
   ObservedSessionOptions,
-} from "@envoycoder/protocol";
+} from "@envoydev/protocol";
 
 import { HARNESS_MODELS, modelIdFor } from "./models.js";
 

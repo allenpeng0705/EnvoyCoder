@@ -3,7 +3,7 @@
  *
  * ## The gap it closes, in the owner's words
  *
- * *"After I run `npm install -g @agentclientprotocol/codex-acp`, how do we let EnvoyCoder know that without
+ * *"After I run `npm install -g @agentclientprotocol/codex-acp`, how do we let EnvoyDev know that without
  * restarting?"* The daemon's half of the answer was already right: `coder.listHarnesses` and
  * `coder.listCatalog` resolve every row's state from filesystem and environment reads **on the read**, with no
  * cache anywhere in the path — measured on the machine this was written on, where a bridge installed minutes
@@ -30,8 +30,8 @@
  * invalidates.
  */
 
-import { parseRpcParams } from "@envoycoder/protocol";
-import type { RpcMethod } from "@envoycoder/protocol";
+import { parseRpcParams } from "@envoydev/protocol";
+import type { RpcMethod } from "@envoydev/protocol";
 
 import type { CoderHandler } from "./service.js";
 

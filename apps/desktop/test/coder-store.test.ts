@@ -17,7 +17,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import { RPC_METHODS, type AgentRun, type RunEvent } from "@envoycoder/protocol";
+import { RPC_METHODS, type AgentRun, type RunEvent } from "@envoydev/protocol";
 
 import type { CoderConnection, ConnectionStatus, HelloResult } from "../src/client/connection.js";
 import { createCoderStore, type CoderState } from "../src/state/coderStore.js";
@@ -63,7 +63,7 @@ class FakeConnection {
     this.answers.set("coder.meshStatus", { mesh: { kind: "no-node", reason: "" } });
     // The catalogue: a projection of a static list, so the healthy answer is the shape the daemon serves
     // and the store may load it with everything else. Empty here, because a fixture with thirty-eight
-    // entries would be describing `@envoycoder/agent-catalog` a second time.
+    // entries would be describing `@envoydev/agent-catalog` a second time.
     this.answers.set("coder.listCatalog", { entries: [] });
     // Looking at the machine again: acknowledged, and deliberately carrying no list (`coder.recheckAgents`
     // documents why). A store leg that wanted a *different* answer after a re-check stages it in `answers`.
@@ -98,7 +98,7 @@ class FakeConnection {
     const refusal = this.refusals.get(method);
     if (refusal !== undefined) return Promise.reject(new Error(refusal));
     if (!this.answers.has(method)) {
-      return Promise.reject(new Error(`envoycoder.harness-failed: ${method} was refused in this test`));
+      return Promise.reject(new Error(`envoydev.harness-failed: ${method} was refused in this test`));
     }
     return Promise.resolve(this.answers.get(method));
   }
@@ -286,11 +286,11 @@ describe("a run's record follows its own events", () => {
     // window's old records are a live-looking fiction; a different `instanceId` is the fact that says so.
     const connection = new FakeConnection();
     const hello = (instanceId: string): HelloResult => ({
-      product: "EnvoyCoder",
+      product: "EnvoyDev",
       version: "0.1.0",
       instanceId,
       home: "/home/you/.envoymesh",
-      stateDir: "/home/you/.envoymesh/EnvoyCoder",
+      stateDir: "/home/you/.envoymesh/EnvoyDev",
       startedAt: "2026-09-14T00:00:00.000Z",
       windowCount: 1,
       methods: [],
@@ -324,7 +324,7 @@ describe("a run's record follows its own events", () => {
     const { store: s, connection, state } = await withRun();
     connection.refusals.set(
       "coder.sendToRun",
-      'envoycoder.harness-failed: That run has already finished, so there is nothing to send to it. Start a new task instead. [envoycoder.key] {"key":"error.runFinished"}',
+      'envoydev.harness-failed: That run has already finished, so there is nothing to send to it. Start a new task instead. [envoydev.key] {"key":"error.runFinished"}',
     );
     connection.answers.set("coder.tailRun", {
       run: {
@@ -365,11 +365,11 @@ describe("the store's connection to the daemon", () => {
     // is the situation that produced "I added a project and it never appeared" — the shell attaches to a
     // daemon already owning the port (family rule D2), so the new window kept talking to the old build.
     const older: HelloResult = {
-      product: "EnvoyCoder",
+      product: "EnvoyDev",
       version: "0.1.0",
       instanceId: "daemon-from-an-older-build",
       home: "/home/you/.envoymesh",
-      stateDir: "/home/you/.envoymesh/EnvoyCoder",
+      stateDir: "/home/you/.envoymesh/EnvoyDev",
       startedAt: "2026-09-14T01:41:19.093Z",
       windowCount: 1,
       methods: ["coder.hello", "coder.listProjects", "coder.getSettings"],
@@ -400,11 +400,11 @@ describe("the store's connection to the daemon", () => {
   it("says nothing when the daemon is the same build, or a newer one", async () => {
     const connection = new FakeConnection();
     connection.hello = {
-      product: "EnvoyCoder",
+      product: "EnvoyDev",
       version: "0.1.0",
       instanceId: "same-build",
       home: "/home/you/.envoymesh",
-      stateDir: "/home/you/.envoymesh/EnvoyCoder",
+      stateDir: "/home/you/.envoymesh/EnvoyDev",
       startedAt: "2026-09-14T01:41:19.093Z",
       windowCount: 1,
       // A daemon with *more* than this window: `coder.somethingFromTheFuture`. Not skew.
@@ -449,11 +449,11 @@ describe("the store's connection to the daemon", () => {
   it("does not offer to run a fix to a daemon that does not serve the method", async () => {
     const connection = new FakeConnection();
     connection.hello = {
-      product: "EnvoyCoder",
+      product: "EnvoyDev",
       version: "0.1.0",
       instanceId: "daemon-from-an-older-build",
       home: "/home/you/.envoymesh",
-      stateDir: "/home/you/.envoymesh/EnvoyCoder",
+      stateDir: "/home/you/.envoymesh/EnvoyDev",
       startedAt: "2026-09-14T01:41:19.093Z",
       windowCount: 1,
       methods: ["coder.hello", "coder.listHarnesses"],
@@ -475,7 +475,7 @@ describe("the store's connection to the daemon", () => {
 
   it("re-checks the machine on request, then re-reads both lists through their ordinary loaders", async () => {
     // The owner's question, as the store's half of it: *"After I run `npm install -g
-    // @agentclientprotocol/codex-acp`, how do we let EnvoyCoder know that without restarting?"* The daemon
+    // @agentclientprotocol/codex-acp`, how do we let EnvoyDev know that without restarting?"* The daemon
     // re-measures on every read; this is the window asking it to, and then reading again — through
     // `loadHarnesses`/`loadCatalog` rather than by accepting a list on the re-check's own answer, so there is
     // one projection and one path.
@@ -507,11 +507,11 @@ describe("the store's connection to the daemon", () => {
     // the half a test can see from here.
     const connection = new FakeConnection();
     connection.hello = {
-      product: "EnvoyCoder",
+      product: "EnvoyDev",
       version: "0.1.0",
       instanceId: "daemon-from-an-older-build",
       home: "/home/you/.envoymesh",
-      stateDir: "/home/you/.envoymesh/EnvoyCoder",
+      stateDir: "/home/you/.envoymesh/EnvoyDev",
       startedAt: "2026-09-14T01:41:19.093Z",
       windowCount: 1,
       methods: ["coder.hello", "coder.listHarnesses"],
@@ -535,11 +535,11 @@ describe("the store's connection to the daemon", () => {
     // window against a daemon that works perfectly well.
     const connection = new FakeConnection();
     connection.hello = {
-      product: "EnvoyCoder",
+      product: "EnvoyDev",
       version: "0.1.0",
       instanceId: "quiet-daemon",
       home: "/home/you/.envoymesh",
-      stateDir: "/home/you/.envoymesh/EnvoyCoder",
+      stateDir: "/home/you/.envoymesh/EnvoyDev",
       startedAt: "2026-09-14T01:41:19.093Z",
       windowCount: 1,
       methods: [],
@@ -562,7 +562,7 @@ describe("the store's connection to the daemon", () => {
     const connection = new FakeConnection();
     const created = createCoderStore({
       resolveEndpoint: async () => {
-        throw new Error("The EnvoyCoder shell did not say where its daemon is.");
+        throw new Error("The EnvoyDev shell did not say where its daemon is.");
       },
       connect: () => connection as unknown as CoderConnection,
     });
@@ -842,7 +842,7 @@ describe("other windows", () => {
 
   it("takes the mesh at its word when it says the attachment changed", async () => {
     const { connection, state } = await store();
-    connection.push("coder:mesh-status", { kind: "attached", scopeKey: "product:EnvoyCoder", ownerId: "owner" });
+    connection.push("coder:mesh-status", { kind: "attached", scopeKey: "product:EnvoyDev", ownerId: "owner" });
     expect(state().mesh.kind).toBe("attached");
   });
 });

@@ -11,11 +11,11 @@
  * Two groups are not surfaces but *kinds of text*:
  *
  *   * **`status.*`** — one key per `TaskStatus`, so the rail and the pane word a status identically
- *     in every language. `@envoycoder/task-model`'s `statusLabel` stays the English source and a
+ *     in every language. `@envoydev/task-model`'s `statusLabel` stays the English source and a
  *     test asserts the two agree word for word.
  *   * **`error.*`, `note.*`, `approval.*`** — sentences the **daemon** sends. Each is repeated here
  *     verbatim so that a German user reads German: the daemon sends the key with its English
- *     sentence (`messageKey`/`messageValues` in `@envoycoder/protocol`), and the window renders the
+ *     sentence (`messageKey`/`messageValues` in `@envoydev/protocol`), and the window renders the
  *     key in the language the user chose. The English here and the English on the wire are the same
  *     sentence on purpose — an English user must see no change at all, and a translator has one
  *     string to translate rather than two.
@@ -30,7 +30,7 @@
 
 export const en = {
   /* ── the product, and the machine it is on ── */
-  "app.name": "EnvoyCoder",
+  "app.name": "EnvoyDev",
   "app.thisMachine": "This machine",
 
   /* ── the connection, said the way a user needs it ── */
@@ -59,7 +59,7 @@ export const en = {
     "Add a directory you work in. Tasks you start in it appear here, and the project remembers which agent they should use.",
   "sidebar.empty.noMatch": "Nothing matches “{query}”.",
   "sidebar.empty.cannotLoadTitle": "Could not read your projects",
-  "sidebar.empty.cannotLoadBody": "This list is unknown, not empty — EnvoyCoder could not ask its daemon for it.",
+  "sidebar.empty.cannotLoadBody": "This list is unknown, not empty — EnvoyDev could not ask its daemon for it.",
   "sidebar.section.tasks": "Tasks",
   "sidebar.project.attention": "Tasks waiting on you",
   "sidebar.project.agent": "The agent new tasks in this project start with",
@@ -78,7 +78,7 @@ export const en = {
   "sidebar.project.remove": "Remove project",
   "sidebar.project.remove.aria": "Remove this project",
   "sidebar.project.remove.confirm":
-    "Remove “{project}” from EnvoyCoder? Its tasks leave the rail and are archived — nothing on disk is deleted.",
+    "Remove “{project}” from EnvoyDev? Its tasks leave the rail and are archived — nothing on disk is deleted.",
   "sidebar.project.remove.cta": "Remove project",
   "sidebar.task.menu.aria": "Actions for {task}",
   "sidebar.task.menu.title": "Task actions",
@@ -123,7 +123,7 @@ export const en = {
   "palette.pickerFailed": "The folder picker could not open: {detail}",
 
   /* ── the work area with nothing in it, and the three reasons why ── */
-  "work.offline.title": "EnvoyCoder cannot reach its daemon",
+  "work.offline.title": "EnvoyDev cannot reach its daemon",
   "work.offline.body":
     "The daemon is the process that runs your tasks, and it is not answering. It starts with the app, so this usually fixes itself in a moment.",
   "work.loading": "Loading your projects…",
@@ -131,7 +131,7 @@ export const en = {
   "work.noTask.body":
     "Pick a task on the left, or start one in a project. Agents run on this machine and, when the mesh is attached, on your other machines too.",
   "work.noProjects.title": "No projects yet",
-  "work.noProjects.body": "Add a directory you work in, and EnvoyCoder can run agents there.",
+  "work.noProjects.body": "Add a directory you work in, and EnvoyDev can run agents there.",
   "work.noTask.action": "Start a task",
   "work.noProjects.action": "Add a project",
 
@@ -160,7 +160,7 @@ export const en = {
   "task.composer.aria": "Message the agent",
   "task.remove": "Remove task",
   "task.remove.aria": "Remove this task",
-  "task.remove.confirm": "Remove “{title}” from EnvoyCoder? It leaves the rail and is archived — the folder and its files are not touched.",
+  "task.remove.confirm": "Remove “{title}” from EnvoyDev? It leaves the rail and is archived — the folder and its files are not touched.",
   "task.remove.cta": "Remove",
   "action.cancel": "Cancel",
   "task.composer.placeholder.approval": "Answer the request above before sending anything",
@@ -199,7 +199,7 @@ export const en = {
     "Choosing a mode for {agent} is not wired up yet, so the picker is off rather than silently ignored.",
   // A third, and the one that is easiest to mistake for the first: nothing has told us yet.
   "task.composer.agentMode.unknown":
-    "EnvoyCoder has not been told which modes {agent} offers yet, so the picker is off for now.",
+    "EnvoyDev has not been told which modes {agent} offers yet, so the picker is off for now.",
 
   /* ── the model the task runs on ──
      The third control, and the one with the most ways to be wrong, so its states are spelled out.
@@ -219,7 +219,7 @@ export const en = {
   "task.composer.model.notWired":
     "Choosing a model for {agent} is not wired up yet, so the control is off rather than silently ignored.",
   "task.composer.model.unknown":
-    "EnvoyCoder has not been told which models {agent} offers yet, so the control is off for now.",
+    "EnvoyDev has not been told which models {agent} offers yet, so the control is off for now.",
   // The free-text case: the agent accepts a model and publishes no list we can read before a run
   // exists. The field is *usable* — this note says what shape the value has to be, and why.
   "task.composer.model.freeText":
@@ -233,7 +233,7 @@ export const en = {
   // "where the list came from" line, because the answer to that question is what changes the user's
   // expectations — a model list is per machine, per credential and per agent build.
   "task.composer.model.observed":
-    "These are the models {agent} listed when EnvoyCoder last opened a session with it, on {at}. It may publish different ones next time.",
+    "These are the models {agent} listed when EnvoyDev last opened a session with it, on {at}. It may publish different ones next time.",
 
   /* ── the thinking level ──
      The fourth control, and the first one whose options exist **nowhere but in a session**: an agent
@@ -252,17 +252,17 @@ export const en = {
   // have not seen yet, or this build cannot deliver one. Only the first is about the agent.
   "task.composer.thinking.none": "{agent} does not offer a thinking level.",
   "task.composer.thinking.notSeen":
-    "EnvoyCoder has not opened a session with {agent} yet, and {agent} only lists its thinking levels inside a session — so there is nothing to choose from until it has run once.",
+    "EnvoyDev has not opened a session with {agent} yet, and {agent} only lists its thinking levels inside a session — so there is nothing to choose from until it has run once.",
   "task.composer.thinking.notWired":
     "Choosing how much {agent} thinks is not wired up yet, so the control is off rather than silently ignored.",
   "task.composer.thinking.unknown":
-    "EnvoyCoder has not been told what {agent} offers yet, so the control is off for now.",
+    "EnvoyDev has not been told what {agent} offers yet, so the control is off for now.",
   // The observation, said out loud — and it carries more weight here than for the model, because a
   // thought level is derived from the model the session resolved: the list describes the model that
   // agent last ran on, so a user who changed the model may see a level the agent no longer accepts.
   // When it refuses one, the run stops with the agent's own sentence rather than continuing quietly.
   "task.composer.thinking.observed":
-    "These are the thinking levels {agent} offered when EnvoyCoder last opened a session with it, on {at}. They were listed for the model it was running then, so they can change.",
+    "These are the thinking levels {agent} offered when EnvoyDev last opened a session with it, on {at}. They were listed for the model it was running then, so they can change.",
 
   /* ── asking the agent what it offers, before the first run ──
      The model list and the thinking levels of both native harnesses exist only *inside a session*, so
@@ -279,14 +279,14 @@ export const en = {
   // While it runs, the control says so *and* says what it costs — an agent process, briefly. A control
   // that showed an empty picker instead would be the lie this whole row exists to prevent.
   "task.composer.probe.asking":
-    "Asking {agent} what it offers. EnvoyCoder starts it, asks, and closes it again — nothing is sent to it.",
+    "Asking {agent} what it offers. EnvoyDev starts it, asks, and closes it again — nothing is sent to it.",
   // The agent answered and had nothing to publish: a fact about the agent, not about our ignorance.
   "task.composer.probe.none":
     "{agent} answered and published nothing to choose from, so there is still no list here — type a value it documents, or pick one after the first run.",
   // We never got to ask. Named separately from "it published nothing" on purpose: reporting our failure
   // as a fact about the agent is the defect this distinction exists to prevent.
   "task.composer.probe.failed":
-    "EnvoyCoder could not ask {agent} what it offers: {reason} Nothing you see has changed.",
+    "EnvoyDev could not ask {agent} what it offers: {reason} Nothing you see has changed.",
 
   /* ── the modes an agent can be put into, in our words rather than the agent's ──
      `AgentMode.labelKey`/`descriptionKey` point here for every mode **we** named; a mode a
@@ -320,7 +320,10 @@ export const en = {
   "mesh.attached.peers": "Mesh connected — {count} machines reachable",
   "mesh.attached.none": "Mesh connected — no other machines reachable yet",
   "mesh.noNode": "Standalone — tasks stay on this machine",
-  "mesh.refused": "EnvoyMesh refused EnvoyCoder a session — tasks stay on this machine",
+  "mesh.refused": "EnvoyMesh refused EnvoyDev a session — tasks stay on this machine",
+  "mesh.hosting.peers": "Hosting this mesh — {count} machines connected",
+  "mesh.hosting.none": "Hosting this mesh — no other machines connected yet",
+  "mesh.hosting.title": "Mesh peer {peerId}",
   "mesh.peers": "{count} peers",
   "mesh.scope.title": "Session scope {scope}",
   "mesh.agentsHere": "Agents run on this machine",
@@ -395,9 +398,9 @@ export const en = {
   "settings.approvals.reaches":
     "Handed to {agent} as its own policy for every run, so the asking happens where the work does.",
   "settings.approvals.unsupported":
-    "EnvoyCoder cannot change this for {agent}: it has no way to be told, and asks on its own terms. Pick an agent EnvoyCoder can hand a policy to, or answer {agent}'s own prompts.",
+    "EnvoyDev cannot change this for {agent}: it has no way to be told, and asks on its own terms. Pick an agent EnvoyDev can hand a policy to, or answer {agent}'s own prompts.",
   "settings.approvals.unknown":
-    "EnvoyCoder has not been told what {agent} accepts yet, so this stays off rather than storing a choice nothing reads.",
+    "EnvoyDev has not been told what {agent} accepts yet, so this stays off rather than storing a choice nothing reads.",
   "settings.transcripts.title": "Keep transcripts after a task ends",
   "settings.transcripts.detail": "Keep the record of what the agent did.",
   "settings.project.title": "Project settings for {project}",
@@ -469,7 +472,7 @@ export const en = {
    */
   "settings.agents.signIn.terminal": "To sign in, run this in your terminal:",
   "settings.agents.olderDaemon":
-    "The daemon this window is talking to is an older build and does not have this part of the agent list, so it cannot be shown here. Restart EnvoyCoder so the window and its daemon are the same build.",
+    "The daemon this window is talking to is an older build and does not have this part of the agent list, so it cannot be shown here. Restart EnvoyDev so the window and its daemon are the same build.",
   /**
    * **The catalogue is a group with a count and two ways in, not thirty-eight expanded rows.**
    *
@@ -485,7 +488,7 @@ export const en = {
   "settings.agents.catalog.browse": "Browse the catalogue",
   "settings.agents.catalog.hide": "Hide the catalogue",
   "settings.agents.catalog.browse.title":
-    "Recipes EnvoyCoder knows how to drive. Whether this machine can run one is a fact somebody has to measure, so nothing is checked until you ask — one row at a time, because checking walks this machine's program folders.",
+    "Recipes EnvoyDev knows how to drive. Whether this machine can run one is a fact somebody has to measure, so nothing is checked until you ask — one row at a time, because checking walks this machine's program folders.",
   "settings.agents.search.label": "Search the catalogue",
   "settings.agents.search.placeholder": "Name, id or description",
   "settings.agents.add.noMatches": "No catalogued agent matches “{query}”.",
@@ -501,21 +504,21 @@ export const en = {
   "settings.agents.row.details.aria": "Details for {agent}",
   "settings.agents.row.nothingToInstall": "Nothing to install",
   /** The row's line when the daemon is a build behind: the action, in four words, not the essay. */
-  "settings.agents.row.restart": "Restart EnvoyCoder",
+  "settings.agents.row.restart": "Restart EnvoyDev",
   "settings.agents.row.add": "Add",
   "settings.agents.row.adding": "Adding…",
   "settings.agents.row.add.title":
     "Add {agent} to your agents. Its command line and its environment come from this entry exactly as they are written above — the recipe's own constants travel with it, and any variable the recipe does not set stays yours to set.",
   "settings.agents.row.builtIn.short": "Built in",
   "settings.agents.row.builtIn":
-    "EnvoyCoder already ships this agent, so it is configured in “On this machine” above rather than added a second time.",
+    "EnvoyDev already ships this agent, so it is configured in “On this machine” above rather than added a second time.",
   "settings.agents.row.installLink": "Where to get it",
   "settings.agents.row.installLink.title": "{agent}'s own page",
   /**
    * **Looking at this machine again**, and the two things the control says.
    *
    * The owner's question, verbatim: *"After I run
-   * `npm install -g @agentclientprotocol/codex-acp`, how do we let EnvoyCoder know that without
+   * `npm install -g @agentclientprotocol/codex-acp`, how do we let EnvoyDev know that without
    * restarting?"* The answer is a press rather than a restart: `coder.recheckAgents` re-asks the login shell
    * where the user's programs are and re-reads every row. `title` says what the press does **and what it does
    * not do** — nothing is started — because that is the question a careful user asks before pressing a button
@@ -554,10 +557,10 @@ export const en = {
   "settings.agent.verdict.fetch.line": "Runs through npx",
   /* The refusal when a connector is not on npm at all: no route to fetch, so nothing is stored. */
   "error.connectorNotFetchable":
-    "{harness} has no connector published on npm, so EnvoyCoder cannot fetch it. Install it instead.",
+    "{harness} has no connector published on npm, so EnvoyDev cannot fetch it. Install it instead.",
   /**
    * **The press that runs the fix.** The owner's second question, in the words a user sees: *"can we support run
-   * the commands in EnvoyCoder?"*
+   * the commands in EnvoyDev?"*
    *
    * `run` is the button, `busy` is what it says while the shell is working, and `title` says what the press does
    * **and what it does not do** — it runs the command above, in a login shell, in the user's home folder, and
@@ -588,14 +591,14 @@ export const en = {
   "settings.agents.fix.copy.aria": "Copy {command}",
   "settings.agents.manual.open": "Add a program of my own",
   "settings.agents.manual.open.title":
-    "If you already have a coding agent that speaks the Agent Client Protocol and it is not in the catalogue, declare it here. EnvoyCoder will start it and probe it exactly as it does the others.",
+    "If you already have a coding agent that speaks the Agent Client Protocol and it is not in the catalogue, declare it here. EnvoyDev will start it and probe it exactly as it does the others.",
   "settings.agents.manual.heading": "Programs you declare",
   "settings.agents.manual.label": "What to call it",
   "settings.agents.manual.command": "Program",
   "settings.agents.manual.args": "Arguments",
   "settings.agents.manual.env": "Environment variable names",
   "settings.agents.manual.env.detail": "Names only, never values.",
-  "settings.agents.manual.transport": "How EnvoyCoder must speak to it",
+  "settings.agents.manual.transport": "How EnvoyDev must speak to it",
   "settings.agents.manual.transport.detail": "No default: a wrong guess fails silently.",
   "settings.agents.manual.transport.acp": "Agent Client Protocol (can be run and driven)",
   "settings.agents.manual.transport.cli": "A plain command line (startable, not yet drivable)",
@@ -625,13 +628,13 @@ export const en = {
   // halves rather than about the machine. The line names it; the guide names the action, which is not an
   // install — nothing is missing from the user's machine and telling them to install something would be the
   // lie this whole slice exists to avoid.
-  "settings.agent.verdict.legacy.line": "EnvoyCoder is a build behind",
+  "settings.agent.verdict.legacy.line": "EnvoyDev is a build behind",
   "settings.agent.verdict.legacy.why":
-    "This window is talking to an older EnvoyCoder daemon, so it cannot say what this machine can do with {agent}. Nothing is missing from your machine — the app's own two halves are different builds.",
-  "settings.agent.verdict.unlooked.line": "EnvoyCoder could not check this machine",
+    "This window is talking to an older EnvoyDev daemon, so it cannot say what this machine can do with {agent}. Nothing is missing from your machine — the app's own two halves are different builds.",
+  "settings.agent.verdict.unlooked.line": "EnvoyDev could not check this machine",
   "settings.agent.verdict.unlooked.why":
-    "This is our gap and not a verdict about {agent}: EnvoyCoder could not read this machine's program folders, so it knows nothing about whether the agent is installed. There is nothing for you to install on the strength of this row.",
-  "settings.agent.verdict.app.restart": "Restart EnvoyCoder",
+    "This is our gap and not a verdict about {agent}: EnvoyDev could not read this machine's program folders, so it knows nothing about whether the agent is installed. There is nothing for you to install on the strength of this row.",
+  "settings.agent.verdict.app.restart": "Restart EnvoyDev",
   // **The reported bug, fixed in the words.** The owner wrote *"Some agents I have installed, but still show
   // need to install or need adapter. Eg, codex, claudecode, deepseek-harness."* For Codex and Claude Code the
   // measurement was right and the row misled: the state is "the agent's own CLI resolved and our adapter did
@@ -640,7 +643,7 @@ export const en = {
   // follows on the same line, in its own face, verbatim.
   "settings.agent.verdict.connector.lead": "Installed — needs its connector",
   "settings.agent.verdict.connector.why":
-    "{agent} is installed. EnvoyCoder needs its connector to drive it, and that is the one piece that is missing:",
+    "{agent} is installed. EnvoyDev needs its connector to drive it, and that is the one piece that is missing:",
   // Nothing resolved over a search that actually ran. The only Not-ready case allowed to lead with an install
   // command, and the only one whose sentence asserts an absence.
   "settings.agent.verdict.absent.short": "Not installed",
@@ -648,16 +651,16 @@ export const en = {
   // **Our gap, said as ours.** A catalogue entry tagged `transport: "cli"` or a provider a user declared as a
   // plain command line resolves and runs — and this build has no adapter for the way it speaks. There is
   // nothing to install, no page to read, and the value of saying so plainly is that a user stops hunting.
-  "settings.agent.verdict.gap.line": "EnvoyCoder cannot drive this agent yet",
+  "settings.agent.verdict.gap.line": "EnvoyDev cannot drive this agent yet",
   "settings.agent.verdict.gap.why":
-    "This is EnvoyCoder's gap, not a missing program: {agent} is reached over a kind of interface this build has no adapter for, and installing it again would change nothing. Nothing is wrong with your machine.",
+    "This is EnvoyDev's gap, not a missing program: {agent} is reached over a kind of interface this build has no adapter for, and installing it again would change nothing. Nothing is wrong with your machine.",
   // The program is present and the daemon cannot start it, because a variable the launch needs is not set. The
   // variable is **named on the row** — the mandate's instruction — and the second half of this sentence says
   // where a value can come from, which is the question naming it raises.
   "settings.agent.verdict.env.line": "{name} is not set",
   "settings.agent.verdict.env.line.more": "{name} is not set, and {count} more",
   "settings.agent.verdict.env.why":
-    "{agent} is installed. Set {names} in the environment EnvoyCoder's daemon was started in — a value can only come from you, because EnvoyCoder never writes a credential down.",
+    "{agent} is installed. Set {names} in the environment EnvoyDev's daemon was started in — a value can only come from you, because EnvoyDev never writes a credential down.",
   /**
    * **The properties: what used to be chips.**
    *
@@ -689,10 +692,10 @@ export const en = {
   "settings.agent.fact.signIn.unknown": "Not established yet",
   "settings.agent.fact.verified": "Verified",
   "settings.agent.fact.verified.never":
-    "Not yet — EnvoyCoder starts an agent to learn this, so it arrives when a task runs rather than when this page opens",
+    "Not yet — EnvoyDev starts an agent to learn this, so it arrives when a task runs rather than when this page opens",
   "settings.agent.fact.publishes": "What it publishes",
   "settings.agent.fact.env.recipe": "Supplied by this recipe",
-  "settings.agent.fact.env.set": "Set in EnvoyCoder's environment",
+  "settings.agent.fact.env.set": "Set in EnvoyDev's environment",
   "settings.agent.fact.env.unset": "Not set",
   /** The row's line for a catalogued program that is here and ready, where the next step is the Add button. */
   "settings.agents.row.readyCatalogued": "Installed — add it to use it",
@@ -720,8 +723,8 @@ export const en = {
      kept apart: `session` is not `none`, and telling a user their agent offers no thinking levels when
      the truth is that nobody has opened a session with it is the sentence the protocol forbids. */
   "settings.agent.tier.title": "Where it comes from",
-  "settings.agent.tier.builtIn": "Ships with EnvoyCoder",
-  "settings.agent.tier.catalogued": "A tool from EnvoyCoder's catalogue",
+  "settings.agent.tier.builtIn": "Ships with EnvoyDev",
+  "settings.agent.tier.catalogued": "A tool from EnvoyDev's catalogue",
   "settings.agent.modes.title": "Modes it offers",
   "settings.agent.models.title": "Models it publishes",
   "settings.agent.modelsFreeText": "Any model you type for it",
@@ -732,7 +735,7 @@ export const en = {
   // its answer rather than refusing the whole list. This is the sentence that says so — see
   // `DeclaredFacts` in `components/settings/SectionsFacts.tsx` for the crash it replaced.
   "settings.agent.notDeclared":
-    "The daemon this window is talking to did not send what {agent} publishes about itself, so there is nothing to show here. That happens when the two are different builds; restart EnvoyCoder so both come from one build.",
+    "The daemon this window is talking to did not send what {agent} publishes about itself, so there is nothing to show here. That happens when the two are different builds; restart EnvoyDev so both come from one build.",
 
   /* ── the keyboard, listed from the table the key handler reads ──
      `settings.shortcuts.binding.*` are labels for ids in `input/shortcuts.ts`, which used to carry
@@ -775,9 +778,28 @@ export const en = {
   "settings.machine.windows.detail": "How many windows were attached when this window connected, including this one.",
   "settings.machine.windows.one": "1 window",
   "settings.machine.windows.many": "{count} windows",
+  "settings.machine.pair.title": "Pair a phone",
+  // 64 characters, against the row's 80-character budget (`SETTING_DETAIL_BUDGET`). The title above
+  // already says what the control does, so the detail spends its one sentence on the thing a user
+  // cannot infer: the code is a bearer secret. "until you revoke it" was the part that pushed it to
+  // 128 — and it is a promise the paired-devices list underneath makes better, by showing the
+  // revocation control.
+  "settings.machine.pair.detail":
+    "The code is a secret — anyone who has it can reach this machine.",
+  "settings.machine.pair.action": "Show pairing code",
+  "settings.machine.pair.copy": "Copy pairing link",
+  "settings.machine.pair.copied": "Copied",
+  "settings.machine.pair.close": "Done",
+  "settings.machine.pair.uriLabel": "Pairing link",
+  "settings.machine.paired.title": "Paired devices",
+  "settings.machine.paired.detail": "Phones and other remotes that may call this daemon with a pairing token.",
+  "settings.machine.paired.empty": "No phones paired yet.",
+  "settings.machine.paired.revoke": "Revoke",
+  "settings.machine.paired.revoked": "Revoked",
+  "settings.machine.paired.expires": "Expires {when}",
 
   /* ── the one comparison a control plane needs ──
-     Both halves of EnvoyCoder are built together, so a difference means one of them is a build behind —
+     Both halves of EnvoyDev are built together, so a difference means one of them is a build behind —
      and a daemon a build behind can refuse settings this window writes, which `docs/settings-parity.md`
      §7.2 records on the wire. The window's own version is a build constant (`app-version.ts`); when
      nothing inlined one, this page says so instead of printing a placeholder that looks like a number. */
@@ -791,13 +813,15 @@ export const en = {
     "One of the two builds is not known to this window, so there is nothing to compare.",
   "settings.about.match": "The window and the daemon are the same build.",
   "settings.about.mismatch":
-    "This window is {window} and the daemon is {daemon} — different builds. A daemon from another build can refuse settings this window writes, so restart EnvoyCoder and let both come from one build.",
+    "This window is {window} and the daemon is {daemon} — different builds. A daemon from another build can refuse settings this window writes, so restart EnvoyDev and let both come from one build.",
 
   "settings.notes.heading": "Things worth knowing",
 
   /* ── what the daemon says when it refuses ── */
+  "error.ownerWindowOnly":
+    "This can only be done at the machine itself. A paired device cannot pair another one — open EnvoyDev on the machine you want to pair with.",
   "error.addProject.notDirectory":
-    "{path} is not a directory on this machine. Pick a folder that exists — EnvoyCoder runs agents in it, so the path has to be real.",
+    "{path} is not a directory on this machine. Pick a folder that exists — EnvoyDev runs agents in it, so the path has to be real.",
   "error.createTask.notDirectory":
     "{path} is not a directory on this machine, so there is nowhere to run the agent. It was the working directory for \"{title}\".",
   "error.updateTask.notDirectory":
@@ -807,7 +831,7 @@ export const en = {
   // an agent in a posture the user did not ask for — an agent that edits files when the user chose
   // "plan" has been misdescribed, not merely inconvenienced.
   "error.agentModeUnsupported":
-    "{harness} cannot be put into a mode over the protocol EnvoyCoder speaks to it, so the run was not started. Leave the mode unset to run {harness} in its own default.",
+    "{harness} cannot be put into a mode over the protocol EnvoyDev speaks to it, so the run was not started. Leave the mode unset to run {harness} in its own default.",
   "error.agentModeUnknown":
     "{harness} does not offer a mode called \"{mode}\", so the run was not started. Pick one of its modes and try again.",
   // The model's three refusals, and they are three because the causes are: the agent takes no model at
@@ -818,7 +842,7 @@ export const en = {
   "error.modelUnsupported":
     "{harness} does not take a model, so the run was not started. Clear the model and start it again to run {harness} with its own default.",
   "error.modelUnknown":
-    "{harness} does not publish a model called \"{model}\", so EnvoyCoder cannot tell which provider it belongs to and the run was not started. Pick one of the models {harness} publishes.",
+    "{harness} does not publish a model called \"{model}\", so EnvoyDev cannot tell which provider it belongs to and the run was not started. Pick one of the models {harness} publishes.",
   // No worked example here, deliberately: the provider name is the agent's own catalog id — verified
   // against the real binary, where it is `deepseek-official` and not `deepseek` — so any concrete pair
   // would teach a name that is wrong for the agent reading this sentence.
@@ -829,7 +853,7 @@ export const en = {
   // that session resolved, so the agent is the authority on what it accepts — and it refuses with its
   // own sentence, which the run surfaces. This refusal is about the agent having no such method at all.
   "error.thinkingUnsupported":
-    "{harness} cannot be given a thinking level over the protocol EnvoyCoder speaks to it, so the run was not started. Leave the thinking level unset to run {harness} the way it decides for itself.",
+    "{harness} cannot be given a thinking level over the protocol EnvoyDev speaks to it, so the run was not started. Leave the thinking level unset to run {harness} the way it decides for itself.",
   // The straight quotes are the daemon's own (`service.ts`, `runs.ts` write `${id}` inside `"…"`),
   // and they are kept here deliberately: this entry *is* the sentence an English user already reads,
   // and an equality test in `daemon-errors-i18n.test.ts` fails if the two ever drift.
@@ -837,6 +861,8 @@ export const en = {
     "There is no project called \"{id}\" on this machine. It may have been removed from another window.",
   "error.taskNotFound":
     "There is no task called \"{id}\" on this machine. It may have been removed from another window.",
+  "error.pairedDeviceMissing":
+    "There is no paired device called \"{id}\". It may already have been revoked.",
   "error.runNotFound":
     "There is no run called \"{runId}\". It may have been started by a daemon that has since restarted.",
   "error.taskForRunMissing": "There is no task called \"{taskId}\", so there is nowhere to run an agent.",
@@ -851,30 +877,30 @@ export const en = {
   // The third member of the family, and it exists so this sentence can avoid the other two's claims: nothing
   // here says the agent is absent, because the daemon could not look. It names the one action that helps.
   "error.harnessUnknown":
-    "EnvoyCoder could not check whether {harness} is installed, so it did not start the task. Restart EnvoyCoder and try again.",
+    "EnvoyDev could not check whether {harness} is installed, so it did not start the task. Restart EnvoyDev and try again.",
   "error.harnessUnsupported":
-    "{harness} speaks a protocol EnvoyCoder cannot drive yet, so the task was not started. EnvoyCoder drives agents over ACP — choose one of those instead.",
+    "{harness} speaks a protocol EnvoyDev cannot drive yet, so the task was not started. EnvoyDev drives agents over ACP — choose one of those instead.",
   // ── the agents a **user declared** (`AgentProviderConfig`) ──
   // Their own sentences rather than the harness ones, because the thing that is wrong is different in
   // kind: a shipped agent has an adapter we have not written, a provider has a *dialect the user chose*
   // and can change. Advice that cannot be followed ("choose one of those instead") is not advice.
   "error.providerUnsupported":
-    "{provider} speaks a protocol EnvoyCoder cannot drive yet, so the run was not started. EnvoyCoder drives agents over ACP — if this program does speak ACP, declare the provider's dialect as ACP and try again.",
+    "{provider} speaks a protocol EnvoyDev cannot drive yet, so the run was not started. EnvoyDev drives agents over ACP — if this program does speak ACP, declare the provider's dialect as ACP and try again.",
   "error.providerNotFound":
     "There is no agent provider called \"{id}\" here. It may have been removed from another window.",
   // No value is echoed, in this sentence or anywhere else: what a user pasted into the name field is
   // very often the credential itself, and a refusal is a string that reaches a log, a transcript and a
   // bug report. So the sentence says *which entry* was wrong, which is what a user needs to fix it.
   "error.providerEnvNotAName":
-    "EnvoyCoder stores the names of the environment variables an agent needs, never their values, and entry {position} of this provider's environment list is not a variable name. A name is letters, digits and underscores, and does not start with a digit. The provider was not added.",
+    "EnvoyDev stores the names of the environment variables an agent needs, never their values, and entry {position} of this provider's environment list is not a variable name. A name is letters, digits and underscores, and does not start with a digit. The provider was not added.",
   "error.providerEnvUnset.one":
-    "{provider} needs the environment variable {name} to be set for EnvoyCoder's daemon, and it is not set, so the run was not started. EnvoyCoder stores the names of the variables an agent needs, never their values — set it where the daemon is started, then restart EnvoyCoder.",
+    "{provider} needs the environment variable {name} to be set for EnvoyDev's daemon, and it is not set, so the run was not started. EnvoyDev stores the names of the variables an agent needs, never their values — set it where the daemon is started, then restart EnvoyDev.",
   // The two-key plural the catalogue's own rule asks for rather than a plural library: a language whose
   // second form is not "add an s" gets a whole string to write, not a rule to implement six times.
   "error.providerEnvUnset.many":
-    "{provider} needs these environment variables to be set for EnvoyCoder's daemon, and they are not set: {names}. The run was not started. EnvoyCoder stores the names of the variables an agent needs, never their values — set them where the daemon is started, then restart EnvoyCoder.",
+    "{provider} needs these environment variables to be set for EnvoyDev's daemon, and they are not set: {names}. The run was not started. EnvoyDev stores the names of the variables an agent needs, never their values — set them where the daemon is started, then restart EnvoyDev.",
   "error.providerIdTaken":
-    "\"{id}\" is the id of an agent EnvoyCoder already ships, so your provider was not added. Give your provider another name.",
+    "\"{id}\" is the id of an agent EnvoyDev already ships, so your provider was not added. Give your provider another name.",
   // Reached two ways — an explicit id a client invented, or a name with no letter or digit in it at all
   // — so the sentence states the rule rather than presuming which of the two happened.
   "error.providerIdInvalid":
@@ -903,29 +929,29 @@ export const en = {
   // `{methods}` is the **agent's own** list of ids, never the caller's string: what a client sent in that
   // field is not echoed back, for the same reason a refused `env` entry is not (it is often the credential).
   "signIn.noMethod":
-    "{agent} will not open a session here and did not name a sign-in method EnvoyCoder may send. It offers: {methods}. Sign in with the agent's own command, then ask again.",
+    "{agent} will not open a session here and did not name a sign-in method EnvoyDev may send. It offers: {methods}. Sign in with the agent's own command, then ask again.",
   "signIn.unavailable":
     "{agent} could not be started, so nothing was signed in: {reason}",
-  "error.notConnected": "EnvoyCoder is not connected to its daemon yet.",
-  "error.notConnectedChange": "EnvoyCoder is not connected to its daemon, so that change was not saved.",
+  "error.notConnected": "EnvoyDev is not connected to its daemon yet.",
+  "error.notConnectedChange": "EnvoyDev is not connected to its daemon, so that change was not saved.",
   "error.connectionClosed": "The connection was closed.",
   "error.daemonClosedConnection": "The daemon closed the connection.",
   "error.daemonTooOld":
-    "The daemon this window is talking to is an older build: it does not know {method}. Restart EnvoyCoder so the window and its daemon are the same build, then try again.",
+    "The daemon this window is talking to is an older build: it does not know {method}. Restart EnvoyDev so the window and its daemon are the same build, then try again.",
   "error.notOurDaemon.product":
-    "Something is answering on the daemon's port, but it says it is “{product}”. EnvoyCoder did not connect to it.",
+    "Something is answering on the daemon's port, but it says it is “{product}”. EnvoyDev did not connect to it.",
   "error.notOurDaemon.instance":
-    "The daemon on port {port} is not the one this window was started for. Another EnvoyCoder daemon may have replaced it — reopen the window.",
+    "The daemon on port {port} is not the one this window was started for. Another EnvoyDev daemon may have replaced it — reopen the window.",
   "error.shellEndpointFailed":
-    "EnvoyCoder's window could not ask the shell where the daemon is. Rebuild the desktop app (the shell permission list is out of date).",
+    "EnvoyDev's window could not ask the shell where the daemon is. Rebuild the desktop app (the shell permission list is out of date).",
   "error.shellEndpointMissing":
-    "The EnvoyCoder shell did not say where its daemon is. This window cannot connect without it.",
+    "The EnvoyDev shell did not say where its daemon is. This window cannot connect without it.",
 
   /* ── what the daemon wanted the user to know at startup ── */
   "note.quarantined.moved":
-    "EnvoyCoder could not read {name}, so it moved it aside to {movedTo} and started that list empty. ({reason})",
+    "EnvoyDev could not read {name}, so it moved it aside to {movedTo} and started that list empty. ({reason})",
   "note.quarantined.left":
-    "EnvoyCoder could not read {name} and could not move it aside, so it left it untouched and started that list empty. ({reason})",
+    "EnvoyDev could not read {name} and could not move it aside, so it left it untouched and started that list empty. ({reason})",
   "note.skipped": "{file}: {reason}",
   /* ── a settings key this build does not have, which cost the user **nothing else** ──
      Two keys rather than one because there are two causes, and only one of them is a fact about us. A key
@@ -935,9 +961,9 @@ export const en = {
      settings file quarantined whole over one unknown key, so "everything else is still in force" is the
      sentence the user actually needs. */
   "note.settings.retired":
-    "{file} had {key}, which this build no longer has. EnvoyCoder dropped it and kept every other setting.",
+    "{file} had {key}, which this build no longer has. EnvoyDev dropped it and kept every other setting.",
   "note.settings.unknown":
-    "{file} had {key}, which this build does not recognise. EnvoyCoder dropped it and kept every other setting.",
+    "{file} had {key}, which this build does not recognise. EnvoyDev dropped it and kept every other setting.",
 
   /* ── an approval, in the daemon's own words ── */
   "approval.question.tool": "Allow the agent to run “{tool}”?",

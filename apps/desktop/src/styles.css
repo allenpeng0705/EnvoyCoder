@@ -1,7 +1,7 @@
 /**
  * Design tokens and layout.
  *
- * The rules this file follows are inherited (see `docs/envoycoder-ui.md`), because they are the
+ * The rules this file follows are inherited (see `docs/envoydev-ui.md`), because they are the
  * ones that keep a dense control plane readable at ten rows and ten agents:
  *
  *   * **hierarchy by weight and colour, not size.** Sizes are fixed; emphasis comes from weight
@@ -1843,7 +1843,7 @@ body {
   border-radius: var(--radius-sm);
   background: var(--surface-2);
   /* `--foreground` and not the `--text` used above: `--text` is defined once, dark, in this file's own
-     `:root` (the light-palette gap recorded in `docs/envoycoder-ui.md`), while `--foreground` is themed. The
+     `:root` (the light-palette gap recorded in `docs/envoydev-ui.md`), while `--foreground` is themed. The
      two are the same value in dark mode, so this changes nothing there and is readable in light mode. */
   color: var(--foreground);
 }
@@ -2438,4 +2438,55 @@ body {
 
 .row--note-quiet .row__meta {
   opacity: 0.75;
+}
+
+/* Pairing panel on Settings → This machine */
+.settings__pairing {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0.5rem 0 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+}
+.settings__pairing-qr {
+  width: 220px;
+  height: 220px;
+  align-self: center;
+  background: #fff;
+  border-radius: 4px;
+}
+.settings__pairing-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+.settings__pairing-uri {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  resize: vertical;
+  width: 100%;
+}
+.settings__pairing-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.settings__paired-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.settings__paired-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
 }

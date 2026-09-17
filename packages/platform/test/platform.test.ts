@@ -49,7 +49,7 @@ describe("platform identity", () => {
   });
 
   it("states its platform limits instead of failing in a random call site", () => {
-    expect(platformRefusal("signals", "windows")?.code).toBe("envoycoder.unsupported-platform");
+    expect(platformRefusal("signals", "windows")?.code).toBe("envoydev.unsupported-platform");
     expect(platformRefusal("signals", "macos")).toBeNull();
     expect(platformRefusal("sshClient", "linux")).toBeNull();
     // Windows ships OpenSSH as an optional feature, so the refusal is about the *client* being
@@ -148,8 +148,8 @@ describe("joins", () => {
     expect(joinFor("windows", "C:\\tools", "claude.cmd")).toBe("C:\\tools\\claude.cmd");
     expect(joinFor("windows", "C:/tools", "claude.cmd")).toBe("C:\\tools\\claude.cmd");
     expect(joinFor("linux", "/usr/local/bin", "pi")).toBe("/usr/local/bin/pi");
-    expect(joinFor("macos", "/Users/dev", "Library", "Application Support", "EnvoyCoder")).toBe(
-      "/Users/dev/Library/Application Support/EnvoyCoder",
+    expect(joinFor("macos", "/Users/dev", "Library", "Application Support", "EnvoyDev")).toBe(
+      "/Users/dev/Library/Application Support/EnvoyDev",
     );
     expect(joinFor("linux")).toBe("");
   });
@@ -192,23 +192,23 @@ describe("ssh", () => {
 
 describe("per-user data directories", () => {
   it("matches the family's rule on every platform, and never roams on Windows", () => {
-    expect(defaultDataDir("EnvoyCoder", { platform: "macos", home: "/Users/dev", env: {} })).toBe(
-      "/Users/dev/Library/Application Support/EnvoyCoder",
+    expect(defaultDataDir("EnvoyDev", { platform: "macos", home: "/Users/dev", env: {} })).toBe(
+      "/Users/dev/Library/Application Support/EnvoyDev",
     );
     // LOCALAPPDATA, not APPDATA: this directory holds keys.
     expect(
-      defaultDataDir("EnvoyCoder", {
+      defaultDataDir("EnvoyDev", {
         platform: "windows",
         home: "C:\\Users\\dev",
         env: { LOCALAPPDATA: "C:\\Users\\dev\\AppData\\Local" },
       }),
-    ).toBe("C:\\Users\\dev\\AppData\\Local\\EnvoyCoder");
-    expect(defaultDataDir("EnvoyCoder", { platform: "linux", home: "/home/dev", env: {} })).toBe(
-      "/home/dev/.local/share/EnvoyCoder",
+    ).toBe("C:\\Users\\dev\\AppData\\Local\\EnvoyDev");
+    expect(defaultDataDir("EnvoyDev", { platform: "linux", home: "/home/dev", env: {} })).toBe(
+      "/home/dev/.local/share/EnvoyDev",
     );
     expect(
-      defaultDataDir("EnvoyCoder", { platform: "linux", home: "/home/dev", env: { XDG_DATA_HOME: "/xdg" } }),
-    ).toBe("/xdg/EnvoyCoder");
+      defaultDataDir("EnvoyDev", { platform: "linux", home: "/home/dev", env: { XDG_DATA_HOME: "/xdg" } }),
+    ).toBe("/xdg/EnvoyDev");
   });
 
   it("documents what each platform can actually do", () => {

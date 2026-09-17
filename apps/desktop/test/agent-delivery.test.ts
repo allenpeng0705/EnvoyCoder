@@ -23,8 +23,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { coderPaths } from "@envoycoder/host-bridge";
-import type { HarnessSummary } from "@envoycoder/protocol";
+import { coderPaths } from "@envoydev/host-bridge";
+import type { HarnessSummary } from "@envoydev/protocol";
 
 import { CoderStore } from "../src/daemon/store.js";
 import { createCoderHandlers } from "../src/daemon/service.js";
@@ -46,7 +46,7 @@ async function summariseFor(
   finding: { state: "needs-bridge" | "ready"; fix?: { command: string }[] },
   delivery: "installed" | "npx",
 ): Promise<HarnessSummary[]> {
-  const home = await mkdtemp(join(tmpdir(), "envoycoder-delivery-"));
+  const home = await mkdtemp(join(tmpdir(), "envoydev-delivery-"));
   cleanups.push(() => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
   const paths = coderPaths(home);
   const store = await CoderStore.open({ paths });
@@ -72,7 +72,7 @@ async function summariseFor(
     deliveries: { of: (harness) => (harness === "codex" ? delivery : "installed"), set: async () => undefined },
   });
 
-  const answer = (await handlers["coder.listHarnesses"]?.({})) as { harnesses: HarnessSummary[] };
+  const answer = (await handlers["coder.listHarnesses"]?.({}, { session: undefined })) as { harnesses: HarnessSummary[] };
   return answer.harnesses;
 }
 

@@ -1,5 +1,5 @@
 /**
- * `@envoycoder/protocol` — the public surface.
+ * `@envoydev/protocol` — the public surface.
  *
  * Three modules, and the split is the package's own architecture rather than tidiness:
  *

@@ -29,14 +29,14 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  ENVOYCODER_ERRORS,
+  ENVOYDEV_ERRORS,
   SIGN_IN_OUTCOMES,
   SignInOutcomeSchema,
   coderErrorCode,
   coderErrorRef,
   parseMessageRef,
-} from "@envoycoder/protocol";
-import { coderPaths } from "@envoycoder/host-bridge";
+} from "@envoydev/protocol";
+import { coderPaths } from "@envoydev/host-bridge";
 
 import { AcpRequestError } from "../src/daemon/acp/client.js";
 import type { ProbedAgent } from "../src/daemon/agent-processes.js";
@@ -124,7 +124,7 @@ async function bench(
     realLaunch?: boolean;
   } = {},
 ): Promise<Bench> {
-  const home = await mkdtemp(join(tmpdir(), "envoycoder-signin-"));
+  const home = await mkdtemp(join(tmpdir(), "envoydev-signin-"));
   const paths = coderPaths(home);
   const store = await CoderStore.open({ paths });
 
@@ -323,7 +323,7 @@ describe("what pressing Sign in can come back as", () => {
     expect(answer.detail).toContain("OpenCode");
     // …and the value is the launch's sentence, which is the one that says *which* of the four ways it failed.
     expect(parseMessageRef(answer.detail).ref?.values?.reason).toContain(
-      "speaks a protocol EnvoyCoder cannot drive yet",
+      "speaks a protocol EnvoyDev cannot drive yet",
     );
     expect(b.signedInWith()).toEqual([]);
     // An agent we could not start has told us nothing about how it would like to sign in.
@@ -430,18 +430,18 @@ describe("the method, and the daemon that has no flow to serve it", () => {
     let code: string | null = null;
     let key: string | undefined;
     try {
-      await handlers["coder.signInAgent"]?.({ harness: "cursor" });
+      await handlers["coder.signInAgent"]?.({ harness: "cursor" }, { session: undefined });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       code = coderErrorCode(message);
       key = coderErrorRef(message)?.key;
     }
-    expect(code).toBe(ENVOYCODER_ERRORS.harnessFailed);
+    expect(code).toBe(ENVOYDEV_ERRORS.harnessFailed);
     expect(key).toBe("error.noRunRuntime");
   });
 
   it("is served by the daemon's own table, so it is a method a window can call", async () => {
-    const home = await mkdtemp(join(tmpdir(), "envoycoder-signin-table-"));
+    const home = await mkdtemp(join(tmpdir(), "envoydev-signin-table-"));
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     const paths = coderPaths(home);
     const store = await CoderStore.open({ paths });
@@ -469,12 +469,12 @@ describe("the method, and the daemon that has no flow to serve it", () => {
 
     // An id the wire schema refuses is refused by the schema, with no sentence for a user: this is a call
     // addressed to whoever wrote the client.
-    await expect(withFlow["coder.signInAgent"]?.({ harness: "not-a-harness" })).rejects.toThrow(
+    await expect(withFlow["coder.signInAgent"]?.({ harness: "not-a-harness" }, { session: undefined })).rejects.toThrow(
       /coder\.signInAgent was called with an unusable/,
     );
     // And a real one reaches the flow, which reports what this machine can do with `opencode` — an agent this
     // build cannot launch, so the answer is `unavailable` rather than a sign-in nobody could perform.
-    const answer = (await withFlow["coder.signInAgent"]?.({ harness: "opencode" })) as { outcome: string };
+    const answer = (await withFlow["coder.signInAgent"]?.({ harness: "opencode" }, { session: undefined })) as { outcome: string };
     expect(answer.outcome).toBe("unavailable");
   });
 });

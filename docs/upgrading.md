@@ -1,6 +1,6 @@
-# Upgrading what EnvoyCoder depends on
+# Upgrading what EnvoyDev depends on
 
-EnvoyCoder runs on code it does not own: the family's mesh packages (linked), and the Envoy Harness (our
+EnvoyDev runs on code it does not own: the family's mesh packages (linked), and the Envoy Harness (our
 own clone). This is the procedure for moving either one forward, and for knowing whether it worked. It is
 written to be followed literally — every command here was run, and every failure in §5 was hit at least
 once while this repo was built.
@@ -40,7 +40,7 @@ in that tree is mine"; `--skip-install` rebuilds only.
 
 ### 2.2 The manual path — what the script does, and why each step exists
 
-Run these from `EnvoyCoder/`. `MESH=../EnvoyMesh` for brevity.
+Run these from `EnvoyDev/`. `MESH=../EnvoyMesh` for brevity.
 
 **Step 0 — know where you are, and whether the tree is clean.**
 
@@ -114,7 +114,7 @@ npm run smoke      # a real host, a real node attach over loopback, a real token
 git -C "$MESH" checkout <the sha you wrote down in step 0>
 (cd "$MESH" && npx tsc -b packages/protocol packages/identity packages/vault packages/api \
     packages/node-core packages/harness packages/host-connect packages/reuse-host)
-cd ../EnvoyCoder && npm install && npm run gates
+cd ../EnvoyDev && npm install && npm run gates
 ```
 
 Rolling back is the same procedure with one step changed, deliberately: a rollback that forgets to rebuild
@@ -136,12 +136,12 @@ first choice (§7.2) and the right one only when we need reproducible builds wit
 today it would mean holding a copy that goes stale silently, which is the family's own documented
 incident (`docs/envoymesh-integration.md` §5.2).
 
-### 2.6 If EnvoyCoder needs a change in their code
+### 2.6 If EnvoyDev needs a change in their code
 
 Never patch it here — not in `node_modules`, not in a vendored copy. A change we need goes **upstream
 first** (guide §7.4), and comes back to us as an upgrade. That is how the pairing URI gained
 `relayWsUrls`: it was missing for a QR relay fallback, the fix landed in `EnvoyMesh/packages/api` with
-round-trip tests, and EnvoyCoder picked it up by upgrading. Upstream's own gates:
+round-trip tests, and EnvoyDev picked it up by upgrading. Upstream's own gates:
 
 ```bash
 cd "$MESH"
@@ -164,10 +164,10 @@ it. We use a sibling checkout next to EnvoyMesh:
 mygithub/
 ├── EnvoyMesh/
 ├── envoy-harness/     ← the harness, our clone
-└── EnvoyCoder/
+└── EnvoyDev/
 ```
 
-**It must sit next to EnvoyMesh, not inside EnvoyCoder.** Its `pnpm-workspace.yaml` redirects its own
+**It must sit next to EnvoyMesh, not inside EnvoyDev.** Its `pnpm-workspace.yaml` redirects its own
 internal family dependencies with paths relative to its parent:
 
 ```yaml
@@ -177,8 +177,8 @@ overrides:
   "@envoymesh/agent-adapter": "link:../EnvoyMesh/packages/agent-adapter"
 ```
 
-Cloning it to `EnvoyCoder/vendor/envoy-harness` would make those paths resolve to
-`EnvoyCoder/vendor/EnvoyMesh/…`, which does not exist, and its build would fail — or worse, resolve a
+Cloning it to `EnvoyDev/vendor/envoy-harness` would make those paths resolve to
+`EnvoyDev/vendor/EnvoyMesh/…`, which does not exist, and its build would fail — or worse, resolve a
 different copy. (This is verified against the checkout, not inferred.) So: sibling of EnvoyMesh, and if
 you ever need it elsewhere, expect to override that workspace config rather than editing it.
 
@@ -228,7 +228,7 @@ package and inherit its release cadence for code it does not own.
 git -C ../envoy-harness fetch --all --tags
 git -C ../envoy-harness checkout <sha>        # the pin, not "whatever main is today"
 cd ../envoy-harness && pnpm install && pnpm -r run build
-cd ../EnvoyCoder && npm install && npm run gates && npm run smoke
+cd ../EnvoyDev && npm install && npm run gates && npm run smoke
 ```
 
 Upgrading the harness is a **product decision**, not maintenance: it changes what our agents do. So it is
@@ -242,7 +242,7 @@ Rolling back is the same three commands with the previous sha.
 ### 3.5 What ships, and what a user needs
 
 A user never sees any of this. The packaged desktop app **stages the built harness bundle at build time**
-(roadmap M6), so an installed EnvoyCoder carries the harness it was built with — no checkout, no
+(roadmap M6), so an installed EnvoyDev carries the harness it was built with — no checkout, no
 `pnpm install`, no sibling directory. That is also why the release must record the harness commit: it is
 the only handle on the agent runtime inside a shipped artifact.
 

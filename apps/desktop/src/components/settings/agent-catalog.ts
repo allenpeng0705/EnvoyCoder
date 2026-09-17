@@ -35,7 +35,7 @@ import type {
   CatalogEntry,
   HarnessSummary,
   AgentProviderSummary,
-} from "@envoycoder/protocol";
+} from "@envoydev/protocol";
 
 import type { AddProviderInput } from "../../state/coderStore.js";
 import type { MessageKey } from "../../i18n/messages/en.js";
@@ -168,9 +168,9 @@ export function commandLineOf(entry: Pick<CatalogEntry, "command" | "args">): st
  *
  * ## Why this is a mirror, and how the mirror is held in step
  *
- * The authority is `@envoycoder/agent-catalog`'s `splitArgs`, which is what the **launch** uses to turn a
+ * The authority is `@envoydev/agent-catalog`'s `splitArgs`, which is what the **launch** uses to turn a
  * provider's stored `args` into argv. This copy exists for one reason: that package's entry point reaches
- * `@envoycoder/platform`, which imports `node:fs`, so the window's bundle cannot import it at all — the same
+ * `@envoydev/platform`, which imports `node:fs`, so the window's bundle cannot import it at all — the same
  * constraint that put the catalogue on the wire in the first place.
  *
  * A second answer to "what did the user mean by this string" is exactly the drift this repository keeps

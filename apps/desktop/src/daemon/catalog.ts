@@ -1,22 +1,22 @@
 /**
- * The catalogue over the wire: **what EnvoyCoder knows how to drive, and what this machine can actually
+ * The catalogue over the wire: **what EnvoyDev knows how to drive, and what this machine can actually
  * do with one of them — on the row, the moment the list is read.**
  *
  * ## Why the catalogue is served at all
  *
  * `coder.listHarnesses` answers for the nine agents we ship and `coder.listProviders` for the ones a user
  * typed. Between them they left the 38 catalogued ACP agents — Gemini CLI, Cline, Goose, Cursor's own
- * recipe — reachable from nowhere: the data was in `@envoycoder/agent-catalog` and no surface read it. A
+ * recipe — reachable from nowhere: the data was in `@envoydev/agent-catalog` and no surface read it. A
  * user with one of those CLIs installed had a product that supported it and no way to find that out.
  *
  * It is served rather than imported into the window for two reasons:
  *
- *   * **One copy.** `@envoycoder/agent-catalog` is where the *launch* reads an entry's command and argv.
+ *   * **One copy.** `@envoydev/agent-catalog` is where the *launch* reads an entry's command and argv.
  *     A window that carried its own copy would be a second answer to "what does this run", free to drift
  *     from the one `launchForProvider` uses — the class of defect this repository keeps paying for.
  *   * **The phone.** The catalogue is not a desktop feature. A thin client that lists agents, or lets a
  *     user add one, reads this same method and gets the same entries, the same dialect facts and the same
- *     verdicts. The package they come from is browser-hostile on purpose (`@envoycoder/platform` imports
+ *     verdicts. The package they come from is browser-hostile on purpose (`@envoydev/platform` imports
  *     `node:fs`), so the daemon is the only half that *can* hold it — which turns "do not put catalogue
  *     knowledge in desktop-only code" into a fact about the architecture rather than a rule to remember.
  *
@@ -56,14 +56,14 @@ import {
   cataloguedInstall,
   cataloguedProviderInput,
   harnessAvailability,
-} from "@envoycoder/agent-catalog";
+} from "@envoydev/agent-catalog";
 import {
   type CatalogEntry,
   type HarnessAvailability,
   type RpcMethod,
   isHarnessId,
   parseRpcParams,
-} from "@envoycoder/protocol";
+} from "@envoydev/protocol";
 
 import type { CoderHandler } from "./service.js";
 

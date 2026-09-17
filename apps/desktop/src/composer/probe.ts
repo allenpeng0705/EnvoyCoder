@@ -45,7 +45,7 @@
  *     "unreachable", and the composer already names the install hint for that agent elsewhere.
  */
 
-import type { HarnessState, ProbeOutcome } from "@envoycoder/protocol";
+import type { HarnessState, ProbeOutcome } from "@envoydev/protocol";
 
 import type { MessageKey } from "../i18n/messages/en.js";
 import { localNotice, type Notice } from "../i18n/notice.js";

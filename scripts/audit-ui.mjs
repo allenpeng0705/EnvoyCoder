@@ -64,7 +64,7 @@ const size = sizeFlag >= 0 ? process.argv[sizeFlag + 1] : "1440,900";
  */
 const portFlag = process.argv.indexOf("--port");
 const port = portFlag >= 0 ? Number(process.argv[portFlag + 1]) : 9333;
-const profile = mkdtempSync(join(tmpdir(), "envoycoder-audit-"));
+const profile = mkdtempSync(join(tmpdir(), "envoydev-audit-"));
 const chrome = spawn(
   CHROME,
   ["--headless=new", "--disable-gpu", "--no-first-run", `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, `--window-size=${size}`, url],

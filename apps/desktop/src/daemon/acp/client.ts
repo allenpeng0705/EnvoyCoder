@@ -1,5 +1,5 @@
 /**
- * The Agent Client Protocol client: how EnvoyCoder drives an agent.
+ * The Agent Client Protocol client: how EnvoyDev drives an agent.
  *
  * ## Why ACP, and why one client is enough
  *
@@ -8,7 +8,7 @@
  * `session/request_permission` for approvals. Both of our native harnesses speak it
  * (`envoy-harness run --acp`, `dsh --profile acp`), and several external CLIs do too, so this one
  * client covers them. That is the whole point of the catalogue recording a *dialect* rather than a
- * client class per agent (`docs/envoycoder-harness.md` §2), and it is why an agent that merely
+ * client class per agent (`docs/envoydev-harness.md` §2), and it is why an agent that merely
  * "probably works" is not added here: `capabilities.approvals` is a statement about the protocol we
  * actually speak.
  *
@@ -27,14 +27,14 @@
  *      why it is never parsed.
  *   2. **The child's working directory *is* the task's root.** `dsh` treats the invoking directory as
  *      its own workspace root, so `cwd` is not a convenience — passing the wrong one runs the agent
- *      in the wrong repository (`docs/envoycoder-harness.md` §4).
+ *      in the wrong repository (`docs/envoydev-harness.md` §4).
  *   3. **Teardown is stdin EOF → SIGTERM → SIGKILL**, in that order, because a harness that is told
  *      its input ended can flush a session; one that is killed cannot.
  *
  * ## What this file does not decide
  *
  * Which agent, which arguments, which environment — that is the catalogue's job
- * (`@envoycoder/agent-catalog`), and it arrives here as a launch description. A client that knew
+ * (`@envoydev/agent-catalog`), and it arrives here as a launch description. A client that knew
  * about `dsh` would have to be forked for the next agent, which is exactly the fork the catalogue
  * exists to prevent.
  */
@@ -107,7 +107,7 @@ export interface AcpClientOptions {
    * so it never uses this.
    *
    * The **value is opaque and belongs to the agent** — `configId` and the encoding are decided in
-   * `@envoycoder/agent-catalog` (see `SessionModelConfig` and `HARNESS_THINKING_DELIVERY` there) and
+   * `@envoydev/agent-catalog` (see `SessionModelConfig` and `HARNESS_THINKING_DELIVERY` there) and
    * passed through verbatim, for the same reason a mode id is: a value this client prettified would be
    * one the agent refuses, and the refusals here are real — an id outside the agent's catalog comes back
    * as `invalid params: unknown model option: …`. Awaited and **not** best-effort, like `agentModeId`: a
@@ -189,7 +189,7 @@ export class AcpClient {
    * The `configOptions` this session has published, **verbatim and most recent**.
    *
    * The agent's own shapes, unparsed on purpose: what an option *means* is a fact about an agent's
-   * protocol dialect, and `@envoycoder/agent-catalog` is where that knowledge lives
+   * protocol dialect, and `@envoydev/agent-catalog` is where that knowledge lives
    * (`parseSessionConfigOptions`). This client's only job is to not lose what it was told.
    */
   private configOptionsValue: unknown[] = [];
@@ -238,7 +238,7 @@ export class AcpClient {
     });
     child.once("error", (error: Error) => {
       this.failAll(
-        new Error(`EnvoyCoder could not start ${options.launch.command}: ${error.message}`),
+        new Error(`EnvoyDev could not start ${options.launch.command}: ${error.message}`),
       );
     });
   }
@@ -491,7 +491,7 @@ export class AcpClient {
       // declares this field. It is here so that the day those two drift, the failure is a sentence
       // rather than a mode silently applied to a field the agent ignores.
       throw new Error(
-        "EnvoyCoder does not know which parameter this agent's session/set_mode reads, so it did " +
+        "EnvoyDev does not know which parameter this agent's session/set_mode reads, so it did " +
           "not ask for a mode. The agent's catalogue entry has to record it before one can be set.",
       );
     }
@@ -540,7 +540,7 @@ export class AcpClient {
    *
    * **Only one field is sent, and only ever a bare value.** The method also carries `sandbox` and
    * `approval` (and a `preset` that expands to all three), and those are the agent's own security
-   * posture — `session/set_mode` is what EnvoyCoder uses to bound what an agent may do, and a settings
+   * posture — `session/set_mode` is what EnvoyDev uses to bound what an agent may do, and a settings
    * row about approvals has no business changing the sandbox underneath it.
    */
   private async setPolicy(autoRun: AcpAutoRunPolicy): Promise<void> {
@@ -735,7 +735,7 @@ export class AcpClient {
       // Refusing is the protocol's answer for "I do not implement that", and it is much better than
       // silence: the agent can then decide what to do instead of waiting for a reply that never
       // comes.
-      this.respondError(id, -32601, `EnvoyCoder does not handle ${method}.`);
+      this.respondError(id, -32601, `EnvoyDev does not handle ${method}.`);
       return;
     }
 

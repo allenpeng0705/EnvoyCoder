@@ -10,10 +10,10 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   CAPABILITY_CODING,
-  ENVOYCODER_ERRORS,
-  ENVOYCODER_PRODUCT_NAME,
+  ENVOYDEV_ERRORS,
+  ENVOYDEV_PRODUCT_NAME,
   coderProductName,
-} from "@envoycoder/protocol";
+} from "@envoydev/protocol";
 import {
   attachToMeshNode,
   checkPairingCode,
@@ -34,7 +34,7 @@ describe("the capability this product exists to use", () => {
 describe("product state on disk", () => {
   it("keeps this product's state inside the shared home, under its own name", () => {
     const paths = coderPaths("/home/dev/.envoymesh");
-    expect(paths.stateDir).toBe("/home/dev/.envoymesh/EnvoyCoder");
+    expect(paths.stateDir).toBe("/home/dev/.envoymesh/EnvoyDev");
     for (const file of [paths.projectsFile, paths.tasksFile, paths.settingsFile]) {
       expect(file.startsWith(paths.stateDir)).toBe(true);
     }
@@ -55,7 +55,7 @@ describe("pairing", () => {
     `envoy://pair?wsUrl=${encodeURIComponent(NODE_WS)}&token=t0ken&ownerPublicKey=KEY&ownerId=envoy%3Aowner%3Aabc&app=${app}`;
 
   it("accepts this app's code and returns what a client needs", () => {
-    const result = checkPairingCode(built(ENVOYCODER_PRODUCT_NAME));
+    const result = checkPairingCode(built(ENVOYDEV_PRODUCT_NAME));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.wsUrl).toBe(NODE_WS);
@@ -67,11 +67,11 @@ describe("pairing", () => {
     const result = checkPairingCode(built("EnvoyMesh"));
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.code).toBe(ENVOYCODER_ERRORS.appMismatch);
+    expect(result.code).toBe(ENVOYDEV_ERRORS.appMismatch);
     // Shared wording matters: every app refuses in the same words, so a user is never told
     // something different by each app they try.
     expect(result.message).toMatch(/made by EnvoyMesh/);
-    expect(result.message).toMatch(/this is EnvoyCoder/);
+    expect(result.message).toMatch(/this is EnvoyDev/);
   });
 
   it("treats a code with no app claim as usable (older codes) and garbage as unreadable", () => {
@@ -111,7 +111,7 @@ describe("attaching to the mesh", () => {
         asked = input;
         return {
           token: "product-token",
-          scopeKey: "product:EnvoyCoder",
+          scopeKey: "product:EnvoyDev",
           ownerId: "envoy:owner:abc",
           wsUrl: `${NODE_WS}?token=product-token`,
         };
@@ -120,7 +120,7 @@ describe("attaching to the mesh", () => {
     expect(asked).toEqual({ port: 3030, path: "/ws" });
     expect(outcome.kind).toBe("attached");
     if (outcome.kind !== "attached") return;
-    expect(outcome.scopeKey).toBe("product:EnvoyCoder");
+    expect(outcome.scopeKey).toBe("product:EnvoyDev");
   });
 
   it("refuses an owner-scoped token rather than holding the owner's authority", async () => {
@@ -161,11 +161,11 @@ describe("guide alignment (§4.4, §4.5, §4.6, §9)", () => {
     // The bug this prevents: `os.homedir()` would ignore ENVOYMESH_HOME and the per-OS default,
     // giving a user who set the variable a second home — and a second set of projects.
     const previous = process.env.ENVOYMESH_HOME;
-    process.env.ENVOYMESH_HOME = "/tmp/envoycoder-guide-check";
+    process.env.ENVOYMESH_HOME = "/tmp/envoydev-guide-check";
     try {
       const paths = coderPaths();
-      expect(paths.home).toBe("/tmp/envoycoder-guide-check");
-      expect(paths.stateDir).toBe("/tmp/envoycoder-guide-check/EnvoyCoder");
+      expect(paths.home).toBe("/tmp/envoydev-guide-check");
+      expect(paths.stateDir).toBe("/tmp/envoydev-guide-check/EnvoyDev");
     } finally {
       if (previous === undefined) delete process.env.ENVOYMESH_HOME;
       else process.env.ENVOYMESH_HOME = previous;
@@ -180,7 +180,7 @@ describe("guide alignment (§4.4, §4.5, §4.6, §9)", () => {
       seen.push(input);
       return {
         token: "t",
-        scopeKey: "product:EnvoyCoder",
+        scopeKey: "product:EnvoyDev",
         ownerId: "o",
         wsUrl: "ws://127.0.0.1:9/ws?token=t",
       };
@@ -204,11 +204,11 @@ describe("guide alignment (§4.4, §4.5, §4.6, §9)", () => {
   });
 
   it("names the product from the environment, falling back to our own name", () => {
-    // §9: `ENVOYMESH_APP_NAME=EnvoyCoder`. The fallback must be *our* name, because
+    // §9: `ENVOYMESH_APP_NAME=EnvoyDev`. The fallback must be *our* name, because
     // `resolveAppName()` answers "EnvoyMesh" when the variable is unset — the one wrong answer.
-    expect(coderProductName({})).toBe("EnvoyCoder");
-    expect(coderProductName({ ENVOYMESH_APP_NAME: "EnvoyCoder" })).toBe("EnvoyCoder");
-    expect(coderProductName({ ENVOYMESH_APP_NAME: "  " })).toBe("EnvoyCoder");
+    expect(coderProductName({})).toBe("EnvoyDev");
+    expect(coderProductName({ ENVOYMESH_APP_NAME: "EnvoyDev" })).toBe("EnvoyDev");
+    expect(coderProductName({ ENVOYMESH_APP_NAME: "  " })).toBe("EnvoyDev");
   });
 
   it("passes the shared relay roster through a pairing code unchanged (§9)", () => {
@@ -234,7 +234,7 @@ describe("guide alignment (§4.4, §4.5, §4.6, §9)", () => {
       // the first one's name.
       expect(uri).toContain("relayPeerId=12D3KooWrelay");
       expect(uri).toContain(encodeURIComponent("wss://relay.example/ws"));
-      expect(uri).toContain("app=EnvoyCoder");
+      expect(uri).toContain("app=EnvoyDev");
     } finally {
       host.stop();
     }

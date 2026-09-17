@@ -28,7 +28,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { CoderSettings } from "@envoycoder/protocol";
+import type { CoderSettings } from "@envoydev/protocol";
 
 import { CoderSidebar } from "../src/components/CoderSidebar.js";
 import { describeStoreNotes } from "../src/daemon/service.js";
@@ -74,11 +74,11 @@ function stateWith(over: Partial<CoderState> = {}): CoderState {
     connection: { state: "connected", endpoint: { host: "127.0.0.1", port: 4770, path: "/ws" } },
     resolved: undefined,
     hello: {
-      product: "EnvoyCoder",
+      product: "EnvoyDev",
       version: "0.1.0",
       instanceId: "test",
       home: "/home/you/.envoymesh",
-      stateDir: "/home/you/.envoymesh/EnvoyCoder",
+      stateDir: "/home/you/.envoymesh/EnvoyDev",
       startedAt: "2026-09-14T00:00:00.000Z",
       windowCount: 1,
       methods: [],
@@ -354,13 +354,13 @@ describe("the rest of the pane, in the same language", () => {
     // looking at any of them.
     renderPane({
       notes: [
-        'EnvoyCoder could not read projects.json, so it moved it aside to /tmp/x and started that list empty. (bad json) [envoycoder.key] {"key":"note.quarantined.moved","values":{"name":"projects.json","movedTo":"/tmp/x","reason":"bad json"}}',
+        'EnvoyDev could not read projects.json, so it moved it aside to /tmp/x and started that list empty. (bad json) [envoydev.key] {"key":"note.quarantined.moved","values":{"name":"projects.json","movedTo":"/tmp/x","reason":"bad json"}}',
       ],
     });
     expect(screen.getByText("Wissenswertes")).toBeTruthy();
     expect(screen.getByText(/projects\.json/)).toBeTruthy();
     expect(screen.getByText(/bad json/)).toBeTruthy();
-    expect(screen.queryByText(/\[envoycoder\.key\]/)).toBeNull();
+    expect(screen.queryByText(/\[envoydev\.key\]/)).toBeNull();
   });
 
   it("says a dropped settings key in the user's language, not in the daemon's English", () => {
@@ -387,6 +387,6 @@ describe("the rest of the pane, in the same language", () => {
     expect(screen.getByText(/diese Einstellung gibt es in diesem Build nicht mehr/)).toBeTruthy();
     expect(screen.getByText(/jede andere Einstellung behalten/)).toBeTruthy();
     expect(screen.queryByText(/no longer has/)).toBeNull();
-    expect(screen.queryByText(/\[envoycoder\.key\]/)).toBeNull();
+    expect(screen.queryByText(/\[envoydev\.key\]/)).toBeNull();
   });
 });

@@ -297,7 +297,7 @@ describe("the cache, and the two halves of the ask landing at different times", 
     const before = currentSearchPath();
     expect(before.shellBinaries).toEqual([]);
 
-    const dir = await mkdtemp(join(tmpdir(), "envoycoder-shell-answer-"));
+    const dir = await mkdtemp(join(tmpdir(), "envoydev-shell-answer-"));
     cleanups.push(() => rm(dir, { recursive: true, force: true }));
     const file = join(dir, "dsh");
     await writeFile(file, "#!/bin/sh\nexit 0\n");
@@ -315,7 +315,7 @@ describe("the cache, and the two halves of the ask landing at different times", 
 
   posixOnly("finds a program installed while the app was open, because a re-ask is a second question", async () => {
     // The owner's report as a mechanism: *"After I run `npm install -g @agentclientprotocol/codex-acp`, how do
-    // we let EnvoyCoder know that without restarting?"* A name the shell could not find stays on the asked list
+    // we let EnvoyDev know that without restarting?"* A name the shell could not find stays on the asked list
     // — one resolving name is enough for the invocation to count as answered — so the daemon keeps a miss it
     // has no way to notice is out of date. This is the leg that separates "asked once" from "asked again".
     resetShellBinaryCacheForTests();

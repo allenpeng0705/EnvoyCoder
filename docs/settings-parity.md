@@ -3,10 +3,10 @@
 **Source studied:** `../paseo`, `packages/app` + `packages/server` + `packages/protocol`, at
 `d1b705a0c` (v0.8.0) · **Scope:** every setting Paseo's settings *surface* has — the two sidebar
 tiers, the pages they route to, and the daemon keys those pages write. **Position of this document:**
-we reimplement ideas and UX; we do not copy code (`envoycoder-paseo-inheritance.md` §1).
+we reimplement ideas and UX; we do not copy code (`envoydev-paseo-inheritance.md` §1).
 
 This is an **inventory and a verdict**, not an implementation plan with dates. Its job is to answer,
-for every entry, "can EnvoyCoder honour this, and if not, why not" — because the failure this document
+for every entry, "can EnvoyDev honour this, and if not, why not" — because the failure this document
 exists to prevent is the one we already shipped: a settings pane with five controls, of which
 **two do nothing and three more settings have no control at all** (§7.1), beside a Paseo section list
 of twenty-one.
@@ -147,7 +147,7 @@ directory module, `hooks/use-settings/` (`index.ts` 263 lines, `storage.ts` 566,
 `migrations.ts`). The type that matters is `AppSettings` in `storage.ts:67-95`. Everything else in the
 brief checks out.
 
-Three write paths, and knowing which one a setting uses decides whether EnvoyCoder can honour it:
+Three write paths, and knowing which one a setting uses decides whether EnvoyDev can honour it:
 
 | Path | Written by | Lands in |
 |---|---|---|
@@ -178,7 +178,7 @@ change, no daemon read site, which is what makes these the cheapest honest wins 
 
 `GeneralSection` — `screens/settings-screen.tsx:357-514`, rendered at `:1524-1537`.
 
-| setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
+| setting | render · label · control | default | what it does | EnvoyDev today | verdict |
 |---|---|---|---|---|---|
 | **Default send** (`sendBehavior`) | `settings-screen.tsx:410-435` (dropdown: interrupt / steer / queue) · `settings.general.defaultSend.label` "Default send" (`i18n/resources/en.ts:2119`) | `"steer"` (`storage.ts:126`) | what the composer does with a follow-up while a turn is running: `composer/index.tsx:1458` maps the setting to steer-or-interrupt, and `composer/input/state.ts:12` forces interrupt when a permission prompt is pending | **the behaviour is already written and tested, with the default hardcoded.** `SendBehaviour` is a four-value union (`apps/desktop/src/composer/controls.ts:158`), `resolveSendBehaviour(state, preferred)` takes the preference as its second argument (`:539-548`), approval-pending already forces `interrupt` (`:545-546`) — and the only caller in the app never passes `preferred` (`TaskPane.tsx:134`), so it always gets the literal `"steer"` (`controls.ts:679`). The per-pane Queue/Steer select is local state defaulted to `"queue"` (`TaskPane.tsx:98`,`:368-385`) | **honour-able now** — one field on `CoderSettings`, one row in `SettingsPane`, and `TaskPane` passing the setting as `preferred` and using it as its initial `mode`. One widening is needed: `preferred` accepts only `"queue" \| "steer"` today (`controls.ts:542`), so Paseo's third value `interrupt` needs the union widened — in our own file, not upstream |
 | **Language** (`language`) | `settings-screen.tsx:436-461` (dropdown) · `settings.general.language.label` "Language" (`en.ts:2160`) | `"system"` (`storage.ts:125`) | the i18n runtime: `settings.language` → `resolveSupportedLocale` → `changeLanguage` (`i18n/provider.tsx:23-27`) — every `t()` string in the app | **already built and honest.** `CoderSettings.language` (`packages/protocol/src/domain.ts:745`, schema `:773`), persisted (`store.ts:469-479`), validated against a closed list at the wire (`:722`), read at `main.tsx:33`, rendered by `SettingsPane.tsx:80-104`; seven locales (`i18n/locales.ts:24`) and 30 `settings.*` keys of 230 | **honour-able now** — it is done. Two caveats recorded rather than fixed: the daemon stores it and the **phone does not read it** (§7.4), and Paseo offers **ten** languages where we offer the family's seven (`storage.ts:199`: `system, ar, en, es, fr, ja, ko, pt-BR, ru, zh-CN`) — deliberately different, and `docs/localization.md` says why |
@@ -198,7 +198,7 @@ That is a different page carrying Paseo's rows, which is the shape we want.
 (`:672`) → detail level (`:683`) → `<SidebarNavSection/>` (`:701`) → fonts (`:702`) → syntax (`:755`)
 with a live preview (`:759-761`). Two rows are hidden on native (`:517`, `:693-698`).
 
-| setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
+| setting | render · label · control | default | what it does | EnvoyDev today | verdict |
 |---|---|---|---|---|---|
 | **Theme** (`theme`) | `appearance-section.tsx:183-224` (dropdown with swatch) · `settings.appearance.theme.title` "Theme" | `"auto"` (`storage.ts:44`,`:123`) | `applyTheme` (`appearance/provider.tsx:25-43`) → `UnistylesRuntime.setTheme`/`setAdaptiveThemes` for all registered themes → every `StyleSheet.create((theme) => …)` consumer repaints | `apps/desktop/src/design/tokens.css` already ships both variants — light in `:root`, `:root[data-theme="dark"]` at `:117`, and a `prefers-color-scheme` fallback at `:155-156` — but **no TypeScript writes `data-theme` anywhere**: the theme is whatever the OS says, with no setting and no control | **honour-able with work** — add a three-value `theme` to `CoderSettings`, a row in the pane, and one effect setting `document.documentElement.dataset.theme`. Small, but not a one-liner: the effect site does not exist yet. Paseo's ten-variant engine is a separate decision we are not taking: `design-tokens.md` records dark as our default and Paseo's own "paseo" variant |
 | **Plugin theme** (`pluginThemeId`) | `appearance-section.tsx:215-222` (one dynamic item per contributed theme) | `null` (`storage.ts:124`) | which plugin-contributed theme `theme:"plugin"` selects (`appearance/provider.tsx:26-31`,`:48-51`) | no plugin themes | **not applicable** |
@@ -209,7 +209,7 @@ with a live preview (`:759-761`). Two rows are hidden on native (`:517`, `:693-6
 | **Interface font** (`uiFontFamily`) | `appearance-section.tsx:705-715` (commit-on-blur text input) | `""` = platform stack (`storage.ts:130`) | `apply.ts:63`,`:104` — patches `theme.fontFamily.ui` for every theme and (on web) sets a CSS variable | the stack is a literal in `design/tokens.css` | **honour-able with work** — one string setting, sanitised the way Paseo sanitises it (no `;{}<>`, ≤200 chars, control chars rejected — `storage.ts:476-494`, because the value lands in a CSS declaration) and applied by setting one custom property. Real work: the sanitiser, a daemon-side validation, 7 language strings |
 | **Interface size** (`uiBaseFontSize`) | `appearance-section.tsx:717-725` | `14` web / `15` native; clamp 10–21 (`storage.ts:48-54`) | `apply.ts:77-81` rebuilds the whole `sm…4xl` ramp by scaling `FONT_SIZE` | `design/tokens.css` defines the scale as literals | **honour-able with work** — a clamped number, and the scale becomes `calc()` over one root variable. The highest-value font row for a laptop-versus-monitor user |
 | **Content size** (`contentFontSize`) | `appearance-section.tsx:726-733` | `15` web / `16` native; clamp 10–21 (`storage.ts:55-61`) | `apply.ts:46` sets `theme.fontSize.content` **absolutely** (not scaled) — the transcript's text size | the transcript's size is a token, not a setting | **honour-able with work** — one clamped number, one variable. This is the font row a user actually reaches for |
-| **Code font** (`monoFontFamily`) | `appearance-section.tsx:734-744` | `""` = platform mono stack (`storage.ts:131`) | patched for every theme (`apply.ts:64`); read directly by the terminal (`terminal-pane.tsx:219-221`), the diff panel (`panels/diff-panel.tsx:39`,`:41`) and the diff documents | we have no code surface — no editor, no diff — so nothing would change when the user changes it | **must be disabled-with-reason** — show it in the font group, disabled, saying in the user's language that it applies to code views EnvoyCoder does not have yet, and enable it with the diff/explorer slice. Live today it would be a setting that changes nothing, which is the defect this document exists to prevent |
+| **Code font** (`monoFontFamily`) | `appearance-section.tsx:734-744` | `""` = platform mono stack (`storage.ts:131`) | patched for every theme (`apply.ts:64`); read directly by the terminal (`terminal-pane.tsx:219-221`), the diff panel (`panels/diff-panel.tsx:39`,`:41`) and the diff documents | we have no code surface — no editor, no diff — so nothing would change when the user changes it | **must be disabled-with-reason** — show it in the font group, disabled, saying in the user's language that it applies to code views EnvoyDev does not have yet, and enable it with the diff/explorer slice. Live today it would be a setting that changes nothing, which is the defect this document exists to prevent |
 | **Code size** (`codeFontSize`) | `appearance-section.tsx:745-752` | `12`; clamp 9–22 (`storage.ts:62-64`) | `apply.ts:47`,`:65`,`:82` — also derives diff line-height as `round(size × 1.5)` | as above | **must be disabled-with-reason** — same reason, same slice as Code font |
 | **Highlight theme** (`syntaxTheme`) | `appearance-section.tsx:467-503` | `"one"` (`storage.ts:135`); 8 options from `packages/highlight/src/themes.ts:36-45`, with **raw English labels, not i18n** | `apply.ts:89`,`:97` `resolveSyntaxColors(syntaxTheme, colorScheme)` patches `theme.colors.syntax` for light and dark | nothing in this repo highlights code | **must be disabled-with-reason** — and note that Paseo's option labels are published theme names (GitHub, Dracula, Nord…), so unlike almost all copy they must **not** be translated when we do enable it |
 
@@ -226,10 +226,10 @@ because a light-mode user is currently stuck with whatever their OS says.
 grep `settings.layout.` across `packages/app/src` outside i18n returns hits only in that file, and
 `LayoutSection` is referenced only from `settings-screen.tsx:54`,`:1498`.
 
-| setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
+| setting | render · label · control | default | what it does | EnvoyDev today | verdict |
 |---|---|---|---|---|---|
 | **Open location** (`openInSidePane` — the group) | `layout-section.tsx:71-88`; the five rows below are its fields · `settings.layout.openInSidePane.title` "Open location" | all five fields `false` (`storage.ts:109-115`) | the record itself is not read: each row's field is read at the open site, and the five booleans collapse to one `"side" \| "main"` per source (`layout-section.tsx:65` writes `true` for side, `false` for main) | no panes (§4.3, below) | **not applicable** — a record whose members are the actual settings; the gate names it because it is a field on `AppSettings`, and a reader is owed the statement that the group itself carries no behaviour |
-| **Selecting a file in Explorer** (`openInSidePane.explorerFiles`) | `layout-section.tsx:73-80` · `settings.layout.openInSidePane.sources.explorerFiles.label` | `false` (`storage.ts:110`) | `workspace-tabs/open-beside.ts:91` picks `"side"` or `"main"` for every implicit open | no panes, no explorer, no tabs — our shell is a rail plus one pane (`docs/envoycoder-ui.md` §2) | **not applicable** |
+| **Selecting a file in Explorer** (`openInSidePane.explorerFiles`) | `layout-section.tsx:73-80` · `settings.layout.openInSidePane.sources.explorerFiles.label` | `false` (`storage.ts:110`) | `workspace-tabs/open-beside.ts:91` picks `"side"` or `"main"` for every implicit open | no panes, no explorer, no tabs — our shell is a rail plus one pane (`docs/envoydev-ui.md` §2) | **not applicable** |
 | **Opening a diff** (`openInSidePane.diffs`) | `layout-section.tsx:73-80` | `false` (`storage.ts:111`) | `open-supporting-view.ts:43-44`; `open-beside.ts:91` | no diff surface | **not applicable** |
 | **Opening a file from an agent chat** (`openInSidePane.chatFiles`) | `layout-section.tsx:73-80` | `false` (`storage.ts:112`) | `open-beside.ts:91`; callers `agent-panel.tsx:1629` | no file pane | **not applicable** |
 | **Opening a file from Changes** (`openInSidePane.diffFiles`) | `layout-section.tsx:73-80` | `false` (`storage.ts:113`) | `open-beside.ts:91`; caller `agent-tracks.tsx:111` | no Changes panel | **not applicable** |
@@ -249,7 +249,7 @@ because it is exactly what makes a surface look bigger and more finished than it
 `EditorSection` — `screens/settings/editor-section.tsx`, `webOnly` (`settings-screen.tsx:161`, gate
 `:1541`). One setting, and it is the whole section:
 
-| setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
+| setting | render · label · control | default | what it does | EnvoyDev today | verdict |
 |---|---|---|---|---|---|
 | **Vim keybindings** (`vimKeybindings`) | `editor-section.tsx:24-29` (switch) · `settings.editor.vimKeybindings` "Vim keybindings" | `false` (`storage.ts:144`) | `file-pane/pane.tsx:491` seeds the editor's mode (`"NORMAL"` or `null`) and `:611` passes `vimEnabled` to the file editor view | no file editor at all | **not applicable** |
 
@@ -265,7 +265,7 @@ notice (`:429-437`). **The largest single section in the product**: 43 remappabl
 that carries a `help` block and passes the platform predicate (`keyboard-shortcuts.ts:1666-1723`),
 drawn from 76 declared bindings.
 
-| item | render · label · control | default | what it does | EnvoyCoder today | verdict |
+| item | render · label · control | default | what it does | EnvoyDev today | verdict |
 |---|---|---|---|---|---|
 | **43 binding rows** (one override each) | `keyboard-shortcuts-section.tsx:455-487` — per row an actions dropdown (Bind/Rebind, Clear, Reset to default) then an inline capture row; labels `settings.shortcuts.help.*` | the shipped default combo per binding, declared beside it in `keyboard-shortcuts.ts` | an override is resolved by action → `routeKeyboardShortcut` (`route-shortcut.ts:174-222`) → the action id the shell implements; consumed at `hooks/use-keyboard-shortcuts.ts:66`,`:230`,`:261` and by every badge via `hooks/use-shortcut-keys.ts:15` | **the layer exists and is mounted; overrides do not.** `apps/desktop/src/input/shortcuts.ts` declares `SHELL_BINDINGS` (`:222-231`, **8** bindings), `createShortcutRegistry` resolves a keystroke to a binding (`:178-220`) with focus scopes and IME guarding, `useShortcuts` mounts it once (`useShortcuts.ts:40-73`) and `CoderApp.tsx:166-192` binds six of the eight to real actions. `SHELL_BINDINGS` is a `const` and nothing reads an override map | **honour-able with work** — the missing work is a persisted `Record<bindingId, combo \| null>` plus an "effective bindings" builder, exactly as Paseo does it (`buildEffectiveBindings`, `keyboard-shortcuts.ts:1212-1238`). Two things make it *work* rather than *now*: our table must first grow to cover the actions the UI actually has — a help sheet listing 8 of ~20 user-visible actions is worse than none — and our own decision that conflicts are **reported, not silently resolved** (`input/shortcuts.ts:19-24`, `findConflicts` `:141`) needs a place to report them |
 | **Reset all** | `keyboard-shortcuts-section.tsx:439-443`, rendered only when overrides exist · `settings.shortcuts.actions.resetAll` (`en.ts:2304`) | — (action) | clears the whole override map (`shortcut-override-store.ts:86-96`) | — | **honour-able with work** — same slice; per-binding reset without reset-all is a support burden |
@@ -315,7 +315,7 @@ honour and no row worth disabling.
 `DesktopNotificationsSection` — `packages/app/src/desktop/components/desktop-notifications-section.tsx`,
 `desktopOnly` (`settings-screen.tsx:169-174`, gate `:1544`).
 
-| setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
+| setting | render · label · control | default | what it does | EnvoyDev today | verdict |
 |---|---|---|---|---|---|
 | **Play sound** (`notifications.playSound`) | `:100-109` (switch, `testID="desktop-notifications-play-sound-switch"`) · `settings.notifications.playSound` "Play sound" (`en.ts:2006`) | `true` (renderer mirror `desktop/settings/desktop-settings.ts:34`; authoritative default in `packages/desktop/src/settings/desktop-settings.ts:35`) | Electron: `silent: !settings.notifications.playSound` on the `paseo:notification:send` handler (`packages/desktop/src/features/notifications.ts:104`). It toggles the OS notification's **silent** flag — the app plays no audio file itself | `grep -rn "notification" apps/desktop/src apps/desktop/src-tauri/src` finds only the ACP `session/cancel` *protocol notification* and the store's own event fan-out — **no OS notification path, no Tauri notification plugin, no tray** | **not applicable** — there is no notification to silence. `docs/paseo-feature-parity.md` #13 puts notifications in Tier 2, and the honest prerequisite is an attention event, not a settings row |
 
@@ -357,7 +357,7 @@ equivalent — the refusal that must be shown in the user's language — is a ga
 
 `DiagnosticsSection` — `screens/settings-screen.tsx:525-591`.
 
-| setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
+| setting | render · label · control | default | what it does | EnvoyDev today | verdict |
 |---|---|---|---|---|---|
 | **Use legacy terminal renderer** (`useLegacyTerminalRenderer`) | `:542-559` (switch, `isNative`-only per `:541`) · `settings.diagnostics.legacyTerminalRenderer.label` (`en.ts:2179`) | `false` (`storage.ts:129`) | picks the renderer implementation for the terminal: `terminal/native-renderer/terminal-renderer-capability.ts:3-11` → `components/terminal-emulator.native.tsx:29-42` chooses `WebViewTerminalEmulator` or `NativeGridTerminalEmulator` | no terminal at all, and the row is native-only besides | **not applicable** |
 
@@ -377,7 +377,7 @@ is strictly better than a settings page holding one switch. No row to add.
 `AboutSection` — `screens/settings-screen.tsx:599-622`, with `WhatsNewRow` (`:624-649`),
 `ConnectedHostsSection` (`:657-677`) and `DesktopAppUpdateRow` (`:747-876`).
 
-| setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
+| setting | render · label · control | default | what it does | EnvoyDev today | verdict |
 |---|---|---|---|---|---|
 | **Release channel** (`releaseChannel`) | `:828-841` (segmented: Stable / Beta) · `settings.about.releaseChannel.label` "Release channel" (`en.ts:2213`) | `"stable"` (renderer mirror `desktop/settings/desktop-settings.ts:32`) | **purely client-side**: `autoUpdater.allowPrerelease = releaseChannel === "beta"` and `autoUpdater.channel = beta ? "beta" : "latest"` (`packages/desktop/src/features/auto-updater.ts:153-154`), plus staged-rollout admission at `app-update-rollout.ts:25`. Zero reads in `packages/server/src`, `packages/protocol/src` or `packages/client/src` | there is **no updater of any kind**: no update check, no download, no installer handoff, nothing in the Tauri shell that could host one | **not applicable** — a channel selects a release feed, and we have no feed. If we ever ship an About page this becomes the canonical **must be disabled-with-reason** row: it is exactly the control a user would press and be misled by |
 
@@ -403,11 +403,11 @@ sidebar's own display-preferences popover (`components/sidebar/display-preferenc
 They are real settings, they persist in the same `@paseo:app-settings` blob, and the gate finds them
 in `AppSettings` — which is exactly why the doc must account for them.
 
-| setting | control · label | default | what it does | EnvoyCoder today | verdict |
+| setting | control · label | default | what it does | EnvoyDev today | verdict |
 |---|---|---|---|---|---|
 | **Workspace title source** (`workspaceTitleSource`) | `display-preferences/model.ts:65-75` · sidebar popover (`settings.sidebarDisplay.*`) | `"title"` (`storage.ts:136`) | each sidebar row shows the workspace title or its branch name | our rows show the task title, with the project as a header and the branch as a chip (`TaskPane.tsx:232-234`) — no per-row source choice | **honour-able with work** — a genuinely simple per-row display preference and the only row in this group we can honour; needs one field, one row, and the row's renderer honouring it |
 | **Row trailing** (`sidebarWorkspaceTrailing`) | `display-preferences/model.ts:66`,`:99-102` | `"diff"` (`storage.ts:137`) | what sits at the right edge of a row: a diff count, a timestamp, or nothing | our rows carry a status dot and a needs-attention marker, not a trailing metric; there is no diff count to show and no timestamp on the row | **not applicable** — "diff" has no source here and adding a timestamp to make the enum non-empty would be building the control rather than the feature |
-| **Row items** (`sidebarRowItems` and its six nested keys `sidebarRowItems.branch`, `sidebarRowItems.project`, `sidebarRowItems.host`, `sidebarRowItems.changeRequest`, `sidebarRowItems.services`, `sidebarRowItems.labels`) | `display-preferences/model.ts:67`,`:83-86`; keys from `SIDEBAR_ROW_ITEMS` (`components/sidebar/display-preferences/row-items.ts:14-21`) | `{branch:false, project:false, host:true, changeRequest:true, services:true, labels:true}` (`row-items.ts:29-36`) | six independent "may this fact appear on a row" flags, merged over the defaults on read (`storage.ts:294-299`) | **our row is not Paseo's row.** Theirs is a workspace row inside a project heading; ours is a *project* row with task rows beneath it (`docs/envoycoder-ui.md` §1), so `project` and `host` have no place to appear and `changeRequest`, `services` and `labels` have no data source | **not applicable** — all six, for the same structural reason. This is the clearest case in the document where copying the control would be copying a shape we deliberately do not have |
+| **Row items** (`sidebarRowItems` and its six nested keys `sidebarRowItems.branch`, `sidebarRowItems.project`, `sidebarRowItems.host`, `sidebarRowItems.changeRequest`, `sidebarRowItems.services`, `sidebarRowItems.labels`) | `display-preferences/model.ts:67`,`:83-86`; keys from `SIDEBAR_ROW_ITEMS` (`components/sidebar/display-preferences/row-items.ts:14-21`) | `{branch:false, project:false, host:true, changeRequest:true, services:true, labels:true}` (`row-items.ts:29-36`) | six independent "may this fact appear on a row" flags, merged over the defaults on read (`storage.ts:294-299`) | **our row is not Paseo's row.** Theirs is a workspace row inside a project heading; ours is a *project* row with task rows beneath it (`docs/envoydev-ui.md` §1), so `project` and `host` have no place to appear and `changeRequest`, `services` and `labels` have no data source | **not applicable** — all six, for the same structural reason. This is the clearest case in the document where copying the control would be copying a shape we deliberately do not have |
 | **Checks display** (`sidebarChecksDisplay`) | `display-preferences/model.ts:68`,`:91`; `iconAndText` / `icon` / `none` (`checks-display.ts:15-17`) | `"iconAndText"` (`checks-display.ts:17`) | three-state display mode for CI check status on a row — its own setting rather than a row item, because it has three answers rather than two | no CI/checks data | **not applicable** |
 
 **Group verdict: `not applicable`, with one exception** (`workspaceTitleSource`, `honour-able with
@@ -427,7 +427,7 @@ the nineteen surface in a settings page; the other eight are config-file/environ
 
 `HostSettingsPage` — `screens/settings/host-page.tsx:351-384`.
 
-| setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
+| setting | render · label · control | default | what it does | EnvoyDev today | verdict |
 |---|---|---|---|---|---|
 | **host name** | `host-appearance-section.tsx:291-301` (button → rename modal, `:49`) · `settings.host.appearance.name.label` "Name" (`i18n/resources/en.ts:2393`) | seeded from the daemon hostname (`runtime/host-runtime.ts:1866-1870`); display fallback `label.trim() \|\| serverId` (`hosts/appearance.ts:86`) | rendered as the host title (`host-page.tsx:369`) and the sidebar badge label (`hosts/host-badge.tsx:48,57`) | no host registry: one loopback daemon, `hello.stateDir`/`hello.version` chips only (`SettingsPane.tsx:50-63`) | **not applicable** — a rename needs a list of hosts to distinguish between; there is one |
 | **host colour** | `host-appearance-section.tsx:123-151` · `settings.host.appearance.color.label` "Color" (`en.ts:2396`) | `"none"` (`hosts/appearance.ts:28-30`); 11 options | `selectHostBadges` (`hosts/appearance.ts:87`) → badge glyph and label colour (`host-badge.tsx:53,56,67`) | no `data-theme`/per-host colour state anywhere in TS; the shell is one host | **not applicable** |
@@ -501,16 +501,16 @@ The card maps `host.connections` into rows whose only control is a destructive *
 **Section verdict: `not applicable`.** There is no connection list: one loopback daemon, and the
 remote path is deliberately refused until a session store exists —
 `coderSessionIdentity` resolves no session and the transport fails closed
-(`packages/host-bridge/src/index.ts:574-598`), and `docs/envoycoder-paseo-inheritance.md` §4.1 records
+(`packages/host-bridge/src/index.ts:574-598`), and `docs/envoydev-paseo-inheritance.md` §4.1 records
 why our pairing model is authority-free rather than Paseo's bearer link.
 
 ### 5.4 `pair-device`
 
 `HostPairDevicePage` — `host-page.tsx:252-265`, page body `desktop/components/pair-device-section.tsx`.
 
-| setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
+| setting | render · label · control | default | what it does | EnvoyDev today | verdict |
 |---|---|---|---|---|---|
-| **Enable relay** | `pair-device-section.tsx:209-217` · `pairing.device.enableRelay` "Enable relay" (`en.ts:1735`) | enabled `true` (`server/bootstrap.ts:531`; store `daemon-config-store.ts:337`) | daemon: `onFieldChange("relay.enabled")` starts/stops the outbound relay transport (`bootstrap.ts:1740` → `server/relay-runtime.ts:50-63`) | we have **no relay to enable** — the mesh is the transport (`docs/paseo-feature-parity.md` #26) | **not applicable** — EnvoyCoder's remote path is the mesh node it attaches to, not a relay the daemon dials; there is no relay process to switch on |
+| **Enable relay** | `pair-device-section.tsx:209-217` · `pairing.device.enableRelay` "Enable relay" (`en.ts:1735`) | enabled `true` (`server/bootstrap.ts:531`; store `daemon-config-store.ts:337`) | daemon: `onFieldChange("relay.enabled")` starts/stops the outbound relay transport (`bootstrap.ts:1740` → `server/relay-runtime.ts:50-63`) | we have **no relay to enable** — the mesh is the transport (`docs/paseo-feature-parity.md` #26) | **not applicable** — EnvoyDev's remote path is the mesh node it attaches to, not a relay the daemon dials; there is no relay process to switch on |
 
 **Section verdict: `honour-able with work`.** Not for `relay`, but because the section's *reason to
 exist* — "let my phone reach this machine, and let me revoke that" — is real and unimplemented. The
@@ -525,7 +525,7 @@ the session store the daemon's own comment names as roadmap M1 in the same block
 `HostAgentsPage` — `host-page.tsx:267-293`: three cards plus two sub-sections; if the host is not
 connected it renders one sentence (`:285-287`).
 
-| setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
+| setting | render · label · control | default | what it does | EnvoyDev today | verdict |
 |---|---|---|---|---|---|
 | **Enable Paseo tools** (`mcp.injectIntoAgents`) | `host-page.tsx:888-892` · `settings.host.orchestration.enableTools.title` "Enable Paseo tools" (`en.ts:2494`) | UI reads `!== false` (`:889`) → **on**; the daemon's config layer resolves `?? false` (`server/config.ts:531`) — the two disagree, recorded here rather than resolved | daemon injects its MCP tool server into every agent session (`bootstrap.ts:1604-1618`, `onFieldChange` `:1614`) | no MCP injection at all: our agents are ACP programs launched through `packages/agent-catalog`, and the ext-agent contract has no MCP server to hand them | **not applicable** — the setting exists to inject a tool catalog we do not have |
 | **Browser tools** (`browserTools.enabled`) | `browser-tools-card.tsx:60-66` · **hardcoded English**, no i18n key (`browser-tools-config.ts:3-5`) | `false` (`protocol/src/messages.ts:186`, `:244`) | daemon registers 22 `browser_*` agent tools (`server/agent/tools/paseo-tools.ts:1208-1215` ← `browser-tools/policy.ts:10-19`); off means the agent has no browser tools | no browser subsystem, no Electron `<webview>` host, no automation broker | **not applicable** — and it is worth noting Paseo's own copy here is untranslated, which is a defect we would not copy |
@@ -556,7 +556,7 @@ would have to render disabled.
 
 `MetadataGenerationPage` — `screens/settings/metadata-generation-page.tsx:19-164`.
 
-| setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
+| setting | render · label · control | default | what it does | EnvoyDev today | verdict |
 |---|---|---|---|---|---|
 | **Model selection** (`metadataGeneration.providers` mode) | `:129-135` (segmented: Automatic / Manual) · `settings.metadataGeneration.selection` "Model selection" (`en.ts:2095`) | derived, not stored: `configuredProvider ? "preferred" : "automatic"` (`:29`) | Automatic persists `providers: []`; Manual persists **nothing on its own** (`:66` — the write happens only when a model is picked) | no generated text of any kind: our tasks, branches and commits are named by the user or the harness | **not applicable** |
 | **Model** (`metadataGeneration.providers[0]`) | `:137-160` (combobox) · `settings.metadataGeneration.model` "Model" (`en.ts:2100`) | `null` (`:28`) | daemon inserts the configured provider ahead of its built-ins (`server/agent/structured-generation-providers.ts:46`,`:244-252`) for **workspace titles and branch names** (`workspace-auto-name.ts:183-194`), **commit messages** and **PR drafts** (`session/checkout/git-metadata-generator.ts:116-167`) | no git subsystem, no generated titles | **not applicable** |
@@ -570,7 +570,7 @@ exactly the defect this document exists to catch.
 
 `HostWorkspacesPage` — `host-page.tsx:295-317`.
 
-| setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
+| setting | render · label · control | default | what it does | EnvoyDev today | verdict |
 |---|---|---|---|---|---|
 | **Archive merged PR workspaces** (`autoArchiveAfterMerge`) | `host-page.tsx:926-931` · **hardcoded English**: "Archive merged PR workspaces" (`:921`) | `false` (`messages.ts:247`) | daemon: unless exactly `true`, the merge subscription bails and clears its open-PR latch, so a merged PR never auto-archives (`server/auto-archive-on-merge/index.ts:39`) | `task.worktree` exists on the wire (`protocol/src/domain.ts:247`, `rpc.ts:364`) and `TaskPane.tsx:232-234` renders a branch chip — but there is **no git service**, so nothing detects a merge | **honour-able with work** — the setting is one boolean and the effect is a daemon-side subscription; both are downstream of a git service we do not have (`docs/paseo-feature-parity.md` #8/#9). Until then it has nothing to switch |
 
@@ -584,11 +584,11 @@ at all, so **ship the disabled row with the git slice, not before it.**
 
 `HostProvidersPage` → `ProvidersSection` — `host-page.tsx:319-331`, `screens/settings/providers-section.tsx:326-474`.
 
-| setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
+| setting | render · label · control | default | what it does | EnvoyDev today | verdict |
 |---|---|---|---|---|---|
 | **Enable {provider}** (`providers[id].enabled`) | `providers-section.tsx:248-253`, per provider · `settings.providers.enableProvider` "Enable {{name}}" (`en.ts:2651`) | `true` (`:444`; daemon `server/agent/provider-registry.ts:737`) | daemon: only enabled providers get a client; disabled ⇒ `unavailable`, `listModels` throws "Provider X is disabled" (`provider-registry.ts:375-377`,`:752-754`,`:836-837`) | **we tried this once, as a list filter, and deleted it — the old ruling was right.** `coder.setAgentHidden` stored `CoderSettings.hiddenAgents` (a list of agent ids), every row of `coder.listHarnesses` / `coder.listProviders` carried a `hidden` flag beside its `availability`, and `pickable` filtered the two agent pickers on it. It is gone: the field, the method, the flag on both summary types, the filter, the switch, the chip, the copy and the tests. The reason is the owner's own brief — *"the control plane of coding agents"*, whose stated failure was that they **could not see** the agents we support — and a list filter is the one control that can make an agent *we ship* disappear from our own lists. It was also a misreading of the source: Paseo's switch decides whether *its* daemon instantiates a provider at all, which is a fact about a daemon's wiring, not a preference over a list. What a picker offers is now **derived** from probed facts (`composer/agent-for.ts`'s `offeredAgents`: only a state that asserts absence drops a row, and the rest are ordered by how usable the measurement says they are), and the key is in `RETIRED_SETTINGS_KEYS` so an upgrading settings file still parses | **`not applicable`** — and this time the verdict holds, because the *substance* of the row is honoured somewhere else. Being able to say which agents you use is a real need, and the answer is **additive** rather than subtractive: `coder.listCatalog` + `coder.addProvider` let a user put the agents they use at hand, the catalogue is one list every client can read, and a curation on top of that must be a favourite that *adds to* a short list — never a filter that can remove an agent from one. Recorded rather than built: nothing offers favourites today, and the reason to build one later is that a short list is a convenience, while a hidden agent is a lie |
-| **Add provider** (`providers[id]` from the ACP catalogue) | `provider-catalog-list.tsx:108-118` · `providerCatalog.actions.add` "Add" (`en.ts:1587`) | — (action) | persists `{providers:{[id]:{extends:"acp",label,description,command,env,params}}}` (`hooks/use-acp-provider-catalog.ts:11-26`) so a third-party ACP CLI becomes runnable | **the plumbing landed; the picker has not.** `AgentProviderConfig` (§7.10) is a provider's shape — id, label, command, args, the **names** of the environment variables it needs, and the dialect it speaks — and `coder.listProviders` / `coder.addProvider` / `coder.removeProvider` store them in `<state>/EnvoyCoder/providers.json` (quarantined rather than emptied when unreadable, replaced rather than merged per id, `providers` broadcast so a second window refetches). Every listed provider is **probed** by the same prober that answers for the nine shipped agents and launched through the same `launchForHarness` body, so its row carries one of the same five `availability` states. What is still absent is the surface: no control adds one, and the 38-entry catalogue is still unreachable from the window | **shipped** — with a divergence that is the whole point. Paseo's Add writes the entry's `env` **values** into `config.json`; ours cannot, because `AgentProviderConfig.env` is a list of variable **names** and the value is read from the daemon's own environment at spawn (§7.10). So the catalogue serves its rows over the wire (`coder.listCatalog`, which measures nothing) and a client adds one by handing back what the entry states: its command, its argv, the names of the variables it needs, and the dialect it declares — `modeParam` and `authMethodId` are *absent* rather than defaulted, because no entry has evidence for either and a guessed `modeParam` is ignored by the peer while the run reports success. The cost that *was* stated on the row is now paid off, and paying it changed the shape: the four entries whose recipe sets a constant used to carry only the **name** across, so the variable was the user's to export even though we had written its value ourselves. `coder.addProvider` now takes `catalogEntryId` — the entry's own id, a **reference** and not a value — and the daemon resolves the recipe's constants from the catalogue it ships, so `providers.json` still holds no value at all, ours or a user's (§7.10). The row says which variables the recipe supplies and that exporting one is how a user overrides it. `coder.probeCatalogAgent` measures one row at a time, on the user's press, because 14 of the 38 are `npx` recipes and a screen that checked them all while opening would spend the machine on rows nobody looked at |
-| **Remove provider** (`removeProviders`) | `providers-section.tsx:155-164` (menu + confirm) · `settings.providers.actions.remove` (`en.ts:2658`) | — (action) | daemon strips the entry, its overrides **and** its `metadataGeneration.providers` entries (`daemon-config-store.ts:101-159`) | `coder.removeProvider` forgets one provider and nothing else — it refuses with `envoycoder.provider-missing` when there is nothing under that id, rather than confirming a removal that did not happen. Nothing refers to a provider today, so unlike `coder.removeProject` there are no rows to archive: a task names a `HarnessId` | **shipped** — every row on the Agents page (a user's provider, and a catalogue entry they already added) carries Remove, and it is the same `coder.removeProvider`: nothing is uninstalled, and nothing a row reports changes except its disappearance from the list. Paseo's version strips the entry, its overrides and its `metadataGeneration.providers` entries, which is what a config-with-overrides shape requires; ours is a flat list of recipes, so there is nothing else to strip |
+| **Add provider** (`providers[id]` from the ACP catalogue) | `provider-catalog-list.tsx:108-118` · `providerCatalog.actions.add` "Add" (`en.ts:1587`) | — (action) | persists `{providers:{[id]:{extends:"acp",label,description,command,env,params}}}` (`hooks/use-acp-provider-catalog.ts:11-26`) so a third-party ACP CLI becomes runnable | **the plumbing landed; the picker has not.** `AgentProviderConfig` (§7.10) is a provider's shape — id, label, command, args, the **names** of the environment variables it needs, and the dialect it speaks — and `coder.listProviders` / `coder.addProvider` / `coder.removeProvider` store them in `<state>/EnvoyDev/providers.json` (quarantined rather than emptied when unreadable, replaced rather than merged per id, `providers` broadcast so a second window refetches). Every listed provider is **probed** by the same prober that answers for the nine shipped agents and launched through the same `launchForHarness` body, so its row carries one of the same five `availability` states. What is still absent is the surface: no control adds one, and the 38-entry catalogue is still unreachable from the window | **shipped** — with a divergence that is the whole point. Paseo's Add writes the entry's `env` **values** into `config.json`; ours cannot, because `AgentProviderConfig.env` is a list of variable **names** and the value is read from the daemon's own environment at spawn (§7.10). So the catalogue serves its rows over the wire (`coder.listCatalog`, which measures nothing) and a client adds one by handing back what the entry states: its command, its argv, the names of the variables it needs, and the dialect it declares — `modeParam` and `authMethodId` are *absent* rather than defaulted, because no entry has evidence for either and a guessed `modeParam` is ignored by the peer while the run reports success. The cost that *was* stated on the row is now paid off, and paying it changed the shape: the four entries whose recipe sets a constant used to carry only the **name** across, so the variable was the user's to export even though we had written its value ourselves. `coder.addProvider` now takes `catalogEntryId` — the entry's own id, a **reference** and not a value — and the daemon resolves the recipe's constants from the catalogue it ships, so `providers.json` still holds no value at all, ours or a user's (§7.10). The row says which variables the recipe supplies and that exporting one is how a user overrides it. `coder.probeCatalogAgent` measures one row at a time, on the user's press, because 14 of the 38 are `npx` recipes and a screen that checked them all while opening would spend the machine on rows nobody looked at |
+| **Remove provider** (`removeProviders`) | `providers-section.tsx:155-164` (menu + confirm) · `settings.providers.actions.remove` (`en.ts:2658`) | — (action) | daemon strips the entry, its overrides **and** its `metadataGeneration.providers` entries (`daemon-config-store.ts:101-159`) | `coder.removeProvider` forgets one provider and nothing else — it refuses with `envoydev.provider-missing` when there is nothing under that id, rather than confirming a removal that did not happen. Nothing refers to a provider today, so unlike `coder.removeProject` there are no rows to archive: a task names a `HarnessId` | **shipped** — every row on the Agents page (a user's provider, and a catalogue entry they already added) carries Remove, and it is the same `coder.removeProvider`: nothing is uninstalled, and nothing a row reports changes except its disappearance from the list. Paseo's version strips the entry, its overrides and its `metadataGeneration.providers` entries, which is what a config-with-overrides shape requires; ours is a flat list of recipes, so there is nothing else to strip |
 | **Add custom model** (`providers[id].additionalModels`) | `provider-diagnostic-sheet.tsx:199-234` (modal form) · `settings.providers.models.addCustomTitle` "Add custom model" (`en.ts:2678`) | `[]` (`provider-registry.ts:735`) | merged on top of discovered models (`provider-registry.ts:383-396`,`:651`): the picker gains ids without replacing the catalogue | our catalogue ships a fixed `models` list per agent (`packages/agent-catalog/src/models.ts`) with no user additions. **Half of this row landed since it was written, and not as a settings control:** the agent is now *asked* what it offers and the answer is recorded, so `deepseek-harness`'s live catalog reaches the picker without a hand-typed id (§7.7). What is still absent is the user's own additions — ids that are not in the agent's catalog at all | **honour-able with work** — needs a per-agent model list on the settings object plus the composer reading it. Small, but it is a **protocol** addition (a `models` array on the agent's stored defaults), so it shares the Add-provider slice's schema change |
 | **Remove model** | `provider-diagnostic-sheet.tsx:114-118` · `settings.providers.models.removeModel` "Remove {{id}}" (`en.ts:2684`) | — (action) | rewrites `additionalModels` without the id (`:651-667`) | absent with the row above | **honour-able with work** — same slice |
 
@@ -596,7 +596,7 @@ at all, so **ship the disabled row with the git slice, not before it.**
 
 Paseo's `providers` page is a *credential and adapter* management surface — a provider there is an
 agent-runtime adapter plus the environment it is spawned with, and Paseo stores its API keys in plaintext
-`env` in `config.json` (§9). EnvoyCoder has no such accounts: our agents are ACP programs in a static
+`env` in `config.json` (§9). EnvoyDev has no such accounts: our agents are ACP programs in a static
 catalogue and the model credentials belong to the agent CLI the user installed. The honour-able rows above
 are *not* that page — they are "user-defined agents", and they belong in our Settings pane as a
 catalogue-management group.
@@ -604,7 +604,7 @@ catalogue-management group.
 **The correction, and then the correction of the correction — because this row has now been wrong in
 both directions, and the second mistake is the more interesting one.**
 
-**First reading (right).** *"Not applicable as a setting — availability in EnvoyCoder is a fact we detect,
+**First reading (right).** *"Not applicable as a setting — availability in EnvoyDev is a fact we detect,
 not a switch the user throws. Making it a switch would let a user hide a working agent for no reason."*
 
 **Second reading (wrong, and shipped).** The audit decided the first reading had conflated one fact where
@@ -659,7 +659,7 @@ settings page.
 `HostTerminalsPage` — `host-page.tsx:1655-1670`. Section header is **hardcoded English**
 ("Terminal agents", `:1664`).
 
-| setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
+| setting | render · label · control | default | what it does | EnvoyDev today | verdict |
 |---|---|---|---|---|---|
 | **Enable terminal agent hooks** (`enableTerminalAgentHooks`) | `host-page.tsx:966-971` · **hardcoded English**: "Enable terminal agent hooks" (`:960`) | `false` (`messages.ts:248`) | daemon installs/uninstalls marker-matched hooks **in the user's real agent CLI config files** at boot and on change (`terminal/agent-hooks/terminal-agent-hook-setting.ts:26-31`) | no terminal subsystem; `packages/platform/src/index.ts:64`,`:80` carries a pty *capability* concept but no daemon terminal exists | **not applicable** — the setting edits files in `~/.claude`-style configs for a terminal integration we do not have |
 | **Terminal profile — name, command, arguments, order** (5 controls) | `terminal-profile-edit-modal.tsx:143-207`; reorder `host-page.tsx:1386-1403` · `settings.host.terminalProfiles.*` (`en.ts:2518-2538`) | `DEFAULT_TERMINAL_PROFILES` = claude, codex, opencode, pi (`protocol/src/terminal-profiles.ts:19-30`) | **the daemon never reads it.** Read client-side only — the launcher menu and the argv sent to `create_terminal_request` (`new-workspace-screen.tsx:1664`, `workspace-header-menu.tsx:230`, `workspace-tabs/launcher/index.tsx:227` → `terminal-profiles.ts:101-106`); the daemon spawns whatever argv it is handed (`terminal/terminal.ts:941-957`) | no terminals (`docs/paseo-feature-parity.md` #11) | **not applicable** |
@@ -673,7 +673,7 @@ different directions, and both are examples of what §7.2 says we must not becom
 
 `HostPluginsPage` — `screens/settings/plugins-page.tsx:191-464`.
 
-| setting | render · label · control | default | what it does | EnvoyCoder today | verdict |
+| setting | render · label · control | default | what it does | EnvoyDev today | verdict |
 |---|---|---|---|---|---|
 | **Enable plugins** (`pluginsEnabled`) | `plugins-page.tsx:405-410` · `settings.plugins.globalTitle` "Enable plugins" (`en.ts:2040`) | `false` (`messages.ts:253`; `server/config.ts:618`) | daemon: nothing starts when false; flipping it live starts/stops every configured plugin (`server/plugins/index.ts:135-145`,`:374-391`) | no plugin runtime, no plugin SDK, no extension points | **not applicable** |
 | **Install directory** + **installation ID** | `plugins-page.tsx:414-443` · `settings.plugins.install` "Install directory" (`en.ts:2047`) | transient `""` each; a plugin is a **directory with a `paseo-plugin.json` manifest** (`server/plugins/manifest.ts:7-17`, `.strict()`, entry files fixed by convention at `plugins/runtime.ts:31-32`) | daemon writes a `plugins.<id>` config entry and loads the plugin's client/server bundles | nothing to install: our agents are ACP programs, our UI has no extension surface | **not applicable** |
@@ -697,7 +697,7 @@ them, so there is no control to copy and no user expectation to meet. The gate e
 them anyway, because the rule it implements is "the doc accounts for what Paseo's source declares",
 and a doc that quietly skipped eight declared fields would be a doc nobody could check.
 
-| key | read site | what it does | EnvoyCoder today | verdict |
+| key | read site | what it does | EnvoyDev today | verdict |
 |---|---|---|---|---|
 | `mcp` (and `mcp.injectIntoAgents`) | `server/bootstrap.ts:1604-1618` | whether the daemon's MCP tool server is injected into agent sessions | no MCP surface (§5.5) | **not applicable** |
 | `relay` | `server/bootstrap.ts:1740` → `server/relay-runtime.ts:50-63` | starts/stops the outbound relay transport | the mesh is the transport (§5.4) | **not applicable** |
@@ -726,7 +726,7 @@ settings debt, and §9 says why that matters to us.
 
 ---
 
-## 7. EnvoyCoder today, exactly
+## 7. EnvoyDev today, exactly
 
 This is the half of the inventory that is about **us**. The owner's instruction was to be exact about
 which settings are merely stored and never used, "because that is the same lie in a different
@@ -829,7 +829,7 @@ already tried here and rejected.
   1. **A disabled row is a promise.** It says "this exists and we cannot honour it yet", which points a
      user at the settings pane for a feature whose prerequisites are a peer directory
      (`coder.listPeers` returns a hardcoded empty list, `service.ts:454-461`), a session store that makes
-     a remote path reachable at all, and a broker decision (`docs/envoycoder-design.md` §7) — none of
+     a remote path reachable at all, and a broker decision (`docs/envoydev-design.md` §7) — none of
      which are settings work.
   2. **Its RPC partner had already gone.** `coder.offerRemoteRun` was a method in the catalogue with no
      handler and no caller: a spec promising a client that a run could be handed to another machine,
@@ -939,7 +939,7 @@ Recorded because both are in shipped comments and would be repeated by the next 
   i18n, and no `coder.getSettings` call** (grep for `getSettings`, `locale`, `i18n`, `language` under
   `apps/mobile/lib` → zero hits). The claim is a statement about the design that is true and a
   statement about the product that is not, and the two are in the same paragraph.
-* **The owner's premise, checked:** `docs/envoycoder-paseo-inheritance.md:55` records Paseo's settings
+* **The owner's premise, checked:** `docs/envoydev-paseo-inheritance.md:55` records Paseo's settings
   as "two scopes" and our own as three. True, and at the time of writing the third scope (per project)
   had **no screen either** — the same gap as Paseo's `projects` section, and the same live bug as
   §7.3.2. Slice 1 gave it one: the sidebar's per-project `⋯` button now opens the project's own defaults
@@ -1180,7 +1180,7 @@ a daemon built from the current source, which sends both. The window accepts tha
 page read `harness.models.options` and threw, React unmounted the pane — there is no error boundary above
 the shell here — and the user got an empty window. That is §7.2's wire asymmetry as a **live** state rather
 than a hypothesis, and it is why the page now answers an older daemon with one sentence in the user's
-language ("the daemon did not send what {agent} publishes about itself … restart EnvoyCoder so both come
+language ("the daemon did not send what {agent} publishes about itself … restart EnvoyDev so both come
 from one build") instead of taking the application down. The regression test asserts the window is still a
 window on that answer, and it fails with the same `TypeError` when the guard is removed — which is how it
 was checked, since no jsdom fixture had produced that shape until this was seen in a browser.
@@ -1382,7 +1382,7 @@ drive first, then — only if it is absent and the entry declares a bridge — t
 **2. A GUI-launched daemon's `PATH` is not the user's, and nothing repaired it.** Measured on the machine this
 was written on: `launchctl getenv PATH` prints **nothing**, and Finder-launched processes carry no `PATH` in
 their environment at all. `spawn_daemon` in `apps/desktop/src-tauri/src/main.rs` passes only
-`ENVOYCODER_DAEMON_PORT`, so what the daemon inherits depends entirely on where the app was launched from — and
+`ENVOYDEV_DAEMON_PORT`, so what the daemon inherits depends entirely on where the app was launched from — and
 the same daemon started from a terminal (the `npm run tauri:dev` development arrangement) answered *differently*
 from the same daemon started from Finder. `packages/platform/src/path-discovery.ts` now resolves the list and
 **both probing and spawning use it** (`launchForHarness` reads it once and puts it in the child's environment,
@@ -1459,7 +1459,7 @@ legacy `true` is `ready` (the same claim, and the change does not make it false 
 `"unknown"` is `unknown`, but a legacy **`false` becomes `unknown`, never `not-installed`** — that daemon only
 ever asked whether *the program it drives* was on *its* search path, which for a bridged agent is the adapter, so
 its `false` is exactly the wrong word this change removes. Carrying no `fix`, it cannot be read as advice
-either; the row adds one sentence naming the daemon as a build behind and restarting EnvoyCoder as the fix.
+either; the row adds one sentence naming the daemon as a build behind and restarting EnvoyDev as the fix.
 
 **A refusal has a state too, and it needed a third code.** The settings row is not the only place a state
 becomes a sentence: pressing Send on an agent that cannot run gets a *translated* refusal, keyed, and the key is
@@ -1467,9 +1467,9 @@ what a German user reads. Two of the states map onto codes that already existed 
 `harness-missing` (something must be installed, and the sentence names both steps) and `unsupported` is
 `harness-unsupported` (nothing to install; the gap is ours). But `unknown` could not borrow either: the existing
 `harness-missing` sentence is *"X is not installed on this machine. Install it, then start the task again."*, and
-that is precisely the claim the state exists to forbid. So `ENVOYCODER_ERRORS.harnessUnknown` and
-`error.harnessUnknown` are new — "EnvoyCoder could not check whether X is installed, so it did not start the
-task. Restart EnvoyCoder and try again." — and `launchForHarness` decides drivability **before** installation,
+that is precisely the claim the state exists to forbid. So `ENVOYDEV_ERRORS.harnessUnknown` and
+`error.harnessUnknown` are new — "EnvoyDev could not check whether X is installed, so it did not start the
+task. Restart EnvoyDev and try again." — and `launchForHarness` decides drivability **before** installation,
 because "install it" is wrong advice for an agent we have no adapter for whether or not it is present. That
 ordering is not stylistic: widening the state to include `unsupported` would otherwise have moved every
 installed-but-undrivable agent into the "missing" branch, telling a user with Copilot installed that it is not
@@ -1648,7 +1648,7 @@ Three design decisions are worth stating in as many words, because each of them 
 * **`methodId` is optional.** When several methods are advertised and the catalogue declares none of them —
   `@agentclientprotocol/codex-acp` offers two `env_var` methods and a browser login — choosing one is us
   picking a sign-in flow on the user's behalf, and the browser one would open a window they never asked for.
-  A row that says "this agent wants a sign-in and EnvoyCoder cannot tell you which" is honest and actionable;
+  A row that says "this agent wants a sign-in and EnvoyDev cannot tell you which" is honest and actionable;
   a row that quietly sent the wrong method is neither.
 * **The schema refuses the two contradictions** the shape would otherwise allow (`HarnessAuthSchema`):
   a `methodId` beside `ready` claims a step that will never happen, and beside `unknown` it asserts a
@@ -1661,7 +1661,7 @@ Three design decisions are worth stating in as many words, because each of them 
 the `authMethodId` the catalogue declares is **not** sent on its behalf — a probe that authenticated would be
 measuring its own side effect, and for a browser-login method it would put a window on the user's desktop
 nobody asked for. The result is written where `coder.listHarnesses` can read it: `AgentAuthObservation` in
-`<state>/EnvoyCoder/agent-auth.json`, keyed per agent, newest wins, quarantined rather than emptied when
+`<state>/EnvoyDev/agent-auth.json`, keyed per agent, newest wins, quarantined rather than emptied when
 unreadable, and broadcast under the store's `harnesses` change kind.
 
 **Why a second file, when the session-options record already exists.** Because the two disagree about what a
@@ -1721,7 +1721,7 @@ disappearing.
 The owner's brief: *"We should do the same thing with paseo, we need user to see them and can enable and use
 them. That's the target of our control plane. If they are not installed, we can guide them to install."* This
 is that screen. It is the last of the four the same request produced (§7.9 availability, §7.10 the provider
-contract, §7.11 sign-in), and it is the one where the product's thesis is either true or not: **EnvoyCoder is
+contract, §7.11 sign-in), and it is the one where the product's thesis is either true or not: **EnvoyDev is
 the control plane for coding agents**, and a control plane that cannot show you the agents is a product with
 a catalogue nobody can read.
 
@@ -1736,8 +1736,8 @@ decisions in `agent-catalog.ts`), three groups:
 
 and one form at the bottom for a program nobody catalogued, which is what `coder.addProvider` was written for.
 
-**1. The catalogue is served, not copied.** `@envoycoder/agent-catalog` is where the *launch* reads an
-entry's command and argv, and its entry point reaches `@envoycoder/platform`, which imports `node:fs` — so
+**1. The catalogue is served, not copied.** `@envoydev/agent-catalog` is where the *launch* reads an
+entry's command and argv, and its entry point reaches `@envoydev/platform`, which imports `node:fs` — so
 the window cannot import it at all. That is not an obstacle to route around: it is the constraint that makes
 "do not put catalogue knowledge in desktop-only code" a fact about the architecture. `coder.listCatalog`
 serves the rows, and the phone reads the same method and gets the same entries and the same dialect facts. It
@@ -1868,8 +1868,8 @@ numbers below are measured there rather than asserted here: see §7.13.
 
 ### 7.13 The agents page, measured in a real window rather than described
 
-Driven, not asserted: a daemon on an **isolated home** (`ENVOYMESH_HOME=/tmp/envoycoder-catalog-home`,
-port 4792), `vite` on 6181 with `VITE_ENVOYCODER_DAEMON_PORT=4792`, headless Chrome over CDP with the
+Driven, not asserted: a daemon on an **isolated home** (`ENVOYMESH_HOME=/tmp/envoydev-catalog-home`,
+port 4792), `vite` on 6181 with `VITE_ENVOYDEV_DAEMON_PORT=4792`, headless Chrome over CDP with the
 target matched **by URL** (`scripts/audit-ui.mjs`, which now takes `--clicks "Settings|Agents"` and probes
 the catalogue; `scripts/preview-ui.mjs` for the pictures). The isolated home matters: the machine this was
 measured on has nine agents probed and four of them missing, which is what makes the five-state column a
@@ -1895,7 +1895,7 @@ promise. The row's buttons become *Check again* and *Remove*; the other 37 keep 
 state chip, and a **separate browser session** — a second client — saw the same row in `coder.listProviders`.
 That is the phone's half of this slice demonstrated rather than argued: the catalogue is served
 (`coder.listCatalog`), the added provider travels the wire every client already reads, and no client needs
-a copy of `@envoycoder/agent-catalog`.
+a copy of `@envoydev/agent-catalog`.
 
 **Hiding one — and this measurement is now a record of a feature that no longer exists.** A second walk
 pressed *Hide from my lists* on a shipped agent: the preference was written, and in the next window the row
@@ -1947,8 +1947,8 @@ its search path — and measures the button, the press and the sentence in a rea
 reasoned about rather than measured on this page: the **`npx`** claim. Fourteen rows read "Not downloaded
 yet" and no run has yet watched a first run actually fetch a package, so the sentence says what the probe
 measured (`npx` resolves) and that nothing has been downloaded, and nothing more. Screenshots for a reader
-who can see pixels: `/tmp/envoycoder-agents-*.png` (`-top`, `-checked`, `-search-cline`, `-added`,
-`-manual`, `-1000`) from the run above, and `<tmp>/envoycoder-signin-window/{before,after}-press.png` from
+who can see pixels: `/tmp/envoydev-agents-*.png` (`-top`, `-checked`, `-search-cline`, `-added`,
+`-manual`, `-1000`) from the run above, and `<tmp>/envoydev-signin-window/{before,after}-press.png` from
 §7.13.1 — the run above is what a text model can check.
 
 #### 7.13.1 The Sign-in button, measured in a window instead of reasoned about
@@ -1960,7 +1960,7 @@ condition is producible on purpose, so the number is now `1` — measured, in a 
 daemon, with an agent that really refuses a session:
 
 ```
-npm run signin:window            # 9 checks; screenshots under <tmp>/envoycoder-signin-window
+npm run signin:window            # 9 checks; screenshots under <tmp>/envoydev-signin-window
 npm run signin:window -- --audit  # …and ui:audit's numbers for the same page
 ```
 
@@ -1973,7 +1973,7 @@ starts it the way it starts any agent, and the fixture advertises one `authMetho
 `session/new` with `-32000 Authentication required … methodId 'fake_login'` until it is given one — the
 measured behaviour of `cursor-agent acp`, on demand. `claude-agent-acp` is the name chosen because no real
 install occupies it, unlike `cursor-agent`, which this machine has and which a login-shell search path would
-resolve first. Vite then serves the real UI at `VITE_ENVOYCODER_DAEMON_PORT=<that daemon>`, and headless
+resolve first. Vite then serves the real UI at `VITE_ENVOYDEV_DAEMON_PORT=<that daemon>`, and headless
 Chrome is driven over CDP with the target matched **by URL**.
 
 | measurement | value |
@@ -1991,7 +1991,7 @@ Chrome is driven over CDP with the target matched **by URL**.
 The press is the **window's** — a real `click()` on the rendered button — and the sentence is read out of the
 `role="status"` element the component renders it in. The daemon is then asked what it recorded, which is what
 makes "the click did the work" a fact rather than an inference from the button's disappearance. Two PNGs are
-left in `<tmp>/envoycoder-signin-window`: `before-press.png` (the button, on a row that says *Needs a
+left in `<tmp>/envoydev-signin-window`: `before-press.png` (the button, on a row that says *Needs a
 sign-in*) and `after-press.png` (the outcome sentence). The pictures are for a human — this model cannot read
 them, which is the whole reason they exist.
 
@@ -2007,8 +2007,8 @@ The browser step (`not-completed`) is still not produced by any window run.
 The walk above pressed *Hide from my lists* and recorded it as a confirmation of §5.8. It was a
 confirmation of the wrong property — the switch could not falsify a *measurement*, and it could take an
 agent we ship out of the lists this product offers — so the preference is gone and the page was measured
-again, the same way and on the same terms: an isolated home (`ENVOYMESH_HOME=/tmp/envoycoder-hide-home`),
-a real daemon on port 4794, Vite on 6184 serving the real UI with `VITE_ENVOYCODER_DAEMON_PORT=4794`, and
+again, the same way and on the same terms: an isolated home (`ENVOYMESH_HOME=/tmp/envoydev-hide-home`),
+a real daemon on port 4794, Vite on 6184 serving the real UI with `VITE_ENVOYDEV_DAEMON_PORT=4794`, and
 `scripts/audit-ui.mjs` driving headless Chrome over CDP with the target matched **by URL**:
 
 ```
@@ -2047,7 +2047,7 @@ options of the nine we ship** — Envoy Harness, DeepSeek Harness, Cursor Agent,
 four of the nine (`copilot`, `opencode`, `pi`, `omp`) are `not-installed` on this machine and `offeredAgents`
 drops exactly that state. `ready` comes first, which is why Envoy Harness leads and why the catalogue's own
 order is preserved under it. And the row carries the sentence the deletion made necessary: *"Every agent
-EnvoyCoder supports is on the Agents page — including the ones that are not installed here, each with the
+EnvoyDev supports is on the Agents page — including the ones that are not installed here, each with the
 command that fixes it."* — so the four absent ones are named, explained and installable one press away
 rather than silently missing. The page itself measures `rowsWrapped: 0`, `horizontalOverflow: 0`, and three
 rows in a 647px viewport, i.e. the sentence did not push anything out of its column.
@@ -2092,7 +2092,7 @@ and the never-heard-of-it case producing the **same kept settings** and differen
 
 **The file is deliberately not rewritten when a key is dropped.** The collection reader rewrites a list
 after skipping a bad row so the warning appears once; that is not copied here. An unknown *settings* key
-is far more often a key from a **newer** build — the user ran a newer EnvoyCoder, then an older one — and
+is far more often a key from a **newer** build — the user ran a newer EnvoyDev, then an older one — and
 rewriting the file would delete that setting permanently, from a version that does read it. The note
 repeats until the user's next settings write, and nothing is destroyed behind their back.
 
@@ -2257,7 +2257,7 @@ Everything below is a command that was run on this machine on 2026-09-15, with i
 | `$SHELL -ilc 'command -v claude'` | `/Users/shileipeng/.local/bin/claude` |
 | **the same login shell asked for `$PATH`, from a clean environment** (`env -i HOME=… SHELL=/bin/zsh /bin/zsh -ilc 'printf %s "$PATH"'`) | **26 directories, and none of them contains `_npx`.** `for d in ${(s.:.)PATH}; do [ -x "$d/dsh" ] && echo FOUND; done` prints nothing |
 | the running daemon's own inherited `PATH` (`ps eww -p <daemon pid>`) | **48 entries, no `_npx` in any of them** |
-| the daemon's log at boot (`~/.envoymesh/EnvoyCoder/logs/daemon.log`) | `[envoycoder] agent search path from login-shell: 33 directories` |
+| the daemon's log at boot (`~/.envoymesh/EnvoyDev/logs/daemon.log`) | `[envoydev] agent search path from login-shell: 33 directories` |
 | the live daemon's answer (`coder.listHarnesses` on `ws://127.0.0.1:4770/ws`) | `deepseek-harness` → **`not-installed`**, fix `npm install -g @deepseek-ai/dsh (developer preview: expect breaking changes)`; `claudecode` → `needs-bridge`, `agentBinary: /Users/shileipeng/.local/bin/claude`; `codex` → `needs-bridge`, `agentBinary: /Users/shileipeng/.npm-global/bin/codex` |
 
 **Three different causes, and only one of them was a wording problem.**
@@ -2343,7 +2343,7 @@ home, a real daemon, Vite against it, headless Chrome over CDP with the target m
 * **15px/600 for the name.** The body text is 13px, the secondary line 12px, the group headings 13px caps, and
   ordinary UI labels (nav items, buttons) use `--font-weight-medium`. `--font-size-content` is one full step
   above all of them and `--font-weight-semibold` is one weight step above the labels, so the name is the only
-  15px/600 text inside a row. §7 of `docs/envoycoder-ui.md` says hierarchy should be by weight and colour
+  15px/600 text inside a row. §7 of `docs/envoydev-ui.md` says hierarchy should be by weight and colour
   rather than size, lest a list look like a ransom note — the law is about *per-row* scaling, and a row title
   set from the sheet's own content token, identically on every row, is not that; the doc now says so.
 * **Three columns, and the controls column is a fixed track.** A chip that is right-aligned *inside its own
@@ -2444,12 +2444,12 @@ What that leaves on a row is **one chip, and it is one of exactly two verdicts**
 |---|---|---|---|
 | `ready` | Ready | the tier, or *Installed — add it to use it* | (nothing to resolve) |
 | `ready` and an `npx` recipe | **Ready** | *Nothing to install* | *Obtained: fetched from npm on the first run (pkg)* |
-| `needs-bridge` | Not ready | *Installed — needs its connector* + the command | *"**Codex is installed.** EnvoyCoder needs its connector to drive it:"* then the exact command |
+| `needs-bridge` | Not ready | *Installed — needs its connector* + the command | *"**Codex is installed.** EnvoyDev needs its connector to drive it:"* then the exact command |
 | `not-installed` | Not ready | the entry's first install step, verbatim | the steps **in the order to run them**, then the entry's link |
 | `ready` + an unset variable the launch names | Not ready | *"NAME is not set"* | the name(s), and that the value can only come from the user |
-| `unsupported` | Not ready | *EnvoyCoder cannot drive this agent yet* | **that this is our gap and there is nothing to install** |
-| `unknown` | Not ready | *EnvoyCoder could not check this machine* | the same, plus the one action that re-measures |
-| *(field absent — older daemon)* | Not ready | *EnvoyCoder is a build behind* | the same, in the words of a build skew |
+| `unsupported` | Not ready | *EnvoyDev cannot drive this agent yet* | **that this is our gap and there is nothing to install** |
+| `unknown` | Not ready | *EnvoyDev could not check this machine* | the same, plus the one action that re-measures |
+| *(field absent — older daemon)* | Not ready | *EnvoyDev is a build behind* | the same, in the words of a build skew |
 
 Two of those rows are worth their own note.
 
@@ -2487,7 +2487,7 @@ Three facts about an agent cannot be known without **starting** it — whether i
 properties in the disclosure, and the property that makes them honest is **`Verified`**: a relative time in the
 user's own language from `Intl.RelativeTimeFormat` (*4 minutes ago*, pluralised and localised in all seven)
 followed by the absolute timestamp. When nothing has been observed the value says **why** — *"Not yet —
-EnvoyCoder starts an agent to learn this, so it arrives when a task runs rather than when this page opens"* —
+EnvoyDev starts an agent to learn this, so it arrives when a task runs rather than when this page opens"* —
 rather than leaving a blank that invites a hunt for a button.
 
 They arrive three ways. Two already existed: `coder.probeSessionOptions` (the composer's *Ask again*) and a run,
@@ -2507,7 +2507,7 @@ publishes. Its bounds are the design, and three of them are prohibitions:
   app start nothing;
 * **off unless asked for**: `startCoderDaemon` defaults `warm` to false, `daemon/main.ts` passes `true`, and
   every test and `scripts/smoke.ts` leaves it out. `scripts/measure-settings.mjs` passes
-  `ENVOYCODER_WARM_AGENTS=0`, because a *measurement* must not start the owner's own coding agents.
+  `ENVOYDEV_WARM_AGENTS=0`, because a *measurement* must not start the owner's own coding agents.
 
 **The honest note about that pass, recorded here rather than discovered later.** It starts the user's installed
 agents — that is what it is for, and it is bounded and cached rather than unbounded, but it is a real side
@@ -2612,7 +2612,7 @@ do, so `acp-agent-support.test.ts` and the smoke gate remain the only evidence a
 unchanged by this slice.
 
 **Pixels are the owner's to judge, and this slice's screenshots are in `/tmp`.** The model that wrote this could
-not read the PNGs (`/tmp/envoycoder-agents/agents-0*.png`, `/tmp/envoycoder-catalog/agents-0*.png`): the geometry
+not read the PNGs (`/tmp/envoydev-agents/agents-0*.png`, `/tmp/envoydev-catalog/agents-0*.png`): the geometry
 above is numeric and therefore stronger than an eyeball for alignment, and *nothing* here claims to know whether
 the page reads well, whether 144px looks balanced, or whether the two verdicts are the right words to put in
 front of a person. Those are the owner's, and the pictures are there for them.
@@ -2620,7 +2620,7 @@ front of a person. Those are the owner's, and the pictures are there for them.
 ### 7.18 The fix, set apart: a block a reader lands on, and a Copy control
 
 The owner's third report on this page, verbatim: *"On the Agents page, can we highlight the info on each agent like
-"Claude Code is installed. EnvoyCoder needs its connector to drive it, and that is the one piece that is missing:
+"Claude Code is installed. EnvoyDev needs its connector to drive it, and that is the one piece that is missing:
 npm install -g @agentclientprotocol/claude-agent-acp". we want to highlight it and let user know how to resolve
 it."*
 
@@ -2653,7 +2653,7 @@ Colour, for the record: amber and **not** the accent (the accent is this app's o
 wearing it would compete with the Run button on the same screen) and **not** `--destructive` (destructive is a
 colour that only appears inside a confirmation). The new rules use `--foreground`/`--foreground-muted` rather than
 the neighbouring `--text`/`--text-dim`, because those two are defined once, dark, in `styles.css`'s own `:root` —
-the light-palette gap `docs/envoycoder-ui.md` records — while the `--foreground` family is themed. They are the same
+the light-palette gap `docs/envoydev-ui.md` records — while the `--foreground` family is themed. They are the same
 values in dark mode, so nothing moved there and the block is legible in light mode.
 
 #### 7.18.2 What cannot be assumed, and is therefore asked
@@ -2711,7 +2711,7 @@ in this slice a packaged build should confirm on each OS at M6.
 ### 7.19 Looking again, and finding out without a restart
 
 The owner's question, verbatim: *"After I run `npm install -g @agentclientprotocol/codex-acp`, how we let
-EnvoyCode know that without restarting or can we support run the commands in EnvoyCoder?"*
+EnvoyCode know that without restarting or can we support run the commands in EnvoyDev?"*
 
 It is two questions, and the first one's answer was already half-built. Measured on the machine it was asked
 about, with the bridges the owner had installed **minutes earlier** and a daemon that had been running since
@@ -2782,9 +2782,9 @@ reddening the named leg. Reasoned about rather than measured: that a page-level 
 (rather than a per-row one, which is the chore §7.17 removed), and that the control belongs beside the count
 rather than in a toolbar. **Not done at all:** running the fix command from the app — see §7.19.2.
 
-#### 7.19.2 Running the commands in EnvoyCoder: the design, and why it is not in this slice
+#### 7.19.2 Running the commands in EnvoyDev: the design, and why it is not in this slice
 
-The owner's second question — *"can we support run the commands in EnvoyCoder?"* — has an answer that is
+The owner's second question — *"can we support run the commands in EnvoyDev?"* — has an answer that is
 buildable and a shape that has to be right, and the difference is a new privilege for the daemon. Two designs
 are honest, and they are not equivalent:
 
@@ -2815,7 +2815,7 @@ schema, a prune rule and seven languages. That is a slice, not a paragraph, and 
 
 ### 7.20 Running the fix: the row resolves, in the block that shows the command
 
-The owner's second question — *"can we support run the commands in EnvoyCoder?"* — built as §7.19.2's design **1**,
+The owner's second question — *"can we support run the commands in EnvoyDev?"* — built as §7.19.2's design **1**,
 which is the general half: it resolves **every** Not-ready row that carries a command, npm-published or not.
 
 #### 7.20.1 The property, because everything else follows from it
@@ -2985,7 +2985,7 @@ fetched-delivery-without-a-package refusal. Gates: **885 passed / 7 skipped**, 1
 ```console
 $ …coder.hello            → advertises coder.setAgentDelivery, 32 methods
 $ …coder.listHarnesses    → codex: ready binary=/Users/shileipeng/.npm-global/bin/codex-acp  delivery={"kind":"installed"}
-$ setAgentDelivery(envoy-harness, npx) → refused: envoycoder.connector-not-fetchable
+$ setAgentDelivery(envoy-harness, npx) → refused: envoydev.connector-not-fetchable
 $ setAgentDelivery(codex, npx)         → {"harness":"codex","delivery":{"kind":"npx","package":"@agentclientprotocol/codex-acp"}}
 $ …coder.listHarnesses    → codex: ready binary=/usr/local/bin/npx                          delivery={"kind":"npx",…}
 $ setAgentDelivery(codex, installed)   → back to …/.npm-global/bin/codex-acp
@@ -3017,7 +3017,7 @@ opening a session. That is one press on the owner's machine and one download, an
 
 ### 7.22 GitHub Copilot: "we cannot drive this" was our entry being stale, not the agent
 
-The owner's question, looking at the row: *"How paseo support it?"* The row said *EnvoyCoder cannot drive this agent
+The owner's question, looking at the row: *"How paseo support it?"* The row said *EnvoyDev cannot drive this agent
 yet*, and the honest answer turned out to be that Paseo drives it exactly the way we drive the two bridges.
 
 #### 7.22.1 What the reference product does, and what our binary says
@@ -3998,7 +3998,7 @@ one added (`task.composer.send.queued`), 450/450 complete.
 The owner:
 
 > *"can we use the same send button style, no text, no send button, when inputting, the icon button displayed. can we
-> use '../EnvoyCoder/apps/desktop/assets/logo.png' as app's logo, also display on the Tauri app's top bar."*
+> use '../EnvoyDev/apps/desktop/assets/logo.png' as app's logo, also display on the Tauri app's top bar."*
 
 #### 7.34.1 The send action: a glyph, and only while the field has something in it
 
@@ -4078,9 +4078,9 @@ Measured on the owner's own machine, against the running daemon:
 
 ```console
 $ … coder.listTasks → "This is a test" (status done, runId c41e0ddc-…)
-$ … coder.tailRun   → envoycoder.run-missing: There is no run called "c41e0ddc-…".
+$ … coder.tailRun   → envoydev.run-missing: There is no run called "c41e0ddc-…".
                       It may have been started by a daemon that has since restarted.
-$ … coder.sendToRun → envoycoder.harness-failed: That run has already finished, so there is nothing
+$ … coder.sendToRun → envoydev.harness-failed: That run has already finished, so there is nothing
                       to send to it. Start a new task instead. [key: error.runFinished]
 ```
 
@@ -4092,7 +4092,7 @@ $ … coder.sendToRun → envoycoder.harness-failed: That run has already finish
 2. **The pane asks about the run it is showing.** An effect fetches it (`openRun`) when the task carries a `runId`
    the window has no record of — a task started by another window, or before this one connected, needs its
    transcript anyway.
-3. **A run the daemon no longer has is not an error.** `openRun` reads `envoycoder.run-missing` as *"this run is
+3. **A run the daemon no longer has is not an error.** `openRun` reads `envoydev.run-missing` as *"this run is
    over"*: it records the run as ended (so nothing can call it live again) and leaves the window's bar alone,
    because the task is fine and its next message starts a new run.
 4. **The message stays in the field until the send lands.** `submit` used to clear it the moment the call was
@@ -4305,7 +4305,7 @@ because both need the same thing first — **a contract change**:
    nothing), one row's state on request (`coder.probeCatalogAgent`, which costs one search of the search
    path), and an editor for a program nobody catalogued. What is still absent is `defaults.models` for
    the custom-model rows — a provider's model is whatever the user put in its `args`, because we have no
-   evidence about its flags. The schema addition was ours — `@envoycoder/protocol` is this repo's
+   evidence about its flags. The schema addition was ours — `@envoydev/protocol` is this repo's
    package — so `check-wiring` followed rather than an upstream round trip.
 
 **Gate:** the upstream contract test the family requires, plus a daemon test that a configured agent

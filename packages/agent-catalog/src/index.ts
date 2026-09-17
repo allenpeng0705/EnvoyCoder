@@ -1,9 +1,9 @@
 /**
- * The agent catalogue: which coding agents EnvoyCoder can drive, and how.
+ * The agent catalogue: which coding agents EnvoyDev can drive, and how.
  *
  * ## Two tiers, and why the distinction is load-bearing
  *
- * * **native** — `envoy-harness` and `deepseek-harness`. EnvoyCoder owns the integration end to
+ * * **native** — `envoy-harness` and `deepseek-harness`. EnvoyDev owns the integration end to
  *   end: it can run them in-process, see their tool calls as structured events, and answer an
  *   approval prompt without parsing a terminal.
  * * **external** — the CLIs the rest of the world ships (`claude`, `codex`, `copilot`,
@@ -25,7 +25,7 @@
  *
  * The decisive evidence is in the capabilities: an agent we cannot *cancel* and cannot *ask on* is
  * not merely less pleasant — it silently denies every escalation (DeepSeek Harness's SDK profile
- * behaves exactly that way, which is why EnvoyCoder drives its `acp` profile instead).
+ * behaves exactly that way, which is why EnvoyDev drives its `acp` profile instead).
  *
  * ## The honesty rule for this file
  *
@@ -53,8 +53,8 @@ import {
   type ToolCache,
   BUILT_IN_HARNESSES,
   CATALOGUED_HARNESSES,
-} from "@envoycoder/protocol";
-import { type PlatformId, detectPlatform, spawnTreeOptions } from "@envoycoder/platform";
+} from "@envoydev/protocol";
+import { type PlatformId, detectPlatform, spawnTreeOptions } from "@envoydev/platform";
 
 import { modelArgs, modelIdOf } from "./models.js";
 import { ACP_AGENT_CATALOG, cataloguedRecipe } from "./acp-catalog.js";
@@ -393,7 +393,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
         descriptionKey: "task.agentMode.review.description",
       },
     ],
-    summary: "EnvoyCoder's built-in agent — structured tools, approvals and sessions.",
+    summary: "EnvoyDev's built-in agent — structured tools, approvals and sessions.",
     launch: {
       kind: "child-process",
       // Spawned, like DeepSeek Harness, and driven over the same ACP surface.
@@ -409,7 +409,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       //
       // Nothing is lost. "In-process" was never what made cancel and approvals exact — speaking a
       // protocol that *has* `session/cancel` and `session/request_permission` is, and a spawned
-      // agent has that too (`docs/envoycoder-harness.md` §2).
+      // agent has that too (`docs/envoydev-harness.md` §2).
       binaries: ["envoy-harness", "envoy"],
       // The model travels as **flags**, and both of them. Its `--acp` dispatch builds a live agent
       // only when `--provider` is set and reads `--model` only in that branch
@@ -468,7 +468,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       hint: "run `npm run peers:check` — the built-in harness is the peer checkout beside this repository",
     },
     // Policy: the harness is a **peer** of the family, not a package EnvoyMesh ships
-    // (EnvoyMesh design D4). EnvoyCoder clones or copies the harness itself.
+    // (EnvoyMesh design D4). EnvoyDev clones or copies the harness itself.
     evidence:
       "Verified from source in ../envoy-harness (peer checkout): the ACP stdio mode is " +
       "`run --acp` (src/cli/argv-help.ts:45 documents `--acp`; src/cli/run.ts:123-124 dispatches " +
@@ -538,7 +538,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       "sdk-minimal/acp). Not-a-library: packages/bundle/base/README.md:12 and " +
       "scripts/verify-application-entrypoints.ts. ACP method table incl. session/cancel and " +
       "session/request_permission: packages/acp/acp/README.md. SDK has no cancel/close: " +
-      "packages/sdk/protocol/README.md. Platform behaviour: see docs/envoycoder-platforms.md " +
+      "packages/sdk/protocol/README.md. Platform behaviour: see docs/envoydev-platforms.md " +
       "§'DeepSeek Harness' (bash on POSIX / pwsh on Windows; sandbox enforcement is 'partial' on " +
       "Windows; SIGTERM is not distinct from force-kill there).",
   },
@@ -677,7 +677,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       // `openai-api-key`, both `type: "env_var"`, and `chat-gpt` — and a fresh process opens a session
       // without any of them (`session/new` answered with a session id and a full option state, while
       // `authenticate {methodId: "api-key"}` answered `CODEX_API_KEY or OPENAI_API_KEY is not set`).
-      // Naming a method here would make EnvoyCoder fail a run that the agent itself is willing to start,
+      // Naming a method here would make EnvoyDev fail a run that the agent itself is willing to start,
       // so the credential is left to the user's own `codex login` / environment, which is where the
       // agent reads it.
     },
@@ -1251,7 +1251,7 @@ export function fetchedArgs(id: HarnessId, input: RunInput): string[] {
  * all 38 recipes — because a user may check any row of the catalogue, and `extra` carries the one thing the
  * catalogue cannot know: the commands **the user declared**.
  *
- * Deliberately unfiltered: which names a shell may be asked about is `@envoycoder/platform`'s rule (a closed
+ * Deliberately unfiltered: which names a shell may be asked about is `@envoydev/platform`'s rule (a closed
  * character set, because a provider's command is user-controlled data), and a second copy of that rule here
  * would be the copy that went stale.
  */
@@ -1349,7 +1349,7 @@ export function repoRoot(): string | null {
     if (existsSync(manifest)) {
       try {
         const parsed = JSON.parse(readFileSync(manifest, "utf8")) as { name?: string };
-        if (parsed.name === "envoycoder") {
+        if (parsed.name === "envoydev") {
           cachedRepoRoot = dir;
           return dir;
         }

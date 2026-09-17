@@ -41,7 +41,7 @@ afterEach(async () => {
 });
 
 async function tempDir(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), "envoycoder-fix-"));
+  const dir = await mkdtemp(join(tmpdir(), "envoydev-fix-"));
   dirs.push(dir);
   return dir;
 }
@@ -140,7 +140,7 @@ describe("what a fix target resolves to", () => {
     const spawn = vi.fn(() => realSpawn("/bin/echo", ["ok"]));
     const recheck = vi.fn(async () => undefined);
     const handler = handlers({ spawn, recheck })["coder.runFix"];
-    const result = (await handler?.({ target: { kind: "harness", id: "codex" } })) as RunResult;
+    const result = (await handler?.({ target: { kind: "harness", id: "codex" } }, { session: undefined })) as RunResult;
 
     expect(result.outcome).toBe("succeeded");
     expect(result.commands).toEqual(["npm install -g @agentclientprotocol/codex-acp"]);
@@ -157,7 +157,7 @@ describe("what a fix target resolves to", () => {
 
   it("spawns nothing when the target is already ready, and says there is nothing to do", async () => {
     // The race the four outcomes exist for: the user installed the program in their own terminal and pressed
-    // EnvoyCoder's button a moment later. Running the install again would be harmless and wrong.
+    // EnvoyDev's button a moment later. Running the install again would be harmless and wrong.
     const spawn = vi.fn();
     const recheck = vi.fn(async () => undefined);
     const handler = handlers({
@@ -165,7 +165,7 @@ describe("what a fix target resolves to", () => {
       spawn,
       recheck,
     })["coder.runFix"];
-    const result = (await handler?.({ target: { kind: "harness", id: "codex" } })) as RunResult;
+    const result = (await handler?.({ target: { kind: "harness", id: "codex" } }, { session: undefined })) as RunResult;
 
     expect(result.outcome).toBe("nothing-to-do");
     expect(result.commands).toEqual([]);
@@ -176,9 +176,10 @@ describe("what a fix target resolves to", () => {
   it("refuses a target that is not in any list, without running anything", async () => {
     const spawn = vi.fn();
     const handler = handlers({ spawn })["coder.runFix"];
-    const result = (await handler?.({
-      target: { kind: "catalog", id: "no-such-agent" },
-    })) as RunResult;
+    const result = (await handler?.(
+      { target: { kind: "catalog", id: "no-such-agent" } },
+      { session: undefined },
+    )) as RunResult;
 
     expect(result.outcome).toBe("refused");
     expect(result.reason).toBe("unknown-target");
@@ -189,7 +190,7 @@ describe("what a fix target resolves to", () => {
     const spawn = vi.fn(() => realSpawn("/bin/sh", ["-c", "exit 7"]));
     const recheck = vi.fn(async () => undefined);
     const handler = handlers({ spawn, recheck })["coder.runFix"];
-    const result = (await handler?.({ target: { kind: "harness", id: "codex" } })) as RunResult;
+    const result = (await handler?.({ target: { kind: "harness", id: "codex" } }, { session: undefined })) as RunResult;
 
     expect(result.outcome).toBe("failed");
     expect(result.exitCode).toBe(7);
@@ -199,7 +200,7 @@ describe("what a fix target resolves to", () => {
   it("refuses a call whose parameters do not name a target", async () => {
     // The wire's own guard: a malformed press is a protocol error, not an invitation to guess a target.
     const handler = handlers({})["coder.runFix"];
-    await expect(handler?.({})).rejects.toThrow();
-    await expect(handler?.({ target: { kind: "harness", id: "not-a-harness" } })).rejects.toThrow();
+    await expect(handler?.({}, { session: undefined })).rejects.toThrow();
+    await expect(handler?.({ target: { kind: "harness", id: "not-a-harness" } }, { session: undefined })).rejects.toThrow();
   });
 });

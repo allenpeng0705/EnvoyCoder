@@ -31,7 +31,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { CatalogEntry, HarnessSummary } from "@envoycoder/protocol";
+import type { CatalogEntry, HarnessSummary } from "@envoydev/protocol";
 
 import { SettingsPane } from "../src/components/SettingsPane.js";
 import { rowVerdict } from "../src/components/settings/agent-verdict.js";
@@ -52,6 +52,7 @@ import type { CoderState } from "../src/state/coderStore.js";
 /** The source translator, so a pure-function assertion reads the same English a row renders. */
 const { t: tEn } = createTranslator(SOURCE_LOCALE);
 import { SETTINGS_SECTIONS } from "../src/state/settings-sections.js";
+import { stubAgentActions } from "./fixtures/agent-actions.js";
 
 afterEach(cleanup);
 
@@ -108,7 +109,7 @@ function entry(over: Partial<CatalogEntry> & { id: string; title: string }): Cat
     builtIn: false,
     // `npx` resolved, so this row is **Ready** and the only thing left to say about it is how it is obtained.
     // A fixture without this field is the *legacy daemon* case, which is a different row entirely — and the
-    // test below spent one run reading `EnvoyCoder is a build behind` because of exactly that.
+    // test below spent one run reading `EnvoyDev is a build behind` because of exactly that.
     availability: { state: "ready", binary: "/usr/bin/npx" },
     ...over,
   };
@@ -118,11 +119,11 @@ const state: CoderState = {
   connection: { state: "connected", endpoint: { host: "127.0.0.1", port: 4770, path: "/ws" } },
   resolved: undefined,
   hello: {
-    product: "EnvoyCoder",
+    product: "EnvoyDev",
     version: "0.1.0",
     instanceId: "test",
     home: "/home/you",
-    stateDir: "/home/you/.envoycoder",
+    stateDir: "/home/you/.envoydev",
     startedAt: "2026-09-14T00:00:00.000Z",
     windowCount: 1,
     methods: ["coder.hello", "coder.listHarnesses", "coder.listProviders", "coder.listCatalog", "coder.signInAgent"],
@@ -173,11 +174,12 @@ const state: CoderState = {
   notes: [],
 };
 
-const noActions = {
-  addProvider: vi.fn(),
-  removeProvider: vi.fn(),
-  signInAgent: vi.fn(),
-} as never;
+/**
+ * The actions every row is handed. A full stub from the shared fixture rather than three methods
+ * cast `as never`: the cast is what hid `listPairedDevices` going missing and turning the
+ * paired-devices row into an unhandled `TypeError` beside a passing test.
+ */
+const noActions = stubAgentActions();
 
 function show(scope: SettingsScope, over: Partial<CoderState> = {}): HTMLElement {
   const { container } = render(
@@ -347,7 +349,7 @@ describe("an agent row: one line, and not much else", () => {
       {
         label: "Goose",
         availability: { state: "not-installed", fix: [{ command: prose }] },
-        readyLine: "Ships with EnvoyCoder",
+        readyLine: "Ships with EnvoyDev",
       },
       tEn,
       AGENT_ROW_LINE_BUDGET,
@@ -360,7 +362,7 @@ describe("an agent row: one line, and not much else", () => {
       {
         label: "Goose",
         availability: { state: "not-installed", fix: [{ command: "npm install -g a-thing" }] },
-        readyLine: "Ships with EnvoyCoder",
+        readyLine: "Ships with EnvoyDev",
       },
       tEn,
       AGENT_ROW_LINE_BUDGET,

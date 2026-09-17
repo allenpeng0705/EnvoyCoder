@@ -1,4 +1,4 @@
-# EnvoyCoder — product design
+# EnvoyDev — product design
 
 **Status:** scaffold · **Owner:** product · **Created:** 2026-09-13
 
@@ -10,12 +10,12 @@
 
 ## 1. The product
 
-EnvoyCoder is a **control plane for coding agents**. You give it directories you work in; it runs
+EnvoyDev is a **control plane for coding agents**. You give it directories you work in; it runs
 agents in them, in parallel, on whichever of your machines makes sense; and it tells you — in a
 window, in a tray, on a phone — which ones need you.
 
 It is *not* an agent. It is the thing that starts them, watches them, shows what they did, and asks
-you the questions they raise. EnvoyCoder's own built-in agent (`envoy-harness`) exists because a
+you the questions they raise. EnvoyDev's own built-in agent (`envoy-harness`) exists because a
 control plane needs one it fully understands, not because writing agents is the point.
 
 ## 2. What it inherits, and from where
@@ -24,9 +24,9 @@ The owner's instruction was explicit, and it splits cleanly in two:
 
 | Source | What we take | What we do not |
 |---|---|---|
-| **Paseo** (Apache-2.0, `../paseo`) | the *ideas and the UX*: daemon-plus-clients architecture, provider abstraction, normalized streaming, the composer with Queue/Steer, the Command Center, panes and tabs, the attention model | its code (`docs/envoycoder-paseo-inheritance.md` explains the licensing position), and three of its weaknesses: a pairing link that *is* the authority, mobile credentials in plain storage, and a renderer that may name any transport for the shell to dial |
-| **EnvoyMesh** (`../EnvoyMesh`) | the *network and identity*: the mesh, discovery, relay, pairing contract, product sessions, the shared home | its product surface — no chat, no bonds UI, no social state. EnvoyCoder reads **kernel** state only, and only what the node grants it |
-| **DeepSeek Harness** (`../deepseek-harness`, MIT) | a first-class agent, driven over ACP | we do not link it: it is explicitly not a library, so we spawn it (`docs/envoycoder-harness.md`) |
+| **Paseo** (Apache-2.0, `../paseo`) | the *ideas and the UX*: daemon-plus-clients architecture, provider abstraction, normalized streaming, the composer with Queue/Steer, the Command Center, panes and tabs, the attention model | its code (`docs/envoydev-paseo-inheritance.md` explains the licensing position), and three of its weaknesses: a pairing link that *is* the authority, mobile credentials in plain storage, and a renderer that may name any transport for the shell to dial |
+| **EnvoyMesh** (`../EnvoyMesh`) | the *network and identity*: the mesh, discovery, relay, pairing contract, product sessions, the shared home | its product surface — no chat, no bonds UI, no social state. EnvoyDev reads **kernel** state only, and only what the node grants it |
+| **DeepSeek Harness** (`../deepseek-harness`, MIT) | a first-class agent, driven over ACP | we do not link it: it is explicitly not a library, so we spawn it (`docs/envoydev-harness.md`) |
 
 ## 3. The left rail, and why it is not Paseo's
 
@@ -42,15 +42,15 @@ The owner's instruction was to follow EnvoyMesh here, and the reason holds up:
   the rail.
 
 Nothing else of the shell is EnvoyMesh's: the panes, tabs, Command Center, composer and attention
-model are Paseo's, because that is the baseline users arrive with. `docs/envoycoder-ui.md` specifies
+model are Paseo's, because that is the baseline users arrive with. `docs/envoydev-ui.md` specifies
 the whole surface.
 
 ## 4. Decisions
 
 Each of these is settled; the alternative is recorded so it can be revisited deliberately.
 
-**D1 — EnvoyCoder is its own app, its own process, its own release.** Not a tab inside EnvoyMesh.
-A user who installs only EnvoyCoder must never load the social surface, and each product needs its
+**D1 — EnvoyDev is its own app, its own process, its own release.** Not a tab inside EnvoyMesh.
+A user who installs only EnvoyDev must never load the social surface, and each product needs its
 own crash, upgrade and permission domain.
 
 **D2 — Agents run where the code is; the mesh carries the control plane.** A task on the workstation
@@ -59,9 +59,9 @@ copy, and not the agent's process. This is the same rule EnvoyMesh applies to it
 is why a laptop on a train can drive a build on a machine with the GPU.
 
 **D3 — We join the family's network; we do not build a second one.** The mesh, the relay, the
-pairing contract and the identity are EnvoyMesh's, shared with every product. EnvoyCoder contributes
+pairing contract and the identity are EnvoyMesh's, shared with every product. EnvoyDev contributes
 its own *daemon* for its own clients, and attaches to the node as a **product** with a scoped
-session. `docs/envoycoder-networking.md` has the details and the security reasoning.
+session. `docs/envoydev-networking.md` has the details and the security reasoning.
 
 **D4 — Multi-window is a mode, not an accident.** One daemon serves every window, and the same
 daemon serves the phone. A second window attaches to the first daemon rather than starting a
@@ -84,10 +84,10 @@ Agent Client Protocol, which is what lets one adapter cover them. Agents with no
 bespoke argv adapter, and are marked as such.
 
 **D7 — Three platforms, one platform layer.** No `process.platform` checks scattered through
-feature code; the differences live in `@envoycoder/platform`, parameterised so the Windows branch is
-tested on macOS. `docs/envoycoder-platforms.md` lists what actually differs.
+feature code; the differences live in `@envoydev/platform`, parameterised so the Windows branch is
+tested on macOS. `docs/envoydev-platforms.md` lists what actually differs.
 
-**D8 — No account, no telemetry, no proxy.** EnvoyCoder has no server. It never routes your model
+**D8 — No account, no telemetry, no proxy.** EnvoyDev has no server. It never routes your model
 traffic through anything of ours, and never asks for provider credentials for itself.
 
 ## 5. Shape of the system
@@ -96,11 +96,11 @@ traffic through anything of ours, and never asks for provider credentials for it
         ┌── window 1 (Tauri) ──────┐   ┌─ window 2 ───┐   ┌── phone ──┐
         │   (Tauri webview)        │   │              │   │ (Flutter) │
         └───────────┬──────────────┘   └──────┬───────┘   └─────┬─────┘
-                    │  EnvoyCoder protocol (WS JSON-RPC)        │  pairing code,
+                    │  EnvoyDev protocol (WS JSON-RPC)        │  pairing code,
                     └───────────────┬───────────────────────────┘  host:port or SSH
                                     ▼
                         ┌───────────────────────┐
-                        │   EnvoyCoder daemon   │   state: <home>/EnvoyCoder/
+                        │   EnvoyDev daemon   │   state: <home>/EnvoyDev/
                         │  projects, tasks     │
                         │  agents, transcripts  │
                         └───────┬───────────────┘
@@ -128,7 +128,7 @@ trust, node config), and each product keeps its own state in `<home>/<product>/`
 <home>/                     shared (EnvoyMesh's rule, §5 of its design)
   profile/                  identity, trust, node config, vault index — NOT ours to write
   EnvoyMesh/                the social product's state
-  EnvoyCoder/               ours: projects, tasks, runs, transcripts, settings
+  EnvoyDev/               ours: projects, tasks, runs, transcripts, settings
     projects.json
     tasks.json
     runs/                   one record per run
@@ -137,7 +137,7 @@ trust, node config), and each product keeps its own state in `<home>/<product>/`
 ```
 
 Two consequences worth stating: another product cannot read which repositories you have opened, and
-EnvoyCoder cannot read anyone's chat transcripts. That separation is enforced by path, and it is why
+EnvoyDev cannot read anyone's chat transcripts. That separation is enforced by path, and it is why
 `coderPaths()` is the only place that builds these paths.
 
 ## 7. What this document does not decide

@@ -1,5 +1,5 @@
 /**
- * The languages EnvoyCoder speaks — **the family's set, not a new one**.
+ * The languages EnvoyDev speaks — **the family's set, not a new one**.
  *
  * These seven are what EnvoyMesh's Social UI and its EnvoyGo phone app already ship (`apps/envoygo/lib/l10n/app_*.arb`):
  * English, Chinese, German, French, Italian, Japanese, Korean. A product in this group that offered a
@@ -19,7 +19,7 @@
  * feature and merged; ours is one catalogue per language because our UI is one app, not three products.
  */
 
-import { CODER_LANGUAGES, type CoderLanguage } from "@envoycoder/protocol";
+import { CODER_LANGUAGES, type CoderLanguage } from "@envoydev/protocol";
 
 export const LOCALES = ["en", "zh", "de", "fr", "it", "ja", "ko"] as const;
 
@@ -32,7 +32,7 @@ export const SOURCE_LOCALE: Locale = "en";
  * `system` follows the operating system, which is what most users want and is EnvoyMesh's default too.
  * It is a setting, not a locale: it resolves to one of `LOCALES` at render time.
  *
- * **The list lives in `@envoycoder/protocol`** (`CODER_LANGUAGES`) and this is an alias for it, not a
+ * **The list lives in `@envoydev/protocol`** (`CODER_LANGUAGES`) and this is an alias for it, not a
  * second copy: the preference is stored daemon-side and validated at the wire against that tuple, so
  * a picker offering a language the protocol does not know would let a user choose something the
  * daemon refuses to save. `i18n.test.ts` asserts the two agree, and that `LOCALES` is exactly it

@@ -6,7 +6,7 @@
  * success for a process that has exited and not been reaped — a **zombie** — and this daemon's predecessor is
  * exactly that whenever it died while a window was still open: the window is its parent, and the window reaps
  * it only when something asks it to (`daemon_endpoint`'s `try_wait`). Read as "running", that zombie makes this
- * daemon refuse to start with *"EnvoyCoder is already running on this machine"* while nothing is serving, and
+ * daemon refuse to start with *"EnvoyDev is already running on this machine"* while nothing is serving, and
  * the window reports a daemon that never answers.
  *
  * ## Why the state is injected here and real in the shell

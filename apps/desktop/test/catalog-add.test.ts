@@ -17,8 +17,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { coderPaths } from "@envoycoder/host-bridge";
-import type { CatalogEntry } from "@envoycoder/protocol";
+import { coderPaths } from "@envoydev/host-bridge";
+import type { CatalogEntry } from "@envoydev/protocol";
 
 import { addedProviderIds, addInputFor } from "../src/components/settings/agent-catalog.js";
 import { CoderStore } from "../src/daemon/store.js";
@@ -33,8 +33,8 @@ afterEach(async () => {
  * The handler table over a throwaway home, with the catalogue probe injected so the rows come from the daemon
  * itself — **the rows a user is looking at**, rather than a second description of the catalogue written here.
  */
-async function handlersOverCatalogue(): Promise<Record<string, (params: unknown) => Promise<unknown>>> {
-  const home = await mkdtemp(join(tmpdir(), "envoycoder-add-"));
+async function handlersOverCatalogue(): Promise<Record<string, (params: unknown, context: { session: unknown }) => Promise<unknown>>> {
+  const home = await mkdtemp(join(tmpdir(), "envoydev-add-"));
   cleanups.push(() => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
   const paths = coderPaths(home);
   const store = await CoderStore.open({ paths });
@@ -46,12 +46,14 @@ async function handlersOverCatalogue(): Promise<Record<string, (params: unknown)
     // Every entry resolves to `ready` over a search that ran: this test is about *storing* a row, not about the
     // machine it was measured on.
     probeCatalogEntry: (entry) => ({ state: "ready", binaryPath: entry.command[0] }),
-  }) as unknown as Record<string, (params: unknown) => Promise<unknown>>;
+  }) as unknown as Record<string, (params: unknown, context: { session: unknown }) => Promise<unknown>>;
 }
 
 /** The catalogue as the wire serves it, which is what a row's Add is handed. */
-async function catalogRows(handlers: Record<string, (params: unknown) => Promise<unknown>>): Promise<CatalogEntry[]> {
-  const answer = (await handlers["coder.listCatalog"]?.({})) as { entries: CatalogEntry[] };
+async function catalogRows(
+  handlers: Record<string, (params: unknown, context: { session: unknown }) => Promise<unknown>>,
+): Promise<CatalogEntry[]> {
+  const answer = (await handlers["coder.listCatalog"]?.({}, { session: undefined })) as { entries: CatalogEntry[] };
   return answer.entries;
 }
 
@@ -64,7 +66,7 @@ describe("adding a catalogue row", () => {
     const refused: { id: string; why: string }[] = [];
     for (const row of rows) {
       try {
-        await handlers["coder.addProvider"]?.(addInputFor(row));
+        await handlers["coder.addProvider"]?.(addInputFor(row), { session: undefined });
       } catch (error) {
         refused.push({ id: row.id, why: error instanceof Error ? error.message.slice(0, 160) : String(error) });
       }
@@ -72,7 +74,7 @@ describe("adding a catalogue row", () => {
 
     // The whole catalogue, or the refusal that says which row and why — never a silent skip.
     expect(refused, JSON.stringify(refused.slice(0, 3), null, 1)).toEqual([]);
-    const stored = (await handlers["coder.listProviders"]?.({})) as {
+    const stored = (await handlers["coder.listProviders"]?.({}, { session: undefined })) as {
       providers: { id: string; catalogEntryId?: string }[];
     };
     expect(stored.providers).toHaveLength(rows.length);

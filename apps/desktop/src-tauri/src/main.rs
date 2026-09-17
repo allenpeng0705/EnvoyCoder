@@ -2,7 +2,7 @@
 //!
 //! ## Why the shell owns the daemon
 //!
-//! The desktop app is not just a window: it starts the daemon that serves *every* EnvoyCoder window
+//! The desktop app is not just a window: it starts the daemon that serves *every* EnvoyDev window
 //! and the paired phone, and it is the only process positioned to reap it. Four rules are carried
 //! over from EnvoyMesh's shell, each of which cost it a bug:
 //!
@@ -23,7 +23,7 @@
 //! ## What the shell does *not* decide
 //!
 //! Where the daemon's code lives once the app is packaged is a packaging question (roadmap M6). This
-//! module resolves an entry point from `ENVOYCODER_DAEMON_ENTRY`, then a bundle built beside the app
+//! module resolves an entry point from `ENVOYDEV_DAEMON_ENTRY`, then a bundle built beside the app
 //! (`dist-daemon/main.mjs`), and says so clearly when it finds neither — rather than spawning
 //! something that might be a different program.
 
@@ -39,7 +39,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
 
 /// The family's product name, used for the shared-home segment and the pairing `app` claim.
-const PRODUCT_NAME: &str = "EnvoyCoder";
+const PRODUCT_NAME: &str = "EnvoyDev";
 const DEFAULT_DAEMON_PORT: u16 = 4770;
 
 /// How long to wait for a freshly spawned daemon to publish its claim.
@@ -69,7 +69,7 @@ const LEGACY_HOME_DIRNAME: &str = ".envoymesh";
 ///
 /// **The test is what is inside, not whether the directory exists.** A directory that exists and holds
 /// no home is not a home: the default root receives a shared `runtime/`, and this app itself creates
-/// `<home>/EnvoyCoder/logs/`, so "the directory is there" is a question whose answer changes because
+/// `<home>/EnvoyDev/logs/`, so "the directory is there" is a question whose answer changes because
 /// of something that has nothing to do with which home the user's install lives in.
 fn looks_like_home(dir: &Path) -> bool {
     [HOME_MARKER_FILE, HOME_PROFILE_DIR, HOME_LEGACY_PROFILE_FILE]
@@ -99,9 +99,9 @@ fn resolve_shared_home() -> PathBuf {
 /// appeared at the per-OS default (on this machine, 2026-09-15, one minute's worth of a shared
 /// `runtime/` install), the shell switched homes and the daemon did not:
 ///
-///   * the daemon published its claim in the adopted home (`~/.envoymesh/EnvoyCoder/daemon.json`),
+///   * the daemon published its claim in the adopted home (`~/.envoymesh/EnvoyDev/daemon.json`),
 ///   * the shell looked for that claim in the default home, where it never appears,
-///   * `daemon_endpoint` therefore spawned a daemon that saw the live claim, printed "EnvoyCoder is
+///   * `daemon_endpoint` therefore spawned a daemon that saw the live claim, printed "EnvoyDev is
 ///     already running on this machine" and exited 0 — and the shell reported that exit as a failure
 ///     ("the daemon exited immediately") while a healthy daemon was serving on the port.
 ///
@@ -159,7 +159,7 @@ fn home_dir() -> PathBuf {
     PathBuf::from(".")
 }
 
-/// Where this product keeps its own state: `<home>/EnvoyCoder`, never inside `profile/`.
+/// Where this product keeps its own state: `<home>/EnvoyDev`, never inside `profile/`.
 fn product_state_dir() -> PathBuf {
     resolve_shared_home().join(PRODUCT_NAME)
 }
@@ -296,14 +296,14 @@ fn repo_root_from_manifest() -> Option<PathBuf> {
 /// one: a developer running the daemon under a debugger should not have to fight the supervisor to
 /// be the one that serves.
 fn resolve_daemon_entry() -> Result<PathBuf, String> {
-    if let Ok(raw) = std::env::var("ENVOYCODER_DAEMON_ENTRY") {
+    if let Ok(raw) = std::env::var("ENVOYDEV_DAEMON_ENTRY") {
         let trimmed = raw.trim();
         if !trimmed.is_empty() {
             let path = PathBuf::from(trimmed);
             return path
                 .is_file()
                 .then_some(path)
-                .ok_or_else(|| format!("ENVOYCODER_DAEMON_ENTRY points at {trimmed}, which is not a file."));
+                .ok_or_else(|| format!("ENVOYDEV_DAEMON_ENTRY points at {trimmed}, which is not a file."));
         }
     }
 
@@ -324,18 +324,18 @@ fn resolve_daemon_entry() -> Result<PathBuf, String> {
         .find(|path| path.is_file())
         .cloned()
         .ok_or_else(|| {
-            "EnvoyCoder could not find the daemon to start. Run `npm run daemon:build` first, or set ENVOYCODER_DAEMON_ENTRY.".to_string()
+            "EnvoyDev could not find the daemon to start. Run `npm run daemon:build` first, or set ENVOYDEV_DAEMON_ENTRY.".to_string()
         })
 }
 
 /// The Node runtime to run it with.
 ///
 /// Found rather than assumed, because a packaged app has no guaranteed PATH: the app's own resources
-/// first, then `ENVOYCODER_NODE`, then whatever `node` resolves to. The bundled runtime is part of
+/// first, then `ENVOYDEV_NODE`, then whatever `node` resolves to. The bundled runtime is part of
 /// roadmap M6; until then a missing Node is reported with the command that fixes it rather than as a
 /// window that quietly never connects.
 fn resolve_node_exe() -> PathBuf {
-    if let Ok(raw) = std::env::var("ENVOYCODER_NODE") {
+    if let Ok(raw) = std::env::var("ENVOYDEV_NODE") {
         let trimmed = raw.trim();
         if !trimmed.is_empty() {
             return PathBuf::from(trimmed);
@@ -383,7 +383,7 @@ fn spawn_daemon(port: u16) -> Result<DaemonClaim, String> {
     let mut command = Command::new(&node);
     command
         .arg(&entry)
-        .env("ENVOYCODER_DAEMON_PORT", port.to_string())
+        .env("ENVOYDEV_DAEMON_PORT", port.to_string())
         // The home this shell resolved, handed to the child rather than resolved a second time.
         //
         // The claim this function is about to wait for is the claim the child writes, so the two must
@@ -413,7 +413,7 @@ fn spawn_daemon(port: u16) -> Result<DaemonClaim, String> {
 
     let mut child = command
         .spawn()
-        .map_err(|error| format!("EnvoyCoder could not start its daemon with {}: {error}", node.display()))?;
+        .map_err(|error| format!("EnvoyDev could not start its daemon with {}: {error}", node.display()))?;
     let pid = child.id();
 
     let deadline = Instant::now() + CLAIM_TIMEOUT;
@@ -429,7 +429,7 @@ fn spawn_daemon(port: u16) -> Result<DaemonClaim, String> {
         }
         if let Ok(Some(status)) = child.try_wait() {
             return Err(format!(
-                "EnvoyCoder's daemon exited immediately ({status}). Its output is in {}.",
+                "EnvoyDev's daemon exited immediately ({status}). Its output is in {}.",
                 product_state_dir().join("logs").join("daemon.log").display()
             ));
         }
@@ -437,7 +437,7 @@ fn spawn_daemon(port: u16) -> Result<DaemonClaim, String> {
     }
 
     Err(format!(
-        "EnvoyCoder's daemon did not finish starting within {} seconds. Its output is in {}.",
+        "EnvoyDev's daemon did not finish starting within {} seconds. Its output is in {}.",
         CLAIM_TIMEOUT.as_secs(),
         product_state_dir().join("logs").join("daemon.log").display()
     ))
@@ -486,7 +486,7 @@ struct Supervisor {
 /// The port the daemon should listen on, overridable for development and for a second window's
 /// daemon-less attach.
 fn daemon_port() -> u16 {
-    std::env::var("ENVOYCODER_DAEMON_PORT")
+    std::env::var("ENVOYDEV_DAEMON_PORT")
         .ok()
         .and_then(|raw| raw.trim().parse::<u16>().ok())
         .unwrap_or(DEFAULT_DAEMON_PORT)
@@ -501,7 +501,7 @@ fn wait_for_claim() -> Result<DaemonClaim, String> {
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-    Err("EnvoyCoder's daemon is still starting. Open the window again in a moment.".to_string())
+    Err("EnvoyDev's daemon is still starting. Open the window again in a moment.".to_string())
 }
 
 fn endpoint_from(claim: DaemonClaim, origin: &str) -> DaemonEndpoint {
@@ -543,7 +543,7 @@ fn daemon_endpoint(supervisor: State<'_, Supervisor>) -> Result<DaemonEndpoint, 
         let mut slot = supervisor
             .child
             .lock()
-            .map_err(|_| "EnvoyCoder's daemon supervisor is unusable.".to_string())?;
+            .map_err(|_| "EnvoyDev's daemon supervisor is unusable.".to_string())?;
         // Reap a child that has exited, so the slot reflects reality rather than history.
         if let Some(existing) = slot.as_mut() {
             if let Ok(Some(_)) = existing.try_wait() {
@@ -605,7 +605,7 @@ fn main() {
                 copy_text
             ])
         .build(tauri::generate_context!())
-        .expect("EnvoyCoder failed to start")
+        .expect("EnvoyDev failed to start")
         .run(|app, event| {
             // On the way out, stop **only** the daemon this shell started. A daemon that was already
             // running when this window opened belongs to whatever started it, and a window that
@@ -953,17 +953,17 @@ mod tests {
     /** A missing tool is an honest error naming it, never a silent success. */
     #[test]
     fn a_clipboard_tool_that_is_not_there_is_reported_by_name() {
-        let error = write_stdin("envoycoder-no-such-clipboard-tool", &[], "x").expect_err("there is no such tool");
-        assert!(error.contains("envoycoder-no-such-clipboard-tool"), "{error}");
+        let error = write_stdin("envoydev-no-such-clipboard-tool", &[], "x").expect_err("there is no such tool");
+        assert!(error.contains("envoydev-no-such-clipboard-tool"), "{error}");
     }
 
     #[test]
     fn env_override_wins_and_is_not_required_to_exist() {
-        with_home("/tmp/envoycoder-test-home", || {
-            assert_eq!(resolve_shared_home(), PathBuf::from("/tmp/envoycoder-test-home"));
+        with_home("/tmp/envoydev-test-home", || {
+            assert_eq!(resolve_shared_home(), PathBuf::from("/tmp/envoydev-test-home"));
             assert_eq!(
                 product_state_dir(),
-                PathBuf::from("/tmp/envoycoder-test-home").join("EnvoyCoder")
+                PathBuf::from("/tmp/envoydev-test-home").join("EnvoyDev")
             );
             // The claim lives beside the state it describes, never in a shared temp directory: two
             // homes are two daemons, and one claim file would make them fight over it.
@@ -990,7 +990,7 @@ mod tests {
     /// A directory of its own per test — the home rule is about what is *inside* a directory, and two
     /// tests sharing one would see each other's markers.
     fn temp_home(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("envoycoder-home-{}-{}", std::process::id(), name));
+        let dir = std::env::temp_dir().join(format!("envoydev-home-{}-{}", std::process::id(), name));
         let _ = std::fs::remove_dir_all(&dir);
         create_dir_all(&dir).expect("create temp home");
         dir
@@ -1003,7 +1003,7 @@ mod tests {
         // install — profile and all — lived in the legacy home. Existence is not a home.
         let default = temp_home("default-empty");
         create_dir_all(default.join("runtime")).expect("create runtime");
-        create_dir_all(default.join("EnvoyCoder").join("logs")).expect("create product logs");
+        create_dir_all(default.join("EnvoyDev").join("logs")).expect("create product logs");
         let legacy = temp_home("legacy-real");
         create_dir_all(legacy.join("profile")).expect("create profile");
 
@@ -1033,7 +1033,7 @@ mod tests {
     #[test]
     fn with_no_install_anywhere_the_default_root_is_chosen_and_creating_state_does_not_change_it() {
         // A first run must be able to create its own state without changing the answer: this shell
-        // creates `<home>/EnvoyCoder` at startup, and if that made the default root "look like a
+        // creates `<home>/EnvoyDev` at startup, and if that made the default root "look like a
         // home", the next launch could resolve somewhere else than the first one did.
         let default = temp_home("first-run").join("EnvoyMesh");
         let legacy = temp_home("first-run-legacy").join(LEGACY_HOME_DIRNAME);
@@ -1052,8 +1052,8 @@ mod tests {
         create_dir_all(legacy.join("profile")).expect("profile");
 
         assert_eq!(
-            resolve_home_with(Some("/tmp/envoycoder-pointed-elsewhere"), &default, &legacy),
-            PathBuf::from("/tmp/envoycoder-pointed-elsewhere")
+            resolve_home_with(Some("/tmp/envoydev-pointed-elsewhere"), &default, &legacy),
+            PathBuf::from("/tmp/envoydev-pointed-elsewhere")
         );
         // An empty or blank value is not an override — the family's rule trims before it decides.
         assert_eq!(resolve_home_with(Some("   "), &default, &legacy), default);
@@ -1061,17 +1061,17 @@ mod tests {
 
     #[test]
     fn daemon_port_can_be_overridden_for_development() {
-        std::env::set_var("ENVOYCODER_DAEMON_PORT", "4771");
+        std::env::set_var("ENVOYDEV_DAEMON_PORT", "4771");
         assert_eq!(daemon_port(), 4771);
-        std::env::set_var("ENVOYCODER_DAEMON_PORT", "not a port");
+        std::env::set_var("ENVOYDEV_DAEMON_PORT", "not a port");
         assert_eq!(daemon_port(), DEFAULT_DAEMON_PORT);
-        std::env::remove_var("ENVOYCODER_DAEMON_PORT");
+        std::env::remove_var("ENVOYDEV_DAEMON_PORT");
     }
 
     #[test]
     fn a_claim_for_another_product_is_never_adopted() {
         // The one field whose mismatch would mean attaching to — or killing — a stranger's daemon.
-        let dir = std::env::temp_dir().join("envoycoder-claim-test");
+        let dir = std::env::temp_dir().join("envoydev-claim-test");
         let _ = create_dir_all(&dir);
         let file = dir.join("daemon.json");
 
@@ -1087,7 +1087,7 @@ mod tests {
         let mut handle = File::create(&file).expect("write");
         write!(
             handle,
-            r#"{{"product":"EnvoyCoder","instanceId":"x","pid":1,"host":"127.0.0.1","port":4770,"path":"/ws","somethingNew":true}}"#
+            r#"{{"product":"EnvoyDev","instanceId":"x","pid":1,"host":"127.0.0.1","port":4770,"path":"/ws","somethingNew":true}}"#
         )
         .expect("write claim");
         drop(handle);

@@ -24,7 +24,8 @@ import {
   AgentThinkingSchema,
   AgentModelSchema,
   CODER_EVENTS,
-  ENVOYCODER_ERRORS,
+  CoderMeshStatusSchema,
+  ENVOYDEV_ERRORS,
   RPC_METHODS,
   RPC_SPECS,
   HarnessAuthSchema,
@@ -43,7 +44,7 @@ import {
   parseMessageRef,
   parseRpcParams,
   readRpcError,
-} from "@envoycoder/protocol";
+} from "@envoydev/protocol";
 
 describe("the method table", () => {
   it("covers the catalogue exactly, in both directions", () => {
@@ -77,7 +78,7 @@ describe("the method table", () => {
       thrown = error;
     }
     const message = thrown instanceof Error ? thrown.message : "";
-    expect(coderErrorCode(message)).toBe(ENVOYCODER_ERRORS.badRequest);
+    expect(coderErrorCode(message)).toBe(ENVOYDEV_ERRORS.badRequest);
     // The refusal names the method and the field: "which call, which argument" is the whole value.
     expect(message).toContain("coder.addProject");
     expect(message).toContain("path");
@@ -92,8 +93,8 @@ describe("the method table", () => {
 
 describe("errors on the wire", () => {
   it("carries a code through the message, because error.code cannot hold one", () => {
-    const error = coderError(ENVOYCODER_ERRORS.taskMissing, "/gone is not a directory");
-    expect(coderErrorCode(error.message)).toBe(ENVOYCODER_ERRORS.taskMissing);
+    const error = coderError(ENVOYDEV_ERRORS.taskMissing, "/gone is not a directory");
+    expect(coderErrorCode(error.message)).toBe(ENVOYDEV_ERRORS.taskMissing);
     expect(coderErrorMessage(error.message)).toBe("/gone is not a directory");
   });
 
@@ -115,12 +116,12 @@ describe("errors on the wire", () => {
     // refusal that a German user must read in German has to fit its key in there too. The sentence
     // stays a sentence: a log line and a client that never heard of the convention both still read
     // exactly what they read before.
-    const error = coderError(ENVOYCODER_ERRORS.taskMissing, "/gone is not a directory", {
+    const error = coderError(ENVOYDEV_ERRORS.taskMissing, "/gone is not a directory", {
       key: "error.addProject.notDirectory",
       values: { path: "/gone" },
     });
-    expect(error.message.startsWith(`${ENVOYCODER_ERRORS.taskMissing}: /gone is not a directory`)).toBe(true);
-    expect(coderErrorCode(error.message)).toBe(ENVOYCODER_ERRORS.taskMissing);
+    expect(error.message.startsWith(`${ENVOYDEV_ERRORS.taskMissing}: /gone is not a directory`)).toBe(true);
+    expect(coderErrorCode(error.message)).toBe(ENVOYDEV_ERRORS.taskMissing);
     expect(coderErrorMessage(error.message)).toBe("/gone is not a directory");
     expect(coderErrorRef(error.message)).toEqual({
       key: "error.addProject.notDirectory",
@@ -131,7 +132,7 @@ describe("errors on the wire", () => {
   it("reads a wire error into the object shape a client gets", () => {
     // What a client actually receives: the transport's `{ code, message }`, with the key inside the
     // message. `readRpcError` is the one place that unpacks it, so no client has to know the marker.
-    const wire = coderError(ENVOYCODER_ERRORS.harnessUnsupported, "x cannot be driven", {
+    const wire = coderError(ENVOYDEV_ERRORS.harnessUnsupported, "x cannot be driven", {
       key: "error.harnessUnsupported",
       values: { harness: "Cursor" },
     });
@@ -145,9 +146,9 @@ describe("errors on the wire", () => {
   it("never shows a user the key's JSON, whatever arrives after the marker", () => {
     // Two ways the tail can be unusable: truncated on the way, or a sentence that merely contains
     // the marker. Both must yield the sentence, not the payload.
-    expect(parseMessageRef("a sentence [envoycoder.key] {not json").text).toBe("a sentence");
-    expect(parseMessageRef('a sentence [envoycoder.key] {"key":""}').ref).toBeUndefined();
-    expect(parseMessageRef('a sentence [envoycoder.key] {"key":"error.x","values":{"n":{}}}')).toEqual({
+    expect(parseMessageRef("a sentence [envoydev.key] {not json").text).toBe("a sentence");
+    expect(parseMessageRef('a sentence [envoydev.key] {"key":""}').ref).toBeUndefined();
+    expect(parseMessageRef('a sentence [envoydev.key] {"key":"error.x","values":{"n":{}}}')).toEqual({
       text: "a sentence",
       // Only what a template can render: a nested object would print `[object Object]`.
       ref: { key: "error.x" },
@@ -155,7 +156,7 @@ describe("errors on the wire", () => {
   });
 
   it("has no key at all when none was sent", () => {
-    expect(coderErrorRef(`${ENVOYCODER_ERRORS.badRequest}: something`)).toBeUndefined();
+    expect(coderErrorRef(`${ENVOYDEV_ERRORS.badRequest}: something`)).toBeUndefined();
     expect(readRpcError({ code: "ERROR", message: "Authentication required" })).toEqual({
       code: "ERROR",
       message: "Authentication required",
@@ -645,10 +646,10 @@ describe("hello", () => {
 
   it("requires an instance id, which is what tells our daemon from a squatter", () => {
     const withoutInstance = {
-      product: "EnvoyCoder",
+      product: "EnvoyDev",
       version: "0.1.0",
       home: "/home/dev/.envoymesh",
-      stateDir: "/home/dev/.envoymesh/EnvoyCoder",
+      stateDir: "/home/dev/.envoymesh/EnvoyDev",
       startedAt: "2026-09-13T10:00:00.000Z",
       windowCount: 1,
       methods: [],
@@ -755,5 +756,53 @@ describe("telling the window and its daemon apart", () => {
   it("ignores a daemon with more methods than this window", () => {
     // The daemon is the newer half. Nothing this window can ask for is missing, so this is not skew.
     expect(missingMethods([...RPC_METHODS, "coder.somethingFromTheFuture"])).toEqual([]);
+  });
+});
+
+describe("the mesh status, and the node we might be", () => {
+  /**
+   * `hosting` is the one variant that says "we *are* the node": this desktop's own peer, not a node it
+   * attached to. A client that predates the variant never has it produced for it, so the change is
+   * additive — the three older shapes must keep parsing byte for byte.
+   */
+  it("round-trips a hosting object, and refuses one that is not", () => {
+    const hosting = {
+      kind: "hosting",
+      peerId: "12D3KooWExamplePeer",
+      multiaddrs: ["/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWExamplePeer"],
+      relayHints: ["/dns4/relay.example.com/tcp/443/wss/p2p/QmRelay"],
+      peerCount: 2,
+    };
+    expect(CoderMeshStatusSchema.safeParse(hosting).success).toBe(true);
+    // `peerCount` is optional: a peer that has just come up reports no count, not zero.
+    const { peerCount: _countOmitted, ...withoutCount } = hosting;
+    expect(CoderMeshStatusSchema.safeParse(withoutCount).success).toBe(true);
+    // The peer id is the identity a client dials, so an absent or empty one is not a status.
+    const { peerId: _missingPeerId, ...withoutPeerId } = hosting;
+    expect(CoderMeshStatusSchema.safeParse(withoutPeerId).success).toBe(false);
+    expect(CoderMeshStatusSchema.safeParse({ ...hosting, peerId: "" }).success).toBe(false);
+    // Both address lists are how a peer is reached; absent means "we could not say", not "none".
+    const { multiaddrs: _noAddrs, ...withoutAddrs } = hosting;
+    expect(CoderMeshStatusSchema.safeParse(withoutAddrs).success).toBe(false);
+    const { relayHints: _noHints, ...withoutHints } = hosting;
+    expect(CoderMeshStatusSchema.safeParse(withoutHints).success).toBe(false);
+    // `.strict()`: a key from another variant (or a typo) is refused rather than silently dropped.
+    expect(CoderMeshStatusSchema.safeParse({ ...hosting, scopeKey: "product:EnvoyDev" }).success).toBe(false);
+    // A count is a count: negative and fractional are neither.
+    expect(CoderMeshStatusSchema.safeParse({ ...hosting, peerCount: -1 }).success).toBe(false);
+    expect(CoderMeshStatusSchema.safeParse({ ...hosting, peerCount: 1.5 }).success).toBe(false);
+  });
+
+  it("still parses the three variants a client already understood", () => {
+    expect(
+      CoderMeshStatusSchema.safeParse({
+        kind: "attached",
+        scopeKey: "product:EnvoyDev",
+        ownerId: "owner",
+        peerCount: 1,
+      }).success,
+    ).toBe(true);
+    expect(CoderMeshStatusSchema.safeParse({ kind: "no-node", reason: "none found" }).success).toBe(true);
+    expect(CoderMeshStatusSchema.safeParse({ kind: "refused", code: "x", reason: "no" }).success).toBe(true);
   });
 });

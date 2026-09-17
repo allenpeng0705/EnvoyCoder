@@ -20,4 +20,4 @@ apps/mobile/.flutter-plugins*
 apps/mobile/ios/Pods/
 apps/mobile/macos/Pods/
 # local runtime state (never commit a home)
-.envoycoder-local/
+.envoydev-local/

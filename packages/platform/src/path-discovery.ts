@@ -3,7 +3,7 @@
  *
  * ## The bug this exists for
  *
- * EnvoyCoder's daemon is started by the Tauri shell, and on macOS a process started by a **GUI** launch
+ * EnvoyDev's daemon is started by the Tauri shell, and on macOS a process started by a **GUI** launch
  * inherits launchd's environment rather than the user's. Measured on the machine this was written on:
  * `launchctl getenv PATH` prints nothing at all, and every Finder-launched process sampled (loginwindow,
  * the Xcode Python shim, …) has **no `PATH` in its environment**. So "is `claude` installed?" was computed
@@ -101,7 +101,7 @@ export const LOGIN_SHELL_MAX_OUTPUT = 64 * 1024;
  * measured example. The **last** occurrence wins, so an rc file that prints the marker itself cannot
  * shadow the answer our own `printf` produced after it.
  */
-export const LOGIN_SHELL_PATH_MARKER = "__ENVOYCODER_LOGIN_PATH__=";
+export const LOGIN_SHELL_PATH_MARKER = "__ENVOYDEV_LOGIN_PATH__=";
 
 /** Where the answer came from. The first thing a bug report needs. */
 export type SearchPathSource = "login-shell" | "process-env" | "well-known" | "cache" | "none";

@@ -34,7 +34,7 @@ import type {
   AgentProviderSummary,
   CatalogEntry,
   HarnessSummary,
-} from "@envoycoder/protocol";
+} from "@envoydev/protocol";
 
 import { SettingsPane } from "../src/components/SettingsPane.js";
 import { VERDICT_CHIP, rowVerdict, verdictFacts } from "../src/components/settings/agent-verdict.js";
@@ -159,11 +159,11 @@ function show(
     connection: { state: "connected", endpoint: { host: "127.0.0.1", port: 4770, path: "/ws" } },
     resolved: undefined,
     hello: {
-      product: "EnvoyCoder",
+      product: "EnvoyDev",
       version: "0.1.0",
       instanceId: "test",
       home: "/home/you",
-      stateDir: "/home/you/.envoycoder",
+      stateDir: "/home/you/.envoydev",
       startedAt: "2026-09-14T00:00:00.000Z",
       windowCount: 1,
       methods: [
@@ -321,7 +321,7 @@ describe("a verdict for every row, with nothing pressed", () => {
       [{ state: "unknown" }, NOT_READY],
     ];
     for (const [availability, expected] of cases) {
-      const verdict = rowVerdict({ label: "X", availability, readyLine: "Ships with EnvoyCoder" }, tEn, 80);
+      const verdict = rowVerdict({ label: "X", availability, readyLine: "Ships with EnvoyDev" }, tEn, 80);
       expect(tEn(verdict.chipKey), JSON.stringify(availability)).toBe(expected);
     }
     // And the table of chips is closed at two, which is what makes "one of exactly two verdicts" structural.
@@ -531,7 +531,7 @@ describe("a Not ready row says what is wrong, and how to fix it", () => {
     expect([...panel.querySelectorAll(".settings__agent-steps code")].map((c) => textOf(c))).toEqual([
       "ANTHROPIC_API_KEY",
     ]);
-    expect(lead).toMatch(/environment EnvoyCoder's daemon was started in/);
+    expect(lead).toMatch(/environment EnvoyDev's daemon was started in/);
   });
 
   it("says the daemon is a build behind rather than blaming the machine or offering an install", () => {
@@ -696,7 +696,7 @@ describe("the facts that are not problems, and the ones that cannot be known che
 
 /**
  * **The owner's question, on the page it was asked about:** *"After I run
- * `npm install -g @agentclientprotocol/codex-acp`, how do we let EnvoyCoder know that without restarting?"*
+ * `npm install -g @agentclientprotocol/codex-acp`, how do we let EnvoyDev know that without restarting?"*
  *
  * The daemon re-measures on every read, so the answer to *"does the page know?"* is entirely about whether
  * something makes it read again. This is that something: one page-level press, rendered beside the count it
@@ -1024,7 +1024,7 @@ describe("choosing how a connector is delivered", () => {
 /* ────────────────────────── running the fix, in the block that shows it ────────────────────────── */
 
 /**
- * **The owner's second question, as a control:** *"can we support run the commands in EnvoyCoder?"*
+ * **The owner's second question, as a control:** *"can we support run the commands in EnvoyDev?"*
  *
  * The block already showed the command and a Copy; this is the press that runs it. Four things are asserted here,
  * and each is a decision rather than a behaviour:

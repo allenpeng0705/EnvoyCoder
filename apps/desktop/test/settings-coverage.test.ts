@@ -38,7 +38,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { CoderSettingsSchema, RETIRED_SETTINGS_KEYS } from "@envoycoder/protocol";
+import { CoderSettingsSchema, RETIRED_SETTINGS_KEYS } from "@envoydev/protocol";
 
 /** The repository root, so a read site can be written the way a reader would cite it. */
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");

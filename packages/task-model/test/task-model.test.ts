@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { Project, Task } from "@envoycoder/protocol";
+import type { Project, Task } from "@envoydev/protocol";
 import {
   attentionSummary,
   countStatuses,
