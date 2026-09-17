@@ -50,6 +50,7 @@ export type SettingsSectionId =
   | "projects"
   | "shortcuts"
   | "machine"
+  | "pairing"
   | "about";
 
 /**
@@ -99,8 +100,9 @@ export interface SettingsSection {
  * The order is the question a user arrives with, most-settled-first: what this app does by default,
  * what a new task starts with, what an agent may do without asking, what the agents on this machine
  * can actually do, which folders this machine works in, what the keyboard does, what this window is
- * attached to, and which build it is. The reference product's order is not copied: its host sections
- * are a per-machine fleet surface we do not have (§5 of `docs/settings-parity.md`).
+ * attached to, how a phone reaches it, and which build it is. The reference product's order is not
+ * copied: its host sections are a per-machine fleet surface we do not have (§5 of
+ * `docs/settings-parity.md`).
  */
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   {
@@ -249,10 +251,31 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
         needle: "hello.windowCount",
         because: "and how many windows are attached to it, which is a number no chip can hold",
       },
+    ],
+  },
+  {
+    id: "pairing",
+    titleKey: "settings.section.pairing.title",
+    band: { kind: "sentence", key: "settings.section.pairing.detail" },
+    content: [
       {
-        file: "apps/desktop/src/components/settings/SectionsFacts.tsx",
+        file: "apps/desktop/src/components/settings/PairingSection.tsx",
+        needle: "mintPairingCode(props.agents)",
+        because:
+          "the one press that mints, through `PairPhone.tsx`'s shared call site, so the palette, the rail's " +
+          "QR button and this page cannot produce three codes by three routes",
+      },
+      {
+        file: "apps/desktop/src/components/settings/PairingSection.tsx",
+        needle: "readPairingLink",
+        because:
+          "and the host:port route reads the address and token back out of that one code rather than " +
+          "assembling a second token format",
+      },
+      {
+        file: "apps/desktop/src/components/settings/PairPhone.tsx",
         needle: "coder.mintPairing",
-        because: "pairing a phone is a fact about this daemon — who may reach it",
+        because: "the shared module itself, which the section reuses rather than reimplements",
       },
     ],
   },

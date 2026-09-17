@@ -354,6 +354,13 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
         multiaddrs: meshPeer?.multiaddrs ?? [],
         relayHints: meshPeer?.relayHints ?? [],
       }),
+      // The half of revocation a store cannot do: `store.revoke` refuses the next token, but a phone
+      // already connected keeps its mesh stream. Read through the closure at revoke time, like `mesh`
+      // above, so it is the live peer. `meshPeer` is `null` on the `skipMeshAttach` / injected-status
+      // paths — the `?.` makes that an ordinary no-op and the revoke still succeeds.
+      closeMeshStreams: (deviceId) => {
+        meshPeer?.closeStreamsForDevice(deviceId);
+      },
     }),
   };
 

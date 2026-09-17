@@ -86,12 +86,12 @@ export const en = {
   "sidebar.task.rename.aria": "New name for this task",
   "sidebar.tasks.empty": "No tasks here yet.",
   "sidebar.footer.add": "Add project",
-  "sidebar.footer.host": "Host: {host}",
-  "sidebar.footer.import": "Import a session (not built yet)",
-  "sidebar.footer.import.title":
-    "Importing a session from another agent's history is not built yet — it needs a reader per agent.",
-  "sidebar.footer.help": "Help and support (not built yet)",
-  "sidebar.footer.help.title": "No help surface yet: the shortcut registry exists, the help sheet does not.",
+  // The rail's one icon-only control, replacing "Host: {host}". The label is a sentence the screen reader
+  // reads and the tooltip repeats; `Host` named a machine and opened Settings, which the gear beside it
+  // already did. Removed with it: `sidebar.footer.import` and `sidebar.footer.help`, whose disabled
+  // buttons could not show their own `title` (a disabled button gets no pointer events) — see
+  // `CoderSidebar.tsx` for why absent beat disabled-with-a-promise.
+  "sidebar.footer.pair": "Pair a phone",
   "sidebar.footer.settings": "Settings",
 
   /* ── the command palette ── */
@@ -316,13 +316,13 @@ export const en = {
 
   /* ── the status line, and the one place the mesh is always visible ──
      `mesh.hosting` is deliberately **count-free**, and this is a correctness rule rather than a style
-     choice. Every standalone daemon joins the community relays and a DHT client (`coderMeshOptions`), so
-     the protocol's `peerCount` is the *shared network's* live connection count — the relays themselves,
-     DHT-discovered peers, other family nodes — not machines connected to this user. A headline that read
-     "30 machines connected" on a machine that had paired nothing asserted exactly that, which is the
-     capability the protocol never granted. So the sentence states the one fact that is always true and
-     is what a user needs — this machine hosts the mesh — and the peer total, which is real, is labelled
-     for what it is (`mesh.peers`) in the tooltip beside the peer id. */
+     choice. `peerCount` is every libp2p connection the daemon's own peer holds — today that is almost
+     always the two community relays (`coderMeshOptions` keeps DHT / mDNS / AutoNAT / bootstrapPeers
+     off so the phone-facing host does not join the public swarm). It is never "phones paired to this
+     user". A headline that once read "30 machines connected" on a machine that had paired nothing
+     asserted a capability the protocol never granted. So the sentence states the one fact that is
+     always true — this machine hosts the mesh — and the peer total, which is real, is labelled for
+     what it is (`mesh.peers`) in the tooltip beside the peer id. */
   "mesh.attached.peers": "Mesh connected — {count} machines reachable",
   "mesh.attached.none": "Mesh connected — no other machines reachable yet",
   "mesh.noNode": "Standalone — tasks stay on this machine",
@@ -379,6 +379,9 @@ export const en = {
   "settings.section.machine.title": "This machine",
   "settings.section.machine.detail":
     "The daemon this window is attached to, and what it was started with.",
+  "settings.section.pairing.title": "Pairing",
+  "settings.section.pairing.detail":
+    "Let a phone reach this machine: scan a code, type its address, or go through SSH.",
   "settings.section.about.title": "About",
   "settings.section.about.detail":
     "Which build this window is, and which build the daemon is.",
@@ -783,25 +786,93 @@ export const en = {
   "settings.machine.windows.detail": "How many windows were attached when this window connected, including this one.",
   "settings.machine.windows.one": "1 window",
   "settings.machine.windows.many": "{count} windows",
-  "settings.machine.pair.title": "Pair a phone",
-  // 64 characters, against the row's 80-character budget (`SETTING_DETAIL_BUDGET`). The title above
-  // already says what the control does, so the detail spends its one sentence on the thing a user
-  // cannot infer: the code is a bearer secret. "until you revoke it" was the part that pushed it to
-  // 128 — and it is a promise the paired-devices list underneath makes better, by showing the
-  // revocation control.
-  "settings.machine.pair.detail":
-    "The code is a secret — anyone who has it can reach this machine.",
-  "settings.machine.pair.action": "Show pairing code",
-  "settings.machine.pair.copy": "Copy pairing link",
-  "settings.machine.pair.copied": "Copied",
-  "settings.machine.pair.close": "Done",
-  "settings.machine.pair.uriLabel": "Pairing link",
-  "settings.machine.paired.title": "Paired devices",
-  "settings.machine.paired.detail": "Phones and other remotes that may call this daemon with a pairing token.",
-  "settings.machine.paired.empty": "No phones paired yet.",
+  /* ── Pairing: three routes to this machine, each said on its own ──
+     Its own section rather than a row on *This machine*, because *This machine* reports what the daemon
+     said and pairing **acts**: it mints a bearer secret. The three blocks are three mechanisms — a scanned
+     code, the same values typed, and an SSH hop that the code does not carry — so each gets its own
+     heading instead of sharing one paragraph. */
+  "settings.pairing.note":
+    "Pairing lets a phone reach this machine. The code carries the address and a token, so keep it on screen only while the phone is scanning.",
+  "settings.pairing.manage": "Codes you have issued are listed under This machine, where you can revoke one.",
+  "settings.pairing.qr.title": "Scan a QR code",
+  // The primary route, marked rather than merely listed first: a user reading the three headings has to be
+  // told which one the product recommends.
+  "settings.pairing.qr.primary": "Recommended",
+  "settings.pairing.qr.detail":
+    "Open EnvoyDev on the phone, choose Scan QR, and point the camera at this code.",
+  "settings.pairing.qr.action": "Show pairing code",
+  "settings.pairing.qr.alt": "Pairing code",
+  "settings.pairing.uriLabel": "Pairing link",
+  "settings.pairing.copy": "Copy pairing link",
+  "settings.pairing.field.copy": "Copy",
+  "settings.pairing.copied": "Copied",
+  "settings.pairing.copyFailed": "Not copied",
+  "settings.pairing.copy.aria": "Copy {field}",
+  "settings.pairing.close": "Done",
+  // 64 characters, and the sentence a user cannot infer: the code is a bearer secret. "until you revoke it"
+  // was the part that pushed an earlier draft to 128, and the revocation control makes that promise better.
+  "settings.pairing.secret": "The code is a secret — anyone who has it can reach this machine.",
+  "settings.pairing.manual.title": "Type the address by hand",
+  "settings.pairing.manual.detail":
+    "For a phone that cannot scan: these are the values its Add host form asks for.",
+  // The address and the token are chosen when the code is minted (the daemon picks the reachable address,
+  // and the token belongs to the record), so before a mint there is nothing honest to fill in.
+  "settings.pairing.manual.waiting":
+    "Show a pairing code above first — the address and the token come from it.",
+  "settings.pairing.manual.address": "Address",
+  "settings.pairing.manual.address.detail": "The machine and port the phone dials, written as host:port.",
+  "settings.pairing.manual.lanAddress": "Address on this network",
+  "settings.pairing.manual.lanAddress.detail": "The same port on the local network, for a phone on the same Wi-Fi.",
+  "settings.pairing.manual.token": "Token",
+  "settings.pairing.manual.token.detail": "What proves the ask. Anyone who has it can reach this machine.",
+  "settings.pairing.manual.unreadable":
+    "This code's address could not be read. Copy the pairing link above and paste it into the phone instead.",
+  "settings.pairing.ssh.title": "Reach it through an SSH hop",
+  "settings.pairing.ssh.detail":
+    "For a machine the phone cannot reach directly: the phone tunnels over SSH, and this daemon sees the connection arrive on its own loopback.",
+  "settings.pairing.ssh.host": "SSH host",
+  "settings.pairing.ssh.host.detail": "The machine this daemon runs on, as your phone reaches it.",
+  "settings.pairing.ssh.port": "SSH port",
+  "settings.pairing.ssh.port.detail": "22, unless your SSH server listens somewhere else.",
+  "settings.pairing.ssh.user": "SSH user",
+  "settings.pairing.ssh.user.detail": "Optional — the phone assumes root when this is left blank.",
+  "settings.pairing.ssh.daemon": "Daemon address",
+  "settings.pairing.ssh.daemon.detail":
+    "As seen from that machine — {address} on almost every machine.",
+  "settings.pairing.ssh.daemon.unknown":
+    "As seen from that machine — its host and the port this daemon listens on.",
+  // The honest half, and the reason this block is a list and not a form: SSH is not in the pairing payload.
+  "settings.pairing.ssh.token": "Token",
+  "settings.pairing.ssh.token.detail":
+    "Optional here: the tunnel arrives on this machine's own loopback, which the daemon trusts without one.",
+  "settings.pairing.ssh.notInCode":
+    "This route is set up by hand in the phone's Add host → SSH form. The pairing code above carries no SSH hop, so there is nothing here to scan.",
+  // The list is the daemon's **issued** records, not the devices that successfully paired: a row exists
+  // from the moment a code is minted, and it survives revocation as the evidence that the token was
+  // withdrawn. So the heading says what the rows are ("Pairing codes"), each row says which state it is
+  // in, and the chip counts only records that are both valid and used. "Paired devices" claimed a
+  // pairing for every minted code, including codes nobody ever scanned — a true list under a false label.
+  "settings.machine.paired.title": "Pairing codes",
+  "settings.machine.paired.detail": "Codes this machine has issued. Each is active, unused, or revoked.",
+  "settings.machine.paired.empty": "No pairing codes issued yet.",
+  // The chip's unit is spelled out: a bare number under this heading once read as "devices with access"
+  // while counting revoked rows, so the count now names exactly what it counts — devices that are still
+  // valid *and* have been used. Revoked and never-scanned records cannot inflate it.
+  "settings.machine.paired.active.one": "1 active device",
+  "settings.machine.paired.active.many": "{count} active devices",
+  // One key per state, because the difference is the fix: an issued code nobody scanned, a withdrawn
+  // token, an expired one, and a device that really reached this machine must not share words.
+  "settings.machine.paired.state.active": "Active · last used {when}",
+  "settings.machine.paired.state.unused": "Not used yet · expires {when}",
+  "settings.machine.paired.state.revoked": "Revoked · {when}",
+  "settings.machine.paired.state.expired": "Expired · {when}",
   "settings.machine.paired.revoke": "Revoke",
-  "settings.machine.paired.revoked": "Revoked",
-  "settings.machine.paired.expires": "Expires {when}",
+  // "Forget" rather than "Delete": the device is unaffected (it is already revoked), and only this
+  // record — the evidence that its token was withdrawn — leaves. The title says so, because the record
+  // is the security property the store deliberately keeps.
+  "settings.machine.paired.forget": "Forget",
+  "settings.machine.paired.forget.title":
+    "Remove this revoked record from the list. The device stays revoked.",
 
   /* ── the one comparison a control plane needs ──
      Both halves of EnvoyDev are built together, so a difference means one of them is a build behind —
@@ -868,6 +939,13 @@ export const en = {
     "There is no task called \"{id}\" on this machine. It may have been removed from another window.",
   "error.pairedDeviceMissing":
     "There is no paired device called \"{id}\". It may already have been revoked.",
+  // Refused by `coder.forgetPairedDevice` when the record is not revoked. Named for the guard, not for
+  // the UI's *active* state: an issued code nobody scanned is refused here too, because it is a working
+  // token either way. The sentence here and the daemon's own words are identical on purpose (see this
+  // file's header): an English user must see no change between the refusal's raw fallback and the
+  // localized lookup of the key.
+  "error.pairedDeviceNotRevoked":
+    "\"{id}\" has not been revoked. Revoke it first — a record is only forgotten once the token is withdrawn.",
   "error.runNotFound":
     "There is no run called \"{runId}\". It may have been started by a daemon that has since restarted.",
   "error.taskForRunMissing": "There is no task called \"{taskId}\", so there is nowhere to run an agent.",

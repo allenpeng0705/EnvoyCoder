@@ -82,6 +82,22 @@ interface StoreFile {
   devices: PairedDeviceRecord[];
 }
 
+/**
+ * What a forget request answered.
+ *
+ * Three outcomes rather than `PairedDevicePublic | null`, because "there is no such record" and "that
+ * record has not been revoked" are different sentences to the user: one says the row is already gone, the
+ * other says revoke it first. The kind is named for the **guard** (not revoked), not for the UI's
+ * *active* state: a minted code that no phone ever scanned is "unused" in the list and still refused
+ * here, because it is a working token either way. Collapsing the outcomes into `null` would make the
+ * refusal generic and would hide the deliberate two-step — revocation is the security event, forgetting
+ * is only the cleanup.
+ */
+export type ForgetPairedDeviceOutcome =
+  | { kind: "forgotten"; device: PairedDevicePublic }
+  | { kind: "not-revoked" }
+  | { kind: "missing" };
+
 function publicOf(record: PairedDeviceRecord): PairedDevicePublic {
   return {
     id: record.id,
@@ -244,6 +260,32 @@ export class PairedDeviceStore {
       this.devices = this.devices.map((d, i) => (i === index ? next : d));
       await this.persist();
       return publicOf(next);
+    });
+  }
+
+  /**
+   * Remove a **revoked** record from the list.
+   *
+   * ## Why this refuses an active record instead of revoking it first
+   *
+   * The revoked row is the evidence that a token was withdrawn: the store deliberately keeps it, and
+   * revocation is a security event, not a delete. A caller that could "forget" an active record would
+   * destroy the only row naming a token that still works — so this refuses, and the two steps stay
+   * explicit. The store never prunes on its own for the same reason: an automatic delete would make the
+   * evidence disappear without the owner deciding that it should.
+   *
+   * Expiry needs no special case here: an expired but unrevoked record is still not `revokedAt` set, so
+   * it is refused on the same terms and can be revoked (or left to read as expired) first.
+   */
+  forget(id: string): Promise<ForgetPairedDeviceOutcome> {
+    return this.enqueue(async () => {
+      await this.ensureLoaded();
+      const record = this.devices.find((d) => d.id === id);
+      if (!record) return { kind: "missing" };
+      if (!record.revokedAt) return { kind: "not-revoked" };
+      this.devices = this.devices.filter((d) => d.id !== id);
+      await this.persist();
+      return { kind: "forgotten", device: publicOf(record) };
     });
   }
 

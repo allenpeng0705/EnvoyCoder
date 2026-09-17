@@ -48,10 +48,29 @@ import {
   type KeyBinding,
 } from "../../input/shortcuts.js";
 import type { MessageKey } from "../../i18n/messages/en.js";
+import { localize, type Notice } from "../../i18n/notice.js";
 import { SettingRow } from "../SettingsRows.js";
 import { shortPath } from "../SettingsShell.js";
-import { mintPairingCode, PairPhonePanel, type PairPhoneOutcome } from "./PairPhone.js";
+import {
+  countActiveDevices,
+  pairedDeviceStanding,
+  type PairedDeviceState,
+} from "./paired-device-state.js";
 import type { SettingsSectionProps } from "./SectionProps.js";
+
+/**
+ * The sentence each recorded state renders, one key per state.
+ *
+ * A table rather than a chain of ternaries, because the taxonomy is the point: every state has its own
+ * words, so adding a state is a compile error here (`satisfies` against `PairedDeviceState`) rather than
+ * a row that silently falls through to another state's sentence.
+ */
+const STATE_KEYS = {
+  revoked: "settings.machine.paired.state.revoked",
+  expired: "settings.machine.paired.state.expired",
+  active: "settings.machine.paired.state.active",
+  unused: "settings.machine.paired.state.unused",
+} as const satisfies Record<PairedDeviceState, MessageKey>;
 
 /**
  * **Keyboard shortcuts** — the keys this window is listening for, and nothing else.
@@ -115,28 +134,14 @@ export function ShortcutsSection(props: SettingsSectionProps & {
  * **This machine** — the daemon this window is attached to, as it described itself.
  *
  * Everything here is `coder.hello`'s answer, and the page is the long form of two chips that are already
- * in the pane's header on every page (the state folder and the build). **Pair a phone** lives here too:
- * minting a pairing QR is a fact about *this* daemon (who may reach it), not a preference — and the code
- * it produces — the QR, the URI and the copy control — is `PairPhone.tsx`'s, shared with the command
- * palette's row so the two routes cannot present one code two ways.
+ * in the pane's header on every page (the state folder and the build). **Pairing left this page**: minting
+ * a code is an action about who may reach this daemon rather than a fact this daemon reported, so it is its
+ * own section (`PairingSection.tsx`) reached from the bar, the rail's QR button and the palette. What stays
+ * here is the other half, and it is a report: the codes this machine has issued, and their standing.
  */
-export function MachineSection(
-  props: SettingsSectionProps & {
-    /**
-     * A code the **palette** already minted, arriving with the page it opened.
-     *
-     * The palette's press is the mint request (see `PairPhone.tsx` for why minting is an event and not an
-     * effect), so by the time this page renders there may be a code — or a refusal — to show. The shell
-     * clears it on every navigation, so leaving this page and coming back cannot resurrect a code the
-     * user has already moved past.
-     */
-    mintedPairing?: PairPhoneOutcome | undefined;
-  },
-): JSX.Element {
+export function MachineSection(props: SettingsSectionProps): JSX.Element {
   const { t, locale } = useI18n();
   const { hello } = props.state;
-  /** `undefined` is "no panel": neither the row's button nor the palette has produced a code yet. */
-  const [pairing, setPairing] = useState<PairPhoneOutcome | undefined>(props.mintedPairing);
   const [devices, setDevices] = useState<
     | readonly {
         id: string;
@@ -148,6 +153,15 @@ export function MachineSection(
       }[]
     | null
   >(null);
+  /**
+   * The last refusal from this list's own buttons (Revoke / Forget).
+   *
+   * A row's press answers on the row, not in the window's top bar (`SettingsRows.tsx` records why). The
+   * pair list is not inside a `SettingRow`, so it keeps its own sentence — and a refusal here is the
+   * interesting case: "revoke it first" is exactly what the daemon says when a forget is attempted on a
+   * still-active record, and a silent swallow would read as a button that does nothing.
+   */
+  const [listRefusal, setListRefusal] = useState<Notice | undefined>(undefined);
 
   const refreshDevices = useCallback(async () => {
     const result = await props.agents.listPairedDevices();
@@ -158,19 +172,14 @@ export function MachineSection(
     void refreshDevices();
   }, [refreshDevices]);
 
-  // **The palette's code, when it lands after this page has mounted.** The shell mints while the palette is
-  // still on screen, so the answer can arrive either side of the render that opens this page; this is the
-  // later case. The state write is idempotent, which is what makes it safe under `<StrictMode>`'s doubled
-  // effect — unlike an effect that *minted*, which would leave a second device record on the daemon.
-  useEffect(() => {
-    if (props.mintedPairing === undefined) return;
-    setPairing(props.mintedPairing);
-    if (props.mintedPairing.ok) void refreshDevices();
-  }, [props.mintedPairing, refreshDevices]);
-
   if (hello === undefined) {
     return <p className="settings__note">{t("settings.machine.noDaemon")}</p>;
   }
+
+  // One clock reading for the whole render, so the chip and every row's state agree even when the render
+  // straddles an expiry boundary.
+  const now = new Date();
+  const activeCount = devices === null ? null : countActiveDevices(devices, now);
 
   return (
     <>
@@ -225,66 +234,80 @@ export function MachineSection(
       </SettingRow>
 
       <SettingRow
-        title={t("settings.machine.pair.title")}
-        detail={t("settings.machine.pair.detail")}
-        developerNote="coder.mintPairing"
-      >
-        <button
-          type="button"
-          className="button button--secondary"
-          onClick={() => {
-            // The press is the request, and the answer — code or refusal — is what the panel below shows.
-            void mintPairingCode(props.agents).then((outcome) => {
-              setPairing(outcome);
-              if (outcome.ok) void refreshDevices();
-            });
-          }}
-        >
-          {t("settings.machine.pair.action")}
-        </button>
-      </SettingRow>
-
-      {pairing ? <PairPhonePanel outcome={pairing} onClose={() => setPairing(undefined)} /> : null}
-
-      <SettingRow
         title={t("settings.machine.paired.title")}
         detail={t("settings.machine.paired.detail")}
         developerNote="coder.listPairedDevices"
       >
-        <span className="chip chip--quiet">{devices === null ? "…" : String(devices.length)}</span>
+        {/*
+          * The chip counts a **named** thing: records that are active — still valid *and* used at least
+          * once. `devices.length` counted revoked and never-scanned rows too, so it only ever grew and
+          * said nothing about who can reach this daemon. "…" until the list has been read, because a zero
+          * before the answer arrives is a claim the window cannot make.
+          */}
+        <span className="chip chip--quiet" data-testid="paired-active-count">
+          {activeCount === null
+            ? "…"
+            : activeCount === 1
+              ? t("settings.machine.paired.active.one")
+              : t("settings.machine.paired.active.many", { count: activeCount })}
+        </span>
       </SettingRow>
 
       {devices !== null && devices.length === 0 ? (
         <p className="settings__note">{t("settings.machine.paired.empty")}</p>
       ) : null}
 
+      {listRefusal !== undefined ? <p className="settings__note">{localize(t, listRefusal)}</p> : null}
+
       {devices !== null && devices.length > 0 ? (
         <ul className="settings__paired-list">
-          {devices.map((device) => (
-            <li key={device.id} className="settings__paired-row">
-              <div>
-                <strong>{device.deviceLabel}</strong>
-                <div className="settings__note">
-                  {device.revokedAt
-                    ? t("settings.machine.paired.revoked")
-                    : t("settings.machine.paired.expires", { when: formatWhen(device.expiresAt, locale) })}
+          {devices.map((device) => {
+            const standing = pairedDeviceStanding(device, now);
+            return (
+              <li key={device.id} className="settings__paired-row" data-device-state={standing.state}>
+                <div>
+                  <strong>{device.deviceLabel}</strong>
+                  <div className="settings__note">
+                    {t(STATE_KEYS[standing.state], { when: formatWhen(standing.at, locale) })}
+                  </div>
                 </div>
-              </div>
-              {device.revokedAt ? null : (
-                <button
-                  type="button"
-                  className="button button--secondary"
-                  onClick={() => {
-                    void props.agents.revokePairedDevice(device.id).then((result) => {
-                      if (result.ok) void refreshDevices();
-                    });
-                  }}
-                >
-                  {t("settings.machine.paired.revoke")}
-                </button>
-              )}
-            </li>
-          ))}
+                {standing.state === "revoked" ? (
+                  /*
+                   * **Forget, and only for a revoked record.** The row is the evidence that a token was
+                   * withdrawn; deleting it is a deliberate press, never a side effect of revoking. An
+                   * active or unused record has no Forget control at all — it must be revoked first, which
+                   * is the two-step the daemon enforces on its own as well (`coder.forgetPairedDevice`).
+                   */
+                  <button
+                    type="button"
+                    className="button button--secondary"
+                    title={t("settings.machine.paired.forget.title")}
+                    onClick={() => {
+                      void props.agents.forgetPairedDevice(device.id).then((result) => {
+                        setListRefusal(result.ok ? undefined : result);
+                        if (result.ok) void refreshDevices();
+                      });
+                    }}
+                  >
+                    {t("settings.machine.paired.forget")}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="button button--secondary"
+                    onClick={() => {
+                      void props.agents.revokePairedDevice(device.id).then((result) => {
+                        setListRefusal(result.ok ? undefined : result);
+                        if (result.ok) void refreshDevices();
+                      });
+                    }}
+                  >
+                    {t("settings.machine.paired.revoke")}
+                  </button>
+                )}
+              </li>
+            );
+          })}
         </ul>
       ) : null}
     </>

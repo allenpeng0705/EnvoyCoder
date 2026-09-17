@@ -2440,7 +2440,7 @@ body {
   opacity: 0.75;
 }
 
-/* Pairing panel on Settings → This machine */
+/* The pairing panel — the QR and the link — on Settings → Pairing */
 .settings__pairing {
   display: flex;
   flex-direction: column;
@@ -2472,6 +2472,75 @@ body {
 .settings__pairing-actions {
   display: flex;
   gap: 0.5rem;
+}
+/* Settings → Pairing: one block per route, because the three are three mechanisms.
+
+   The blocks are ruled apart rather than spaced apart, for the same reason the agent lists are: a
+   route the user skips must be *visibly* a different thing from the one they are reading, not merely
+   a paragraph lower down. The heading and its "Recommended" chip share a line so the marking reads
+   as a property of the route. */
+.settings__pairing-route {
+  margin: 0 0 1.5rem;
+  padding: 0 0 1.25rem;
+  border-bottom: 1px solid var(--border, #333);
+}
+.settings__pairing-route:last-of-type {
+  border-bottom: none;
+}
+.settings__pairing-route-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.settings__pairing-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0.5rem 0 0.75rem;
+}
+.settings__pairing-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+}
+.settings__pairing-field .setting__title,
+.settings__pairing-field-detail {
+  grid-column: 1;
+}
+.settings__pairing-value {
+  grid-column: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.settings__pairing-field .button {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  align-self: center;
+}
+.settings__pairing-field-detail {
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+.settings__pairing-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.settings__pairing-fact dt {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.settings__pairing-fact dd {
+  margin: 0;
+  font-size: 0.85rem;
+  opacity: 0.85;
+  overflow-wrap: anywhere;
 }
 .settings__paired-list {
   list-style: none;

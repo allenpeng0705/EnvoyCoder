@@ -112,4 +112,15 @@ export interface AgentActions {
     | { ok: true; device: { id: string; deviceLabel: string; createdAt: string; expiresAt: string; revokedAt?: string } }
     | Refusal
   >;
+
+  /**
+   * Remove a **revoked** record from the list. The daemon refuses an active one ("revoke it first"),
+   * so this is never a shortcut around revocation.
+   */
+  forgetPairedDevice(
+    id: string,
+  ): Promise<
+    | { ok: true; device: { id: string; deviceLabel: string; createdAt: string; expiresAt: string; revokedAt?: string } }
+    | Refusal
+  >;
 }

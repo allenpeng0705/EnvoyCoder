@@ -35,9 +35,10 @@
  * `test/settings-nav.test.tsx` refuses a section whose citation is stale and a section that renders
  * nothing. **A section with nothing in it cannot be added to the bar without failing that test**, which
  * is the property the owner's brief asks for: *"an eleven-item bar of empty pages is the failure mode,
- * not the goal."* The sections we do **not** have — the reference product's terminals, plugins, device
- * pairing, account providers and the rest — are absent rather than empty, and §7.6 of
- * `docs/settings-parity.md` records each one with the audit's verdict and the reason.
+ * not the goal."* The sections we do **not** have — the reference product's terminals, plugins, account
+ * providers and the rest — are absent rather than empty, and §7.6 of `docs/settings-parity.md` records
+ * each one with the audit's verdict and the reason. **Device pairing is not on that list any more**: it
+ * is `PairingSection`, reached from the bar's *Pairing* item, the rail's QR button and the palette.
  *
  * ## Three scopes below the sections, and what separates them
  *
@@ -111,6 +112,7 @@ import { SettingsShell, StoreNotes } from "./SettingsShell.js";
 import { AboutSection, MachineSection, ShortcutsSection } from "./settings/SectionsFacts.js";
 import { AgentsSection } from "./settings/SectionsAgents.js";
 import { GeneralSection, SafetySection, TasksSection } from "./settings/SectionsControls.js";
+import { PairingSection } from "./settings/PairingSection.js";
 import { ProjectSection, ProjectsSection } from "./settings/SectionsProjects.js";
 import type { PairPhoneOutcome } from "./settings/PairPhone.js";
 
@@ -173,12 +175,13 @@ export interface SettingsPaneProps {
    */
   projectsUnavailable?: string | undefined;
   /**
-   * A pairing code the shell has **already minted**, from the command palette's *Pair a phone* row.
+   * A pairing code the shell has **already minted**, from the command palette's *Pair a phone* row or the
+   * rail's QR button.
    *
    * Data rather than a destination, on the same rule as `projectsUnavailable`: absent means no code is
-   * waiting, which is the state of every ordinary visit to these settings. `MachineSection` renders it and
-   * says why the mint could not happen instead — the palette's press is the request (`PairPhone.tsx`), so
-   * by the time this pane is drawn the answer may already exist.
+   * waiting, which is the state of every ordinary visit to these settings. `PairingSection` renders it and
+   * says why the mint could not happen instead — the press is the request (`PairPhone.tsx`), so by the time
+   * this pane is drawn the answer may already exist.
    */
   mintedPairing?: PairPhoneOutcome | undefined;
 }
@@ -371,8 +374,10 @@ function sectionBody(props: SettingsPaneProps & { section: SettingsSectionId }):
         />
       );
     case "machine":
+      return <MachineSection state={props.state} onUpdate={props.onUpdate} agents={props.agents} />;
+    case "pairing":
       return (
-        <MachineSection
+        <PairingSection
           state={props.state}
           onUpdate={props.onUpdate}
           agents={props.agents}

@@ -88,6 +88,25 @@ export function HelpIcon({ size = 16 }: IconProps): JSX.Element {
   );
 }
 
+/**
+ * Pairing — the QR code a phone scans.
+ *
+ * Three finder squares and a scatter of modules, which is what a QR code looks like at 16px without
+ * pretending to be scannable. It replaced the footer's `ServerIcon`, whose "Host: <machine>" tooltip
+ * named a control that only opened Settings — the gear beside it already does that, so the button was a
+ * second way to one place. This one has a destination of its own: the pairing section.
+ */
+export function QrIcon({ size = 16 }: IconProps): JSX.Element {
+  return (
+    <svg {...frame(size)}>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <path d="M14 14h3v3h-3zM20 14v3M14 20h3M20 20h.01" />
+    </svg>
+  );
+}
+
 /** Add — the plus, for "Add project". */
 export function PlusIcon({ size = 16 }: IconProps): JSX.Element {
   return (

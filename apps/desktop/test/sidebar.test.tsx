@@ -123,6 +123,7 @@ function renderSidebar(over: Partial<Parameters<typeof CoderSidebar>[0]> = {}) {
       onRemoveTask={onRemoveTask}
       onOpenCommandCenter={vi.fn()}
       onOpenSettings={vi.fn()}
+      onShowPairing={vi.fn()}
       {...over}
     />,
   );

@@ -182,6 +182,9 @@ describe("the sections bar, in the same language", () => {
     "Projekte",
     "Tastenkürzel",
     "Dieser Computer",
+    // The Pairing section's German name, from the catalogue like every other: a section added with a
+    // hardcoded English title would drop out of this list and fail the length assertion below.
+    "Kopplung",
     "Über",
   ];
 
@@ -323,6 +326,7 @@ describe("the rest of the pane, in the same language", () => {
           onRemoveTask={vi.fn()}
           onOpenCommandCenter={vi.fn()}
           onOpenSettings={vi.fn()}
+          onShowPairing={vi.fn()}
         />
       </I18nProvider>,
     );

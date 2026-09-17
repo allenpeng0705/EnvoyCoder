@@ -10,10 +10,11 @@
  *
  * on a machine with no paired phone and no second window. Both numbers were real and both labels were
  * false. `peerCount` comes from `node.getConnectedPeerIds().length` (`packages/host-bridge/src/mesh-peer.ts`),
- * which is **every libp2p connection the daemon's own peer holds** — and every standalone daemon dials the
- * community relays and a DHT client (`coderMeshOptions`), so it legitimately holds dozens: the relays, the
- * peers the DHT introduces, other family nodes, other people's phones. None of them are connected *to this
- * user*, so the sentence claimed a capability the protocol never granted (AGENTS.md non-negotiable #4).
+ * which is **every libp2p connection the daemon's own peer holds** — relays first, and historically also
+ * the DHT swarm when `coderMeshOptions` still enabled discovery. None of those peers are phones paired
+ * *to this user*, so the sentence claimed a capability the protocol never granted (AGENTS.md
+ * non-negotiable #4). Today's options keep the swarm off (~2 peers at rest); the fixture below still
+ * uses 30 so a regression that re-introduces a count in the headline fails even against the old swarm.
  *
  * ## What is pinned here
  *
@@ -41,9 +42,9 @@ import type { MeshStatus } from "../src/state/useCoderState.js";
 afterEach(cleanup);
 
 /**
- * The exact machine the owner reported: a standalone daemon whose own peer holds the dozens of
- * connections the community relays and a DHT client hand every node — and a user who has paired
- * nothing and opened no second window. Not one of these peers is the user's device.
+ * The owner's bug report, preserved as a worst-case fixture: a high `peerCount` with nothing paired.
+ * Production sits near 2 (the relays) after the swarm was turned off; 30 still proves the headline
+ * never absorbs the count.
  */
 const HOSTING_NOTHING_PAIRED: Extract<MeshStatus, { kind: "hosting" }> = {
   kind: "hosting",

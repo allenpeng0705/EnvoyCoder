@@ -51,21 +51,23 @@ Reference implementation to mirror — **`EnvoyMesh/apps/node/src/index.ts:1294`
 subset of it, and no more:
 
 ```ts
+// Live shape is `coderMeshOptions` in `packages/host-bridge/src/mesh-peer.ts` — phone-facing host,
+// not a public-swarm member. The phone already has every address from the pairing QR.
 const mesh = new EnvoyMesh({
   listen,                       // e.g. ["/ip4/0.0.0.0/tcp/0"] — a port of our own, not the node's
-  enableMdns: true,             // the same-LAN direct path
-  enableDht: true, dhtClientMode: true,
-  bootstrapPeers: relayAddrs,   // from the shared roster, §1.3
+  enableMdns: false,            // QR carries LAN multiaddrs; mDNS browse/advertise is churn
+  enableDht: false, dhtClientMode: false,
+  bootstrapPeers: [],           // DHT bootstrap path; relays are reached via configuredRelayAddrs
   enableRelay: true,
-  configuredRelayAddrs: relayAddrs,
-  enableAutoNat: true,          // the user's requirement: direct when possible…
-  enableDcutr: true,            // …hole-punched, and the relay only when it cannot be
+  configuredRelayAddrs: relayAddrs, // load-bearing: circuit listen + reservation (no DHT needed)
+  enableAutoNat: false,         // AutoNAT dials random peers; with DHT off it is pure cost
+  enableDcutr: true,            // upgrades the *phone's* relayed connection to direct — dials only that peer
   libp2pPrivateKey,             // §1.1
 });
 ```
 
-Do **not** copy the node's CLI surface, its strict-dial policy or its DHT server mode. Those exist for the
-social node's own reasons and would be cargo.
+Do **not** copy the node's CLI surface, its strict-dial policy or its DHT server/client swarm. Those
+exist for the social node's own reasons and would be cargo on a pairing-only host.
 
 ### 1.3 The roster is the family's, and it is shared
 
@@ -422,7 +424,7 @@ Exported from `packages/host-bridge/src/index.ts`. The API, as built:
 | Export | Shape |
 |---|---|
 | `createCoderMeshPeer(options)` | `(CoderMeshPeerOptions) => CoderMeshPeer` |
-| `coderMeshOptions(paths)` | `(CoderPaths) => EnvoyMeshOptions` — `libp2pPrivateKeyPath = meshIdentityPath(paths)`, `configuredRelayAddrs` + `bootstrapPeers` = the cn/us community addrs, plus relay/mdns/dht/autoNat/dcutr flags |
+| `coderMeshOptions(identity?)` | `(CoderMeshPrivateKey?) => EnvoyMeshOptions` — listen + `configuredRelayAddrs` = cn/us relays, `enableRelay` + `enableDcutr` on; DHT / mDNS / AutoNAT / `bootstrapPeers` off (measured: ~17→2 peers, ~+89→+9 MB RSS). Identity is the honoured `libp2pPrivateKey`, not a path. |
 | `meshIdentityPath(paths)` | `join(paths.secretsDir, "mesh-identity.json")` |
 | `CODER_MESH_RELAY_HINTS` | `DEFAULT_ENVOY_COMMUNITY_RELAY_BOOTSTRAP_ADDRS` |
 | `CoderMeshPeer` | `start()` (idempotent), `stop()` (idempotent, never rejects), `status()`, `peerId`, `multiaddrs`, `relayHints`, `closeStreamsForDevice(deviceId)` |

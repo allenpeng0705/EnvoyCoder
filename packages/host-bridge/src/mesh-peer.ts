@@ -60,16 +60,38 @@ import {
 export const CODER_MESH_RELAY_HINTS: readonly string[] = DEFAULT_ENVOY_COMMUNITY_RELAY_BOOTSTRAP_ADDRS
 
 /**
- * The options our peer is built with.
+ * The options our peer is built with — a **phone-facing host, not a member of the public swarm**.
  *
- * `configuredRelayAddrs` is the load-bearing one: the network package turns each into a
- * `<relay>/p2p-circuit` **listen** address and dials the relay while setting it up
- * (`../EnvoyMesh/packages/network/src/index.ts:800-813`, and the comment at `:856` that says exactly
- * this), so with no EnvoyMesh node on the machine this daemon still becomes reachable from the WAN.
- * `bootstrapPeers` carries the same addresses so the relay connection is also established through the
- * ordinary bootstrap path; the rest is the shape `docs/envoydev-mesh-transport.md` specifies — mDNS
- * for the same-LAN direct path, AutoNAT + DCUtR to prefer a direct connection and fall back to the
- * relay only when there is no other route.
+ * The phone learns everything it needs from the pairing QR (`serve.ts` sends `meshPeerId`,
+ * `meshMultiaddrs` and `meshRelayHints`), so discovery mechanisms for peers nobody named are pure
+ * cost. In the owner's words: *"The mobile scans the QR code and knows the details of home node, no
+ * needs for home node to continue to keep trying connecting with some unknowing items."*
+ *
+ * That is why `enableDht`, `dhtClientMode`, `enableMdns` and `enableAutoNat` are `false` and
+ * `bootstrapPeers` is empty. **Measured at rest** (real `EnvoyMesh`, isolated home, ~60 s):
+ *
+ *   * the family defaults that were here before — DHT + mDNS + AutoNAT on, `bootstrapPeers` = the
+ *     community relays — reached **17 peers (2 relays + 15 unknown)** for **+89.3 MB RSS**;
+ *   * these options reached **2 peers (exactly the two configured relays)** for **+9.0 MB RSS**.
+ *
+ * That is the rejected alternative, written down so a future reader does not "helpfully" turn the
+ * DHT back on. Nothing the product does needs those strangers, and every one of them is somebody
+ * else's connection, CPU and memory on the owner's machine.
+ *
+ * `configuredRelayAddrs` is the load-bearing option that keeps the WAN route: the network package
+ * makes each a `<relay>/p2p-circuit` **listen** address and dials the relay while setting it up
+ * (`../EnvoyMesh/packages/network/src/index.ts:798-813`). A reservation does **not** require the
+ * DHT — it is negotiated over that connection — and a `reserved/live/everReserved` circuit plus an
+ * authenticated `coder.meshStatus` over `/p2p-circuit` were measured with the options below.
+ * `bootstrapPeers` is empty because it is the libp2p *bootstrap/DHT* path, duplicating a connection
+ * `configuredRelayAddrs` already makes; the pairing payload is unaffected, since its
+ * `bootstrapPeers` is `meshPeer.multiaddrs ∪ meshPeer.relayHints` and `relayHints` is the constant
+ * `CODER_MESH_RELAY_HINTS` below.
+ *
+ * `enableRelay` stays: it registers the circuit-relay transport the `/p2p-circuit` listen address
+ * needs. `enableDcutr` stays because it only ever dials back the peer that just connected through
+ * the relay — the phone — to upgrade that circuit to direct; with the swarm gone there is nobody
+ * else to dial.
  *
  * `identity` is the peer's persisted Ed25519 key, loaded by `start()` from
  * `meshIdentityPath(paths)` and passed as the honoured `libp2pPrivateKey`. Without it libp2p mints a
@@ -78,18 +100,17 @@ export const CODER_MESH_RELAY_HINTS: readonly string[] = DEFAULT_ENVOY_COMMUNITY
  * (the unit tests' fake node) can ask for an ephemeral node on purpose.
  */
 export function coderMeshOptions(identity?: CoderMeshPrivateKey): EnvoyMeshOptions {
-  // One array, both fields: a relay the listener reserved on but never bootstrapped to is a circuit
-  // nobody dials, and the reverse is a wasted connection.
-  const relayHints = [...DEFAULT_ENVOY_COMMUNITY_RELAY_BOOTSTRAP_ADDRS]
   return {
     listen: ["/ip4/0.0.0.0/tcp/0"],
-    enableMdns: true,
-    enableDht: true,
-    dhtClientMode: true,
-    bootstrapPeers: relayHints,
+    // Discovery for peers nobody named: the QR already named this one.
+    enableMdns: false,
+    enableDht: false,
+    dhtClientMode: false,
+    bootstrapPeers: [],
+    enableAutoNat: false,
+    // The direct route, the relay circuit, and the phone's DCUtR upgrade of that circuit.
     enableRelay: true,
-    configuredRelayAddrs: relayHints,
-    enableAutoNat: true,
+    configuredRelayAddrs: [...DEFAULT_ENVOY_COMMUNITY_RELAY_BOOTSTRAP_ADDRS],
     enableDcutr: true,
     ...(identity ? { libp2pPrivateKey: identity } : {}),
   }

@@ -8,7 +8,7 @@
  * simply never reached the flow. Wiring the palette to a second copy of "call `coder.mintPairing`, draw the
  * URI as a QR, offer to copy it" is exactly the drift this repo refuses: two implementations of one
  * **secret-producing** call, only one of them covered by a test. So the call (`mintPairingCode`) and the
- * code's rendering (`PairPhonePanel`) live here, the settings section and the window shell both use them,
+ * code's rendering (`PairPhonePanel`) live here, the *Pairing* section and the window shell both use them,
  * and there is one place to change when the URI grows a field.
  *
  * ## Why minting is a function called from a press, and not an effect
@@ -17,8 +17,9 @@
  * An effect that minted would therefore create two paired-device records for one press — a real record on
  * the daemon, not merely a doubled render — and this repo has already paid for that lesson once
  * (`coderStore.ts:248`, where StrictMode's doubled effect opened two sockets). So the **press is the
- * request**: `mintPairingCode` is called from an event handler (the settings row's button, the palette's
- * `run`), and the panel below only renders what came back.
+ * request**: `mintPairingCode` is called from an event handler (the *Pairing* section's button, the rail's
+ * QR button through `CoderApp.openPairing`, and the palette's `run`), and the panel below only renders what
+ * came back.
  *
  * ## What this module owns, and what it deliberately does not
  *
@@ -36,6 +37,7 @@ import QRCode from "qrcode";
 
 import { useI18n } from "../../i18n/context.js";
 import type { AgentActions } from "../../state/agent-actions.js";
+import { canCopyText, copyText } from "./clipboard.js";
 
 /**
  * What one press on a pairing control produced: the code, or the daemon's own refusal in its words.
@@ -79,8 +81,8 @@ export interface PairPhonePanelProps {
  * The minted code, as a QR **and** as text a user can paste.
  *
  * Both forms, because a phone scans the image while a machine that cannot see it needs the URI — the same
- * pairing the settings row has always shown, kept identical here so the palette's route and the row's
- * route cannot present the same code two ways.
+ * pairing the *Pairing* section and the palette row both show, kept identical here so the two routes cannot
+ * present one code two ways.
  */
 export function PairPhonePanel(props: PairPhonePanelProps): JSX.Element {
   const { t } = useI18n();
@@ -115,24 +117,32 @@ export function PairPhonePanel(props: PairPhonePanelProps): JSX.Element {
   return (
     <div className="settings__pairing" data-testid="pairing-panel">
       {qrDataUrl ? (
-        <img className="settings__pairing-qr" src={qrDataUrl} alt={t("settings.machine.pair.title")} />
+        <img className="settings__pairing-qr" src={qrDataUrl} alt={t("settings.pairing.qr.alt")} />
       ) : null}
       <label className="settings__pairing-label">
-        {t("settings.machine.pair.uriLabel")}
+        {t("settings.pairing.uriLabel")}
         <textarea className="settings__pairing-uri" readOnly value={code} rows={3} />
       </label>
       <div className="settings__pairing-actions">
-        <button
-          type="button"
-          className="button button--secondary"
-          onClick={() => {
-            void navigator.clipboard.writeText(code).then(() => setCopied(true));
-          }}
-        >
-          {copied ? t("settings.machine.pair.copied") : t("settings.machine.pair.copy")}
-        </button>
+        {/* **Copy through the shared clipboard helper, not `navigator.clipboard`.** The raw API rejects
+            without a live gesture and is off under WebKitGTK, and the old `.then(() => setCopied(true))`
+            therefore had two ways to show *Copied* over a secret that never reached the clipboard —
+            the one outcome this pane forbids. `clipboard.ts` tries the webview, then the shell's own
+            `copy_text`, then the legacy path, and answers honestly. The button is drawn only where a
+            write can work at all, exactly as `CopyCommand.tsx` does. */}
+        {canCopyText() ? (
+          <button
+            type="button"
+            className="button button--secondary"
+            onClick={() => {
+              void copyText(code).then(setCopied);
+            }}
+          >
+            {copied ? t("settings.pairing.copied") : t("settings.pairing.copy")}
+          </button>
+        ) : null}
         <button type="button" className="button" onClick={props.onClose}>
-          {t("settings.machine.pair.close")}
+          {t("settings.pairing.close")}
         </button>
       </div>
     </div>

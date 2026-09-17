@@ -147,7 +147,7 @@ function frameClient(duplex: ReturnType<typeof meshStreamAsDuplex>) {
  * `createCoderDispatcher` for "what may be called". Only the token table and the one handler body
  * are test data — the authentication gate and the method catalogue are the product's own.
  */
-function coderPorts() {
+function coderPorts(record?: { method: string; session: unknown }[]) {
   return {
     sessionIdentity: coderSessionIdentity({
       resolveSession: async (token: string) =>
@@ -163,12 +163,15 @@ function coderPorts() {
     }),
     dispatch: createCoderDispatcher({
       handlers: {
-        "coder.meshStatus": async (params, { session }) => ({
-          kind: "hosting",
-          answeredBy: "coder-mesh-peer",
-          echo: params,
-          deviceId: (session as { deviceId?: string } | undefined)?.deviceId ?? null,
-        }),
+        "coder.meshStatus": async (params, { session }) => {
+          record?.push({ method: "coder.meshStatus", session });
+          return {
+            kind: "hosting",
+            answeredBy: "coder-mesh-peer",
+            echo: params,
+            deviceId: (session as { deviceId?: string } | undefined)?.deviceId ?? null,
+          };
+        },
       },
     }),
   }
@@ -177,10 +180,11 @@ function coderPorts() {
 /**
  * A real `EnvoyMesh`, narrowed to loopback.
  *
- * `createNode` is injected only to change the *reach*: the default `coderMeshOptions(identity)` adds
- * the family's community relays and enables DHT, mDNS and AutoNAT, which would make this leg
- * depend on the internet. The node is still a real `EnvoyMesh`, the protocol handler is still the
- * one `createCoderMeshPeer` registers, and the dial is still a real libp2p dial.
+ * `createNode` is injected only to change the *reach*: the default `coderMeshOptions(identity)`
+ * still carries the family's community relays (it no longer enables DHT, mDNS or AutoNAT — see
+ * `mesh-peer.ts`), and dialing the public relays would make this leg depend on the internet. The
+ * node is still a real `EnvoyMesh`, the protocol handler is still the one `createCoderMeshPeer`
+ * registers, and the dial is still a real libp2p dial.
  */
 function loopbackNode(options: EnvoyMeshOptions): EnvoyMesh {
   const nodeOptions: EnvoyMeshOptions = {
@@ -292,6 +296,8 @@ describeWhen("the daemon's own mesh peer, dialled by a second real libp2p peer",
   let paths: CoderPaths
   let peer: CoderMeshPeer
   let second: EnvoyMesh | undefined
+  /** Every dispatch that landed, so a refused connection can be proven to have reached nothing. */
+  let calls: { method: string; session: unknown }[]
 
   beforeAll(async () => {
     // The isolated home: never the user's real one. `coderPaths` is the product's own resolver, so
@@ -306,7 +312,8 @@ describeWhen("the daemon's own mesh peer, dialled by a second real libp2p peer",
   })
 
   beforeEach(async () => {
-    peer = createCoderMeshPeer({ paths, ...coderPorts(), createNode: loopbackNode })
+    calls = []
+    peer = createCoderMeshPeer({ paths, ...coderPorts(calls), createNode: loopbackNode })
     const status = await peer.start()
     expect(status.kind, JSON.stringify(status)).toBe("hosting")
   })
@@ -391,6 +398,83 @@ describeWhen("the daemon's own mesh peer, dialled by a second real libp2p peer",
     // is deliberately identical for wrong, expired and revoked tokens.
     expect(reply.type).toBe("proxy-reject")
     expect(String(reply.reason)).toMatch(/invalid|expired/)
+    // The property the sample above only implies: the request that follows a refused handshake
+    // reaches nothing. `calls` is the real dispatcher's own record.
+    expect(calls).toEqual([])
+
+    await client.close()
+  })
+
+  it("refuses a request sent with no handshake at all, and never dispatches it", async () => {
+    const { client } = await dialHome()
+
+    // The shape an unauthenticated peer on the shared network would send: a plain JSON-RPC request
+    // as the first frame. The transport reads the first frame as the handshake, finds no token, and
+    // closes — so `coder.meshStatus` is never dispatched, on this connection or any later frame.
+    await client.send({ id: "atk-direct", method: "coder.meshStatus", params: { probe: PROBE } })
+    const reply = await client.next()
+    expect(reply.type).toBe("proxy-reject")
+    expect(String(reply.reason)).toBe("no token")
+    expect(calls).toEqual([])
+
+    // The stream is closed rather than left waiting for a better-shaped frame.
+    await expect(client.next()).rejects.toThrow(/ended before a whole frame/)
+  })
+
+  it("refuses a bad token followed by a well-formed request, and dispatches nothing", async () => {
+    const { client } = await dialHome()
+
+    await client.send({ type: "proxy-connect", token: "wrong" })
+    // Sent immediately after, before reading the rejection: a gate that answered per *frame* rather
+    // than per *connection* would dispatch this one behind the refusal.
+    await client.send({ id: "atk-second", method: "coder.meshStatus", params: { probe: PROBE } })
+
+    expect((await client.next()).type).toBe("proxy-reject")
+    await expect(client.next()).rejects.toThrow(/ended before a whole frame/)
+    expect(calls).toEqual([])
+  })
+
+  /**
+   * The one shape that makes the transport throw rather than answer, over a real dial.
+   *
+   * `JSON.parse("null")` succeeds, so the handshake parser reaches `parsed.type` on `null` and throws
+   * a `TypeError` before writing `proxy-reject` (`../EnvoyMesh/packages/host-connect/src/
+   * mesh-host-transport.ts:124`). The transport's own doc says it "never throws for a peer's
+   * misbehaviour", so the interesting question is not the throw but its blast radius: does one peer's
+   * malformed frame take the daemon's mesh surface down? libp2p catches a rejected stream handler and
+   * aborts that stream (`node_modules/libp2p/dist/src/connection.js:190-192`), so the measured answer
+   * is no — asserted here rather than inferred, and reported as a doc/robustness defect.
+   */
+  it("survives a `null` handshake that makes the transport throw, and still serves a paired phone", async () => {
+    const { address } = await dialHome()
+    // A second stream on the same peer node, so `afterEach` still owns exactly one node to stop.
+    const attacker = frameClient(meshStreamAsDuplex(await second!.dialProtocol(address, CLIENT_PROXY_PROTOCOL)))
+    await attacker.send(null)
+    // Measured: libp2p aborts the stream, so the peer sees a reset — not a `proxy-reject`, and not an
+    // open stream waiting for a better frame. That is the containment this test exists to check.
+    await expect(attacker.next()).rejects.toThrow(/stream has been reset/)
+    expect(calls).toEqual([])
+    expect(hostingStatus().kind).toBe("hosting")
+
+    // An independent stream is unaffected: the node is still serving the protocol.
+    const client = frameClient(meshStreamAsDuplex(await second!.dialProtocol(address, CLIENT_PROXY_PROTOCOL)))
+    await client.send({ type: "proxy-connect", token: VALID_TOKEN })
+    expect(await client.next()).toEqual({ type: "proxy-accept" })
+    await client.send({ id: "after-null", method: "coder.meshStatus", params: { probe: PROBE } })
+    expect(await client.next()).toEqual({
+      id: "after-null",
+      result: {
+        kind: "hosting",
+        answeredBy: "coder-mesh-peer",
+        echo: { probe: PROBE },
+        deviceId: DEVICE_ID,
+      },
+    })
+    // Exactly one dispatch happened, and it was the authenticated one.
+    expect(calls.map((call) => call.method)).toEqual(["coder.meshStatus"])
+    // The dispatcher was handed the resolved session, never `undefined` — the fact
+    // `requireOwnerWindow`'s `session === undefined` rule depends on.
+    expect(calls[0]?.session).toMatchObject({ deviceId: DEVICE_ID, isOwnerScope: false })
 
     await client.close()
   })

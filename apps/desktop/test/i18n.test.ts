@@ -152,7 +152,7 @@ describe("the catalogues", () => {
   it("interpolates the values a key declares, and leaves unknown placeholders alone", () => {
     const t = createTranslator("en").t;
     expect(t("sidebar.attention.many", { count: 3 })).toBe("3 tasks need you");
-    expect(t("sidebar.footer.host", { host: "This machine" })).toBe("Host: This machine");
+    expect(t("settings.pairing.copy.aria", { field: "Token" })).toBe("Copy Token");
     // A missing value must not become "undefined" on screen.
     expect(t("sidebar.attention.many", {})).toContain("{count}");
   });

@@ -63,6 +63,19 @@ export interface PairingHandlerDeps {
    * that only exists once the reservation has landed.
    */
   mesh?: () => { peerId?: string; multiaddrs: readonly string[]; relayHints: readonly string[] };
+  /**
+   * Cut a revoked device's **already-open** mesh stream, if this daemon has a live peer.
+   *
+   * `store.revoke` stops the *next* authentication only. A phone that was already connected keeps its
+   * stream until it closes it itself, so without this a revoke leaves the connection it was meant to
+   * end running — revocation in name only.
+   *
+   * Optional, and absence is an ordinary no-op rather than an error: a daemon booted with
+   * `skipMeshAttach` (or an injected `mesh` status, which every test uses) has no peer at all, and
+   * `serve.ts` reaches its `meshPeer` closure for the real one. The call is fire-and-forget because
+   * how many streams closed is the peer's business, not the revoke's answer.
+   */
+  closeMeshStreams?: (deviceId: string) => void;
 }
 
 /** First non-loopback IPv4 address, or `null` when the machine has none. */
@@ -163,7 +176,57 @@ export function createPairingHandlers(deps: PairingHandlerDeps): Partial<Record<
           ref("error.pairedDeviceMissing", { id: input.id }),
         );
       }
+      // The store has now *persisted* the revocation, and nothing here may undo or hide it. A daemon
+      // with no peer is the `?.` no-op; a device with no live stream is `closeStreamsForDevice`
+      // returning 0; and a transport that throws while closing a half-dead duplex is swallowed,
+      // because the credential is already withdrawn and reporting the revoke as failed would be a
+      // lie about the security event. `device.id` is the key the mesh registry registered — it is
+      // `match.id` in `PairedDeviceStore.resolveSession`.
+      try {
+        deps.closeMeshStreams?.(device.id);
+      } catch {
+        /* the revocation succeeded; a stream that would not close must not turn that into an error */
+      }
       return { device };
+    },
+
+    /**
+     * Forget a **revoked** record — the cleanup half of revocation, and nothing else.
+     *
+     * `requireOwnerWindow` is the same guard as mint and revoke: deleting the row removes the evidence
+     * that a token was withdrawn, which is at least as sensitive as withdrawing it. The store refuses an
+     * active record, so the two-step ("revoke, then forget") cannot be collapsed from the wire either.
+     *
+     * **No stream close here, deliberately.** Forget is only reachable for a record that is already
+     * `revoked`, and `coder.revokePairedDevice` is the only caller of `store.revoke` — so
+     * `closeMeshStreams` has already run for this device and a second call would be a no-op. Repeating
+     * it would also tell a future reader that *forget* is what cuts a live connection, which is exactly
+     * the wrong belief. The one place a stream is closed is the revoke handler above.
+     */
+    "coder.forgetPairedDevice": async (params, context) => {
+      requireOwnerWindow(context, "coder.forgetPairedDevice");
+      const input = parseRpcParams("coder.forgetPairedDevice", params) as { id: string };
+      const outcome = await deps.store.forget(input.id);
+      if (outcome.kind === "missing") {
+        // The same key as revoke's refusal: a row reaches `missing` only after it was revoked and then
+        // forgotten, so "it may already have been revoked" stays true and reuses one sentence.
+        throw coderError(
+          ENVOYDEV_ERRORS.badRequest,
+          `There is no paired device called "${input.id}". It may already have been revoked.`,
+          ref("error.pairedDeviceMissing", { id: input.id }),
+        );
+      }
+      if (outcome.kind === "not-revoked") {
+        // The row still names a token that a phone could present, so removing it would destroy the only
+        // record of a live credential. The sentence names the one action that makes the delete legitimate.
+        throw coderError(
+          ENVOYDEV_ERRORS.badRequest,
+          `"${input.id}" has not been revoked. Revoke it first — a record is only forgotten once the ` +
+            "token is withdrawn.",
+          ref("error.pairedDeviceNotRevoked", { id: input.id }),
+        );
+      }
+      return { device: outcome.device };
     },
   };
 }

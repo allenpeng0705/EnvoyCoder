@@ -2438,6 +2438,27 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
       })
       .strict(),
   },
+  /**
+   * Forget a revoked record. The daemon refuses when the id is unknown **or** the record is not
+   * revoked, so the wire cannot collapse revocation into a delete.
+   */
+  "coder.forgetPairedDevice": {
+    params: z.object({ id: z.string().min(1) }).strict(),
+    result: z
+      .object({
+        device: z
+          .object({
+            id: z.string().min(1),
+            deviceLabel: z.string().min(1),
+            createdAt: z.string().min(1),
+            expiresAt: z.string().min(1),
+            revokedAt: z.string().min(1).optional(),
+            lastSeenAt: z.string().min(1).optional(),
+          })
+          .strict(),
+      })
+      .strict(),
+  },
 
   /* — settings — */
   "coder.getSettings": {

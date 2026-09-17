@@ -34,7 +34,7 @@
 
 import type { JSX } from "react";
 
-import { GearIcon, HelpIcon, ImportIcon, PlusIcon, ServerIcon } from "./icons.js";
+import { GearIcon, PlusIcon, QrIcon } from "./icons.js";
 import { RowMenu } from "./RowMenu.js";
 
 import { Fragment, useMemo, useRef, useState } from "react";
@@ -87,13 +87,14 @@ export interface CoderSidebarProps {
   onOpenCommandCenter: () => void;
   onOpenSettings: () => void;
   /**
-   * What to call the machine this daemon runs on, for the Host button.
+   * **Show the pairing code** — the footer's QR button.
    *
-   * Optional and defaulting to "This machine" so the shell can pass the real name (the mesh node's
-   * label, or the host from a remote setup) when it has one; until then the button states the truth
-   * rather than an empty label.
+   * The button this replaced said *"Host: <machine>"* and opened Settings, which the gear beside it
+   * already does; the owner's report was that it was useless. What the rail was missing is not a
+   * second way to one place but a way to the thing a phone needs, and that is the pairing section
+   * (the shell mints and navigates — minting is a press, never an effect: `settings/PairPhone.tsx`).
    */
-  hostLabel?: string;
+  onShowPairing: () => void;
   /** Search box contents, owned by the shell so the Command Center can drive it too. */
   query?: string | undefined;
   onQueryChange?: ((query: string) => void) | undefined;
@@ -378,9 +379,20 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
         )}
       </div>
 
-      {/* The sidebar's tool row, in Paseo's order: the wide add-project action, then Host, Import,
-          Help and Settings. Icons rather than bare words, because five text buttons at the bottom of a
-          rail read as a sentence — and `Local` was never a label, it was a host with no name. */}
+      {/* The sidebar's tool row, in Paseo's order: the wide add-project action, then Pair, then
+          Settings. Icons rather than bare words, because text buttons at the bottom of a rail read as
+          a sentence.
+
+          **Two controls were removed from here, and the reason is the owner's own report** (*"I don't
+          know what's the Downloading icon and info icon, they were disabled too"*). They were the
+          disabled Import (an arrow into a tray, read as a download) and Help (a question mark in a
+          circle, read as an info) buttons. A disabled button does not receive the pointer events that
+          would show its `title`, so the sentence explaining it was unreachable in every real browser:
+          the control could not say why it was disabled, which is the one thing this pane's rule
+          requires of a control it cannot honour. A rail has no room for the reason on screen, and
+          neither feature exists — `Import` needs a reader per agent's own session store, and there is
+          no help surface — so they are **gone** rather than teased. That is the same verdict
+          `allowRemoteRuns` got in `SettingsPane.tsx`: absent, not disabled-with-a-promise. */}
       <div className="sidebar__footer">
         <button
           type="button"
@@ -391,37 +403,18 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
           <span className="icon-button__label">{t("sidebar.footer.add")}</span>
         </button>
 
+        {/* The icon-only control follows the composer's send button (`TaskPane.tsx`): the glyph on the
+            face, and the name in a `visually-hidden` span so it is announced and not drawn. The
+            `title` is the tooltip, not the accessible name — a name that only exists in a tooltip is a
+            name a keyboard or screen-reader user never reaches. */}
         <button
           type="button"
           className="icon-button"
-          onClick={props.onOpenSettings}
-          title={t("sidebar.footer.host", { host: props.hostLabel ?? t("app.thisMachine") })}
-          aria-label={t("sidebar.footer.host", { host: props.hostLabel ?? t("app.thisMachine") })}
+          onClick={props.onShowPairing}
+          title={t("sidebar.footer.pair")}
         >
-          <ServerIcon />
-        </button>
-
-        {/* Not built yet, and it says so instead of doing nothing. Paseo's Import reads another
-            agent's own session store (Claude Code, Codex, …) — a daemon-side job that needs a reader
-            per provider, not a button. */}
-        <button
-          type="button"
-          className="icon-button"
-          disabled
-          title={t("sidebar.footer.import.title")}
-          aria-label={t("sidebar.footer.import")}
-        >
-          <ImportIcon />
-        </button>
-
-        <button
-          type="button"
-          className="icon-button"
-          disabled
-          title={t("sidebar.footer.help.title")}
-          aria-label={t("sidebar.footer.help")}
-        >
-          <HelpIcon />
+          <QrIcon />
+          <span className="visually-hidden">{t("sidebar.footer.pair")}</span>
         </button>
 
         <button

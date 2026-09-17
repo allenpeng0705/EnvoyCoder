@@ -1085,6 +1085,15 @@ export const RPC_METHODS = [
   "coder.listPairedDevices",
   /** Stop accepting a paired device's token. */
   "coder.revokePairedDevice",
+  /**
+   * Remove a **revoked** device's record from the list — the deliberate cleanup an owner asks for.
+   *
+   * The record is the evidence that a token was withdrawn (`daemon/paired-devices.ts`), so this is never
+   * a side effect of revoking and never automatic pruning: an active record is refused with "revoke it
+   * first", and the owner's press is the only thing that can destroy a row. Owner-window-only, exactly
+   * like minting and revoking.
+   */
+  "coder.forgetPairedDevice",
   "coder.getSettings",
   "coder.updateSettings",
 ] as const;

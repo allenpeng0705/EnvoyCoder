@@ -53,6 +53,7 @@ export function stubAgentActions(overrides: Partial<AgentActions> = {}): AgentAc
     mintPairing: vi.fn(async () => REFUSAL),
     listPairedDevices: vi.fn(async () => REFUSAL),
     revokePairedDevice: vi.fn(async () => REFUSAL),
+    forgetPairedDevice: vi.fn(async () => REFUSAL),
   };
   return { ...base, ...overrides };
 }

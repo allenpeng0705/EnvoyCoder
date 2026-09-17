@@ -192,7 +192,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
   const layout = useSettingsLayout();
   const [settingsScope, setSettingsScope] = useState<SettingsScope | undefined>(undefined);
   /**
-   * **The code the palette's *Pair a phone* row minted**, on its way to *Settings → This machine*.
+   * **The code the palette's *Pair a phone* row minted**, on its way to *Settings → Pairing*.
    *
    * Held here rather than inside the page because the press happens here: the row is this shell's command,
    * and the page it opens may not be mounted yet. `goToSettings` clears it on every navigation and on
@@ -214,14 +214,15 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    * `<StrictMode>` invokes a mounting effect twice in development, and a second mint is a second
    * paired-device record on the daemon — not a doubled render (`settings/PairPhone.tsx` is the argument).
    * The pane is opened first so the press always has a visible result; the answer — the code, or the
-   * daemon's refusal — arrives a moment later and `MachineSection` renders whichever it is.
+   * daemon's refusal — arrives a moment later and `PairingSection` renders whichever it is. The rail's
+   * QR button and the palette's row are the same press, because they are this one function.
    *
    * A refusal here is not worked around. `coder.mintPairing` is owner-window-only by design
    * (`daemon/pairing.ts`), and this is the owner's window; if the daemon ever refused this press, the
    * sentence would appear on the page unaltered.
    */
   const openPairing = (): void => {
-    setSettingsScope(appScope("machine"));
+    setSettingsScope(appScope("pairing"));
     void mintPairingCode(props.actions).then(setMintedPairing);
   };
   /**
@@ -534,6 +535,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
             failure={railFailure}
             onOpenCommandCenter={() => openPalette()}
             onOpenSettings={openAppSettings}
+            onShowPairing={openPairing}
             unavailable={projectsUnavailable}
             tasksUnknown={!state.tasksKnown}
           />
@@ -564,7 +566,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               onNavigate={goToSettings}
               onClose={closeSettings}
               // The pairing code the palette minted before this pane opened, when there is one — see
-              // `openPairing` and `MachineSection`. Data, so absent is the ordinary visit.
+              // `openPairing` and `PairingSection`. Data, so absent is the ordinary visit.
               {...(mintedPairing !== undefined ? { mintedPairing } : {})}
               // The agents page's own five calls, handed over as the store itself: `CoderStore` satisfies
               // `AgentActions` structurally, so there is no adapter to drift from the methods it names.

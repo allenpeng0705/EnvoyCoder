@@ -2158,4 +2158,56 @@ describe("paired-device sessions (M4)", () => {
       revoked.call("coder.hello", { client: { name: "envoydev-mobile", platform: "test" } }),
     ).rejects.toThrow(/UNAUTHORIZED|unauthorized|Authentication/i);
   }, 30_000);
+
+  /**
+   * **The cleanup half: a revoked record can be forgotten, and nothing else can.**
+   *
+   * The store keeps revoked rows on purpose — the row is the evidence that a token was withdrawn — so
+   * clearing the list has to be a separate, deliberate action. The order matters and this test is the
+   * order: forgetting a record that has **not been revoked** is refused (otherwise the delete would
+   * destroy the only record of a token a phone could still present), revocation still works, and
+   * forgetting is only accepted once the record is revoked. The final call proves it is a real delete and
+   * not an idempotent no-op: the id is gone, and forgetting it again is a refusal rather than a second
+   * silent success.
+   */
+  it("forgets only a revoked record, after revoking it", async () => {
+    const { daemon, home } = await bootDaemon();
+    cleanups.push(async () => {
+      await daemon.stop();
+      await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    });
+
+    const window = await connect(daemon.port);
+    cleanups.push(async () => window.close());
+
+    const minted = (await window.call("coder.mintPairing", { deviceLabel: "Untested phone" })) as {
+      device: { id: string };
+    };
+
+    // 1. Not revoked: refused, with the sentence that names the missing step.
+    await expect(window.call("coder.forgetPairedDevice", { id: minted.device.id })).rejects.toThrow(
+      /has not been revoked/i,
+    );
+
+    // 2. And the refusal changed nothing: the record is still there and still not revoked.
+    const afterRefusal = (await window.call("coder.listPairedDevices", {})) as {
+      devices: { id: string; revokedAt?: string }[];
+    };
+    expect(afterRefusal.devices.some((d) => d.id === minted.device.id && d.revokedAt === undefined)).toBe(true);
+
+    // 3. Revoke, then forget — the two steps, in that order.
+    await window.call("coder.revokePairedDevice", { id: minted.device.id });
+    const forgotten = (await window.call("coder.forgetPairedDevice", { id: minted.device.id })) as {
+      device: { id: string; revokedAt?: string };
+    };
+    expect(forgotten.device.id).toBe(minted.device.id);
+    expect(forgotten.device.revokedAt).toBeTruthy();
+
+    // 4. The row is gone from the list, and forgetting it again is a refusal.
+    const listed = (await window.call("coder.listPairedDevices", {})) as { devices: { id: string }[] };
+    expect(listed.devices.some((d) => d.id === minted.device.id)).toBe(false);
+    await expect(window.call("coder.forgetPairedDevice", { id: minted.device.id })).rejects.toThrow(
+      /no paired device/i,
+    );
+  }, 30_000);
 });

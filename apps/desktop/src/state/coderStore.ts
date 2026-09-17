@@ -1095,6 +1095,22 @@ export class CoderStore {
     });
   }
 
+  /**
+   * Forget a revoked record. The answer is the record that left the list, which is what lets a caller
+   * confirm the delete happened rather than assume it did.
+   */
+  async forgetPairedDevice(id: string): Promise<
+    | { ok: true; device: { id: string; deviceLabel: string; createdAt: string; expiresAt: string; revokedAt?: string } }
+    | Refusal
+  > {
+    return this.mutate("coder.forgetPairedDevice", { id }, (result) => {
+      const answer = result as {
+        device: { id: string; deviceLabel: string; createdAt: string; expiresAt: string; revokedAt?: string };
+      };
+      return { ok: true as const, device: answer.device };
+    });
+  }
+
   async updateSettings(patch: Partial<CoderSettings>): Promise<{ ok: true } | Refusal> {
     return this.mutate("coder.updateSettings", { settings: patch }, (result) => {
       this.set({ settings: (result as { settings: CoderSettings }).settings });

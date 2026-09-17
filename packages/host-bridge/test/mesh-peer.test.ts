@@ -197,13 +197,57 @@ describe("the relay hints", () => {
   it("are the family's shared cn + us community relays, static and complete", () => {
     const options = coderMeshOptions()
     expect(options.configuredRelayAddrs).toEqual([CN_RELAY, US_RELAY])
-    // The same addresses bootstrap the connection to the relay the circuit listener reserves on.
-    expect(options.bootstrapPeers).toEqual([CN_RELAY, US_RELAY])
+    // `bootstrapPeers` is deliberately **empty**: it is the DHT/bootstrap path, and the relay
+    // connection the circuit reservation rides is already made by `configuredRelayAddrs`. A future
+    // edit that refills it from the hints would re-join the public swarm (see the pinning test below).
+    expect(options.bootstrapPeers).toEqual([])
     expect(options.enableRelay).toBe(true)
     // No identity argument, no key: an ephemeral node is a caller's explicit choice, never a
     // default. `start()` supplies the persisted key, which the tests above and below assert.
     expect(options.libp2pPrivateKey).toBeUndefined()
     expect(CODER_MESH_RELAY_HINTS).toEqual([CN_RELAY, US_RELAY])
+  })
+
+  /**
+   * **The pin against re-enabling the swarm.** Measured before this landed: with the family defaults
+   * (DHT + mDNS + AutoNAT on, `bootstrapPeers` = the relays) the peer sat at 17 connected peers — two
+   * relays plus fifteen unknown members of the public DHT swarm — for +89.3 MB RSS, against 2 peers
+   * and +9.0 MB with the options below. The phone was told exactly where this machine is by the QR
+   * code, so none of those fifteen were ever dialled by the product. This test fails the moment a
+   * later edit turns any of them back on, which is the whole point of writing the number down in
+   * `coderMeshOptions`.
+   */
+  it("keeps the public swarm off and the phone's relay route on", async () => {
+    const options = coderMeshOptions()
+    // Off — discovery for peers nobody named.
+    expect(options.enableDht).toBe(false)
+    expect(options.dhtClientMode).toBe(false)
+    expect(options.enableMdns).toBe(false)
+    expect(options.enableAutoNat).toBe(false)
+    expect(options.bootstrapPeers).toEqual([])
+    // On — the route a paired phone actually takes.
+    expect(options.enableRelay).toBe(true)
+    expect(options.enableDcutr).toBe(true)
+    expect(options.configuredRelayAddrs).toEqual([CN_RELAY, US_RELAY])
+
+    // The relay circuit is still *advertised*: a phone that scanned the QR is handed the circuit
+    // address, so switching the swarm off must not have cost the reachable route. The fake node
+    // returns a circuit from `getRelayAdvertisedMultiaddrs` and a bare LAN address from `multiaddrs`;
+    // the peer preferring the former is what puts `/p2p-circuit` in the pairing payload.
+    const node = fakeNode()
+    const peer = createCoderMeshPeer({
+      paths: coderPaths(HOME),
+      ...proxyPorts(),
+      createNode: () => node,
+    })
+    try {
+      await peer.start()
+      expect(peer.multiaddrs).toContain(`${CN_RELAY}/p2p-circuit`)
+      expect(peer.multiaddrs.some((addr) => addr.includes("/p2p-circuit"))).toBe(true)
+      expect(peer.relayHints).toEqual([CN_RELAY, US_RELAY])
+    } finally {
+      await peer.stop()
+    }
   })
 
   it("reach the node through the injected factory, carrying the persisted key", async () => {
