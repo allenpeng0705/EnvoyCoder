@@ -475,14 +475,26 @@ export const it: Catalogue = {
   "settings.pairing.secret": "Il codice è un segreto: chi lo ha può raggiungere questa macchina.",
   "settings.pairing.manual.title": "Digita l'indirizzo a mano",
   "settings.pairing.manual.detail": "Per un telefono che non può scansionare: questi sono i valori che chiede il suo modulo Aggiungi host.",
-  "settings.pairing.manual.waiting": "Mostra prima un codice di abbinamento qui sopra: l'indirizzo e il token vengono da lì.",
   "settings.pairing.manual.address": "Indirizzo",
   "settings.pairing.manual.address.detail": "La macchina e la porta che il telefono contatta, come host:port.",
-  "settings.pairing.manual.lanAddress": "Indirizzo su questa rete",
-  "settings.pairing.manual.lanAddress.detail": "La stessa porta sulla rete locale, per un telefono sullo stesso Wi-Fi.",
   "settings.pairing.manual.token": "Token",
   "settings.pairing.manual.token.detail": "Ciò che prova la richiesta. Chi lo ha può raggiungere questa macchina.",
-  "settings.pairing.manual.unreadable": "L'indirizzo di questo codice non è leggibile. Copia invece il link di abbinamento qui sopra e incollalo nel telefono.",
+  "settings.pairing.manual.address.placeholder":
+    "example.com:4770",
+  "settings.pairing.manual.lanHint":
+    "On this Wi-Fi you can also use {address}.",
+  "settings.pairing.manual.token.placeholder":
+    "8–10 characters",
+  "settings.pairing.manual.token.length":
+    "Use 8–10 letters or digits.",
+  "settings.pairing.manual.token.charset":
+    "Letters and digits only.",
+  "settings.pairing.manual.address.missing":
+    "Enter the address as host:port.",
+  "settings.pairing.manual.action":
+    "Create pairing values",
+  "settings.pairing.manual.busy":
+    "Creating…",
   "settings.pairing.ssh.title": "Raggiungila con un salto SSH",
   "settings.pairing.ssh.detail": "Per una macchina che il telefono non raggiunge direttamente: il telefono apre un tunnel SSH e questo servizio vede la connessione arrivare sul proprio loopback.",
   "settings.pairing.ssh.host": "Host SSH",
@@ -540,6 +552,12 @@ export const it: Catalogue = {
     "There is no paired device called \"{id}\". It may already have been revoked.",
   "error.pairedDeviceNotRevoked":
     "«{id}» non è stato revocato. Revocalo prima — una voce si dimentica solo dopo che il token è stato ritirato.",
+  "error.pairingTokenDuplicate":
+    "That token is already in use by another pairing code. Choose a different one.",
+  "error.pairingTokenCharset":
+    "The token must be letters and digits only (8–10 characters).",
+  "error.pairingTokenLength":
+    "The token must be 8–10 characters.",
   "error.runNotFound": "Non esiste un'esecuzione chiamata «{runId}». Potrebbe essere stata avviata da un servizio riavviato nel frattempo.",
   "error.taskForRunMissing": "Non esiste un'attività chiamata «{taskId}», quindi non c'è dove eseguire un agente.",
   "error.taskAlreadyRunning": "«{task}» è già in esecuzione. Mandale invece un messaggio — avviare un secondo agente nella stessa cartella è il modo in cui due di loro finiscono per modificare lo stesso file.",

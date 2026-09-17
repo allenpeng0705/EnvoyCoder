@@ -22,6 +22,19 @@ import { dirname, join } from "node:path";
 import { type CoderPaths } from "@envoydev/host-bridge";
 import { ENVOYDEV_PRODUCT_NAME } from "@envoydev/protocol";
 
+import {
+  USER_PAIRING_TOKEN_MAX_LEN,
+  USER_PAIRING_TOKEN_MIN_LEN,
+  normalizeUserPairingToken,
+} from "../pairing-token.js";
+
+export {
+  USER_PAIRING_TOKEN_MAX_LEN,
+  USER_PAIRING_TOKEN_MIN_LEN,
+  normalizeUserPairingToken,
+} from "../pairing-token.js";
+export type { UserPairingTokenResult } from "../pairing-token.js";
+
 /**
  * Minimal session shape the transport's `resolveSession` port expects.
  *
@@ -232,14 +245,34 @@ export class PairedDeviceStore {
     });
   }
 
-  mint(input: { deviceLabel?: string; ttlMs?: number } = {}): Promise<{ record: PairedDeviceRecord; public: PairedDevicePublic }> {
+  mint(
+    input: { deviceLabel?: string; ttlMs?: number; token?: string } = {},
+  ): Promise<{ record: PairedDeviceRecord; public: PairedDevicePublic }> {
     return this.enqueue(async () => {
       await this.ensureLoaded();
       const now = this.now();
+      let token: string;
+      if (input.token !== undefined) {
+        const normalized = normalizeUserPairingToken(input.token);
+        if (!normalized.ok) {
+          throw new Error(
+            normalized.reason === "length"
+              ? `token must be ${USER_PAIRING_TOKEN_MIN_LEN}–${USER_PAIRING_TOKEN_MAX_LEN} characters`
+              : "token must be letters and digits only",
+          );
+        }
+        const taken = this.devices.some((d) => d.token === normalized.token && isActive(d, now));
+        if (taken) {
+          throw new Error("that token is already in use by another pairing code");
+        }
+        token = normalized.token;
+      } else {
+        token = randomBytes(24).toString("base64url");
+      }
       const ttl = input.ttlMs ?? DEFAULT_PAIRING_TTL_MS;
       const record: PairedDeviceRecord = {
         id: `pad_${randomBytes(8).toString("hex")}`,
-        token: randomBytes(24).toString("base64url"),
+        token,
         deviceLabel: (input.deviceLabel?.trim() || "Phone").slice(0, 80),
         createdAt: now.toISOString(),
         expiresAt: new Date(now.getTime() + ttl).toISOString(),

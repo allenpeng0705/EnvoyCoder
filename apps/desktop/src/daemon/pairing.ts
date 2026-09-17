@@ -114,6 +114,26 @@ export function firstLanAddress(): string | null {
 }
 
 /**
+ * Hostname (or bare IP) from a reach string that may include `:port`.
+ *
+ * `pairingUri` always appends the daemon's bound port, so a typed `203.0.113.7:4770` must not become
+ * `ws://203.0.113.7:4770:4770/ws`. IPv6 in brackets is supported; a bare hostname is returned as-is.
+ */
+export function hostnameOfReach(raw: string): string {
+  const text = raw.trim();
+  if (text === "") return "";
+  if (text.startsWith("[")) {
+    const match = /^\[([^\]]+)](?::\d+)?$/.exec(text);
+    return match?.[1] ?? text;
+  }
+  const colon = text.lastIndexOf(":");
+  if (colon > 0 && /^\d+$/.test(text.slice(colon + 1))) {
+    return text.slice(0, colon);
+  }
+  return text;
+}
+
+/**
  * Refuse anything but a call made **at the machine itself**.
  *
  * Not an authority distinction. A paired phone is the owner's own device and stands where the desktop
@@ -142,17 +162,53 @@ export function createPairingHandlers(deps: PairingHandlerDeps): Partial<Record<
         deviceLabel?: string;
         host?: string;
         lanHost?: string;
+        token?: string;
       };
       // Settle the peer before reading its addresses — see `awaitMeshReady` on the deps.
       await deps.awaitMeshReady?.();
       const host = deps.getHost();
       const lan = firstLanAddress();
-      const reach = input.host?.trim() || lan || "127.0.0.1";
-      const lanHost = input.lanHost?.trim() || (reach !== "127.0.0.1" ? reach : lan ?? undefined);
+      // User-supplied host wins (host:port typed route). Strip a trailing `:port` — pairingUri always
+      // appends the daemon's bound port, so `203.0.113.7:4770` must become hostname `203.0.113.7`.
+      const reach = hostnameOfReach(input.host?.trim() || "") || lan || "127.0.0.1";
+      const lanHint = hostnameOfReach(input.lanHost?.trim() || "") || lan || undefined;
+      const lanHost =
+        lanHint && lanHint !== reach && lanHint !== "127.0.0.1" ? lanHint : undefined;
       const identity = await loadOrCreatePairingIdentity(deps.paths);
-      const { record, public: device } = await deps.store.mint({
-        ...(input.deviceLabel ? { deviceLabel: input.deviceLabel } : {}),
-      });
+      let record: Awaited<ReturnType<PairedDeviceStore["mint"]>>["record"];
+      let device: Awaited<ReturnType<PairedDeviceStore["mint"]>>["public"];
+      try {
+        const minted = await deps.store.mint({
+          ...(input.deviceLabel ? { deviceLabel: input.deviceLabel } : {}),
+          ...(input.token !== undefined ? { token: input.token } : {}),
+        });
+        record = minted.record;
+        device = minted.public;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (/already in use/i.test(message)) {
+          throw coderError(
+            ENVOYDEV_ERRORS.badRequest,
+            "That token is already in use by another pairing code. Choose a different one.",
+            ref("error.pairingTokenDuplicate"),
+          );
+        }
+        if (/letters and digits/i.test(message)) {
+          throw coderError(
+            ENVOYDEV_ERRORS.badRequest,
+            "The token must be letters and digits only (8–10 characters).",
+            ref("error.pairingTokenCharset"),
+          );
+        }
+        if (/must be \d/i.test(message) || /characters/i.test(message)) {
+          throw coderError(
+            ENVOYDEV_ERRORS.badRequest,
+            "The token must be 8–10 characters.",
+            ref("error.pairingTokenLength"),
+          );
+        }
+        throw error;
+      }
       const relay = deps.relay?.() ?? {};
       const mesh = deps.mesh?.() ?? { multiaddrs: [], relayHints: [] };
       const uri = host.pairingUri({
@@ -160,12 +216,9 @@ export function createPairingHandlers(deps: PairingHandlerDeps): Partial<Record<
         ownerId: identity.ownerId,
         ownerPublicKey: identity.ownerPublicKey,
         host: reach,
-        ...(lanHost && lanHost !== reach ? { lanHost } : lanHost ? { lanHost } : {}),
+        ...(lanHost ? { lanHost } : {}),
         ...(relay.relayPeerId ? { relayPeerId: relay.relayPeerId } : {}),
         ...(relay.relayWsUrls && relay.relayWsUrls.length > 0 ? { relayWsUrls: relay.relayWsUrls } : {}),
-        // The libp2p route, sent only when it is a route: a peer id with no address would give the
-        // phone a name for this machine and no way to reach it, and a phone that read an identity
-        // without addresses would have to guess. Both travel, or neither does.
         ...(mesh.peerId && mesh.multiaddrs.length > 0
           ? {
               meshPeerId: mesh.peerId,

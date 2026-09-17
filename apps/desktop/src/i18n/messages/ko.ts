@@ -473,14 +473,26 @@ export const ko: Catalogue = {
   "settings.pairing.secret": "이 코드는 비밀입니다 — 가진 사람은 누구나 이 컴퓨터에 접속할 수 있습니다.",
   "settings.pairing.manual.title": "주소 직접 입력",
   "settings.pairing.manual.detail": "스캔할 수 없는 휴대폰용입니다. 호스트 추가 양식이 요구하는 값은 다음과 같습니다.",
-  "settings.pairing.manual.waiting": "먼저 위에서 페어링 코드를 표시하세요 — 주소와 토큰이 거기서 나옵니다.",
   "settings.pairing.manual.address": "주소",
   "settings.pairing.manual.address.detail": "휴대폰이 접속할 컴퓨터와 포트를 host:port 형식으로 씁니다.",
-  "settings.pairing.manual.lanAddress": "이 네트워크의 주소",
-  "settings.pairing.manual.lanAddress.detail": "같은 Wi-Fi에 있는 휴대폰을 위한 로컬 네트워크의 같은 포트입니다.",
   "settings.pairing.manual.token": "토큰",
   "settings.pairing.manual.token.detail": "요청을 증명합니다. 가진 사람은 누구나 이 컴퓨터에 접속할 수 있습니다.",
-  "settings.pairing.manual.unreadable": "이 코드의 주소를 읽을 수 없습니다. 대신 위의 페어링 링크를 복사해 휴대폰에 붙여 넣으세요.",
+  "settings.pairing.manual.address.placeholder":
+    "example.com:4770",
+  "settings.pairing.manual.lanHint":
+    "On this Wi-Fi you can also use {address}.",
+  "settings.pairing.manual.token.placeholder":
+    "8–10 characters",
+  "settings.pairing.manual.token.length":
+    "Use 8–10 letters or digits.",
+  "settings.pairing.manual.token.charset":
+    "Letters and digits only.",
+  "settings.pairing.manual.address.missing":
+    "Enter the address as host:port.",
+  "settings.pairing.manual.action":
+    "Create pairing values",
+  "settings.pairing.manual.busy":
+    "Creating…",
   "settings.pairing.ssh.title": "SSH 홉으로 접속",
   "settings.pairing.ssh.detail": "휴대폰이 직접 닿지 못하는 컴퓨터용입니다. 휴대폰이 SSH로 터널을 열고, 이 서비스는 연결이 자신의 루프백으로 들어오는 것을 봅니다.",
   "settings.pairing.ssh.host": "SSH 호스트",
@@ -538,6 +550,12 @@ export const ko: Catalogue = {
     "There is no paired device called \"{id}\". It may already have been revoked.",
   "error.pairedDeviceNotRevoked":
     "“{id}”는 취소되지 않았습니다. 먼저 취소하세요. 기록은 토큰이 회수된 뒤에만 삭제할 수 있습니다.",
+  "error.pairingTokenDuplicate":
+    "That token is already in use by another pairing code. Choose a different one.",
+  "error.pairingTokenCharset":
+    "The token must be letters and digits only (8–10 characters).",
+  "error.pairingTokenLength":
+    "The token must be 8–10 characters.",
   "error.runNotFound": "“{runId}”라는 실행이 없습니다. 그 사이 재시작한 서비스가 시작했을 수 있습니다.",
   "error.taskForRunMissing": "“{taskId}”라는 작업이 없어 에이전트를 실행할 곳이 없습니다.",
   "error.taskAlreadyRunning": "“{task}”이(가) 이미 실행 중입니다. 대신 메시지를 보내세요 — 같은 디렉터리에서 두 번째 에이전트를 시작하면 둘이 같은 파일을 편집하게 됩니다.",

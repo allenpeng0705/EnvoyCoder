@@ -56,12 +56,19 @@ export type PairPhoneOutcome =
  * The label is recorded by the daemon against the device this code will pair, so the paired-devices list on
  * *This machine* names the phone rather than showing a bare id. `"Phone"` is the shipped label because the
  * milestone's client is the mobile app; a caller may pass its own.
+ *
+ * `host` + `token` are the typed (host:port) route: the user chose the address and a short passphrase.
+ * Omit both for QR — the daemon mints a long random secret the phone only scans.
  */
 export async function mintPairingCode(
   agents: AgentActions,
-  deviceLabel = "Phone",
+  input: { deviceLabel?: string; host?: string; token?: string } = {},
 ): Promise<PairPhoneOutcome> {
-  const result = await agents.mintPairing({ deviceLabel });
+  const result = await agents.mintPairing({
+    deviceLabel: input.deviceLabel ?? "Phone",
+    ...(input.host ? { host: input.host } : {}),
+    ...(input.token ? { token: input.token } : {}),
+  });
   return result.ok ? { ok: true, uri: result.uri } : { ok: false, message: result.message };
 }
 

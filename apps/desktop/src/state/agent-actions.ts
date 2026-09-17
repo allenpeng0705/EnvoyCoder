@@ -86,6 +86,10 @@ export interface AgentActions {
   /** Mint an `envoy://pair` URI for a phone. The URI carries the secret. */
   mintPairing(input?: {
     deviceLabel?: string;
+    /** Hostname or `host:port` for the typed route (port is stripped; daemon port is used). */
+    host?: string;
+    /** User-chosen 8–10 character token for host:port; omit for QR (long random). */
+    token?: string;
   }): Promise<
     | { ok: true; uri: string; device: { id: string; deviceLabel: string; createdAt: string; expiresAt: string } }
     | Refusal

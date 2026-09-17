@@ -9,17 +9,17 @@
  *
  *   1. **Three routes, three blocks.** Each is its own `<section data-route=…>` with its own heading, and
  *      the QR route is *marked* primary rather than merely first.
- *   2. **One code, one mint.** The section reuses `PairPhone.tsx`'s call rather than growing a second one,
- *      and the host:port values are read **out of the minted URI** — so a reader that invented a second
- *      token format, or that filled the fields from the window's loopback connection, fails here.
+ *   2. **QR mint stays out of the manual block.** A QR press produces a long secret in the panel only;
+ *      the host:port route has its own form (address + 8–10 char token) and never echoes that QR secret.
  *   3. **SSH is not overstated.** The pairing code carries no SSH hop (`daemon/pairing.ts` never passes one
  *      and `apps/mobile/lib/services/add_host.dart` is where the route is actually built), so the block
  *      must say what the phone will ask for and must **not** render a form that implies the desktop can set
  *      it up. `AGENTS.md` §4 is the rule this case exists for.
  *
- * ## The two mutations it fails on
+ * ## The mutations it fails on
  *
- *   * filling the manual route from `state.connection` (address `127.0.0.1:4770` appears with no mint);
+ *   * dumping a QR long token into the manual route after a QR mint;
+ *   * gating the manual form on "mint a QR first";
  *   * rendering the SSH block as inputs (a `textbox` appears under `[data-route="ssh"]`).
  */
 
@@ -229,64 +229,61 @@ describe("the three routes, separately", () => {
     const panel = await screen.findByTestId("pairing-panel");
     const uriField = within(panel).getByLabelText(en["settings.pairing.uriLabel"]) as HTMLTextAreaElement;
     expect(uriField.value).toBe(MINTED_URI);
+    // QR mint must not dump the long random token into the manual route.
+    const manual = document.querySelector('[data-route="manual"]');
+    if (!(manual instanceof HTMLElement)) throw new Error("no manual block");
+    expect(within(manual).queryByText("test-secret")).toBeNull();
+    expect(manual.querySelector("[data-manual-result]")).toBeNull();
   });
 
-  it("shows the minted code's address and token as copyable values in the manual route", async () => {
-    show({ mintPairing: minting() });
-    // Nothing yet: the manual route says where the two values come from instead of filling them in from the
-    // window's own connection, which is loopback and therefore an address a phone cannot dial.
-    expect(screen.getByText(en["settings.pairing.manual.waiting"])).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: en["settings.pairing.qr.action"] }));
-    await screen.findByTestId("pairing-panel");
+  it("mints a short user token from the manual form without needing a QR first", async () => {
+    const shortUri =
+      "envoy://pair?wsUrl=ws%3A%2F%2F203.0.113.7%3A4770%2Fws&token=MyPhone99&ownerPublicKey=pk&ownerId=envoy%3Aowner%3Aabc&app=EnvoyDev";
+    const mintPairing = minting(shortUri);
+    show({ mintPairing });
 
     const manual = document.querySelector('[data-route="manual"]');
     if (!(manual instanceof HTMLElement)) throw new Error("no manual block");
-    expect(within(manual).getByText("192.168.1.20:4770")).toBeTruthy();
-    expect(within(manual).getByText("test-secret")).toBeTruthy();
-    // The daemon mints `lanWsUrl` equal to `wsUrl` when the machine has one non-loopback address, and the
-    // same `host:port` twice under two labels would read as two routes when there is one — so the LAN row
-    // is absent here.
-    expect(within(manual).queryByText(en["settings.pairing.manual.lanAddress"])).toBeNull();
-    // The token is a secret, and the section says so where the user is about to copy it.
-    expect(within(manual).getByText(en["settings.pairing.secret"])).toBeTruthy();
-    // **Each field's button says "Copy", not "Copy pairing link".** Found by driving the real window: the
-    // first build reused the QR panel's whole-link label on the address field, so a button beside
-    // `192.168.1.20:4770` named the wrong thing. The accessible name still names the field, which is what
-    // makes two identical-looking buttons distinguishable.
-    expect(within(manual).getAllByText(en["settings.pairing.field.copy"])).toHaveLength(2);
-    expect(within(manual).queryByText(en["settings.pairing.copy"])).toBeNull();
-    expect(
-      within(manual).getByRole("button", {
-        name: en["settings.pairing.copy.aria"].replace("{field}", en["settings.pairing.manual.address"]),
+    // Form is present up front — not gated on a QR mint.
+    expect(within(manual).getByPlaceholderText(en["settings.pairing.manual.address.placeholder"])).toBeTruthy();
+    expect(manual.querySelector("[data-manual-result]")).toBeNull();
+    const address = within(manual).getByPlaceholderText(en["settings.pairing.manual.address.placeholder"]);
+    const token = within(manual).getByPlaceholderText(en["settings.pairing.manual.token.placeholder"]);
+    fireEvent.change(address, { target: { value: "203.0.113.7:4770" } });
+    fireEvent.change(token, { target: { value: "MyPhone99" } });
+    fireEvent.click(within(manual).getByRole("button", { name: en["settings.pairing.manual.action"] }));
+
+    await vi.waitFor(() =>
+      expect(mintPairing).toHaveBeenCalledWith({
+        deviceLabel: "Phone",
+        host: "203.0.113.7:4770",
+        token: "MyPhone99",
       }),
-    ).toBeTruthy();
-    expect(
-      within(manual).getByRole("button", {
-        name: en["settings.pairing.copy.aria"].replace("{field}", en["settings.pairing.manual.token"]),
-      }),
-    ).toBeTruthy();
-    // …and the values are not in an editable field: they are read-only text plus a Copy button, so nothing
-    // here can be mistaken for a setting the desktop stores.
-    expect(within(manual).queryByRole("textbox")).toBeNull();
+    );
+    await vi.waitFor(() => expect(manual.querySelector("[data-manual-result]")).toBeTruthy());
+    const result = manual.querySelector("[data-manual-result]");
+    if (!(result instanceof HTMLElement)) throw new Error("no manual result");
+    expect(within(result).getByText("203.0.113.7:4770")).toBeTruthy();
+    expect(within(result).getByText("MyPhone99")).toBeTruthy();
+    expect(within(result).getByText(en["settings.pairing.secret"])).toBeTruthy();
+    // Short token only — not the QR's long secret from a different mint.
+    expect(within(result).queryByText("test-secret")).toBeNull();
   });
 
-  /**
-   * The other shape: a reach address that is a tunnel and a LAN address that is not. Then both are shown,
-   * because they are two routes to one daemon and the phone may prefer the local one.
-   */
-  it("shows the LAN address as its own row only when it differs from the reach address", async () => {
-    const viaTunnel =
-      "envoy://pair?wsUrl=wss%3A%2F%2Frelay.example%3A443%2Fws&lanWsUrl=ws%3A%2F%2F192.168.1.20%3A4770%2Fws&token=test-secret";
-    show({ mintPairing: minting(viaTunnel) });
-    fireEvent.click(screen.getByRole("button", { name: en["settings.pairing.qr.action"] }));
-    await screen.findByTestId("pairing-panel");
-
+  it("refuses a short token that is too short before calling the daemon", async () => {
+    const mintPairing = minting();
+    show({ mintPairing });
     const manual = document.querySelector('[data-route="manual"]');
     if (!(manual instanceof HTMLElement)) throw new Error("no manual block");
-    expect(within(manual).getByText("relay.example:443")).toBeTruthy();
-    expect(within(manual).getByText("192.168.1.20:4770")).toBeTruthy();
-    expect(within(manual).getByText(en["settings.pairing.manual.lanAddress"])).toBeTruthy();
+    fireEvent.change(within(manual).getByPlaceholderText(en["settings.pairing.manual.address.placeholder"]), {
+      target: { value: "example.com:4770" },
+    });
+    fireEvent.change(within(manual).getByPlaceholderText(en["settings.pairing.manual.token.placeholder"]), {
+      target: { value: "short" },
+    });
+    fireEvent.click(within(manual).getByRole("button", { name: en["settings.pairing.manual.action"] }));
+    expect(within(manual).getByRole("alert").textContent).toBe(en["settings.pairing.manual.token.length"]);
+    expect(mintPairing).not.toHaveBeenCalled();
   });
 
   /**
@@ -296,7 +293,6 @@ describe("the three routes, separately", () => {
     show();
     const ssh = document.querySelector('[data-route="ssh"]');
     if (!(ssh instanceof HTMLElement)) throw new Error("no ssh block");
-    // The fields the phone's Add host → SSH form asks for, all five named.
     for (const key of [
       "settings.pairing.ssh.host",
       "settings.pairing.ssh.port",
@@ -306,18 +302,17 @@ describe("the three routes, separately", () => {
     ] as const) {
       expect(within(ssh).getByText(en[key])).toBeTruthy();
     }
-    // The daemon address as seen from the far machine, from the live connection — not a hardcoded 4770.
+    expect(within(ssh).getByText(en["settings.pairing.ssh.host.detail"])).toBeTruthy();
+    expect(en["settings.pairing.ssh.host.detail"]).toMatch(/public IP or domain/i);
     expect(within(ssh).getByText(/127\.0\.0\.1:4770/)).toBeTruthy();
-    // No form: a control the user could fill in here would be a control that does not do anything.
+    expect(within(ssh).getByText(en["settings.pairing.ssh.token.detail"])).toBeTruthy();
+    expect(en["settings.pairing.ssh.token.detail"]).toMatch(/short token/i);
     expect(within(ssh).queryByRole("textbox")).toBeNull();
     expect(within(ssh).queryByRole("button")).toBeNull();
-    // And the sentence that keeps the product from claiming more than the protocol provides.
     expect(within(ssh).getByText(en["settings.pairing.ssh.notInCode"])).toBeTruthy();
   });
 
   it("says where an issued code is revoked, because that control is on another page", () => {
-    // Found by reading the move back: minting left *This machine* and the issued-codes list stayed there,
-    // so the section that mints has to say where the record — and the way to revoke it — now lives.
     show();
     expect(screen.getByText(en["settings.pairing.manage"])).toBeTruthy();
   });

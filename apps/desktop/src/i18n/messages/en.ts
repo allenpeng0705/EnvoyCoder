@@ -818,24 +818,27 @@ export const en = {
   "settings.pairing.secret": "The code is a secret — anyone who has it can reach this machine.",
   "settings.pairing.manual.title": "Type the address by hand",
   "settings.pairing.manual.detail":
-    "For a phone that cannot scan: these are the values its Add host form asks for.",
-  // The address and the token are chosen when the code is minted (the daemon picks the reachable address,
-  // and the token belongs to the record), so before a mint there is nothing honest to fill in.
-  "settings.pairing.manual.waiting":
-    "Show a pairing code above first — the address and the token come from it.",
+    "For a phone that cannot scan: enter the address the phone should dial and a short token you choose. The phone's Add host form asks for the same two values.",
   "settings.pairing.manual.address": "Address",
-  "settings.pairing.manual.address.detail": "The machine and port the phone dials, written as host:port.",
-  "settings.pairing.manual.lanAddress": "Address on this network",
-  "settings.pairing.manual.lanAddress.detail": "The same port on the local network, for a phone on the same Wi-Fi.",
+  "settings.pairing.manual.address.detail":
+    "Usually your public IP or domain, then the daemon port — written as host:port. On the same Wi-Fi as this machine, a private LAN address is fine.",
+  "settings.pairing.manual.address.placeholder": "example.com:4770",
+  "settings.pairing.manual.lanHint": "On this Wi-Fi you can also use {address}.",
   "settings.pairing.manual.token": "Token",
-  "settings.pairing.manual.token.detail": "What proves the ask. Anyone who has it can reach this machine.",
-  "settings.pairing.manual.unreadable":
-    "This code's address could not be read. Copy the pairing link above and paste it into the phone instead.",
+  "settings.pairing.manual.token.detail":
+    "8–10 letters or digits you choose. Anyone who has it can reach this machine until you revoke the code.",
+  "settings.pairing.manual.token.placeholder": "8–10 characters",
+  "settings.pairing.manual.token.length": "Use 8–10 letters or digits.",
+  "settings.pairing.manual.token.charset": "Letters and digits only.",
+  "settings.pairing.manual.address.missing": "Enter the address as host:port.",
+  "settings.pairing.manual.action": "Create pairing values",
+  "settings.pairing.manual.busy": "Creating…",
   "settings.pairing.ssh.title": "Reach it through an SSH hop",
   "settings.pairing.ssh.detail":
     "For a machine the phone cannot reach directly: the phone tunnels over SSH, and this daemon sees the connection arrive on its own loopback.",
   "settings.pairing.ssh.host": "SSH host",
-  "settings.pairing.ssh.host.detail": "The machine this daemon runs on, as your phone reaches it.",
+  "settings.pairing.ssh.host.detail":
+    "Usually the public IP or domain of this machine, as the phone reaches it. A LAN name only works when the phone is on the same network.",
   "settings.pairing.ssh.port": "SSH port",
   "settings.pairing.ssh.port.detail": "22, unless your SSH server listens somewhere else.",
   "settings.pairing.ssh.user": "SSH user",
@@ -848,7 +851,7 @@ export const en = {
   // The honest half, and the reason this block is a list and not a form: SSH is not in the pairing payload.
   "settings.pairing.ssh.token": "Token",
   "settings.pairing.ssh.token.detail":
-    "Optional here: the tunnel arrives on this machine's own loopback, which the daemon trusts without one.",
+    "Optional here: the tunnel arrives on this machine's own loopback, which the daemon trusts without one. If you want a credential anyway, use the short token from Type the address by hand — not the long secret inside a QR code.",
   "settings.pairing.ssh.notInCode":
     "This route is set up by hand in the phone's Add host → SSH form. The pairing code above carries no SSH hop, so there is nothing here to scan.",
   // The list is the daemon's **issued** records, not the devices that successfully paired: a row exists
@@ -950,6 +953,10 @@ export const en = {
   // localized lookup of the key.
   "error.pairedDeviceNotRevoked":
     "\"{id}\" has not been revoked. Revoke it first — a record is only forgotten once the token is withdrawn.",
+  "error.pairingTokenLength": "The token must be 8–10 characters.",
+  "error.pairingTokenCharset": "The token must be letters and digits only (8–10 characters).",
+  "error.pairingTokenDuplicate":
+    "That token is already in use by another pairing code. Choose a different one.",
   "error.runNotFound":
     "There is no run called \"{runId}\". It may have been started by a daemon that has since restarted.",
   "error.taskForRunMissing": "There is no task called \"{taskId}\", so there is nowhere to run an agent.",

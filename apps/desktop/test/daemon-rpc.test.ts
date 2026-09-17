@@ -2188,6 +2188,37 @@ describe("paired-device sessions (M4)", () => {
    * not an idempotent no-op: the id is gone, and forgetting it again is a refusal rather than a second
    * silent success.
    */
+  it("mints a user-chosen short token at a typed host into the pairing URI", async () => {
+    const { daemon, home } = await bootDaemon();
+    cleanups.push(async () => {
+      await daemon.stop();
+      await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    });
+
+    const window = await connect(daemon.port);
+    cleanups.push(async () => window.close());
+
+    const minted = (await window.call("coder.mintPairing", {
+      deviceLabel: "Typed phone",
+      host: "203.0.113.7:4770",
+      token: "MyPhone99",
+    })) as { uri: string; device: { id: string } };
+
+    const url = new URL(minted.uri);
+    expect(url.searchParams.get("token")).toBe("MyPhone99");
+    const wsUrl = url.searchParams.get("wsUrl");
+    expect(wsUrl).toBeTruthy();
+    expect(new URL(wsUrl!).hostname).toBe("203.0.113.7");
+
+    await expect(
+      window.call("coder.mintPairing", { host: "203.0.113.7", token: "MyPhone99" }),
+    ).rejects.toThrow(/already in use/i);
+
+    await expect(
+      window.call("coder.mintPairing", { host: "203.0.113.7", token: "short" }),
+    ).rejects.toThrow(/8|character/i);
+  }, 30_000);
+
   it("forgets only a revoked record, after revoking it", async () => {
     const { daemon, home } = await bootDaemon();
     cleanups.push(async () => {

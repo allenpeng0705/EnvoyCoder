@@ -262,15 +262,14 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
         file: "apps/desktop/src/components/settings/PairingSection.tsx",
         needle: "mintPairingCode(props.agents)",
         because:
-          "the one press that mints, through `PairPhone.tsx`'s shared call site, so the palette, the rail's " +
+          "QR and host:port both mint through `PairPhone.tsx`'s shared call site, so the palette, the rail's " +
           "QR button and this page cannot produce three codes by three routes",
       },
       {
         file: "apps/desktop/src/components/settings/PairingSection.tsx",
-        needle: "readPairingLink",
+        needle: "data-manual-result",
         because:
-          "and the host:port route reads the address and token back out of that one code rather than " +
-          "assembling a second token format",
+          "the host:port route shows its own short token after a form mint, never the QR's long secret",
       },
       {
         file: "apps/desktop/src/components/settings/PairPhone.tsx",

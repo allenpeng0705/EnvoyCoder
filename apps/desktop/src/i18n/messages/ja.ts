@@ -473,14 +473,26 @@ export const ja: Catalogue = {
   "settings.pairing.secret": "このコードは秘密情報です。持っている人は誰でもこのマシンに接続できます。",
   "settings.pairing.manual.title": "アドレスを手入力する",
   "settings.pairing.manual.detail": "読み取れないスマートフォン向けです。ホスト追加フォームが求める値は次のとおりです。",
-  "settings.pairing.manual.waiting": "先に上のペアリングコードを表示してください。アドレスとトークンはそこから得られます。",
   "settings.pairing.manual.address": "アドレス",
   "settings.pairing.manual.address.detail": "スマートフォンが接続するマシンとポートを host:port で書きます。",
-  "settings.pairing.manual.lanAddress": "このネットワーク上のアドレス",
-  "settings.pairing.manual.lanAddress.detail": "同じ Wi-Fi 上のスマートフォン向けの、ローカルネットワーク側の同じポートです。",
   "settings.pairing.manual.token": "トークン",
   "settings.pairing.manual.token.detail": "要求を証明するものです。持っている人は誰でもこのマシンに接続できます。",
-  "settings.pairing.manual.unreadable": "このコードのアドレスを読み取れませんでした。代わりに上のペアリングリンクをコピーして、スマートフォンに貼り付けてください。",
+  "settings.pairing.manual.address.placeholder":
+    "example.com:4770",
+  "settings.pairing.manual.lanHint":
+    "On this Wi-Fi you can also use {address}.",
+  "settings.pairing.manual.token.placeholder":
+    "8–10 characters",
+  "settings.pairing.manual.token.length":
+    "Use 8–10 letters or digits.",
+  "settings.pairing.manual.token.charset":
+    "Letters and digits only.",
+  "settings.pairing.manual.address.missing":
+    "Enter the address as host:port.",
+  "settings.pairing.manual.action":
+    "Create pairing values",
+  "settings.pairing.manual.busy":
+    "Creating…",
   "settings.pairing.ssh.title": "SSH 経由で接続する",
   "settings.pairing.ssh.detail": "スマートフォンから直接届かないマシン向けです。スマートフォンが SSH でトンネルを張り、このサービスには接続が自身のループバックに届きます。",
   "settings.pairing.ssh.host": "SSH ホスト",
@@ -538,6 +550,12 @@ export const ja: Catalogue = {
     "There is no paired device called \"{id}\". It may already have been revoked.",
   "error.pairedDeviceNotRevoked":
     "「{id}」は取り消されていません。先に無効化してください。記録を削除できるのは、トークンが取り消された後だけです。",
+  "error.pairingTokenDuplicate":
+    "That token is already in use by another pairing code. Choose a different one.",
+  "error.pairingTokenCharset":
+    "The token must be letters and digits only (8–10 characters).",
+  "error.pairingTokenLength":
+    "The token must be 8–10 characters.",
   "error.runNotFound": "「{runId}」という実行はありません。その後再起動したサービスが開始した可能性があります。",
   "error.taskForRunMissing": "「{taskId}」というタスクがないため、エージェントを動かす場所がありません。",
   "error.taskAlreadyRunning": "「{task}」はすでに実行中です。代わりにメッセージを送ってください — 同じディレクトリで 2 つ目のエージェントを起動すると、2 つが同じファイルを編集する事態になります。",

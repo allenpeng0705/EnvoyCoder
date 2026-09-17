@@ -11,36 +11,29 @@
  * Inside the section the three routes are three blocks rather than one paragraph because they are three
  * different mechanisms, not three phrasings of one:
  *
- *   1. **QR code** — the primary route. The phone scans the whole payload: address, token and owner identity
- *      in one image. `PairPhone.tsx` owns the mint and the drawing; this module owns the presentation, so
- *      the palette and the rail's button reach the same code by the same call.
- *   2. **Host and port** — the same payload, typed. A phone that cannot scan needs the address and the token
- *      as two values, and they are read **out of the code that was minted** rather than assembled here:
- *      there is one token format (`envoy://pair`, `@envoymesh/api`'s builder) and this is a reader of it.
- *   3. **SSH** — a hop, and the one route the desktop cannot hand over. The phone opens the tunnel by hand
- *      (`apps/mobile/lib/services/add_host.dart`), and the pairing code carries no SSH fields, so this block
- *      says what the phone will ask for instead of pretending to mint it. Claiming an SSH route in the code
- *      would be exactly the overstatement `AGENTS.md` §4 forbids.
- *
- * ## Why the manual route is empty until a code exists
- *
- * `wsUrl` and `token` are chosen **at mint time** — the daemon picks the first non-loopback address, and the
- * token is minted with the record. The window's own connection is loopback (`127.0.0.1`), which is not an
- * address a phone can dial, so filling these fields from `state.connection` would print a true value for the
- * wrong route. Until a code exists the block says where the two values come from; after one exists it shows
- * them, copyable and with the secret stated.
+ *   1. **QR code** — the primary route. The phone scans the whole payload (including a long random token
+ *      the user never types). `PairPhone.tsx` owns the mint and the drawing.
+ *   2. **Host and port** — typed. The user enters a reachable address (public IP/domain, or LAN on the
+ *      same Wi-Fi) and chooses a short 8–10 character token. That mint is independent of the QR — the
+ *      manual route must not echo the QR's long secret.
+ *   3. **SSH** — a hop, and the one route the desktop cannot hand over. Guidance only: public IP/domain
+ *      for the SSH host; daemon as seen from that machine; token optional.
  */
 
 import type { JSX } from "react";
 
 import { useEffect, useState } from "react";
 
+import {
+  USER_PAIRING_TOKEN_MAX_LEN,
+  normalizeUserPairingToken,
+} from "../../pairing-token.js";
 import { useI18n } from "../../i18n/context.js";
 import { canCopyText, copyText } from "./clipboard.js";
 import { mintPairingCode, PairPhonePanel, type PairPhoneOutcome } from "./PairPhone.js";
 import type { SettingsSectionProps } from "./SectionProps.js";
 
-/** What the manual route shows, read from a minted `envoy://pair` URI. Any field may be absent. */
+/** What the manual route shows after a successful typed mint. */
 export interface PairingLink {
   /** `host:port` from `wsUrl` — the field the phone's Add host form takes. */
   readonly address: string | undefined;
@@ -70,11 +63,7 @@ function hostPortOf(url: string | null): string | undefined {
  * Read the values the manual route needs out of a pairing URI.
  *
  * **A reader, not a second format.** `host.pairingUri` builds the URI with `@envoymesh/api`'s one builder,
- * which writes `wsUrl` / `lanWsUrl` / `token` as query parameters; this reads exactly those keys. It does not
- * encode, decode or re-package the token — the secret is copied through untouched, so there is still one
- * token format and one place that defines it. (The family's own parser is not importable here: it lives in
- * `@envoymesh/api`'s product-bound barrel, which the window bundle deliberately does not reach —
- * `packages/host-bridge/src/index.ts` records why.)
+ * which writes `wsUrl` / `lanWsUrl` / `token` as query parameters; this reads exactly those keys.
  */
 export function readPairingLink(uri: string): PairingLink {
   let params: URLSearchParams;
@@ -96,7 +85,7 @@ export function readPairingLink(uri: string): PairingLink {
  *
  * Rendered from the real `SectionProps` and the real `mintPairingCode`, so this page cannot mint by a route
  * of its own. The keyboard/QR surface arrives as `PairPhonePanel`, which both this section and the palette
- * use — the shared module is the only place the mint call exists.
+ * use — the shared module is the only place the mint call exists for QR.
  */
 export function PairingSection(
   props: SettingsSectionProps & {
@@ -110,34 +99,58 @@ export function PairingSection(
   },
 ): JSX.Element {
   const { t } = useI18n();
-  /** `undefined` is "no code yet": neither press has produced one on this visit. */
+  /** QR outcome only — never reused as the manual route's values. */
   const [pairing, setPairing] = useState<PairPhoneOutcome | undefined>(props.mintedPairing);
+  const [manualAddress, setManualAddress] = useState("");
+  const [manualToken, setManualToken] = useState("");
+  const [manualBusy, setManualBusy] = useState(false);
+  const [manualError, setManualError] = useState<string | undefined>();
+  const [manualLink, setManualLink] = useState<PairingLink | undefined>();
 
-  // The palette mints while it is still on screen, so a code (or a refusal) can arrive after this section
-  // mounted. A state write is idempotent and safe under `<StrictMode>`'s doubled effect — unlike an effect
-  // that *minted*, which is why the mint itself lives in `PairPhone.tsx` and only ever runs from a press.
   useEffect(() => {
     if (props.mintedPairing === undefined) return;
     setPairing(props.mintedPairing);
   }, [props.mintedPairing]);
 
-  const mint = (): void => {
+  const mintQr = (): void => {
     void mintPairingCode(props.agents).then(setPairing);
   };
 
-  const link = pairing?.ok === true ? readPairingLink(pairing.uri) : undefined;
-  // **The LAN row appears only when it says something the first one does not.** For a machine with one
-  // non-loopback address the daemon mints `lanWsUrl` equal to `wsUrl` (`daemon/pairing.ts`), and printing
-  // the same `host:port` twice under two labels would read as two routes when there is one. It differs
-  // when the reach address is a tunnel or relay and the phone may prefer the local one — which is the case
-  // the row exists for.
-  const lanAddress =
-    link?.lanAddress !== undefined && link.lanAddress !== link.address ? link.lanAddress : undefined;
-  const hasDetails =
-    link !== undefined && (link.address !== undefined || lanAddress !== undefined || link.token !== undefined);
-  /** The port this daemon listens on, for the SSH block's "as seen from that machine" address. */
+  /** The port this daemon listens on, for address hints and the SSH block. */
   const port = props.state.connection.state === "connected" ? props.state.connection.endpoint.port : undefined;
   const meshHosting = props.state.mesh.kind === "hosting";
+  // Quiet example only when we know the daemon port — address.detail already teaches public vs LAN.
+  const lanHintAddress = port !== undefined ? `192.168.x.x:${port}` : undefined;
+
+  const mintManual = (): void => {
+    setManualError(undefined);
+    const address = manualAddress.trim();
+    if (address === "") {
+      setManualError(t("settings.pairing.manual.address.missing"));
+      return;
+    }
+    const normalized = normalizeUserPairingToken(manualToken);
+    if (!normalized.ok) {
+      setManualError(
+        normalized.reason === "length"
+          ? t("settings.pairing.manual.token.length")
+          : t("settings.pairing.manual.token.charset"),
+      );
+      return;
+    }
+    setManualBusy(true);
+    void mintPairingCode(props.agents, { host: address, token: normalized.token, deviceLabel: "Phone" }).then(
+      (outcome) => {
+        setManualBusy(false);
+        if (!outcome.ok) {
+          setManualError(outcome.message);
+          setManualLink(undefined);
+          return;
+        }
+        setManualLink(readPairingLink(outcome.uri));
+      },
+    );
+  };
 
   return (
     <>
@@ -149,58 +162,95 @@ export function PairingSection(
           <h2 className="settings__heading" id="settings-pairing-qr">
             {t("settings.pairing.qr.title")}
           </h2>
-          {/* The primary route is marked as such on the heading, not only by being first: a user who reads
-              the three headings while scrolling should be told which one the product recommends. */}
           <span className="chip chip--quiet">{t("settings.pairing.qr.primary")}</span>
         </div>
         <p className="settings__note">{t("settings.pairing.qr.detail")}</p>
         <p className="settings__note" data-mesh-route={meshHosting ? "ready" : "unavailable"}>
           {t(meshHosting ? "settings.pairing.qr.meshHosting" : "settings.pairing.qr.meshUnavailable")}
         </p>
-        <button type="button" className="button button--primary" onClick={mint}>
+        <button type="button" className="button button--primary" onClick={mintQr}>
           {t("settings.pairing.qr.action")}
         </button>
         {pairing ? <PairPhonePanel outcome={pairing} onClose={() => setPairing(undefined)} /> : null}
       </section>
 
-      {/* ── route 2: the same payload, typed by hand ── */}
+      {/* ── route 2: typed host:port + short user token ── */}
       <section className="settings__pairing-route" data-route="manual" aria-labelledby="settings-pairing-manual">
         <h2 className="settings__heading" id="settings-pairing-manual">
           {t("settings.pairing.manual.title")}
         </h2>
         <p className="settings__note">{t("settings.pairing.manual.detail")}</p>
-        {hasDetails && link !== undefined ? (
-          <div className="settings__pairing-fields">
-            {link.address !== undefined ? (
+        <div className="settings__pairing-form">
+          <label className="settings__pairing-field">
+            <span className="setting__title">{t("settings.pairing.manual.address")}</span>
+            <input
+              type="text"
+              className="settings__pairing-input"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={t("settings.pairing.manual.address.placeholder")}
+              value={manualAddress}
+              onChange={(event) => setManualAddress(event.target.value)}
+              aria-describedby="settings-pairing-manual-address-detail"
+            />
+            <span className="settings__pairing-field-detail" id="settings-pairing-manual-address-detail">
+              {t("settings.pairing.manual.address.detail")}
+            </span>
+            {lanHintAddress !== undefined ? (
+              <span className="settings__note">{t("settings.pairing.manual.lanHint", { address: lanHintAddress })}</span>
+            ) : null}
+          </label>
+          <label className="settings__pairing-field">
+            <span className="setting__title">{t("settings.pairing.manual.token")}</span>
+            <input
+              type="text"
+              className="settings__pairing-input"
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={USER_PAIRING_TOKEN_MAX_LEN}
+              placeholder={t("settings.pairing.manual.token.placeholder")}
+              value={manualToken}
+              onChange={(event) => setManualToken(event.target.value)}
+              aria-describedby="settings-pairing-manual-token-detail"
+            />
+            <span className="settings__pairing-field-detail" id="settings-pairing-manual-token-detail">
+              {t("settings.pairing.manual.token.detail")}
+            </span>
+          </label>
+          <button
+            type="button"
+            className="button button--primary"
+            disabled={manualBusy}
+            onClick={mintManual}
+          >
+            {manualBusy ? t("settings.pairing.manual.busy") : t("settings.pairing.manual.action")}
+          </button>
+          {manualError !== undefined ? (
+            <p className="settings__note" role="alert" data-manual-error="">
+              {manualError}
+            </p>
+          ) : null}
+        </div>
+        {manualLink !== undefined &&
+        (manualLink.address !== undefined || manualLink.token !== undefined) ? (
+          <div className="settings__pairing-fields" data-manual-result="">
+            {manualLink.address !== undefined ? (
               <CopyField
                 label={t("settings.pairing.manual.address")}
                 detail={t("settings.pairing.manual.address.detail")}
-                value={link.address}
+                value={manualLink.address}
               />
             ) : null}
-            {lanAddress !== undefined ? (
-              <CopyField
-                label={t("settings.pairing.manual.lanAddress")}
-                detail={t("settings.pairing.manual.lanAddress.detail")}
-                value={lanAddress}
-              />
-            ) : null}
-            {link.token !== undefined ? (
+            {manualLink.token !== undefined ? (
               <CopyField
                 label={t("settings.pairing.manual.token")}
                 detail={t("settings.pairing.manual.token.detail")}
-                value={link.token}
+                value={manualLink.token}
               />
             ) : null}
             <p className="settings__note">{t("settings.pairing.secret")}</p>
           </div>
-        ) : pairing?.ok === true ? (
-          // A code came back that we could not read: say so and leave the link above as the way through,
-          // rather than printing a half-parsed address the phone would fail to dial.
-          <p className="settings__note">{t("settings.pairing.manual.unreadable")}</p>
-        ) : (
-          <p className="settings__note">{t("settings.pairing.manual.waiting")}</p>
-        )}
+        ) : null}
       </section>
 
       {/* ── route 3: the hop, which is the phone's form and not our code ── */}
@@ -209,9 +259,6 @@ export function PairingSection(
           {t("settings.pairing.ssh.title")}
         </h2>
         <p className="settings__note">{t("settings.pairing.ssh.detail")}</p>
-        {/* A **definition list, not a form**: these are the fields the phone's own Add host → SSH dialog
-            asks for, and the desktop is telling the user what to expect rather than collecting values it
-            has nowhere to send. A form here would be the overstatement this file's header refuses. */}
         <dl className="settings__pairing-fields">
           <PairingFact label={t("settings.pairing.ssh.host")} value={t("settings.pairing.ssh.host.detail")} />
           <PairingFact label={t("settings.pairing.ssh.port")} value={t("settings.pairing.ssh.port.detail")} />
@@ -229,9 +276,6 @@ export function PairingSection(
         <p className="settings__note">{t("settings.pairing.ssh.notInCode")}</p>
       </section>
 
-      {/* **Where the record of what this page minted lives.** Minting moved here and the list of issued
-          codes stayed on *This machine*, because that page is the daemon's own report; saying so is what
-          keeps the move from becoming a place a user cannot find the revoke control. */}
       <p className="settings__note">{t("settings.pairing.manage")}</p>
     </>
   );
@@ -249,13 +293,6 @@ function PairingFact(props: { label: string; value: string }): JSX.Element {
 
 /**
  * **One value from the code, and the control that makes it usable.**
- *
- * The token is a bearer secret, so it is shown exactly as the QR panel shows the whole URI: selectable, in a
- * mono face, with the sentence that says what it is. Hiding it behind dots would make the one field a user
- * cannot retype visible only to the eye that already had it on screen — and the phone needs it typed.
- *
- * Copy follows `CopyCommand.tsx`'s rule in the same folder: offered only where `canCopyText()` says a write
- * can work, and the failure is reported instead of a tick over a value that never reached the clipboard.
  */
 function CopyField(props: { label: string; detail: string; value: string }): JSX.Element {
   const { t } = useI18n();
@@ -270,11 +307,7 @@ function CopyField(props: { label: string; detail: string; value: string }): JSX
       ? t("settings.pairing.copied")
       : result === "failed"
         ? t("settings.pairing.copyFailed")
-        : // **One word, because this button copies one field.** The QR panel's button says "Copy pairing
-          // link" and copies the whole URI; a field's button that said the same would name the wrong thing
-          // next to `192.168.1.20:4770`. The accessible name still names the field (`….copy.aria`), which
-          // is what distinguishes three buttons that all read *Copy*.
-          t("settings.pairing.field.copy");
+        : t("settings.pairing.field.copy");
 
   return (
     <div className="settings__pairing-field">
@@ -285,8 +318,6 @@ function CopyField(props: { label: string; detail: string; value: string }): JSX
         <button
           type="button"
           className="button button--secondary button--small"
-          // The accessible name begins with the printed word and then names the field, so three buttons all
-          // reading *Copy* are still three distinguishable controls to a voice or screen-reader user.
           aria-label={t("settings.pairing.copy.aria", { field: props.label })}
           onClick={press}
         >
@@ -303,3 +334,6 @@ function CopyField(props: { label: string; detail: string; value: string }): JSX
     </div>
   );
 }
+
+// Re-export token bounds for tests that assert the form's maxLength without importing the daemon.
+export { USER_PAIRING_TOKEN_MAX_LEN } from "../../pairing-token.js";

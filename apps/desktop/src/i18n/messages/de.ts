@@ -475,14 +475,26 @@ export const de: Catalogue = {
   "settings.pairing.secret": "Der Code ist ein Geheimnis — wer ihn hat, erreicht diesen Rechner.",
   "settings.pairing.manual.title": "Adresse von Hand eintippen",
   "settings.pairing.manual.detail": "Für ein Telefon, das nicht scannen kann: das sind die Werte, die sein Formular „Host hinzufügen“ verlangt.",
-  "settings.pairing.manual.waiting": "Zeig oben zuerst einen Kopplungscode — Adresse und Token stammen daraus.",
   "settings.pairing.manual.address": "Adresse",
   "settings.pairing.manual.address.detail": "Rechner und Port, die das Telefon anwählt, als host:port.",
-  "settings.pairing.manual.lanAddress": "Adresse in diesem Netzwerk",
-  "settings.pairing.manual.lanAddress.detail": "Derselbe Port im lokalen Netzwerk, für ein Telefon im selben WLAN.",
   "settings.pairing.manual.token": "Token",
   "settings.pairing.manual.token.detail": "Was die Anfrage belegt. Wer es hat, erreicht diesen Rechner.",
-  "settings.pairing.manual.unreadable": "Die Adresse dieses Codes war nicht lesbar. Kopiere stattdessen den Kopplungslink oben und füge ihn im Telefon ein.",
+  "settings.pairing.manual.address.placeholder":
+    "example.com:4770",
+  "settings.pairing.manual.lanHint":
+    "On this Wi-Fi you can also use {address}.",
+  "settings.pairing.manual.token.placeholder":
+    "8–10 characters",
+  "settings.pairing.manual.token.length":
+    "Use 8–10 letters or digits.",
+  "settings.pairing.manual.token.charset":
+    "Letters and digits only.",
+  "settings.pairing.manual.address.missing":
+    "Enter the address as host:port.",
+  "settings.pairing.manual.action":
+    "Create pairing values",
+  "settings.pairing.manual.busy":
+    "Creating…",
   "settings.pairing.ssh.title": "Über einen SSH-Sprung erreichen",
   "settings.pairing.ssh.detail": "Für einen Rechner, den das Telefon nicht direkt erreicht: Das Telefon tunnelt über SSH, und dieser Dienst sieht die Verbindung auf seinem eigenen Loopback ankommen.",
   "settings.pairing.ssh.host": "SSH-Host",
@@ -540,6 +552,12 @@ export const de: Catalogue = {
     "There is no paired device called \"{id}\". It may already have been revoked.",
   "error.pairedDeviceNotRevoked":
     "„{id}“ wurde nicht widerrufen. Zuerst widerrufen — ein Eintrag wird erst verworfen, wenn das Token entzogen ist.",
+  "error.pairingTokenDuplicate":
+    "That token is already in use by another pairing code. Choose a different one.",
+  "error.pairingTokenCharset":
+    "The token must be letters and digits only (8–10 characters).",
+  "error.pairingTokenLength":
+    "The token must be 8–10 characters.",
   "error.runNotFound": "Es gibt keinen Lauf namens „{runId}“. Vielleicht wurde er von einem Dienst gestartet, der seitdem neu gestartet wurde.",
   "error.taskForRunMissing": "Es gibt keine Aufgabe namens „{taskId}“, es gibt also keinen Ort, an dem ein Agent laufen könnte.",
   "error.taskAlreadyRunning": "„{task}“ läuft bereits. Schick ihr stattdessen eine Nachricht — einen zweiten Agenten im selben Verzeichnis zu starten ist der Weg, auf dem zwei von ihnen dieselbe Datei bearbeiten.",

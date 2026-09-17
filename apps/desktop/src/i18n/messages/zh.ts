@@ -469,14 +469,26 @@ export const zh: Catalogue = {
   "settings.pairing.secret": "该码是密钥——持有者都能连接此机器。",
   "settings.pairing.manual.title": "手动输入地址",
   "settings.pairing.manual.detail": "适用于无法扫描的手机：这些是它“添加主机”表单要填的值。",
-  "settings.pairing.manual.waiting": "请先在上方显示配对码——地址和令牌都来自它。",
   "settings.pairing.manual.address": "地址",
   "settings.pairing.manual.address.detail": "手机连接的机器和端口，写成 host:port。",
-  "settings.pairing.manual.lanAddress": "本网络中的地址",
-  "settings.pairing.manual.lanAddress.detail": "同一 Wi-Fi 下手机可用的局域网同一端口。",
   "settings.pairing.manual.token": "令牌",
   "settings.pairing.manual.token.detail": "用于证明请求。持有者都能连接此机器。",
-  "settings.pairing.manual.unreadable": "无法读取该码中的地址。请改为复制上方的配对链接，粘贴到手机中。",
+  "settings.pairing.manual.address.placeholder":
+    "example.com:4770",
+  "settings.pairing.manual.lanHint":
+    "On this Wi-Fi you can also use {address}.",
+  "settings.pairing.manual.token.placeholder":
+    "8–10 characters",
+  "settings.pairing.manual.token.length":
+    "Use 8–10 letters or digits.",
+  "settings.pairing.manual.token.charset":
+    "Letters and digits only.",
+  "settings.pairing.manual.address.missing":
+    "Enter the address as host:port.",
+  "settings.pairing.manual.action":
+    "Create pairing values",
+  "settings.pairing.manual.busy":
+    "Creating…",
   "settings.pairing.ssh.title": "通过 SSH 跳板连接",
   "settings.pairing.ssh.detail": "适用于手机无法直接访问的机器：手机通过 SSH 建立隧道，本服务会看到连接从自己的回环地址进来。",
   "settings.pairing.ssh.host": "SSH 主机",
@@ -534,6 +546,12 @@ export const zh: Catalogue = {
     "没有名为“{id}”的已配对设备。可能已被撤销。",
   "error.pairedDeviceNotRevoked":
     "“{id}”尚未撤销。请先撤销——只有在令牌被撤回后，记录才能被删除。",
+  "error.pairingTokenDuplicate":
+    "That token is already in use by another pairing code. Choose a different one.",
+  "error.pairingTokenCharset":
+    "The token must be letters and digits only (8–10 characters).",
+  "error.pairingTokenLength":
+    "The token must be 8–10 characters.",
   "error.runNotFound": "没有名为“{runId}”的运行。它可能是由一个其后重启过的服务启动的。",
   "error.taskForRunMissing": "没有名为“{taskId}”的任务，因此没有地方运行智能体。",
   "error.taskAlreadyRunning": "“{task}”已在运行。请改为给它发消息——在同一个目录里启动第二个智能体，正是两者开始编辑同一个文件的途径。",

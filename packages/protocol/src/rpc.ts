@@ -2375,12 +2375,23 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
         /** Shown in Settings → This machine. Defaults to "Phone". */
         deviceLabel: z.string().min(1).max(80).optional(),
         /**
-         * Reachable host for the QR's `wsUrl` (LAN IP, tailnet, or public). Absent → first non-loopback
-         * address, then `127.0.0.1` (useful only for same-machine tests).
+         * Reachable host for the QR's `wsUrl` (LAN IP, tailnet, public IP, or domain). Absent → first
+         * non-loopback address, then `127.0.0.1` (useful only for same-machine tests). Hostname only —
+         * the daemon's bound port is appended when the URI is built.
          */
         host: z.string().min(1).optional(),
         /** Preferable LAN address for `lanWsUrl`. */
         lanHost: z.string().min(1).optional(),
+        /**
+         * User-chosen short token for the host:port (typed) route. Absent → daemon mints a long random
+         * secret for QR scan (the phone never types it). When present: 8–10 alphanumeric characters.
+         */
+        token: z
+          .string()
+          .min(8)
+          .max(10)
+          .regex(/^[A-Za-z0-9]+$/, "token must be 8–10 letters or digits")
+          .optional(),
       })
       .strict(),
     result: z

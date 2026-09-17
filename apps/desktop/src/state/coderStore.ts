@@ -1041,17 +1041,27 @@ export class CoderStore {
   }
 
   /** Mint an `envoy://pair` URI for the phone. The URI carries the secret — never log it. */
-  async mintPairing(input: { deviceLabel?: string } = {}): Promise<
+  async mintPairing(
+    input: { deviceLabel?: string; host?: string; token?: string } = {},
+  ): Promise<
     | { ok: true; uri: string; device: { id: string; deviceLabel: string; createdAt: string; expiresAt: string } }
     | Refusal
   > {
-    return this.mutate("coder.mintPairing", { ...(input.deviceLabel ? { deviceLabel: input.deviceLabel } : {}) }, (result) => {
-      const answer = result as {
-        uri: string;
-        device: { id: string; deviceLabel: string; createdAt: string; expiresAt: string };
-      };
-      return { ok: true as const, uri: answer.uri, device: answer.device };
-    });
+    return this.mutate(
+      "coder.mintPairing",
+      {
+        ...(input.deviceLabel ? { deviceLabel: input.deviceLabel } : {}),
+        ...(input.host ? { host: input.host } : {}),
+        ...(input.token ? { token: input.token } : {}),
+      },
+      (result) => {
+        const answer = result as {
+          uri: string;
+          device: { id: string; deviceLabel: string; createdAt: string; expiresAt: string };
+        };
+        return { ok: true as const, uri: answer.uri, device: answer.device };
+      },
+    );
   }
 
   async listPairedDevices(): Promise<
