@@ -112,6 +112,7 @@ import { AboutSection, MachineSection, ShortcutsSection } from "./settings/Secti
 import { AgentsSection } from "./settings/SectionsAgents.js";
 import { GeneralSection, SafetySection, TasksSection } from "./settings/SectionsControls.js";
 import { ProjectSection, ProjectsSection } from "./settings/SectionsProjects.js";
+import type { PairPhoneOutcome } from "./settings/PairPhone.js";
 
 export interface SettingsPaneProps {
   state: CoderState;
@@ -171,6 +172,15 @@ export interface SettingsPaneProps {
    * no reason to give.
    */
   projectsUnavailable?: string | undefined;
+  /**
+   * A pairing code the shell has **already minted**, from the command palette's *Pair a phone* row.
+   *
+   * Data rather than a destination, on the same rule as `projectsUnavailable`: absent means no code is
+   * waiting, which is the state of every ordinary visit to these settings. `MachineSection` renders it and
+   * says why the mint could not happen instead — the palette's press is the request (`PairPhone.tsx`), so
+   * by the time this pane is drawn the answer may already exist.
+   */
+  mintedPairing?: PairPhoneOutcome | undefined;
 }
 
 /**
@@ -361,7 +371,14 @@ function sectionBody(props: SettingsPaneProps & { section: SettingsSectionId }):
         />
       );
     case "machine":
-      return <MachineSection state={props.state} onUpdate={props.onUpdate} agents={props.agents} />;
+      return (
+        <MachineSection
+          state={props.state}
+          onUpdate={props.onUpdate}
+          agents={props.agents}
+          {...(props.mintedPairing !== undefined ? { mintedPairing: props.mintedPairing } : {})}
+        />
+      );
     case "about":
       return <AboutSection state={props.state} onUpdate={props.onUpdate} agents={props.agents} />;
     // The Projects section is not a page of rows at level 1: its page *is* the list of projects, one

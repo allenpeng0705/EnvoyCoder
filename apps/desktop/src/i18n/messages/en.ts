@@ -114,8 +114,6 @@ export const en = {
   "palette.openTask.subtitle": "Open this task",
   "palette.pairPhone.title": "Pair a phone",
   "palette.pairPhone.subtitle": "Show a code the mobile app can scan",
-  "palette.pairPhone.notYet":
-    "Pairing a phone arrives with the mobile milestone: the daemon has no session store yet, so it refuses remote clients on purpose.",
   "palette.toggleRail.title": "Toggle the project rail",
   "palette.settings.title": "Open settings",
   "palette.settings.subtitle": "Defaults for new tasks, and what needs approval",
@@ -316,15 +314,22 @@ export const en = {
   "run.diff.many": "{count} files changed.",
   "run.context": "Context {percent}% full.",
 
-  /* ── the status line, and the one place the mesh is always visible ── */
+  /* ── the status line, and the one place the mesh is always visible ──
+     `mesh.hosting` is deliberately **count-free**, and this is a correctness rule rather than a style
+     choice. Every standalone daemon joins the community relays and a DHT client (`coderMeshOptions`), so
+     the protocol's `peerCount` is the *shared network's* live connection count — the relays themselves,
+     DHT-discovered peers, other family nodes — not machines connected to this user. A headline that read
+     "30 machines connected" on a machine that had paired nothing asserted exactly that, which is the
+     capability the protocol never granted. So the sentence states the one fact that is always true and
+     is what a user needs — this machine hosts the mesh — and the peer total, which is real, is labelled
+     for what it is (`mesh.peers`) in the tooltip beside the peer id. */
   "mesh.attached.peers": "Mesh connected — {count} machines reachable",
   "mesh.attached.none": "Mesh connected — no other machines reachable yet",
   "mesh.noNode": "Standalone — tasks stay on this machine",
   "mesh.refused": "EnvoyMesh refused EnvoyDev a session — tasks stay on this machine",
-  "mesh.hosting.peers": "Hosting this mesh — {count} machines connected",
-  "mesh.hosting.none": "Hosting this mesh — no other machines connected yet",
+  "mesh.hosting": "Hosting this mesh",
   "mesh.hosting.title": "Mesh peer {peerId}",
-  "mesh.peers": "{count} peers",
+  "mesh.peers": "{count} peers on the shared mesh",
   "mesh.scope.title": "Session scope {scope}",
   "mesh.agentsHere": "Agents run on this machine",
 

@@ -45,6 +45,7 @@ import { TaskPane } from "./TaskPane.js";
 import { MeshStatusBar } from "./MeshStatusBar.js";
 import { SettingsPane } from "./SettingsPane.js";
 import { useSettingsLayout } from "./SettingsNav.js";
+import { mintPairingCode, type PairPhoneOutcome } from "./settings/PairPhone.js";
 import type { CoderState } from "../state/coderStore.js";
 // The logo, bundled by Vite: one import, and the built app carries the file with it (the Tauri build copies the
 // frontend `dist` into the bundle, so an image the window shows has to come through the bundler, not from a path
@@ -53,6 +54,7 @@ import logo from "../../assets/logo-128.png";
 import type { CoderStore } from "../state/coderStore.js";
 import {
   PROJECTS_SCOPE,
+  appScope,
   entryScope,
   projectScope,
   scopeProjectId,
@@ -189,8 +191,39 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    */
   const layout = useSettingsLayout();
   const [settingsScope, setSettingsScope] = useState<SettingsScope | undefined>(undefined);
-  const openAppSettings = (): void => setSettingsScope(entryScope(layout));
-  const closeSettings = (): void => setSettingsScope(undefined);
+  /**
+   * **The code the palette's *Pair a phone* row minted**, on its way to *Settings → This machine*.
+   *
+   * Held here rather than inside the page because the press happens here: the row is this shell's command,
+   * and the page it opens may not be mounted yet. `goToSettings` clears it on every navigation and on
+   * close, so a code the user has moved past cannot come back — a pairing URI is a secret with an expiry,
+   * not a value to rediscover.
+   */
+  const [mintedPairing, setMintedPairing] = useState<PairPhoneOutcome | undefined>(undefined);
+  /** Every way the pane's scope changes, so the pairing code above cannot outlive the visit it belongs to. */
+  const goToSettings = (scope: SettingsScope | undefined): void => {
+    setSettingsScope(scope);
+    setMintedPairing(undefined);
+  };
+  const openAppSettings = (): void => goToSettings(entryScope(layout));
+  const closeSettings = (): void => goToSettings(undefined);
+  /**
+   * **The palette's *Pair a phone* row, which now pairs.**
+   *
+   * The press mints **here**, in the event handler, rather than in an effect on the page it opens:
+   * `<StrictMode>` invokes a mounting effect twice in development, and a second mint is a second
+   * paired-device record on the daemon — not a doubled render (`settings/PairPhone.tsx` is the argument).
+   * The pane is opened first so the press always has a visible result; the answer — the code, or the
+   * daemon's refusal — arrives a moment later and `MachineSection` renders whichever it is.
+   *
+   * A refusal here is not worked around. `coder.mintPairing` is owner-window-only by design
+   * (`daemon/pairing.ts`), and this is the owner's window; if the daemon ever refused this press, the
+   * sentence would appear on the page unaltered.
+   */
+  const openPairing = (): void => {
+    setSettingsScope(appScope("machine"));
+    void mintPairingCode(props.actions).then(setMintedPairing);
+  };
   /**
    * The one way into a project's settings, whoever asks.
    *
@@ -415,7 +448,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
           return started.ok ? undefined : started;
         },
         onOpenSettings: openAppSettings,
-        onPairPhone: () => localNotice("palette.pairPhone.notYet"),
+        onPairPhone: openPairing,
         onToggleRail: () => setRailOpen((open) => !open),
         onRevealTask: (taskId) => setActiveId(taskId),
       }),
@@ -528,8 +561,11 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               // `projectScope(id)`, `SECTIONS_SCOPE`) and the shell stores it. One callback rather than
               // four is what makes "each back control returns to its own level" a property of the data
               // instead of four handlers that have to agree.
-              onNavigate={setSettingsScope}
+              onNavigate={goToSettings}
               onClose={closeSettings}
+              // The pairing code the palette minted before this pane opened, when there is one — see
+              // `openPairing` and `MachineSection`. Data, so absent is the ordinary visit.
+              {...(mintedPairing !== undefined ? { mintedPairing } : {})}
               // The agents page's own five calls, handed over as the store itself: `CoderStore` satisfies
               // `AgentActions` structurally, so there is no adapter to drift from the methods it names.
               agents={props.actions}

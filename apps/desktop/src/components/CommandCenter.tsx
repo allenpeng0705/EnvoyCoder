@@ -407,7 +407,7 @@ export function buildCommandContributions(input: {
   onNewTask: (projectId: string, title: string) => Promise<WriteFailure>;
   onNewTaskInFirstProject?: () => void;
   onOpenSettings: () => void;
-  onPairPhone: () => WriteFailure;
+  onPairPhone: () => void;
   onToggleRail: () => void;
   onRevealTask: (taskId: string) => void;
   tasks: readonly { id: string; title: string; projectId: string }[];
@@ -508,9 +508,12 @@ export function buildCommandContributions(input: {
       group: t("palette.group.machine"),
       kind: "action",
       keywords: ["qr", "mobile", "device"],
-      // Async like the rest, because the answer is what the palette decides on: "Pairing a phone is not built
-      // yet" is a *refusal of the press*, and this is where the user pressed.
-      run: async () => input.onPairPhone(),
+      // **The row used to answer instead of acting.** It returned the notice *"Pairing a phone arrives with
+      // the mobile milestone…"* — a sentence that had stopped being true — so the palette stayed open to
+      // display it and nothing was minted. The press now opens the pairing surface with a code already
+      // minted (`CoderApp.openPairing`), which is the same flow the *This machine* row runs, so there is
+      // nothing to keep the palette open for: it closes like any command that landed.
+      run: () => input.onPairPhone(),
     },
     {
       id: "view.rail",

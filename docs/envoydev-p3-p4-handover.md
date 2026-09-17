@@ -1034,3 +1034,44 @@ Three times now the error has been the same shape: **asserting a conclusion from
 explanation instead of checking.** A second-hand rule without its exception (the false D2 violation), a
 shape without its behaviour (the dead `libp2pPrivateKeyPath`), and now a limitation asserted without
 reading the configuration that removes it. In each case the evidence was one `grep` away.
+
+---
+
+## OWNER RULING: the oversized modules stay oversized
+
+The 800-line hard cap (target 500) is enforced by a wired gate in **both** repos, and the files over it are
+allowlisted with documented reasons. The owner has ruled that **the splitting work is not to be done**:
+splitting these particular modules is judged too critical to risk for the benefit.
+
+This needs recording because the allowlist's own note says the opposite in spirit — *"Removing entries is
+the goal; adding one to silence NEW growth is not."* That sentence is still right about **new** growth, and
+the gate still blocks it. It is **not** an instruction to go and split the existing entries, and a future
+reader should not treat it as one.
+
+The exempted modules and why each is risky rather than merely long:
+
+| Module | Lines | Why splitting is a design decision, not a file move |
+|---|---|---|
+| `packages/protocol/src/rpc.ts` | 2511 | the wire contract every daemon, window and phone agrees on |
+| `packages/protocol/src/domain.ts` | 1437 | the shared domain nouns; splitting by bounded context changes imports everywhere |
+| `packages/agent-catalog/src/index.ts` | 1460 | catalogue data plus its lookup logic |
+| `apps/desktop/src/state/coderStore.ts` | 1183 | read directly by React components — a state-layer refactor with UI call sites |
+| `apps/desktop/src/daemon/service.ts` | 990 | the daemon's method handlers, behind the dispatcher |
+| `apps/desktop/src/i18n/messages/en.ts` | 988 | the catalogue every other locale is measured against |
+| `apps/desktop/src/daemon/runs.ts` | 856 | one agent turn's event lifecycle |
+| `packages/agent-catalog/src/acp-catalog.ts` | 851 | per-backend catalogue rows |
+| `apps/desktop/src/daemon/store.ts` | 847 | on-disk persistence for projects, tasks and settings |
+| `apps/desktop/src/daemon/acp/client.ts` | 845 | ACP session lifecycle over stdio |
+| `apps/desktop/src/composer/controls.ts` | 803 | per-agent capability projection |
+
+EnvoyMesh carries the same class of debt, now **visible** because the scan list was widened from 6 trees to
+22: `packages/network/src/index.ts` (5791), `packages/protocol/src/index.ts` (4558) plus `agent-network.ts`
+(959), `packages/local-store/src/index.ts` (2916), `packages/models/src/index.ts` (1001), and on the app
+surface `apps/relay/src/index.ts` (2406), `apps/social/src/lib/direct-call-client.ts` (1825) and sixteen
+>800-line i18n tables. Same ruling applies.
+
+**If this is ever revisited**, the two tiers are not comparable. The i18n message tables and the
+agent-catalogue data are mechanical — moving object literals and updating imports, with the i18n parity
+gate and a green suite as real evidence. The wire contract, the mesh's public surface and the state stores
+are the opposite: each needs an interface chosen deliberately, and a bad split costs more than the length
+it removes.

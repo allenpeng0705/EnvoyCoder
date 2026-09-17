@@ -37,7 +37,6 @@
 import type { JSX } from "react";
 
 import { useCallback, useEffect, useState } from "react";
-import QRCode from "qrcode";
 
 import { APP_VERSION } from "../../app-version.js";
 import { useI18n } from "../../i18n/context.js";
@@ -51,6 +50,7 @@ import {
 import type { MessageKey } from "../../i18n/messages/en.js";
 import { SettingRow } from "../SettingsRows.js";
 import { shortPath } from "../SettingsShell.js";
+import { mintPairingCode, PairPhonePanel, type PairPhoneOutcome } from "./PairPhone.js";
 import type { SettingsSectionProps } from "./SectionProps.js";
 
 /**
@@ -116,15 +116,27 @@ export function ShortcutsSection(props: SettingsSectionProps & {
  *
  * Everything here is `coder.hello`'s answer, and the page is the long form of two chips that are already
  * in the pane's header on every page (the state folder and the build). **Pair a phone** lives here too:
- * minting a pairing QR is a fact about *this* daemon (who may reach it), not a preference.
+ * minting a pairing QR is a fact about *this* daemon (who may reach it), not a preference — and the code
+ * it produces — the QR, the URI and the copy control — is `PairPhone.tsx`'s, shared with the command
+ * palette's row so the two routes cannot present one code two ways.
  */
-export function MachineSection(props: SettingsSectionProps): JSX.Element {
+export function MachineSection(
+  props: SettingsSectionProps & {
+    /**
+     * A code the **palette** already minted, arriving with the page it opened.
+     *
+     * The palette's press is the mint request (see `PairPhone.tsx` for why minting is an event and not an
+     * effect), so by the time this page renders there may be a code — or a refusal — to show. The shell
+     * clears it on every navigation, so leaving this page and coming back cannot resurrect a code the
+     * user has already moved past.
+     */
+    mintedPairing?: PairPhoneOutcome | undefined;
+  },
+): JSX.Element {
   const { t, locale } = useI18n();
   const { hello } = props.state;
-  const [uri, setUri] = useState<string | null>(null);
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [pairError, setPairError] = useState<string | null>(null);
+  /** `undefined` is "no panel": neither the row's button nor the palette has produced a code yet. */
+  const [pairing, setPairing] = useState<PairPhoneOutcome | undefined>(props.mintedPairing);
   const [devices, setDevices] = useState<
     | readonly {
         id: string;
@@ -146,19 +158,15 @@ export function MachineSection(props: SettingsSectionProps): JSX.Element {
     void refreshDevices();
   }, [refreshDevices]);
 
+  // **The palette's code, when it lands after this page has mounted.** The shell mints while the palette is
+  // still on screen, so the answer can arrive either side of the render that opens this page; this is the
+  // later case. The state write is idempotent, which is what makes it safe under `<StrictMode>`'s doubled
+  // effect — unlike an effect that *minted*, which would leave a second device record on the daemon.
   useEffect(() => {
-    if (!uri) {
-      setQrDataUrl(null);
-      return;
-    }
-    let cancelled = false;
-    void QRCode.toDataURL(uri, { margin: 1, width: 220 }).then((url) => {
-      if (!cancelled) setQrDataUrl(url);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [uri]);
+    if (props.mintedPairing === undefined) return;
+    setPairing(props.mintedPairing);
+    if (props.mintedPairing.ok) void refreshDevices();
+  }, [props.mintedPairing, refreshDevices]);
 
   if (hello === undefined) {
     return <p className="settings__note">{t("settings.machine.noDaemon")}</p>;
@@ -225,15 +233,10 @@ export function MachineSection(props: SettingsSectionProps): JSX.Element {
           type="button"
           className="button button--secondary"
           onClick={() => {
-            setPairError(null);
-            void props.agents.mintPairing({ deviceLabel: "Phone" }).then(async (result) => {
-              if (!result.ok) {
-                setPairError(result.message);
-                return;
-              }
-              setUri(result.uri);
-              setCopied(false);
-              await refreshDevices();
+            // The press is the request, and the answer — code or refusal — is what the panel below shows.
+            void mintPairingCode(props.agents).then((outcome) => {
+              setPairing(outcome);
+              if (outcome.ok) void refreshDevices();
             });
           }}
         >
@@ -241,40 +244,7 @@ export function MachineSection(props: SettingsSectionProps): JSX.Element {
         </button>
       </SettingRow>
 
-      {pairError ? <p className="settings__note">{pairError}</p> : null}
-
-      {uri ? (
-        <div className="settings__pairing" data-testid="pairing-panel">
-          {qrDataUrl ? (
-            <img className="settings__pairing-qr" src={qrDataUrl} alt={t("settings.machine.pair.title")} />
-          ) : null}
-          <label className="settings__pairing-label">
-            {t("settings.machine.pair.uriLabel")}
-            <textarea className="settings__pairing-uri" readOnly value={uri} rows={3} />
-          </label>
-          <div className="settings__pairing-actions">
-            <button
-              type="button"
-              className="button button--secondary"
-              onClick={() => {
-                void navigator.clipboard.writeText(uri).then(() => setCopied(true));
-              }}
-            >
-              {copied ? t("settings.machine.pair.copied") : t("settings.machine.pair.copy")}
-            </button>
-            <button
-              type="button"
-              className="button"
-              onClick={() => {
-                setUri(null);
-                setCopied(false);
-              }}
-            >
-              {t("settings.machine.pair.close")}
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {pairing ? <PairPhonePanel outcome={pairing} onClose={() => setPairing(undefined)} /> : null}
 
       <SettingRow
         title={t("settings.machine.paired.title")}
