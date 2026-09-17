@@ -223,7 +223,7 @@ export const zh: Catalogue = {
   "mesh.attached.peers": "Mesh 已连接 — {count} 台机器可达",
   "mesh.attached.none": "Mesh 已连接 — 暂时没有其他机器可达",
   "mesh.noNode": "独立运行 — 任务留在这台机器上",
-  "mesh.refused": "EnvoyMesh 拒绝为 EnvoyDev 授予会话 — 任务留在这台机器上",
+  "mesh.refused": "无法启动本机的 mesh 对等节点 — 任务留在本机。仍可通过网络地址配对。",
   "mesh.hosting": "正在托管此 Mesh",
   "mesh.hosting.title": "Mesh 对等节点 {peerId}",
   "mesh.peers": "共享 Mesh 上有 {count} 个对等节点",
@@ -453,6 +453,10 @@ export const zh: Catalogue = {
   "settings.pairing.qr.title": "扫描二维码",
   "settings.pairing.qr.primary": "推荐",
   "settings.pairing.qr.detail": "在手机上打开 EnvoyDev，选择“扫描二维码”，把摄像头对准这个码。",
+  "settings.pairing.qr.meshHosting":
+    "This code includes a direct mesh route when the phone can reach this machine over the network.",
+  "settings.pairing.qr.meshUnavailable":
+    "The mesh peer is not hosting — this code still works over the network address and SSH.",
   "settings.pairing.qr.action": "显示配对码",
   "settings.pairing.qr.alt": "配对码",
   "settings.pairing.uriLabel": "配对链接",

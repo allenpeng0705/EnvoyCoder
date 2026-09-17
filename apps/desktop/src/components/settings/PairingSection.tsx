@@ -137,6 +137,7 @@ export function PairingSection(
     link !== undefined && (link.address !== undefined || lanAddress !== undefined || link.token !== undefined);
   /** The port this daemon listens on, for the SSH block's "as seen from that machine" address. */
   const port = props.state.connection.state === "connected" ? props.state.connection.endpoint.port : undefined;
+  const meshHosting = props.state.mesh.kind === "hosting";
 
   return (
     <>
@@ -153,6 +154,9 @@ export function PairingSection(
           <span className="chip chip--quiet">{t("settings.pairing.qr.primary")}</span>
         </div>
         <p className="settings__note">{t("settings.pairing.qr.detail")}</p>
+        <p className="settings__note" data-mesh-route={meshHosting ? "ready" : "unavailable"}>
+          {t(meshHosting ? "settings.pairing.qr.meshHosting" : "settings.pairing.qr.meshUnavailable")}
+        </p>
         <button type="button" className="button button--primary" onClick={mint}>
           {t("settings.pairing.qr.action")}
         </button>

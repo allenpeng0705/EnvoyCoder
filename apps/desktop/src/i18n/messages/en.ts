@@ -326,7 +326,7 @@ export const en = {
   "mesh.attached.peers": "Mesh connected — {count} machines reachable",
   "mesh.attached.none": "Mesh connected — no other machines reachable yet",
   "mesh.noNode": "Standalone — tasks stay on this machine",
-  "mesh.refused": "EnvoyMesh refused EnvoyDev a session — tasks stay on this machine",
+  "mesh.refused": "Could not start this machine's mesh peer — tasks stay local. Pairing still works by address.",
   "mesh.hosting": "Hosting this mesh",
   "mesh.hosting.title": "Mesh peer {peerId}",
   "mesh.peers": "{count} peers on the shared mesh",
@@ -800,6 +800,10 @@ export const en = {
   "settings.pairing.qr.primary": "Recommended",
   "settings.pairing.qr.detail":
     "Open EnvoyDev on the phone, choose Scan QR, and point the camera at this code.",
+  "settings.pairing.qr.meshHosting":
+    "This code includes a direct mesh route when the phone can reach this machine over the network.",
+  "settings.pairing.qr.meshUnavailable":
+    "The mesh peer is not hosting — this code still works over the network address and SSH.",
   "settings.pairing.qr.action": "Show pairing code",
   "settings.pairing.qr.alt": "Pairing code",
   "settings.pairing.uriLabel": "Pairing link",

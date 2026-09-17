@@ -186,6 +186,33 @@ describe("the three routes, separately", () => {
     // …and the primary route says so on its own heading, rather than relying on being first.
     expect(within(routes[0]!).getByText(en["settings.pairing.qr.primary"])).toBeTruthy();
     expect(within(routes[1]!).queryByText(en["settings.pairing.qr.primary"])).toBeNull();
+    // Default fixture mesh is `no-node`, so the QR route must say the code still works without hosting.
+    expect(within(routes[0]!).getByText(en["settings.pairing.qr.meshUnavailable"])).toBeTruthy();
+    expect(routes[0]!.querySelector('[data-mesh-route="unavailable"]')).toBeTruthy();
+  });
+
+  it("tells the user when the mesh peer is hosting and the QR includes a direct route", () => {
+    render(
+      <I18nProvider preference="en">
+        <PairingSection
+          state={stateWith({
+            mesh: {
+              kind: "hosting",
+              peerId: "12D3KooWHost",
+              multiaddrs: ["/ip4/192.168.1.20/tcp/4001"],
+              relayHints: [],
+              peerCount: 2,
+            },
+          })}
+          onUpdate={vi.fn()}
+          agents={stubAgentActions()}
+        />
+      </I18nProvider>,
+    );
+    const qr = document.querySelector('[data-route="qr"]');
+    expect(qr).toBeTruthy();
+    expect(within(qr as HTMLElement).getByText(en["settings.pairing.qr.meshHosting"])).toBeTruthy();
+    expect(qr!.querySelector('[data-mesh-route="ready"]')).toBeTruthy();
   });
 
   it("mints once, from the section's own press, through the shared call", async () => {

@@ -76,6 +76,22 @@ export interface PairingHandlerDeps {
    * how many streams closed is the peer's business, not the revoke's answer.
    */
   closeMeshStreams?: (deviceId: string) => void;
+  /**
+   * Cut a revoked device's **already-open WebSocket** sessions on the daemon host.
+   *
+   * Same security event as `closeMeshStreams`, for the LAN/`host:port` route. Optional for the same
+   * reason: unit tests that never call `serve()` have no host sockets to close.
+   */
+  closeWsSessions?: (deviceId: string) => void;
+  /**
+   * Wait until this daemon's own mesh peer has finished starting (hosting or refused), or resolve
+   * immediately when there is no peer to wait for (`skipMeshAttach` / injected status).
+   *
+   * Mint runs against a host that is already listening, while the peer starts *after* `serve()`.
+   * Without this wait a code minted in that window silently omits libp2p fields even though the peer
+   * is about to host — the phone would get WS/SSH only for no reason the user can see.
+   */
+  awaitMeshReady?: () => Promise<void>;
 }
 
 /** First non-loopback IPv4 address, or `null` when the machine has none. */
@@ -127,6 +143,8 @@ export function createPairingHandlers(deps: PairingHandlerDeps): Partial<Record<
         host?: string;
         lanHost?: string;
       };
+      // Settle the peer before reading its addresses — see `awaitMeshReady` on the deps.
+      await deps.awaitMeshReady?.();
       const host = deps.getHost();
       const lan = firstLanAddress();
       const reach = input.host?.trim() || lan || "127.0.0.1";
@@ -181,11 +199,16 @@ export function createPairingHandlers(deps: PairingHandlerDeps): Partial<Record<
       // returning 0; and a transport that throws while closing a half-dead duplex is swallowed,
       // because the credential is already withdrawn and reporting the revoke as failed would be a
       // lie about the security event. `device.id` is the key the mesh registry registered — it is
-      // `match.id` in `PairedDeviceStore.resolveSession`.
+      // `match.id` in `PairedDeviceStore.resolveSession`. The same id keys WebSocket sessions.
       try {
         deps.closeMeshStreams?.(device.id);
       } catch {
         /* the revocation succeeded; a stream that would not close must not turn that into an error */
+      }
+      try {
+        deps.closeWsSessions?.(device.id);
+      } catch {
+        /* same rule as the mesh half */
       }
       return { device };
     },
@@ -199,9 +222,10 @@ export function createPairingHandlers(deps: PairingHandlerDeps): Partial<Record<
      *
      * **No stream close here, deliberately.** Forget is only reachable for a record that is already
      * `revoked`, and `coder.revokePairedDevice` is the only caller of `store.revoke` — so
-     * `closeMeshStreams` has already run for this device and a second call would be a no-op. Repeating
-     * it would also tell a future reader that *forget* is what cuts a live connection, which is exactly
-     * the wrong belief. The one place a stream is closed is the revoke handler above.
+     * `closeMeshStreams` / `closeWsSessions` have already run for this device and a second call would
+     * be a no-op. Repeating it would also tell a future reader that *forget* is what cuts a live
+     * connection, which is exactly the wrong belief. The one place a connection is closed is the
+     * revoke handler above.
      */
     "coder.forgetPairedDevice": async (params, context) => {
       requireOwnerWindow(context, "coder.forgetPairedDevice");

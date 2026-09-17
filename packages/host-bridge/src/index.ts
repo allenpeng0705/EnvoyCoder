@@ -515,6 +515,13 @@ export interface CoderDaemonHost {
   }): string;
   /** What a client needs to connect, without the secret. */
   descriptor(ssh?: CoderHostDescriptor["ssh"]): CoderHostDescriptor;
+  /**
+   * Close every authenticated WebSocket whose session carries this device id.
+   *
+   * The WebSocket half of revocation: `store.revoke` stops the next handshake; this cuts an already-open
+   * phone session. 0 when the host has not served yet or no socket matches.
+   */
+  disconnectClientsForDevice(deviceId: string): number;
   stop(): void;
 }
 
@@ -588,6 +595,9 @@ export function createCoderDaemonHost(
       });
     },
     descriptor,
+    disconnectClientsForDevice(deviceId) {
+      return host.disconnectClientsForDevice(deviceId);
+    },
     stop() {
       host.stop();
     },

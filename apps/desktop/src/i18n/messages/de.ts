@@ -223,7 +223,7 @@ export const de: Catalogue = {
   "mesh.attached.peers": "Mesh verbunden — {count} Computer erreichbar",
   "mesh.attached.none": "Mesh verbunden — noch keine anderen Computer erreichbar",
   "mesh.noNode": "Eigenständig — Aufgaben bleiben auf diesem Rechner",
-  "mesh.refused": "EnvoyMesh hat EnvoyDev keine Sitzung gewährt — Aufgaben bleiben auf diesem Computer",
+  "mesh.refused": "Der Mesh-Peer dieses Rechners konnte nicht gestartet werden — Aufgaben bleiben lokal. Pairing über die Adresse funktioniert weiter.",
   "mesh.hosting": "Dieses Mesh wird gehostet",
   "mesh.hosting.title": "Mesh-Peer {peerId}",
   "mesh.peers": "{count} Peers im gemeinsamen Mesh",
@@ -459,6 +459,10 @@ export const de: Catalogue = {
   "settings.pairing.qr.title": "QR-Code scannen",
   "settings.pairing.qr.primary": "Empfohlen",
   "settings.pairing.qr.detail": "Öffne EnvoyDev auf dem Telefon, wähle QR scannen und halte die Kamera auf diesen Code.",
+  "settings.pairing.qr.meshHosting":
+    "This code includes a direct mesh route when the phone can reach this machine over the network.",
+  "settings.pairing.qr.meshUnavailable":
+    "The mesh peer is not hosting — this code still works over the network address and SSH.",
   "settings.pairing.qr.action": "Kopplungscode anzeigen",
   "settings.pairing.qr.alt": "Kopplungscode",
   "settings.pairing.uriLabel": "Kopplungslink",

@@ -13,6 +13,9 @@
  * exactly as `serve.ts` hands it the live `meshPeer`. A spy that only recorded a call would not prove
  * the stream a phone holds is actually closed, which is the claim.
  *
+ * The WebSocket half of the same revoke (`closeWsSessions` → `disconnectClientsForDevice`) is proven
+ * over a real socket in `daemon-rpc.test.ts` — this file stays about the mesh registry.
+ *
  * The no-op cases sit beside it, because "revocation must never fail" is the other half of the
  * contract: a daemon with **no peer** (`startCoderDaemon`'s `skipMeshAttach` / injected-status paths,
  * which every daemon test uses) and a device that **never opened a stream** both revoke successfully.

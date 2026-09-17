@@ -317,6 +317,18 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
   // time, so a `const` further down the function would sit in the temporal dead zone for any mint that
   // arrived first — and the failure would be a thrown ReferenceError in the one flow a new user runs.
   let meshPeer: CoderMeshPeer | null = null;
+  /**
+   * One deferred for the whole boot: mint awaits it so a code issued while the peer is still starting
+   * still carries libp2p fields once hosting lands. Settled immediately when there is no peer to wait
+   * for (`skipMeshAttach` / injected status), otherwise after `meshPeer.start()` finishes.
+   */
+  let settleMeshReady: () => void = () => undefined;
+  const meshReady = new Promise<void>((resolve) => {
+    settleMeshReady = resolve;
+  });
+  if (options.mesh || options.skipMeshAttach) {
+    settleMeshReady();
+  }
 
   const handlers = {
     ...createCoderHandlers({
@@ -354,12 +366,17 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
         multiaddrs: meshPeer?.multiaddrs ?? [],
         relayHints: meshPeer?.relayHints ?? [],
       }),
+      awaitMeshReady: () => meshReady,
       // The half of revocation a store cannot do: `store.revoke` refuses the next token, but a phone
       // already connected keeps its mesh stream. Read through the closure at revoke time, like `mesh`
       // above, so it is the live peer. `meshPeer` is `null` on the `skipMeshAttach` / injected-status
       // paths — the `?.` makes that an ordinary no-op and the revoke still succeeds.
       closeMeshStreams: (deviceId) => {
         meshPeer?.closeStreamsForDevice(deviceId);
+      },
+      // The WebSocket half of the same event — LAN / host:port phones.
+      closeWsSessions: (deviceId) => {
+        hostRef?.disconnectClientsForDevice(deviceId);
       },
     }),
   };
@@ -418,6 +435,7 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
   if (meshPeer) {
     mesh = await meshPeer.start();
   }
+  settleMeshReady();
 
   // Only now is the port answering, so only now is the claim worth anything.
   await writeDaemonClaim(paths, {

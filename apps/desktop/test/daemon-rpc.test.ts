@@ -85,6 +85,8 @@ interface JsonRpcClient {
   collectEvents(event: string, sink: unknown[]): () => void;
   /** Ask the daemon for events on this connection, the way the window does. */
   subscribe(events?: readonly string[]): Promise<{ subscribed: string[] }>;
+  /** Resolves when the underlying socket closes (e.g. after revoke disconnects the device). */
+  waitClosed(): Promise<void>;
   close(): void;
 }
 
@@ -181,6 +183,16 @@ async function connect(
     collectEvents(event, sink) {
       return onEvent(event, (data) => {
         sink.push(data);
+      });
+    },
+    waitClosed() {
+      return new Promise((resolve) => {
+        // CLOSING(2) or CLOSED(3): either wait for the event or resolve immediately.
+        if (socket.readyState === WebSocket.CLOSED) {
+          resolve();
+          return;
+        }
+        socket.once("close", () => resolve());
       });
     },
     close() {
@@ -2151,7 +2163,13 @@ describe("paired-device sessions (M4)", () => {
     };
     expect(hello.product).toBe("EnvoyDev");
 
+    // Arm before revoke: the socket can close synchronously, and a waiter attached afterwards
+    // would miss the event and hang until the test timeout.
+    const phoneClosed = phone.waitClosed();
     await window.call("coder.revokePairedDevice", { id: minted.device.id });
+    await phoneClosed;
+
+    // A fresh dial with the same token must fail — the store half of revocation.
     const revoked = await connect(daemon.port, DEFAULT_DAEMON_PATH, { token: token! });
     cleanups.push(async () => revoked.close());
     await expect(

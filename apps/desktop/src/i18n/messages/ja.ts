@@ -223,7 +223,7 @@ export const ja: Catalogue = {
   "mesh.attached.peers": "メッシュ接続済み — {count} 台に到達できます",
   "mesh.attached.none": "メッシュ接続済み — 到達できる他のマシンはまだありません",
   "mesh.noNode": "単独で動作 — タスクはこのマシン上で実行されます",
-  "mesh.refused": "EnvoyMesh が EnvoyDev にセッションを許可しませんでした — タスクはこのコンピューターにとどまります",
+  "mesh.refused": "このマシンの mesh ピアを起動できませんでした — タスクはローカルのままです。アドレスでのペアリングは引き続き使えます。",
   "mesh.hosting": "このメッシュをホスト中",
   "mesh.hosting.title": "メッシュピア {peerId}",
   "mesh.peers": "共有メッシュ上に {count} ピア",
@@ -457,6 +457,10 @@ export const ja: Catalogue = {
   "settings.pairing.qr.title": "QR コードを読み取る",
   "settings.pairing.qr.primary": "推奨",
   "settings.pairing.qr.detail": "スマートフォンで EnvoyDev を開き、「QR を読み取る」を選んでこのコードにカメラを向けます。",
+  "settings.pairing.qr.meshHosting":
+    "This code includes a direct mesh route when the phone can reach this machine over the network.",
+  "settings.pairing.qr.meshUnavailable":
+    "The mesh peer is not hosting — this code still works over the network address and SSH.",
   "settings.pairing.qr.action": "ペアリングコードを表示",
   "settings.pairing.qr.alt": "ペアリングコード",
   "settings.pairing.uriLabel": "ペアリングリンク",

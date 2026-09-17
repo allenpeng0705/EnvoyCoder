@@ -223,7 +223,7 @@ export const it: Catalogue = {
   "mesh.attached.peers": "Mesh connessa — {count} macchine raggiungibili",
   "mesh.attached.none": "Mesh connessa — nessun'altra macchina raggiungibile per ora",
   "mesh.noNode": "Autonomo — le attività restano su questa macchina",
-  "mesh.refused": "EnvoyMesh ha rifiutato una sessione a EnvoyDev — le attività restano su questo computer",
+  "mesh.refused": "Impossibile avviare il peer mesh di questo computer — le attività restano in locale. L'abbinamento via indirizzo funziona ancora.",
   "mesh.hosting": "Questa mesh è ospitata",
   "mesh.hosting.title": "Peer della mesh {peerId}",
   "mesh.peers": "{count} peer sulla mesh condivisa",
@@ -459,6 +459,10 @@ export const it: Catalogue = {
   "settings.pairing.qr.title": "Scansiona un codice QR",
   "settings.pairing.qr.primary": "Consigliato",
   "settings.pairing.qr.detail": "Apri EnvoyDev sul telefono, scegli Scansiona QR e inquadra questo codice.",
+  "settings.pairing.qr.meshHosting":
+    "This code includes a direct mesh route when the phone can reach this machine over the network.",
+  "settings.pairing.qr.meshUnavailable":
+    "The mesh peer is not hosting — this code still works over the network address and SSH.",
   "settings.pairing.qr.action": "Mostra il codice di abbinamento",
   "settings.pairing.qr.alt": "Codice di abbinamento",
   "settings.pairing.uriLabel": "Link di abbinamento",

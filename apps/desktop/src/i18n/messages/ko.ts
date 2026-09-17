@@ -223,7 +223,7 @@ export const ko: Catalogue = {
   "mesh.attached.peers": "메시 연결됨 — 컴퓨터 {count}대에 도달 가능",
   "mesh.attached.none": "메시 연결됨 — 아직 도달할 수 있는 다른 컴퓨터가 없습니다",
   "mesh.noNode": "단독 실행 — 작업은 이 컴퓨터에서 실행됩니다",
-  "mesh.refused": "EnvoyMesh가 EnvoyDev에 세션을 허용하지 않았습니다 — 작업은 이 컴퓨터에 남습니다",
+  "mesh.refused": "이 컴퓨터의 mesh 피어를 시작하지 못했습니다 — 작업은 로컬에 남습니다. 주소로 페어링은 계속 됩니다.",
   "mesh.hosting": "이 메시를 호스팅 중",
   "mesh.hosting.title": "메시 피어 {peerId}",
   "mesh.peers": "공유 메시의 피어 {count}개",
@@ -457,6 +457,10 @@ export const ko: Catalogue = {
   "settings.pairing.qr.title": "QR 코드 스캔",
   "settings.pairing.qr.primary": "권장",
   "settings.pairing.qr.detail": "휴대폰에서 EnvoyDev를 열고 QR 스캔을 선택한 뒤 이 코드에 카메라를 맞추세요.",
+  "settings.pairing.qr.meshHosting":
+    "This code includes a direct mesh route when the phone can reach this machine over the network.",
+  "settings.pairing.qr.meshUnavailable":
+    "The mesh peer is not hosting — this code still works over the network address and SSH.",
   "settings.pairing.qr.action": "페어링 코드 표시",
   "settings.pairing.qr.alt": "페어링 코드",
   "settings.pairing.uriLabel": "페어링 링크",
