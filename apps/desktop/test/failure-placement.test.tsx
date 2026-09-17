@@ -198,8 +198,8 @@ describe("a refused press is read where it was made", () => {
     const onClose = vi.fn();
     show();
 
-    // ⌘K is the shell's own binding; the titlebar carries the same action as a button.
-    fireEvent.click(screen.getByRole("button", { name: en["palette.title"] }));
+    // ⌘K is the shell's own binding; the rail carries the same action as a button.
+    fireEvent.click(screen.getByRole("button", { name: en["sidebar.command.title"] }));
     fireEvent.click(screen.getByText(en["palette.addProject.title"]));
 
     // The placeholder rather than the label: in a window with no shell the stage appends *why* there is no
@@ -229,7 +229,7 @@ describe("a refused press is read where it was made", () => {
     // A settings write is the case with no row of its own in the store's answer: the patch says what changed,
     // not which control asked. `SettingRow` owns the sink, so the sentence lands under the control that wrote.
     show();
-    fireEvent.click(screen.getByRole("button", { name: en["sidebar.footer.settings"] }));
+    fireEvent.click(screen.getByRole("button", { name: en["sidebar.settings"] }));
     const select = screen.getByLabelText(en["settings.language.aria"]);
     fireEvent.change(select, { target: { value: "de" } });
 
@@ -325,11 +325,14 @@ describe("a refused press is read where it was made", () => {
     // and `⌘B` is bound to it (`input/shortcuts.ts`, listed on Settings → Keyboard shortcuts).
     show();
     const titlebar = document.querySelector(".titlebar") as HTMLElement;
-    expect(titlebar.querySelectorAll("button")).toHaveLength(1);
+    // Title bar is brand + connection only — Pair, Settings and Command Center sit on the rail top row.
+    expect(titlebar.querySelectorAll("button")).toHaveLength(0);
     expect(titlebar.textContent ?? "").not.toContain("▤");
+    expect(screen.getByRole("button", { name: en["sidebar.pair"] })).toBeTruthy();
+    expect(screen.getByRole("button", { name: en["sidebar.settings"] })).toBeTruthy();
 
-    // …and the row is still there, in the palette the window opens with its own button.
-    fireEvent.click(screen.getByRole("button", { name: en["palette.title"] }));
+    // …and the toggle row is still there, in the palette opened from the rail's ⌘K.
+    fireEvent.click(screen.getByRole("button", { name: en["sidebar.command.title"] }));
     expect(screen.getByText(en["palette.toggleRail.title"])).toBeTruthy();
   });
 

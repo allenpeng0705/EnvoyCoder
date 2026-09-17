@@ -107,6 +107,7 @@ function renderPane(
   over: Partial<CoderState> = {},
   preference: "system" | "de" | "ja" = "de",
   scope: SettingsScope = appScope("general"),
+  layout: "wide" | "narrow" = "wide",
 ) {
   const onUpdate = vi.fn();
   // Required by `SettingsPaneProps`: this file asserts that language changes reach every string, so its
@@ -125,10 +126,9 @@ function renderPane(
         // Which scope the pane is on: one section by default, and the parameter is what lets the
         // assertions below render the list of sections, the projects page or a project's own page.
         scope={scope}
-        // The window's shape. **Wide**, because that is the layout with the bar in it, and the bar is
-        // what most of the assertions below are about; a narrow window renders the same registry as the
-        // page instead (`settings-nav.test.tsx` walks that one).
-        layout="wide"
+        // The window's shape. **Wide** by default (bar beside content); pass `"narrow"` for the
+        // list-as-page that a small window opens on.
+        layout={layout}
         // The bindings the shell mounted — see `WIRED`.
         shortcuts={wiredBindings(WIRED)}
         // The pane's own navigation, which is required rather than optional: a caller that renders a row
@@ -231,7 +231,7 @@ describe("the sections bar, in the same language", () => {
   });
 
   it("translates the list of sections, which is what a narrow window opens on", () => {
-    renderPane({}, "de", SECTIONS_SCOPE);
+    renderPane({}, "de", SECTIONS_SCOPE, "narrow");
     expect(screen.getByRole("heading", { name: "Einstellungen" })).toBeTruthy();
     expect(screen.getByText(/Bereich für Bereich/)).toBeTruthy();
     // Every section is reachable as a row here as well as from the bar, and each row is named in German.
@@ -243,18 +243,18 @@ describe("the sections bar, in the same language", () => {
   it("is German on the projects page too, back control included", () => {
     // **The level the earlier restructure added, in the language this file exists for.** Two things are
     // worth more than the prose: the sentences that moved here from the app scope (the override note and
-    // the empty state, both of them German), and the back control — which must name *its* destination,
-    // so it says "Alle Einstellungen" here and something else at the level below.
+    // the empty state, both of them German), and the back control — which on a wide window leaves settings
+    // entirely ("Zurück zur Arbeit"), while the level below still names its parent ("Projekte").
     renderPane({ projects: [] }, "de", PROJECTS_SCOPE);
     expect(screen.getByRole("heading", { name: "Projekte" })).toBeTruthy();
     expect(
       screen.getByText("Jedes Projekt kann die Einstellungen dieses Computers überschreiben. Wenn du eines auswählst, öffnest du seine eigenen."),
     ).toBeTruthy();
     expect(screen.getByText(/Noch keine Projekte\./)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Alle Einstellungen" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Zurück zur Arbeit" })).toBeTruthy();
     // The rail's own Add-project label is interpolated, translated, so the sentence points at a German word
     // that is actually on screen.
-    expect(screen.getByText(/unten in der Projektleiste hinzu/)).toBeTruthy();
+    expect(screen.getByText(/oben in der Projektleiste hinzu/)).toBeTruthy();
 
     cleanup();
 

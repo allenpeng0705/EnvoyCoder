@@ -950,7 +950,7 @@ describe("the Agents section inside the pane", () => {
     show();
     expect(screen.getByRole("heading", { name: en["settings.section.agents.title"] })).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: new RegExp(en["settings.back"]) }),
+      screen.getByRole("button", { name: new RegExp(en["settings.exit"]) }),
     ).toBeTruthy();
     expect(SECTIONS_SCOPE).toEqual({ kind: "sections" });
   });

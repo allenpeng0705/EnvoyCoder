@@ -85,14 +85,9 @@ export const en = {
   "sidebar.task.rename": "Rename",
   "sidebar.task.rename.aria": "New name for this task",
   "sidebar.tasks.empty": "No tasks here yet.",
-  "sidebar.footer.add": "Add project",
-  // The rail's one icon-only control, replacing "Host: {host}". The label is a sentence the screen reader
-  // reads and the tooltip repeats; `Host` named a machine and opened Settings, which the gear beside it
-  // already did. Removed with it: `sidebar.footer.import` and `sidebar.footer.help`, whose disabled
-  // buttons could not show their own `title` (a disabled button gets no pointer events) — see
-  // `CoderSidebar.tsx` for why absent beat disabled-with-a-promise.
-  "sidebar.footer.pair": "Pair a phone",
-  "sidebar.footer.settings": "Settings",
+  // Pair + Settings sit on the rail's top row beside ⌘K (not in the title bar or a footer).
+  "sidebar.pair": "Pair a phone",
+  "sidebar.settings": "Settings",
 
   /* ── the command palette ── */
   "palette.title": "Command Center",
@@ -339,13 +334,13 @@ export const en = {
      without me". The headings are sentence case and are not labels — nothing on this pane needs one. */
   "settings.title": "Settings",
   "settings.close": "Close",
-  // The way out of the **projects page** (level 2), back to the settings for this machine (level 1). It
-  // names where it goes rather than saying "Back", because a control labelled after the direction you
-  // are moving is a control a user has to press to find out what it does. The level *below* has a back
-  // control of its own and it says something different — `settings.project.back.title` — because it
-  // lands somewhere else, on this page's title.
+  // Narrow windows: leave a section for the list of every section (the only index that shape has).
   "settings.back": "All settings",
   "settings.back.title": "Back to this machine's settings",
+  // Wide windows: leave settings for the project rail. The section bar already lists every section, so
+  // "All settings" would reopen the same index beside itself.
+  "settings.exit": "Back to work",
+  "settings.exit.title": "Leave settings and return to your projects",
   "settings.stateDir": "State in {path}",
   "settings.noDaemon": "No daemon",
   "settings.daemon": "Daemon {version}",
@@ -433,7 +428,7 @@ export const en = {
      `settings.projects.title` is deliberately one string used three times — the level-1 row's label, the
      level-2 page title, and level 3's back label — because all three name the same place, and a name
      that is stored once cannot drift between them.
-     `{add}` is the rail's own Add-project label (`sidebar.footer.add`) rather than the word "Add"
+     `{add}` is the rail's own Add-project label (`sidebar.add`) rather than the word "Add"
      repeated here, so the sentence keeps naming the control it means when the control is renamed or
      translated. */
   "settings.projects.title": "Projects",
@@ -447,7 +442,7 @@ export const en = {
   "settings.projects.note":
     "Each project can override this machine's settings. Selecting one opens its own.",
   "settings.projects.empty":
-    "No projects yet. A project is a folder on this machine that agents work in — add one with {add} at the bottom of the rail, or from the Command Center.",
+    "No projects yet. A project is a folder on this machine that agents work in — add one with {add} at the top of the rail, or from the Command Center.",
   "settings.agents.empty": "The agent list has not arrived yet.",
 
   /* ── the catalogue: the 38 recipes, the two extra ways to get an agent, and the words that keep the

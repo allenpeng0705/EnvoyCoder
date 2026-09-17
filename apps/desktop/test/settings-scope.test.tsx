@@ -626,8 +626,8 @@ describe("the projects page, and the count row that opens it", () => {
   });
 
   it("gives each back control its own level, and each one names it", () => {
-    // **The reason the two labels must differ.** Level 3's back control returns to the *list of
-    // projects*, so it says "Projects"; level 2's returns to the root, so it says "All settings". A single
+    // **The reason the two labels must differ.** Level 3's back returns to the *list of projects*, so it
+    // says "Projects"; level 2's leaves settings for the work page, so it says "Back to work". A single
     // control labelled "All settings" that landed on a project's parent would be a lie of exactly the kind
     // this pane was rebuilt to remove, and the assertions below are written so that either control taking
     // the other's label — or the other's destination — fails here.
@@ -646,13 +646,13 @@ describe("the projects page, and the count row that opens it", () => {
     expect(barProjects).toBeTruthy();
     const backToProjects = screen.getByRole("button", { name: "Projects", current: false });
     expect(backToProjects.tagName).toBe("BUTTON");
-    // …and it is the *only* way out of this page: nothing here says "All settings", because that would
-    // land two levels up rather than on the list this project came from.
-    expect(screen.queryByRole("button", { name: "All settings" })).toBeNull();
+    // …and it is the *only* way out of this page: nothing here says "Back to work", because that would
+    // leave settings entirely rather than return to the list this project came from.
+    expect(screen.queryByRole("button", { name: "Back to work" })).toBeNull();
     fireEvent.click(backToProjects);
 
-    // Landed on the list, not on the root: this is the assertion that fails if level 3's back control is
-    // wired to the root "because that is where back went before".
+    // Landed on the list, not out of settings: this is the assertion that fails if level 3's back control is
+    // wired to exit "because that is where back went before".
     expect(screen.queryByRole("heading", { name: "Project settings for web" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Projects" })).toBeTruthy();
     expect(rowFor("web")).toBeTruthy();
@@ -660,26 +660,21 @@ describe("the projects page, and the count row that opens it", () => {
     // title.
     expect(screen.queryByLabelText("Ask before anything destructive")).toBeNull();
 
-    // Level 2 → level 0, the list of sections. Only this control says "All settings".
-    const backToApp = screen.getByRole("button", { name: "All settings" });
-    expect(backToApp.tagName).toBe("BUTTON");
-    fireEvent.click(backToApp);
+    // Level 2 → leave settings. The section bar already lists every section, so this control exits.
+    const backToWork = screen.getByRole("button", { name: "Back to work" });
+    expect(backToWork.tagName).toBe("BUTTON");
+    fireEvent.click(backToWork);
 
-    // The root is the list of sections — and on this page the bar is **not** rendered, because the list
-    // in the bar and the list in the page are the same eight rows: the index moved from the column into
-    // the content rather than being printed twice.
-    expect(screen.getByRole("heading", { name: "Settings" })).toBeTruthy();
+    // Settings is gone; the work page is back. The section bar must not be on screen.
     expect(screen.queryByRole("navigation", { name: "Settings sections" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Safety" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Projects" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /^Project settings for / })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Projects" })).toBeNull();
+    expect(screen.getByTestId("task-list")).toBeTruthy();
 
-    // And the section that was a heading beside the row before this restructure is now a page of its own,
-    // one press from here — which is the whole round trip, walked to the end rather than assumed.
+    // Round trip again: open settings, pick Safety from the permanent bar.
+    openAppSettings();
     fireEvent.click(screen.getByRole("button", { name: "Safety" }));
     expect(screen.getByRole("heading", { name: "Safety" })).toBeTruthy();
     expect(screen.getByLabelText("Ask before anything destructive")).toBeTruthy();
-    // The bar is back, marking the section the user is on.
     expect(screen.getByRole("button", { name: "Safety", current: "page" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Project settings for / })).toBeNull();
   });
@@ -722,7 +717,7 @@ describe("the projects page, and the count row that opens it", () => {
     // told "no projects" by one half of the window while the other half says it could not read them.
     expect(screen.getAllByText("Could not read your projects")).toHaveLength(2);
     // Still leavable, because a failure is not a dead end either.
-    expect(screen.getByRole("button", { name: "All settings" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Back to work" })).toBeTruthy();
   });
 
   it("teaches how a project gets added when there are none", () => {
@@ -734,11 +729,11 @@ describe("the projects page, and the count row that opens it", () => {
     // sentence interpolates the rail's own Add-project label, so it cannot end up pointing at a word that
     // is not on screen — which is what the second assertion pins.
     expect(screen.getByText(/No projects yet\. A project is a folder on this machine/)).toBeTruthy();
-    expect(screen.getByText(/add one with Add project at the bottom of the rail/)).toBeTruthy();
+    expect(screen.getByText(/add one with \+ Add project at the top of the rail/)).toBeTruthy();
     // And nothing to list means no list: not an empty box, and no rows.
     expect(screen.queryByRole("button", { name: /^Project settings for / })).toBeNull();
     // The page is still somewhere you can leave, with no projects to choose from.
-    expect(screen.getByRole("button", { name: "All settings" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Back to work" })).toBeTruthy();
   });
 
   it("lists and navigates without putting a project's own controls on either page", () => {

@@ -116,10 +116,10 @@ describe("the palette's Pair a phone row", () => {
       </I18nProvider>,
     );
 
-    // The catalogue, opened the way the title bar opens it. The row is pressed **inside the dialog**: the
+    // The catalogue, opened from the rail's ⌘K. The row is pressed **inside the dialog**: the
     // rail's QR button now carries the same words as its accessible name, so an unscoped `getByText` would
     // find two elements and the failure would be about the fixture rather than about the palette.
-    fireEvent.click(screen.getByRole("button", { name: en["palette.title"] }));
+    fireEvent.click(screen.getByRole("button", { name: en["sidebar.command.title"] }));
     fireEvent.click(
       within(screen.getByRole("dialog", { name: en["palette.title"] })).getByText(
         en["palette.pairPhone.title"],
@@ -179,9 +179,9 @@ describe("the palette's Pair a phone row", () => {
       </I18nProvider>,
     );
 
-    // The rail's footer button opens settings; jsdom has no `matchMedia`, so the pane falls back to the
+    // The rail-top Settings button opens settings; jsdom has no `matchMedia`, so the pane falls back to the
     // wide layout and the bar is beside the page (`settings-nav.test.tsx` asserts that fallback).
-    fireEvent.click(screen.getByRole("button", { name: en["sidebar.footer.settings"] }));
+    fireEvent.click(screen.getByRole("button", { name: en["sidebar.settings"] }));
     fireEvent.click(screen.getByRole("button", { name: en["settings.section.pairing.title"] }));
     fireEvent.click(screen.getByRole("button", { name: en["settings.pairing.qr.action"] }));
 
@@ -190,12 +190,10 @@ describe("the palette's Pair a phone row", () => {
   });
 
   /**
-   * **The rail's QR button** — the control that replaced the useless *Host* button.
+   * **The rail-top QR button** — beside ⌘K on the same row as Add project.
    *
-   * The owner's report was that *Host* only opened Settings, which the gear beside it already does. The
-   * button is asserted through the shell rather than as a rendered glyph, because the two things that make
-   * it useful are the wiring this test can see: the press **mints** (one call, the shared one) and it lands
-   * on the pairing section rather than on whatever page happened to be open.
+   * Asserted through the shell: the press **mints** (one call, the shared one) and lands on the
+   * pairing section rather than on whatever page happened to be open.
    */
   it("opens Pairing and mints from the rail's QR button", async () => {
     const mintPairing = vi.fn(async () => ({
@@ -223,7 +221,7 @@ describe("the palette's Pair a phone row", () => {
 
     // The accessible name is the `visually-hidden` label, which is the point of the icon-only pattern: the
     // glyph is on the face, the name is announced, and there is no stray text in the rail.
-    fireEvent.click(screen.getByRole("button", { name: en["sidebar.footer.pair"] }));
+    fireEvent.click(screen.getByRole("button", { name: en["sidebar.pair"] }));
 
     await vi.waitFor(() => expect(mintPairing).toHaveBeenCalledTimes(1));
     // The section it landed on, by its own heading — not merely "a pane opened".

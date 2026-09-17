@@ -13,7 +13,7 @@
  *
  * ## The breakpoint, and why it is 1100 rather than a rounder number
  *
- * The bar is a 216px column. The content beside it is the window minus the rail (300px at its default),
+ * The bar is a 280px column. The content beside it is the window minus the rail (300px at its default),
  * and a settings row is a sentence beside a control: as the content narrows, the *sentence* wraps into
  * more lines while the control keeps its width, which is what "squeezed" means on this surface. That is
  * measurable, so it was measured — `npm run ui:audit --click Settings --size WxH` probes this surface now,

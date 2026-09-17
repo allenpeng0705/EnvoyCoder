@@ -17,8 +17,7 @@
  *     counts and the default agent) rather than by scrolling its tasks;
  *   * "new work in this repo" is a control *on the repo*, not a global button plus a project
  *     picker;
- *   * settings live where the defaults live — per project — with app-wide defaults at the foot of
- *     the rail.
+ *   * settings live where the defaults live — per project — with app-wide defaults in the title bar.
  *
  * A flat list makes the second and third of those awkward and the first impossible. Since two
  * tasks can share one `cwd` (Paseo's own data-model note), grouping by *path* is also the
@@ -34,7 +33,7 @@
 
 import type { JSX } from "react";
 
-import { GearIcon, PlusIcon, QrIcon } from "./icons.js";
+import { GearIcon, QrIcon } from "./icons.js";
 import { RowMenu } from "./RowMenu.js";
 
 import { Fragment, useMemo, useRef, useState } from "react";
@@ -86,14 +85,7 @@ export interface CoderSidebarProps {
   onRemoveTask: (taskId: string) => void;
   onOpenCommandCenter: () => void;
   onOpenSettings: () => void;
-  /**
-   * **Show the pairing code** — the footer's QR button.
-   *
-   * The button this replaced said *"Host: <machine>"* and opened Settings, which the gear beside it
-   * already does; the owner's report was that it was useless. What the rail was missing is not a
-   * second way to one place but a way to the thing a phone needs, and that is the pairing section
-   * (the shell mints and navigates — minting is a press, never an effect: `settings/PairPhone.tsx`).
-   */
+  /** Mint and open Pairing — the rail-top QR beside ⌘K. */
   onShowPairing: () => void;
   /** Search box contents, owned by the shell so the Command Center can drive it too. */
   query?: string | undefined;
@@ -188,9 +180,28 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
         </button>
         <button
           type="button"
+          className="icon-button"
+          onClick={props.onShowPairing}
+          title={t("sidebar.pair")}
+        >
+          <QrIcon />
+          <span className="visually-hidden">{t("sidebar.pair")}</span>
+        </button>
+        <button
+          type="button"
+          className="icon-button"
+          onClick={props.onOpenSettings}
+          title={t("sidebar.settings")}
+          aria-label={t("sidebar.settings")}
+        >
+          <GearIcon />
+        </button>
+        <button
+          type="button"
           className="button button--ghost sidebar__command"
           onClick={props.onOpenCommandCenter}
           title={t("sidebar.command.title")}
+          aria-label={t("sidebar.command.title")}
         >
           ⌘K
         </button>
@@ -377,55 +388,6 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
             );
           })
         )}
-      </div>
-
-      {/* The sidebar's tool row, in Paseo's order: the wide add-project action, then Pair, then
-          Settings. Icons rather than bare words, because text buttons at the bottom of a rail read as
-          a sentence.
-
-          **Two controls were removed from here, and the reason is the owner's own report** (*"I don't
-          know what's the Downloading icon and info icon, they were disabled too"*). They were the
-          disabled Import (an arrow into a tray, read as a download) and Help (a question mark in a
-          circle, read as an info) buttons. A disabled button does not receive the pointer events that
-          would show its `title`, so the sentence explaining it was unreachable in every real browser:
-          the control could not say why it was disabled, which is the one thing this pane's rule
-          requires of a control it cannot honour. A rail has no room for the reason on screen, and
-          neither feature exists — `Import` needs a reader per agent's own session store, and there is
-          no help surface — so they are **gone** rather than teased. That is the same verdict
-          `allowRemoteRuns` got in `SettingsPane.tsx`: absent, not disabled-with-a-promise. */}
-      <div className="sidebar__footer">
-        <button
-          type="button"
-          className="icon-button icon-button--wide"
-          onClick={props.onAddProject}
-        >
-          <PlusIcon />
-          <span className="icon-button__label">{t("sidebar.footer.add")}</span>
-        </button>
-
-        {/* The icon-only control follows the composer's send button (`TaskPane.tsx`): the glyph on the
-            face, and the name in a `visually-hidden` span so it is announced and not drawn. The
-            `title` is the tooltip, not the accessible name — a name that only exists in a tooltip is a
-            name a keyboard or screen-reader user never reaches. */}
-        <button
-          type="button"
-          className="icon-button"
-          onClick={props.onShowPairing}
-          title={t("sidebar.footer.pair")}
-        >
-          <QrIcon />
-          <span className="visually-hidden">{t("sidebar.footer.pair")}</span>
-        </button>
-
-        <button
-          type="button"
-          className="icon-button"
-          onClick={props.onOpenSettings}
-          title={t("sidebar.footer.settings")}
-          aria-label={t("sidebar.footer.settings")}
-        >
-          <GearIcon />
-        </button>
       </div>
     </aside>
   );

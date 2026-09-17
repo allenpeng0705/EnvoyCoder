@@ -141,8 +141,8 @@ describe("the catalogues", () => {
     // incomplete. Every shipped language is complete, so the fallback is asserted where it can still
     // happen: a language that has not translated a key (new copy, before its translation lands).
     const german = createTranslator("de", {});
-    expect(german.t("sidebar.footer.settings")).toBe("Settings");
-    expect(german.t("sidebar.footer.settings")).not.toContain("sidebar.");
+    expect(german.t("sidebar.settings")).toBe("Settings");
+    expect(german.t("sidebar.settings")).not.toContain("sidebar.");
     // The same rule for text that came from the daemon: no key, so the sentence is what a user reads.
     expect(localize(german.t, { message: "/gone is not a directory." })).toBe(
       "/gone is not a directory.",

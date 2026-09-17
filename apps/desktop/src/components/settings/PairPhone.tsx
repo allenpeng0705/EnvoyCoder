@@ -17,7 +17,7 @@
  * An effect that minted would therefore create two paired-device records for one press — a real record on
  * the daemon, not merely a doubled render — and this repo has already paid for that lesson once
  * (`coderStore.ts:248`, where StrictMode's doubled effect opened two sockets). So the **press is the
- * request**: `mintPairingCode` is called from an event handler (the *Pairing* section's button, the rail's
+ * request**: `mintPairingCode` is called from an event handler (the *Pairing* section's button, the rail-top
  * QR button through `CoderApp.openPairing`, and the palette's `run`), and the panel below only renders what
  * came back.
  *

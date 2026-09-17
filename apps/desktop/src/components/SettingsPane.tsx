@@ -106,7 +106,7 @@ import {
   type SettingsLayout,
   type SettingsScope,
 } from "../state/settings-scope.js";
-import { sectionById, type SettingsSectionId } from "../state/settings-sections.js";
+import { sectionById, DEFAULT_SECTION_ID, type SettingsSectionId } from "../state/settings-sections.js";
 import { SettingsNav, SettingsSectionRows } from "./SettingsNav.js";
 import { SettingsShell, StoreNotes } from "./SettingsShell.js";
 import { AboutSection, MachineSection, ShortcutsSection } from "./settings/SectionsFacts.js";
@@ -196,6 +196,11 @@ export function SettingsPane(props: SettingsPaneProps): JSX.Element {
   const resolved = resolveScope(props.scope, props.state.projects);
   switch (resolved.kind) {
     case "sections":
+      // Wide windows keep the section bar as the permanent index — never the list-as-page (that would
+      // duplicate the bar). Land on the default section instead; narrow still uses the list.
+      if (props.layout === "wide") {
+        return <SectionPage {...props} section={DEFAULT_SECTION_ID} />;
+      }
       return <SectionsPage {...props} />;
     case "app":
       return <SectionPage {...props} section={resolved.section} />;
@@ -216,22 +221,14 @@ export function SettingsPane(props: SettingsPaneProps): JSX.Element {
 }
 
 /**
- * Is the bar rendered beside this scope, in this window?
+ * Is the section bar rendered beside this page?
  *
- * **One rule, and it is about the page rather than about the window:** the bar is the list of sections,
- * so it is rendered beside every page that is *not* the list of sections, and a wide window is the only
- * shape with room for a column at all. When the pane is on the list — which a narrow window opens on,
- * and which every back control below a section lands on — the list *is* the page, and a bar beside it
- * would be the same eight rows twice, which is why the list is rendered as content and the column is
- * empty on that one page.
- *
- * It is exported from this file rather than passed around because two places need the same answer:
- * `Page` (for the column) and `SectionPage` (for the section's own sentence, which the bar carries when
- * it is there — see `Page`). Two computations of "is there a bar" is how a page ends up printing a
- * sentence the bar is already showing three inches away.
+ * On a **wide** window the bar is always there: it is the permanent index of sections, and the body
+ * shows whichever section (or projects drill-down) is selected. On a **narrow** window there is no
+ * room for a column, so the list of sections *is* the page and the bar stays hidden.
  */
-function showsBar(layout: SettingsLayout, scope: SettingsScope): boolean {
-  return layout === "wide" && scopeSection(scope) !== undefined;
+function showsBar(layout: SettingsLayout, _scope: SettingsScope): boolean {
+  return layout === "wide";
 }
 
 /**
@@ -266,7 +263,9 @@ function Page(
         ? {
             nav: (
               <SettingsNav
-                current={scopeSection(props.scope)}
+                // When a wide window somehow lands on `sections` (redirected to General above), still
+                // mark the default section so the bar and the body agree.
+                current={scopeSection(props.scope) ?? DEFAULT_SECTION_ID}
                 onNavigate={props.onNavigate}
                 projects={props.state.projects}
                 {...(props.projectsUnavailable !== undefined
@@ -325,18 +324,26 @@ function SectionsPage(props: SettingsPaneProps): JSX.Element {
 function SectionPage(props: SettingsPaneProps & { section: SettingsSectionId }): JSX.Element {
   const { t } = useI18n();
   const section = sectionById(props.section);
+  const wide = showsBar(props.layout, props.scope);
   return (
     <Page
       {...props}
       title={t(section.titleKey)}
-      // The way back to the root, and it names it — *All settings*, the destination rather than the
-      // direction. It is the same pair of keys every page below the root uses, because the destination
-      // is the same page: the list of every section.
-      back={{
-        label: t("settings.back"),
-        title: t("settings.back.title"),
-        onClick: () => props.onNavigate(SECTIONS_SCOPE),
-      }}
+      // Wide: leave settings entirely (the bar already lists every section). Narrow: back to the
+      // sections list, which is the only index that window has.
+      back={
+        wide
+          ? {
+              label: t("settings.exit"),
+              title: t("settings.exit.title"),
+              onClick: () => props.onClose(),
+            }
+          : {
+              label: t("settings.back"),
+              title: t("settings.back.title"),
+              onClick: () => props.onNavigate(SECTIONS_SCOPE),
+            }
+      }
     >
       {/* **The section's own sentence, printed once.** It is the bar item's second band when there is a
           bar, and the page's first line when there is not — one sentence for one place, rendered in the
@@ -345,7 +352,7 @@ function SectionPage(props: SettingsPaneProps & { section: SettingsSectionId }):
           beside a bar that already says it is exactly what a reader skips.
           A section whose band is data rather than a sentence (Projects) renders nothing here at all:
           its scope is the projects page, and that page carries its own note. */}
-      {!showsBar(props.layout, props.scope) && section.band.kind === "sentence" ? (
+      {!wide && section.band.kind === "sentence" ? (
         <p className="settings__note">{t(section.band.key)}</p>
       ) : null}
       {sectionBody(props)}
@@ -405,15 +412,24 @@ function sectionBody(props: SettingsPaneProps & { section: SettingsSectionId }):
  */
 function ProjectsPage(props: SettingsPaneProps): JSX.Element {
   const { t } = useI18n();
+  const wide = showsBar(props.layout, props.scope);
   return (
     <Page
       {...props}
       title={t("settings.projects.title")}
-      back={{
-        label: t("settings.back"),
-        title: t("settings.back.title"),
-        onClick: () => props.onNavigate(SECTIONS_SCOPE),
-      }}
+      back={
+        wide
+          ? {
+              label: t("settings.exit"),
+              title: t("settings.exit.title"),
+              onClick: () => props.onClose(),
+            }
+          : {
+              label: t("settings.back"),
+              title: t("settings.back.title"),
+              onClick: () => props.onNavigate(SECTIONS_SCOPE),
+            }
+      }
     >
       <ProjectsSection {...props} projects={props.state.projects} />
     </Page>

@@ -86,9 +86,9 @@ export function ProjectsSection(props: ProjectSectionProps): JSX.Element {
       ) : projects.length === 0 ? (
         // Design law 6, at the one place in this pane a user can arrive at nothing: the page says how a
         // project gets here instead of rendering an empty box. It names the rail's own control through
-        // that control's label (`sidebar.footer.add`), so renaming or translating the button cannot
+        // that control's label (`sidebar.add`), so renaming or translating the button cannot
         // leave this sentence pointing at a word that is not on screen.
-        <p className="settings__note">{t("settings.projects.empty", { add: t("sidebar.footer.add") })}</p>
+        <p className="settings__note">{t("settings.projects.empty", { add: t("sidebar.add") })}</p>
       ) : (
         <ul className="settings__projects">
           {projects.map((project) => (

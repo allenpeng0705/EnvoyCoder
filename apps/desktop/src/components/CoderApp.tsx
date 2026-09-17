@@ -485,14 +485,8 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
         <span className="titlebar__title" data-tauri-drag-region>{t("app.name")}</span>
         <span className="titlebar__spacer" data-tauri-drag-region />
         <ConnectionChip state={state} />
-        <button
-          type="button"
-          className="button button--ghost"
-          onClick={() => setPaletteOpen(true)}
-          title={t("palette.title")}
-        >
-          {t("palette.title")}
-        </button>
+        {/* Pair, Settings and Command Center live on the rail's top row (`CoderSidebar`), beside
+            "+ Add project" — not duplicated here. The palette still opens via ⌘K on that row. */}
       </header>
 
       {state.error ? (
