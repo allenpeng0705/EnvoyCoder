@@ -71,6 +71,8 @@ export const zh: Catalogue = {
   "sidebar.project.menu.aria": "{project} 的操作",
   "sidebar.project.menu.title": "项目操作",
   "sidebar.project.menu.newTask": "新建任务",
+  "sidebar.project.menu.openNewWindow": "在新窗口中打开",
+  "sidebar.project.menu.openNewWindowFailed": "无法打开新窗口",
   "sidebar.project.remove": "移除项目",
   "sidebar.project.remove.aria": "移除此项目",
   "sidebar.project.remove.confirm":
@@ -254,7 +256,7 @@ export const zh: Catalogue = {
   "settings.section.shortcuts.detail": "这个窗口正在监听的每一个按键，读取自键盘层所用的同一张表。",
   "settings.section.machine.title": "这台计算机",
   "settings.section.machine.detail": "这个窗口连接的服务，以及它是用什么启动的。",
-  "settings.section.pairing.title": "配对",
+  "settings.section.pairing.title": "手机配对",
   "settings.section.pairing.detail": "让手机访问这台机器：扫描二维码、手动输入地址，或通过 SSH 连接。",
   "settings.section.about.title": "关于",
   "settings.section.about.detail": "这个窗口是哪个版本，服务又是哪个版本。",
@@ -458,7 +460,8 @@ export const zh: Catalogue = {
     "This code includes a direct mesh route when the phone can reach this machine over the network.",
   "settings.pairing.qr.meshUnavailable":
     "The mesh peer is not hosting — this code still works over the network address and SSH.",
-  "settings.pairing.qr.action": "显示配对码",
+  "settings.pairing.qr.busy": "正在准备配对码…",
+  "settings.pairing.qr.action": "显示新配对码",
   "settings.pairing.qr.alt": "配对码",
   "settings.pairing.uriLabel": "配对链接",
   "settings.pairing.copy": "复制配对链接",

@@ -109,13 +109,19 @@ const MINTED_URI =
   "envoy://pair?wsUrl=ws%3A%2F%2F192.168.1.20%3A4770%2Fws&lanWsUrl=ws%3A%2F%2F192.168.1.20%3A4770%2Fws&token=test-secret&ownerPublicKey=pk&ownerId=envoy%3Aowner%3Aabc&app=EnvoyDev";
 
 /** The section, with the one action it may call. */
-function show(overrides: Parameters<typeof stubAgentActions>[0] = {}): void {
+function show(
+  overrides: Parameters<typeof stubAgentActions>[0] & {
+    mintedPairing?: Parameters<typeof PairingSection>[0]["mintedPairing"];
+  } = {},
+): void {
+  const { mintedPairing, ...agentOverrides } = overrides;
   render(
     <I18nProvider preference="en">
       <PairingSection
         state={stateWith()}
         onUpdate={vi.fn()}
-        agents={stubAgentActions(overrides)}
+        agents={stubAgentActions(agentOverrides)}
+        {...(mintedPairing !== undefined ? { mintedPairing } : {})}
       />
     </I18nProvider>,
   );
@@ -219,12 +225,14 @@ describe("the three routes, separately", () => {
     const mintPairing = minting();
     show({ mintPairing });
 
-    // Before a press there is no panel and no code anywhere in the section.
+    // Without a shell-minted prop the panel waits for the refresh button (unit isolation of PairPhone).
     expect(screen.queryByTestId("pairing-panel")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: en["settings.pairing.qr.action"] }));
 
-    await vi.waitFor(() => expect(mintPairing).toHaveBeenCalledWith({ deviceLabel: "Phone" }));
+    await vi.waitFor(() =>
+      expect(mintPairing).toHaveBeenCalledWith({ deviceLabel: "Phone", fresh: true }),
+    );
     expect(mintPairing).toHaveBeenCalledTimes(1);
     const panel = await screen.findByTestId("pairing-panel");
     const uriField = within(panel).getByLabelText(en["settings.pairing.uriLabel"]) as HTMLTextAreaElement;
@@ -234,6 +242,26 @@ describe("the three routes, separately", () => {
     if (!(manual instanceof HTMLElement)) throw new Error("no manual block");
     expect(within(manual).queryByText("test-secret")).toBeNull();
     expect(manual.querySelector("[data-manual-result]")).toBeNull();
+  });
+
+  it("shows a shell-minted code immediately, without a second press", async () => {
+    const mintPairing = minting();
+    show({
+      mintPairing,
+      mintedPairing: {
+        ok: true,
+        uri: MINTED_URI,
+        device: {
+          id: "device-1",
+          deviceLabel: "Phone",
+          createdAt: "2026-09-14T10:00:00.000Z",
+          expiresAt: "2026-09-14T10:10:00.000Z",
+        },
+      },
+    });
+
+    expect(await screen.findByTestId("pairing-panel")).toBeTruthy();
+    expect(mintPairing).not.toHaveBeenCalled();
   });
 
   it("mints a short user token from the manual form without needing a QR first", async () => {

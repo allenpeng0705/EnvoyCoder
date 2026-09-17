@@ -1042,7 +1042,7 @@ export class CoderStore {
 
   /** Mint an `envoy://pair` URI for the phone. The URI carries the secret — never log it. */
   async mintPairing(
-    input: { deviceLabel?: string; host?: string; token?: string } = {},
+    input: { deviceLabel?: string; host?: string; token?: string; fresh?: boolean } = {},
   ): Promise<
     | { ok: true; uri: string; device: { id: string; deviceLabel: string; createdAt: string; expiresAt: string } }
     | Refusal
@@ -1053,6 +1053,7 @@ export class CoderStore {
         ...(input.deviceLabel ? { deviceLabel: input.deviceLabel } : {}),
         ...(input.host ? { host: input.host } : {}),
         ...(input.token ? { token: input.token } : {}),
+        ...(input.fresh === true ? { fresh: true } : {}),
       },
       (result) => {
         const answer = result as {

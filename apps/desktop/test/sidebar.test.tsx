@@ -288,6 +288,24 @@ describe("a project's row menu", () => {
     expect(onOpenProjectSettings).toHaveBeenCalledWith(SAMPLE_PROJECTS[1]);
   });
 
+  it("offers Open in new window when the shell can create one", () => {
+    const onOpenProjectInNewWindow = vi.fn();
+    renderSidebar({ onOpenProjectInNewWindow });
+    openMenu("Actions for payments-api");
+    fireEvent.click(
+      within(menu("Actions for payments-api")).getByRole("menuitem", { name: "Open in new window" }),
+    );
+    expect(onOpenProjectInNewWindow).toHaveBeenCalledWith(SAMPLE_PROJECTS[1]);
+  });
+
+  it("hides Open in new window when the shell cannot create one", () => {
+    renderSidebar();
+    openMenu("Actions for payments-api");
+    expect(
+      within(menu("Actions for payments-api")).queryByRole("menuitem", { name: "Open in new window" }),
+    ).toBeNull();
+  });
+
   it("starts a new task in that project", () => {
     const { onNewTask } = renderSidebar();
     openMenu("Actions for payments-api");

@@ -59,15 +59,19 @@ export type PairPhoneOutcome =
  *
  * `host` + `token` are the typed (host:port) route: the user chose the address and a short passphrase.
  * Omit both for QR — the daemon mints a long random secret the phone only scans.
+ *
+ * `fresh` forces a new QR secret (the section's "Show a new code"). Absent, an unused QR is reused so
+ * opening Pairing does not stack rows on *This machine*.
  */
 export async function mintPairingCode(
   agents: AgentActions,
-  input: { deviceLabel?: string; host?: string; token?: string } = {},
+  input: { deviceLabel?: string; host?: string; token?: string; fresh?: boolean } = {},
 ): Promise<PairPhoneOutcome> {
   const result = await agents.mintPairing({
     deviceLabel: input.deviceLabel ?? "Phone",
     ...(input.host ? { host: input.host } : {}),
     ...(input.token ? { token: input.token } : {}),
+    ...(input.fresh === true ? { fresh: true } : {}),
   });
   return result.ok ? { ok: true, uri: result.uri } : { ok: false, message: result.message };
 }

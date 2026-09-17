@@ -71,6 +71,8 @@ export const ja: Catalogue = {
   "sidebar.project.menu.aria": "{project} の操作",
   "sidebar.project.menu.title": "プロジェクトの操作",
   "sidebar.project.menu.newTask": "新しいタスク",
+  "sidebar.project.menu.openNewWindow": "新しいウィンドウで開く",
+  "sidebar.project.menu.openNewWindowFailed": "新しいウィンドウを開けませんでした",
   "sidebar.project.remove": "プロジェクトを削除",
   "sidebar.project.remove.aria": "このプロジェクトを削除",
   "sidebar.project.remove.confirm":
@@ -254,7 +256,7 @@ export const ja: Catalogue = {
   "settings.section.shortcuts.detail": "このウィンドウが待ち受けているすべてのキー。キーボード層が読むのと同じ表から読み出しています。",
   "settings.section.machine.title": "このコンピューター",
   "settings.section.machine.detail": "このウィンドウが接続しているサービスと、その起動時の情報。",
-  "settings.section.pairing.title": "ペアリング",
+  "settings.section.pairing.title": "モバイルペアリング",
   "settings.section.pairing.detail": "スマートフォンからこのマシンに接続させます。コードを読み取るか、アドレスを入力するか、SSH 経由で接続します。",
   "settings.section.about.title": "アプリについて",
   "settings.section.about.detail": "このウィンドウがどのバージョンで、サービスがどのバージョンか。",

@@ -90,10 +90,11 @@ export function readPairingLink(uri: string): PairingLink {
 export function PairingSection(
   props: SettingsSectionProps & {
     /**
-     * A code the **palette or the rail** already minted, arriving with the page it opened.
+     * A code the **palette, the rail, or the settings bar** already minted, arriving with the page.
      *
-     * The press happens in the shell before this page exists (see `CoderApp.openPairing`), so the answer can
-     * land either side of the render that first shows this section; the effect below is the later case.
+     * Minting happens in the shell's navigation handler (`CoderApp.goToSettings` / `openPairing`) so
+     * `<StrictMode>` cannot double-mint via a mount effect. This page only renders what it was handed,
+     * plus a button to mint again.
      */
     mintedPairing?: PairPhoneOutcome | undefined;
   },
@@ -101,6 +102,7 @@ export function PairingSection(
   const { t } = useI18n();
   /** QR outcome only — never reused as the manual route's values. */
   const [pairing, setPairing] = useState<PairPhoneOutcome | undefined>(props.mintedPairing);
+  const [qrBusy, setQrBusy] = useState(false);
   const [manualAddress, setManualAddress] = useState("");
   const [manualToken, setManualToken] = useState("");
   const [manualBusy, setManualBusy] = useState(false);
@@ -110,10 +112,15 @@ export function PairingSection(
   useEffect(() => {
     if (props.mintedPairing === undefined) return;
     setPairing(props.mintedPairing);
+    setQrBusy(false);
   }, [props.mintedPairing]);
 
   const mintQr = (): void => {
-    void mintPairingCode(props.agents).then(setPairing);
+    setQrBusy(true);
+    void mintPairingCode(props.agents, { fresh: true }).then((outcome) => {
+      setQrBusy(false);
+      setPairing(outcome);
+    });
   };
 
   /** The port this daemon listens on, for address hints and the SSH block. */
@@ -156,7 +163,7 @@ export function PairingSection(
     <>
       <p className="settings__note">{t("settings.pairing.note")}</p>
 
-      {/* ── route 1: the QR code, and the section's primary action ── */}
+      {/* ── route 1: the QR code — shown as soon as the section opens (shell mints on navigate) ── */}
       <section className="settings__pairing-route" data-route="qr" aria-labelledby="settings-pairing-qr">
         <div className="settings__pairing-route-head">
           <h2 className="settings__heading" id="settings-pairing-qr">
@@ -168,10 +175,20 @@ export function PairingSection(
         <p className="settings__note" data-mesh-route={meshHosting ? "ready" : "unavailable"}>
           {t(meshHosting ? "settings.pairing.qr.meshHosting" : "settings.pairing.qr.meshUnavailable")}
         </p>
-        <button type="button" className="button button--primary" onClick={mintQr}>
-          {t("settings.pairing.qr.action")}
-        </button>
+        {qrBusy && pairing === undefined ? (
+          <p className="settings__note" role="status" data-qr-busy="">
+            {t("settings.pairing.qr.busy")}
+          </p>
+        ) : null}
         {pairing ? <PairPhonePanel outcome={pairing} onClose={() => setPairing(undefined)} /> : null}
+        <button
+          type="button"
+          className="button button--secondary"
+          disabled={qrBusy}
+          onClick={mintQr}
+        >
+          {qrBusy ? t("settings.pairing.qr.busy") : t("settings.pairing.qr.action")}
+        </button>
       </section>
 
       {/* ── route 2: typed host:port + short user token ── */}

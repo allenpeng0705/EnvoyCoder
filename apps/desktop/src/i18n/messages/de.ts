@@ -71,6 +71,8 @@ export const de: Catalogue = {
   "sidebar.project.menu.aria": "Aktionen für {project}",
   "sidebar.project.menu.title": "Projektaktionen",
   "sidebar.project.menu.newTask": "Neue Aufgabe",
+  "sidebar.project.menu.openNewWindow": "In neuem Fenster öffnen",
+  "sidebar.project.menu.openNewWindowFailed": "Neues Fenster konnte nicht geöffnet werden",
   "sidebar.project.remove": "Projekt entfernen",
   "sidebar.project.remove.aria": "Dieses Projekt entfernen",
   "sidebar.project.remove.confirm":
@@ -254,7 +256,7 @@ export const de: Catalogue = {
   "settings.section.shortcuts.detail": "Jede Taste, auf die dieses Fenster hört — gelesen aus derselben Tabelle, die die Tastaturschicht liest.",
   "settings.section.machine.title": "Dieser Computer",
   "settings.section.machine.detail": "Der Dienst, mit dem dieses Fenster verbunden ist, und womit er gestartet wurde.",
-  "settings.section.pairing.title": "Kopplung",
+  "settings.section.pairing.title": "Mobile Kopplung",
   "settings.section.pairing.detail": "Ein Telefon zu diesem Rechner lassen: Code scannen, Adresse eintippen oder über SSH gehen.",
   "settings.section.about.title": "Über",
   "settings.section.about.detail": "Welche Version dieses Fenster ist und welche der Dienst ist.",
@@ -464,7 +466,8 @@ export const de: Catalogue = {
     "This code includes a direct mesh route when the phone can reach this machine over the network.",
   "settings.pairing.qr.meshUnavailable":
     "The mesh peer is not hosting — this code still works over the network address and SSH.",
-  "settings.pairing.qr.action": "Kopplungscode anzeigen",
+  "settings.pairing.qr.busy": "Kopplungscode wird vorbereitet…",
+  "settings.pairing.qr.action": "Neuen Code anzeigen",
   "settings.pairing.qr.alt": "Kopplungscode",
   "settings.pairing.uriLabel": "Kopplungslink",
   "settings.pairing.copy": "Kopplungslink kopieren",

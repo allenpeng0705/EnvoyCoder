@@ -36,7 +36,7 @@ import type { JSX } from "react";
 import { GearIcon, QrIcon } from "./icons.js";
 import { RowMenu } from "./RowMenu.js";
 
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   type HarnessId,
   type Project,
@@ -64,6 +64,13 @@ export interface CoderSidebarProps {
   onNewTask: (projectId: string) => void;
   onAddProject: () => void;
   onOpenProjectSettings: (project: Project) => void;
+  /**
+   * Open this project in a new window (desktop shell only).
+   *
+   * Same affordance as Paseo's project kebab "Open in new window": one daemon, another window
+   * that lands on this project. Absent when the window has no shell to ask (browser dev).
+   */
+  onOpenProjectInNewWindow?: ((project: Project) => void) | undefined;
   /**
    * Take a project out of the rail.
    *
@@ -119,6 +126,13 @@ export interface CoderSidebarProps {
    * the sentence leaves with the row if the row does.
    */
   failure?: { rowId: string; notice: Notice } | undefined;
+  /**
+   * Project this window was opened to work in (from "Open in new window").
+   *
+   * Other projects start collapsed so the rail lands on that project the way Paseo's new window
+   * lands on the path it was given.
+   */
+  focusProjectId?: string | undefined;
 }
 
 /** The agent a project's new tasks will use — the group header's badge. */
@@ -148,8 +162,18 @@ function harnessBadge(harness: HarnessId): string {
 export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
   const t = useT();
   const [collapsed, setCollapsed] = useState<readonly string[]>([]);
-  const [flat, setFlat] = useState(false);
   const [localQuery, setLocalQuery] = useState("");
+  /** Apply the landing focus once — do not fight the user if they later expand another project. */
+  const focusApplied = useRef(false);
+
+  useEffect(() => {
+    if (focusApplied.current) return;
+    const focusId = props.focusProjectId;
+    if (!focusId) return;
+    if (!props.projects.some((project) => project.id === focusId)) return;
+    focusApplied.current = true;
+    setCollapsed(props.projects.filter((project) => project.id !== focusId).map((project) => project.id));
+  }, [props.focusProjectId, props.projects]);
 
   const query = props.query ?? localQuery;
   const setQuery = props.onQueryChange ?? setLocalQuery;
@@ -215,15 +239,7 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
           aria-label={t("sidebar.search.aria")}
           onChange={(event) => setQuery(event.target.value)}
         />
-        <button
-          type="button"
-          className="button button--ghost sidebar__viewmode"
-          aria-pressed={flat}
-          title={flat ? t("sidebar.view.groupBy") : t("sidebar.view.flat")}
-          onClick={() => setFlat((value) => !value)}
-        >
-          {flat ? t("sidebar.view.group") : t("sidebar.view.list")}
-        </button>
+        {/* Flat "List" view is deferred — grouped by project is the default and only layout for now. */}
       </div>
 
       {attention.badge > 0 ? (
@@ -254,25 +270,6 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
               <p className="sidebar__empty-body">{t("sidebar.empty.noMatch", { query })}</p>
             )}
           </div>
-        ) : flat ? (
-          groups
-            .flatMap((group) => group.rows)
-            .map((row) => (
-              <Fragment key={row.task.id}>
-                <TaskRow
-                  row={row}
-                  active={row.task.id === props.activeTaskId}
-                  onSelect={props.onSelect}
-                  onRenameTask={props.onRenameTask}
-                  onRemoveTask={props.onRemoveTask}
-                />
-                {props.failure?.rowId === row.task.id ? (
-                  <p className="sidebar__failure" role="status">
-                    {localize(t, props.failure.notice)}
-                  </p>
-                ) : null}
-              </Fragment>
-            ))
         ) : (
           groups.map((group) => {
             const isCollapsed = collapsed.includes(group.project.id);
@@ -331,6 +328,15 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                         label: t("sidebar.project.menu.newTask"),
                         onSelect: () => props.onNewTask(group.project.id),
                       },
+                      ...(props.onOpenProjectInNewWindow
+                        ? [
+                            {
+                              id: "open-new-window",
+                              label: t("sidebar.project.menu.openNewWindow"),
+                              onSelect: () => props.onOpenProjectInNewWindow?.(group.project),
+                            },
+                          ]
+                        : []),
                     ]}
                     confirm={{
                       label: t("sidebar.project.remove"),

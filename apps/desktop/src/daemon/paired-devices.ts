@@ -129,6 +129,20 @@ function isActive(record: PairedDeviceRecord, now: Date): boolean {
   return expires > now.getTime();
 }
 
+/**
+ * QR mint secrets are long random base64url; the typed route uses 8–10 character tokens.
+ * Only the long kind stacks when Settings → Pairing auto-opens — those are safe to discard when
+ * unused, because nothing ever authenticated with them.
+ */
+function isQrSecret(token: string): boolean {
+  return token.length > USER_PAIRING_TOKEN_MAX_LEN;
+}
+
+/** Unused QR codes: never seen by a phone, not an explicit revoke. */
+function isUnusedQr(record: PairedDeviceRecord): boolean {
+  return isQrSecret(record.token) && !record.lastSeenAt && !record.revokedAt;
+}
+
 async function atomicWrite(path: string, body: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   const tmp = `${path}.tmp-${process.pid}`;
@@ -241,16 +255,32 @@ export class PairedDeviceStore {
   list(): Promise<PairedDevicePublic[]> {
     return this.enqueue(async () => {
       await this.ensureLoaded();
+      // Opening *This machine* should not show a graveyard of codes minted every time Pairing opened
+      // and never scanned — keep at most one unused QR, drop the rest (and expired unused QR).
+      if (this.pruneUnusedQrCodes({ keepNewest: true })) await this.persist();
       return this.devices.map(publicOf);
     });
   }
 
   mint(
-    input: { deviceLabel?: string; ttlMs?: number; token?: string } = {},
+    input: { deviceLabel?: string; ttlMs?: number; token?: string; fresh?: boolean } = {},
   ): Promise<{ record: PairedDeviceRecord; public: PairedDevicePublic }> {
     return this.enqueue(async () => {
       await this.ensureLoaded();
       const now = this.now();
+
+      // QR path (no user token): reuse an unused code when Pairing opens again, instead of stacking
+      // another "Phone" row the owner never paired with. `fresh: true` is "Show a new code".
+      if (input.token === undefined && input.fresh !== true) {
+        const reusable = this.devices
+          .filter((d) => isUnusedQr(d) && isActive(d, now))
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+        if (reusable) {
+          if (this.pruneUnusedQrCodes({ keepId: reusable.id })) await this.persist();
+          return { record: reusable, public: publicOf(reusable) };
+        }
+      }
+
       let token: string;
       if (input.token !== undefined) {
         const normalized = normalizeUserPairingToken(input.token);
@@ -267,6 +297,8 @@ export class PairedDeviceStore {
         }
         token = normalized.token;
       } else {
+        // New QR secret: drop every unused QR first so "Show a new code" replaces clutter.
+        this.pruneUnusedQrCodes({ keepId: null });
         token = randomBytes(24).toString("base64url");
       }
       const ttl = input.ttlMs ?? DEFAULT_PAIRING_TTL_MS;
@@ -281,6 +313,36 @@ export class PairedDeviceStore {
       await this.persist();
       return { record, public: publicOf(record) };
     });
+  }
+
+  /**
+   * Drop unused QR pairing codes that never authenticated a phone.
+   *
+   * These are not security evidence (nothing was revoked; nothing connected). They accumulate when
+   * Pairing auto-mints on open. User-chosen short tokens, used devices, and explicitly revoked rows
+   * are kept.
+   *
+   * @param keepId keep this record; `null` keep none; omit + `keepNewest` keep the newest active unused QR
+   */
+  private pruneUnusedQrCodes(
+    options: { keepId?: string | null; keepNewest?: boolean } = {},
+  ): boolean {
+    const now = this.now();
+    let keepId = options.keepId;
+    if (keepId === undefined && options.keepNewest === true) {
+      keepId =
+        this.devices
+          .filter((d) => isUnusedQr(d) && isActive(d, now))
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.id ?? null;
+    }
+    const next = this.devices.filter((d) => {
+      if (keepId && d.id === keepId) return true;
+      if (!isUnusedQr(d)) return true;
+      return false;
+    });
+    if (next.length === this.devices.length) return false;
+    this.devices = next;
+    return true;
   }
 
   revoke(id: string): Promise<PairedDevicePublic | null> {

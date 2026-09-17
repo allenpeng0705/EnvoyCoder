@@ -30,6 +30,11 @@ import type { Project, Task } from "@envoydev/protocol";
 import { taskTitleFromPrompt } from "@envoydev/task-model";
 
 import { startWindowDrag } from "../client/window-drag.js";
+import {
+  canOpenProjectInNewWindow,
+  openProjectInNewWindow,
+  takePendingProject,
+} from "../client/new-window.js";
 import { useT } from "../i18n/context.js";
 import {
   asFailure,
@@ -88,6 +93,11 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
   const { state } = props;
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  /**
+   * Project this window was opened to work in ("Open in new window" / pending from the shell).
+   * Consumed once on mount; drives rail collapse + selecting a recent task in that project.
+   */
+  const [focusProjectId, setFocusProjectId] = useState<string | undefined>(undefined);
   /**
    * What the palette was opened *for*, if anything.
    *
@@ -192,38 +202,37 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
   const layout = useSettingsLayout();
   const [settingsScope, setSettingsScope] = useState<SettingsScope | undefined>(undefined);
   /**
-   * **The code the palette's *Pair a phone* row minted**, on its way to *Settings → Pairing*.
+   * **The code minted for the current Pairing visit**, on its way to *Settings → Mobile Pairing*.
    *
-   * Held here rather than inside the page because the press happens here: the row is this shell's command,
-   * and the page it opens may not be mounted yet. `goToSettings` clears it on every navigation and on
-   * close, so a code the user has moved past cannot come back — a pairing URI is a secret with an expiry,
-   * not a value to rediscover.
+   * Held here rather than inside the page because the press happens here: the rail QR, the palette
+   * row, and the settings-bar item are this shell's navigation, and the page may not be mounted yet.
+   * Cleared when leaving Pairing so a code the user has moved past cannot come back — a pairing URI
+   * is a secret with an expiry, not a value to rediscover.
    */
   const [mintedPairing, setMintedPairing] = useState<PairPhoneOutcome | undefined>(undefined);
-  /** Every way the pane's scope changes, so the pairing code above cannot outlive the visit it belongs to. */
+  /**
+   * Every way the pane's scope changes. Opening **Mobile Pairing** also mints here — in the click
+   * handler, not in a mount effect — so `<StrictMode>` cannot create two paired-device records, and
+   * the code appears as soon as the page opens without a second "Show pairing code" press.
+   */
   const goToSettings = (scope: SettingsScope | undefined): void => {
     setSettingsScope(scope);
+    if (scope?.kind === "app" && scope.section === "pairing") {
+      void mintPairingCode(props.actions).then(setMintedPairing);
+      return;
+    }
     setMintedPairing(undefined);
   };
   const openAppSettings = (): void => goToSettings(entryScope(layout));
   const closeSettings = (): void => goToSettings(undefined);
   /**
-   * **The palette's *Pair a phone* row, which now pairs.**
+   * **The palette's *Pair a phone* row and the rail's QR** — same destination as the settings-bar item.
    *
-   * The press mints **here**, in the event handler, rather than in an effect on the page it opens:
-   * `<StrictMode>` invokes a mounting effect twice in development, and a second mint is a second
-   * paired-device record on the daemon — not a doubled render (`settings/PairPhone.tsx` is the argument).
-   * The pane is opened first so the press always has a visible result; the answer — the code, or the
-   * daemon's refusal — arrives a moment later and `PairingSection` renders whichever it is. The rail's
-   * QR button and the palette's row are the same press, because they are this one function.
-   *
-   * A refusal here is not worked around. `coder.mintPairing` is owner-window-only by design
-   * (`daemon/pairing.ts`), and this is the owner's window; if the daemon ever refused this press, the
-   * sentence would appear on the page unaltered.
+   * One function so the three ways in cannot mint by three routes. Navigation mints; the page only
+   * renders the answer (`PairingSection` + `mintedPairing`).
    */
   const openPairing = (): void => {
-    setSettingsScope(appScope("pairing"));
-    void mintPairingCode(props.actions).then(setMintedPairing);
+    goToSettings(appScope("pairing"));
   };
   /**
    * The one way into a project's settings, whoever asks.
@@ -236,6 +245,31 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
   const openProjectSettings = (project: Project): void => {
     setSettingsScope(projectScope(project.id));
   };
+
+  /** Pull the landing project once, when this window was opened via "Open in new window". */
+  useEffect(() => {
+    let cancelled = false;
+    void takePendingProject().then((projectId) => {
+      if (!cancelled && projectId) setFocusProjectId(projectId);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /**
+   * Once the daemon's project list includes the landing project, select its most recently updated
+   * task so the work area is not blank — and only if the user has not already picked a task.
+   */
+  useEffect(() => {
+    if (!focusProjectId || activeId !== undefined) return;
+    if (!state.projects.some((project) => project.id === focusProjectId)) return;
+    const newest = [...state.tasks]
+      .filter((task) => task.projectId === focusProjectId && !task.archivedAt)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+    if (newest) setActiveId(newest.id);
+  }, [focusProjectId, state.projects, state.tasks, activeId]);
+
   const [railOpen, setRailOpen] = useState(true);
   /**
    * **The two failures this shell routes, because it is what holds the press.**
@@ -260,6 +294,19 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
   const toPane = (taskId: string, failure: WriteFailure): WriteFailure => {
     setPaneFailure(failure ? { taskId, notice: failure } : undefined);
     return failure;
+  };
+
+  /**
+   * Open this project in another window — the project's `…` menu, desktop shell only.
+   *
+   * Same shape as Paseo's kebab item: the shell creates the window and records the project id;
+   * the new window pulls it on mount. Failures land under the project row (toRail), not in a toast.
+   */
+  const openProjectWindow = (project: Project): void => {
+    void openProjectInNewWindow(project.id).then((result) => {
+      if (result.ok) return;
+      toRail(project.id, localNotice("sidebar.project.menu.openNewWindowFailed"));
+    });
   };
   /**
    * Take one project off the rail — the row menu's Remove, after its own inline confirmation.
@@ -523,7 +570,9 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
             }}
             onAddProject={() => openPalette({ commandId: "project.add" })}
             onOpenProjectSettings={openProjectSettings}
+            onOpenProjectInNewWindow={canOpenProjectInNewWindow() ? openProjectWindow : undefined}
             onRemoveProject={(projectId) => void removeProjectRow(projectId).then((f) => toRail(projectId, f))}
+            focusProjectId={focusProjectId}
             onRenameTask={(taskId, title) => void renameTaskRow(taskId, title).then((f) => toRail(taskId, f))}
             onRemoveTask={(taskId) => void removeTaskRow(taskId).then((f) => toRail(taskId, f))}
             failure={railFailure}

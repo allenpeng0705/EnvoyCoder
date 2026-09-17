@@ -1,0 +1,7 @@
+# Open another EnvoyDev window on the same daemon (Paseo's "Open in new window").
+# `new_window` creates the webview; `take_pending_project` lets that window read the project it
+# was opened for — once — so a reload does not re-focus it.
+[[permission]]
+identifier = "allow-new-window"
+description = "Open an additional EnvoyDev window, optionally landing on a project."
+commands.allow = ["new_window", "take_pending_project"]

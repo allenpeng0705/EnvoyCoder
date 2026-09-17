@@ -75,6 +75,8 @@ export const en = {
   "sidebar.project.menu.aria": "Actions for {project}",
   "sidebar.project.menu.title": "Project actions",
   "sidebar.project.menu.newTask": "New task",
+  "sidebar.project.menu.openNewWindow": "Open in new window",
+  "sidebar.project.menu.openNewWindowFailed": "Couldn't open a new window",
   "sidebar.project.remove": "Remove project",
   "sidebar.project.remove.aria": "Remove this project",
   "sidebar.project.remove.confirm":
@@ -374,7 +376,7 @@ export const en = {
   "settings.section.machine.title": "This machine",
   "settings.section.machine.detail":
     "The daemon this window is attached to, and what it was started with.",
-  "settings.section.pairing.title": "Pairing",
+  "settings.section.pairing.title": "Mobile Pairing",
   "settings.section.pairing.detail":
     "Let a phone reach this machine: scan a code, type its address, or go through SSH.",
   "settings.section.about.title": "About",
@@ -799,7 +801,8 @@ export const en = {
     "This code includes a direct mesh route when the phone can reach this machine over the network.",
   "settings.pairing.qr.meshUnavailable":
     "The mesh peer is not hosting — this code still works over the network address and SSH.",
-  "settings.pairing.qr.action": "Show pairing code",
+  "settings.pairing.qr.busy": "Preparing pairing code…",
+  "settings.pairing.qr.action": "Show a new code",
   "settings.pairing.qr.alt": "Pairing code",
   "settings.pairing.uriLabel": "Pairing link",
   "settings.pairing.copy": "Copy pairing link",

@@ -163,6 +163,7 @@ export function createPairingHandlers(deps: PairingHandlerDeps): Partial<Record<
         host?: string;
         lanHost?: string;
         token?: string;
+        fresh?: boolean;
       };
       // Settle the peer before reading its addresses — see `awaitMeshReady` on the deps.
       await deps.awaitMeshReady?.();
@@ -181,6 +182,7 @@ export function createPairingHandlers(deps: PairingHandlerDeps): Partial<Record<
         const minted = await deps.store.mint({
           ...(input.deviceLabel ? { deviceLabel: input.deviceLabel } : {}),
           ...(input.token !== undefined ? { token: input.token } : {}),
+          ...(input.fresh === true ? { fresh: true } : {}),
         });
         record = minted.record;
         device = minted.public;

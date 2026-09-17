@@ -179,12 +179,11 @@ describe("the sections bar, in the same language", () => {
     "Neue Aufgaben",
     "Sicherheit",
     "Agenten",
+    // Mobile pairing sits above Projects in the registry — same order the bar renders.
+    "Mobile Kopplung",
     "Projekte",
     "Tastenkürzel",
     "Dieser Computer",
-    // The Pairing section's German name, from the catalogue like every other: a section added with a
-    // hardcoded English title would drop out of this list and fail the length assertion below.
-    "Kopplung",
     "Über",
   ];
 

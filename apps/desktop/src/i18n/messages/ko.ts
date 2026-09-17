@@ -71,6 +71,8 @@ export const ko: Catalogue = {
   "sidebar.project.menu.aria": "{project} 작업",
   "sidebar.project.menu.title": "프로젝트 메뉴",
   "sidebar.project.menu.newTask": "새 작업",
+  "sidebar.project.menu.openNewWindow": "새 창에서 열기",
+  "sidebar.project.menu.openNewWindowFailed": "새 창을 열 수 없습니다",
   "sidebar.project.remove": "프로젝트 제거",
   "sidebar.project.remove.aria": "이 프로젝트 제거",
   "sidebar.project.remove.confirm":
@@ -254,7 +256,7 @@ export const ko: Catalogue = {
   "settings.section.shortcuts.detail": "이 창이 듣고 있는 모든 키. 키보드 계층이 읽는 것과 같은 표에서 읽습니다.",
   "settings.section.machine.title": "이 컴퓨터",
   "settings.section.machine.detail": "이 창이 연결된 서비스와 그것이 시작된 정보.",
-  "settings.section.pairing.title": "페어링",
+  "settings.section.pairing.title": "모바일 페어링",
   "settings.section.pairing.detail": "휴대폰에서 이 컴퓨터에 접속하게 합니다. 코드를 스캔하거나 주소를 입력하거나 SSH를 거칩니다.",
   "settings.section.about.title": "앱 정보",
   "settings.section.about.detail": "이 창이 어느 버전이고 서비스가 어느 버전인지.",

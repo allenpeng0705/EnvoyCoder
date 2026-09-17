@@ -2392,6 +2392,11 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
           .max(10)
           .regex(/^[A-Za-z0-9]+$/, "token must be 8–10 letters or digits")
           .optional(),
+        /**
+         * QR path only: mint a **new** secret even when an unused QR code already exists.
+         * Absent / false → reuse the newest unused QR (stops Pairing-on-open from stacking rows).
+         */
+        fresh: z.boolean().optional(),
       })
       .strict(),
     result: z

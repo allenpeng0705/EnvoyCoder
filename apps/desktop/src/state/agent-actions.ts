@@ -90,6 +90,8 @@ export interface AgentActions {
     host?: string;
     /** User-chosen 8–10 character token for host:port; omit for QR (long random). */
     token?: string;
+    /** QR path: force a new secret instead of reusing an unused one. */
+    fresh?: boolean;
   }): Promise<
     | { ok: true; uri: string; device: { id: string; deviceLabel: string; createdAt: string; expiresAt: string } }
     | Refusal

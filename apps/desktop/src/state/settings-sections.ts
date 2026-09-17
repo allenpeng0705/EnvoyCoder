@@ -99,10 +99,11 @@ export interface SettingsSection {
  *
  * The order is the question a user arrives with, most-settled-first: what this app does by default,
  * what a new task starts with, what an agent may do without asking, what the agents on this machine
- * can actually do, which folders this machine works in, what the keyboard does, what this window is
- * attached to, how a phone reaches it, and which build it is. The reference product's order is not
- * copied: its host sections are a per-machine fleet surface we do not have (§5 of
- * `docs/settings-parity.md`).
+ * can actually do, how a phone reaches it, which folders this machine works in, what the keyboard
+ * does, what this window is attached to, and which build it is. Mobile pairing sits above Projects
+ * because pairing is how another device reaches this machine — a setup step, not a project default.
+ * The reference product's order is not copied: its host sections are a per-machine fleet surface we
+ * do not have (§5 of `docs/settings-parity.md`).
  */
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   {
@@ -202,6 +203,31 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     ],
   },
   {
+    id: "pairing",
+    titleKey: "settings.section.pairing.title",
+    band: { kind: "sentence", key: "settings.section.pairing.detail" },
+    content: [
+      {
+        file: "apps/desktop/src/components/settings/PairingSection.tsx",
+        needle: "mintPairingCode(props.agents)",
+        because:
+          "QR and host:port both mint through `PairPhone.tsx`'s shared call site, so the palette, the rail's " +
+          "QR button and this page cannot produce three codes by three routes",
+      },
+      {
+        file: "apps/desktop/src/components/settings/PairingSection.tsx",
+        needle: "data-manual-result",
+        because:
+          "the host:port route shows its own short token after a form mint, never the QR's long secret",
+      },
+      {
+        file: "apps/desktop/src/components/settings/PairPhone.tsx",
+        needle: "coder.mintPairing",
+        because: "the shared module itself, which the section reuses rather than reimplements",
+      },
+    ],
+  },
+  {
     id: "projects",
     titleKey: "settings.projects.title",
     // Not a sentence: the band says **how many** projects are registered (`projectsCount`).
@@ -250,31 +276,6 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
         file: "apps/desktop/src/components/settings/SectionsFacts.tsx",
         needle: "hello.windowCount",
         because: "and how many windows are attached to it, which is a number no chip can hold",
-      },
-    ],
-  },
-  {
-    id: "pairing",
-    titleKey: "settings.section.pairing.title",
-    band: { kind: "sentence", key: "settings.section.pairing.detail" },
-    content: [
-      {
-        file: "apps/desktop/src/components/settings/PairingSection.tsx",
-        needle: "mintPairingCode(props.agents)",
-        because:
-          "QR and host:port both mint through `PairPhone.tsx`'s shared call site, so the palette, the rail's " +
-          "QR button and this page cannot produce three codes by three routes",
-      },
-      {
-        file: "apps/desktop/src/components/settings/PairingSection.tsx",
-        needle: "data-manual-result",
-        because:
-          "the host:port route shows its own short token after a form mint, never the QR's long secret",
-      },
-      {
-        file: "apps/desktop/src/components/settings/PairPhone.tsx",
-        needle: "coder.mintPairing",
-        because: "the shared module itself, which the section reuses rather than reimplements",
       },
     ],
   },

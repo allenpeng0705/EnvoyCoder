@@ -155,7 +155,7 @@ describe("the palette's Pair a phone row", () => {
    * mints through the shared module. Without it, a regression in `PairPhone.tsx` would be invisible to the
    * suite — the same shape of gap that let the palette's stub sit there in the first place.
    */
-  it("mints from the Pairing section's own button, through the same shared code", async () => {
+  it("mints from the Pairing section once the settings bar opens it — no second press", async () => {
     const mintPairing = vi.fn(async () => ({
       ok: true as const,
       uri: MINTED_URI,
@@ -183,7 +183,6 @@ describe("the palette's Pair a phone row", () => {
     // wide layout and the bar is beside the page (`settings-nav.test.tsx` asserts that fallback).
     fireEvent.click(screen.getByRole("button", { name: en["sidebar.settings"] }));
     fireEvent.click(screen.getByRole("button", { name: en["settings.section.pairing.title"] }));
-    fireEvent.click(screen.getByRole("button", { name: en["settings.pairing.qr.action"] }));
 
     await vi.waitFor(() => expect(mintPairing).toHaveBeenCalledWith({ deviceLabel: "Phone" }));
     expect(await screen.findByTestId("pairing-panel")).toBeTruthy();

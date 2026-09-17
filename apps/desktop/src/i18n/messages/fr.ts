@@ -71,6 +71,8 @@ export const fr: Catalogue = {
   "sidebar.project.menu.aria": "Actions pour {project}",
   "sidebar.project.menu.title": "Actions du projet",
   "sidebar.project.menu.newTask": "Nouvelle tâche",
+  "sidebar.project.menu.openNewWindow": "Ouvrir dans une nouvelle fenêtre",
+  "sidebar.project.menu.openNewWindowFailed": "Impossible d'ouvrir une nouvelle fenêtre",
   "sidebar.project.remove": "Retirer le projet",
   "sidebar.project.remove.aria": "Retirer ce projet",
   "sidebar.project.remove.confirm":
@@ -254,7 +256,7 @@ export const fr: Catalogue = {
   "settings.section.shortcuts.detail": "Chaque touche que cette fenêtre écoute, lue dans la même table que la couche clavier.",
   "settings.section.machine.title": "Cet ordinateur",
   "settings.section.machine.detail": "Le service auquel cette fenêtre est connectée, et avec quoi il a démarré.",
-  "settings.section.pairing.title": "Association",
+  "settings.section.pairing.title": "Association mobile",
   "settings.section.pairing.detail": "Laisser un téléphone joindre cette machine : scanner un code, saisir son adresse, ou passer par SSH.",
   "settings.section.about.title": "À propos",
   "settings.section.about.detail": "Quelle version est cette fenêtre, et quelle version est le service.",

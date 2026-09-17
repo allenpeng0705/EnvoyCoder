@@ -29,14 +29,16 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::collections::HashMap;
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use tauri::{Manager, State};
+use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 /// The family's product name, used for the shared-home segment and the pairing `app` claim.
 const PRODUCT_NAME: &str = "EnvoyDev";
@@ -591,6 +593,7 @@ fn main() {
 
     tauri::Builder::default()
         .manage(Supervisor::default())
+        .manage(PendingProjects::default())
         // `daemon_port` is deliberately *not* a command any more. The window asks where the daemon
         // is (`daemon_endpoint`) rather than which port to dial: the shell decides what "the daemon"
         // means, and a command that handed out a port would invite the window to build a URL of its
@@ -602,7 +605,10 @@ fn main() {
                 pick_folder,
                 // The clipboard: `Copy` beside an install command must not depend on the webview's gesture rules,
                 // which is what `copy_text`'s own doc explains.
-                copy_text
+                copy_text,
+                // Multi-window: open another window on the same daemon, optionally focused on a project.
+                new_window,
+                take_pending_project
             ])
         .build(tauri::generate_context!())
         .expect("EnvoyDev failed to start")
@@ -625,6 +631,92 @@ fn main() {
                 }
             }
         });
+}
+
+/* ────────────────────────────── multi-window ────────────────────────────── */
+
+/// Sequence for additional window labels (`win-1`, `win-2`, …). The first window is `main`
+/// (from `tauri.conf.json`); every later window needs a distinct label so capabilities can
+/// cover them with a glob without colliding with the primary.
+static WINDOW_SEQ: AtomicU64 = AtomicU64::new(1);
+
+/// Project id to land on, keyed by the window label that should consume it.
+///
+/// Same shape as Paseo's pending-open-project store: the shell records the path/id when it
+/// creates the window, and the window pulls it once on mount. A global would race; a URL query
+/// is fragile across Tauri's app/dev URLs — so the label is the key.
+#[derive(Default)]
+struct PendingProjects(Mutex<HashMap<String, String>>);
+
+/**
+ * Open another EnvoyDev window on the same daemon, optionally landing on a project.
+ *
+ * ## Why the shell owns this
+ *
+ * The daemon already accepts many connections (one per window). What was missing is *creating*
+ * a second window: the capability list was scoped to `main`, and there was no command. This is
+ * that command — Paseo's `paseo:window:openNew` translated to Tauri.
+ *
+ * Additional windows open at the default size and let the OS cascade them; they do not restore
+ * the primary window's saved geometry (we do not yet persist window state at all).
+ */
+#[tauri::command]
+fn new_window(
+    app: tauri::AppHandle,
+    pending: State<'_, PendingProjects>,
+    project_id: Option<String>,
+) -> Result<(), String> {
+    let seq = WINDOW_SEQ.fetch_add(1, Ordering::Relaxed);
+    let label = format!("win-{seq}");
+    let project = project_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+
+    let mut builder = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html".into()))
+        .title("EnvoyDev")
+        .inner_size(1280.0, 820.0)
+        .min_inner_size(900.0, 560.0)
+        .resizable(true)
+        .hidden_title(true);
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.title_bar_style(tauri::TitleBarStyle::Overlay);
+    }
+
+    // Record the landing project *before* the webview can ask for it — otherwise a fast mount
+    // can race an empty map (Paseo's store is filled in `onCreated` for the same reason).
+    if let Some(id) = project {
+        let mut map = pending
+            .0
+            .lock()
+            .map_err(|_| "EnvoyDev's pending-project map is unusable.".to_string())?;
+        map.insert(label.clone(), id);
+    }
+
+    if let Err(error) = builder.build() {
+        if let Ok(mut map) = pending.0.lock() {
+            map.remove(&label);
+        }
+        return Err(format!("Could not open a new window: {error}"));
+    }
+    Ok(())
+}
+
+/**
+ * The project this window was opened for, if any — taken once, then gone.
+ *
+ * The window asks on mount (like Paseo's `getPendingOpenProject`). Taking rather than peeking
+ * means a reload does not re-focus a project the user already left.
+ */
+#[tauri::command]
+fn take_pending_project(
+    window: tauri::WebviewWindow,
+    pending: State<'_, PendingProjects>,
+) -> Option<String> {
+    pending.0.lock().ok()?.remove(window.label())
 }
 
 /**
