@@ -937,6 +937,15 @@ export const RPC_METHODS = [
   "coder.addProject",
   "coder.updateProject",
   "coder.removeProject",
+  /**
+   * Where a remote folder picker starts: platform, home directory, and drive/root list.
+   *
+   * The phone cannot open the OS chooser on the daemon's machine. These two methods are the
+   * same contract EnvoyGo already uses against EnvoyMesh (`getHomeFsInfo` / `listHomeFsEntries`),
+   * namespaced under `coder.*` so the catalogue stays one closed list.
+   */
+  "coder.getHomeFsInfo",
+  "coder.listHomeFsEntries",
   "coder.listTasks",
   "coder.createTask",
   "coder.updateTask",
@@ -1096,6 +1105,13 @@ export const RPC_METHODS = [
   "coder.forgetPairedDevice",
   "coder.getSettings",
   "coder.updateSettings",
+  /**
+   * Read Envoy Harness LLM settings for the Agents panel — provider, model, base URL, and whether an
+   * API key is stored. The key itself never travels on this wire.
+   */
+  "coder.getEnvoyLlm",
+  /** Write Envoy Harness LLM settings (and optionally replace or clear the stored API key). */
+  "coder.setEnvoyLlm",
 ] as const;
 
 export type RpcMethod = (typeof RPC_METHODS)[number];

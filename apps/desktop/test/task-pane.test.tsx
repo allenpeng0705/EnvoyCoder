@@ -154,16 +154,23 @@ function renderPane(
 }
 
 describe("the pane's header", () => {
-  it("says which machine the work is on, and what it is working in", () => {
+  it("says what the work is on, without naming this machine when the task is local", () => {
     renderPane([]);
-    // "This machine" is a statement, not an omission: a distributed control plane that leaves it out
-    // invites the user to assume "here" and then wonder why a passing test fails in the transcript.
-    expect(screen.getByText("This machine")).toBeTruthy();
+    // Local work is the default: a permanent "This machine" chip is noise. The rail already hides
+    // `hostId === "local"` the same way. Remote hosts still appear (next test).
+    expect(screen.queryByText("This machine")).toBeNull();
     expect(screen.getByText("payments-api")).toBeTruthy();
-    expect(screen.getByText("DeepSeek Harness")).toBeTruthy();
+    expect(screen.getByText("DeepSeek")).toBeTruthy();
     expect(screen.getByText("deepseek-official/deepseek-v4-flash")).toBeTruthy();
-    // The status is the end-user wording, never the internal bucket.
-    expect(screen.getByText("Needs your answer")).toBeTruthy();
+    // Status is a coloured dot, not a worded chip — same vocabulary as the rail.
+    expect(screen.queryByText("Needs your answer")).toBeNull();
+    expect(screen.getByLabelText("Needs your answer")).toBeTruthy();
+  });
+
+  it("names a remote host when the task is not on this machine", () => {
+    renderPane([], { task: { ...task, hostId: "workstation" } });
+    expect(screen.getByText("workstation")).toBeTruthy();
+    expect(screen.queryByText("This machine")).toBeNull();
   });
 
   it("teaches a new user what will happen, rather than showing a blank panel", () => {
@@ -187,6 +194,42 @@ describe("the transcript", () => {
     expect(screen.getByText(/joined the turn/)).toBeTruthy();
   });
 
+  it("renders assistant answers as markdown — headings, lists, and fenced code", () => {
+    renderPane([
+      event({
+        kind: "run.output",
+        stream: "assistant",
+        messageId: "m1",
+        text: "## Fix\n\n- use a map\n\n```ts\nconst m = new Map()\n```",
+      }),
+    ]);
+    const transcript = screen.getByTestId("transcript");
+    expect(within(transcript).getByRole("heading", { level: 2, name: "Fix" })).toBeTruthy();
+    expect(within(transcript).getByText("use a map")).toBeTruthy();
+    // Highlight splits the line across token spans — match the code element's text.
+    expect(transcript.querySelector("code.hljs")?.textContent).toBe("const m = new Map()");
+    expect(within(transcript).getByRole("button", { name: "Copy" })).toBeTruthy();
+    expect(within(transcript).getByText("ts")).toBeTruthy();
+    expect(transcript.textContent).not.toContain("```");
+  });
+
+  it("keeps a mermaid fence as source while the run is still live", () => {
+    renderPane(
+      [
+        event({
+          kind: "run.output",
+          stream: "assistant",
+          messageId: "m1",
+          text: "```mermaid\nflowchart TD\n  A-->B\n```",
+        }),
+      ],
+      { runLive: true },
+    );
+    const transcript = screen.getByTestId("transcript");
+    expect(within(transcript).getByText("mermaid")).toBeTruthy();
+    expect(within(transcript).getByText(/Diagram appears when/)).toBeTruthy();
+  });
+
   it("puts reasoning behind a summary instead of in the reader's way", () => {
     renderPane([
       event({ kind: "run.thought", text: "perhaps the parser is wrong", messageId: "m1" }),
@@ -200,9 +243,17 @@ describe("the transcript", () => {
   });
 
   it("says when the history is incomplete rather than rendering a plausible lie", () => {
+    const first = event({ kind: "run.output", stream: "assistant", text: "one", messageId: "m1" });
     renderPane([
-      event({ kind: "run.output", stream: "assistant", text: "one", messageId: "m1" }),
-      { ...base, seq: 9, kind: "run.output", stream: "assistant", text: "nine", messageId: "m2" } as RunEvent,
+      first,
+      {
+        ...base,
+        seq: first.seq + 8,
+        kind: "run.output",
+        stream: "assistant",
+        text: "nine",
+        messageId: "m2",
+      } as RunEvent,
     ]);
     expect(screen.getByText(/did not arrive/)).toBeTruthy();
   });

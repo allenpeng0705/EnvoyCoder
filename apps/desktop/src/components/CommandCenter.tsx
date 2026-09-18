@@ -31,25 +31,13 @@ import type { JSX } from "react";
 import {
   hasShellPicker,
   pickFolder,
-  type FolderPickResult,
 } from "../client/folder-picker.js";
-
-/** Why there is no picker here, in one short clause for the stage label. */
-async function pickFolderUnavailableReason(
-  t: Translator["t"],
-): Promise<string | undefined> {
-  const probe: FolderPickResult = await pickFolder(t("palette.addProject.pickPrompt"));
-  if (probe.kind !== "unavailable") return undefined;
-  return probe.cause === "no-shell"
-    ? t("palette.noPicker")
-    : t("palette.pickerFailed", { detail: probe.reason });
-}
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Project } from "@envoydev/protocol";
 
 import { useT } from "../i18n/context.js";
-import { localize, type WriteFailure } from "../i18n/notice.js";
+import { localize, type Notice, type WriteFailure } from "../i18n/notice.js";
 import type { Translator } from "../i18n/translate.js";
 
 /** A row a user can run. `selected` only means anything for `choice`. */
@@ -107,6 +95,17 @@ export interface CommandCenterProps {
    */
   initialCommandId?: string | undefined;
   initialIdPrefix?: string | undefined;
+  /**
+   * Open already holding a refusal — used when the rail's folder chooser registered a path the daemon
+   * rejected, so the palette can show *why* next to a field the user can correct, instead of an empty
+   * Command Center with no sentence.
+   */
+  initialStatus?: Notice | undefined;
+  /**
+   * Seed the staged field and **skip the native picker**. The rail chooser already returned this path;
+   * opening `project.add` again would put another dialog on top of the refusal the user has not read.
+   */
+  initialSeedValue?: string | undefined;
 }
 
 export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
@@ -142,6 +141,7 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
       setQuery("");
       setStage(undefined);
       setSubset(undefined);
+      setStatus(undefined);
     }
   }, [props.open]);
 
@@ -210,17 +210,13 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
       // **Never leave the row dead.** A picker can be absent (no shell, no
       // zenity) or fail, and the first version of this returned silently in those
       // cases — the row appeared to do nothing at all. Every path now ends in
-      // either a run or the text stage, and the reason is *shown* on the stage
-      // label instead of being swallowed.
+      // either a run, a close, or the text stage — and a *cancel* must not dump
+      // the user into typing a path they already decided not to pick.
       void (async () => {
         let picked: string | null = null;
         let why: string | undefined;
         try {
           picked = await row.pick!();
-          if (picked === null) {
-            const probed = await pickFolderUnavailableReason(t);
-            why = probed;
-          }
         } catch (error) {
           why = error instanceof Error ? error.message : String(error);
         }
@@ -228,10 +224,22 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
           await finish(row, picked);
           return;
         }
+        // `null` is cancel or "no picker". Only fall through to typing when there is genuinely
+        // no shell chooser — probing with another `pickFolder` would open a second dialog.
+        if (!why && !hasShellPicker()) {
+          why = t("palette.noPicker");
+        }
+        if (!why) {
+          // Cancelled. If the shell opened the palette *for this command*, close it so the
+          // dialog does not leave a naked Command Center behind.
+          if (props.initialCommandId === row.id) props.onClose();
+          return;
+        }
         if (row.needs) {
-          stageInto(
-            why ? { ...row, needs: { ...row.needs, label: `${row.needs.label} (${why})` } } : row,
-          );
+          stageInto({
+            ...row,
+            needs: { ...row.needs, label: `${row.needs.label} (${why})` },
+          });
         }
       })();
       return;
@@ -258,7 +266,7 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
     // its lists, and those refreshes arrive on their own schedule — a task event from another window
     // mid-typing would otherwise re-activate the intent, clear the field the user is writing in, and
     // look like a keyboard that drops characters.
-    const key = `${props.initialCommandId ?? ""}|${props.initialIdPrefix ?? ""}`;
+    const key = `${props.initialCommandId ?? ""}|${props.initialIdPrefix ?? ""}|${props.initialSeedValue ?? ""}|${props.initialStatus?.message ?? ""}`;
     if (appliedIntent.current === key) return;
     appliedIntent.current = key;
 
@@ -267,14 +275,31 @@ export function CommandCenter(props: CommandCenterProps): JSX.Element | null {
       : undefined;
     if (wanted) {
       setSubset(undefined);
-      activate(wanted);
+      // A seed means the shell already has a path (the rail's chooser) — land on the typed stage with
+      // that path, and never open another picker on top of the refusal the user has not read yet.
+      if (props.initialSeedValue !== undefined && wanted.needs) {
+        stageInto({
+          ...wanted,
+          needs: { ...wanted.needs, value: props.initialSeedValue },
+        });
+      } else {
+        activate(wanted);
+      }
+      if (props.initialStatus) setStatus(localize(t, props.initialStatus));
       return;
     }
     setSubset(props.initialIdPrefix ? { prefix: props.initialIdPrefix } : undefined);
     // `activate` is rebuilt every render by design (it closes over `t` and `props`); including it would
     // re-run this on each keystroke. The intent props are the trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.open, props.initialCommandId, props.initialIdPrefix, props.contributions]);
+  }, [
+    props.open,
+    props.initialCommandId,
+    props.initialIdPrefix,
+    props.initialSeedValue,
+    props.initialStatus,
+    props.contributions,
+  ]);
 
   useEffect(() => {
     if (props.open) inputRef.current?.focus();

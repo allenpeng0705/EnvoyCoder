@@ -20,8 +20,10 @@ means concretely:
 | `host_list_screen.dart` | the paired machines, and adding another |
 | `add_host_sheet.dart` | paste or scan a pairing code |
 | `qr_scan_screen.dart` | the camera path onto the same code |
-| `host_home_screen.dart` | that machine's tasks, and their runs |
-| `run_screen.dart` | one run: transcript, an inline approval card, a composer |
+| `host_home_screen.dart` | projects → tasks, search, agent picker, New task, settings |
+| `new_task_sheet.dart` | createTask + startRun with agent/model/mode/thinking |
+| `run_screen.dart` | markdown (+ highlight), Queue/Steer, Stop, composer controls |
+| `settings_screen.dart` | daemon settings + Envoy Harness LLM |
 
 ## Running it
 

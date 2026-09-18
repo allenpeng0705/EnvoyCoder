@@ -3,16 +3,15 @@
  *
  * A control plane should not ask a user to type an absolute path when the operating system has a folder
  * chooser: it is slower, it is error-prone, and it is the first thing anyone notices. The webview cannot
- * open one itself, so this asks the shell (`pick_folder` in `src-tauri/src/main.rs`), which uses the
- * platform's own picker.
+ * open one itself, so this asks the shell (`pick_folder` in `src-tauri/src/main.rs`), which opens a
+ * native folder dialog parented to this window on macOS, Windows, and Linux.
  *
  * Three outcomes, and the third is the one that matters:
  *
  *   * `picked` — a real path.
  *   * `cancelled` — the user closed the dialog. Not an error, and not something to report.
- *   * `unavailable` — there is no shell to ask (the browser dev server) **or** no picker on this system
- *     (Linux without `zenity`/`kdialog`). The caller falls back to asking for a path by hand and says
- *     why, rather than presenting a dead button.
+ *   * `unavailable` — there is no shell to ask (the browser dev server). The caller falls back to
+ *     asking for a path by hand and says why, rather than presenting a dead button.
  */
 
 /** The Tauri bridge, as this window uses it. Declared rather than pulled from a package. */

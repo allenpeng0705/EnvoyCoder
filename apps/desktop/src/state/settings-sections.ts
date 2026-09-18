@@ -47,6 +47,7 @@ export type SettingsSectionId =
   | "tasks"
   | "safety"
   | "agents"
+  | "llm"
   | "projects"
   | "shortcuts"
   | "machine"
@@ -203,13 +204,35 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     ],
   },
   {
+    id: "llm",
+    titleKey: "settings.section.llm.title",
+    band: { kind: "sentence", key: "settings.section.llm.detail" },
+    content: [
+      {
+        file: "apps/desktop/src/components/settings/EnvoyLlmPanel.tsx",
+        needle: 't("settings.agents.envoyLlm.baseUrl")',
+        because: "the base URL is the first of the three fields on this page",
+      },
+      {
+        file: "apps/desktop/src/components/settings/EnvoyLlmPanel.tsx",
+        needle: 't("settings.agents.envoyLlm.model")',
+        because: "the model string is the second",
+      },
+      {
+        file: "apps/desktop/src/components/settings/EnvoyLlmPanel.tsx",
+        needle: 't("settings.agents.envoyLlm.apiKey")',
+        because: "and the write-only API key is the third",
+      },
+    ],
+  },
+  {
     id: "pairing",
     titleKey: "settings.section.pairing.title",
     band: { kind: "sentence", key: "settings.section.pairing.detail" },
     content: [
       {
         file: "apps/desktop/src/components/settings/PairingSection.tsx",
-        needle: "mintPairingCode(props.agents)",
+        needle: "mintPairingCode(props.agents,",
         because:
           "QR and host:port both mint through `PairPhone.tsx`'s shared call site, so the palette, the rail's " +
           "QR button and this page cannot produce three codes by three routes",

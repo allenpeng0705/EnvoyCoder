@@ -65,6 +65,7 @@ import {
   fetchedArgs,
   fetchedRecipe,
   resolveHarnessCommand,
+  resolveModelChoice,
   resolveProviderEnv,
   splitArgs,
   type ProbeFinding,
@@ -74,6 +75,7 @@ import { capabilitiesFor, currentSearchPath, detectPlatform, type PlatformId } f
 import type { CoderPaths } from "@envoydev/host-bridge";
 
 import type { AcpLaunch } from "./acp/client.js";
+import { envoyLlmBaseUrlArgs, envoyLlmLaunchEnv } from "./envoy-llm.js";
 import { ref } from "./messages.js";
 import type { MessageKey } from "../i18n/messages/en.js";
 
@@ -168,6 +170,18 @@ export function launchForHarness(input: LaunchInput): AcpLaunch {
    * daemon refuses to *store* an unfetchable delivery in the first place.
    */
   const fetched = delivery === "npx" ? fetchedRecipe(harness) : undefined;
+  const runProvider =
+    harness === "envoy-harness" && model !== undefined && model !== ""
+      ? (() => {
+          const resolved = resolveModelChoice(harness, model);
+          return resolved.ok ? resolved.provider : undefined;
+        })()
+      : undefined;
+  const llmEnv = harness === "envoy-harness" ? envoyLlmLaunchEnv(input.paths, runProvider) : {};
+  const baseUrlArgs = harness === "envoy-harness" ? envoyLlmBaseUrlArgs(input.paths, runProvider) : [];
+  const withBaseUrl = (args: string[]): string[] =>
+    baseUrlArgs.length === 0 ? args : [...args, ...baseUrlArgs];
+
   return resolveLaunch(
     {
       label: definition.label,
@@ -181,26 +195,36 @@ export function launchForHarness(input: LaunchInput): AcpLaunch {
             // The path the probe resolved rather than the bare name `npx`, on the same rule every other launch
             // follows: "the probe verified this file" is a different claim from "something answers to this name".
             command: probe.binaryPath ?? "npx",
-            args: fetchedArgs(harness, {
-              prompt: "",
-              cwd,
-              ...(model ? { model } : {}),
-              ...(extraArgs ? { extraArgs } : {}),
-            }),
+            args: withBaseUrl(
+              fetchedArgs(harness, {
+                prompt: "",
+                cwd,
+                ...(model ? { model } : {}),
+                ...(extraArgs ? { extraArgs } : {}),
+              }),
+            ),
           })
-        : (probe) =>
-            resolveHarnessCommand(harness, probe, {
+        : (probe) => {
+            const resolved = resolveHarnessCommand(harness, probe, {
               prompt: "",
               cwd,
               ...(model ? { model } : {}),
               ...(extraArgs ? { extraArgs } : {}),
-            }),
+            });
+            return { command: resolved.command, args: withBaseUrl(resolved.args) };
+          },
       // Both of these are **protocol** facts about the agent rather than ways to start it, and they travel
       // on this one channel because this is the only one the daemon and the catalogue share.
       acp: harnessAcpFacts(harness),
       // A home of our own per agent, so EnvoyDev never writes into the state a user's own `dsh` install
       // owns — and so sessions the control plane starts are separable from the ones they started by hand.
-      env: definition.id === "deepseek-harness" ? { DSH_HOME: join(input.paths.stateDir, "agents", "dsh") } : {},
+      // Envoy Harness also receives a stored API key from the Agents LLM panel when the run's provider matches.
+      env: {
+        ...(definition.id === "deepseek-harness"
+          ? { DSH_HOME: join(input.paths.stateDir, "agents", "dsh") }
+          : {}),
+        ...llmEnv,
+      },
       // The catalogue's own wording for this gap, and it is **unchanged** on purpose: `drivable.test.ts`
       // and the settings docs quote it, and the sentence a user already reads must not move because the
       // body that produces it moved. A provider gets its own sentence (`error.providerUnsupported`)

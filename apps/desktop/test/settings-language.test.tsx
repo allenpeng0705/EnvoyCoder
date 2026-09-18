@@ -179,6 +179,7 @@ describe("the sections bar, in the same language", () => {
     "Neue Aufgaben",
     "Sicherheit",
     "Agenten",
+    "LLM",
     // Mobile pairing sits above Projects in the registry — same order the bar renders.
     "Mobile Kopplung",
     "Projekte",
@@ -339,9 +340,9 @@ describe("the rest of the pane, in the same language", () => {
     expect(screen.queryByText("Needs your answer")).toBeNull();
     expect(screen.queryByText("1 task needs you")).toBeNull();
     expect(screen.queryByText("No projects yet")).toBeNull();
-    // The agent's own name is not ours to translate, and it is still there — on the project header
-    // and again on the row, hence "all".
-    expect(screen.getAllByText("Envoy Harness").length).toBeGreaterThan(0);
+    // The agent's own name is not ours to translate. The rail shows the short badge on the project
+    // header and again on the task row.
+    expect(screen.getAllByText("Envoy").length).toBeGreaterThan(0);
   });
 
   it("takes the language from the provider, not from a module-level default", () => {

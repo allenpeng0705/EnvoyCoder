@@ -417,11 +417,15 @@ export function modelNote(
   model: {
     kind: "listed" | "free-text" | "none";
     observedAt?: string;
+    /** When true, free-text accepts a bare ACP model id rather than provider/model. */
+    bareId?: boolean;
   },
   input: { enabled: boolean },
 ): MessageKey | undefined {
   if (!input.enabled) return undefined;
-  if (model.kind === "free-text") return "task.composer.model.freeText";
+  if (model.kind === "free-text") {
+    return model.bareId === true ? "task.composer.model.freeTextBare" : "task.composer.model.freeText";
+  }
   // The third case, and the one this control gained with the observation channel: a list a real session
   // published is a **record rather than a promise**, and the sentence that says so names the time. The
   // two cases cannot both apply — a list we observed is `"listed"` by construction — so the order here
@@ -496,12 +500,18 @@ export function thinkingOffReason(
  * the user is still typing. Committing `deepseek` on the way to `deepseek/deepseek-chat` would save a
  * value that makes the next run refuse, so a half-written value is kept in the field and not saved.
  *
+ * For bare-id agents (Claude / Codex / Cursor), any non-empty trimmed string is enough — their select
+ * values have no `provider/` half.
+ *
  * `""` is meaningful and is handled by the caller: empty means "the agent's own default", which clears
  * the stored model rather than naming one.
  */
-export function looksLikeModelValue(value: string): boolean {
-  const slash = value.indexOf("/");
-  return slash > 0 && slash < value.length - 1;
+export function looksLikeModelValue(value: string, options: { bareId?: boolean } = {}): boolean {
+  const trimmed = value.trim();
+  if (trimmed === "") return false;
+  if (options.bareId === true) return true;
+  const slash = trimmed.indexOf("/");
+  return slash > 0 && slash < trimmed.length - 1;
 }
 
 /**

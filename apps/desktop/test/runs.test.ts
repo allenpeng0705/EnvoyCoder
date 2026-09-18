@@ -23,6 +23,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { HarnessId, RunEvent } from "@envoydev/protocol";
 import { coderErrorCode, coderErrorMessage, coderErrorRef } from "@envoydev/protocol";
+import { canApplyModel } from "@envoydev/agent-catalog";
 import { coderPaths } from "@envoydev/host-bridge";
 
 import { en, isMessageKey } from "../src/i18n/messages/en.js";
@@ -63,16 +64,31 @@ afterEach(async () => {
  * genuinely has none.
  */
 async function bench(
-  options: { harness?: HarnessId; agentEnv?: Record<string, string> } = {},
+  options: {
+    harness?: HarnessId;
+    agentEnv?: Record<string, string>;
+    /** Skip the model default for agents that require one (refusal tests). */
+    noModel?: boolean;
+  } = {},
 ): Promise<Bench> {
   const home = await mkdtemp(join(tmpdir(), "envoydev-m2-"));
   const paths = coderPaths(home);
   const store = await CoderStore.open({ paths });
   const project = await store.addProject({ path: join(home, "repo") });
+  const harness = options.harness ?? "envoy-harness";
   const task = await store.createTask({
     projectId: project.project.id,
     title: "a task",
-    ...(options.harness ? { harness: options.harness } : {}),
+    harness,
+    // Every agent this build can put on a model must carry one through `resolveModelDelivery`.
+    // Refusal tests opt out with `noModel`.
+    ...(!options.noModel && canApplyModel(harness)
+      ? {
+          // deepseek free-text accepts any provider/model; the fake agent only publishes reasoning
+          // levels for its own `fake/*` ids, so fixtures that also set a thinking level use those.
+          model: harness === "deepseek-harness" ? "fake/flash" : "anthropic/claude-sonnet-4-6",
+        }
+      : {}),
   });
 
   const events: RunEvent[] = [];
@@ -666,6 +682,26 @@ describe("the model a run is started on", () => {
     );
   });
 
+  it("refuses to start Envoy Harness without a model, but lets external agents use their own default", async () => {
+    // Argv delivery (Envoy Harness) must name a model before a process exists — otherwise the hermetic
+    // demo backend answers while the window still looks empty. Session-config agents (DeepSeek, …)
+    // may omit a model and keep whatever default their own CLI already has.
+    const envoy = await bench({ harness: "envoy-harness", noModel: true });
+    const envoyWire = await envoy.manager
+      .start({ taskId: envoy.taskId, prompt: "hi" })
+      .then(() => undefined, (error: unknown) => (error as Error).message);
+
+    const envoyRef = coderErrorRef(envoyWire ?? "");
+    expect(envoyRef?.key).toBe("error.modelRequired");
+    expect(isMessageKey(envoyRef?.key ?? "")).toBe(true);
+    expect(coderErrorMessage(envoyWire ?? "")).toContain("no model configured");
+    expect(envoy.events).toEqual([]);
+
+    const deepseek = await bench({ harness: "deepseek-harness", noModel: true });
+    await deepseek.manager.start({ taskId: deepseek.taskId, prompt: "hi" });
+    expect(deepseek.events.some((event) => event.kind === "run.started")).toBe(true);
+  });
+
   it("refuses a model this agent does not publish, rather than starting on its own default", async () => {
     // **The failure that is invisible afterwards.** `envoy-harness` parses `--model` and then ignores
     // it unless `--provider` came too, and for `deepseek-harness` a wrong id would be refused later by
@@ -714,16 +750,15 @@ describe("the model a run is started on", () => {
     expect(b.events).toEqual([]);
   });
 
-  it("is never sent when the task has none, so the agent's own default stands", async () => {
-    const b = await bench({ harness: "deepseek-harness" });
-    const run = await b.manager.start({ taskId: b.taskId, prompt: "model-me" });
+  it("still starts without a model when the agent cannot take one", async () => {
+    // The other half of `canApplyModel`: an agent with no delivery has no control to clear, and
+    // requiring a model it cannot receive would strand every run of that agent.
+    const b = await bench({ harness: "copilot" });
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "hello" });
     await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
 
     expect(run.model).toBeUndefined();
-    // Not "the first model we know about", and not an empty string: an agent whose model nobody chose
-    // runs on whatever it is configured with, and a control plane that named a default it did not
-    // choose would be describing somebody else's decision as its own.
-    expect(said(b.events, "model: (none)")).toBe(true);
+    expect(kinds(b.events, "run.started")).toHaveLength(1);
   });
 });
 

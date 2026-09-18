@@ -30,6 +30,7 @@ import type { Project, Task } from "@envoydev/protocol";
 import { taskTitleFromPrompt } from "@envoydev/task-model";
 
 import { startWindowDrag } from "../client/window-drag.js";
+import { hasShellPicker, pickFolder } from "../client/folder-picker.js";
 import {
   canOpenProjectInNewWindow,
   openProjectInNewWindow,
@@ -108,11 +109,24 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    * command**, and only ⌘K opens the catalogue.
    */
   const [paletteIntent, setPaletteIntent] = useState<
-    { commandId?: string; idPrefix?: string } | undefined
+    | {
+        commandId?: string;
+        idPrefix?: string;
+        status?: Notice;
+        seedValue?: string;
+      }
+    | undefined
   >(undefined);
 
   /** Open the palette on a workflow. `undefined` intent is the catalogue (⌘K). */
-  const openPalette = (intent?: { commandId?: string; idPrefix?: string }): void => {
+  const openPalette = (
+    intent?: {
+      commandId?: string;
+      idPrefix?: string;
+      status?: Notice;
+      seedValue?: string;
+    },
+  ): void => {
     setPaletteIntent(intent);
     setPaletteOpen(true);
   };
@@ -152,6 +166,65 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
     if (title === "") return undefined;
     const started = await props.actions.startRun(created.task.id, title);
     return started.ok ? undefined : started;
+  };
+
+  /**
+   * Register a project, then open an empty draft in it — the same landing as "+ New".
+   *
+   * Re-adding a folder that is already on the rail is still success (the daemon says so), but it must
+   * not spawn another draft every time: only a path that was not listed yet gets the automatic task.
+   */
+  const addProjectAndOpenDraft = async (path: string): Promise<WriteFailure> => {
+    const knownIds = new Set(state.projects.map((project) => project.id));
+    const result = await props.actions.addProject(path);
+    if (!result.ok) return result;
+    if (!knownIds.has(result.project.id)) {
+      return startNewTask(result.project.id);
+    }
+    return undefined;
+  };
+
+  /**
+   * **+ Add project on the rail** — pick a folder and register it, without opening the Command Center.
+   *
+   * The old path opened the palette on `project.add`, which then opened the folder chooser on top of it.
+   * After *Choose*, the dialog closed onto that palette — exactly the "jumped to the command center"
+   * report. The rail already named the action; the chooser is enough. The palette row stays for ⌘K
+   * and for windows with no shell picker (browser), where typing a path is the only option.
+   *
+   * A refusal still has to be *read*. Opening an empty `project.add` and discarding the `WriteFailure`
+   * was the Bugbot finding: the typed-path palette path keeps the sentence in its status line, and the
+   * rail must do the same — seed the path, show the refusal, skip a second picker. A draft that fails
+   * after a successful add lands under the new project row (`toRail`), because that row is already on
+   * screen.
+   */
+  const addProjectFromRail = (): void => {
+    if (!hasShellPicker()) {
+      openPalette({ commandId: "project.add" });
+      return;
+    }
+    void (async () => {
+      const picked = await pickFolder(t("palette.addProject.pickPrompt"));
+      if (picked.kind === "cancelled") return;
+      if (picked.kind === "unavailable") {
+        // No chooser after all — fall through to the palette's typed path, which explains why.
+        openPalette({ commandId: "project.add" });
+        return;
+      }
+      const knownIds = new Set(state.projects.map((project) => project.id));
+      const added = await props.actions.addProject(picked.path);
+      if (!added.ok) {
+        openPalette({
+          commandId: "project.add",
+          status: added,
+          seedValue: picked.path,
+        });
+        return;
+      }
+      if (!knownIds.has(added.project.id)) {
+        toRail(added.project.id, await startNewTask(added.project.id));
+      }
+    })();
   };
   /**
    * Which settings the pane is showing — and whether it is showing at all.
@@ -481,9 +554,9 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
           // field still holding what was typed, so a bad path can be corrected and pressed again.
           //
           // An empty path never reaches the daemon: it is the palette's own question, and this is its answer.
+          // A newly registered project also opens an empty draft (same landing as "+ New").
           if (!path) return localNotice("palette.addProject.noFolder");
-          const result = await props.actions.addProject(path);
-          return result.ok ? undefined : result;
+          return addProjectAndOpenDraft(path);
         },
         onNewTask: async (projectId, title) => {
           if (!title) return undefined;
@@ -568,8 +641,15 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               // own row — including the one the ⌘N shortcut produces, which has no row of its own to speak in.
               void startNewTask(projectId).then((failure) => toRail(projectId, failure));
             }}
-            onAddProject={() => openPalette({ commandId: "project.add" })}
+            onAddProject={addProjectFromRail}
             onOpenProjectSettings={openProjectSettings}
+            onChangeProjectAgent={async (project, defaults) => {
+              const result = await props.actions.updateProject({ id: project.id, defaults });
+              if (!result.ok) return result;
+              return { ok: true as const };
+            }}
+            harnesses={state.harnesses}
+            appHarness={state.settings.defaults.harness ?? "envoy-harness"}
             onOpenProjectInNewWindow={canOpenProjectInNewWindow() ? openProjectWindow : undefined}
             onRemoveProject={(projectId) => void removeProjectRow(projectId).then((f) => toRail(projectId, f))}
             focusProjectId={focusProjectId}
@@ -637,6 +717,16 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               events={active.runId ? (state.runs[active.runId]?.events ?? []) : []}
               runLive={runLive}
               harnesses={state.harnesses}
+              appHarness={state.settings.defaults.harness ?? "envoy-harness"}
+              onChangeProjectAgent={async (defaults) => {
+                const project = projectFor(state.projects, active);
+                if (project === undefined) {
+                  return { ok: false as const, message: "No project for this task." };
+                }
+                const result = await props.actions.updateProject({ id: project.id, defaults });
+                if (!result.ok) return result;
+                return { ok: true as const };
+              }}
               // **The window's half of the build-skew rule.** The probe is a method this build added, so a
               // window attached to an older daemon (the shell attaches to whichever build owns the port)
               // asks `coder.hello` first — and offers no button at all when the answer is no, rather than
@@ -735,6 +825,8 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
         contributions={contributions}
         initialCommandId={paletteIntent?.commandId}
         initialIdPrefix={paletteIntent?.idPrefix}
+        initialStatus={paletteIntent?.status}
+        initialSeedValue={paletteIntent?.seedValue}
       />
     </div>
   );

@@ -1,13 +1,18 @@
-/// One run: transcript tail, approval card, and a minimal composer.
+/// One run: transcript, approvals, composer with full agent controls.
 library;
 
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
+import '../models/harness.dart';
+import '../models/text_reveal.dart';
 import '../models/transcript.dart';
 import '../services/host_client.dart';
 import '../theme/tokens.dart';
+import '../widgets/composer_controls.dart';
+import '../widgets/transcript_row.dart';
 
 class RunScreen extends StatefulWidget {
   const RunScreen({
@@ -15,43 +20,88 @@ class RunScreen extends StatefulWidget {
     required this.client,
     required this.runId,
     required this.title,
+    this.harnesses = const [],
+    this.taskId,
   });
 
   final HostClient client;
   final String runId;
   final String title;
+  final List<HarnessInfo> harnesses;
+  final String? taskId;
 
   @override
   State<RunScreen> createState() => _RunScreenState();
 }
 
-class _RunScreenState extends State<RunScreen> {
+class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMixin {
   final _composer = TextEditingController();
-
-  /// **The transcript, folded** — not a list of lines. `models/transcript.dart` owns the four folding
-  /// rules (join chunks by message, drop a repeated `seq`, pair a tool call with its result, report a
-  /// gap), because rendering one row per event is what made a streaming answer a column of one-word
-  /// lines and made a reconnect duplicate the tail.
   final _transcript = Transcript();
+  final _scroll = ScrollController();
 
   bool _live = false;
   bool _loading = true;
+  bool _cancelling = false;
+  String _sendMode = 'queue';
   String? _error;
+  String? _taskId;
+  List<HarnessInfo> _harnesses = [];
+  ComposerSelection _selection = const ComposerSelection();
   StreamSubscription<Map<String, dynamic>>? _eventSub;
+
+  TextRevealState _reveal = beginTextReveal('');
+  String? _revealMessageId;
+  Ticker? _ticker;
+  Duration? _lastTick;
 
   @override
   void initState() {
     super.initState();
+    _taskId = widget.taskId;
+    _harnesses = List.of(widget.harnesses);
     _eventSub = widget.client.events.listen(_onEventFrame);
-    unawaited(_loadTail());
+    unawaited(_bootstrap());
+  }
+
+  Future<void> _bootstrap() async {
+    if (_harnesses.isEmpty) {
+      try {
+        final result = await widget.client.call('coder.listHarnesses', {});
+        final list = result['harnesses'];
+        if (list is List) {
+          _harnesses = list
+              .whereType<Map>()
+              .map((e) => HarnessInfo.fromJson(Map<String, dynamic>.from(e)))
+              .toList();
+        }
+      } catch (_) {}
+    }
+    if (_taskId != null) {
+      try {
+        final tasks = await widget.client.call('coder.listTasks', {});
+        final list = tasks['tasks'];
+        if (list is List) {
+          for (final raw in list) {
+            if (raw is! Map) continue;
+            if (raw['id'] != _taskId) continue;
+            _selection = ComposerSelection(
+              harnessId: raw['harness'] as String?,
+              model: raw['model'] as String?,
+              agentModeId: raw['agentModeId'] as String?,
+              thinkingLevel: raw['thinkingLevel'] as String?,
+            );
+            break;
+          }
+        }
+      } catch (_) {}
+    }
+    await _loadTail();
   }
 
   Future<void> _loadTail() async {
     try {
       final snap = await widget.client.call('coder.tailRun', {
         'runId': widget.runId,
-        // From the watermark the transcript itself keeps, so a retry after a dropped frame asks only
-        // for what is missing instead of re-reading the tail.
         if (_transcript.lastSeq > 0) 'sinceSeq': _transcript.lastSeq,
       });
       final events = snap['events'];
@@ -65,8 +115,13 @@ class _RunScreenState extends State<RunScreen> {
         _live = snap['live'] == true;
         _loading = false;
         _error = null;
+        if (_taskId == null && snap['taskId'] is String) {
+          _taskId = snap['taskId'] as String;
+        }
       });
-    } catch (error) {
+      _syncReveal();
+      _scrollToEnd();
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -82,15 +137,84 @@ class _RunScreenState extends State<RunScreen> {
     final event = Map<String, dynamic>.from(data);
     if (event['runId'] != widget.runId) return;
     _applyEvent(event);
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+      _syncReveal();
+      _scrollToEnd();
+    }
   }
 
-  /// **The whole of the folding, in one call.** Everything this used to do — appending a row per
-  /// event, guessing at a tool's label, keeping a second copy of the open approval — is the model's
-  /// job now, and it is tested there (`test/transcript_test.dart`) rather than through the widget.
   void _applyEvent(Map<String, dynamic> event) {
     _transcript.apply(event);
-    if (event['kind'] == 'run.ended') _live = false;
+    if (event['kind'] == 'run.ended') {
+      _live = false;
+      _stopTicker();
+    }
+  }
+
+  void _syncReveal() {
+    TranscriptEntry? lastAssistant;
+    for (var i = _transcript.entries.length - 1; i >= 0; i--) {
+      if (_transcript.entries[i].kind == 'assistant') {
+        lastAssistant = _transcript.entries[i];
+        break;
+      }
+    }
+    if (lastAssistant == null || !_live) {
+      _stopTicker();
+      if (lastAssistant != null) {
+        _reveal = beginTextReveal(lastAssistant.text);
+        _revealMessageId = lastAssistant.id;
+      }
+      return;
+    }
+    if (_revealMessageId != lastAssistant.id) {
+      _reveal = beginTextReveal(lastAssistant.text);
+      _revealMessageId = lastAssistant.id;
+    } else {
+      _reveal = retargetTextReveal(_reveal, lastAssistant.text);
+    }
+    if (!isTextRevealSettled(_reveal)) {
+      _startTicker();
+    } else {
+      _stopTicker();
+    }
+  }
+
+  void _startTicker() {
+    _ticker ??= createTicker((elapsed) {
+      final previous = _lastTick;
+      _lastTick = elapsed;
+      final delta = previous == null
+          ? textRevealFrameIntervalMs
+          : (elapsed - previous).inMilliseconds.toDouble();
+      if (delta < textRevealFrameIntervalMs) return;
+      final next = advanceTextReveal(_reveal, delta);
+      if (next.revealed != _reveal.revealed || next.target != _reveal.target) {
+        setState(() => _reveal = next);
+      }
+      if (isTextRevealSettled(_reveal)) _stopTicker();
+    })
+      ..start();
+  }
+
+  void _stopTicker() {
+    _ticker?.stop();
+    _ticker?.dispose();
+    _ticker = null;
+    _lastTick = null;
+    _reveal = completeTextReveal(_reveal);
+  }
+
+  void _scrollToEnd() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scroll.hasClients) return;
+      _scroll.animateTo(
+        _scroll.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   Future<void> _answer(String requestId, String optionId) async {
@@ -100,14 +224,30 @@ class _RunScreenState extends State<RunScreen> {
         'requestId': requestId,
         'optionId': optionId,
       });
-      // The card is not cleared here. The transcript holds the question and its answer, so the next
-      // `run.approval-resolved` — which the daemon emits to every window, not only to the one that
-      // answered — is what closes it. Clearing locally would make the phone disagree with the desk
-      // whenever a second device answers first.
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not send that answer. Try again.')),
+      );
+    }
+  }
+
+  Future<void> _persistSelection(ComposerSelection next) async {
+    setState(() => _selection = next);
+    final taskId = _taskId;
+    if (taskId == null) return;
+    try {
+      await widget.client.call('coder.updateTask', {
+        'id': taskId,
+        if (next.harnessId != null) 'harness': next.harnessId,
+        if (next.model != null) 'model': next.model,
+        if (next.agentModeId != null) 'agentModeId': next.agentModeId,
+        if (next.thinkingLevel != null) 'thinkingLevel': next.thinkingLevel ?? '',
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not update the task on the computer.')),
       );
     }
   }
@@ -120,7 +260,7 @@ class _RunScreenState extends State<RunScreen> {
       await widget.client.call('coder.sendToRun', {
         'runId': widget.runId,
         'text': text,
-        'mode': 'queue',
+        'mode': _sendMode,
       });
     } catch (_) {
       if (!mounted) return;
@@ -130,20 +270,45 @@ class _RunScreenState extends State<RunScreen> {
     }
   }
 
+  Future<void> _cancel() async {
+    if (!_live || _cancelling) return;
+    setState(() => _cancelling = true);
+    try {
+      await widget.client.call('coder.cancelRun', {'runId': widget.runId});
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not stop the run. Try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _cancelling = false);
+    }
+  }
+
   @override
   void dispose() {
     unawaited(_eventSub?.cancel() ?? Future<void>.value());
+    _stopTicker();
     _composer.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = CoderTheme.of(context);
+    final approvalOpen = _transcript.pendingApproval != null;
+    final lastAssistantIndex = _transcript.entries.lastIndexWhere((e) => e.kind == 'assistant');
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
         actions: [
+          if (_live)
+            TextButton(
+              onPressed: _cancelling ? null : () => unawaited(_cancel()),
+              child: Text(_cancelling ? 'Stopping…' : 'Stop'),
+            ),
           if (_live)
             Padding(
               padding: const EdgeInsets.only(right: 12),
@@ -172,35 +337,33 @@ class _RunScreenState extends State<RunScreen> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : ListView.builder(
-                    padding: const EdgeInsets.all(12),
+                    controller: _scroll,
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
                     itemCount: _transcript.entries.length,
                     itemBuilder: (context, index) {
                       final entry = _transcript.entries[index];
-                      // **The approval is a row, not a banner above the list.** It belongs where the
-                      // agent paused — the same rule the desktop follows (docs/envoydev-ui.md §6),
-                      // and on a phone it also keeps the question next to the tool call that raised it
-                      // instead of pushing the transcript down the screen.
-                      if (entry.kind == 'approval' && entry.approval != null) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: _ApprovalCard(
-                            approval: entry.approval!,
-                            onAnswer: _answer,
-                            colors: colors,
-                          ),
-                        );
-                      }
+                      final streaming = _live && index == lastAssistantIndex && entry.kind == 'assistant';
+                      final display = streaming
+                          ? TranscriptEntry(
+                              kind: entry.kind,
+                              id: entry.id,
+                              text: visibleRevealedText(_reveal),
+                              tone: entry.tone,
+                              callId: entry.callId,
+                              status: entry.status,
+                              delivered: entry.delivered,
+                              toolInput: entry.toolInput,
+                              toolOutput: entry.toolOutput,
+                              approval: entry.approval,
+                            )
+                          : entry;
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          _displayText(entry),
-                          style: TextStyle(
-                            color: entry.kind == 'thought' || entry.kind == 'note'
-                                ? colors.foregroundMuted
-                                : colors.foreground,
-                            fontStyle: entry.kind == 'thought' ? FontStyle.italic : FontStyle.normal,
-                            fontSize: entry.kind == 'note' ? 12 : null,
-                          ),
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: TranscriptRow(
+                          entry: display,
+                          colors: colors,
+                          onAnswer: _answer,
+                          streaming: streaming,
                         ),
                       );
                     },
@@ -208,37 +371,78 @@ class _RunScreenState extends State<RunScreen> {
           ),
           SafeArea(
             top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _composer,
-                      enabled: _live && _transcript.pendingApproval == null,
-                      minLines: 1,
-                      maxLines: 4,
-                      decoration: InputDecoration(
-                        hintText: _transcript.pendingApproval != null
-                            ? 'Answer the request above first'
-                            : _live
-                                ? 'Send a follow-up…'
-                                : 'Run is not live',
-                        border: const OutlineInputBorder(),
-                        isDense: true,
+            child: Material(
+              color: colors.surface0,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_harnesses.isNotEmpty) ...[
+                      ComposerControls(
+                        harnesses: _harnesses,
+                        selection: _selection,
+                        enabled: !approvalOpen,
+                        onChanged: (next) => unawaited(_persistSelection(next)),
                       ),
-                      onSubmitted: (_) => unawaited(_send()),
+                      const SizedBox(height: 8),
+                    ],
+                    if (_live)
+                      Row(
+                        children: [
+                          ChoiceChip(
+                            label: const Text('Queue'),
+                            selected: _sendMode == 'queue',
+                            onSelected: approvalOpen ? null : (_) => setState(() => _sendMode = 'queue'),
+                          ),
+                          const SizedBox(width: 8),
+                          ChoiceChip(
+                            label: const Text('Steer'),
+                            selected: _sendMode == 'steer',
+                            onSelected: approvalOpen ? null : (_) => setState(() => _sendMode = 'steer'),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _sendMode == 'steer'
+                                  ? 'Joins the turn now'
+                                  : 'Waits for this turn to finish',
+                              style: TextStyle(color: colors.foregroundMuted, fontSize: 11),
+                            ),
+                          ),
+                        ],
+                      ),
+                    const SizedBox(height: 8),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _composer,
+                            enabled: _live && !approvalOpen,
+                            minLines: 1,
+                            maxLines: 4,
+                            decoration: InputDecoration(
+                              hintText: approvalOpen
+                                  ? 'Answer the request above first'
+                                  : _live
+                                      ? 'Send a follow-up…'
+                                      : 'Run is not live',
+                              border: const OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            onSubmitted: (_) => unawaited(_send()),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton.filled(
+                          onPressed: _live && !approvalOpen ? () => unawaited(_send()) : null,
+                          icon: const Icon(Icons.send),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    // Refused while the agent is waiting on an answer: a message sent then would sit
-                    // behind a question nobody has answered, which is how a user concludes the agent
-                    // ignored them.
-                    onPressed: _live && _transcript.pendingApproval == null ? () => unawaited(_send()) : null,
-                    icon: const Icon(Icons.send),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -246,105 +450,4 @@ class _RunScreenState extends State<RunScreen> {
       ),
     );
   }
-}
-
-/// How one folded row reads on a small screen.
-///
-/// The daemon's events describe *what happened*; this is the phone's rendering of it, and it is the
-/// only place that decides a tool row shows its state as a word after a dot rather than as a chip.
-String _displayText(TranscriptEntry entry) {
-  switch (entry.kind) {
-    case 'user':
-      // The user's own words, as they typed them. The transcript also records *how* the message was
-      // delivered (`entry.delivered`), and the phone only ever queues — so there is nothing here for
-      // a reader to act on, and annotating every message would be noise on a small screen.
-      return entry.text;
-    case 'tool':
-      final status = entry.status ?? '';
-      return status.isEmpty ? entry.text : '${entry.text} · $status';
-    default:
-      return entry.text;
-  }
-}
-
-class _ApprovalCard extends StatelessWidget {
-  const _ApprovalCard({
-    required this.approval,
-    required this.onAnswer,
-    required this.colors,
-  });
-
-  final TranscriptApproval approval;
-  final Future<void> Function(String requestId, String optionId) onAnswer;
-  final CoderColors colors;
-
-  @override
-  Widget build(BuildContext context) {
-    final question = approval.question;
-    final detail = approval.detail;
-    final optionList = approval.options;
-    final answered = approval.resolvedWith;
-    final closed = approval.closed;
-
-    return Card(
-      margin: const EdgeInsets.all(12),
-      color: colors.surface2,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Needs your approval', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 6),
-            Text(question),
-            if (detail != null && detail.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(detail, style: TextStyle(color: colors.foregroundMuted)),
-            ],
-            const SizedBox(height: 12),
-            // An answered or closed question stops being a question: the row stays where it was, so
-            // the reader does not lose their place in a long transcript, and it stops asking.
-            if (answered != null)
-              Text(
-                'Answered: ${_labelFor(optionList, answered)}',
-                style: TextStyle(color: colors.foregroundMuted, fontSize: 12),
-              )
-            else if (closed)
-              Text(
-                'No longer waiting.',
-                style: TextStyle(color: colors.foregroundMuted, fontSize: 12),
-              )
-            else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final option in optionList)
-                    FilledButton(
-                      // The destructive colour appears only inside a decision, never on a row
-                      // (docs/envoydev-ui.md §7), and which option that is comes from the protocol's
-                      // own flag rather than from the label.
-                      style: option.destructive
-                          ? FilledButton.styleFrom(backgroundColor: colors.destructive)
-                          : null,
-                      onPressed: () => unawaited(onAnswer(approval.requestId, option.id)),
-                      child: Text(option.label),
-                    ),
-                ],
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// The label a user chose, for the line that replaces the buttons.
-String _labelFor(List<TranscriptOption> options, String optionId) {
-  for (final option in options) {
-    if (option.id == optionId) return option.label;
-  }
-  // An id we do not have a label for is still shown: "Answered: allow-once" tells a user the question
-  // was answered, and inventing a friendlier word for an option we cannot name would be worse.
-  return optionId;
 }

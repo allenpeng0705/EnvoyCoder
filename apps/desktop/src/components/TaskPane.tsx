@@ -3,9 +3,8 @@
  *
  * Four deliberate choices, each inherited from something that works rather than invented here:
  *
- *   1. **The header states the machine.** A distributed control plane that does not say *where* the
- *      agent runs invites the user to assume "here", and then to wonder why a test that passes on
- *      their laptop fails in the transcript. Host, cwd and branch are always visible.
+ *   1. **The header states where the work is.** Host only appears when the task is not on this
+ *      machine — saying "This machine" on every local task is noise. Cwd and branch stay visible.
  *   2. **The composer distinguishes Queue from Steer.** Sending while an agent works either waits for
  *      the turn or joins it; one control that silently picks for the user is how people conclude the
  *      agent ignored their message.
@@ -34,7 +33,15 @@
 import type { JSX } from "react";
 
 import { useEffect, useRef, useState } from "react";
-import type { HarnessId, HarnessSummary, ProbeOutcome, Project, RunEvent, Task } from "@envoydev/protocol";
+import type {
+  HarnessId,
+  HarnessSummary,
+  ProbeOutcome,
+  Project,
+  RunEvent,
+  Task,
+  TaskDefaults,
+} from "@envoydev/protocol";
 
 import { hasShellPicker, pickFolder } from "../client/folder-picker.js";
 import { agentFor } from "../composer/agent-for.js";
@@ -45,7 +52,7 @@ import {
   taskLocationLabel,
   thinkingOffReason,
 } from "../composer/controls.js";
-import { harnessLabel } from "../composer/harness-label.js";
+import { harnessBadge, harnessLabel, modelAcceptsBareId } from "../composer/harness-label.js";
 import { probeAsk, publishesOnlyInSession, type ProbeState } from "../composer/probe.js";
 import { useT } from "../i18n/context.js";
 import {
@@ -59,6 +66,8 @@ import {
 import { buildTranscript, type TranscriptEntry } from "../state/transcript.js";
 import { ComposerControls } from "./ComposerControls.js";
 import { FolderIcon } from "./icons.js";
+import { MessageMarkdown } from "./markdown/MessageMarkdown.js";
+import { ProjectAgentPicker } from "./ProjectAgentPicker.js";
 
 export interface TaskPaneProps {
   task: Task;
@@ -117,6 +126,14 @@ export interface TaskPaneProps {
    * than rendering as an agent with no modes — two different facts that must not look alike.
    */
   harnesses?: readonly HarnessSummary[];
+  /** App-wide default agent — used when the project has not set its own. */
+  appHarness?: HarnessId;
+  /**
+   * Change this project's coding agent (migrates idle tasks on the daemon).
+   *
+   * Absent when there is no project, or in a pane rendered without a write path.
+   */
+  onChangeProjectAgent?: (defaults: TaskDefaults) => Promise<{ ok: true } | Refusal>;
   /**
    * Ask this agent what it offers, before any run — the pre-flight probe.
    *
@@ -370,24 +387,46 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
         <div className="pane__title-group">
           <h1 className="pane__title">{task.title || t("task.untitled")}</h1>
           <div className="pane__meta">
-            <span className={`chip ${chipFor(task.status)}`}>{t(statusKey(task.status))}</span>
-            <span className="chip chip--quiet" title={t("task.meta.agent")}>
-              {harnessLabel(task.harness)}
-            </span>
-            {task.model ? <span className="chip chip--quiet">{task.model}</span> : null}
+            {/* Status as a colour only — same dots as the rail. Agent and model are link-style text,
+                not chips: their lengths change with every task, and pills make a short name and a long
+                id look like two different controls. */}
+            <span
+              className={`dot ${dotClassFor(task.status)}`}
+              aria-label={t(statusKey(task.status))}
+              title={t(statusKey(task.status))}
+            />
+            {project !== undefined && props.onChangeProjectAgent !== undefined && props.harnesses !== undefined ? (
+              <ProjectAgentPicker
+                project={project}
+                appHarness={props.appHarness ?? "envoy-harness"}
+                harnesses={props.harnesses}
+                appearance="meta"
+                onChoose={props.onChangeProjectAgent}
+              />
+            ) : (
+              <span className="pane__meta-link" title={harnessLabel(task.harness)}>
+                {harnessBadge(task.harness)}
+              </span>
+            )}
+            {task.model ? (
+              <>
+                <span className="pane__meta-sep" aria-hidden>
+                  ·
+                </span>
+                <span className="pane__meta-link" title={task.model}>
+                  {task.model}
+                </span>
+              </>
+            ) : null}
             {/* **Where the task runs, and the control that moves it.**
-                It used to be a passive chip here *and* a pill with the path in it in the composer — the one
-                place a path is least worth reading, since it is long, truncated, and competing with the
-                message being typed (the owner: *"we needn't to show the folder path on the inputting field"*).
-                The composer row is a toolbar of agent settings now, and the location lives here: a glyph and
-                the project's name, the whole path in the title, and a press opens the folder chooser.
-
-                A window with no chooser keeps the chip and takes the reason — attached, as §7.30's rule has
-                it — and a chooser that *fails* says so on the line below, because §7.27's rule is that a
-                refusal is read where the press was. */}
+                Same link style as the facts beside it — a chip here would reintroduce the uneven pills.
+                The press still opens the folder chooser; the whole path stays in the title. */}
+            <span className="pane__meta-sep" aria-hidden>
+              ·
+            </span>
             <button
               type="button"
-              className="chip chip--quiet pane__cwd"
+              className="pane__meta-link pane__cwd"
               title={
                 folderUnavailable === undefined ? task.cwd : `${task.cwd} — ${folderUnavailable}`
               }
@@ -405,14 +444,25 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               </p>
             )}
             {task.worktree ? (
-              <span className="chip chip--quiet" title={task.worktree.path}>
-                {task.worktree.branch}
-              </span>
+              <>
+                <span className="pane__meta-sep" aria-hidden>
+                  ·
+                </span>
+                <span className="pane__meta-link" title={task.worktree.path}>
+                  {task.worktree.branch}
+                </span>
+              </>
             ) : null}
-            {/* Where it runs. "This machine" is a statement, not an omission. */}
-            <span className="chip chip--quiet" title={t("task.meta.host")}>
-              {task.hostId && task.hostId !== "local" ? task.hostId : t("app.thisMachine")}
-            </span>
+            {task.hostId && task.hostId !== "local" ? (
+              <>
+                <span className="pane__meta-sep" aria-hidden>
+                  ·
+                </span>
+                <span className="pane__meta-link" title={t("task.meta.host")}>
+                  {task.hostId}
+                </span>
+              </>
+            ) : null}
           </div>
           {/* **A press that failed, under the chip that was pressed.** §7.27's rule, and the reason this is
               not silence: the chooser refused, so the header says so where the click was made. */}
@@ -468,13 +518,22 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
           </div>
         ) : (
           <ol className="transcript__list">
-            {transcript.entries.map((entry) => (
-              <TranscriptRow
-                key={`${entry.kind}-${entry.id}`}
-                entry={entry}
-                onAnswer={props.onAnswer}
-              />
-            ))}
+            {transcript.entries.map((entry, index) => {
+              const streaming =
+                entry.kind === "assistant" &&
+                props.runLive &&
+                !transcript.entries
+                  .slice(index + 1)
+                  .some((later) => later.kind === "assistant");
+              return (
+                <TranscriptRow
+                  key={`${entry.kind}-${entry.id}`}
+                  entry={entry}
+                  streaming={streaming}
+                  onAnswer={props.onAnswer}
+                />
+              );
+            })}
           </ol>
         )}
       </div>
@@ -528,6 +587,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               models={controls.model.options}
               selectedModelId={selectedModelId}
               modelOff={modelOff}
+              modelBareId={modelAcceptsBareId(task.harness)}
               agentLabel={agent.label}
               onChooseModel={(chosen) => {
                 // `""` is the agent's own default, and it is kept as the empty string here rather than
@@ -623,6 +683,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
 
 function TranscriptRow(props: {
   entry: TranscriptEntry;
+  streaming?: boolean;
   onAnswer: (requestId: string, optionId: string) => void | Promise<void>;
 }): JSX.Element | null {
   const t = useT();
@@ -641,15 +702,23 @@ function TranscriptRow(props: {
       );
 
     case "assistant":
+      // Markdown for the answer (GFM + fenced code + Mermaid). Streaming uses paced
+      // reveal and block-split re-parse so finished paragraphs stay put.
       return (
         <li className="row row--assistant">
-          <p className="row__text">{entry.text}</p>
+          <div className="row__markdown">
+            <MessageMarkdown
+              text={entry.text}
+              phase={props.streaming ? "streaming" : "complete"}
+            />
+          </div>
         </li>
       );
 
     case "thought":
       // Collapsed by default: reasoning is usually long and often irrelevant, and hiding it behind a
-      // summary is what keeps the answer readable (`docs/envoydev-ui.md` §7).
+      // summary is what keeps the answer readable (`docs/envoydev-ui.md` §7). Kept as plain text —
+      // Paseo does the same; partial markdown in a streaming thought flickers more than it helps.
       return (
         <li className="row row--thought">
           <details>
@@ -771,17 +840,21 @@ function summarize(value: unknown, limit = 400): string {
   return text.length > limit ? `${text.slice(0, limit)}\n…` : text;
 }
 
-function chipFor(status: Task["status"]): string {
+function dotClassFor(status: Task["status"]): string {
   switch (status) {
-    case "needs-attention":
-      return "chip--warn";
-    case "failed":
-      return "chip--danger";
     case "running":
+      return "dot--running";
+    case "needs-attention":
+      return "dot--warn";
+    case "failed":
+      return "dot--danger";
+    case "done":
+      return "dot--ok";
     case "queued":
-      return "chip--live";
-    default:
-      return "chip--quiet";
+      return "dot--queued";
+    case "idle":
+    case "cancelled":
+      return "dot--quiet";
   }
 }
 

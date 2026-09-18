@@ -137,6 +137,28 @@ void main() {
 
       expect(transcript.entries.single.status, 'running');
     });
+
+    test('keeps truncated input and output on the tool row', () {
+      final transcript = folded([
+        at(1, {
+          'kind': 'run.tool',
+          'callId': 'c1',
+          'name': 'shell',
+          'status': 'running',
+          'input': 'ls -la',
+        }),
+        at(2, {
+          'kind': 'run.tool',
+          'callId': 'c1',
+          'name': '',
+          'status': 'completed',
+          'output': 'file.txt',
+        }),
+      ]);
+
+      expect(transcript.entries.single.toolInput, 'ls -la');
+      expect(transcript.entries.single.toolOutput, 'file.txt');
+    });
   });
 
   group('approvals', () {

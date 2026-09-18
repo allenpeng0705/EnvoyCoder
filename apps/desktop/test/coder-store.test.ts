@@ -840,10 +840,62 @@ describe("other windows", () => {
     void s;
   });
 
+  it("still refetches projects when a harnesses event lands in the same coalesce window", async () => {
+    // Boot primes `harnesses` off the critical path; without kind accumulation that broadcast
+    // replaced a pending `projects` refresh and the rail stayed empty after a successful add.
+    const { connection } = await store();
+    const projects = connection.calls.filter((call) => call.method === "coder.listProjects").length;
+    const harnesses = connection.calls.filter((call) => call.method === "coder.listHarnesses").length;
+
+    connection.push("coder:state-changed", { kind: "projects", at: "2026-09-17T10:00:00.000Z", ids: ["added"] });
+    connection.push("coder:state-changed", { kind: "harnesses", at: "2026-09-17T10:00:00.010Z" });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    expect(connection.calls.filter((call) => call.method === "coder.listProjects").length).toBe(projects + 1);
+    expect(connection.calls.filter((call) => call.method === "coder.listHarnesses").length).toBe(harnesses + 1);
+  });
+
   it("takes the mesh at its word when it says the attachment changed", async () => {
     const { connection, state } = await store();
     connection.push("coder:mesh-status", { kind: "attached", scopeKey: "product:EnvoyDev", ownerId: "owner" });
     expect(state().mesh.kind).toBe("attached");
+  });
+});
+
+describe("adding a project", () => {
+  it("puts the daemon's project on the rail without waiting for a broadcast", async () => {
+    const { store: s, connection, state } = await store();
+    const project = {
+      id: "local::/Users/me/work/repo",
+      path: "/Users/me/work/repo",
+      label: "repo",
+      hostId: "local",
+      addedAt: "2026-09-17T10:00:00.000Z",
+    };
+    connection.answers.set("coder.addProject", { project });
+
+    const result = await s.addProject("/Users/me/work/repo");
+    expect(result.ok).toBe(true);
+    expect(state().projects).toEqual([project]);
+  });
+
+  it("puts a created task on the rail without waiting for a broadcast", async () => {
+    const { store: s, connection, state } = await store();
+    const task = {
+      id: "t1",
+      projectId: "local::/Users/me/work/repo",
+      cwd: "/Users/me/work/repo",
+      title: "",
+      harness: "envoy-harness" as const,
+      status: "idle" as const,
+      createdAt: "2026-09-17T10:00:00.000Z",
+      updatedAt: "2026-09-17T10:00:00.000Z",
+    };
+    connection.answers.set("coder.createTask", { task });
+
+    const result = await s.createTask({ projectId: task.projectId, title: "" });
+    expect(result.ok).toBe(true);
+    expect(state().tasks).toEqual([task]);
   });
 });
 

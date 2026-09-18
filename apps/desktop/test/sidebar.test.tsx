@@ -156,7 +156,7 @@ describe("CoderSidebar", () => {
     // Asserted on the header badge specifically: the same label also appears on each row that
     // uses that agent, and `getByText` would find either.
     const headerBadge = within(group).getByTitle("The agent new tasks in this project start with");
-    expect(headerBadge.textContent).toBe("Envoy Harness");
+    expect(headerBadge.textContent).toBe("Envoy");
     expect(within(group).getByText("Tasks")).toBeTruthy();
     // …and the tasks under it.
     expect(within(group).getByText("Wire product attach into the new node service")).toBeTruthy();

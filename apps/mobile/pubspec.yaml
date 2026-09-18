@@ -36,6 +36,10 @@ dependencies:
   # heavyweight dependency the phone takes for a route it actually uses.
   envoy_mesh_libp2p:
     path: ../../../EnvoyMesh/packages/envoy-mesh-libp2p-dart
+  flutter_markdown: ^0.7.7+1
+  flutter_highlight: ^0.7.0
+  highlight: ^0.7.0
+  markdown: ^7.3.1
 
 # `dart_libp2p` pins `mdns_dart ^2.0.1` → 2.2.1, which fails to compile on Dart 3.13+
 # (`InternetAddress` vs `InterfaceAddress`); 2.2.2 is the fix. Overrides are only honoured from the

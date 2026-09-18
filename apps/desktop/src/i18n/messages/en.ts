@@ -63,6 +63,9 @@ export const en = {
   "sidebar.section.tasks": "Tasks",
   "sidebar.project.attention": "Tasks waiting on you",
   "sidebar.project.agent": "The agent new tasks in this project start with",
+  "project.agent.picker.aria": "Coding agent for this project: {agent}. Change",
+  "project.agent.picker.title": "Change the coding agent for this project",
+  "project.agent.picker.menu": "Coding agents for this project",
   "sidebar.project.settings": "Project settings",
   "sidebar.project.newTask": "+ New",
   "sidebar.project.newTask.title": "Start a task in {project}",
@@ -147,6 +150,15 @@ export const en = {
   "task.delivered.steered": "joined the turn",
   "task.delivered.queued": "waited for the turn",
   "task.thought.summary": "How it thought about this",
+  "task.code.copy": "Copy",
+  "task.code.copied": "Copied",
+  "task.code.plain": "text",
+  "task.diagram.aria": "Diagram",
+  "task.diagram.source": "Source",
+  "task.diagram.view": "View diagram",
+  "task.diagram.streaming": "Diagram appears when the agent finishes this block.",
+  "task.diagram.blocked": "This diagram was not rendered — its source looked unsafe.",
+  "task.diagram.failed": "Could not draw this diagram. The source is shown instead.",
   "task.approval.aria": "The agent needs your answer",
   "task.approval.answered": "Answered",
   "task.approval.answeredWith": "Answered: {option}",
@@ -208,6 +220,7 @@ export const en = {
   // applies, because "default" alone leaves the user guessing whose.
   "task.composer.model.agentDefault": "The agent's own default",
   "task.composer.model.placeholder": "provider/model",
+  "task.composer.model.placeholderBare": "model id",
   // Why the control is off. Three facts, three sentences — folding them together is how a user
   // concludes an agent has no models when it has some we cannot reach.
   "task.composer.model.none": "{agent} does not take a model.",
@@ -223,6 +236,10 @@ export const en = {
     // binary, where it is `deepseek-official` and not `deepseek`. An example would teach the wrong name
     // and every copy of it would go stale with somebody else's catalog.
     "{agent} publishes its models only inside a running session, so there is no list to choose from here. Type one as provider/model, using the provider name {agent} itself uses — and if it does not have that model the run stops with the agent's own words, rather than quietly using another one.",
+  // Claude / Codex / Cursor: the select value is a bare model id. Optional until a session lists them;
+  // leaving the field empty uses the agent's own default (credentials stay in that CLI).
+  "task.composer.model.freeTextBare":
+    "{agent} publishes its models only inside a running session. Leave this empty to use {agent}'s own default, or type a model id it accepts — custom providers are configured in that agent's own settings, not here.",
   // …and the one note that is not a refusal *or* an instruction: the list on screen came from a real
   // session, at a real time, and is therefore a record rather than a promise. Printed instead of a
   // "where the list came from" line, because the answer to that question is what changes the user's
@@ -370,6 +387,8 @@ export const en = {
   "settings.section.agents.title": "Agents",
   "settings.section.agents.detail":
     "Every agent this machine can run, and what each one says it can do.",
+  "settings.section.llm.title": "LLM",
+  "settings.section.llm.detail": "Base URL, model and API key for Envoy Harness.",
   "settings.section.shortcuts.title": "Keyboard shortcuts",
   "settings.section.shortcuts.detail":
     "Every key this window is listening for, read from the table the keyboard layer reads.",
@@ -476,6 +495,34 @@ export const en = {
    * command is a command that does not run.
    */
   "settings.agents.signIn.terminal": "To sign in, run this in your terminal:",
+  /**
+   * Envoy Harness LLM panel — built-in agent only. The API key stays under secretsDir on this machine.
+   */
+  "settings.agents.envoyLlm.configure": "Configure LLM",
+  "settings.agents.envoyLlm.hide": "Hide LLM settings",
+  "settings.agents.envoyLlm.open": "LLM settings",
+  "settings.agents.envoyLlm.open.title": "Base URL, model and API key for Envoy Harness.",
+  "settings.agents.envoyLlm.configure.title":
+    "Provider, model, optional base URL, and API key for Envoy Harness on this machine.",
+  "settings.agents.envoyLlm.heading": "Envoy Harness LLM",
+  "settings.agents.envoyLlm.note":
+    "Envoy Harness uses this. Other agents keep their own sign-in. The key stays on this computer.",
+  "settings.agents.envoyLlm.provider": "Provider",
+  "settings.agents.envoyLlm.model": "Model",
+  "settings.agents.envoyLlm.model.placeholder": "gpt-4o or anthropic/claude-sonnet-4-5",
+  "settings.agents.envoyLlm.model.detail": "A model id, or provider/model.",
+  "settings.agents.envoyLlm.baseUrl": "Base URL",
+  "settings.agents.envoyLlm.baseUrl.placeholder": "Optional — LiteLLM or a proxy",
+  "settings.agents.envoyLlm.baseUrl.detail": "Leave empty to use the provider’s default endpoint.",
+  "settings.agents.envoyLlm.apiKey": "API key",
+  "settings.agents.envoyLlm.apiKey.placeholder": "Paste a new key to replace the saved one",
+  "settings.agents.envoyLlm.apiKey.detail": "Write-only: EnvoyDev never shows a saved key again.",
+  "settings.agents.envoyLlm.apiKey.saved": "API key saved on this machine.",
+  "settings.agents.envoyLlm.apiKey.clear": "Clear",
+  "settings.agents.envoyLlm.save": "Save",
+  "settings.agents.envoyLlm.saving": "Saving…",
+  "settings.agents.envoyLlm.saved": "Saved.",
+  "settings.agents.envoyLlm.loading": "Loading LLM settings…",
   "settings.agents.olderDaemon":
     "The daemon this window is talking to is an older build and does not have this part of the agent list, so it cannot be shown here. Restart EnvoyDev so the window and its daemon are the same build.",
   /**
@@ -929,6 +976,14 @@ export const en = {
   // would teach a name that is wrong for the agent reading this sentence.
   "error.modelNotProviderQualified":
     "{harness} needs a model written as provider/model — the provider name, a slash, then the model — and \"{model}\" does not name both, so the run was not started.",
+  // Only Envoy Harness (argv delivery) must have a model before a process exists — otherwise it
+  // answers on the hermetic demo backend while the window still looks empty. External agents may omit.
+  "error.modelRequired":
+    "{harness} has no model configured. Choose a model from the list, then try again.",
+  "error.envoyLlmUnknownModel":
+    "Envoy Harness does not publish {provider}/{model} as a default model, so the LLM settings were not saved.",
+  "error.envoyLlmApiKeyRequired":
+    "Envoy Harness needs an API key for {provider}. Enter one in LLM settings, then save.",
   // The thinking level's one refusal, and note what it is *not*: a level the agent does not publish is
   // never refused here. The list a user picks from came from an earlier session and describes the model
   // that session resolved, so the agent is the authority on what it accepts — and it refuses with its

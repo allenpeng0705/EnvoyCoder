@@ -85,17 +85,36 @@ describe("grouping", () => {
     expect(groups[0]?.counts.total).toBe(0);
   });
 
-  it("surfaces a project that needs attention above a busier but calmer one", () => {
-    const calm = project({ id: "local::/repo/calm", label: "calm" });
-    const busy = project({ id: "local::/repo/busy", label: "busy" });
+  it("keeps project order stable: newest addedAt first, never by attention or activity", () => {
+    const older = project({
+      id: "local::/repo/older",
+      label: "older",
+      addedAt: "2026-09-01T00:00:00.000Z",
+    });
+    const newer = project({
+      id: "local::/repo/newer",
+      label: "newer",
+      addedAt: "2026-09-10T00:00:00.000Z",
+    });
     const groups = groupByProject({
-      projects: [calm, busy],
+      projects: [older, newer],
       tasks: [
-        task({ id: "a", projectId: calm.id, status: "running", updatedAt: "2026-09-13T12:00:00Z" }),
-        task({ id: "b", projectId: busy.id, status: "needs-attention", updatedAt: "2026-09-13T09:00:00Z" }),
+        // Activity and attention on the older project must not pull it above the newer one.
+        task({
+          id: "a",
+          projectId: older.id,
+          status: "needs-attention",
+          updatedAt: "2026-09-13T12:00:00Z",
+        }),
+        task({
+          id: "b",
+          projectId: newer.id,
+          status: "idle",
+          updatedAt: "2026-09-01T00:00:00Z",
+        }),
       ],
     });
-    expect(groups[0]?.project.label).toBe("busy");
+    expect(groups.map((g) => g.project.label)).toEqual(["newer", "older"]);
   });
 
   it("pins first, then orders by recency, and never loses an orphaned task", () => {
@@ -148,6 +167,20 @@ describe("search", () => {
     expect(filterRows(groups, { text: "idempotency" }).flatMap((g) => g.rows).map((r) => r.task.id)).toEqual(["t"]);
     expect(filterRows(groups, { text: "payments" }).flatMap((g) => g.rows).length).toBe(2);
     expect(filterRows(groups, { text: "nothing here" })).toEqual([]);
+  });
+
+  it("keeps an empty project when the query hits its label or path", () => {
+    const empty = project({
+      id: "local::/repo/archive",
+      label: "archive",
+      path: "/repo/archive",
+    });
+    const groups = groupByProject({ projects: [empty, project()], tasks: [task()] });
+    const byLabel = filterRows(groups, { text: "archive" });
+    expect(byLabel).toHaveLength(1);
+    expect(byLabel[0]?.project.label).toBe("archive");
+    expect(byLabel[0]?.rows).toEqual([]);
+    expect(filterRows(groups, { text: "/repo/archive" })[0]?.project.label).toBe("archive");
   });
 
   it("filters by status, agent and host without touching the tree's shape", () => {

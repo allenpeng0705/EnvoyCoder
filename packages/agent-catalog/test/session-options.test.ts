@@ -206,6 +206,38 @@ describe("the model list a session yields", () => {
     expect(models.options).toEqual([]);
     expect(models.observedAt).toBeUndefined();
   });
+
+  it("decodes bare ACP model ids for Claude / Codex / Cursor", () => {
+    // The select value *is* the model id — JSON.parse would fail and used to drop every option.
+    const { models } = sessionFacts(
+      "claudecode",
+      observeSessionOptions({
+        harness: "claudecode",
+        observedAt: AT,
+        configOptions: [
+          {
+            id: "model",
+            name: "Model",
+            category: "model",
+            type: "select",
+            options: [
+              { value: "haiku", name: "Haiku" },
+              { value: "sonnet", name: "Sonnet" },
+              { value: "MiniMax-M2.7-highspeed", name: "MiniMax" },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(models.kind).toBe("listed");
+    expect(models.observedAt).toBe(AT);
+    expect(models.options.map((option) => option.id)).toEqual([
+      "haiku",
+      "sonnet",
+      "MiniMax-M2.7-highspeed",
+    ]);
+    expect(models.options[0]).toMatchObject({ provider: "acp", model: "haiku" });
+  });
 });
 
 describe("the thinking level", () => {

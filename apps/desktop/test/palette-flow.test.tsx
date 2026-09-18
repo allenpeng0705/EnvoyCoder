@@ -197,6 +197,41 @@ describe("a palette opened for one workflow", () => {
  * capable than the product cannot fail that way, so this test builds the real catalogue.
  */
 describe("the project row as the product registers it", () => {
+  it("opens already holding a refusal and a seeded path, without opening the picker again", () => {
+    // The rail chooser path: a folder was picked, the daemon refused it, and the shell reopens the
+    // palette so the user can correct the path. Opening `project.add` cold would fire the picker
+    // again on top of a status line that never appeared — which is the failure Bugbot named.
+    const t = createTranslator("en", CATALOGUES.en).t;
+    const pick = vi.fn(async () => "/should-not-be-called");
+    const contributions = buildCommandContributions({
+      t,
+      projects: [],
+      tasks: [],
+      onAddProject: vi.fn(),
+      onNewTask: vi.fn(),
+      onOpenSettings: vi.fn(),
+      onPairPhone: vi.fn(),
+      onToggleRail: vi.fn(),
+      onRevealTask: vi.fn(),
+    }).map((row) => (row.id === "project.add" ? { ...row, pick } : row));
+
+    render(
+      <CommandCenter
+        open
+        onClose={vi.fn()}
+        contributions={contributions}
+        initialCommandId="project.add"
+        initialSeedValue="/Users/you/bad-path"
+        initialStatus={{ message: "That folder is not on this machine." }}
+      />,
+    );
+
+    expect(pick).not.toHaveBeenCalled();
+    const field = screen.getByLabelText(/^Which folder\? Paste its full path\./) as HTMLInputElement;
+    expect(field.value).toBe("/Users/you/bad-path");
+    expect(screen.getByRole("status").textContent).toBe("That folder is not on this machine.");
+  });
+
   it("asks for a path when there is no shell to open a chooser", () => {
     const t = createTranslator("en", CATALOGUES.en).t;
     const onAddProject = vi.fn();

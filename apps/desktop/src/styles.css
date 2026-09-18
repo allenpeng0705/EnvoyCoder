@@ -284,6 +284,12 @@ body {
   font-weight: 600;
 }
 
+.button--primary:hover {
+  background: var(--accent-bright);
+  border-color: var(--accent-bright);
+  color: var(--accent-text);
+}
+
 .button--secondary {
   background: var(--bg-active);
 }
@@ -363,7 +369,8 @@ body {
   flex: 1;
   min-width: 0;
   display: inline-flex;
-  justify-content: flex-start;
+  align-items: center;
+  justify-content: center;
 }
 
 .sidebar__search .input {
@@ -399,7 +406,7 @@ body {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding-bottom: 8px;
+  padding: 4px 0 8px;
 }
 
 .sidebar__empty {
@@ -458,15 +465,28 @@ body {
 
 /* ── project group ─────────────────────────────────────────────────────── */
 
+/* Each project is its own block. With only 4px of margin the rail read as one continuous list of
+   tasks; a hairline and breathing room between groups make "this repo vs that repo" obvious at a
+   glance — the same divider pattern the settings project list already uses. */
 .project {
-  margin-bottom: 4px;
+  margin: 0;
+  padding: 2px 0 8px;
+}
+
+.project + .project {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-strong);
 }
 
 .project__header-row {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding-right: 6px;
+  margin: 0 4px;
+  padding-right: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
 }
 
 .project__header {
@@ -478,6 +498,7 @@ body {
   height: 30px;
   padding: 0 6px 0 8px;
   border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text);
   font: inherit;
@@ -508,11 +529,50 @@ body {
   font-weight: 400;
 }
 
+button.project__agent {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+button.project__agent:hover {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.project-agent-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.project-agent-picker__trigger[aria-expanded="true"] {
+  color: var(--text);
+}
+
+.project-agent-picker__menu {
+  /* Reuses .row-menu__list positioning; sit under the trigger on the rail / header. */
+  right: 0;
+  left: auto;
+  min-width: 10rem;
+  z-index: 20;
+}
+
+.project-agent-picker__notice {
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--status-danger, #d8847b);
+}
+
 .project__tasks-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 2px 8px 2px 22px;
+  padding: 4px 8px 2px 22px;
 }
 
 .project__tasks-title {
@@ -653,10 +713,15 @@ body {
 }
 
 .chip {
+  display: inline-flex;
+  align-items: center;
   flex: none;
-  padding: 1px var(--space-1-5);
+  box-sizing: border-box;
+  min-height: 1.375rem;
+  padding: 0 var(--space-1-5);
   border-radius: var(--radius-full);
   font-size: var(--font-size-sm);
+  line-height: 1;
   /* Small text on a raised surface: measured in the browser at 3.83:1 with the muted tone, so the
      chips read `--foreground` and let the *background* carry the quietness. */
   color: var(--foreground);
@@ -763,30 +828,56 @@ body {
 .pane__meta {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1-5);
+  align-items: center;
+  gap: 0.15rem 0.4rem;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
 }
 
-/* **The header's location chip is a control.** It reads exactly like the chips beside it — that was the point
-   of moving it out of the composer — and the only addition is the glyph before the name and a hover fill, so a
-   user can tell it is pressable without it becoming a button-shaped thing in a row of facts. */
-.pane__cwd {
+/* Facts as link-style text — length can be anything, so no pills. Truncate only when the row itself
+   runs out of room; a short name and a long model id then read as one line of prose, not two boxes. */
+.pane__meta-link {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
+  max-width: min(28rem, 100%);
+  overflow: hidden;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-bright, #7ccba0);
   font: inherit;
+  line-height: 1.3;
+  text-decoration: none;
+  text-underline-offset: 2px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.pane__meta-link {
   cursor: pointer;
 }
 
-.pane__cwd:hover:not(:disabled) {
-  background: var(--bg-hover);
+.pane__meta-link:hover,
+button.pane__meta-link:hover:not(:disabled) {
+  text-decoration: underline;
 }
 
-.pane__cwd:disabled {
+button.pane__meta-link:disabled {
   color: var(--text-faint);
   cursor: default;
+  text-decoration: none;
 }
 
-/* A failed press, under the row of chips it came from — the header's own line, on §7.27's rule. */
+.pane__meta-sep {
+  flex: none;
+  color: var(--text-faint);
+  user-select: none;
+}
+
+/* A failed press, under the row of facts it came from — the header's own line, on §7.27's rule. */
 .pane__notice {
   margin: var(--space-1) 0 0;
   color: var(--status-danger);
@@ -2291,6 +2382,19 @@ body {
   border-top: 1px solid var(--border-strong, #2f3534);
 }
 
+.settings__envoy-llm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: var(--space-3) 0 var(--space-2);
+  border-top: 1px solid var(--border-strong, #2f3534);
+}
+
+.settings__agent-below {
+  padding: 0 var(--space-1) var(--space-2);
+}
+
 .settings__link {
   color: var(--accent-bright, #7ccba0);
   text-decoration: underline;
@@ -2368,6 +2472,364 @@ body {
 
 .row--assistant .row__text {
   color: var(--foreground);
+}
+
+/* Assistant answers are markdown (`.md`), not pre-wrapped plain text. Measure and type match
+   `--font-size-content` / the 820px transcript column — the tokens already named this surface. */
+.row__markdown {
+  color: var(--foreground);
+  font-size: var(--font-size-content);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+/* ── markdown body (agent output) ─────────────────────────────────────────── */
+
+.md {
+  min-width: 0;
+}
+
+.md > *:first-child {
+  margin-top: 0;
+}
+
+.md > *:last-child {
+  margin-bottom: 0;
+}
+
+.md p {
+  margin: 0 0 var(--space-3);
+  line-height: 1.4;
+}
+
+.md h1,
+.md h2,
+.md h3,
+.md h4,
+.md h5,
+.md h6 {
+  margin: var(--space-4) 0 var(--space-2);
+  color: var(--foreground);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.3;
+}
+
+.md h1 {
+  margin-top: var(--space-6);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 1.6em;
+  font-weight: var(--font-weight-bold);
+}
+
+.md h2 {
+  margin-top: var(--space-6);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 1.35em;
+  font-weight: var(--font-weight-bold);
+}
+
+.md h3 {
+  font-size: 1.15em;
+}
+
+.md h4,
+.md h5,
+.md h6 {
+  font-size: 1em;
+}
+
+.md h6 {
+  color: var(--foreground-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.md ul,
+.md ol {
+  margin: 0 0 var(--space-3);
+  padding-left: 1.4em;
+}
+
+.md li {
+  margin: 0 0 var(--space-1);
+}
+
+.md li > p {
+  margin: 0;
+}
+
+.md li + li {
+  margin-top: var(--space-1);
+}
+
+.md blockquote {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-1) 0 var(--space-1) var(--space-3);
+  border-left: 3px solid var(--border);
+  color: var(--foreground-muted);
+}
+
+.md hr {
+  margin: var(--space-4) 0;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+.md a {
+  color: var(--accent-bright);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.md a:hover {
+  text-decoration: underline;
+}
+
+.md strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+.md em {
+  font-style: italic;
+}
+
+.md del {
+  color: var(--foreground-muted);
+  text-decoration: line-through;
+}
+
+.md__inline-code {
+  padding: 0.1em 0.35em;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-code);
+}
+
+.md__fence {
+  position: relative;
+  margin: 0 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.md__fence-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1-5) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+}
+
+.md__fence-lang {
+  color: var(--foreground-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  text-transform: lowercase;
+}
+
+.md__fence-copy {
+  padding: var(--space-0-5) var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--foreground-muted);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  opacity: 0.7;
+  transition:
+    opacity var(--motion-fade) var(--motion-ease),
+    background var(--motion-fade) var(--motion-ease),
+    border-color var(--motion-fade) var(--motion-ease);
+}
+
+.md__fence:hover .md__fence-copy,
+.md__fence-copy:focus-visible {
+  opacity: 1;
+}
+
+.md__fence-copy:hover {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+.md__fence-pre {
+  margin: 0;
+  padding: var(--space-3);
+  max-height: 480px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-code);
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 2;
+}
+
+.md__fence-pre code {
+  font: inherit;
+  color: var(--foreground);
+  background: none;
+  padding: 0;
+}
+
+.md__table-wrap {
+  margin: 0 0 var(--space-3);
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.md table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-base);
+}
+
+.md th,
+.md td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.md th {
+  background: var(--surface-1);
+  font-weight: var(--font-weight-semibold);
+}
+
+.md tr:last-child td {
+  border-bottom: none;
+}
+
+.md input[type="checkbox"] {
+  margin-right: var(--space-2);
+}
+
+.md__block + .md__block {
+  margin-top: var(--space-3);
+}
+
+/* highlight.js token colours — themed via design tokens */
+.md .hljs-comment,
+.md .hljs-quote {
+  color: var(--syntax-comment);
+  font-style: italic;
+}
+
+.md .hljs-keyword,
+.md .hljs-selector-tag {
+  color: var(--syntax-keyword);
+}
+
+.md .hljs-string,
+.md .hljs-meta .hljs-string,
+.md .hljs-regexp {
+  color: var(--syntax-string);
+}
+
+.md .hljs-number,
+.md .hljs-literal {
+  color: var(--syntax-number);
+}
+
+.md .hljs-built_in,
+.md .hljs-type,
+.md .hljs-params,
+.md .hljs-name,
+.md .hljs-attribute {
+  color: var(--syntax-built-in);
+}
+
+.md .hljs-attr,
+.md .hljs-variable,
+.md .hljs-template-variable,
+.md .hljs-class .hljs-title,
+.md .hljs-title {
+  color: var(--syntax-variable);
+}
+
+.md .hljs-tag,
+.md .hljs-selector-id,
+.md .hljs-selector-class {
+  color: var(--syntax-tag);
+}
+
+.md .hljs-meta,
+.md .hljs-doctag {
+  color: var(--syntax-meta);
+}
+
+.md .hljs-deletion {
+  color: var(--syntax-deletion);
+}
+
+.md .hljs-addition {
+  color: var(--syntax-addition);
+}
+
+.md__mermaid {
+  position: relative;
+  margin: 0 0 var(--space-3);
+}
+
+.md__mermaid--rendered {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  overflow: hidden;
+}
+
+.md__mermaid-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1-5) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.md__mermaid-svg {
+  padding: var(--space-3);
+  overflow: auto;
+  max-height: 480px;
+  text-align: center;
+}
+
+.md__mermaid-svg svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.md__mermaid-toggle {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 1;
+  padding: var(--space-0-5) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  color: var(--foreground-muted);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.md__mermaid-hint {
+  margin: var(--space-1) 0 0;
+  color: var(--foreground-muted);
+  font-size: var(--font-size-sm);
 }
 
 .row--thought {

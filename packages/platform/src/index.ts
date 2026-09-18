@@ -547,6 +547,13 @@ export function normalizeUserPath(input: string, home: string): string {
 }
 
 /**
+ * Browse directories on the daemon for remote folder pickers (phone / thin clients).
+ *
+ * Same wire shape as EnvoyMesh's home-fs helpers, so EnvoyGo-style Flutter browsers stay portable.
+ */
+export * from "./home-fs.js";
+
+/**
  * The `PATH` a GUI-launched process should search, and the provenance of what it found.
  *
  * A separate module because it is a separate subject — the daemon's *environment* rather than the OS's

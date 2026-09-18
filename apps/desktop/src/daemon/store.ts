@@ -47,6 +47,7 @@ import {
 } from "@envoydev/protocol";
 import type { CoderPaths } from "@envoydev/host-bridge";
 import { projectIdFor, resolveTaskDefaults, taskIdFor } from "@envoydev/task-model";
+import { harnessSwitchPatch, applyHarnessSwitch, taskMayFollowProjectHarness } from "./task-harness-switch.js";
 
 import { StateFiles, type FileNotes } from "./state-file.js";
 
@@ -422,13 +423,17 @@ export class CoderStore {
   }
 
   /**
-   * Update a project — its label, its tags, and **the defaults new tasks in it inherit**.
+   * Update a project — its label, its tags, and **the defaults its tasks inherit**.
    *
    * The defaults *replace* rather than merge, which is the opposite of `updateSettings` and deliberate:
    * a project's defaults are a complete statement about that project ("this one runs on DeepSeek"),
    * while the app's are a set of independent fallbacks. The patch shape carries `""` for "clear", on the
    * same terms as `updateSettings` — a project scope whose model control can be emptied has to be able
    * to empty it — and `dropCleared` is what keeps the sentinel out of the stored file.
+   *
+   * When the resolved agent changes, every **idle** task in the project is rewritten onto that agent
+   * (mode / model / thinking cleared when the new harness cannot honour them). That is what stops the
+   * project header saying DeepSeek while an open task still says Envoy. Active runs are left alone.
    */
   async updateProject(
     id: string,
@@ -444,6 +449,30 @@ export class CoderStore {
     };
     this.projectsState = this.projectsState.map((project) => (project.id === id ? next : project));
     await this.persistProjects([id]);
+
+    if (patch.defaults !== undefined) {
+      const resolvedHarness = (project: Project): HarnessId =>
+        project.defaults?.harness ?? this.settingsState.defaults.harness ?? "envoy-harness";
+      const previousHarness = resolvedHarness(current);
+      const nextHarness = resolvedHarness(next);
+      if (previousHarness !== nextHarness) {
+        const preferredModel = next.defaults?.model;
+        const at = this.now().toISOString();
+        const migratedIds: string[] = [];
+        this.tasksState = this.tasksState.map((task) => {
+          if (task.projectId !== id || !taskMayFollowProjectHarness(task)) return task;
+          if (task.harness === nextHarness) return task;
+          migratedIds.push(task.id);
+          return applyHarnessSwitch(
+            task,
+            harnessSwitchPatch(task, nextHarness, preferredModel),
+            at,
+          );
+        });
+        if (migratedIds.length > 0) await this.persistTasks(migratedIds);
+      }
+    }
+
     return next;
   }
 

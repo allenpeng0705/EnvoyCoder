@@ -23,7 +23,7 @@ import type { HarnessId, HarnessSummary } from "@envoydev/protocol";
 
 import { agentFor } from "../../composer/agent-for.js";
 import { composerControls, modelNote, modelOffReason } from "../../composer/controls.js";
-import { harnessLabel } from "../../composer/harness-label.js";
+import { harnessLabel, modelAcceptsBareId } from "../../composer/harness-label.js";
 import { useI18n } from "../../i18n/context.js";
 import type { WriteFailure } from "../../i18n/notice.js";
 import { formatWhen } from "../../i18n/when.js";
@@ -72,7 +72,13 @@ export function ModelRow(props: {
     known: props.summary !== undefined,
     agent: agent.label,
   });
-  const noteKey = modelNote(controls.model, { enabled: off === undefined });
+  const noteKey = modelNote(
+    {
+      ...controls.model,
+      ...(modelAcceptsBareId(props.harness) ? { bareId: true } : {}),
+    },
+    { enabled: off === undefined },
+  );
   const at =
     controls.model.observedAt !== undefined
       ? formatWhen(controls.model.observedAt, locale)
@@ -102,6 +108,7 @@ export function ModelRow(props: {
           options={controls.model.options}
           selected={props.value}
           off={off}
+          bareId={modelAcceptsBareId(props.harness)}
           title={t("task.composer.model.title")}
           onChoose={(model) => write(props.onChoose(model))}
         />

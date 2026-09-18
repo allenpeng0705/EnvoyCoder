@@ -195,6 +195,8 @@ const state: CoderState = {
       "coder.listProviders",
       "coder.listCatalog",
       "coder.signInAgent",
+      "coder.getEnvoyLlm",
+      "coder.setEnvoyLlm",
     ],
     mesh: { kind: "no-node", reason: "not attached in this test" },
     notes: [],
@@ -276,6 +278,23 @@ function agentActions(options: { addRefusal?: Refusal } = {}): {
       calls.signedIn.push(id);
       return { ok: true as const, outcome: "signed-in" as const, detail: "…" };
     },
+    getEnvoyLlm: async () => ({
+      ok: true as const,
+      apiKeySet: false,
+      options: [
+        { id: "anthropic/claude-sonnet-4-6", provider: "anthropic", model: "claude-sonnet-4-6", label: "claude-sonnet-4-6" },
+        { id: "openai/gpt-4o", provider: "openai", model: "gpt-4o", label: "gpt-4o" },
+      ],
+    }),
+    setEnvoyLlm: async () => ({
+      ok: true as const,
+      apiKeySet: true,
+      provider: "anthropic",
+      model: "claude-sonnet-4-6",
+      options: [
+        { id: "anthropic/claude-sonnet-4-6", provider: "anthropic", model: "claude-sonnet-4-6", label: "claude-sonnet-4-6" },
+      ],
+    }),
   };
   return { actions, calls };
 }
@@ -731,16 +750,17 @@ describe("nothing on this page can take an agent out of a list", () => {
       expect(document.body.textContent, `the page still says "${stale}"`).not.toContain(stale);
     }
     // And a shipped agent's row carries no button that acts on the *list*: the only controls an agent we ship
-    // has are its own sign-in (absent here — this fixture has not said it needs one) and the disclosure that
-    // unfolds its own facts. The assertion is on the **names**, not on the count, and that is a change this
-    // slice made deliberately: `queryAllByRole("button")).toEqual([])` was true when a row carried nothing but
-    // a Sign-in, and it would now fail on `Details` — a button that opens the row it belongs to and can no more
+    // has are its own sign-in (absent here — this fixture has not said it needs one), a link to LLM
+    // settings for the built-in agent, and the disclosure that unfolds its own facts. The assertion is
+    // on the **names**, not on the count, and that is a change this slice made deliberately:
+    // `queryAllByRole("button")).toEqual([])` was true when a row carried nothing but a Sign-in,
+    // and it would now fail on `Details` — a button that opens the row it belongs to and can no more
     // shorten a list than a tooltip can.
     expect(
       within(rowFor("Envoy Harness"))
         .queryAllByRole("button")
         .map((button) => button.textContent ?? ""),
-    ).toEqual([en["settings.agents.row.details"]]);
+    ).toEqual([en["settings.agents.envoyLlm.open"], en["settings.agents.row.details"]]);
   });
 
   it("removes an agent the user declared, in words that are not 'hide'", async () => {
@@ -953,5 +973,32 @@ describe("the Agents section inside the pane", () => {
       screen.getByRole("button", { name: new RegExp(en["settings.exit"]) }),
     ).toBeTruthy();
     expect(SECTIONS_SCOPE).toEqual({ kind: "sections" });
+  });
+
+  it("offers LLM settings only on the Envoy Harness row, and opens that section", () => {
+    const onNavigate = vi.fn();
+    const { actions } = agentActions();
+    render(
+      <I18nProvider preference="en">
+        <SettingsPane
+          state={state}
+          onClose={vi.fn()}
+          onUpdate={vi.fn()}
+          scope={appScope("agents")}
+          layout="wide"
+          shortcuts={[]}
+          onNavigate={onNavigate}
+          agents={actions as never}
+        />
+      </I18nProvider>,
+    );
+    const open = screen.getByRole("button", { name: en["settings.agents.envoyLlm.open"] });
+    expect(open).toBeTruthy();
+    const codexRow = screen.getByText("Codex").closest("li");
+    expect(codexRow).toBeTruthy();
+    expect(within(codexRow!).queryByRole("button", { name: en["settings.agents.envoyLlm.open"] })).toBeNull();
+
+    fireEvent.click(open);
+    expect(onNavigate).toHaveBeenCalledWith(appScope("llm"));
   });
 });

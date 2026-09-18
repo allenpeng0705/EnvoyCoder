@@ -727,29 +727,26 @@ fn take_pending_project(
  * A webview cannot open a native picker; only the process that owns a window can. That is the same
  * boundary as `daemon_endpoint`: the window asks *for a folder*, the shell decides how to ask the user.
  *
- * ## The method, and where it came from
+ * ## The method
  *
- * EnvoyMesh's Tauri app answers the same question the same way (`pick_directory` in
- * `apps/tauri/src-tauri/src/main.rs`): each operating system already ships a folder chooser, so this
- * shells out to the one that exists instead of adding `tauri-plugin-dialog` — a Rust crate, an npm
- * package and a capability entry for one call. The family shares the *approach* to native shell
- * affordances, not the shell code (their app is not a package we can link).
+ * One path on every desktop OS: `rfd` with this window as parent. Parenting is what makes the dialog
+ * key immediately — an unparented chooser (AppleScript `osascript`, a freestanding WinForms dialog,
+ * zenity without a transient-for hint) can appear on screen while the first click only activates it.
+ * `rfd` uses NSOpenPanel / IFileDialog / the XDG portal (or GTK) under the hood, so we do not shell
+ * out and do not depend on zenity/kdialog being installed.
  *
- * Four things are copied from their version because they are better than a first draft:
+ * ## Cancel vs failure
  *
- *   * **`default_path`** — the dialog opens where the user last was, not at `/`. A picker that starts
- *     somewhere unrelated is a picker you navigate out of every time.
- *   * **The title is escaped, not stripped.** A project called `Ada "work"` is a real folder name, and
- *     an AppleScript string that ends at the first quote is a broken dialog.
- *   * **Cancel and failure are different answers.** Cancelling is `Ok(None)`; a machine with no dialog at
- *     all is an `Err` that names what was tried, so the window can say "install zenity" instead of
- *     pretending the user cancelled.
- *   * **The permission file.** A custom command is not callable until a capability allows it (see
- *     `permissions/pick-folder.toml`) — `invoke_handler!` alone leaves the window's promise rejected,
- *     which looks exactly like "the picker does not work".
+ * Cancelling is `Ok(None)`. `rfd` does not distinguish "no dialog backend" as a separate error on
+ * the platforms we ship; a missing portal on Linux simply returns `None`, and the window already
+ * offers typing a path when the shell itself is absent (`hasShellPicker()`).
  */
 #[tauri::command]
-fn pick_folder(prompt: Option<String>, default_path: Option<String>) -> Result<Option<String>, String> {
+fn pick_folder(
+    window: tauri::WebviewWindow,
+    prompt: Option<String>,
+    default_path: Option<String>,
+) -> Result<Option<String>, String> {
     let title = prompt
         .as_deref()
         .map(str::trim)
@@ -762,109 +759,38 @@ fn pick_folder(prompt: Option<String>, default_path: Option<String>) -> Result<O
         .filter(|value| !value.is_empty())
         .map(str::to_string);
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     {
-        // Escape both characters that end an AppleScript string literal: a quote and a backslash.
-        fn escape(value: &str) -> String {
-            value.replace('\\', "\\\\").replace('"', "\\\"")
-        }
-
-        let mut script = format!("POSIX path of (choose folder with prompt \"{}\"", escape(&title));
-        if let Some(raw) = default_path.as_deref() {
-            let path = std::path::PathBuf::from(raw);
-            let start = if path.is_dir() {
-                path
-            } else {
-                path.parent()
-                    .filter(|parent| parent.is_dir())
-                    .map(|parent| parent.to_path_buf())
-                    .unwrap_or(path)
+        let _ = window.set_focus();
+        let mut dialog = rfd::FileDialog::new().set_title(&title);
+        if let Some(path) = default_path.as_deref() {
+            let start = {
+                let path = std::path::PathBuf::from(path);
+                if path.is_dir() {
+                    path
+                } else {
+                    path.parent()
+                        .filter(|parent| parent.is_dir())
+                        .map(|parent| parent.to_path_buf())
+                        .unwrap_or(path)
+                }
             };
-            script.push_str(&format!(
-                " default location (POSIX file \"{}\")",
-                escape(&start.to_string_lossy())
-            ));
+            dialog = dialog.set_directory(start);
         }
-        script.push(')');
-
-        let output = Command::new("osascript")
-            .arg("-e")
-            .arg(&script)
-            .output()
-            .map_err(|error| format!("could not open the folder picker: {error}"))?;
-
-        // osascript exits non-zero when the user cancels — that is an answer, not a failure.
-        if !output.status.success() {
-            return Ok(None);
-        }
-        let path = String::from_utf8_lossy(&output.stdout).trim().trim_end_matches('/').to_string();
-        return Ok(if path.is_empty() { None } else { Some(path) });
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        // WinForms needs an STA thread. `-STA` is the flag that gives it one; without it ShowDialog
-        // returns immediately and the dialog never appears.
-        let script = format!(
-            "Add-Type -AssemblyName System.Windows.Forms; \
-             $d = New-Object System.Windows.Forms.FolderBrowserDialog; \
-             $d.Description = '{}'; \
-             $r = $d.ShowDialog(); \
-             if ($r -eq [System.Windows.Forms.DialogResult]::OK) {{ $d.SelectedPath }} \
-             elseif ($r -eq [System.Windows.Forms.DialogResult]::Cancel) {{ }} \
-             else {{ [Console]::Error.WriteLine(\"FolderBrowserDialog failed: $r\"); exit 1 }}",
-            title.replace('\'', "")
-        );
-        let output = Command::new("powershell")
-            .args(["-NoProfile", "-STA", "-Command", &script])
-            .output()
-            .map_err(|error| format!("could not open the folder picker: {error}"))?;
-
-        if !output.status.success() {
-            let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            if detail.is_empty() {
-                return Ok(None); // cancelled
-            }
-            return Err(format!("the folder picker failed: {detail}"));
-        }
-        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        return Ok(if path.is_empty() { None } else { Some(path) });
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        // Prefer zenity (GNOME), then kdialog (KDE), and name what was tried when neither exists: a
-        // silent cancel and a missing dependency must not look the same to the user.
-        let mut tried: Vec<&str> = Vec::new();
-        for (bin, args) in [
-            ("zenity", vec!["--file-selection", "--directory", "--title", title.as_str()]),
-            ("kdialog", vec!["--getexistingdirectory", ".", "--title", title.as_str()]),
-        ] {
-            match Command::new(bin).args(args).output() {
-                Ok(output) if output.status.success() => {
-                    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                    if !path.is_empty() {
-                        return Ok(Some(path));
-                    }
-                }
-                // A cancel exits non-zero; an absent binary errors. Both mean "try the next one", and a
-                // cancel on zenity must not be reported as a failure when kdialog could still answer.
-                Ok(_) => tried.push(bin),
-                Err(_) => {
-                    tried.push(bin);
-                    continue;
-                }
-            }
-        }
-        return Err(format!(
-            "no folder dialog available (tried {}). Install zenity or kdialog, or type the path instead.",
-            tried.join(", ")
-        ));
+        // Parenting is what makes the panel key immediately — without it, the first click only
+        // activates the dialog (macOS sheet / Windows IFileDialog / Linux portal transient-for).
+        dialog = dialog.set_parent(&window);
+        let path = dialog.pick_folder();
+        return Ok(path.map(|p| {
+            p.to_string_lossy()
+                .trim_end_matches(['/', '\\'])
+                .to_string()
+        }));
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
-        let _ = (title, default_path);
+        let _ = (window, title, default_path);
         Ok(None)
     }
 }
@@ -889,8 +815,9 @@ fn pick_folder(prompt: Option<String>, default_path: Option<String>) -> Result<O
  * on the machine this was developed on: `cargo` cannot reach the registry through this environment's network, so
  * the new dependency made the whole shell unbuildable — including the owner's own `tauri dev`, which then sat
  * waiting on the package-cache lock. A dependency that cannot be fetched is worse than the tool we already have,
- * so the clipboard goes through the platform's own binary instead, which is what `pick_folder` below does for its
- * dialogs and for the same reason: no new crate, and an honest error naming what was tried.
+ * so the clipboard goes through the platform's own binary instead, which is what the folder picker used
+ * to do before `rfd`: no new crate when the registry is unreachable, and an honest error naming what
+ * was tried.
  *
  * ## The three platforms
  *

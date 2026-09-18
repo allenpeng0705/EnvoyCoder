@@ -259,6 +259,10 @@ describe("the model control is honest about what it can do", () => {
     expect(looksLikeModelValue("deepseek/")).toBe(false);
     expect(looksLikeModelValue("/deepseek-chat")).toBe(false);
     expect(looksLikeModelValue("")).toBe(false);
+    // Bare ACP ids (Claude / Codex / Cursor) commit without a slash.
+    expect(looksLikeModelValue("haiku", { bareId: true })).toBe(true);
+    expect(looksLikeModelValue("composer-2.5[fast=true]", { bareId: true })).toBe(true);
+    expect(looksLikeModelValue("", { bareId: true })).toBe(false);
   });
 
   it("says which shape a free-text model has to be, since the user cannot guess it", () => {

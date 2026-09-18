@@ -165,6 +165,11 @@ export interface ComposerControlsProps {
    */
   probeAction?: { key: MessageKey; enabled: boolean } | undefined;
   onProbeAgent?: (() => void) | undefined;
+  /**
+   * When true, the free-text model field accepts a bare ACP id (Claude / Codex / Cursor).
+   * DeepSeek keeps the provider/model shape.
+   */
+  modelBareId?: boolean;
 }
 
 export function ComposerControls(props: ComposerControlsProps): JSX.Element {
@@ -200,6 +205,7 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
     {
       kind: props.modelKind,
       ...(props.modelObservedAt !== undefined ? { observedAt: props.modelObservedAt } : {}),
+      ...(props.modelBareId === true ? { bareId: true } : {}),
     },
     { enabled: modelOff === undefined },
   );
@@ -325,6 +331,7 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
             options={props.models}
             selected={props.selectedModelId}
             off={modelOff}
+            bareId={props.modelBareId === true}
             {...(chipTitle(modelReason, nextRun) !== undefined ? { descriptionId: "composer-model-reason" } : {})}
             title={
               chipTitle(

@@ -39,6 +39,8 @@ class TranscriptEntry {
     this.callId,
     this.status,
     this.delivered,
+    this.toolInput,
+    this.toolOutput,
     this.approval,
   });
 
@@ -58,6 +60,10 @@ class TranscriptEntry {
 
   /// For a user message: whether it waited for the turn or joined it.
   final String? delivered;
+
+  /// Tool call payload, when the daemon included it (desktop shows these in a `<pre>`).
+  String? toolInput;
+  String? toolOutput;
 
   TranscriptApproval? approval;
 }
@@ -269,12 +275,16 @@ class Transcript {
     final callId = (event['callId'] as String?) ?? '';
     final name = (event['name'] as String?) ?? '';
     final status = (event['status'] as String?) ?? '';
+    final input = _summarizePayload(event['input']);
+    final output = _summarizePayload(event['output']);
     final at = _byCall[callId];
     if (at != null) {
       // Rule 3: the result event carries no title, so an empty name must not erase the one the start
       // already gave us — that is how a finished row loses its label.
       if (name.isNotEmpty) entries[at].text = name;
       entries[at].status = status;
+      if (input != null) entries[at].toolInput = input;
+      if (output != null) entries[at].toolOutput = output;
       return;
     }
     _byCall[callId] = entries.length;
@@ -285,8 +295,19 @@ class Transcript {
         text: name.isEmpty ? 'tool' : name,
         callId: callId,
         status: status,
+        toolInput: input,
+        toolOutput: output,
       ),
     );
+  }
+
+  /// A few readable lines for the phone — same idea as desktop's 400-char `summarize`.
+  static String? _summarizePayload(Object? value) {
+    if (value == null) return null;
+    final raw = value is String ? value : value.toString();
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return null;
+    return trimmed.length > 400 ? '${trimmed.substring(0, 400)}…' : trimmed;
   }
 
   void _applyApprovalRequested(Map<String, dynamic> event, int? seq) {

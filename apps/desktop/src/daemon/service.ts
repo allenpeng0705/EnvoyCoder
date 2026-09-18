@@ -19,7 +19,12 @@
  * actionable is a code that was chosen wrong.
  */
 
-import { currentSearchPath, normalizeUserPath } from "@envoydev/platform";
+import {
+  currentSearchPath,
+  getHomeFsInfo,
+  listHomeFsEntries,
+  normalizeUserPath,
+} from "@envoydev/platform";
 import { stat } from "node:fs/promises";
 
 import {
@@ -43,12 +48,10 @@ import {
   ALL_HARNESSES,
   harnessAvailability,
   harnessDefinition,
-  canApplyThinking,
   cataloguedRecipe,
   probeHarness,
   probeProvider,
   probeRecipe,
-  resolveModelChoice,
   type AcpAgentEntry,
   type HarnessProbe,
   type ProbeFinding,
@@ -57,11 +60,12 @@ import {
   fetchablePackage,
   fetchedRecipe,
 } from "@envoydev/agent-catalog";
-
 import type { CoderPaths } from "@envoydev/host-bridge";
 
 import { keyed, ref } from "./messages.js";
 import { createCatalogHandlers } from "./catalog.js";
+import { getEnvoyLlmPublic, setEnvoyLlm } from "./envoy-llm.js";
+import { harnessSwitchPatch } from "./task-harness-switch.js";
 import { createFixHandlers } from "./fixes.js";
 import { createRecheckHandlers } from "./recheck.js";
 import { createProviderHandlers } from "./providers.js";
@@ -356,6 +360,27 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
       return { removed: result.removed, archived: result.archived };
     },
 
+    /* ────────────────── home filesystem (remote folder picker) ────────────────── */
+    "coder.getHomeFsInfo": async (params) => {
+      parseRpcParams("coder.getHomeFsInfo", params);
+      return getHomeFsInfo();
+    },
+
+    "coder.listHomeFsEntries": async (params) => {
+      const input = parseRpcParams("coder.listHomeFsEntries", params) as
+        | { path?: string; dirsOnly?: boolean }
+        | undefined;
+      try {
+        return listHomeFsEntries(input ?? {});
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw coderError(
+          ENVOYDEV_ERRORS.badRequest,
+          detail,
+        );
+      }
+    },
+
     /* ────────────────── tasks ────────────────── */
     "coder.listTasks": async (params) => {
       const input = parseRpcParams("coder.listTasks", params) as
@@ -433,63 +458,37 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
       if (model === "") model = undefined;
 
       /**
-       * **A stored mode the new harness cannot honour is dropped here, not left to fail later.**
+       * **A stored mode / model / thinking the new harness cannot honour is dropped here.**
        *
-       * Modes are per agent — `envoy-harness` takes `default | plan | review`, `deepseek-harness`
-       * takes none — so switching the agent can strand a mode the task remembers. Keeping it would
-       * make every later run of this task refuse, with a sentence about a mode the user chose for a
-       * *different* agent and has since replaced. Clearing it means the next run starts the way the
-       * agent's own default does, which is what "no mode chosen" already means.
+       * Same helper the project-default migration uses (`harnessSwitchPatch`), so a task switched from
+       * the pane and one rewritten because the project agent changed stay on identical rules.
        */
       let agentModeId = input.agentModeId;
       let clearAgentMode = false;
-      if (input.harness !== undefined) {
-        const next = harnessDefinition(input.harness);
-        const kept = agentModeId ?? deps.store.findTask(input.id)?.agentModeId;
-        if (kept !== undefined && !next.modes.some((mode) => mode.id === kept)) {
-          agentModeId = undefined;
-          clearAgentMode = true;
-        }
-      }
-
-      /**
-       * **A stored model the new agent cannot resolve is dropped here too**, for the same reason and
-       * with the same cost: switching the agent can strand a value the task remembers. The two cases
-       * are genuinely different values, though — `deepseek-harness` takes free text, so a task can
-       * carry a bare `sonnet` that `envoy-harness` has no provider for, and every later run of that
-       * task would then refuse with a sentence about a model the user chose for a *different* agent.
-       * Clearing it means the next run starts on the agent's own default, which is what "no model
-       * chosen" already means.
-       *
-       * Only checked when the harness was given and no model came with it: a model the *current* agent
-       * cannot resolve is left alone, because there it is the run's job to refuse loudly rather than
-       * for a stray edit of the title to quietly erase a choice.
-       */
-      if (input.harness !== undefined && model === undefined) {
-        const kept = deps.store.findTask(input.id)?.model;
-        if (kept !== undefined && kept !== "" && !resolveModelChoice(input.harness, kept).ok) {
-          clearModel = true;
-        }
-      }
-
-      /**
-       * **A stored thinking level the new agent cannot take is dropped**, on exactly the terms of the
-       * mode above and for a sharper reason: a level is an id in one agent's vocabulary (`off | low |
-       * high | max` for `deepseek-harness`) and means nothing to an agent with no thought-level method
-       * at all. Left in place, every later run of the task would refuse with a sentence about a choice
-       * the user made for the agent they replaced; clearing it leaves the next run at the depth the new
-       * agent decides for itself, which is what "no level chosen" already means.
-       *
-       * The check is the delivery, not a list of values: whether the agent accepts *this* id is the
-       * agent's answer, and the observed list we could compare against describes a model that agent may
-       * no longer be running.
-       */
       let thinkingLevel = input.thinkingLevel;
       let clearThinkingLevel = input.thinkingLevel === "";
       if (thinkingLevel === "") thinkingLevel = undefined;
+
       if (input.harness !== undefined) {
-        const kept = thinkingLevel ?? deps.store.findTask(input.id)?.thinkingLevel;
-        if (kept !== undefined && !canApplyThinking(input.harness)) {
+        const current = deps.store.findTask(input.id);
+        const switched = harnessSwitchPatch(
+          {
+            agentModeId: agentModeId ?? current?.agentModeId,
+            model: model ?? current?.model,
+            thinkingLevel: thinkingLevel ?? current?.thinkingLevel,
+          },
+          input.harness,
+        );
+        if (switched.clearAgentMode) {
+          agentModeId = undefined;
+          clearAgentMode = true;
+        }
+        // Only auto-clear model when the caller did not send a replacement.
+        if (input.model === undefined && switched.clearModel) {
+          clearModel = true;
+          model = undefined;
+        }
+        if (switched.clearThinkingLevel) {
           thinkingLevel = undefined;
           clearThinkingLevel = true;
         }
@@ -796,6 +795,22 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
       };
       const settings = await deps.store.updateSettings(input.settings);
       return { settings };
+    },
+
+    "coder.getEnvoyLlm": async (params) => {
+      parseRpcParams("coder.getEnvoyLlm", params);
+      return getEnvoyLlmPublic(deps.paths);
+    },
+
+    "coder.setEnvoyLlm": async (params) => {
+      const input = parseRpcParams("coder.setEnvoyLlm", params) as {
+        provider: string;
+        model: string;
+        baseUrl?: string;
+        apiKey?: string;
+        clearApiKey?: boolean;
+      };
+      return setEnvoyLlm(deps.paths, deps.store, input);
     },
 
     // **There is deliberately no `coder.setAgentHidden` here, and its absence is a design decision rather

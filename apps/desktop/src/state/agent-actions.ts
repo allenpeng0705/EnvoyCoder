@@ -29,6 +29,23 @@ import type { AgentDelivery, FixRunResult, FixTarget, HarnessId, SignInOutcome }
 import type { Refusal } from "../i18n/notice.js";
 import type { AddProviderInput } from "./coderStore.js";
 
+/** What `coder.getEnvoyLlm` / `coder.setEnvoyLlm` return — never the API key. */
+export interface EnvoyLlmPublic {
+  provider?: string;
+  model?: string;
+  baseUrl?: string;
+  apiKeySet: boolean;
+  options: readonly { id: string; provider: string; model: string; label: string }[];
+}
+
+export interface EnvoyLlmSetInput {
+  provider: string;
+  model: string;
+  baseUrl?: string;
+  apiKey?: string;
+  clearApiKey?: boolean;
+}
+
 export interface AgentActions {
   /**
    * Declare an agent — a catalogue entry, or one nobody catalogued.
@@ -129,4 +146,10 @@ export interface AgentActions {
     | { ok: true; device: { id: string; deviceLabel: string; createdAt: string; expiresAt: string; revokedAt?: string } }
     | Refusal
   >;
+
+  /** Envoy Harness LLM panel — non-secret fields plus whether a key is stored. */
+  getEnvoyLlm(): Promise<{ ok: true } & EnvoyLlmPublic | Refusal>;
+
+  /** Save Envoy Harness LLM settings; optional key replace / clear. Syncs `defaults.model`. */
+  setEnvoyLlm(input: EnvoyLlmSetInput): Promise<{ ok: true } & EnvoyLlmPublic | Refusal>;
 }

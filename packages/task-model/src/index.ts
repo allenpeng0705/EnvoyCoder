@@ -147,11 +147,10 @@ export function countStatuses(tasks: readonly Task[]): StatusCounts {
  * Group rows by project, in the order the sidebar renders them.
  *
  * Rules, in order:
- *   1. pinned tasks first, then by recency;
- *   2. projects that need attention bubble to the top of the project list, so the badge is not
- *      the only thing competing for the user's eye;
- *   3. otherwise projects sort by their most recent activity, then by label — a stable order
- *      that does not reshuffle while the user is reading it.
+ *   1. pinned tasks first, then by recency *within* a project;
+ *   2. projects stay put: newest `addedAt` first, then label — never reshuffled by
+ *      attention or task activity (that was jumping the rail while people read it);
+ *   3. find a place by name via the sidebar search (`filterRows`), not by bubbling it up.
  *
  * `archived` tasks are excluded unless asked for; they are reachable through search.
  */
@@ -199,7 +198,8 @@ export function groupByProject(input: {
       path: tasks[0]?.cwd ?? projectId,
       label: "Unknown project",
       hostId: tasks[0]?.hostId ?? "local",
-      addedAt: tasks[0]?.createdAt ?? new Date(0).toISOString(),
+      // Epoch so unknowns sink below registered projects (newest-first rail).
+      addedAt: new Date(0).toISOString(),
     };
     const rows = sortRows(tasks, syntheticProject, input.activeTaskId);
     groups.push({
@@ -211,10 +211,9 @@ export function groupByProject(input: {
   }
 
   return groups.sort((a, b) => {
-    const attention = b.counts.needsAttention - a.counts.needsAttention;
-    if (attention !== 0) return attention;
-    const recency = lastActivityAt(b.rows) - lastActivityAt(a.rows);
-    if (recency !== 0) return recency;
+    const added =
+      Date.parse(b.project.addedAt) - Date.parse(a.project.addedAt);
+    if (added !== 0) return Number.isFinite(added) ? added : 0;
     return a.project.label.localeCompare(b.project.label);
   });
 }
@@ -236,15 +235,6 @@ function sortRows(
     }));
 }
 
-function lastActivityAt(rows: readonly TaskRow[]): number {
-  let newest = 0;
-  for (const row of rows) {
-    const at = Date.parse(row.task.updatedAt);
-    if (Number.isFinite(at) && at > newest) newest = at;
-  }
-  return newest;
-}
-
 /* ────────────────────────────── search ───────────────────────────── */
 
 export interface SearchFilters {
@@ -258,8 +248,10 @@ export interface SearchFilters {
 /**
  * Filter rows for the sidebar's search box.
  *
- * The text query matches the task title, the project label *and* the cwd, because users
- * search for "the repo I was in" about as often as for what they typed.
+ * The text query matches the task title, the project label, the project path *and* the
+ * task cwd — people look up a place by folder name as often as by what they typed. A
+ * hit on the project itself keeps the whole group (including an empty project), so
+ * search is how you find a repo without relying on the rail to reshuffle.
  */
 export function filterRows(
   groups: readonly ProjectGroup[],
@@ -271,6 +263,14 @@ export function filterRows(
   const projectIds = filters.projectIds ? new Set(filters.projectIds) : null;
   const hostIds = filters.hostIds ? new Set(filters.hostIds) : null;
 
+  const projectTextHit = (group: ProjectGroup): boolean => {
+    if (!text) return false;
+    return (
+      group.project.label.toLowerCase().includes(text) ||
+      group.project.path.toLowerCase().includes(text)
+    );
+  };
+
   const keep = (row: TaskRow): boolean => {
     const task = row.task;
     if (statuses && !statuses.has(task.status)) return false;
@@ -281,16 +281,20 @@ export function filterRows(
     return (
       task.title.toLowerCase().includes(text) ||
       task.cwd.toLowerCase().includes(text) ||
-      (row.project?.label.toLowerCase().includes(text) ?? false)
+      (row.project?.label.toLowerCase().includes(text) ?? false) ||
+      (row.project?.path.toLowerCase().includes(text) ?? false)
     );
   };
 
   return groups
-    .map((group) => ({
-      ...group,
-      rows: group.rows.filter(keep),
-    }))
-    .filter((group) => group.rows.length > 0);
+    .map((group) => {
+      if (projectTextHit(group)) return group;
+      return {
+        ...group,
+        rows: group.rows.filter(keep),
+      };
+    })
+    .filter((group) => group.rows.length > 0 || projectTextHit(group));
 }
 
 /* ────────────────────────────── attention ───────────────────────────── */

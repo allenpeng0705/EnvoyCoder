@@ -39,8 +39,10 @@ import { RowMenu } from "./RowMenu.js";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   type HarnessId,
+  type HarnessSummary,
   type Project,
   type Task,
+  type TaskDefaults,
   statusNeedsHuman,
 } from "@envoydev/protocol";
 import {
@@ -52,7 +54,9 @@ import {
 } from "@envoydev/task-model";
 
 import { useT } from "../i18n/context.js";
-import { localize, statusKey, type Notice } from "../i18n/notice.js";
+import { localize, statusKey, type Notice, type Refusal } from "../i18n/notice.js";
+import { harnessBadge } from "../composer/harness-label.js";
+import { ProjectAgentPicker } from "./ProjectAgentPicker.js";
 
 export interface CoderSidebarProps {
   projects: readonly Project[];
@@ -64,6 +68,17 @@ export interface CoderSidebarProps {
   onNewTask: (projectId: string) => void;
   onAddProject: () => void;
   onOpenProjectSettings: (project: Project) => void;
+  /**
+   * Change a project's coding agent from the rail badge. Migrates idle tasks on the daemon.
+   */
+  onChangeProjectAgent?: (
+    project: Project,
+    defaults: TaskDefaults,
+  ) => Promise<{ ok: true } | Refusal>;
+  /** Agents this daemon lists — for the project agent menu. */
+  harnesses?: readonly HarnessSummary[];
+  /** App-wide default agent when a project has not set its own. */
+  appHarness?: HarnessId;
   /**
    * Open this project in a new window (desktop shell only).
    *
@@ -135,30 +150,6 @@ export interface CoderSidebarProps {
   focusProjectId?: string | undefined;
 }
 
-/** The agent a project's new tasks will use — the group header's badge. */
-function harnessBadge(harness: HarnessId): string {
-  switch (harness) {
-    case "envoy-harness":
-      return "Envoy Harness";
-    case "deepseek-harness":
-      return "DeepSeek";
-    case "claudecode":
-      return "Claude Code";
-    case "codex":
-      return "Codex";
-    case "copilot":
-      return "Copilot";
-    case "opencode":
-      return "OpenCode";
-    case "cursor":
-      return "Cursor";
-    case "pi":
-      return "Pi";
-    case "omp":
-      return "Oh My Pi";
-  }
-}
-
 export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
   const t = useT();
   const [collapsed, setCollapsed] = useState<readonly string[]>([]);
@@ -196,7 +187,7 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
       <div className="sidebar__top">
         <button
           type="button"
-          className="button button--ghost sidebar__add"
+          className="button button--primary sidebar__add"
           onClick={props.onAddProject}
           title={t("sidebar.add.title")}
         >
@@ -302,13 +293,20 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                         {group.counts.needsAttention}
                       </span>
                     ) : null}
-                    <span
-                      className="project__agent"
-                      title={t("sidebar.project.agent")}
-                    >
+                  </button>
+                  {props.onChangeProjectAgent !== undefined && props.harnesses !== undefined ? (
+                    <ProjectAgentPicker
+                      project={group.project}
+                      appHarness={props.appHarness ?? "envoy-harness"}
+                      harnesses={props.harnesses}
+                      appearance="rail"
+                      onChoose={(defaults) => props.onChangeProjectAgent!(group.project, defaults)}
+                    />
+                  ) : (
+                    <span className="project__agent" title={t("sidebar.project.agent")}>
                       {harnessBadge(group.defaultHarness)}
                     </span>
-                  </button>
+                  )}
                   {/* The row's `…`, which used to be a bare `⋯` that opened project settings and nothing
                       else — a button whose only item had to be its whole accessible name. It is a menu
                       now, and project settings is one item in it rather than the button's identity.

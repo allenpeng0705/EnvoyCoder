@@ -128,6 +128,13 @@ export interface AgentRowProps {
   /** What the row's disclosure reveals: the guide, then the properties. Absent means no button at all. */
   details?: ReactNode;
   /**
+   * Content under the row that is **not** gated by Details — e.g. the Envoy Harness LLM panel.
+   *
+   * Kept separate from `details` so a Configure control in the actions column can open a panel without
+   * also forcing the disclosure open.
+   */
+  below?: ReactNode;
+  /**
    * One extra class, for the list the row belongs to.
    *
    * The anatomy is shared and the **list's own dividers are not**: the shipped and provider lists are
@@ -233,6 +240,7 @@ export function AgentRow(props: AgentRowProps): JSX.Element {
           {props.details}
         </div>
       ) : null}
+      {props.below !== undefined ? <div className="settings__agent-below">{props.below}</div> : null}
     </li>
   );
 }

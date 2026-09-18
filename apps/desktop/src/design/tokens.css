@@ -111,6 +111,23 @@
   /* The content measure: chat, composer and forms all stop here. */
   --content-max-width: 820px;
 
+  /* Syntax highlight (hljs classes in fenced code). Tuned for light surfaces. */
+  --syntax-comment: #6a737d;
+  --syntax-keyword: #d73a49;
+  --syntax-string: #032f62;
+  --syntax-number: #005cc5;
+  --syntax-literal: #005cc5;
+  --syntax-built-in: #6f42c1;
+  --syntax-type: #6f42c1;
+  --syntax-attr: #005cc5;
+  --syntax-meta: #6a737d;
+  --syntax-tag: #22863a;
+  --syntax-name: #6f42c1;
+  --syntax-variable: #e36209;
+  --syntax-regexp: #032f62;
+  --syntax-deletion: #b31d28;
+  --syntax-addition: #22863a;
+
   /* Motion. Six durations, and reduced motion is honoured globally below. */
   --motion-fade-fast: 80ms;
   --motion-fade: 100ms;
@@ -157,6 +174,22 @@
 
   --diff-addition: #4ade80;
   --diff-deletion: #ef4444;
+
+  --syntax-comment: #8b949e;
+  --syntax-keyword: #ff7b72;
+  --syntax-string: #a5d6ff;
+  --syntax-number: #79c0ff;
+  --syntax-literal: #79c0ff;
+  --syntax-built-in: #d2a8ff;
+  --syntax-type: #d2a8ff;
+  --syntax-attr: #79c0ff;
+  --syntax-meta: #8b949e;
+  --syntax-tag: #7ee787;
+  --syntax-name: #d2a8ff;
+  --syntax-variable: #ffa657;
+  --syntax-regexp: #a5d6ff;
+  --syntax-deletion: #ffa198;
+  --syntax-addition: #7ee787;
 }
 
 /* Follow the OS when the user has not chosen a theme. */
@@ -173,6 +206,11 @@
     --status-dot-success: #35c264; --status-dot-danger: #f7796d;
     --status-dot-warning: #db932e; --status-dot-running: #5caaf6;
     --diff-addition: #4ade80; --diff-deletion: #ef4444;
+    --syntax-comment: #8b949e; --syntax-keyword: #ff7b72; --syntax-string: #a5d6ff;
+    --syntax-number: #79c0ff; --syntax-literal: #79c0ff; --syntax-built-in: #d2a8ff;
+    --syntax-type: #d2a8ff; --syntax-attr: #79c0ff; --syntax-meta: #8b949e;
+    --syntax-tag: #7ee787; --syntax-name: #d2a8ff; --syntax-variable: #ffa657;
+    --syntax-regexp: #a5d6ff; --syntax-deletion: #ffa198; --syntax-addition: #7ee787;
   }
 }
 

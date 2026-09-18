@@ -268,8 +268,39 @@ describe("the daemon over a socket", () => {
     expect(hello.home).toBe(home);
     expect(hello.stateDir).toBe(join(home, "EnvoyDev"));
     expect(hello.methods).toContain("coder.addProject");
+    expect(hello.methods).toContain("coder.getHomeFsInfo");
+    expect(hello.methods).toContain("coder.listHomeFsEntries");
     expect(hello.mesh.kind).toBe("no-node");
     expect(hello.windowCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it("lists the home filesystem so a phone can pick a project folder", async () => {
+    const { daemon, home } = await bootDaemon();
+    cleanups.push(async () => {
+      await daemon.stop();
+      await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    });
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+
+    const { mkdir } = await import("node:fs/promises");
+    const work = join(home, "work", "repo");
+    await mkdir(work, { recursive: true });
+
+    const info = (await client.call("coder.getHomeFsInfo", {})) as {
+      platform: string;
+      homeDir: string;
+      roots: string[];
+    };
+    expect(info.homeDir.length).toBeGreaterThan(0);
+    expect(info.roots.length).toBeGreaterThan(0);
+
+    const listed = (await client.call("coder.listHomeFsEntries", {
+      path: join(home, "work"),
+      dirsOnly: true,
+    })) as { path: string; parent?: string; entries: { name: string; kind: string }[] };
+    expect(listed.entries.some((e) => e.name === "repo" && e.kind === "dir")).toBe(true);
+    expect(listed.parent).toBe(home);
   });
 
   it("adds a project, creates a task in it, and reads both back", async () => {
@@ -1149,6 +1180,7 @@ describe("a run, driven over the socket", () => {
     const task = (await client.call("coder.createTask", {
       projectId: project.project.id,
       title: "wire it up",
+      model: "anthropic/claude-sonnet-4-6",
     })) as { task: { id: string } };
 
     const pushed: unknown[] = [];
@@ -1222,6 +1254,7 @@ describe("a run, driven over the socket", () => {
     const task = (await client.call("coder.createTask", {
       projectId: project.project.id,
       title: "plan first",
+      model: "anthropic/claude-sonnet-4-6",
     })) as { task: { id: string } };
 
     const started = (await client.call("coder.startRun", {
@@ -1468,6 +1501,10 @@ describe("changing which agent a task uses", () => {
     expect(Object.prototype.hasOwnProperty.call(switched.task, "agentModeId")).toBe(false);
 
     // And the proof that the drop was worth making: the task starts.
+    await client.call("coder.updateTask", {
+      id: task.task.id,
+      model: "deepseek/deepseek-chat",
+    });
     await client.subscribe(["coder:run-event"]);
     await client.call("coder.startRun", { taskId: task.task.id, prompt: "hello" });
     await client.waitForEvent("coder:run-event", (data) => (data as { kind?: string }).kind === "run.ended");
@@ -1529,6 +1566,7 @@ describe("the model a task runs on", () => {
       projectId: project.project.id,
       title: "a model to choose",
       harness: "deepseek-harness",
+      model: "fake/flash",
     })) as { task: { id: string } };
     return { client, taskId: task.task.id };
   }
@@ -1639,6 +1677,30 @@ describe("the model a task runs on", () => {
       harness: "deepseek-harness",
     })) as { task: { model?: string } };
     expect(stillThere.task.model).toBe("anthropic/claude-sonnet-4-6");
+  });
+
+  it("refuses Envoy Harness with no model, but starts a session-config agent on its own default", async () => {
+    // Only argv delivery must have a model before a process exists. External agents may omit one.
+    const { client, taskId } = await modelBench();
+    await client.call("coder.updateTask", { id: taskId, harness: "envoy-harness", model: "" });
+
+    const refusal = await client
+      .call("coder.startRun", { taskId, prompt: "go" })
+      .then(() => "")
+      .catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
+    expect(coderErrorCode(refusal)).toBe(ENVOYDEV_ERRORS.badRequest);
+    expect(coderErrorMessage(refusal)).toContain("no model configured");
+    const ref_ = coderErrorRef(refusal);
+    expect(ref_?.key).toBe("error.modelRequired");
+    expect(ref_?.values).toEqual({ harness: "Envoy Harness" });
+    expect(isMessageKey(ref_!.key)).toBe(true);
+
+    // DeepSeek with an empty model starts — the agent's own default travels, not a silent Envoy pick.
+    await client.call("coder.updateTask", { id: taskId, harness: "deepseek-harness", model: "" });
+    await client.call("coder.startRun", { taskId, prompt: "go" });
+    const tasks = (await client.call("coder.listTasks", {})) as { tasks: { status: string; runId?: string }[] };
+    expect(tasks.tasks[0]?.runId).toBeDefined();
+    expect(tasks.tasks[0]?.status).not.toBe("idle");
   });
 
   it("refuses a model this agent does not publish, instead of starting a run on another one", async () => {
@@ -1770,6 +1832,7 @@ describe("the thinking level a task runs at", () => {
       projectId: project.project.id,
       title: "how much thinking",
       harness: "deepseek-harness",
+      model: "fake/flash",
     })) as { task: { id: string } };
     return { client, taskId: task.task.id };
   }
@@ -1871,7 +1934,11 @@ describe("the thinking level a task runs at", () => {
 
   it("refuses a level for an agent that has no way to receive one, before starting anything", async () => {
     const { client, taskId } = await thinkingBench();
-    await client.call("coder.updateTask", { id: taskId, harness: "envoy-harness" });
+    await client.call("coder.updateTask", {
+      id: taskId,
+      harness: "envoy-harness",
+      model: "anthropic/claude-sonnet-4-6",
+    });
 
     await expect(
       client.call("coder.startRun", { taskId, prompt: "hi", thinkingLevel: "max" }),

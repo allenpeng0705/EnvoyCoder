@@ -58,7 +58,7 @@ import type {
   ObservedSessionOptions,
 } from "@envoydev/protocol";
 
-import { HARNESS_MODELS, modelIdFor } from "./models.js";
+import { HARNESS_MODELS, HARNESS_MODEL_DELIVERY, modelIdFor, type ModelValueShape } from "./models.js";
 
 /** ACP's category for the model option (`dsh-acp` `lib/index.js:490`). */
 export const MODEL_CATEGORY = "model";
@@ -182,7 +182,26 @@ export function observeSessionOptions(input: {
  * and this is the only place the pair is recovered without splitting on a slash, which is how
  * `AgentModel` is documented to be built.
  */
-function decodeModelValue(value: string): { provider: string; model: string } | undefined {
+/**
+ * Take a model option value apart the way the agent's own encoding put it together.
+ *
+ *   * `"json-pair"` — DeepSeek: only a two-element JSON array of non-empty strings counts.
+ *   * `"bare-id"` — Claude / Codex / Cursor: the select value *is* the model id (`haiku`, `gpt-5.5`).
+ *
+ * A provider or model containing a slash is fine inside a JSON pair (`meta-llama/Llama-3-70b`); the
+ * qualifier is `provider/model` for display and storage and this is the only place the pair is
+ * recovered without splitting on a slash, which is how `AgentModel` is documented to be built.
+ */
+function decodeModelValue(
+  value: string,
+  shape: ModelValueShape,
+): { provider: string; model: string; id: string } | undefined {
+  if (shape === "bare-id") {
+    const trimmed = value.trim();
+    if (trimmed === "") return undefined;
+    // Task stores the bare id; encode() only sends `model`. Sentinel provider matches resolveModelChoice.
+    return { provider: "acp", model: trimmed, id: trimmed };
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(value) as unknown;
@@ -193,7 +212,7 @@ function decodeModelValue(value: string): { provider: string; model: string } | 
   const [provider, model] = parsed as unknown[];
   if (typeof provider !== "string" || typeof model !== "string") return undefined;
   if (provider === "" || model === "") return undefined;
-  return { provider, model };
+  return { provider, model, id: modelIdFor(provider, model) };
 }
 
 /** The model option in a record, by category first and by id second (see `THOUGHT_LEVEL_CATEGORY`). */
@@ -205,16 +224,23 @@ function findOption(
   return options.find((option) => option.category === category) ?? options.find((option) => option.configId === configId);
 }
 
+/** How this harness spells model select values — json-pair unless the delivery says bare-id. */
+function valueShapeFor(id: HarnessId): ModelValueShape {
+  const delivery = HARNESS_MODEL_DELIVERY[id];
+  return delivery?.kind === "session-config" ? delivery.valueShape : "json-pair";
+}
+
 /** The models an observed record actually yields, which is `[]` when its values are not model pairs. */
-function observedModels(options: readonly ObservedSessionOption[]): AgentModel[] {
+function observedModels(id: HarnessId, options: readonly ObservedSessionOption[]): AgentModel[] {
   const option = findOption(options, MODEL_CATEGORY, "model");
   if (option === undefined) return [];
+  const shape = valueShapeFor(id);
   const out: AgentModel[] = [];
   for (const value of option.values) {
-    const decoded = decodeModelValue(value.value);
+    const decoded = decodeModelValue(value.value, shape);
     if (decoded === undefined) continue;
     out.push({
-      id: modelIdFor(decoded.provider, decoded.model),
+      id: decoded.id,
       label: value.label,
       ...(value.description !== undefined ? { description: value.description } : {}),
       provider: decoded.provider,
@@ -428,7 +454,8 @@ export function sessionFacts(
   if (observed === undefined) return { models: staticModels, thinking: staticThinking };
 
   const at = observed.observedAt;
-  const models = observedModels(observed.options);
+  const models = observedModels(id, observed.options);
+  const shape = valueShapeFor(id);
   const resolvedModels: AgentModels =
     models.length > 0
       ? {
@@ -437,7 +464,9 @@ export function sessionFacts(
           source:
             `Observed from a session this daemon opened at ${at}: the agent's own ` +
             `${MODEL_CATEGORY} option enumerated ${models.length} model(s), and each value was decoded ` +
-            "with the inverse of the encoding SessionModelConfig builds (JSON.stringify([provider, model])). " +
+            (shape === "bare-id"
+              ? "as a bare ACP model id (Claude / Codex / Cursor select values). "
+              : "with the inverse of the encoding SessionModelConfig builds (JSON.stringify([provider, model])). ") +
             "A session's catalog is per machine and per credential, which is why the window prints the time.",
           observedAt: at,
         }

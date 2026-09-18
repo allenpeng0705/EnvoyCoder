@@ -93,6 +93,70 @@ const ENVOY_HARNESS_DEFAULTS: readonly (readonly [provider: string, model: strin
 ];
 
 /**
+ * The provider/model pairs Envoy Harness publishes as defaults — public so the Agents LLM panel and
+ * the launch inject path share one list with the catalogue picker.
+ */
+export function envoyHarnessDefaultModels(): readonly {
+  id: string;
+  provider: string;
+  model: string;
+  label: string;
+}[] {
+  return ENVOY_HARNESS_DEFAULTS.map(([provider, model]) => ({
+    id: modelIdFor(provider, model),
+    provider,
+    model,
+    label: model,
+  }));
+}
+
+/**
+ * Which environment variable Envoy Harness reads for a provider's API key — or `undefined` when the
+ * provider is keyless (`ollama`). Aliases (`zhipu`→`glm`, `dashscope`→`qwen`) match the peer's
+ * `createProviderAdapter` switch.
+ */
+export function envoyProviderApiKeyEnv(provider: string): string | undefined {
+  switch (provider.toLowerCase()) {
+    case "openai":
+      return "OPENAI_API_KEY";
+    case "anthropic":
+      return "ANTHROPIC_API_KEY";
+    case "deepseek":
+      return "DEEPSEEK_API_KEY";
+    case "minimax":
+      return "MINIMAX_API_KEY";
+    case "glm":
+    case "zhipu":
+      return "ZHIPU_API_KEY";
+    case "qwen":
+    case "dashscope":
+      return "DASHSCOPE_API_KEY";
+    case "ollama":
+      return undefined;
+    default:
+      return undefined;
+  }
+}
+
+/** A provider Envoy Harness can be asked to use — including keyless `ollama`. */
+export function isEnvoyHarnessProvider(provider: string): boolean {
+  switch (provider.toLowerCase()) {
+    case "openai":
+    case "anthropic":
+    case "deepseek":
+    case "minimax":
+    case "glm":
+    case "zhipu":
+    case "qwen":
+    case "dashscope":
+    case "ollama":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/**
  * A provider-qualified id, which is the value that travels and the value stored on the task.
  *
  * `provider/model` is already the documented shape of `TaskDefaults.model` in the protocol
@@ -154,11 +218,26 @@ export type ModelResolution = ({ ok: true } & ModelChoice) | ModelUnresolvable;
  * It is never quietly ignored, which is the property that makes constructing it acceptable instead of
  * reckless.
  */
+/**
+ * How a session-config agent spells a model value on the wire.
+ *
+ *   * `"json-pair"` — DeepSeek's opaque `JSON.stringify([provider, model])`.
+ *   * `"bare-id"` — Claude / Codex / Cursor select values (`haiku`, `gpt-5.5`, …): the model half alone.
+ */
+export type ModelValueShape = "json-pair" | "bare-id";
+
 export interface SessionModelConfig {
   /** The agent's own config-option id. */
   configId: string;
   /** The agent's own encoding of a provider + model choice. */
   encode: (choice: { provider: string; model: string }) => string;
+  /**
+   * How values look in `session/new` and what free text may commit.
+   *
+   * Defaults to `"json-pair"` when omitted (DeepSeek's shape). Bare-id agents must set `"bare-id"`
+   * so observation and resolution do not demand a slash the agent never uses.
+   */
+  valueShape: ModelValueShape;
   /** Where the id and the encoding were read from. */
   source: string;
 }
@@ -190,6 +269,7 @@ const ACP_SESSION_MODEL_DELIVERY: Readonly<
     kind: "session-config",
     configId: "model",
     encode: ({ model }) => model,
+    valueShape: "bare-id",
     source:
       "session/new → configOptions includes {id: 'model', category: 'model', type: 'select'}; " +
       "session/set_config_option {configId: 'model', value: 'haiku'} → accepted, echoed as current. " +
@@ -199,6 +279,7 @@ const ACP_SESSION_MODEL_DELIVERY: Readonly<
     kind: "session-config",
     configId: "model",
     encode: ({ model }) => model,
+    valueShape: "bare-id",
     source:
       "session/new → configOptions includes {id: 'model', category: 'model', type: 'select'} with six " +
       "values; session/set_config_option {configId: 'model', value: 'gpt-5.5'} → accepted, echoed as " +
@@ -209,6 +290,7 @@ const ACP_SESSION_MODEL_DELIVERY: Readonly<
     kind: "session-config",
     configId: "model",
     encode: ({ model }) => model,
+    valueShape: "bare-id",
     source:
       "session/new → configOptions includes {id: 'model', category: 'model', type: 'select'} with seven " +
       "values; session/set_config_option {configId: 'model', value: 'composer-2.5[fast=true]'} → " +
@@ -256,6 +338,7 @@ export const HARNESS_MODEL_DELIVERY: Readonly<Partial<Record<HarnessId, ModelDel
     // describes at :76, `configId` is `MODEL_CONFIG_ID = 'model'` in the source.
     configId: "model",
     encode: ({ provider, model }) => JSON.stringify([provider, model]),
+    valueShape: "json-pair",
     source:
       "packages/acp/acp/README.md:70,76; packages/acp/acp/src/index.ts:196-231 (session/new answers " +
       "{sessionId, configOptions}) and :388 (session/set_config_option); " +
@@ -304,9 +387,9 @@ export const HARNESS_MODELS: Readonly<Record<HarnessId, HarnessModels>> = {
       "(\"Default models per provider. Public so callers can show them in help text\"). The ids are " +
       "copied verbatim — a translated or prettified model id is one `createProviderAdapter` routes to " +
       "nothing. NOT a closed list: the peer's `--model` is documented as a free-form \"LLM model " +
-      "identifier\" (cli/argv-help.ts:23), so these are the defaults it publishes, not every id it will " +
-      "accept; a task carrying a different id is refused by us rather than guessed at, because we cannot " +
-      "know which provider it belongs to.",
+      "identifier\" (cli/argv-help.ts:23). A task id that is not in this list is still accepted when it " +
+      "is `provider/model` and the provider is one Envoy Harness documents (`isEnvoyHarnessProvider`); " +
+      "anything else is refused rather than guessed, because we cannot know which provider it belongs to.",
   },
 
   "deepseek-harness": {
@@ -446,6 +529,18 @@ export function canApplyModel(id: HarnessId): boolean {
   return HARNESS_MODEL_DELIVERY[id] !== undefined;
 }
 
+/**
+ * Whether this agent's session values are bare ACP model ids (no `provider/` prefix).
+ *
+ * The composer's free-text field and the observation decoder both key off this: Claude / Codex /
+ * Cursor publish `haiku`, not `anthropic/haiku`, and demanding a slash there would refuse every
+ * value the agent itself listed.
+ */
+export function modelAcceptsBareId(id: HarnessId): boolean {
+  const delivery = harnessModelDelivery(id);
+  return delivery?.kind === "session-config" && delivery.valueShape === "bare-id";
+}
+
 /* ────────────────────────────── resolution ───────────────────────────── */
 
 /**
@@ -459,9 +554,9 @@ export function canApplyModel(id: HarnessId): boolean {
  * `meta-llama`. A stored id that is no longer published is refused with a sentence naming the agent,
  * which is a better outcome than a run that starts on some other model than the one on screen.
  *
- * For `free-text` agents there is no list to look up, so the value is split on the **first** slash and
- * both halves must be non-empty. That is a real constraint on the user and it is stated on screen
- * rather than discovered at run time, because these agents need a provider to build a route at all.
+ * For `free-text` agents the shape depends on the delivery: DeepSeek needs `provider/model` (both
+ * halves travel in its JSON pair); Claude / Codex / Cursor take a **bare** model id, so a non-empty
+ * string is enough — a slash form is still accepted, and only the model half is encoded.
  *
  * Returning a discriminated union rather than throwing keeps this usable both by the daemon (which
  * turns `code` into a translated sentence) and by argv construction, without an exception crossing a
@@ -480,19 +575,55 @@ export function resolveModelChoice(harness: HarnessId, value: string): ModelReso
 
   if (models.kind === "listed") {
     const found = models.options.find((option) => option.id === value);
-    if (found === undefined) {
-      return {
-        ok: false,
-        code: "unknownModel",
-        reason: `${harness} does not publish a model called "${value}", so we cannot tell which provider it belongs to.`,
-      };
+    if (found !== undefined) {
+      return { ok: true, id: found.id, provider: found.provider, model: found.model };
     }
-    return { ok: true, id: found.id, provider: found.provider, model: found.model };
+    // Envoy Harness's `--model` is free-form. A published default is looked up above; a custom id is
+    // accepted only when the provider half is one it documents, so `openai/gpt-4.1` launches and
+    // `meta-llama/Llama-3-70b` is still refused rather than split into a provider we do not have.
+    if (harness === "envoy-harness") {
+      const trimmed = value.trim();
+      const slash = trimmed.indexOf("/");
+      if (slash > 0 && slash < trimmed.length - 1) {
+        const provider = trimmed.slice(0, slash).toLowerCase();
+        const model = trimmed.slice(slash + 1).trim();
+        if (model.length > 0 && isEnvoyHarnessProvider(provider)) {
+          return { ok: true, id: modelIdFor(provider, model), provider, model };
+        }
+      }
+    }
+    return {
+      ok: false,
+      code: "unknownModel",
+      reason: `${harness} does not publish a model called "${value}", so we cannot tell which provider it belongs to.`,
+    };
   }
 
-  const slash = value.indexOf("/");
-  const provider = slash > 0 ? value.slice(0, slash) : "";
-  const model = slash > 0 ? value.slice(slash + 1) : "";
+  const trimmed = value.trim();
+  if (modelAcceptsBareId(harness)) {
+    if (trimmed === "") {
+      return {
+        ok: false,
+        code: "notProviderQualified",
+        reason: `${harness} needs a model id (for example haiku), and "${value}" is empty.`,
+      };
+    }
+    const slash = trimmed.indexOf("/");
+    if (slash > 0 && slash < trimmed.length - 1) {
+      return {
+        ok: true,
+        id: trimmed,
+        provider: trimmed.slice(0, slash),
+        model: trimmed.slice(slash + 1),
+      };
+    }
+    // Sentinel provider: encode() for bare-id agents uses only `model`, and the task stores the bare id.
+    return { ok: true, id: trimmed, provider: "acp", model: trimmed };
+  }
+
+  const slash = trimmed.indexOf("/");
+  const provider = slash > 0 ? trimmed.slice(0, slash) : "";
+  const model = slash > 0 ? trimmed.slice(slash + 1) : "";
   if (provider === "" || model === "") {
     return {
       ok: false,
@@ -500,7 +631,7 @@ export function resolveModelChoice(harness: HarnessId, value: string): ModelReso
       reason: `${harness} needs a model written as provider/model (for example deepseek/deepseek-chat), and "${value}" does not name both.`,
     };
   }
-  return { ok: true, id: value, provider, model };
+  return { ok: true, id: trimmed, provider, model };
 }
 
 /**

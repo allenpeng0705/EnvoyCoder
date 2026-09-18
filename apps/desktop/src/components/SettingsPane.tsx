@@ -100,6 +100,7 @@ import type { CoderState } from "../state/coderStore.js";
 import {
   SECTIONS_SCOPE,
   PROJECTS_SCOPE,
+  appScope,
   resolveScope,
   scopeProject,
   scopeSection,
@@ -113,6 +114,7 @@ import { AboutSection, MachineSection, ShortcutsSection } from "./settings/Secti
 import { AgentsSection } from "./settings/SectionsAgents.js";
 import { GeneralSection, SafetySection, TasksSection } from "./settings/SectionsControls.js";
 import { PairingSection } from "./settings/PairingSection.js";
+import { LlmSection } from "./settings/EnvoyLlmPanel.js";
 import { ProjectSection, ProjectsSection } from "./settings/SectionsProjects.js";
 import type { PairPhoneOutcome } from "./settings/PairPhone.js";
 
@@ -360,7 +362,7 @@ function SectionPage(props: SettingsPaneProps & { section: SettingsSectionId }):
   );
 }
 
-/** The eight pages, one arm each. Exhaustive: a new section id is a compile error until it is here. */
+/** The pages, one arm each. Exhaustive: a new section id is a compile error until it is here. */
 function sectionBody(props: SettingsPaneProps & { section: SettingsSectionId }): ReactNode {
   switch (props.section) {
     case "general":
@@ -370,7 +372,16 @@ function sectionBody(props: SettingsPaneProps & { section: SettingsSectionId }):
     case "safety":
       return <SafetySection state={props.state} onUpdate={props.onUpdate} agents={props.agents} />;
     case "agents":
-      return <AgentsSection state={props.state} onUpdate={props.onUpdate} agents={props.agents} />;
+      return (
+        <AgentsSection
+          state={props.state}
+          onUpdate={props.onUpdate}
+          agents={props.agents}
+          onOpenLlm={() => props.onNavigate(appScope("llm"))}
+        />
+      );
+    case "llm":
+      return <LlmSection agents={props.agents} />;
     case "shortcuts":
       return (
         <ShortcutsSection

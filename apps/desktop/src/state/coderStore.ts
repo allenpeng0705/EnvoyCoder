@@ -53,6 +53,7 @@ import type { AgentDelivery as AgentDeliveryWire, FixRunResult as FixRunResultWi
 
 import { localNotice, noticeFromError, type Notice, type Refusal } from "../i18n/notice.js";
 import { buildTranscript, type Transcript } from "./transcript.js";
+import type { EnvoyLlmPublic, EnvoyLlmSetInput } from "./agent-actions.js";
 
 import { CoderConnection, type ConnectionStatus, type HelloResult } from "../client/connection.js";
 import { resolveDaemonEndpoint, type ResolvedEndpoint } from "../client/endpoint.js";
@@ -208,6 +209,12 @@ export class CoderStore {
   /** Coalesces a burst of change events into one refetch. See `scheduleRefresh`. */
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   /**
+   * Kinds waiting inside the coalesce window. Replacing the timer used to drop every kind but the
+   * latest — so a boot `harnesses` broadcast landing just after `projects` could cancel the rail
+   * refetch and leave a freshly added project invisible until the next change.
+   */
+  private refreshKinds = new Set<string>();
+  /**
    * The in-flight `start()`, which is what makes "one socket per window" true.
    *
    * A promise rather than a boolean because the guard has to survive its own `await` — see `start()`.
@@ -292,6 +299,7 @@ export class CoderStore {
   dispose(): void {
     if (this.refreshTimer) clearTimeout(this.refreshTimer);
     this.refreshTimer = undefined;
+    this.refreshKinds.clear();
     this.starting = undefined;
     this.closeConnection();
   }
@@ -419,22 +427,32 @@ export class CoderStore {
    * A burst is normal: adding a project and creating its first task emits two `projects`/`tasks`
    * pairs plus the caller's own refetch. Without coalescing, a fast user produces a refetch storm on
    * a socket with one in-flight request at a time.
+   *
+   * Kinds accumulate across the window. Resetting the timer alone used to keep only the *last* kind,
+   * which is how a late boot `harnesses` event could swallow a `projects` refresh and leave the rail
+   * empty after a successful add.
    */
   private scheduleRefresh(kind: string | undefined): void {
+    this.refreshKinds.add(kind ?? "lists");
     if (this.refreshTimer) clearTimeout(this.refreshTimer);
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = undefined;
-      // Three of the four kinds land in a list; `harnesses` is the odd one and refetches on its own.
-      // What moved there is the *answer about an agent* — a run reports what it published when its
-      // session opened — so a client that fetched task lists on this event would fetch the wrong list,
-      // and the composer's pickers would keep showing what the agent offered before it last ran.
-      void (kind === "settings"
-        ? this.loadSettings()
-        : kind === "harnesses"
-          ? this.loadHarnesses()
-          : kind === "providers"
-            ? this.loadProviders()
-            : this.loadLists());
+      const kinds = this.refreshKinds;
+      this.refreshKinds = new Set();
+      // Three of the four kinds land in a list; `harnesses` / `providers` / `settings` refetch on
+      // their own. What moved for harnesses is the *answer about an agent* — a run reports what it
+      // published when its session opened — so a client that fetched task lists on that event alone
+      // would fetch the wrong list, and the composer's pickers would keep showing what the agent
+      // offered before it last ran. When several kinds share the window, each needed load runs.
+      const loads: Promise<void>[] = [];
+      if (kinds.has("settings")) loads.push(this.loadSettings());
+      if (kinds.has("harnesses")) loads.push(this.loadHarnesses());
+      if (kinds.has("providers")) loads.push(this.loadProviders());
+      const needLists = [...kinds].some(
+        (k) => k !== "settings" && k !== "harnesses" && k !== "providers",
+      );
+      if (needLists) loads.push(this.loadLists());
+      void Promise.all(loads);
     }, 16);
   }
 
@@ -895,6 +913,12 @@ export class CoderStore {
   async addProject(path: string): Promise<{ ok: true; project: Project } | Refusal> {
     return this.mutate("coder.addProject", { path }, (result) => {
       const project = (result as { project: Project }).project;
+      // The RPC answer *is* the rail's confirmation. Waiting only for `coder:state-changed` left
+      // the row missing when that broadcast was coalesced away (boot `harnesses`) or when the path
+      // was already registered and the daemon returned success without emitting again.
+      if (!this.state.projects.some((row) => row.id === project.id)) {
+        this.set({ projects: [...this.state.projects, project] });
+      }
       return { ok: true, project };
     });
   }
@@ -905,10 +929,15 @@ export class CoderStore {
     harness?: HarnessId;
     model?: string;
   }): Promise<{ ok: true; task: Task } | Refusal> {
-    return this.mutate("coder.createTask", input, (result) => ({
-      ok: true,
-      task: (result as { task: Task }).task,
-    }));
+    return this.mutate("coder.createTask", input, (result) => {
+      const task = (result as { task: Task }).task;
+      // Same rule as `addProject`: the RPC answer paints the row; do not wait on a broadcast that can
+      // be coalesced away before the rail reads the new list.
+      if (!this.state.tasks.some((row) => row.id === task.id)) {
+        this.set({ tasks: [...this.state.tasks, task], tasksKnown: true });
+      }
+      return { ok: true, task };
+    });
   }
 
   async updateTask(
@@ -1120,6 +1149,32 @@ export class CoderStore {
       };
       return { ok: true as const, device: answer.device };
     });
+  }
+
+  /** Envoy Harness LLM panel — never returns the API key. */
+  async getEnvoyLlm(): Promise<{ ok: true } & EnvoyLlmPublic | Refusal> {
+    return this.mutate("coder.getEnvoyLlm", {}, (result) => {
+      const answer = result as EnvoyLlmPublic;
+      return { ok: true as const, ...answer };
+    });
+  }
+
+  /** Save Envoy Harness LLM settings; `defaults.model` syncs on the daemon and via settings broadcast. */
+  async setEnvoyLlm(input: EnvoyLlmSetInput): Promise<{ ok: true } & EnvoyLlmPublic | Refusal> {
+    return this.mutate(
+      "coder.setEnvoyLlm",
+      {
+        provider: input.provider,
+        model: input.model,
+        ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
+        ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
+        ...(input.clearApiKey !== undefined ? { clearApiKey: input.clearApiKey } : {}),
+      },
+      (result) => {
+        const answer = result as EnvoyLlmPublic;
+        return { ok: true as const, ...answer };
+      },
+    );
   }
 
   async updateSettings(patch: Partial<CoderSettings>): Promise<{ ok: true } | Refusal> {

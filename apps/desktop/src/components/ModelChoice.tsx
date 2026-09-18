@@ -76,6 +76,11 @@ export interface ModelChoiceProps {
    * form's `.select`, so a caller that says nothing gets the settings look.
    */
   fieldClassName?: string;
+  /**
+   * When true, free-text commits any non-empty model id (Claude / Codex / Cursor bare ACP values).
+   * When false or omitted, the field still requires `provider/model` (DeepSeek).
+   */
+  bareId?: boolean;
 }
 
 export function ModelChoice(props: ModelChoiceProps): JSX.Element {
@@ -95,8 +100,10 @@ export function ModelChoice(props: ModelChoiceProps): JSX.Element {
       return;
     }
     // The predicate `composer/controls.ts` exports and a test pins, rather than a second copy here: the
-    // rule for "this names a provider and a model" has to be one rule.
-    if (looksLikeModelValue(value) && value !== props.selected) props.onChoose(value);
+    // rule for "this names a model this agent can take" has to be one rule.
+    if (looksLikeModelValue(value, { bareId: props.bareId === true }) && value !== props.selected) {
+      props.onChoose(value);
+    }
   };
 
   if (props.kind === "free-text") {
@@ -111,7 +118,11 @@ export function ModelChoice(props: ModelChoiceProps): JSX.Element {
         {...(props.ariaLabel !== undefined ? { "aria-label": props.ariaLabel } : {})}
         {...(props.descriptionId !== undefined ? { "aria-describedby": props.descriptionId } : {})}
         disabled={props.off !== undefined}
-        placeholder={t("task.composer.model.placeholder")}
+        placeholder={
+          props.bareId === true
+            ? t("task.composer.model.placeholderBare")
+            : t("task.composer.model.placeholder")
+        }
         title={props.title}
         value={draft}
         onChange={(event) => setDraft(event.target.value)}

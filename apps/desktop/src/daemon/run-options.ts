@@ -16,8 +16,9 @@
  * ## The three answers, which are the same three every time
  *
  *   * **Nothing was asked for** (`undefined`, or the control's `""` for "the agent's own default") —
- *     not an error. The agent runs the way it decides for itself, which is a real state a user chooses
- *     rather than a missing value.
+ *     for mode and thinking level, not an error: the agent runs the way it decides for itself. For a
+ *     **model**, that is only fine when this build cannot apply one at all; every agent that *can*
+ *     take a model must have one configured, or the run is refused before a process exists.
  *   * **Something this build can deliver** — a delivery: argv flags the caller has already built, a
  *     session-config pair applied to the session the agent just opened, or `undefined` when the value
  *     travelled in the launch itself.
@@ -89,8 +90,13 @@ export function resolveAgentMode(harness: HarnessId, requested: string | undefin
  *
  * ## The three outcomes, and why the middle one is not "ignore it"
  *
- *   * **No model asked for** (`undefined`) — the agent runs its own default, and the task file says
- *     nothing rather than naming a default it did not choose. Not an error.
+ *   * **No model asked for** (`undefined`) — for an agent this build **cannot** put on a model
+ *     (`canApplyModel` is false), that is fine: the agent has no model control and runs as itself.
+ *     For **Envoy Harness** (argv delivery), it is a refusal: starting without one leaves the
+ *     transcript naming nothing while the agent answers on its silent default (the hermetic demo
+ *     backend). External ACP agents (DeepSeek, Claude, Codex, Cursor) may omit a model and use
+ *     whatever default their own CLI / account already has — credentials and custom providers live
+ *     there, not in EnvoyDev's picker.
  *   * **A model this agent takes** — returned as the agent's own session-configuration pair when it is
  *     an agent that reads one there (`deepseek-harness`), or as `undefined` when the value already
  *     travelled in argv (`envoy-harness`, where the catalogue's `buildArgs` built the flags). Two
@@ -108,7 +114,19 @@ export function resolveModelDelivery(
   harness: HarnessId,
   model: string | undefined,
 ): { configId: string; value: string } | undefined {
-  if (model === undefined || model === "") return undefined;
+  if (model === undefined || model === "") {
+    // Only argv delivery (Envoy Harness) must name a model before a process exists. Session-config
+    // agents keep their own default when the picker is left empty.
+    if (harnessModelDelivery(harness)?.kind === "argv") {
+      const label = harnessDefinition(harness).label;
+      throw coderError(
+        ENVOYDEV_ERRORS.badRequest,
+        `${label} has no model configured. Choose a model from the list, then try again.`,
+        ref("error.modelRequired", { harness: label }),
+      );
+    }
+    return undefined;
+  }
   const label = harnessDefinition(harness).label;
   const resolved = resolveModelChoice(harness, model);
   if (!resolved.ok) {

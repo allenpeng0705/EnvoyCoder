@@ -118,7 +118,7 @@ import { CatalogList } from "./CatalogRows.js";
  * a row is `AgentRow.tsx`, the catalogue and the manual form are `CatalogRows.tsx`, and the decisions that
  * can silently lie are pure functions in `agent-catalog.ts`.
  */
-export function AgentsSection(props: SettingsSectionProps): JSX.Element {
+export function AgentsSection(props: SettingsSectionProps & { onOpenLlm: () => void }): JSX.Element {
   const { t } = useI18n();
   const { state, agents } = props;
 
@@ -143,6 +143,7 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
     runFix: state.hello?.methods.includes("coder.runFix") === true,
     // Choosing how an agent's connector is delivered. Same rule: no control whose press would be refused by name.
     delivery: state.hello?.methods.includes("coder.setAgentDelivery") === true,
+    envoyLlm: state.hello?.methods.includes("coder.getEnvoyLlm") === true,
   };
 
   /**
@@ -217,6 +218,8 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
             key={harness.id}
             harness={harness}
             canSignIn={can.signIn}
+            canEnvoyLlm={can.envoyLlm}
+            onOpenLlm={props.onOpenLlm}
             signingIn={signingIn === harness.id}
             onSignIn={onSignIn}
             {...(can.runFix
@@ -310,6 +313,10 @@ export function AgentsSection(props: SettingsSectionProps): JSX.Element {
 function ShippedAgent(props: {
   harness: HarnessSummary;
   canSignIn: boolean;
+  /** Daemon serves `coder.getEnvoyLlm` — only used for the Envoy Harness row. */
+  canEnvoyLlm: boolean;
+  /** Open Settings → LLM. The row does not host the form. */
+  onOpenLlm: () => void;
   signingIn: boolean;
   onSignIn: (harness: HarnessSummary) => Promise<void>;
   /**
@@ -376,6 +383,8 @@ function ShippedAgent(props: {
     t,
   );
 
+  const showEnvoyLlm = props.canEnvoyLlm && harness.id === "envoy-harness";
+
   return (
     <AgentRow
       verdictLabel={t(verdict.chipKey)}
@@ -397,17 +406,29 @@ function ShippedAgent(props: {
          * be a control that cannot be honoured, which is the one thing this pane forbids; the instruction lives in
          * the disclosure instead (`SignInInstruction` below), with the command verbatim.
          */
-        props.canSignIn && harness.auth?.state === "needs-signin" && harness.auth.terminal === undefined ? (
-          <button
-            type="button"
-            className="button button--secondary button--small"
-            disabled={props.signingIn}
-            title={t("settings.agents.signIn.title", { agent: harness.label })}
-            onClick={() => void props.onSignIn(harness)}
-          >
-            {props.signingIn ? t("settings.agents.signIn.working") : t("settings.agents.signIn")}
-          </button>
-        ) : null
+        <>
+          {props.canSignIn && harness.auth?.state === "needs-signin" && harness.auth.terminal === undefined ? (
+            <button
+              type="button"
+              className="button button--secondary button--small"
+              disabled={props.signingIn}
+              title={t("settings.agents.signIn.title", { agent: harness.label })}
+              onClick={() => void props.onSignIn(harness)}
+            >
+              {props.signingIn ? t("settings.agents.signIn.working") : t("settings.agents.signIn")}
+            </button>
+          ) : null}
+          {showEnvoyLlm ? (
+            <button
+              type="button"
+              className="button button--ghost button--small"
+              title={t("settings.agents.envoyLlm.open.title")}
+              onClick={props.onOpenLlm}
+            >
+              {t("settings.agents.envoyLlm.open")}
+            </button>
+          ) : null}
+        </>
       }
       details={
         <>

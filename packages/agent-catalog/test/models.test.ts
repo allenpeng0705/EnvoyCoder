@@ -148,6 +148,7 @@ describe("how a chosen model reaches an agent", () => {
       expect(delivery?.kind, id).toBe("session-config");
       if (delivery?.kind !== "session-config") throw new Error("unreachable");
       expect(delivery.configId, id).toBe("model");
+      expect(delivery.valueShape, id).toBe("bare-id");
       expect(delivery.encode({ provider: "anthropic", model: "haiku" }), id).toBe("haiku");
       // The provider half really is ignored, so nobody later reads its absence as a bug.
       expect(delivery.encode({ provider: "whoever", model: "haiku" }), id).toBe("haiku");
@@ -200,13 +201,20 @@ describe("turning the value on a task into what the agent wants", () => {
       provider: "anthropic",
       model: "claude-sonnet-4-6",
     });
-    // A value the agent does not publish is refused, not guessed at: we cannot know which provider it
-    // belongs to, and guessing is what would put the run on a model nobody chose.
+    // A value the agent does not publish, and whose provider it does not document, is refused.
     const unknown = resolveModelChoice("envoy-harness", "meta-llama/Llama-3-70b");
     expect(unknown.ok).toBe(false);
     if (unknown.ok) throw new Error("unreachable");
     expect(unknown.code).toBe("unknownModel");
     expect(unknown.reason).toContain("does not publish a model");
+    // A custom id is accepted when the provider half is one Envoy Harness documents.
+    const custom = resolveModelChoice("envoy-harness", "openai/gpt-4.1-mini");
+    expect(custom).toEqual({
+      ok: true,
+      id: "openai/gpt-4.1-mini",
+      provider: "openai",
+      model: "gpt-4.1-mini",
+    });
   });
 
   it("splits a free-text value on the first slash, and demands both halves", () => {
@@ -232,6 +240,22 @@ describe("turning the value on a task into what the agent wants", () => {
       expect(bad.code, half).toBe("notProviderQualified");
       expect(bad.reason, half).toContain("provider/model");
     }
+  });
+
+  it("accepts a bare ACP model id for Claude / Codex / Cursor", () => {
+    // Their select values are bare (`haiku`, `gpt-5.5`) — demanding provider/model would refuse every
+    // id the agent itself listed in session/new.
+    const bare = resolveModelChoice("claudecode", "haiku");
+    expect(bare).toEqual({ ok: true, id: "haiku", provider: "acp", model: "haiku" });
+    const delivery = harnessModelDelivery("claudecode");
+    expect(delivery?.kind).toBe("session-config");
+    if (delivery?.kind !== "session-config") throw new Error("unreachable");
+    expect(delivery.valueShape).toBe("bare-id");
+    expect(delivery.encode({ provider: "acp", model: "haiku" })).toBe("haiku");
+
+    // A slash form is still accepted; encode keeps only the model half.
+    const qualified = resolveModelChoice("codex", "openai/gpt-5.5");
+    expect(qualified).toEqual({ ok: true, id: "openai/gpt-5.5", provider: "openai", model: "gpt-5.5" });
   });
 
   it("refuses a model for an agent that takes none, and says which of the two it is", () => {

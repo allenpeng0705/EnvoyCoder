@@ -1877,6 +1877,45 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
       .strict(),
   },
 
+  /* — home filesystem (remote folder picker) — */
+  "coder.getHomeFsInfo": {
+    params: EmptyParams,
+    result: z
+      .object({
+        platform: z.enum(["darwin", "linux", "win32", "other"]),
+        pathSep: z.string().min(1),
+        homeDir: z.string().min(1),
+        roots: z.array(z.string().min(1)).readonly(),
+      })
+      .strict(),
+  },
+  "coder.listHomeFsEntries": {
+    params: z
+      .object({
+        path: z.string().optional(),
+        dirsOnly: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+    result: z
+      .object({
+        path: z.string().min(1),
+        parent: z.string().min(1).optional(),
+        entries: z
+          .array(
+            z
+              .object({
+                name: z.string().min(1),
+                kind: z.enum(["dir", "file"]),
+                path: z.string().min(1),
+              })
+              .strict(),
+          )
+          .readonly(),
+      })
+      .strict(),
+  },
+
   /* — tasks — */
   "coder.listTasks": {
     params: z
@@ -2507,6 +2546,66 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
       })
       .strict(),
     result: z.object({ settings: CoderSettingsSchema }).strict(),
+  },
+
+  /**
+   * Envoy Harness LLM panel — non-secret fields plus `apiKeySet`. The key stays in `secretsDir`.
+   */
+  "coder.getEnvoyLlm": {
+    params: EmptyParams,
+    result: z
+      .object({
+        provider: z.string().min(1).optional(),
+        model: z.string().min(1).optional(),
+        baseUrl: z.string().min(1).optional(),
+        apiKeySet: z.boolean(),
+        options: z
+          .array(
+            z
+              .object({
+                id: z.string().min(1),
+                provider: z.string().min(1),
+                model: z.string().min(1),
+                label: z.string().min(1),
+              })
+              .strict(),
+          )
+          .readonly(),
+      })
+      .strict(),
+  },
+  "coder.setEnvoyLlm": {
+    params: z
+      .object({
+        provider: z.string().min(1),
+        model: z.string().min(1),
+        /** Empty string clears a stored base URL. */
+        baseUrl: z.string().optional(),
+        /** When non-empty, replaces the stored key. Never echoed back. */
+        apiKey: z.string().optional(),
+        clearApiKey: z.boolean().optional(),
+      })
+      .strict(),
+    result: z
+      .object({
+        provider: z.string().min(1).optional(),
+        model: z.string().min(1).optional(),
+        baseUrl: z.string().min(1).optional(),
+        apiKeySet: z.boolean(),
+        options: z
+          .array(
+            z
+              .object({
+                id: z.string().min(1),
+                provider: z.string().min(1),
+                model: z.string().min(1),
+                label: z.string().min(1),
+              })
+              .strict(),
+          )
+          .readonly(),
+      })
+      .strict(),
   },
 });
 
