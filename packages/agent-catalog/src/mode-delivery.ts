@@ -31,21 +31,21 @@ export function permissionModes(preferredId?: PermissionModeId): AgentMode[] {
       id: "read-only",
       label: "Read only",
       labelKey: "task.agentMode.readOnly.label",
-      description: "Read files. Do not change them.",
+      description: "Read files. Do not change them, and do not ask before each read.",
       descriptionKey: "task.agentMode.readOnly.description",
     },
     {
       id: "workspace-write",
       label: "Workspace change",
       labelKey: "task.agentMode.workspace.label",
-      description: "Change files in this project. Ask before going further.",
+      description: "Change files in this project. Ask only before a command or a change outside it.",
       descriptionKey: "task.agentMode.workspace.description",
     },
     {
       id: "danger-full-access",
       label: "Full access",
       labelKey: "task.agentMode.fullAccess.label",
-      description: "The whole computer, without asking each turn.",
+      description: "The whole computer, without asking.",
       descriptionKey: "task.agentMode.fullAccess.description",
       unattended: true,
     },
@@ -78,16 +78,19 @@ export function modeLaunchEnv(
 
 export interface PermissionPolicy {
   sandbox: PermissionModeId
-  approval: "on-request" | "never"
-  autoRun?: "off"
+  /** How often the live hook stops for a person. Not `approval`: that setter drops the host's handler. */
+  autoRun: "safe-only" | "off"
 }
 
 /**
  * `session/set_policy` for an Envoy Harness permission level.
  *
- * Workspace change is sandbox `workspace-write` with approval still on. It is not the preset
- * `ask-all`: that preset confirms every tool, which is the opposite of being allowed to edit the
- * project. Full access is the one that stops asking (`approval: never`, `autoRun: off`).
+ * Read only and Workspace change ask only for a command or a write (`safe-only`). Reads and a
+ * single safe lookup do not stop the turn. Full access is the one that stops asking.
+ *
+ * `approval` is deliberately absent. The harness's `setApprovalPolicy` replaces the host handler
+ * that receives Allow, so a card the person answered still came back denied. The sandbox is what
+ * stops a write in Read only; the hook is what decides whether to ask.
  */
 export function envoyPermissionPolicy(
   harness: HarnessId,
@@ -97,7 +100,7 @@ export function envoyPermissionPolicy(
     return undefined
   }
   if (modeId === "danger-full-access") {
-    return { sandbox: modeId, approval: "never", autoRun: "off" }
+    return { sandbox: modeId, autoRun: "off" }
   }
-  return { sandbox: modeId, approval: "on-request" }
+  return { sandbox: modeId, autoRun: "safe-only" }
 }

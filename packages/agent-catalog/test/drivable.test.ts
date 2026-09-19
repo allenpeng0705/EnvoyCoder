@@ -148,7 +148,9 @@ describe("which agents can be put into a mode", () => {
       "workspace-write",
       "danger-full-access",
     ]);
-    expect(HARNESS_CATALOG["envoy-harness"].modes.find((mode) => mode.preferred)).toBeUndefined();
+    expect(HARNESS_CATALOG["envoy-harness"].modes.find((mode) => mode.preferred)?.id).toBe(
+      "workspace-write",
+    );
     expect(HARNESS_CATALOG["envoy-harness"].capabilities.agentMode).toBe(true);
   });
 

@@ -499,14 +499,15 @@ describe("the agent's own mode", () => {
     expect(said(b.events, "mode: read-only")).toBe(false);
   });
 
-  it("hands Envoy Harness a permission level as a sandbox, and stops asking only for full access", async () => {
+  it("hands Envoy Harness a permission level as a sandbox, and asks only when that level says to", async () => {
     const readOnly = await bench();
     await readOnly.manager.start({ taskId: readOnly.taskId, prompt: "policy-me", agentModeId: "read-only" });
     await readOnly.until((events) => kinds(events, "run.ended").length === 1, "the read-only run to end");
     expect(said(readOnly.events, "sandbox: read-only")).toBe(true);
-    expect(said(readOnly.events, "approval: on-request")).toBe(true);
-    // The settings switch must not ride along: it would keep asking after the user chose a level.
-    expect(said(readOnly.events, "autoRun: always-confirm")).toBe(false);
+    expect(said(readOnly.events, "autoRun: safe-only")).toBe(true);
+    // `approval` would replace the handler Allow is answered on, so a level must not send it.
+    expect(said(readOnly.events, "approval: (none)")).toBe(true);
+    expect(said(readOnly.events, "approval: on-request")).toBe(false);
 
     const full = await bench();
     await full.manager.start({
@@ -516,8 +517,9 @@ describe("the agent's own mode", () => {
     });
     await full.until((events) => kinds(events, "run.ended").length === 1, "the full-access run to end");
     expect(said(full.events, "sandbox: danger-full-access")).toBe(true);
-    expect(said(full.events, "approval: never")).toBe(true);
     expect(said(full.events, "autoRun: off")).toBe(true);
+    expect(said(full.events, "approval: (none)")).toBe(true);
+    expect(said(full.events, "approval: never")).toBe(false);
   });
 
   it("fails the run when the agent itself refuses to be put into a mode", async () => {
@@ -594,7 +596,7 @@ describe("the agent's own mode", () => {
  *
  * Three cases, and the third is the one that keeps the settings pane honest:
  *
- *   * **on** (the shipped default) → `autoRun: "always-confirm"`, with the agent's own report as the
+ *   * **on** (the shipped default) → `autoRun: "safe-only"`, with the agent's own report as the
  *     evidence rather than the request we sent;
  *   * **off** → `autoRun: "off"`, because a user who turns the switch off is asking the agent to stop
  *     asking, and a daemon that only ever sent the strict value would be a switch with one position;
@@ -612,7 +614,7 @@ describe("whether the agent asks before it acts", () => {
     // `resolveApprovalPolicy`'s. A run that sent no policy at all reports `(none)` — the peer's own
     // "unset" state — so this assertion fails for the defect rather than for a formatting change.
     expect(run.harness).toBe("envoy-harness");
-    expect(said(b.events, "autoRun: always-confirm")).toBe(true);
+    expect(said(b.events, "autoRun: safe-only")).toBe(true);
   });
 
   it("stops the agent asking when the user turns the switch off", async () => {
@@ -625,7 +627,7 @@ describe("whether the agent asks before it acts", () => {
     await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
 
     expect(said(b.events, "autoRun: off")).toBe(true);
-    expect(said(b.events, "autoRun: always-confirm")).toBe(false);
+    expect(said(b.events, "autoRun: safe-only")).toBe(false);
   });
 
   it("is not sent at all to an agent that has no way to be told, and the run still works", async () => {

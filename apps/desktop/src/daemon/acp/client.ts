@@ -554,8 +554,9 @@ export class AcpClient {
    * policy this daemon set is one it already knows.
    *
    * **The fields that are set are the ones that are sent.** `autoRun` alone is the settings switch.
-   * A permission level also sends `sandbox` and `approval`, and Full access sends `autoRun: "off"`
-   * so the settings switch does not keep asking after the user chose not to be asked.
+   * A permission level also sends `sandbox`. Read only and Workspace change send `autoRun:
+   * "safe-only"` so a read does not stop the turn. Full access sends `autoRun: "off"`. `approval`
+   * is not one of these fields: sending it replaces the handler that receives Allow.
    */
   private async setPolicy(policy: AcpSessionPolicy): Promise<void> {
     const sessionId = this.requireSession();

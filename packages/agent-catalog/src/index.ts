@@ -371,13 +371,15 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
     // (`../envoy-harness/packages/envoy-harness/src/plan/mode-kind.ts`). A mode id we invent is a
     // mode id `session/set_mode` refuses with `mode must be default|plan|review`. The three after
     // them are permission levels (`PermissionModeSchema`), sent on `session/set_policy` rather than
-    // as a mode — see `mode-delivery.ts`. The labels are ours; the ids are passed through verbatim.
+    // as a mode — see `mode-delivery.ts`. Workspace change is preferred: it is the level a new task
+    // should start on, the same default DeepSeek uses, so a person is not asked before every read.
+    // The labels are ours; the ids are passed through verbatim.
     modes: [
       {
         id: "default",
         label: "Default",
         labelKey: "task.agentMode.default.label",
-        description: "Do the work, asking before anything destructive.",
+        description: "Do the work. Ask before a command or a change, not before each read.",
         descriptionKey: "task.agentMode.default.description",
       },
       {
@@ -394,7 +396,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
         description: "Check and report. Change nothing.",
         descriptionKey: "task.agentMode.review.description",
       },
-      ...permissionModes(),
+      ...permissionModes("workspace-write"),
     ],
     summary: "EnvoyDev's built-in agent — structured tools, approvals and sessions.",
     launch: {

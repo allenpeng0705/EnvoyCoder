@@ -688,7 +688,9 @@ describe("the agent's mode control", () => {
     expect(picker.disabled).toBe(true);
     // The reason is on the control — its tooltip and its `aria-describedby` — rather than as a paragraph under
     // the row (§7.30's rule, applied to the reason as well).
-    expect(picker.closest(".composer__chip")?.getAttribute("data-hint")).toBe("Change mode");
+    expect(picker.closest(".composer__chip")?.getAttribute("data-hint")).toBe(
+      "How much this agent may do without asking",
+    );
     const describedBy = picker.getAttribute("aria-describedby");
     expect(document.getElementById(describedBy as string)?.textContent).toContain(
       "DeepSeek Harness does not offer selectable modes.",
@@ -893,7 +895,12 @@ describe("the model control", () => {
     // `--provider`/`--model` (envoy-harness) or the session config (deepseek-harness). The fourth is
     // `undefined` here because this agent declared no thinking levels in the summary, which is the
     // "not told yet" state — the run is started without a level rather than with an invented one.
-    expect(onStart).toHaveBeenCalledWith("use sonnet", "default", "anthropic/claude-sonnet-4-6", undefined);
+    expect(onStart).toHaveBeenCalledWith(
+      "use sonnet",
+      "workspace-write",
+      "anthropic/claude-sonnet-4-6",
+      undefined,
+    );
   });
 
   it("clears the model when the user picks the agent's own default, rather than storing nothing", () => {

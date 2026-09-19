@@ -1,92 +1,114 @@
-# EnvoyDev
+<p align="center">
+  <img src="apps/desktop/assets/logo.png" alt="EnvoyDev" width="160">
+</p>
 
-**The control plane for coding agents.** Run agents in parallel across your own machines — your
-desk, your workstation, your server — and reach them from a window or a phone.
+<h1 align="center">EnvoyDev</h1>
 
-EnvoyDev is a member of the **EnvoyMesh apps group**: it shares the mesh (identity, discovery,
-relay) and the pairing experience with the rest of the family, and keeps its own state to itself.
+<p align="center"><strong>The control plane for coding agents.</strong></p>
+
+<p align="center">Run Claude Code, Codex, OpenCode, Cursor, Pi, and more — on your own machines.<br>
+Reach them from a window or a phone. Open source, self-hosted, local-first.</p>
 
 ---
 
-## What it is
+## What is EnvoyDev?
 
-| | |
-|---|---|
-| **A control plane, not another agent** | It drives agents — yours (`envoy-harness`), DeepSeek's (`dsh`), and the CLIs the world already uses (`claude`, `codex`, `copilot`, `opencode`, `cursor-agent`, `pi`). It does not try to be one. |
-| **Projects are places, tasks are units of work** | A project is a directory you work in; a task is one unit of work in it, with its own branch, agent and model. The left rail is that tree, because "which repo is this in?" is the question a control plane must answer without a click. |
-| **Local first, distributed when you want it** | Agents run on the machine where the code is. With the mesh attached, a task can run on another of your machines — the same relationship EnvoyMesh has with its peers. |
-| **Your credentials stay yours** | Model keys live with the agent that uses them. EnvoyDev never proxies your provider credentials, and it never asks for an account. |
-| **macOS, Windows and Linux** | All three are first-class: the platform layer is a package with the differences written down and tested, not `if (win32)` scattered through the code. |
+EnvoyDev is a desktop app that drives coding agents on the computer where your code lives. It does not try to *be* an agent — it gives Claude Code, Codex, OpenCode, Cursor, Pi, DeepSeek's CLI, and others **one unified window**: the same timeline, the same approvals, the same diff review, on every agent.
 
-## Quickstart
+Your code never leaves your machine. Your model keys stay with the agent that uses them. EnvoyDev never asks for an account.
+
+EnvoyDev is part of the **[EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh)** apps group — it shares the mesh (identity, discovery, relay) and the pairing experience with the rest of the family, and keeps its own project and task state.
+
+---
+
+## What can it do?
+
+- **One window, every agent.** Pick the coding agent per task. Switch models and CLIs without learning a new UI.
+- **Projects on the left, tasks in the middle.** A project is the folder you work in. A task is one unit of work in it — with its own branch, agent, and model.
+- **See what the agent is doing.** A live transcript with messages, tool calls, file changes, and approval cards.
+- **Approve before risky steps.** A permission dock shows scope and risk before each tool runs.
+- **Cancel, queue, or steer.** Queue waits for the turn. Steer interrupts it. The transcript records which one happened.
+- **Resume after a disconnect.** Your work is on your machine — pick it up where you left off.
+- **macOS, Windows, and Linux.** All three are first-class.
+
+---
+
+## Coding agents supported
+
+EnvoyDev ships with one unified UI for every first-class coding harness. Install only the CLIs you actually use — EnvoyDev discovers the rest at runtime.
+
+| Tier | Agents |
+| --- | --- |
+| **Built-in** | Envoy Harness (ACP), Pi |
+| **Tier B catalog** | Claude Code, Codex, OpenCode, Cursor, CodeWhale, DeepSeek Harness, MiniMax Code, Grok, Gemini, TraeCLI, Qoder, Copilot |
+
+Your model credentials live with the agent that uses them — EnvoyDev never proxies them, never asks for an account.
+
+---
+
+## Code from anywhere — EnvoyDev Mobile
+
+The **EnvoyDev Mobile** app is the phone-side companion to your desktop. It pairs with the desktop over a secure WebSocket and runs on iOS and Android (Flutter).
+
+<p align="center">
+  <img src="apps/mobile/assets/logo.png" alt="EnvoyDev Mobile" width="96">
+</p>
+
+### Three ways to pair your phone
+
+- **📷 Scan a QR code** — the fastest path. Open the desktop, show the QR, point the phone. Done.
+- **🔌 Paste `host:port`** — type something like `devbox.local:4770` and paste a token. Direct TCP for when you're on the same network or VPN.
+- **🔐 Use an SSH hop** — point the phone at any SSH-reachable box that can see the desktop. The tunnel terminates on the daemon's loopback, no public IP needed.
+
+### What you can do from the phone
+
+- See your projects and tasks
+- Read the live transcript
+- Answer approval cards
+- Queue a follow-up or steer the run
+- Stop a run
+
+The phone is a **thin client** — it never runs an agent, never holds a provider key. Your desktop does the work; the phone is the window.
+
+---
+
+## Built on EnvoyMesh
+
+EnvoyDev is a member of the **EnvoyMesh apps group**. It shares:
+
+- The same identity (Ed25519 keys, cryptographic pairing)
+- The same discovery (LAN → public → P2P → bootstrap → relay, in that order)
+- The same mesh and pairing UX as the rest of the family
+
+State is per-product: EnvoyDev keeps its project and task tree under `<home>/EnvoyDev/`. EnvoyMesh's mesh, peer list, and identity are shared.
+
+Learn more about the mesh → [github.com/allenpeng0705/EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh).
+
+---
+
+## Download
+
+For most people: grab the installer from the [EnvoyMesh site](https://github.com/allenpeng0705/EnvoyMesh) when 0.5.0 artifacts are out, or build from source below.
 
 ```bash
+git clone https://github.com/allenpeng0705/EnvoyCoder.git
+cd EnvoyCoder
 npm install
-npm run peers:check   # confirms the EnvoyMesh sibling + harness are where they should be
-npm run wiring:check  # every package declared everywhere that resolves it (guide §4.1)
-npm run gates         # peers + wiring + family docs + src-clean + mobile + typecheck + tests
-npm run dev           # the desktop UI in a browser (Vite)
-npm run tauri:dev     # the desktop app (Tauri shell)
-npm run smoke         # boots a real host, mints a real pairing code, probes your agents
+npm run tauri:dev   # the desktop app (Tauri shell)
 ```
 
 The mobile app is Flutter:
 
 ```bash
-cd apps/mobile && flutter pub get && flutter test
+cd apps/mobile
+flutter pub get
+flutter test
 ```
 
-## What is in this scaffold
+---
 
-```
-apps/desktop/        Tauri shell + the window UI (project rail, task pane, composer)
-apps/mobile/         Flutter app: pair with a desktop, check on running work
-packages/protocol/   EnvoyDev's own wire contract (projects, tasks, run events, errors)
-packages/platform/   everything that differs per OS: PATH, shells, quoting, process trees, ssh
-packages/task-model/       the project → task model and the sidebar's queries
-packages/agent-catalog/    which agents we drive, how, and what each one can actually do
-packages/host-bridge/      the EnvoyMesh attach + this product's own daemon host
-docs/                the design, and the reasoning behind it
-docs/family/         copies of the EnvoyMesh documents that govern this product
-```
+## Links
 
-## Read this before changing anything
-
-1. `docs/family/envoymesh-new-app-guide.md` — the family's standard for an app, and the checklist this
-   repo's gates implement. **A copy**: read it here, fix it in EnvoyMesh, refresh with `docs:sync`.
-2. `docs/envoydev-design.md` — what the product is and the decisions already taken.
-3. `docs/envoydev-networking.md` — how it joins the EnvoyMesh family (and what it may not do).
-4. `docs/envoydev-platforms.md` — the three operating systems and their traps.
-5. `docs/envoymesh-integration.md` — how this repo relates to EnvoyMesh: what it links, what it
-   must clone, and how contract changes travel upstream.
-6. `docs/upgrading.md` — how to move the linked EnvoyMesh packages and the harness forward, and how to
-   tell whether it worked.
-
-## Status
-
-**M1, M2 and M3 landed: the desktop app runs agents and answers them.** The daemon serves the project, task, settings
-and *run* methods over the family's WebSocket host and persists them to `<home>/EnvoyDev/`; the
-Tauri shell starts and supervises the daemon; the window renders the daemon's state and a live
-transcript rather than fixtures; and a task started in the window drives a real agent process over the
-Agent Client Protocol, with normalized events, an inline approval card, cancel, queue/steer and resume.
-A corrupt state file is quarantined, never overwritten; two agents are never started in one working
-tree.
-
-Escalations are answered inline: an approval renders as a card in the transcript, with the agent's own
-option labels, and the run continues once it is answered. The composer's Queue and Steer are genuinely
-different — Queue waits for the turn, Steer interrupts it — and the transcript records which happened.
-
-What is not real yet: the **diff panel** (a `run.diff` renders as "3 files changed" and nothing
-opens), approvals answered from the **phone** (M4), and a **successful model turn** on this machine —
-`dsh` is installed and driven, but the box has no DeepSeek credential, so the run ends with the agent's
-own sentence about the missing key. That path is tested; the successful one needs
-`RUN_LIVE_ACP=1`.
-
-```bash
-npm run daemon:build   # bundle the daemon the shell spawns
-npm run tauri:dev      # the desktop app, daemon included
-npm run run -- --prompt "add a test for the parser"   # one task, over the wire, from a terminal
-npm run smoke          # boots the bundled daemon as a child process and speaks to it
-```
-
-`docs/roadmap.md` lists what each milestone has to prove, and marks where M1's and M2's evidence is.
+- EnvoyMesh (the mesh) → [github.com/allenpeng0705/EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh)
+- envoy-harness (the built-in agent runtime) → [github.com/allenpeng0705/envoy-harness](https://github.com/allenpeng0705/envoy-harness)
+- Issues → [github.com/allenpeng0705/EnvoyCoder/issues](https://github.com/allenpeng0705/EnvoyCoder/issues)

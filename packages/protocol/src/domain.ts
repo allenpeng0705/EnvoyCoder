@@ -1262,7 +1262,7 @@ export interface CoderSettings {
    *
    * Delivered to the agent as its own session policy (`session/set_policy { autoRun }`) at the start of
    * every run, for the agents that document such a method — `envoy-harness` does, `deepseek-harness`
-   * does not. `true` states the fail-closed posture (`always-confirm`: ask before every tool), `false`
+   * does not. `true` asks before a command or a change (`safe-only`), not before each read. `false`
    * asks the agent to stop asking (`off`). `resolveApprovalPolicy` in the daemon owns the mapping; see
    * `docs/settings-parity.md` §7.1 for which agents it reaches and why the control is disabled, with
    * the reason on screen, for the ones it cannot.

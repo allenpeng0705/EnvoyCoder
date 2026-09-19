@@ -183,9 +183,10 @@ export type AcpAutoRunPolicy = "always-confirm" | "safe-only" | "off";
 /**
  * What `session/set_policy` may carry.
  *
- * `autoRun` alone is the settings switch ("ask before anything destructive"). `sandbox` and
- * `approval` are a permission level the user picked — Read only, Workspace change, or Full access.
- * The client sends only the fields that are set.
+ * `autoRun` alone is the settings switch ("ask before a command or a change"). `sandbox` and
+ * `autoRun` together are a permission level the user picked — Read only and Workspace change ask
+ * only then (`safe-only`); Full access does not ask (`off`). `approval` is not sent: the harness
+ * setter that receives it replaces the handler Allow is answered on.
  */
 export interface AcpSessionPolicy {
   sandbox?: "read-only" | "workspace-write" | "danger-full-access";

@@ -229,27 +229,19 @@ export function resolveThinkingDelivery(
  * policy, and that the settings pane says so **before** the user gets here — which is why the wire
  * carries `capabilities.approvalPolicy` and the row is disabled with a reason when it is false.
  *
- * ## Which value for which state, and why the strict one
+ * ## Which value for which state
  *
- *   * `requireApprovalForDestructive: true` → **`always-confirm`**: ask before every tool. That is also
- *     what the peer does when no policy is sent at all (`shouldAskUnderAutoRun(undefined)` answers
- *     `undefined`, and the live hook falls through to `shouldAskTool?.(…) ?? true`), so turning the
- *     setting *on* pins the safe posture rather than silently loosening it — and pins it against a
- *     harness whose default could change under us. Stated on the session either way, so
- *     `session/get_policy` can prove which posture a run is in.
- *   * `false` → **`off`**: never ask.
- *
- * `safe-only` — the third value the peer accepts — is deliberately **not** used for the `true` state,
- * and the reason is the value's own definition: it auto-allows every tool in `AUTO_RUN_SAFE_TOOLS`,
- * which includes the whole `git` tool regardless of arguments (`permissions/auto-run.ts:16-23`), so a
- * commit or a push would run without asking. That contradicts the sentence on the row ("ask before
- * anything destructive"), and a safety control that quietly under-delivers is the exact defect this
- * slice exists to remove.
+ *   * `requireApprovalForDestructive: true` → **`safe-only`**: reads and a single safe lookup run;
+ *     a write, an edit, and any other command stop and ask. `always-confirm` asked before every
+ *     tool, including `read_file`, which is why a task could not get past the first look at the
+ *     project. The `git` tool this value auto-allows is read-only (`status` / `diff` / `log`); a
+ *     commit is `bash`, and a mutating git command is not in the safe list.
+ *   * `false` → **`off`**: never ask. A task mode of Full access says the same thing on its own.
  */
 export function resolveApprovalPolicy(
   harness: HarnessId,
   requireApprovalForDestructive: boolean,
 ): { autoRun: AcpAutoRunPolicy } | undefined {
   if (!harnessDefinition(harness).capabilities.approvalPolicy) return undefined;
-  return { autoRun: requireApprovalForDestructive ? "always-confirm" : "off" };
+  return { autoRun: requireApprovalForDestructive ? "safe-only" : "off" };
 }

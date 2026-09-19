@@ -112,7 +112,7 @@ const READERS: Readonly<Record<string, readonly ReadSite[]>> = {
     },
     {
       file: "apps/desktop/src/daemon/run-options.ts",
-      needle: 'requireApprovalForDestructive ? "always-confirm" : "off"',
+      needle: 'requireApprovalForDestructive ? "safe-only" : "off"',
       because:
         "the mapping to the value `envoy-harness` validates; `runs.test.ts` proves both positions " +
         "reach the agent over a real pipe",

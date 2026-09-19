@@ -252,7 +252,7 @@ export const en = {
      as a paragraph about it (`docs/settings-parity.md` §7.30). */
   "task.composer.value.default": "Default",
   "task.composer.appliesNextRun": "Applies to the next run.",
-  "task.composer.hint.mode": "Change mode",
+  "task.composer.hint.mode": "How much this agent may do without asking",
   "task.composer.hint.model": "Change model",
   "task.composer.hint.thinking": "Thinking mode",
   "task.composer.hint.fast": "Toggle fast mode",
@@ -371,17 +371,17 @@ export const en = {
      `AgentMode.labelKey`/`descriptionKey` point here for every mode **we** named; a mode a
      third-party agent named itself carries no key and is shown as the agent wrote it. */
   "task.agentMode.default.label": "Default",
-  "task.agentMode.default.description": "Do the work, asking before anything destructive.",
+  "task.agentMode.default.description": "Do the work. Ask before a command or a change, not before each read.",
   "task.agentMode.plan.label": "Plan",
   "task.agentMode.plan.description": "Investigate and propose a plan. Change nothing yet.",
   "task.agentMode.review.label": "Review",
   "task.agentMode.review.description": "Check and report. Change nothing.",
   "task.agentMode.readOnly.label": "Read only",
-  "task.agentMode.readOnly.description": "Read files. Do not change them.",
+  "task.agentMode.readOnly.description": "Read files. Do not change them, and do not ask before each read.",
   "task.agentMode.workspace.label": "Workspace change",
-  "task.agentMode.workspace.description": "Change files in this project. Ask before going further.",
+  "task.agentMode.workspace.description": "Change files in this project. Ask only before a command or a change outside it.",
   "task.agentMode.fullAccess.label": "Full access",
-  "task.agentMode.fullAccess.description": "The whole computer, without asking each turn.",
+  "task.agentMode.fullAccess.description": "The whole computer, without asking.",
 
   /* ── a status, in the words a user reads ── */
   "status.queued": "Waiting to start",
@@ -491,7 +491,7 @@ export const en = {
   "settings.extraArgs.detail": "Added to the agent's command line for every task.",
   "settings.extraArgs.placeholder": "--verbose",
   "settings.approvals.title": "Ask before anything destructive",
-  "settings.approvals.detail": "Stop and ask before anything destructive.",
+  "settings.approvals.detail": "Ask before a command or a change. Reading a file does not ask. The mode on a task can allow more.",
   "settings.approvals.reaches":
     "Handed to {agent} as its own policy for every run, so the asking happens where the work does.",
   "settings.approvals.unsupported":

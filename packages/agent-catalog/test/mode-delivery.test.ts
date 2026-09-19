@@ -39,18 +39,17 @@ describe("permission levels", () => {
     expect(modeLaunchEnv("envoy-harness", "read-only")).toBeUndefined()
   })
 
-  it("sends Envoy Harness a sandbox, and stops asking only for full access", () => {
+  it("sends Envoy Harness a sandbox, and asks only when the level says to", () => {
     expect(envoyPermissionPolicy("envoy-harness", "read-only")).toEqual({
       sandbox: "read-only",
-      approval: "on-request",
+      autoRun: "safe-only",
     })
     expect(envoyPermissionPolicy("envoy-harness", "workspace-write")).toEqual({
       sandbox: "workspace-write",
-      approval: "on-request",
+      autoRun: "safe-only",
     })
     expect(envoyPermissionPolicy("envoy-harness", "danger-full-access")).toEqual({
       sandbox: "danger-full-access",
-      approval: "never",
       autoRun: "off",
     })
     expect(envoyPermissionPolicy("envoy-harness", "plan")).toBeUndefined()
