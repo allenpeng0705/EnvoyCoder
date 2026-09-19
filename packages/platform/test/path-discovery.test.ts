@@ -224,6 +224,18 @@ describe("composing the list", () => {
     expect(gui.added).toEqual(["/Users/you/.local/bin", "/opt/homebrew/bin", "/usr/local/bin"]);
   });
 
+  it("puts the packaged bin ahead of the shell, when the installer set one", () => {
+    const composed = composeSearchPath({
+      platform: "linux",
+      home: "/home/you",
+      processPath: "/usr/bin",
+      loginShell: "/home/you/.local/bin",
+      env: { ENVOYDEV_BUNDLED_BIN: "/opt/EnvoyDev/bin" },
+      exists: (entry) => entry === "/opt/EnvoyDev/bin",
+    });
+    expect(composed.dirs[0]).toBe("/opt/EnvoyDev/bin");
+  });
+
   it("adds a well-known directory only when it exists, and never twice", () => {
     const composed = composeSearchPath({
       platform: "linux",

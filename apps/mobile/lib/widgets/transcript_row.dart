@@ -18,7 +18,7 @@ class TranscriptRow extends StatelessWidget {
 
   final TranscriptEntry entry;
   final CoderColors colors;
-  final Future<void> Function(String requestId, String optionId)? onAnswer;
+  final Future<void> Function(String requestId, {String? optionId, List<String>? optionIds, String? text})? onAnswer;
   final bool streaming;
 
   @override
@@ -237,7 +237,7 @@ class ApprovalCard extends StatelessWidget {
 
   final TranscriptApproval approval;
   final CoderColors colors;
-  final Future<void> Function(String requestId, String optionId)? onAnswer;
+  final Future<void> Function(String requestId, {String? optionId, List<String>? optionIds, String? text})? onAnswer;
 
   @override
   Widget build(BuildContext context) {
@@ -273,11 +273,15 @@ class ApprovalCard extends StatelessWidget {
           const SizedBox(height: 12),
           if (answered != null)
             Text(
-              'Answered: ${_labelFor(approval.options, answered)}',
+              'Answered: ${_answeredLabel(approval)}',
               style: TextStyle(color: colors.foregroundMuted, fontSize: 12),
             )
           else if (closed)
             Text('No longer waiting.', style: TextStyle(color: colors.foregroundMuted, fontSize: 12))
+          else if (approval.selection == 'many')
+            _ManyChoices(approval: approval, colors: colors, onAnswer: onAnswer)
+          else if (approval.selection == 'text')
+            _TextAnswer(approval: approval, colors: colors, onAnswer: onAnswer)
           else
             Wrap(
               spacing: 8,
@@ -290,7 +294,7 @@ class ApprovalCard extends StatelessWidget {
                         : null,
                     onPressed: onAnswer == null
                         ? null
-                        : () => onAnswer!(approval.requestId, option.id),
+                        : () => onAnswer!(approval.requestId, optionId: option.id),
                     child: Text(option.label),
                   ),
               ],
@@ -301,9 +305,110 @@ class ApprovalCard extends StatelessWidget {
   }
 }
 
+String _answeredLabel(TranscriptApproval approval) {
+  final ids = approval.resolvedWithIds;
+  if (ids != null && ids.length > 1) {
+    return ids.map((id) => _labelFor(approval.options, id)).join(', ');
+  }
+  return _labelFor(approval.options, approval.resolvedWith ?? '');
+}
+
 String _labelFor(List<TranscriptOption> options, String optionId) {
   for (final option in options) {
     if (option.id == optionId) return option.label;
   }
   return optionId;
+}
+
+class _ManyChoices extends StatefulWidget {
+  const _ManyChoices({required this.approval, required this.colors, this.onAnswer});
+
+  final TranscriptApproval approval;
+  final CoderColors colors;
+  final Future<void> Function(String requestId, {String? optionId, List<String>? optionIds, String? text})? onAnswer;
+
+  @override
+  State<_ManyChoices> createState() => _ManyChoicesState();
+}
+
+class _ManyChoicesState extends State<_ManyChoices> {
+  final Set<String> _picked = {};
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final option in widget.approval.options)
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            value: _picked.contains(option.id),
+            title: Text(option.label, style: TextStyle(color: widget.colors.foreground)),
+            controlAffinity: ListTileControlAffinity.leading,
+            onChanged: (checked) {
+              setState(() {
+                if (checked == true) {
+                  _picked.add(option.id);
+                } else {
+                  _picked.remove(option.id);
+                }
+              });
+            },
+          ),
+        FilledButton(
+          onPressed: widget.onAnswer == null || _picked.isEmpty
+              ? null
+              : () => widget.onAnswer!(widget.approval.requestId, optionIds: _picked.toList()),
+          child: const Text('Confirm'),
+        ),
+      ],
+    );
+  }
+}
+
+class _TextAnswer extends StatefulWidget {
+  const _TextAnswer({required this.approval, required this.colors, this.onAnswer});
+
+  final TranscriptApproval approval;
+  final CoderColors colors;
+  final Future<void> Function(String requestId, {String? optionId, List<String>? optionIds, String? text})? onAnswer;
+
+  @override
+  State<_TextAnswer> createState() => _TextAnswerState();
+}
+
+class _TextAnswerState extends State<_TextAnswer> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ready = _controller.text.trim().isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _controller,
+          minLines: 2,
+          maxLines: 6,
+          style: TextStyle(color: widget.colors.foreground),
+          decoration: const InputDecoration(hintText: 'Your answer'),
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 8),
+        FilledButton(
+          onPressed: widget.onAnswer == null || !ready
+              ? null
+              : () => widget.onAnswer!(widget.approval.requestId, text: _controller.text),
+          child: const Text('Confirm'),
+        ),
+      ],
+    );
+  }
 }

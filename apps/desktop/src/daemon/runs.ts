@@ -78,8 +78,9 @@ import type { PlatformId } from "@envoydev/platform";
 
 import type { CoderPaths } from "@envoydev/host-bridge";
 
-import { AcpClient, type AcpLaunch, type AcpPermissionRequest, type AcpSessionPolicy, type AcpUpdate } from "./acp/client.js";
+import { AcpClient, type AcpLaunch, type AcpPermissionRequest, type AcpSessionPolicy, type AcpUpdate, type AcpUserQuestion, type AcpUserQuestionChoice } from "./acp/client.js";
 import { launchForHarness } from "./launch.js";
+import { envoyRunModel } from "./envoy-llm.js";
 import { slashCommandsFromAcp } from "../composer/slash-commands.js";
 import { keyed, ref } from "./messages.js";
 // The values a run asks for, checked against the catalogue before anything is spawned — and the
@@ -167,8 +168,11 @@ interface LiveRun {
   queued: { text: string; mode: RunMode; images?: PromptImage[] }[];
   /** Why the turn in flight was interrupted — the difference between `cancel` and `steer`. */
   intent: "none" | "cancel" | "steer";
-  /** The approval the run is blocked on, if any. */
-  approval: { requestId: string; settle: (optionId: string | null) => void } | undefined;
+  /** The approval or question the run is blocked on, if any. A string is one permission choice. */
+  approval: {
+    requestId: string;
+    settle: (choice: string | AcpUserQuestionChoice | null) => void;
+  } | undefined;
   stderr: string[];
   settled: boolean;
   /**
@@ -278,7 +282,11 @@ export class RunManager {
       );
     }
 
-    const model = input.model ?? task.model;
+    const requested = input.model ?? task.model;
+    // Envoy Harness has no model until Settings saves one. An empty picker, or a leftover catalogue
+    // choice for a different provider, uses that saved model so the key and base URL travel with it.
+    const model =
+      task.harness === "envoy-harness" ? envoyRunModel(this.deps.paths, requested) : requested;
     // **Checked before anything is spawned.** A mode the agent cannot accept has two possible
     // outcomes and only one of them is honest: refuse the call, or start an agent in a posture the
     // user did not ask for. The second is not a smaller version of the first — a user who chose
@@ -431,6 +439,7 @@ export class RunManager {
         launch: live.launch,
         onUpdate: (update) => this.onUpdate(live, update),
         onPermissionRequest: (request) => this.onPermissionRequest(live, request),
+        onUserQuestion: (request) => this.onUserQuestion(live, request),
         onStderr: (line) => {
           // Kept, bounded, and never printed: it is what explains a failure the protocol reported as
           // one sentence, and a chatty agent must not become a memory leak in a long-lived daemon.
@@ -622,20 +631,34 @@ export class RunManager {
    */
   private onPermissionRequest(live: LiveRun, request: AcpPermissionRequest): Promise<string | null> {
     const requestId = request.toolCall?.toolCallId ?? randomUUID();
-    const options = (request.options ?? []).map((option, index) => ({
+    const fromAgent = (request.options ?? []).map((option, index) => ({
       id: typeof option.optionId === "string" && option.optionId !== "" ? option.optionId : `option-${index}`,
       label: typeof option.name === "string" && option.name !== "" ? option.name : `Option ${index + 1}`,
       // The protocol's own vocabulary says which choice refuses. Guessing from the label would paint
       // "Deny" as a neutral button for the one agent that words it differently.
       destructive: option.kind === "reject_once" || option.kind === "reject_always",
     }));
+    // Envoy Harness asks without listing choices. An empty list is a card with no buttons.
+    const options =
+      fromAgent.length > 0
+        ? fromAgent
+        : [
+            { id: "allow", label: keyed("approval.allow", "Allow"), destructive: false },
+            { id: "deny", label: keyed("approval.deny", "Don't allow"), destructive: true },
+          ];
 
-    const toolName = this.toolName(live, requestId);
+    const named =
+      this.toolName(live, request.toolCall?.toolCallId ?? "") ??
+      (typeof request.toolName === "string" && request.toolName !== "" ? request.toolName : undefined) ??
+      (typeof request.toolCall?.title === "string" && request.toolCall.title !== ""
+        ? request.toolCall.title
+        : undefined);
     return new Promise<string | null>((resolve) => {
-      const settle = (optionId: string | null): void => {
+      const settle = (choice: string | AcpUserQuestionChoice | null): void => {
         if (live.approval?.requestId !== requestId) return;
         live.approval = undefined;
-        resolve(optionId);
+        if (typeof choice === "string") resolve(choice);
+        else resolve(choice?.optionIds?.[0] ?? null);
       };
       live.approval = { requestId, settle };
 
@@ -647,14 +670,68 @@ export class RunManager {
           // The family's wording rule: the headline is what is about to happen, in the user's words.
           // ACP gives us a tool id and the agent's own label for the call; "the agent is asking" is
           // the part that is always true, so it is what the card leads with when there is no label.
-          question: toolName
-            ? keyed("approval.question.tool", `Allow the agent to run “${toolName}”?`, { tool: toolName })
+          question: named
+            ? keyed("approval.question.tool", `Allow the agent to run “${named}”?`, { tool: named })
             : keyed("approval.question.generic", "Allow the agent to continue?"),
           detail: keyed(
             "approval.detail",
             "It has stopped before this step and will not continue until you answer. Answering this one request does not allow anything else.",
           ),
           options,
+        });
+      })();
+    });
+  }
+
+  /**
+   * A question the model asked (`ask_user`), not a permission.
+   *
+   * `multiple` becomes checkboxes. No options becomes a typed answer. Either way the reply is the
+   * set the human confirmed, not one click that also means "allow".
+   */
+  private onUserQuestion(live: LiveRun, request: AcpUserQuestion): Promise<AcpUserQuestionChoice | null> {
+    const requestId =
+      typeof request.questionId === "string" && request.questionId !== "" ? request.questionId : randomUUID();
+    const labels = request.options ?? [];
+    const options = labels.map((label, index) => ({
+      id: String(index),
+      label: label !== "" ? label : `Option ${index + 1}`,
+      destructive: false,
+    }));
+    const many = request.multiple === true && options.length > 1;
+    const text = options.length === 0;
+    const prompt = typeof request.prompt === "string" ? request.prompt.trim() : "";
+    return new Promise<AcpUserQuestionChoice | null>((resolve) => {
+      const settle = (choice: string | AcpUserQuestionChoice | null): void => {
+        if (live.approval?.requestId !== requestId) return;
+        live.approval = undefined;
+        if (choice === null || typeof choice === "string") {
+          resolve(typeof choice === "string" ? { optionIds: [choice] } : null);
+          return;
+        }
+        resolve(choice);
+      };
+      live.approval = { requestId, settle };
+      void (async () => {
+        await this.setStatus(live, "needs-attention");
+        await this.record(live, {
+          kind: "run.approval-requested",
+          requestId,
+          question: prompt !== "" ? prompt : keyed("approval.question.ask", "The agent asked a question."),
+          detail: many
+            ? keyed(
+                "approval.detail.multiple",
+                "Tick every option that applies, then confirm. This answer is only for this question.",
+              )
+            : text
+              ? keyed(
+                  "approval.detail.text",
+                  "Type your answer. The agent will not continue until you send it.",
+                )
+              : keyed("approval.detail.pick", "Pick one. This answer is only for this question."),
+          options,
+          ...(many ? { selection: "many" as const } : {}),
+          ...(text ? { selection: "text" as const, ...(request.multiline === true ? { multiline: true } : {}) } : {}),
         });
       })();
     });
@@ -741,14 +818,31 @@ export class RunManager {
     return true;
   }
 
-  /** Answer the approval this run is blocked on. */
-  async answerApproval(runId: string, requestId: string, optionId: string): Promise<boolean> {
+  /** Answer the approval or question this run is blocked on. */
+  async answerApproval(
+    runId: string,
+    requestId: string,
+    optionId: string | undefined,
+    extra?: { optionIds?: readonly string[]; text?: string },
+  ): Promise<boolean> {
     const live = this.active.get(runId);
     if (!live?.approval || live.approval.requestId !== requestId) return false;
+    const ids = extra?.optionIds && extra.optionIds.length > 0 ? [...extra.optionIds] : optionId !== undefined ? [optionId] : [];
+    const text = extra?.text?.trim() ?? "";
+    const primary = ids[0] ?? (text !== "" ? text : undefined);
+    if (primary === undefined) return false;
     const settle = live.approval.settle;
-    await this.record(live, { kind: "run.approval-resolved", requestId, optionId, by: "you" });
+    await this.record(live, {
+      kind: "run.approval-resolved",
+      requestId,
+      optionId: primary,
+      ...(ids.length > 1 ? { optionIds: ids } : {}),
+      by: "you",
+    });
     await this.setStatus(live, "running");
-    settle(optionId);
+    if (text !== "") settle({ text });
+    else if (ids.length > 1) settle({ optionIds: ids });
+    else settle(primary);
     return true;
   }
 

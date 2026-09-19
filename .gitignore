@@ -13,6 +13,8 @@ coverage/
 # Tauri
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
+apps/desktop/src-tauri/resources/
+build/
 # Flutter
 apps/mobile/.dart_tool/
 apps/mobile/build/

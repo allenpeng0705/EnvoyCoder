@@ -7,8 +7,9 @@ environment:
   sdk: ">=3.4.0 <4.0.0"
 
 # Dependencies stay deliberate: the phone talks to a daemon the user already trusts (LAN, mesh, or
-# an SSH hop), so it needs no product SDK. Camera, secure storage, prefs, and SSH are the four
-# additions M4 needs; nothing else rides along.
+# an SSH hop), so it needs no product SDK. Camera, secure storage, prefs, and SSH are what pairing
+# needs. Photos, files, and the clipboard are how a message carries an attachment — the same three
+# actions the desktop field has — and nothing else rides along.
 dependencies:
   flutter:
     sdk: flutter
@@ -40,6 +41,9 @@ dependencies:
   flutter_highlight: ^0.7.0
   highlight: ^0.7.0
   markdown: ^7.3.1
+  image_picker: ^1.1.2
+  file_picker: ^8.1.7
+  pasteboard: ^0.5.0
 
 # `dart_libp2p` pins `mdns_dart ^2.0.1` → 2.2.1, which fails to compile on Dart 3.13+
 # (`InternetAddress` vs `InterfaceAddress`); 2.2.2 is the fix. Overrides are only honoured from the

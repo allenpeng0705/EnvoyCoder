@@ -75,6 +75,7 @@ class TranscriptApproval {
     required this.question,
     this.detail,
     required this.options,
+    this.selection,
   });
 
   final String requestId;
@@ -82,8 +83,14 @@ class TranscriptApproval {
   final String? detail;
   final List<TranscriptOption> options;
 
+  /// `many` is checkboxes, `text` is a typed answer. Absent is one exclusive choice.
+  final String? selection;
+
   /// The option the user chose, once they have. Null while the question is still open.
   String? resolvedWith;
+
+  /// Every id chosen, when the card asked for more than one.
+  List<String>? resolvedWithIds;
 
   /// True when the question went away without an answer — the run ended, or was cancelled, while the
   /// card was on screen. Distinct from `resolvedWith`, because "Stopped" and "you allowed it" are
@@ -188,7 +195,14 @@ class Transcript {
       case 'run.approval-resolved':
         final requestId = event['requestId'] as String? ?? '';
         final at = _byRequest[requestId];
-        if (at != null) entries[at].approval?.resolvedWith = event['optionId'] as String?;
+        if (at != null) {
+          final approval = entries[at].approval;
+          approval?.resolvedWith = event['optionId'] as String?;
+          final ids = event['optionIds'];
+          if (ids is List) {
+            approval?.resolvedWithIds = [for (final id in ids) if (id is String) id];
+          }
+        }
         return;
 
       case 'run.status':
@@ -339,6 +353,7 @@ class Transcript {
         question: (event['question'] as String?) ?? 'The agent needs a decision',
         detail: event['detail'] as String?,
         options: options,
+        selection: event['selection'] as String?,
       ),
     );
     if (requestId.isNotEmpty) _byRequest[requestId] = entries.length;

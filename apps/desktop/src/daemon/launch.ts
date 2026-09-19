@@ -228,6 +228,14 @@ export function launchForHarness(input: LaunchInput): AcpLaunch {
         ...(definition.id === "deepseek-harness"
           ? { DSH_HOME: join(input.paths.stateDir, "agents", "dsh") }
           : {}),
+        // `~/.local/state` is often root-owned on this machine, so the harness cannot create
+        // its default folder there. Sessions stay under EnvoyDev's own state instead.
+        ...(definition.id === "envoy-harness"
+          ? {
+              ENVOY_HARNESS_SESSION_DIR: join(input.paths.stateDir, "agents", "envoy-harness", "sessions"),
+              ENVOY_HARNESS_HISTORY: join(input.paths.stateDir, "agents", "envoy-harness", "history"),
+            }
+          : {}),
         ...llmEnv,
         ...input.extraEnv,
       },

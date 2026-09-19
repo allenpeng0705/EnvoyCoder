@@ -6,11 +6,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../models/composer_attachment.dart';
 import '../models/harness.dart';
 import '../models/text_reveal.dart';
 import '../models/transcript.dart';
+import '../services/attachment_pickers.dart';
 import '../services/host_client.dart';
 import '../theme/tokens.dart';
+import '../widgets/composer_attach.dart';
 import '../widgets/composer_controls.dart';
 import '../widgets/transcript_row.dart';
 import 'explorer_screen.dart';
@@ -41,6 +44,8 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   final _composer = TextEditingController();
   final _transcript = Transcript();
   final _scroll = ScrollController();
+  List<ComposerAttachment> _attachments = [];
+  String? _attachNotice;
 
   bool _live = false;
   bool _loading = true;
@@ -248,13 +253,28 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     });
   }
 
-  Future<void> _answer(String requestId, String optionId) async {
+  Future<void> _answer(
+    String requestId, {
+    String? optionId,
+    List<String>? optionIds,
+    String? text,
+  }) async {
+    final params = <String, Object>{
+      'runId': widget.runId,
+      'requestId': requestId,
+    };
+    if (optionIds != null && optionIds.isNotEmpty) {
+      params['optionId'] = optionIds.first;
+      params['optionIds'] = optionIds;
+    } else if (text != null && text.trim().isNotEmpty) {
+      params['text'] = text.trim();
+    } else if (optionId != null && optionId.isNotEmpty) {
+      params['optionId'] = optionId;
+    } else {
+      return;
+    }
     try {
-      await widget.client.call('coder.answerApproval', {
-        'runId': widget.runId,
-        'requestId': requestId,
-        'optionId': optionId,
-      });
+      await widget.client.call('coder.answerApproval', params);
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -284,21 +304,48 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   }
 
   Future<void> _send() async {
-    final text = _composer.text.trim();
-    if (text.isEmpty || !_live) return;
+    final turn = composeTurn(_composer.text, _attachments);
+    if (turn.prompt.isEmpty || !_live) return;
+    final previousText = _composer.text;
+    final previousAttachments = List<ComposerAttachment>.of(_attachments);
     _composer.clear();
+    setState(() {
+      _attachments = [];
+      _attachNotice = null;
+    });
     try {
-      await widget.client.call('coder.sendToRun', {
-        'runId': widget.runId,
-        'text': text,
-        'mode': _sendMode,
-      });
+      await widget.client.call(
+        'coder.sendToRun',
+        {
+          'runId': widget.runId,
+          'text': turn.prompt,
+          'mode': _sendMode,
+          if (turn.images.isNotEmpty) 'images': turn.images,
+        },
+        turn.images.isEmpty ? const Duration(seconds: 15) : const Duration(seconds: 60),
+      );
     } catch (_) {
       if (!mounted) return;
+      _composer.text = previousText;
+      setState(() => _attachments = previousAttachments);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not send. Is the run still live?')),
       );
     }
+  }
+
+  Future<void> _attach(Future<List<IncomingFile>?> Function() pick) {
+    return takeAttachments(
+      current: _attachments,
+      pick: pick,
+      stillMounted: () => mounted,
+      apply: (attachments, notice) {
+        setState(() {
+          _attachments = attachments;
+          _attachNotice = notice;
+        });
+      },
+    );
   }
 
   Future<void> _openExplorer() async {
@@ -489,28 +536,52 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
+                        AttachMenuButton(
+                          enabled: _live && !approvalOpen,
+                          onImage: () => unawaited(_attach(pickGalleryImages)),
+                          onPaste: () => unawaited(_attach(pasteClipboardImage)),
+                          onFile: () => unawaited(_attach(pickDocuments)),
+                        ),
                         Expanded(
-                          child: TextField(
-                            controller: _composer,
-                            enabled: _live && !approvalOpen,
-                            minLines: 1,
-                            maxLines: 4,
-                            decoration: InputDecoration(
-                              hintText: approvalOpen
-                                  ? 'Answer the request above first'
-                                  : _live
-                                      ? 'Send a follow-up…'
-                                      : 'Run is not live',
-                              border: const OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            onChanged: (_) => setState(() {}),
-                            onSubmitted: (_) => unawaited(_send()),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              AttachmentTray(
+                                attachments: _attachments,
+                                notice: _attachNotice,
+                                onRemove: (id) => setState(() {
+                                  _attachments = [
+                                    for (final attachment in _attachments)
+                                      if (attachment.id != id) attachment,
+                                  ];
+                                  _attachNotice = null;
+                                }),
+                              ),
+                              TextField(
+                                controller: _composer,
+                                enabled: _live && !approvalOpen,
+                                minLines: 1,
+                                maxLines: 4,
+                                decoration: InputDecoration(
+                                  hintText: approvalOpen
+                                      ? 'Answer the request above first'
+                                      : _live
+                                          ? 'Send a follow-up…'
+                                          : 'Run is not live',
+                                  border: const OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                                onChanged: (_) => setState(() {}),
+                                onSubmitted: (_) => unawaited(_send()),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(width: 8),
                         IconButton.filled(
-                          onPressed: _live && !approvalOpen ? () => unawaited(_send()) : null,
+                          onPressed: _live && !approvalOpen && canSendComposer(_composer.text, _attachments)
+                              ? () => unawaited(_send())
+                              : null,
                           icon: const Icon(Icons.send),
                         ),
                       ],

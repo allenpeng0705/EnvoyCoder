@@ -161,6 +161,7 @@ export const en = {
   "task.approval.aria": "The agent needs your answer",
   "task.approval.answered": "Answered",
   "task.approval.answeredWith": "Answered: {option}",
+  "task.approval.confirm": "Confirm",
 
   /* ── the composer ── */
   "task.composer.aria": "Message the agent",
@@ -289,6 +290,7 @@ export const en = {
   // Why the control is off. Three facts, three sentences — folding them together is how a user
   // concludes an agent has no models when it has some we cannot reach.
   "task.composer.model.none": "{agent} does not take a model.",
+  "task.composer.model.configure": "Set a model in Settings. Envoy Harness does not include one.",
   "task.composer.model.notWired":
     "Choosing a model for {agent} is not wired up yet, so the control is off rather than silently ignored.",
   "task.composer.model.unknown":
@@ -580,11 +582,12 @@ export const en = {
     "Envoy Harness uses this. Other agents keep their own sign-in. The key stays on this computer.",
   "settings.agents.envoyLlm.provider": "Provider",
   "settings.agents.envoyLlm.model": "Model",
-  "settings.agents.envoyLlm.model.placeholder": "gpt-4o or anthropic/claude-sonnet-4-5",
-  "settings.agents.envoyLlm.model.detail": "A model id, or provider/model.",
+  "settings.agents.envoyLlm.model.placeholder": "MiniMax-M3",
+  "settings.agents.envoyLlm.model.detail": "The model id from your provider, for example MiniMax-M3.",
   "settings.agents.envoyLlm.baseUrl": "Base URL",
   "settings.agents.envoyLlm.baseUrl.placeholder": "Optional — LiteLLM or a proxy",
-  "settings.agents.envoyLlm.baseUrl.detail": "Leave empty to use the provider’s default endpoint.",
+  "settings.agents.envoyLlm.baseUrl.detail":
+    "Leave empty to use that provider’s own address. MiniMax uses the OpenAI format. A model written anthropic/… uses the Anthropic format. One address is not both.",
   "settings.agents.envoyLlm.apiKey": "API key",
   "settings.agents.envoyLlm.apiKey.placeholder": "Paste a new key to replace the saved one",
   "settings.agents.envoyLlm.apiKey.detail": "Write-only: EnvoyDev never shows a saved key again.",
@@ -1187,6 +1190,12 @@ export const en = {
   "approval.question.generic": "Allow the agent to continue?",
   "approval.detail":
     "It has stopped before this step and will not continue until you answer. Answering this one request does not allow anything else.",
+  "approval.allow": "Allow",
+  "approval.deny": "Don't allow",
+  "approval.question.ask": "The agent asked a question.",
+  "approval.detail.pick": "Pick one. This answer is only for this question.",
+  "approval.detail.multiple": "Tick every option that applies, then confirm. This answer is only for this question.",
+  "approval.detail.text": "Type your answer. The agent will not continue until you send it.",
 } as const;
 
 export type Messages = typeof en;

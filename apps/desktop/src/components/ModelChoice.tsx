@@ -81,6 +81,10 @@ export interface ModelChoiceProps {
    * When false or omitted, the field still requires `provider/model` (DeepSeek).
    */
   bareId?: boolean;
+  /**
+   * When false, the empty "agent default" option is omitted. Envoy Harness has no default model.
+   */
+  allowUnset?: boolean;
 }
 
 export function ModelChoice(props: ModelChoiceProps): JSX.Element {
@@ -151,13 +155,13 @@ export function ModelChoice(props: ModelChoiceProps): JSX.Element {
       value={props.selected ?? ""}
       onChange={(event) => props.onChoose(event.target.value)}
     >
-      {/* "The agent's own default" is a choice, not an empty slot: it is the state a task is in before anybody
-          picks, and picking it is how a user undoes a model they chose. Its *text* is the short form because this
-          control is a chip on the composer's toolbar, where one line is all there is; the sentence that explains
-          whose default it is is the option's tooltip (`task.composer.model.agentDefault`). */}
-      <option value="" title={t("task.composer.model.agentDefault")}>
-        {t("task.composer.value.default")}
-      </option>
+      {/* Other agents can leave the model unset and use their own default. Envoy Harness cannot:
+          with no model it does not call the LLM saved in Settings. */}
+      {props.allowUnset === false ? null : (
+        <option value="" title={t("task.composer.model.agentDefault")}>
+          {t("task.composer.value.default")}
+        </option>
+      )}
       {props.options.map((model) => (
         <option key={model.id} value={model.id} title={model.description}>
           {model.label}

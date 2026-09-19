@@ -1,0 +1,11 @@
+{
+  "bundle": {
+    "resources": [
+      "resources/daemon/main.mjs",
+      "resources/daemon/**/*",
+      "resources/node-runtime/**/*",
+      "resources/envoy-harness/**/*",
+      "resources/bin/**/*"
+    ]
+  }
+}

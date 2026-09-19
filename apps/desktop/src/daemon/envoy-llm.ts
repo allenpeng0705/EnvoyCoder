@@ -18,14 +18,15 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  envoyHarnessDefaultModels,
   envoyProviderApiKeyEnv,
   isEnvoyHarnessProvider,
   modelIdFor,
+  resolveModelChoice,
 } from "@envoydev/agent-catalog";
 import {
   ENVOYDEV_ERRORS,
   coderError,
+  type AgentModels,
   type CoderSettings,
 } from "@envoydev/protocol";
 import type { CoderPaths } from "@envoydev/host-bridge";
@@ -78,8 +79,14 @@ async function atomicWrite(path: string, body: string): Promise<void> {
  * Turn the model string a person typed into the provider/model Envoy Harness launches with.
  *
  * `anthropic/claude-sonnet-4-5` names both halves. A bare id (`gpt-4o`, or a custom id) is OpenAI-compatible
- * unless the client already named a provider Envoy Harness documents — older callers send them separately.
+ * unless it is a MiniMax id (`MiniMax-M3`, `Minimax M3`) or the client already named a provider.
  */
+function miniMaxModelId(input: string): string | undefined {
+  const compact = input.replace(/[\s_-]+/g, "").toLowerCase();
+  const match = /^minimaxm(\d+)$/.exec(compact);
+  return match === null ? undefined : `MiniMax-M${match[1]}`;
+}
+
 export function deriveEnvoyLlmChoice(
   modelInput: string,
   clientProvider = "",
@@ -90,9 +97,12 @@ export function deriveEnvoyLlmChoice(
     const left = trimmed.slice(0, slash).toLowerCase();
     const right = trimmed.slice(slash + 1).trim();
     if (right.length > 0 && isEnvoyHarnessProvider(left)) {
-      return { provider: left, model: right };
+      const mini = miniMaxModelId(right);
+      return { provider: left, model: mini ?? right };
     }
   }
+  const mini = miniMaxModelId(trimmed);
+  if (mini !== undefined) return { provider: "minimax", model: mini };
   const fallback = clientProvider.trim().toLowerCase();
   if (isEnvoyHarnessProvider(fallback)) return { provider: fallback, model: trimmed };
   return { provider: "openai", model: trimmed };
@@ -105,23 +115,25 @@ export function envoyLlmModelField(provider: string | undefined, model: string |
   return `${provider}/${model}`;
 }
 
+/** Re-derive on read so a model saved as OpenAI before MiniMax was recognised still launches as MiniMax. */
+function normalizeStored(raw: Partial<EnvoyLlmConfig>): EnvoyLlmConfig | undefined {
+  if (typeof raw.provider !== "string" || raw.provider.length === 0) return undefined;
+  if (typeof raw.model !== "string" || raw.model.length === 0) return undefined;
+  const choice = deriveEnvoyLlmChoice(envoyLlmModelField(raw.provider, raw.model), raw.provider);
+  if (choice.model.length === 0) return undefined;
+  return {
+    provider: choice.provider,
+    model: choice.model,
+    ...(typeof raw.baseUrl === "string" && raw.baseUrl.trim() !== ""
+      ? { baseUrl: raw.baseUrl.trim() }
+      : {}),
+  };
+}
+
 export async function readEnvoyLlmConfig(paths: CoderPaths): Promise<EnvoyLlmConfig | undefined> {
   try {
     const raw = JSON.parse(await readFile(stateFile(paths), "utf8")) as Partial<EnvoyLlmConfig>;
-    if (
-      typeof raw.provider === "string" &&
-      raw.provider.length > 0 &&
-      typeof raw.model === "string" &&
-      raw.model.length > 0
-    ) {
-      return {
-        provider: raw.provider,
-        model: raw.model,
-        ...(typeof raw.baseUrl === "string" && raw.baseUrl.trim() !== ""
-          ? { baseUrl: raw.baseUrl.trim() }
-          : {}),
-      };
-    }
+    return normalizeStored(raw);
   } catch {
     // Missing or unreadable — no settings yet.
   }
@@ -150,7 +162,7 @@ export async function getEnvoyLlmPublic(paths: CoderPaths): Promise<EnvoyLlmPubl
         }
       : {}),
     apiKeySet: key !== undefined,
-    options: envoyHarnessDefaultModels(),
+    options: config === undefined ? [] : [configuredOption(config)],
   };
 }
 
@@ -244,23 +256,63 @@ export function envoyLlmBaseUrlArgs(
   return ["--base-url", config.baseUrl];
 }
 
+function configuredOption(config: EnvoyLlmConfig): {
+  id: string;
+  provider: string;
+  model: string;
+  label: string;
+} {
+  return {
+    id: modelIdFor(config.provider, config.model),
+    provider: config.provider,
+    model: config.model,
+    label: config.model,
+  };
+}
+
+/**
+ * What the composer may offer for Envoy Harness.
+ *
+ * The harness has no model of its own. Until Settings saves one, the control is off. After that,
+ * the list is that model — not the catalogue of provider defaults.
+ */
+export function envoyHarnessModels(paths: CoderPaths): AgentModels {
+  const config = readEnvoyLlmConfigSync(paths);
+  if (config === undefined) {
+    return {
+      kind: "none",
+      options: [],
+      source: "Envoy Harness has no model of its own. Settings has not saved one.",
+    };
+  }
+  return {
+    kind: "listed",
+    options: [configuredOption(config)],
+    source: "The model saved in Settings. Envoy Harness does not ship a model list.",
+  };
+}
+
+/**
+ * The model a new Envoy Harness run should use.
+ *
+ * An empty choice, or a choice for a different provider than the saved key, becomes the saved
+ * model. A choice for the same provider is kept, so one key can later cover more than one model.
+ */
+export function envoyRunModel(paths: CoderPaths, requested: string | undefined): string | undefined {
+  const config = readEnvoyLlmConfigSync(paths);
+  if (config === undefined) return requested === "" ? undefined : requested;
+  const configured = modelIdFor(config.provider, config.model);
+  if (requested === undefined || requested.trim() === "") return configured;
+  const resolved = resolveModelChoice("envoy-harness", requested);
+  if (!resolved.ok) return configured;
+  if (resolved.provider.toLowerCase() !== config.provider.toLowerCase()) return configured;
+  return modelIdFor(resolved.provider, resolved.model);
+}
+
 function readEnvoyLlmConfigSync(paths: CoderPaths): EnvoyLlmConfig | undefined {
   try {
     const raw = JSON.parse(readFileSync(stateFile(paths), "utf8")) as Partial<EnvoyLlmConfig>;
-    if (
-      typeof raw.provider === "string" &&
-      raw.provider.length > 0 &&
-      typeof raw.model === "string" &&
-      raw.model.length > 0
-    ) {
-      return {
-        provider: raw.provider,
-        model: raw.model,
-        ...(typeof raw.baseUrl === "string" && raw.baseUrl.trim() !== ""
-          ? { baseUrl: raw.baseUrl.trim() }
-          : {}),
-      };
-    }
+    return normalizeStored(raw);
   } catch {
     // Missing or unreadable.
   }

@@ -785,8 +785,22 @@ export type RunEvent =
       question: string;
       detail?: string;
       options: readonly { id: string; label: string; destructive?: boolean }[];
+      /**
+       * How the card is answered. Absent means one exclusive choice (a permission, or a
+       * single-pick question). `many` is checkboxes; `text` is a typed answer.
+       */
+      selection?: "one" | "many" | "text";
+      /** A typed answer may be several lines. Ignored unless `selection` is `text`. */
+      multiline?: boolean;
     })
-  | (RunEventBase & { kind: "run.approval-resolved"; requestId: string; optionId: string; by: string })
+  | (RunEventBase & {
+      kind: "run.approval-resolved";
+      requestId: string;
+      optionId: string;
+      /** Every id chosen, when the card asked for more than one. */
+      optionIds?: readonly string[];
+      by: string;
+    })
   | (RunEventBase & { kind: "run.diff"; files: readonly { path: string; added: number; removed: number }[] })
   | (RunEventBase & {
       kind: "run.usage";

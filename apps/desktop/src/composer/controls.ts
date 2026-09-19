@@ -655,14 +655,18 @@ export function composerControls(
   const modelReason = models === undefined
     ? undefined
     : modelKind === "none"
-      ? `${agent.label} does not take a model.`
+      ? agent.id === "envoy-harness"
+        ? "Set a model in Settings. Envoy Harness does not include one."
+        : `${agent.label} does not take a model.`
       : agent.modelApplicable !== true
         ? `Choosing a model for ${agent.label} is not wired up yet, so the control is off rather than silently ignored.`
         : undefined;
   const modelReasonKey: MessageKey | undefined = models === undefined
     ? undefined
     : modelKind === "none"
-      ? "task.composer.model.none"
+      ? agent.id === "envoy-harness"
+        ? "task.composer.model.configure"
+        : "task.composer.model.none"
       : agent.modelApplicable !== true
         ? "task.composer.model.notWired"
         : undefined;

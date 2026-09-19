@@ -5,10 +5,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../models/composer_attachment.dart';
 import '../models/harness.dart';
 import '../models/project_rail.dart';
+import '../services/attachment_pickers.dart';
 import '../services/host_client.dart';
 import '../theme/tokens.dart';
+import '../widgets/composer_attach.dart';
 import '../widgets/composer_controls.dart';
 import 'run_screen.dart';
 
@@ -55,6 +58,8 @@ class _NewTaskSheetState extends State<_NewTaskSheet> {
   late String? _projectId;
   late ComposerSelection _selection;
   final _prompt = TextEditingController();
+  List<ComposerAttachment> _attachments = [];
+  String? _attachNotice;
   bool _busy = false;
   String? _error;
 
@@ -84,16 +89,30 @@ class _NewTaskSheetState extends State<_NewTaskSheet> {
     super.dispose();
   }
 
+  Future<void> _attach(Future<List<IncomingFile>?> Function() pick) {
+    return takeAttachments(
+      current: _attachments,
+      pick: pick,
+      stillMounted: () => mounted,
+      apply: (attachments, notice) {
+        setState(() {
+          _attachments = attachments;
+          _attachNotice = notice;
+        });
+      },
+    );
+  }
+
   Future<void> _start() async {
-    final prompt = _prompt.text.trim();
+    final turn = composeTurn(_prompt.text, _attachments);
     final projectId = _projectId;
-    if (prompt.isEmpty || projectId == null || _busy) return;
+    if (turn.prompt.isEmpty || projectId == null || _busy) return;
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      final title = prompt.split('\n').first.trim();
+      final title = turn.prompt.split('\n').first.trim();
       final created = await widget.client.call('coder.createTask', {
         'projectId': projectId,
         'title': title.length > 80 ? '${title.substring(0, 80)}…' : title,
@@ -115,14 +134,19 @@ class _NewTaskSheetState extends State<_NewTaskSheet> {
           if (_selection.thinkingLevel != null) 'thinkingLevel': _selection.thinkingLevel,
         });
       }
-      final started = await widget.client.call('coder.startRun', {
-        'taskId': taskId,
-        'prompt': prompt,
-        if (_selection.agentModeId != null) 'agentModeId': _selection.agentModeId,
-        if (_selection.model != null && _selection.model!.isNotEmpty) 'model': _selection.model,
-        if (_selection.thinkingLevel != null && _selection.thinkingLevel!.isNotEmpty)
-          'thinkingLevel': _selection.thinkingLevel,
-      });
+      final started = await widget.client.call(
+        'coder.startRun',
+        {
+          'taskId': taskId,
+          'prompt': turn.prompt,
+          if (_selection.agentModeId != null) 'agentModeId': _selection.agentModeId,
+          if (_selection.model != null && _selection.model!.isNotEmpty) 'model': _selection.model,
+          if (_selection.thinkingLevel != null && _selection.thinkingLevel!.isNotEmpty)
+            'thinkingLevel': _selection.thinkingLevel,
+          if (turn.images.isNotEmpty) 'images': turn.images,
+        },
+        turn.images.isEmpty ? const Duration(seconds: 15) : const Duration(seconds: 60),
+      );
       final run = started['run'];
       final runId = run is Map ? run['id'] as String? : null;
       if (!mounted) return;
@@ -205,15 +229,39 @@ class _NewTaskSheetState extends State<_NewTaskSheet> {
                 onChanged: (next) => setState(() => _selection = next),
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: _prompt,
-                minLines: 3,
-                maxLines: 8,
-                enabled: !_busy,
-                decoration: const InputDecoration(
-                  hintText: 'Describe the task',
-                  border: OutlineInputBorder(),
-                ),
+              AttachmentTray(
+                attachments: _attachments,
+                notice: _attachNotice,
+                onRemove: (id) => setState(() {
+                  _attachments = [
+                    for (final attachment in _attachments)
+                      if (attachment.id != id) attachment,
+                  ];
+                  _attachNotice = null;
+                }),
+              ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  AttachMenuButton(
+                    enabled: !_busy,
+                    onImage: () => unawaited(_attach(pickGalleryImages)),
+                    onPaste: () => unawaited(_attach(pasteClipboardImage)),
+                    onFile: () => unawaited(_attach(pickDocuments)),
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _prompt,
+                      minLines: 3,
+                      maxLines: 8,
+                      enabled: !_busy,
+                      decoration: const InputDecoration(
+                        hintText: 'Describe the task',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
               ),
               if (_error != null) ...[
                 const SizedBox(height: 8),

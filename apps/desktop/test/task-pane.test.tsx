@@ -282,6 +282,29 @@ describe("an approval, inline", () => {
     expect(pane.onAnswer).toHaveBeenCalledWith("req-1", "allow-once");
   });
 
+  it("lets you tick several options and confirm them together", () => {
+    const pane = renderPane([
+      event({
+        kind: "run.approval-requested",
+        requestId: "req-2",
+        question: "Which files?",
+        selection: "many",
+        options: [
+          { id: "0", label: "App" },
+          { id: "1", label: "Tests" },
+        ],
+      }),
+    ]);
+    const card = screen.getByRole("alertdialog");
+    const confirm = within(card).getByRole("button", { name: "Confirm" }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    fireEvent.click(within(card).getByRole("checkbox", { name: "App" }));
+    fireEvent.click(within(card).getByRole("checkbox", { name: "Tests" }));
+    expect(confirm.disabled).toBe(false);
+    fireEvent.click(confirm);
+    expect(pane.onAnswer).toHaveBeenCalledWith("req-2", ["0", "1"]);
+  });
+
   it("stops being a question once it is answered, and stays where it was", () => {
     renderPane([
       approval,
@@ -780,32 +803,33 @@ describe("the agent's mode control", () => {
 describe("the model control", () => {
   const envoyTask = { ...task, harness: "envoy-harness" as const, model: undefined };
 
-  it("lists the models the agent publishes, and takes the agent's own default as a choice", () => {
-    renderPane([], { task: envoyTask, harnesses: [harnessFor("envoy-harness")], runLive: false });
+  it("lists only the model saved for Envoy Harness", () => {
+    renderPane([], {
+      task: envoyTask,
+      harnesses: [
+        harnessFor("envoy-harness", {
+          models: {
+            kind: "listed",
+            options: [
+              {
+                id: "minimax/MiniMax-M3",
+                label: "MiniMax-M3",
+                provider: "minimax",
+                model: "MiniMax-M3",
+              },
+            ],
+            source: "settings",
+          },
+        }),
+      ],
+      runLive: false,
+    });
 
     const picker = screen.getByLabelText("Model") as HTMLSelectElement;
     expect(picker.tagName).toBe("SELECT");
     expect(picker.disabled).toBe(false);
-    // The empty option is first and is the state a task is in before anybody chooses — an agent running
-    // on whatever it defaults to. It is a *choice* here, and picking it is how a user undoes a model.
-    // The first choice reads **short** because this control is a chip on the composer's toolbar now, where one
-    // line is all there is; the sentence that explains whose default it is is the option's own tooltip.
-    expect([...picker.options].map((option) => option.textContent)).toEqual([
-      "Default",
-      "gpt-4o",
-      "claude-sonnet-4-6",
-      "deepseek-chat",
-      "MiniMax-M3",
-      "glm-4-flash",
-      "qwen-plus",
-      "llama3.1",
-    ]);
-    expect(picker.options[0]?.title).toBe("The agent's own default");
-    expect(picker.value).toBe("");
-    for (const option of [...picker.options]) {
-      // The id is the value, because it is what the task stores and what the daemon resolves.
-      if (option.value !== "") expect(option.value).toContain("/");
-    }
+    expect([...picker.options].map((option) => option.textContent)).toEqual(["MiniMax-M3"]);
+    expect(picker.value).toBe("minimax/MiniMax-M3");
   });
 
   it("gives an agent with no published list a usable text field, not a disabled pill", () => {

@@ -69,7 +69,7 @@ import type { CoderPaths } from "@envoydev/host-bridge";
 
 import { keyed, ref } from "./messages.js";
 import { createCatalogHandlers } from "./catalog.js";
-import { getEnvoyLlmPublic, setEnvoyLlm } from "./envoy-llm.js";
+import { getEnvoyLlmPublic, setEnvoyLlm, envoyHarnessModels } from "./envoy-llm.js";
 import { harnessSwitchPatch } from "./task-harness-switch.js";
 import { createFixHandlers } from "./fixes.js";
 import { createRecheckHandlers } from "./recheck.js";
@@ -629,10 +629,15 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
       const input = parseRpcParams("coder.answerApproval", params) as {
         runId: string;
         requestId: string;
-        optionId: string;
+        optionId?: string;
+        optionIds?: string[];
+        text?: string;
       };
       const runs = requireRuns(deps);
-      const resolved = await runs.answerApproval(input.runId, input.requestId, input.optionId);
+      const resolved = await runs.answerApproval(input.runId, input.requestId, input.optionId, {
+        ...(input.optionIds !== undefined ? { optionIds: input.optionIds } : {}),
+        ...(input.text !== undefined ? { text: input.text } : {}),
+      });
       return { runId: input.runId, requestId: input.requestId, resolved };
     },
 
@@ -698,7 +703,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
            * them beside the delivery control.
            */
           const installFix = recipe === undefined ? undefined : harnessAvailability(installed).fix;
-          return summarize(
+          const row = summarize(
             id,
             () => finding,
             deps.store.sessionOptions(id),
@@ -721,6 +726,9 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
               ? { package: fetchablePackage(id) ?? "", covers: fetchableCovers(id) ?? "connector" }
               : undefined,
           );
+          // Envoy Harness has no model of its own. The catalogue's provider defaults are not a list
+          // the user can call. The picker is the model saved in Settings, or nothing until one is.
+          return id === "envoy-harness" ? { ...row, models: envoyHarnessModels(deps.paths) } : row;
         }),
       };
     },

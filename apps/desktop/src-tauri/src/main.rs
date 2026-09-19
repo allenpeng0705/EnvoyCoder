@@ -25,10 +25,10 @@
 //!
 //! ## What the shell does *not* decide
 //!
-//! Where the daemon's code lives once the app is packaged is a packaging question (roadmap M6). This
-//! module resolves an entry point from `ENVOYDEV_DAEMON_ENTRY`, then a bundle built beside the app
-//! (`dist-daemon/main.mjs`), and says so clearly when it finds neither — rather than spawning
-//! something that might be a different program.
+//! Where the daemon's code lives once the app is packaged is decided by the installer scripts
+//! (`scripts/build-dmg.sh`, `scripts/build-exe.ps1`, `scripts/build-linux.sh`): the bundle sits in
+//! the app's resources, next to the Node runtime that runs it. This module looks there first, then
+//! at the development bundle (`dist-daemon/main.mjs`), and says so clearly when it finds neither.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -300,6 +300,62 @@ fn repo_root_from_manifest() -> Option<PathBuf> {
     root.is_dir().then_some(root)
 }
 
+/// Directories a packaged app keeps its resources in.
+///
+/// macOS puts them in `Contents/Resources`, beside `Contents/MacOS`. Windows and Linux put them in
+/// `resources/` next to the executable. Both are searched, and so is the nested `resources/` Tauri
+/// adds when the staged folder is already named that.
+fn content_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    let Ok(exe) = std::env::current_exe() else {
+        return roots;
+    };
+    let Some(exe_dir) = exe.parent() else {
+        return roots;
+    };
+    roots.push(exe_dir.to_path_buf());
+    if let Some(contents) = exe_dir.parent() {
+        roots.push(contents.join("Resources"));
+    }
+    roots.push(exe_dir.join("resources"));
+    roots
+}
+
+fn first_file(rels: &[&str]) -> Option<PathBuf> {
+    for root in content_roots() {
+        for rel in rels {
+            let path = root.join(rel);
+            if path.is_file() {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
+/// The `bin` directory the installer staged, when this copy of the app shipped one.
+fn bundled_bin_dir() -> Option<PathBuf> {
+    for root in content_roots() {
+        for rel in ["bin", "resources/bin", "resources/resources/bin"] {
+            let dir = root.join(rel);
+            if dir.join("envoy-harness").is_file() || dir.join("envoy-harness.cmd").is_file() {
+                return Some(dir);
+            }
+        }
+    }
+    None
+}
+
+fn prepend_path(dir: &Path) -> String {
+    let current = std::env::var("PATH").unwrap_or_default();
+    let sep = if cfg!(windows) { ";" } else { ":" };
+    if current.is_empty() {
+        dir.display().to_string()
+    } else {
+        format!("{}{sep}{current}", dir.display())
+    }
+}
+
 /// Where the daemon's code is.
 ///
 /// In development the bundle is built into the app's own directory (`npm run daemon:build`); when
@@ -319,12 +375,12 @@ fn resolve_daemon_entry() -> Result<PathBuf, String> {
     }
 
     let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            // A packaged app: the shell sits beside its resources.
-            candidates.push(exe_dir.join("daemon").join("main.mjs"));
-            candidates.push(exe_dir.join("resources").join("daemon").join("main.mjs"));
-        }
+    if let Some(packaged) = first_file(&[
+        "daemon/main.mjs",
+        "resources/daemon/main.mjs",
+        "resources/resources/daemon/main.mjs",
+    ]) {
+        candidates.push(packaged);
     }
     if let Some(repo) = repo_root_from_manifest() {
         candidates.push(repo.join("apps").join("desktop").join("dist-daemon").join("main.mjs"));
@@ -342,8 +398,8 @@ fn resolve_daemon_entry() -> Result<PathBuf, String> {
 /// The Node runtime to run it with.
 ///
 /// Found rather than assumed, because a packaged app has no guaranteed PATH: the app's own resources
-/// first, then `ENVOYDEV_NODE`, then whatever `node` resolves to. The bundled runtime is part of
-/// roadmap M6; until then a missing Node is reported with the command that fixes it rather than as a
+/// first, then `ENVOYDEV_NODE`, then whatever `node` resolves to. The installer stages a Node runtime
+/// beside the app; a development launch that has neither reports the missing command rather than a
 /// window that quietly never connects.
 fn resolve_node_exe() -> PathBuf {
     if let Ok(raw) = std::env::var("ENVOYDEV_NODE") {
@@ -364,6 +420,16 @@ fn resolve_node_exe() -> PathBuf {
                 }
             }
         }
+    }
+    if let Some(bundled) = first_file(&[
+        "node-runtime/bin/node",
+        "node-runtime/node.exe",
+        "resources/node-runtime/bin/node",
+        "resources/node-runtime/node.exe",
+        "resources/resources/node-runtime/bin/node",
+        "resources/resources/node-runtime/node.exe",
+    ]) {
+        return bundled;
     }
     PathBuf::from("node")
 }
@@ -406,6 +472,14 @@ fn spawn_daemon(port: u16) -> Result<(DaemonClaim, Child), String> {
         .stdin(Stdio::null())
         .stdout(log.map(Stdio::from).unwrap_or_else(Stdio::null))
         .stderr(log_err.map(Stdio::from).unwrap_or_else(Stdio::null));
+
+    // The installer ships Envoy Harness beside the app. Putting that directory first is what makes
+    // the packaged copy the one that runs, ahead of an older install the user's shell might still
+    // have. A development launch has no staged bin, so this stays unset.
+    if let Some(bin) = bundled_bin_dir() {
+        command.env("ENVOYDEV_BUNDLED_BIN", &bin);
+        command.env("PATH", prepend_path(&bin));
+    }
 
     // Its own process group, so that stopping it stops what it started. Without this an agent the
     // daemon spawned survives the daemon and keeps writing to the user's working tree — the failure

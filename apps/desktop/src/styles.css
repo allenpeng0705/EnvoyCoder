@@ -1573,6 +1573,41 @@ button.explorer__change:hover {
   margin-left: auto;
 }
 
+.approval--stack {
+  align-items: stretch;
+}
+
+.approval--stack .approval__actions {
+  flex-basis: 100%;
+  flex-direction: column;
+  align-items: stretch;
+  margin-left: 0;
+}
+
+.approval__choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.approval__choice {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.approval__text {
+  width: 100%;
+  min-height: 5rem;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+  color: var(--foreground);
+  font: inherit;
+}
+
 /* ── composer: a card, not a textarea and a button ─────────────────────── */
 
 .composer {

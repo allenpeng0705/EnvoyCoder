@@ -68,7 +68,73 @@ export interface AcpUpdate {
 export interface AcpPermissionRequest {
   sessionId: string;
   toolCall?: { toolCallId?: string; title?: string; kind?: string };
+  /**
+   * Envoy Harness does not send ACP `options`. It names the tool here and expects
+   * `{ decision: "allow" | "deny" }` back, not `{ outcome }`.
+   */
+  toolName?: string;
+  description?: string;
   options?: readonly { optionId?: string; name?: string; kind?: string }[];
+}
+
+/**
+ * The reply body for one permission request.
+ *
+ * DeepSeek sends `options` and reads `{ outcome }`. Envoy Harness sends none and reads
+ * `{ decision: "allow" | "deny" }`. Answering the second with the first is a silent deny.
+ */
+export function permissionReply(request: AcpPermissionRequest, optionId: string | null): unknown {
+  const harnessStyle = request.options === undefined || request.options.length === 0;
+  if (harnessStyle) return { decision: optionId === "allow" ? "allow" : "deny" };
+  if (optionId === null) return { outcome: { outcome: "cancelled" } };
+  return { outcome: { outcome: "selected", optionId } };
+}
+
+/**
+ * One `session/user_question` payload.
+ *
+ * Envoy Harness asks this when the model calls `ask_user`. `multiple` means the human may pick
+ * more than one option. A permission is never this shape: allow and deny stay one exclusive choice.
+ */
+export interface AcpUserQuestion {
+  sessionId?: string;
+  questionId?: string;
+  prompt?: string;
+  options?: readonly string[];
+  recommendedIndex?: number;
+  multiline?: boolean;
+  multiple?: boolean;
+}
+
+/** What the card settled on. `null` is "no answer" (skipped, or the run was stopped). */
+export interface AcpUserQuestionChoice {
+  optionIds?: readonly string[];
+  text?: string;
+}
+
+/**
+ * The reply body for one user question.
+ *
+ * A single pick is `{ value, optionIndex }`. Several picks are `{ value, optionIndexes }`.
+ * Typed answers are `{ value }` only. Skipping is `{ value: "", cancelled: true }`.
+ */
+export function userQuestionReply(request: AcpUserQuestion, choice: AcpUserQuestionChoice | null): unknown {
+  if (choice === null) return { value: "", cancelled: true };
+  const options = request.options ?? [];
+  if (options.length === 0) {
+    const value = choice.text?.trim() ?? "";
+    if (value === "") return { value: "", cancelled: true };
+    return { value, cancelled: false };
+  }
+  const indexes = (choice.optionIds ?? [])
+    .map((id) => Number.parseInt(id, 10))
+    .filter((index) => Number.isInteger(index) && index >= 0 && index < options.length);
+  if (indexes.length === 0) return { value: "", cancelled: true };
+  const labels = indexes.map((index) => options[index] ?? "");
+  if (request.multiple === true || indexes.length > 1) {
+    return { value: labels.join(", "), optionIndexes: indexes, cancelled: false };
+  }
+  return { value: labels[0] ?? "", optionIndex: indexes[0], cancelled: false };
 }
 
 /** What the agent said it can do. Recorded so the run's capabilities are the agent's, not ours. */

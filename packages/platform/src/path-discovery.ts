@@ -463,8 +463,9 @@ export interface ComposeSearchPathInput extends SearchPathOptions {
 /**
  * Assemble the search list from the four sources, in the documented order.
  *
- * Exported and pure so the ordering rule — "what the user's own shell said wins a collision, and nothing a
- * later source adds can shadow an earlier one" — is asserted directly rather than inferred from a spawn.
+ * Exported and pure so the ordering rule — the installer's bin first when one was shipped, then what
+ * the user's own shell said, and nothing a later source adds can shadow an earlier one — is asserted
+ * directly rather than inferred from a spawn.
  */
 export function composeSearchPath(input: ComposeSearchPathInput = {}): SearchPath {
   const platform = input.platform ?? detectPlatform();
@@ -480,12 +481,17 @@ export function composeSearchPath(input: ComposeSearchPathInput = {}): SearchPat
     dirs.push(entry);
   };
 
+  // The installer sets this to the bin it shipped. It has to win over the login shell: otherwise a
+  // packaged app would run an older Envoy Harness the user happened to have installed.
+  const bundled = (env.ENVOYDEV_BUNDLED_BIN ?? "").trim();
+  if (bundled && exists(bundled)) push(bundled);
+
   /**
    * **Step 0: the names the user's own shell resolved.** Each answer is believed only when the program is
    * really there — a shell answer is a *fact about a lookup*, and a lookup whose file has since been removed
-   * is a fact that has expired. The directory goes in **first**, because this is the one source that says
-   * "this is the file my terminal would run", and anything later could only be a worse guess at the same
-   * question.
+   * is a fact that has expired. The directory goes in ahead of the process `PATH`, because this is the
+   * source that says "this is the file my terminal would run". The packaged bin, when the installer set
+   * one, is the only thing in front of it.
    */
   const shellBinaries: ShellBinaryAnswer[] = [];
   // The module's answers describe **this** machine, so a call that names its own world (`env`, `home`,

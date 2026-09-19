@@ -53,8 +53,12 @@ export type TranscriptEntry =
       question: string;
       detail?: string;
       options: readonly { id: string; label: string; destructive?: boolean }[];
+      /** `many` is checkboxes. `text` is a typed answer. Absent is one exclusive choice. */
+      selection?: "one" | "many" | "text";
       /** Set once somebody answered it, so an answered card stops looking like a question. */
       resolvedWith?: string;
+      /** Every id chosen, when the card asked for more than one. */
+      resolvedWithIds?: readonly string[];
     }
   /**
    * A line this module folds out of an event — "3 files changed.", "Context 45% full.".
@@ -203,6 +207,7 @@ export function buildTranscript(events: readonly RunEvent[]): Transcript {
           question: event.question,
           ...(event.detail !== undefined ? { detail: event.detail } : {}),
           options: event.options,
+          ...(event.selection !== undefined ? { selection: event.selection } : {}),
         });
         break;
       }
@@ -211,7 +216,13 @@ export function buildTranscript(events: readonly RunEvent[]): Transcript {
         const at = indexByRequest.get(event.requestId);
         const current = at !== undefined ? entries[at] : undefined;
         if (at !== undefined && current?.kind === "approval") {
-          entries[at] = { ...current, resolvedWith: event.optionId };
+          entries[at] = {
+            ...current,
+            resolvedWith: event.optionId,
+            ...(event.optionIds !== undefined && event.optionIds.length > 0
+              ? { resolvedWithIds: event.optionIds }
+              : {}),
+          };
         }
         if (pendingApprovalId === event.requestId) pendingApprovalId = undefined;
         break;

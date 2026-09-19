@@ -75,6 +75,7 @@ import {
   statusKey,
 } from "../i18n/notice.js";
 import { buildTranscript, type TranscriptEntry } from "../state/transcript.js";
+import { ApprovalChoices } from "./ApprovalChoices.js";
 import { ComposerControls } from "./ComposerControls.js";
 import { AttachButton, AttachmentTray } from "./ComposerAttach.js";
 import { ExplorerSidebar, type ChangeListing, type DirectoryListing } from "./ExplorerSidebar.js";
@@ -106,7 +107,7 @@ export interface TaskPaneProps {
     images?: PromptImage[],
   ) => WriteFailure | Promise<WriteFailure>;
   onCancel: () => void | Promise<void>;
-  onAnswer: (requestId: string, optionId: string) => void | Promise<void>;
+  onAnswer: (requestId: string, choice: string | readonly string[] | { text: string }) => void | Promise<void>;
   /**
    * Start this task's run with the first message.
    *
@@ -315,7 +316,17 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   // `task.model` is handed to `composerControls` above, so "what the control shows" is decided in one
   // place instead of being recomputed here where the two could drift. `undefined` — nothing stored and
   // nothing picked — is the agent's own default, which is a state rather than a missing value.
-  const selectedModelId = pickedModel ?? controls.model.selected ?? undefined;
+  const listed = controls.model.options;
+  const stored =
+    pickedModel ??
+    (typeof controls.model.selected === "string" && controls.model.selected !== ""
+      ? controls.model.selected
+      : undefined);
+  const inList = stored !== undefined && listed.some((model) => model.id === stored);
+  // Envoy Harness has one saved model. A task that still says "default", or an old catalogue id,
+  // shows that model — it is the one the next run will use.
+  const selectedModelId =
+    task.harness === "envoy-harness" && !inList && listed.length === 1 ? listed[0]?.id : stored;
   const modelOff = modelOffReason(controls.model, {
     known: summary !== undefined,
     agent: agent.label,
@@ -926,7 +937,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
 function TranscriptRow(props: {
   entry: TranscriptEntry;
   streaming?: boolean;
-  onAnswer: (requestId: string, optionId: string) => void | Promise<void>;
+  onAnswer: (requestId: string, choice: string | readonly string[] | { text: string }) => void | Promise<void>;
 }): JSX.Element | null {
   const t = useT();
   const { entry } = props;
@@ -1016,15 +1027,16 @@ function TranscriptRow(props: {
  */
 function ApprovalCard(props: {
   entry: Extract<TranscriptEntry, { kind: "approval" }>;
-  onAnswer: (requestId: string, optionId: string) => void | Promise<void>;
+  onAnswer: (requestId: string, choice: string | readonly string[] | { text: string }) => void | Promise<void>;
 }): JSX.Element {
   const t = useT();
   const { entry } = props;
   const answered = entry.resolvedWith !== undefined;
+  const stacked = entry.selection === "many" || entry.selection === "text";
 
   return (
     <div
-      className={`approval${answered ? " approval--answered" : ""}`}
+      className={`approval${answered ? " approval--answered" : ""}${stacked ? " approval--stack" : ""}`}
       role={answered ? "status" : "alertdialog"}
       aria-label={answered ? t("task.approval.answered") : t("task.approval.aria")}
     >
@@ -1033,29 +1045,7 @@ function ApprovalCard(props: {
         {entry.detail ? <p className="approval__detail">{localizeText(t, entry.detail)}</p> : null}
       </div>
       <div className="approval__actions">
-        {answered ? (
-          <span className="approval__resolved">
-            {t("task.approval.answeredWith", {
-              option:
-                entry.options.find((option) => option.id === entry.resolvedWith)?.label ??
-                entry.resolvedWith ??
-                "",
-            })}
-          </span>
-        ) : (
-          entry.options.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              // The one primary action per view is the *permissive* one; a destructive colour appears
-              // only here, inside a decision, never on a row (`docs/envoydev-ui.md` §7).
-              className={`button ${option.destructive ? "button--danger" : "button--primary"}`}
-              onClick={() => void props.onAnswer(entry.requestId, option.id)}
-            >
-              {option.label}
-            </button>
-          ))
-        )}
+        <ApprovalChoices entry={entry} onAnswer={props.onAnswer} />
       </div>
     </div>
   );

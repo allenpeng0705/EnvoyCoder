@@ -49,6 +49,10 @@ import {
   type AcpSessionPolicy,
   type AcpPermissionRequest,
   type AcpUpdate,
+  type AcpUserQuestion,
+  type AcpUserQuestionChoice,
+  permissionReply,
+  userQuestionReply,
 } from "./protocol.js";
 import { sessionPromptAttempts } from "./prompt-attempts.js";
 
@@ -61,6 +65,8 @@ export type {
   AcpSessionPolicy,
   AcpPermissionRequest,
   AcpUpdate,
+  AcpUserQuestion,
+  AcpUserQuestionChoice,
 } from "./protocol.js";
 export { AcpRequestError } from "./protocol.js";
 
@@ -77,6 +83,13 @@ export interface AcpClientOptions {
    * strictly worse than a refusal.
    */
   onPermissionRequest?: (request: AcpPermissionRequest) => Promise<string | null>;
+  /**
+   * A question the agent is blocked on (`session/user_question`).
+   *
+   * One pick is `optionIds` of length 1. Several picks are a longer list. A typed answer is `text`.
+   * `null` cancels the question. A permission does not come through here.
+   */
+  onUserQuestion?: (request: AcpUserQuestion) => Promise<AcpUserQuestionChoice | null>;
   /** Child stderr, line by line. Diagnostics only — never parsed, never treated as protocol. */
   onStderr?: (line: string) => void;
   /** How long a single request may take. `session/prompt` is a whole turn, so it needs a lot. */
@@ -719,8 +732,8 @@ export class AcpClient {
       return;
     }
 
-    // A request from the agent to us: the approval seam, and nothing else — that is the only
-    // server-to-client request this client advertises support for.
+    // A request from the agent to us. Approvals and questions are the two we answer; anything else
+    // is refused so the agent is not left waiting.
     if (frame.method !== undefined && frame.id !== undefined) {
       await this.handleIncomingRequest(frame.id, frame.method, frame.params);
       return;
@@ -737,6 +750,20 @@ export class AcpClient {
   }
 
   private async handleIncomingRequest(id: number | string, method: string, params: unknown): Promise<void> {
+    if (method === "session/user_question") {
+      const request = params as AcpUserQuestion;
+      try {
+        const choice = (await this.options.onUserQuestion?.(request)) ?? null;
+        this.respond(id, userQuestionReply(request, choice));
+      } catch (error) {
+        this.options.onStderr?.(
+          `the question handler failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        this.respond(id, userQuestionReply(request, null));
+      }
+      return;
+    }
+
     if (method !== "session/request_permission") {
       // Refusing is the protocol's answer for "I do not implement that", and it is much better than
       // silence: the agent can then decide what to do instead of waiting for a reply that never
@@ -748,20 +775,14 @@ export class AcpClient {
     const request = params as AcpPermissionRequest;
     try {
       const optionId = (await this.options.onPermissionRequest?.(request)) ?? null;
-      if (optionId === null) {
-        this.respond(id, { outcome: { outcome: "cancelled" } });
-        return;
-      }
-      // The shape is the agent's, not ours: `{outcome: {outcome: "selected", optionId}}`
-      // (`../deepseek-harness/packages/acp/acp/src/index.ts:169-172`).
-      this.respond(id, { outcome: { outcome: "selected", optionId } });
+      this.respond(id, permissionReply(request, optionId));
     } catch (error) {
       // A throw from the answerer must still answer. Leaving the agent blocked on a request we
       // dropped is the one failure mode that looks like a hang rather than an error.
       this.options.onStderr?.(
         `the approval handler failed: ${error instanceof Error ? error.message : String(error)}`,
       );
-      this.respond(id, { outcome: { outcome: "cancelled" } });
+      this.respond(id, permissionReply(request, null));
     }
   }
 

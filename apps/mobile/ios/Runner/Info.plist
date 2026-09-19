@@ -10,6 +10,8 @@
 	<string>EnvoyDev</string>
 	<key>NSCameraUsageDescription</key>
 	<string>EnvoyDev uses the camera to scan the pairing code shown on your computer.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>EnvoyDev uses your photos so you can attach a picture to a message.</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

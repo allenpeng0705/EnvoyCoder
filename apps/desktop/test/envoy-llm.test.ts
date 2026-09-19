@@ -113,6 +113,9 @@ describe("Envoy Harness LLM settings", () => {
       searchDirs: [binDir],
     });
     expect(launch.env?.ANTHROPIC_API_KEY).toBe("sk-launch-inject");
+    expect(launch.env?.ENVOY_HARNESS_SESSION_DIR).toBe(
+      join(paths.stateDir, "agents", "envoy-harness", "sessions"),
+    );
     expect(launch.args).toContain("--base-url");
     expect(launch.args).toContain("https://litellm.example");
   });
@@ -179,5 +182,22 @@ describe("Envoy Harness LLM settings", () => {
     expect(slashed.provider).toBe("anthropic");
     expect(slashed.model).toBe("claude-sonnet-4-6");
     expect(envoyLlmLaunchEnv(paths, "anthropic")).toEqual({ ANTHROPIC_API_KEY: "sk-anthropic" });
+  });
+
+  it("treats MiniMax-M3, Minimax M3 and a saved OpenAI mis-file as MiniMax", async () => {
+    const home = tempDir("envoydev-llm-minimax-");
+    const paths = coderPaths(home);
+    const store = await CoderStore.open({ paths });
+
+    const typed = await setEnvoyLlm(paths, store, {
+      provider: "openai",
+      model: "Minimax M3",
+      apiKey: "sk-mini",
+    });
+    expect(typed.provider).toBe("minimax");
+    expect(typed.model).toBe("MiniMax-M3");
+    expect(typed.options.map((option) => option.id)).toEqual(["minimax/MiniMax-M3"]);
+    expect(store.settings().defaults.model).toBe("minimax/MiniMax-M3");
+    expect(envoyLlmLaunchEnv(paths, "minimax")).toEqual({ MINIMAX_API_KEY: "sk-mini" });
   });
 });

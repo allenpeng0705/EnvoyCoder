@@ -141,6 +141,34 @@ describe("approvals", () => {
     expect(transcript.entries[0]).toMatchObject({ kind: "approval", resolvedWith: "allow-once" });
   });
 
+  it("keeps every chosen option when the question allowed more than one", () => {
+    const transcript = buildTranscript([
+      at(1, {
+        kind: "run.approval-requested",
+        requestId: "req-2",
+        question: "Which files?",
+        selection: "many",
+        options: [
+          { id: "0", label: "App" },
+          { id: "1", label: "Tests" },
+        ],
+      }),
+      at(2, {
+        kind: "run.approval-resolved",
+        requestId: "req-2",
+        optionId: "0",
+        optionIds: ["0", "1"],
+        by: "you",
+      }),
+    ]);
+    expect(transcript.entries[0]).toMatchObject({
+      kind: "approval",
+      selection: "many",
+      resolvedWith: "0",
+      resolvedWithIds: ["0", "1"],
+    });
+  });
+
   it("closes an open card when the run ends without an answer", () => {
     // Cancelling while the card is on screen: the question is moot, and a card that stayed would be
     // a UI asking for a decision about something that no longer exists.

@@ -811,9 +811,15 @@ export class CoderStore {
   async answerApproval(
     runId: string,
     requestId: string,
-    optionId: string,
+    choice: string | { optionIds: readonly string[] } | { text: string },
   ): Promise<{ ok: true } | Refusal> {
-    return this.mutate("coder.answerApproval", { runId, requestId, optionId }, () => ({ ok: true as const }));
+    const params =
+      typeof choice === "string"
+        ? { runId, requestId, optionId: choice }
+        : "text" in choice
+          ? { runId, requestId, text: choice.text }
+          : { runId, requestId, optionId: choice.optionIds[0], optionIds: [...choice.optionIds] };
+    return this.mutate("coder.answerApproval", params, () => ({ ok: true as const }));
   }
 
   /**

@@ -485,6 +485,8 @@ export const RunEventSchema: z.ZodType<RunEvent> = z.discriminatedUnion("kind", 
           z.object({ id: z.string(), label: z.string(), destructive: z.boolean().optional() }).strict(),
         )
         .readonly(),
+      selection: z.enum(["one", "many", "text"]).optional(),
+      multiline: z.boolean().optional(),
     })
     .strict(),
   z
@@ -493,6 +495,7 @@ export const RunEventSchema: z.ZodType<RunEvent> = z.discriminatedUnion("kind", 
       kind: z.literal("run.approval-resolved"),
       requestId: z.string().min(1),
       optionId: z.string(),
+      optionIds: z.array(z.string().min(1)).min(1).readonly().optional(),
       by: z.string(),
     })
     .strict(),
@@ -2168,9 +2171,21 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
       .object({
         runId: z.string().min(1),
         requestId: z.string().min(1),
-        optionId: z.string().min(1),
+        optionId: z.string().min(1).optional(),
+        optionIds: z.array(z.string().min(1)).min(1).optional(),
+        text: z.string().min(1).optional(),
+        /** The user left the question without picking. Not a permission decision. */
+        skipped: z.literal(true).optional(),
       })
-      .strict(),
+      .strict()
+      .refine(
+        (value) =>
+          value.skipped === true ||
+          value.optionId !== undefined ||
+          (value.optionIds !== undefined && value.optionIds.length > 0) ||
+          value.text !== undefined,
+        { message: "An answer needs a choice, some text, or a skip." },
+      ),
     result: z.object({ runId: z.string(), requestId: z.string(), resolved: z.boolean() }).strict(),
   },
   "coder.getRun": {

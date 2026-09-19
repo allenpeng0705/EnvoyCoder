@@ -1637,21 +1637,12 @@ describe("the model a task runs on", () => {
     };
     const byId = new Map(answer.harnesses.map((harness) => [harness.id, harness]));
 
-    // The list is the agent's own, and it travels with the citation a maintainer needs. This is the
-    // wire test for the facts `agent-catalog/test/models.test.ts` pins at the source.
+    // Envoy Harness has no model of its own. Until Settings saves one, the control is off — the
+    // catalogue of provider defaults is not a list the user can call.
     const envoy = byId.get("envoy-harness");
-    expect(envoy?.models.kind).toBe("listed");
-    expect(envoy?.models.options.map((option) => option.id)).toEqual([
-      "openai/gpt-4o",
-      "anthropic/claude-sonnet-4-6",
-      "deepseek/deepseek-chat",
-      "minimax/MiniMax-M3",
-      "glm/glm-4-flash",
-      "qwen/qwen-plus",
-      "ollama/llama3.1",
-    ]);
+    expect(envoy?.models.kind).toBe("none");
+    expect(envoy?.models.options).toEqual([]);
     expect(envoy?.capabilities.model).toBe(true);
-    expect(envoy?.models.source).toContain("llm/index.ts:110-120");
 
     // **The value-level rule, on the wire.** `deepseek-harness` publishes nothing here and takes a
     // model, so it is `free-text` with no options — not `none`, which would tell the window to disable
