@@ -12,6 +12,7 @@
     "allow-daemon-shell",
     "allow-copy-text",
     "allow-new-window",
+    "allow-work-tools",
     "core:window:allow-start-dragging"
   ]
 }

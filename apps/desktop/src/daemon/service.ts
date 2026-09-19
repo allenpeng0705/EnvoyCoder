@@ -23,6 +23,10 @@ import {
   currentSearchPath,
   getHomeFsInfo,
   listHomeFsEntries,
+  listWorktreeChanges,
+  readWorktreeDiff,
+  createHomeFsEntry,
+  readHomeFsFile,
   normalizeUserPath,
 } from "@envoydev/platform";
 import { stat } from "node:fs/promises";
@@ -34,6 +38,7 @@ import {
   type HarnessId,
   type HarnessSummary,
   type ObservedSessionOptions,
+  type PromptImage,
   type RpcMethod,
   type RunEvent,
   type CoderMeshStatus,
@@ -381,6 +386,54 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
       }
     },
 
+    "coder.readHomeFsFile": async (params) => {
+      const { path } = parseRpcParams("coder.readHomeFsFile", params) as { path: string };
+      try {
+        return readHomeFsFile(path);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw coderError(ENVOYDEV_ERRORS.badRequest, detail);
+      }
+    },
+
+    "coder.createHomeFsEntry": async (params) => {
+      const input = parseRpcParams("coder.createHomeFsEntry", params) as {
+        directory: string;
+        name: string;
+        kind: "file" | "dir";
+      };
+      try {
+        return createHomeFsEntry(input.directory, input.name, input.kind);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw coderError(ENVOYDEV_ERRORS.badRequest, detail);
+      }
+    },
+
+    "coder.listWorktreeChanges": async (params) => {
+      const input = parseRpcParams("coder.listWorktreeChanges", params) as { path: string };
+      try {
+        return listWorktreeChanges(input.path);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw coderError(ENVOYDEV_ERRORS.badRequest, detail);
+      }
+    },
+
+    "coder.readWorktreeDiff": async (params) => {
+      const input = parseRpcParams("coder.readWorktreeDiff", params) as {
+        directory: string;
+        path: string;
+        from?: string;
+      };
+      try {
+        return readWorktreeDiff(input.directory, input.path, input.from);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw coderError(ENVOYDEV_ERRORS.badRequest, detail);
+      }
+    },
+
     /* ────────────────── tasks ────────────────── */
     "coder.listTasks": async (params) => {
       const input = parseRpcParams("coder.listTasks", params) as
@@ -423,6 +476,8 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         cwd?: string;
         agentModeId?: string;
         thinkingLevel?: string;
+        fastMode?: boolean;
+        planMode?: boolean;
         extraArgs?: string;
       };
 
@@ -529,6 +584,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         agentModeId?: string;
         model?: string;
         thinkingLevel?: string;
+        images?: PromptImage[];
       };
       const runs = requireRuns(deps);
       const run = await runs.start({
@@ -546,6 +602,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         // agent with no thought-level method cannot be told to think less, and pretending otherwise
         // would start it at a depth nobody chose.
         ...(input.thinkingLevel !== undefined ? { thinkingLevel: input.thinkingLevel } : {}),
+        ...(input.images !== undefined && input.images.length > 0 ? { images: input.images } : {}),
       });
       return { run };
     },
@@ -555,9 +612,10 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         runId: string;
         text: string;
         mode: "queue" | "steer";
+        images?: PromptImage[];
       };
       const runs = requireRuns(deps);
-      const delivered = await runs.send(input.runId, input.text, input.mode);
+      const delivered = await runs.send(input.runId, input.text, input.mode, input.images);
       return { runId: input.runId, delivered };
     },
 

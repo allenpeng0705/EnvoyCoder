@@ -238,7 +238,7 @@ export type ShortcutActions = Readonly<Record<string, (() => void) | undefined>>
 /**
  * The bindings this window actually listens for — **the table filtered by the actions that exist**.
  *
- * The distinction is not academic. Three of the eight bindings in `SHELL_BINDINGS` have no action in
+ * The distinction is not academic. Three of the seven bindings in `SHELL_BINDINGS` have no action in
  * the shell today (`window.new`, `help.shortcuts`, `run.interrupt`), and `useShortcuts` documents why
  * that is honest: a binding with no action does nothing and swallows no keystroke. A *settings
  * section* that listed the whole table would undo exactly that honesty — it would print `⇧?` for a
@@ -261,8 +261,7 @@ export const SHELL_BINDINGS: readonly KeyBinding[] = [
   { id: "newTask", combos: ["Mod+N"], labelKey: "settings.shortcuts.binding.newTask", groupKey: "settings.shortcuts.group.projects" },
   { id: "search.find", combos: ["Mod+P"], labelKey: "settings.shortcuts.binding.search", groupKey: "settings.shortcuts.group.general" },
   { id: "window.new", combos: ["Mod+Shift+N"], labelKey: "settings.shortcuts.binding.windowNew", groupKey: "settings.shortcuts.group.layout" },
-  { id: "sidebar.toggle", combos: ["Mod+B"], labelKey: "settings.shortcuts.binding.sidebar", groupKey: "settings.shortcuts.group.layout", when: { editable: true } },
   { id: "settings.open", combos: ["Mod+,"], labelKey: "settings.shortcuts.binding.settings", groupKey: "settings.shortcuts.group.general", when: { editable: true } },
   { id: "help.shortcuts", combos: ["Shift+?"], labelKey: "settings.shortcuts.binding.help", groupKey: "settings.shortcuts.group.general" },
-  { id: "run.interrupt", combos: ["Escape"], labelKey: "settings.shortcuts.binding.interrupt", groupKey: "settings.shortcuts.group.agentInput", when: { editable: true, terminal: true } },
+  { id: "run.interrupt", combos: ["Escape"], labelKey: "settings.shortcuts.binding.interrupt", groupKey: "settings.shortcuts.group.agentInput", when: { editable: true } },
 ];

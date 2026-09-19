@@ -350,6 +350,7 @@ class _HostHomeScreenState extends State<HostHomeScreen> {
           title: task.title,
           harnesses: _harnesses,
           taskId: task.id,
+          cwd: task.cwd,
         ),
       ),
     );

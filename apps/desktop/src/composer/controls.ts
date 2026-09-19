@@ -159,6 +159,8 @@ export interface ComposerThinking {
 export interface ComposerMode extends WordedOption {
   id: string;
   unattended?: boolean;
+  /** The mode to show when the task has not stored one. See `AgentMode.preferred`. */
+  preferred?: boolean;
 }
 
 export interface ComposerState {
@@ -603,7 +605,11 @@ export function composerControls(
   }
 
   /* ── the agent's own mode ── */
-  const selected = options.selectedModeId ?? agent.modes.find((mode) => mode.unattended !== true)?.id ?? null;
+  const selected =
+    options.selectedModeId ??
+    agent.modes.find((mode) => mode.preferred === true)?.id ??
+    agent.modes.find((mode) => mode.unattended !== true)?.id ??
+    null;
   const modesKnown = agent.modes.length > 0;
   const modeEnabled = modesKnown && agent.modesApplicable === true && available;
   /**

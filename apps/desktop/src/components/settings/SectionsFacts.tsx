@@ -75,7 +75,7 @@ const STATE_KEYS = {
 /**
  * **Keyboard shortcuts** — the keys this window is listening for, and nothing else.
  *
- * The list is `wiredBindings`, not `SHELL_BINDINGS`: three of the eight bindings in the table have no
+ * The list is `wiredBindings`, not `SHELL_BINDINGS`: three of the seven bindings in the table have no
  * action mounted in this build, and printing one of their combos would advertise a key that does
  * nothing — in the pane whose whole reason for existing is that a control must not do that. The empty
  * state is a sentence rather than an empty list for the same reason.

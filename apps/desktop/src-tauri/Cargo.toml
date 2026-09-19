@@ -9,7 +9,10 @@ rust-version = "1.77"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# `unstable` only unlocks `Window::add_child`, which is how a Browser tab is a real page
+# rather than an iframe (most sites refuse to be framed, and the window CSP is `default-src 'self'`).
+# The feature adds no crates: `tauri-runtime-wry`'s `unstable` is an empty flag.
+tauri = { version = "2", features = ["unstable"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rfd = "0.15"
@@ -17,3 +20,7 @@ rfd = "0.15"
 # used: the daemon is our own child process with our own lifecycle, not a user-configured command,
 # and the family's Tauri shell already paid to learn that ownership has to be explicit — it kills
 # only the pid it recorded, and verifies the health body names the identity it expects.
+
+# Already in the lockfile (Tauri pulls it). Unix terminals need `openpty`; Windows uses a pipe.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.186"

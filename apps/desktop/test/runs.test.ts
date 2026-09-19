@@ -69,6 +69,7 @@ async function bench(
     agentEnv?: Record<string, string>;
     /** Skip the model default for agents that require one (refusal tests). */
     noModel?: boolean;
+    onLaunch?: (input: { extraEnv?: Record<string, string> }) => void;
   } = {},
 ): Promise<Bench> {
   const home = await mkdtemp(join(tmpdir(), "envoydev-m2-"));
@@ -108,7 +109,13 @@ async function bench(
     paths,
     store,
     onEvent: (event) => events.push(event),
-    resolveLaunch: () => launch,
+    resolveLaunch: (input) => {
+      options.onLaunch?.(input);
+      return {
+        ...launch,
+        env: { ...launch.env, ...input.extraEnv },
+      };
+    },
   });
 
   cleanups.push(async () => {
@@ -203,6 +210,18 @@ describe("one run, end to end", () => {
     const usage = kinds(b.events, "run.usage")[0];
     expect(usage && usage.kind === "run.usage" ? usage.contextUsed : undefined).toBe(1200);
     expect(usage && usage.kind === "run.usage" ? usage.contextSize : undefined).toBe(128_000);
+  });
+
+  it("records the slash commands the agent published, and drops a nameless one", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "commands" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const listed = kinds(b.events, "run.commands")[0];
+    expect(listed && listed.kind === "run.commands" ? listed.commands : []).toEqual([
+      { name: "compact", description: "Summarize the conversation", argumentHint: "[focus]" },
+      { name: "review", description: "Review the diff" },
+    ]);
   });
 
   it("turns an agent error into a failed run rather than a rejected call", async () => {
@@ -451,9 +470,8 @@ describe("the agent's own mode", () => {
     expect(b.store.findTask(b.taskId)?.status).toBe("idle");
   });
 
-  it("refuses a mode for an agent whose protocol has no way to be given one", async () => {
-    // `deepseek-harness` is the real case: it speaks ACP, it has no `session/set_mode`, and asking for
-    // plan mode would otherwise start an agent that edits files while the user believes it will not.
+  it("refuses a mode DeepSeek does not declare, and starts nothing", async () => {
+    // `plan` is not one of DeepSeek's permission levels, so the run is refused before a process exists.
     const b = await bench({ harness: "deepseek-harness" });
     const failure = await b.manager
       .start({ taskId: b.taskId, prompt: "hello", agentModeId: "plan" })
@@ -462,8 +480,44 @@ describe("the agent's own mode", () => {
         (error: unknown) => error as Error,
       );
 
-    expect(failure?.message).toContain("cannot be put into a mode");
+    expect(failure?.message).toContain("does not offer a mode");
     expect(b.events).toEqual([]);
+  });
+
+  it("hands DeepSeek a permission level as an environment variable, not as a mode", async () => {
+    const seen: { extraEnv?: Record<string, string> }[] = [];
+    const b = await bench({
+      harness: "deepseek-harness",
+      onLaunch: (input) => seen.push(input),
+    });
+    await b.manager.start({ taskId: b.taskId, prompt: "mode-me", agentModeId: "read-only" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    expect(seen[0]?.extraEnv).toEqual({ DSH_PERMISSION_MODE: "read-only" });
+    // The fixture's own starting mode. `session/set_mode` was not called.
+    expect(said(b.events, "mode: default")).toBe(true);
+    expect(said(b.events, "mode: read-only")).toBe(false);
+  });
+
+  it("hands Envoy Harness a permission level as a sandbox, and stops asking only for full access", async () => {
+    const readOnly = await bench();
+    await readOnly.manager.start({ taskId: readOnly.taskId, prompt: "policy-me", agentModeId: "read-only" });
+    await readOnly.until((events) => kinds(events, "run.ended").length === 1, "the read-only run to end");
+    expect(said(readOnly.events, "sandbox: read-only")).toBe(true);
+    expect(said(readOnly.events, "approval: on-request")).toBe(true);
+    // The settings switch must not ride along: it would keep asking after the user chose a level.
+    expect(said(readOnly.events, "autoRun: always-confirm")).toBe(false);
+
+    const full = await bench();
+    await full.manager.start({
+      taskId: full.taskId,
+      prompt: "policy-me",
+      agentModeId: "danger-full-access",
+    });
+    await full.until((events) => kinds(events, "run.ended").length === 1, "the full-access run to end");
+    expect(said(full.events, "sandbox: danger-full-access")).toBe(true);
+    expect(said(full.events, "approval: never")).toBe(true);
+    expect(said(full.events, "autoRun: off")).toBe(true);
   });
 
   it("fails the run when the agent itself refuses to be put into a mode", async () => {
@@ -489,7 +543,7 @@ describe("the agent's own mode", () => {
     // The same guarantee `daemon-errors-i18n.test.ts` makes for the handler table, for the two refusals
     // this file produces: a German user must read German, and an English one must read exactly the
     // sentence the daemon sent — which is why `en.ts` repeats it rather than paraphrasing it.
-    const unsupported = await bench({ harness: "deepseek-harness" })
+    const unsupported = await bench({ harness: "pi" })
       .then((b) => b.manager.start({ taskId: b.taskId, prompt: "hi", agentModeId: "plan" }))
       .then(() => undefined, (error: unknown) => (error as Error).message);
     const unknown = await bench()
@@ -509,7 +563,7 @@ describe("the agent's own mode", () => {
       .then(() => undefined, (error: unknown) => (error as Error).message);
 
     const cases: readonly [string | undefined, keyof typeof en, Record<string, string>][] = [
-      [unsupported, "error.agentModeUnsupported", { harness: "DeepSeek Harness" }],
+      [unsupported, "error.agentModeUnsupported", { harness: "Pi" }],
       [unknown, "error.agentModeUnknown", { harness: "Envoy Harness", mode: "nope" }],
       [thinking, "error.thinkingUnsupported", { harness: "Envoy Harness" }],
     ];

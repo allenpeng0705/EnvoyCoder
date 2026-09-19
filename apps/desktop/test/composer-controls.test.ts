@@ -85,6 +85,21 @@ describe("the mode picker is honest about what it can do", () => {
     expect(controls.mode.reason).toBeUndefined();
   });
 
+  it("preselects a preferred mode ahead of the first one", () => {
+    const controls = composerControls(
+      agent({
+        modesApplicable: true,
+        modes: [
+          { id: "read-only", label: "Read only" },
+          { id: "workspace-write", label: "Workspace change", preferred: true },
+          { id: "danger-full-access", label: "Full access", unattended: true },
+        ],
+      }),
+      idle,
+    );
+    expect(controls.mode.selected).toBe("workspace-write");
+  });
+
   it("honours an explicit selection, including the unattended mode", () => {
     const controls = composerControls(agent({ modesApplicable: true }), idle, { selectedModeId: "bypassPermissions" });
     expect(controls.mode.selected).toBe("bypassPermissions");

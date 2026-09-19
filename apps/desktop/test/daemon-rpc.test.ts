@@ -270,6 +270,7 @@ describe("the daemon over a socket", () => {
     expect(hello.methods).toContain("coder.addProject");
     expect(hello.methods).toContain("coder.getHomeFsInfo");
     expect(hello.methods).toContain("coder.listHomeFsEntries");
+    expect(hello.methods).toContain("coder.listWorktreeChanges");
     expect(hello.mesh.kind).toBe("no-node");
     expect(hello.windowCount).toBeGreaterThanOrEqual(1);
   });
@@ -301,6 +302,40 @@ describe("the daemon over a socket", () => {
     })) as { path: string; parent?: string; entries: { name: string; kind: string }[] };
     expect(listed.entries.some((e) => e.name === "repo" && e.kind === "dir")).toBe(true);
     expect(listed.parent).toBe(home);
+  });
+
+  it("lists git changes in a folder, and says when the folder is not a repository", async () => {
+    const { daemon, home } = await bootDaemon();
+    cleanups.push(async () => {
+      await daemon.stop();
+      await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    });
+    const client = await connect(daemon.port);
+    cleanups.push(async () => client.close());
+
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    const { spawnSync } = await import("node:child_process");
+    const repo = join(home, "work", "repo");
+    const plain = join(home, "work", "plain");
+    await mkdir(repo, { recursive: true });
+    await mkdir(plain, { recursive: true });
+    const init = spawnSync("git", ["init"], { cwd: repo, encoding: "utf8" });
+    expect(init.status, init.stderr).toBe(0);
+    await writeFile(join(repo, "note.txt"), "hi");
+
+    const changes = (await client.call("coder.listWorktreeChanges", { path: repo })) as {
+      repo: boolean;
+      changes: { path: string; kind: string }[];
+    };
+    expect(changes.repo).toBe(true);
+    expect(changes.changes).toContainEqual({ path: "note.txt", kind: "untracked" });
+
+    const none = (await client.call("coder.listWorktreeChanges", { path: plain })) as {
+      repo: boolean;
+      changes: unknown[];
+    };
+    expect(none.repo).toBe(false);
+    expect(none.changes).toEqual([]);
   });
 
   it("adds a project, creates a task in it, and reads both back", async () => {
@@ -1294,7 +1329,8 @@ describe("a run, driven over the socket", () => {
     const project = (await client.call("coder.addProject", { path: join(home, "repo") })) as {
       project: { id: string };
     };
-    // `deepseek-harness`: a real ACP agent with no `session/set_mode`, so a mode cannot be honoured.
+    // `plan` is a collaboration mode DeepSeek does not declare. The three it does declare are
+    // permission levels, delivered as `DSH_PERMISSION_MODE`, not as `session/set_mode`.
     const task = (await client.call("coder.createTask", {
       projectId: project.project.id,
       title: "no modes here",
@@ -1303,7 +1339,7 @@ describe("a run, driven over the socket", () => {
 
     await expect(
       client.call("coder.startRun", { taskId: task.task.id, prompt: "hello", agentModeId: "plan" }),
-    ).rejects.toThrow(/cannot be put into a mode/);
+    ).rejects.toThrow(/does not offer a mode/);
 
     // **Nothing was started.** The refusal has to come before the agent does, or a user is left with an
     // agent running in a posture they did not choose *and* an error message.
@@ -1435,13 +1471,25 @@ describe("changing the folder a task runs in", () => {
     // The three ids are the peer's own, and the picker's labels carry a key because *we* wrote them —
     // an agent's own wording would arrive without one and be shown as the agent wrote it.
     const envoy = byId.get("envoy-harness");
-    expect(envoy?.modes.map((mode) => mode.id)).toEqual(["default", "plan", "review"]);
+    expect(envoy?.modes.map((mode) => mode.id)).toEqual([
+      "default",
+      "plan",
+      "review",
+      "read-only",
+      "workspace-write",
+      "danger-full-access",
+    ]);
     expect(envoy?.modes.every((mode) => typeof mode.labelKey === "string")).toBe(true);
     expect(envoy?.capabilities.agentMode).toBe(true);
 
-    // No `session/set_mode` on this one's ACP surface, so the mode is not offered and the field says so.
-    expect(byId.get("deepseek-harness")?.modes).toEqual([]);
-    expect(byId.get("deepseek-harness")?.capabilities.agentMode).toBe(false);
+    // Permission levels, not `session/set_mode`. The preferred one is the process default.
+    const deepseek = byId.get("deepseek-harness");
+    expect(deepseek?.modes.map((mode) => mode.id)).toEqual([
+      "read-only",
+      "workspace-write",
+      "danger-full-access",
+    ]);
+    expect(deepseek?.capabilities.agentMode).toBe(true);
 
     // Every entry answers the question, so a client never has to treat "absent" as "no".
     for (const harness of answer.harnesses) {
@@ -1453,8 +1501,8 @@ describe("changing the folder a task runs in", () => {
 /**
  * Switching the agent, and the mode the task was remembering.
  *
- * Modes are per agent — `envoy-harness` takes `default | plan | review`, `deepseek-harness` takes none
- * — so a task carrying a mode across a harness change carries something the new agent cannot honour.
+ * Modes are per agent. `plan` is an Envoy Harness collaboration mode; DeepSeek's list is the three
+ * permission levels. A task carrying `plan` across that switch would be refused on every later run.
  * Left in place, `RunManager` would refuse *every* later run of that task, with a sentence about a
  * choice the user made for an agent they have since replaced. This is the test for the fix: the stale
  * mode goes, and the task runs again.

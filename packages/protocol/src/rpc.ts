@@ -370,6 +370,8 @@ export const TaskSchema = z
     model: z.string().optional(),
     agentModeId: z.string().min(1).optional(),
     thinkingLevel: z.string().min(1).optional(),
+    fastMode: z.boolean().optional(),
+    planMode: z.boolean().optional(),
     extraArgs: z.string().optional(),
     status: TaskStatusSchema,
     createdAt: z.string(),
@@ -512,6 +514,23 @@ export const RunEventSchema: z.ZodType<RunEvent> = z.discriminatedUnion("kind", 
       costUsd: z.number().optional(),
       contextUsed: z.number().optional(),
       contextSize: z.number().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      ...RunEventBase,
+      kind: z.literal("run.commands"),
+      commands: z
+        .array(
+          z
+            .object({
+              name: z.string().min(1),
+              description: z.string(),
+              argumentHint: z.string().min(1).optional(),
+            })
+            .strict(),
+        )
+        .readonly(),
     })
     .strict(),
   z
@@ -1765,6 +1784,20 @@ export interface RpcMethodSpec {
 const EmptyParams = z.object({}).strict().optional();
 
 /**
+ * A picture attached to a turn. Base64, no `data:` prefix.
+ *
+ * Kept off the prompt string because a string has nowhere to put one, and the agent protocol reads
+ * it as its own block. Capped so one message cannot be a multi-megabyte dump of a folder.
+ */
+export const PromptImageSchema = z
+  .object({
+    mimeType: z.string().regex(/^image\/[a-zA-Z0-9.+-]+$/),
+    data: z.string().min(1).max(5_600_000),
+  })
+  .strict();
+export type PromptImage = z.infer<typeof PromptImageSchema>;
+
+/**
  * Every method, its parameters and its result.
  *
  * Grouped by the question it answers, because that is how a client consumes them: the rail asks for
@@ -1908,10 +1941,79 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
                 name: z.string().min(1),
                 kind: z.enum(["dir", "file"]),
                 path: z.string().min(1),
+                size: z.number().int().nonnegative().optional(),
+                modifiedAt: z.string().min(1).optional(),
               })
               .strict(),
           )
           .readonly(),
+      })
+      .strict(),
+  },
+  "coder.readHomeFsFile": {
+    params: z.object({ path: z.string().min(1) }).strict(),
+    result: z
+      .object({
+        path: z.string().min(1),
+        name: z.string().min(1),
+        kind: z.enum(["text", "image", "pdf", "binary", "tooLarge"]),
+        size: z.number().int().nonnegative(),
+        modifiedAt: z.string().min(1),
+        mimeType: z.string().min(1).optional(),
+        content: z.string().optional(),
+      })
+      .strict(),
+  },
+  "coder.createHomeFsEntry": {
+    params: z
+      .object({
+        directory: z.string().min(1),
+        name: z.string().min(1),
+        kind: z.enum(["file", "dir"]),
+      })
+      .strict(),
+    result: z
+      .object({
+        path: z.string().min(1),
+        kind: z.enum(["file", "dir"]),
+      })
+      .strict(),
+  },
+  "coder.listWorktreeChanges": {
+    params: z.object({ path: z.string().min(1) }).strict(),
+    result: z
+      .object({
+        path: z.string().min(1),
+        repo: z.boolean(),
+        changes: z
+          .array(
+            z
+              .object({
+                path: z.string().min(1),
+                kind: z.enum(["added", "modified", "deleted", "renamed", "untracked", "conflict"]),
+                from: z.string().min(1).optional(),
+              })
+              .strict(),
+          )
+          .readonly(),
+        })
+        .strict(),
+  },
+  "coder.readWorktreeDiff": {
+    params: z
+      .object({
+        directory: z.string().min(1),
+        path: z.string().min(1),
+        from: z.string().min(1).optional(),
+      })
+      .strict(),
+    result: z
+      .object({
+        path: z.string().min(1),
+        name: z.string().min(1),
+        kind: z.enum(["text", "binary", "tooLarge", "empty"]),
+        size: z.number().int().nonnegative(),
+        content: z.string().optional(),
       })
       .strict(),
   },
@@ -1969,6 +2071,10 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
          * nothing.
          */
         thinkingLevel: z.string().optional(),
+        /** Codex / Claude Fast for the next run. Absent leaves the stored value alone. */
+        fastMode: z.boolean().optional(),
+        /** Codex Plan for the next run. Absent leaves the stored value alone. */
+        planMode: z.boolean().optional(),
         extraArgs: z.string().optional(),
       })
       .strict(),
@@ -2037,13 +2143,19 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
          * refuses loudly with its own sentence.
          */
         thinkingLevel: z.string().min(1).optional(),
+        images: z.array(PromptImageSchema).max(8).optional(),
       })
       .strict(),
     result: z.object({ run: AgentRunSchema }).strict(),
   },
   "coder.sendToRun": {
     params: z
-      .object({ runId: z.string().min(1), text: z.string().min(1), mode: z.enum(RUN_MODES) })
+      .object({
+        runId: z.string().min(1),
+        text: z.string().min(1),
+        mode: z.enum(RUN_MODES),
+        images: z.array(PromptImageSchema).max(8).optional(),
+      })
       .strict(),
     result: z.object({ runId: z.string(), delivered: z.enum(["queued", "steered"]) }).strict(),
   },

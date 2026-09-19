@@ -33,6 +33,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _language = 'system';
   String? _defaultHarness;
   bool _apiKeySet = false;
+  bool _clearApiKey = false;
   final _model = TextEditingController();
   final _baseUrl = TextEditingController();
   final _apiKey = TextEditingController();
@@ -78,6 +79,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _model.text = provider.isEmpty || provider == 'openai' ? model : '$provider/$model';
           _baseUrl.text = (llm['baseUrl'] as String?) ?? '';
           _apiKeySet = llm['apiKeySet'] == true;
+          _clearApiKey = false;
+          _apiKey.clear();
         }
         _loading = false;
         _error = null;
@@ -91,7 +94,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _saveSettings() async {
+  Future<void> _save() async {
     setState(() => _saving = true);
     try {
       await widget.client.call('coder.updateSettings', {
@@ -104,47 +107,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
           },
         },
       });
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Settings saved on the computer.')),
-      );
     } catch (_) {
       if (!mounted) return;
+      setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not save settings.')),
       );
-    } finally {
-      if (mounted) setState(() => _saving = false);
+      return;
     }
-  }
 
-  Future<void> _saveLlm() async {
     final model = _model.text.trim();
     if (model.isEmpty) {
+      if (!mounted) return;
+      setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a model first.')),
+        const SnackBar(content: Text('Settings saved. Enter a model to save LLM settings.')),
       );
       return;
     }
-    setState(() => _saving = true);
+
     try {
       await widget.client.call('coder.setEnvoyLlm', {
         // The daemon re-derives the provider from the model string.
         'provider': 'openai',
         'model': model,
         'baseUrl': _baseUrl.text.trim(),
+        if (_clearApiKey && _apiKey.text.trim().isEmpty) 'clearApiKey': true,
         if (_apiKey.text.trim().isNotEmpty) 'apiKey': _apiKey.text.trim(),
       });
-      _apiKey.clear();
-      await _load();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Envoy Harness LLM settings saved.')),
+        const SnackBar(content: Text('Settings saved on the computer.')),
       );
+      await _load();
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not save LLM settings.')),
+        const SnackBar(content: Text('Settings saved, but the LLM settings were not.')),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -160,7 +159,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('Settings'),
         actions: [
           TextButton(
-            onPressed: _saving || _loading ? null : () => unawaited(_saveSettings()),
+            onPressed: _saving || _loading ? null : () => unawaited(_save()),
             child: Text(_saving ? 'Saving…' : 'Save'),
           ),
         ],
@@ -252,25 +251,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: TextField(
-                    controller: _apiKey,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: _apiKeySet ? 'API key (set — leave blank to keep)' : 'API key',
-                      border: const OutlineInputBorder(),
-                      isDense: true,
+                if (_apiKeySet && !_clearApiKey)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: Row(
+                      children: [
+                        const Expanded(child: Text('API key saved on this computer.')),
+                        TextButton(
+                          onPressed: _saving
+                              ? null
+                              : () => setState(() {
+                                    _clearApiKey = true;
+                                    _apiKey.clear();
+                                  }),
+                          child: const Text('Clear'),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: TextField(
+                      controller: _apiKey,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'API key',
+                        hintText: 'Paste a new key to replace the saved one',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
                     ),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: FilledButton(
-                    onPressed: _saving ? null : () => unawaited(_saveLlm()),
-                    child: const Text('Save LLM settings'),
-                  ),
-                ),
               ],
             ),
     );

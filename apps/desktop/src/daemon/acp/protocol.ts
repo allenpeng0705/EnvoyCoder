@@ -114,6 +114,19 @@ export interface AcpAgentInfo {
  */
 export type AcpAutoRunPolicy = "always-confirm" | "safe-only" | "off";
 
+/**
+ * What `session/set_policy` may carry.
+ *
+ * `autoRun` alone is the settings switch ("ask before anything destructive"). `sandbox` and
+ * `approval` are a permission level the user picked — Read only, Workspace change, or Full access.
+ * The client sends only the fields that are set.
+ */
+export interface AcpSessionPolicy {
+  sandbox?: "read-only" | "workspace-write" | "danger-full-access";
+  approval?: "unless-trusted" | "on-request" | "granular" | "never";
+  autoRun?: AcpAutoRunPolicy;
+}
+
 /** A JSON-RPC failure, with the protocol's own code preserved. */
 export class AcpRequestError extends Error {
   readonly code: number | undefined;

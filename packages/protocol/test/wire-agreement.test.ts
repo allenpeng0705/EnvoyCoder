@@ -36,6 +36,15 @@ describe("coder.startRun", () => {
       parseRpcParams("coder.startRun", { taskId: "w1", prompt: "hi", mode: "queue", resume: false }),
     ).not.toThrow();
   });
+
+  it("accepts pictures on a turn, and still refuses a field nobody sends", () => {
+    const images = [{ mimeType: "image/png", data: "aGVsbG8=" }];
+    expect(() => parseRpcParams("coder.startRun", { taskId: "w1", prompt: "hi", images })).not.toThrow();
+    expect(() => parseRpcParams("coder.sendToRun", { runId: "r1", text: "hi", mode: "queue", images })).not.toThrow();
+    expect(() =>
+      parseRpcParams("coder.startRun", { taskId: "w1", prompt: "hi", images, attachmentPath: "/tmp/x" }),
+    ).toThrow();
+  });
 });
 
 describe("coder.hello", () => {

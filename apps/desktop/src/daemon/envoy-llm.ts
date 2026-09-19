@@ -174,13 +174,8 @@ export async function setEnvoyLlm(
     typeof input.baseUrl === "string" && input.baseUrl.trim() !== "" ? input.baseUrl.trim() : undefined;
 
   const needsKey = envoyProviderApiKeyEnv(provider) !== undefined;
-  if (needsKey && input.clearApiKey === true) {
-    throw coderError(
-      ENVOYDEV_ERRORS.badRequest,
-      `Envoy Harness needs an API key for ${provider}, so the key was not cleared.`,
-      ref("error.envoyLlmApiKeyRequired", { provider }),
-    );
-  }
+  // Clear is allowed even when this provider normally needs a key. The next launch simply
+  // starts without one; refusing here made the Clear button a no-op for every real provider.
   if (needsKey && input.clearApiKey !== true) {
     const existing = await readApiKey(paths);
     const next = typeof input.apiKey === "string" && input.apiKey.length > 0 ? input.apiKey : existing;

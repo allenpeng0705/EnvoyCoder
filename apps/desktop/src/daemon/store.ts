@@ -124,6 +124,8 @@ export interface UpdateTaskInput {
    * an agent with no thought-level method must be able to leave the task clean rather than unrunnable.
    */
   clearThinkingLevel?: boolean;
+  fastMode?: boolean;
+  planMode?: boolean;
   extraArgs?: string;
 }
 
@@ -565,6 +567,8 @@ export class CoderStore {
         : input.clearThinkingLevel === true
           ? { thinkingLevel: undefined }
           : {}),
+      ...(input.fastMode !== undefined ? { fastMode: input.fastMode } : {}),
+      ...(input.planMode !== undefined ? { planMode: input.planMode } : {}),
       ...(input.extraArgs !== undefined ? { extraArgs: input.extraArgs } : {}),
       updatedAt: this.now().toISOString(),
     };

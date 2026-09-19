@@ -485,6 +485,20 @@ export interface Task {
    * thinking, because that is the word on the pill and the word a user reads.
    */
   thinkingLevel?: string;
+  /**
+   * Codex / Claude Fast, when the user has turned it on or off.
+   *
+   * Absent means the agent decides. Stored even when this build cannot deliver it yet: Fast is not an
+   * ACP option the bridges publish, and dropping the choice would make the toggle forget itself.
+   */
+  fastMode?: boolean;
+  /**
+   * Codex Plan (`collaboration_mode` `plan`), when the user has chosen.
+   *
+   * Not the same thing as the mode picker: that one is how much the agent may do, this one is
+   * planning-only collaboration. Absent means the agent's own default (`default`).
+   */
+  planMode?: boolean;
   extraArgs?: string;
   status: TaskStatus;
   createdAt: string;
@@ -590,6 +604,13 @@ export interface AgentMode {
    * yet offer unattended runs; the field exists so the *data* is honest, not to imply the feature.
    */
   unattended?: boolean;
+  /**
+   * The mode a new task should show when the user has not chosen one.
+   *
+   * One list should mark at most one. DeepSeek lists Read only first and marks Workspace change,
+   * because that is the process default when `DSH_PERMISSION_MODE` is unset.
+   */
+  preferred?: boolean;
 }
 
 export const AgentModeSchema = z
@@ -600,6 +621,7 @@ export const AgentModeSchema = z
     labelKey: z.string().optional(),
     descriptionKey: z.string().optional(),
     unattended: z.boolean().optional(),
+    preferred: z.boolean().optional(),
   })
   .strict();
 
@@ -654,6 +676,7 @@ export const RUN_EVENT_KINDS = [
   "run.approval-resolved",
   "run.diff",
   "run.usage",
+  "run.commands",
   "run.status",
   "run.ended",
 ] as const;
@@ -779,6 +802,17 @@ export type RunEvent =
        */
       contextUsed?: number;
       contextSize?: number;
+    })
+  | (RunEventBase & {
+      kind: "run.commands";
+      /**
+       * The slash commands this agent says it accepts, newest list wins.
+       *
+       * They arrive as an ACP `available_commands_update`, which is how Claude, Codex, Cursor and the
+       * harnesses publish `/compact` and the rest. The list is the agent's, not a catalogue we keep:
+       * a command the agent did not name is one we must not offer.
+       */
+      commands: readonly { name: string; description: string; argumentHint?: string }[];
     })
   | (RunEventBase & { kind: "run.status"; status: TaskStatus; note?: string })
   | (RunEventBase & { kind: "run.ended"; exitCode: number | null; status: TaskStatus });
@@ -946,6 +980,29 @@ export const RPC_METHODS = [
    */
   "coder.getHomeFsInfo",
   "coder.listHomeFsEntries",
+  /**
+   * One file from a listing, so the window can open it.
+   *
+   * Text, pictures, and PDFs carry their bytes. Anything else, and anything over the size cap,
+   * is still an answer: the tab opens and says what it could not draw.
+   */
+  "coder.readHomeFsFile",
+  /** An empty file or a new folder in a directory the listing already showed. */
+  "coder.createHomeFsEntry",
+  /**
+   * Git changes in a folder: added, modified, deleted, renamed, and new files.
+   *
+   * The desktop explorer asks for this. `repo: false` is a normal answer — the folder is not a
+   * git repository — not an error. A path that is not a directory is.
+   */
+  "coder.listWorktreeChanges",
+  /**
+   * The difference for one file in that list.
+   *
+   * A click in Changes opens this, not the file. A deletion is still an answer. The path has to
+   * stay inside the repository.
+   */
+  "coder.readWorktreeDiff",
   "coder.listTasks",
   "coder.createTask",
   "coder.updateTask",

@@ -87,13 +87,12 @@ const project: Project = {
   addedAt: "2026-09-01T09:00:00.000Z",
 };
 
-/** The five ids the shell mounts actions for — see `WIRED` below. */
+/** The four ids the shell mounts actions for — see `WIRED` below. */
 const WIRED: ShortcutActions = {
   "commandCenter.open": () => {},
   "search.find": () => {},
   newTask: () => {},
   "settings.open": () => {},
-  "sidebar.toggle": () => {},
 };
 
 const harnesses: CoderState["harnesses"] = (["envoy-harness", "deepseek-harness"] as const).map((id) => ({
@@ -557,7 +556,7 @@ describe("what the bar does when there is no room for it", () => {
 describe("the pages the bar opens", () => {
   it("lists only the keyboard bindings the shell mounted an action for", () => {
     // **The mutation this fails on:** rendering `SHELL_BINDINGS` instead of `wiredBindings(actions)`.
-    // Three of the eight declared bindings have no action in this build, and a page that printed their
+    // Three of the seven declared bindings have no action in this build, and a page that printed their
     // combos would advertise keys that do nothing — in the pane whose rule is that a row must not do
     // that. Asserted through the shell, because the shell is the only thing that knows which actions
     // exist.
@@ -566,7 +565,6 @@ describe("the pages the bar opens", () => {
       "commandCenter.open",
       "newTask",
       "search.find",
-      "sidebar.toggle",
       "settings.open",
     ]);
     expect(wired.length).toBeLessThan(SHELL_BINDINGS.length);

@@ -93,16 +93,21 @@ describe("which agents this product can actually run", () => {
       "claudecode",
       "codex",
       "cursor",
+      "deepseek-harness",
       "envoy-harness",
     ]);
+    // DeepSeek's permission levels travel as `DSH_PERMISSION_MODE`, not `session/set_mode`. Every
+    // other claiming entry still has to name the field, or `setMode` would guess and the peer
+    // would ignore it.
     for (const id of claiming) {
-      expect(harnessAcpFacts(id).modeParam, id).toMatch(/^(mode|modeId)$/);
+      if (id === "deepseek-harness") {
+        expect(harnessAcpFacts(id).modeParam, id).toBeUndefined();
+      } else {
+        expect(harnessAcpFacts(id).modeParam, id).toMatch(/^(mode|modeId)$/);
+      }
       expect(HARNESS_CATALOG[id].modes.length, id).toBeGreaterThan(0);
     }
 
-    // And the entry whose mode the daemon genuinely cannot set declares nothing, so the accessor is
-    // exercised in both directions rather than only where it answers.
-    expect(harnessAcpFacts("deepseek-harness").modeParam).toBeUndefined();
     expect(harnessAcpFacts("deepseek-harness").authMethodId).toBeUndefined();
   });
 
@@ -132,27 +137,34 @@ describe("which agents this product can actually run", () => {
  * checkouts' own source rather than against memory.
  */
 describe("which agents can be put into a mode", () => {
-  it("names exactly the peer's three mode ids for the built-in harness", () => {
-    // `session/set_mode` validates against `ModeKind` and answers
-    // `-32602 mode must be default|plan|review` for anything else
-    // (`../envoy-harness/packages/envoy-harness/src/plan/mode-kind.ts`;
-    // `.../src/protocol/acp-params.ts:352-375`). A label we invented would be a mode it refuses, so the
-    // ids are asserted rather than trusted to a reviewer.
+  it("names the peer's three mode ids, then the three permission levels", () => {
+    // The first three are `session/set_mode` (`ModeKind`). The last three are `session/set_policy`
+    // sandboxes — sending one of them as a mode is refused with `mode must be default|plan|review`.
     expect(HARNESS_CATALOG["envoy-harness"].modes.map((mode) => mode.id)).toEqual([
       "default",
       "plan",
       "review",
+      "read-only",
+      "workspace-write",
+      "danger-full-access",
     ]);
+    expect(HARNESS_CATALOG["envoy-harness"].modes.find((mode) => mode.preferred)).toBeUndefined();
     expect(HARNESS_CATALOG["envoy-harness"].capabilities.agentMode).toBe(true);
   });
 
-  it("offers nothing for the harness whose ACP surface has no session/set_mode", () => {
-    // `deepseek-harness` registers new/list/resume/close/setConfigOption/prompt/cancel and nothing else
-    // (`../deepseek-harness/packages/acp/acp/src/index.ts:384-390`), and the configuration it reports
-    // per session is the model and the reasoning effort (`.../src/model-control.ts:188-220`). Empty is
-    // the *answer*, so the catalogue says so rather than listing modes the agent would ignore.
-    expect(HARNESS_CATALOG["deepseek-harness"].modes).toEqual([]);
-    expect(HARNESS_CATALOG["deepseek-harness"].capabilities.agentMode).toBe(false);
+  it("offers DeepSeek the three permission levels without a session/set_mode field", () => {
+    // The process reads `DSH_PERMISSION_MODE`. `workspace-write` is preferred because that is the
+    // default when the variable is unset.
+    expect(HARNESS_CATALOG["deepseek-harness"].modes.map((mode) => mode.id)).toEqual([
+      "read-only",
+      "workspace-write",
+      "danger-full-access",
+    ]);
+    expect(HARNESS_CATALOG["deepseek-harness"].modes.find((mode) => mode.preferred)?.id).toBe(
+      "workspace-write",
+    );
+    expect(HARNESS_CATALOG["deepseek-harness"].capabilities.agentMode).toBe(true);
+    expect(harnessAcpFacts("deepseek-harness").modeParam).toBeUndefined();
   });
 
   it("keeps the two facts consistent everywhere, in the direction that could lie", () => {

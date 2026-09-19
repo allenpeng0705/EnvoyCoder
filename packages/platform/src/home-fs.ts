@@ -22,6 +22,10 @@ export interface HomeFsEntry {
   name: string;
   kind: HomeFsEntryKind;
   path: string;
+  /** Bytes. A directory's own stat size, not the size of everything inside it. */
+  size: number;
+  /** ISO time from the filesystem. The explorer sorts by this. */
+  modifiedAt: string;
 }
 
 export interface HomeFsInfo {
@@ -142,15 +146,21 @@ export function listHomeFsEntries(
   for (const name of names) {
     if (name === "." || name === "..") continue;
     const full = path.join(target, name);
-    let kind: HomeFsEntryKind;
+    let st: ReturnType<typeof statSync>;
     try {
-      const st = statSync(full);
-      kind = st.isDirectory() ? "dir" : "file";
+      st = statSync(full);
     } catch {
       continue;
     }
+    const kind: HomeFsEntryKind = st.isDirectory() ? "dir" : "file";
     if (params.dirsOnly && kind !== "dir") continue;
-    entries.push({ name, kind, path: full });
+    entries.push({
+      name,
+      kind,
+      path: full,
+      size: st.size,
+      modifiedAt: st.mtime.toISOString(),
+    });
   }
 
   entries.sort((a, b) => {

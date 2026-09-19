@@ -63,7 +63,7 @@ export function EnvoyLlmPanel(props: { agents: AgentActions }): JSX.Element {
       provider: "openai",
       model,
       baseUrl,
-      ...(clearKey ? { clearApiKey: true } : apiKey.length > 0 ? { apiKey } : {}),
+      ...(clearKey && apiKey.length === 0 ? { clearApiKey: true } : apiKey.length > 0 ? { apiKey } : {}),
     });
     setBusy(false);
     if (!result.ok) {
@@ -85,7 +85,7 @@ export function EnvoyLlmPanel(props: { agents: AgentActions }): JSX.Element {
       <label className="settings__field">
         <span className="setting__title">{t("settings.agents.envoyLlm.baseUrl")}</span>
         <input
-          type="url"
+          type="text"
           className="input"
           value={baseUrl}
           placeholder={t("settings.agents.envoyLlm.baseUrl.placeholder")}
@@ -129,10 +129,7 @@ export function EnvoyLlmPanel(props: { agents: AgentActions }): JSX.Element {
             value={apiKey}
             autoComplete="off"
             placeholder={t("settings.agents.envoyLlm.apiKey.placeholder")}
-            onChange={(event) => {
-              setApiKey(event.target.value);
-              setClearKey(false);
-            }}
+            onChange={(event) => setApiKey(event.target.value)}
           />
         )}
         <span className="setting__detail">{t("settings.agents.envoyLlm.apiKey.detail")}</span>

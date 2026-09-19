@@ -137,6 +137,7 @@ class _NewTaskSheetState extends State<_NewTaskSheet> {
               title: title,
               harnesses: widget.harnesses,
               taskId: taskId,
+              cwd: task['cwd'] as String? ?? _projectFor(projectId)?.path,
             ),
           ),
         );

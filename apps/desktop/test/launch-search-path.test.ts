@@ -478,4 +478,24 @@ describe("a connector that is fetched rather than installed", () => {
     expect(fetchableCovers("codex")).toBe("connector");
     expect(fetchedRecipe("copilot")?.agentBinaries).toBeUndefined();
   });
+
+  it("merges a DeepSeek permission level into the launch environment", async () => {
+    const binDir = await tempDir("envoydev-dsh-bin-");
+    const dsh = join(binDir, "dsh");
+    await writeFile(dsh, "#!/bin/sh\nexit 0\n");
+    await chmod(dsh, 0o755);
+    const cwd = await tempDir("envoydev-dsh-cwd-");
+    const home = await tempDir("envoydev-dsh-home-");
+
+    const launch = launchForHarness({
+      harness: "deepseek-harness",
+      cwd,
+      paths: coderPaths(home),
+      searchDirs: [binDir],
+      extraEnv: { DSH_PERMISSION_MODE: "danger-full-access" },
+    });
+    expect(launch.env?.DSH_PERMISSION_MODE).toBe("danger-full-access");
+    expect(launch.env?.DSH_HOME).toBe(join(coderPaths(home).stateDir, "agents", "dsh"));
+    resetSearchPathCacheForTests();
+  });
 });

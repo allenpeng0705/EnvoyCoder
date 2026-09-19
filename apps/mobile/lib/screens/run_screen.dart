@@ -13,6 +13,7 @@ import '../services/host_client.dart';
 import '../theme/tokens.dart';
 import '../widgets/composer_controls.dart';
 import '../widgets/transcript_row.dart';
+import 'explorer_screen.dart';
 
 class RunScreen extends StatefulWidget {
   const RunScreen({
@@ -22,6 +23,7 @@ class RunScreen extends StatefulWidget {
     required this.title,
     this.harnesses = const [],
     this.taskId,
+    this.cwd,
   });
 
   final HostClient client;
@@ -29,6 +31,7 @@ class RunScreen extends StatefulWidget {
   final String title;
   final List<HarnessInfo> harnesses;
   final String? taskId;
+  final String? cwd;
 
   @override
   State<RunScreen> createState() => _RunScreenState();
@@ -45,8 +48,10 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   String _sendMode = 'queue';
   String? _error;
   String? _taskId;
+  String? _cwd;
   List<HarnessInfo> _harnesses = [];
   ComposerSelection _selection = const ComposerSelection();
+  List<_SlashCommand> _commands = const [];
   StreamSubscription<Map<String, dynamic>>? _eventSub;
 
   TextRevealState _reveal = beginTextReveal('');
@@ -58,6 +63,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   void initState() {
     super.initState();
     _taskId = widget.taskId;
+    _cwd = widget.cwd;
     _harnesses = List.of(widget.harnesses);
     _eventSub = widget.client.events.listen(_onEventFrame);
     unawaited(_bootstrap());
@@ -90,6 +96,8 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
               agentModeId: raw['agentModeId'] as String?,
               thinkingLevel: raw['thinkingLevel'] as String?,
             );
+            final cwd = raw['cwd'];
+            if (cwd is String && cwd.isNotEmpty) _cwd = cwd;
             break;
           }
         }
@@ -145,11 +153,35 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   }
 
   void _applyEvent(Map<String, dynamic> event) {
+    if (event['kind'] == 'run.commands') {
+      final raw = event['commands'];
+      _commands = raw is List
+          ? [
+              for (final item in raw)
+                if (item is Map && item['name'] is String)
+                  _SlashCommand(
+                    name: item['name'] as String,
+                    description: (item['description'] as String?) ?? '',
+                    argumentHint: item['argumentHint'] as String?,
+                  ),
+            ]
+          : const [];
+    }
     _transcript.apply(event);
     if (event['kind'] == 'run.ended') {
       _live = false;
       _stopTicker();
     }
+  }
+
+  List<_SlashCommand> get _commandMatches {
+    final text = _composer.text;
+    if (!text.startsWith('/') || text.contains(' ')) return const [];
+    final query = text.substring(1).toLowerCase();
+    return [
+      for (final command in _commands)
+        if (query.isEmpty || command.name.toLowerCase().startsWith(query)) command,
+    ];
   }
 
   void _syncReveal() {
@@ -209,11 +241,10 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   void _scrollToEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
-      _scroll.animateTo(
-        _scroll.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      );
+      // The list is reversed, so the latest row is offset 0. Follow only when the reader is
+      // already there — a jump to maxScrollExtent would land on the oldest message.
+      if (_scroll.offset > 80) return;
+      _scroll.jumpTo(0);
     });
   }
 
@@ -270,6 +301,24 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     }
   }
 
+  Future<void> _openExplorer() async {
+    final cwd = _cwd;
+    if (cwd == null || cwd.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This task has no folder yet.')),
+      );
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ExplorerScreen(
+          rpc: (method, [params = const {}]) => widget.client.call(method, params),
+          root: cwd,
+        ),
+      ),
+    );
+  }
+
   Future<void> _cancel() async {
     if (!_live || _cancelling) return;
     setState(() => _cancelling = true);
@@ -316,6 +365,11 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                 child: Text('Live', style: TextStyle(color: colors.statusDotRunning, fontSize: 12)),
               ),
             ),
+          IconButton(
+            tooltip: 'Toggle Explorer sidebar',
+            onPressed: () => unawaited(_openExplorer()),
+            icon: const Icon(Icons.view_sidebar_outlined),
+          ),
         ],
       ),
       body: Column(
@@ -338,11 +392,13 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                 ? const Center(child: CircularProgressIndicator())
                 : ListView.builder(
                     controller: _scroll,
+                    reverse: true,
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
                     itemCount: _transcript.entries.length,
                     itemBuilder: (context, index) {
-                      final entry = _transcript.entries[index];
-                      final streaming = _live && index == lastAssistantIndex && entry.kind == 'assistant';
+                      final realIndex = _transcript.entries.length - 1 - index;
+                      final entry = _transcript.entries[realIndex];
+                      final streaming = _live && realIndex == lastAssistantIndex && entry.kind == 'assistant';
                       final display = streaming
                           ? TranscriptEntry(
                               kind: entry.kind,
@@ -413,6 +469,23 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                         ],
                       ),
                     const SizedBox(height: 8),
+                    if (_commandMatches.isNotEmpty)
+                      ..._commandMatches.map(
+                        (command) => ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('/${command.name}${command.argumentHint == null ? '' : ' ${command.argumentHint}'}'),
+                          subtitle: command.description.isEmpty ? null : Text(command.description),
+                          onTap: () {
+                            final next = '/${command.name} ';
+                            _composer.value = TextEditingValue(
+                              text: next,
+                              selection: TextSelection.collapsed(offset: next.length),
+                            );
+                            setState(() {});
+                          },
+                        ),
+                      ),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
@@ -431,6 +504,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                               border: const OutlineInputBorder(),
                               isDense: true,
                             ),
+                            onChanged: (_) => setState(() {}),
                             onSubmitted: (_) => unawaited(_send()),
                           ),
                         ),
@@ -450,4 +524,12 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
       ),
     );
   }
+}
+
+class _SlashCommand {
+  const _SlashCommand({required this.name, required this.description, this.argumentHint});
+
+  final String name;
+  final String description;
+  final String? argumentHint;
 }

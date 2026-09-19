@@ -284,6 +284,7 @@ export function buildTranscript(events: readonly RunEvent[]): Transcript {
       // them, and a transcript that opened with "the run started" would be narrating the furniture.
       case "run.started":
       case "run.session":
+      case "run.commands":
         break;
     }
   }

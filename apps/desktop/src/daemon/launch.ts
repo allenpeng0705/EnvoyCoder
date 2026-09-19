@@ -113,6 +113,11 @@ export interface LaunchInput {
    * asked for one.
    */
   delivery?: "installed" | "npx";
+  /**
+   * Environment to merge over the launch's own. A DeepSeek permission level arrives here as
+   * `DSH_PERMISSION_MODE`; it is not a `session/set_mode` argument.
+   */
+  extraEnv?: Record<string, string>;
 }
 
 /**
@@ -224,6 +229,7 @@ export function launchForHarness(input: LaunchInput): AcpLaunch {
           ? { DSH_HOME: join(input.paths.stateDir, "agents", "dsh") }
           : {}),
         ...llmEnv,
+        ...input.extraEnv,
       },
       // The catalogue's own wording for this gap, and it is **unchanged** on purpose: `drivable.test.ts`
       // and the settings docs quote it, and the sentence a user already reads must not move because the

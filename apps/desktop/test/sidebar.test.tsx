@@ -157,6 +157,11 @@ describe("CoderSidebar", () => {
     // uses that agent, and `getByText` would find either.
     const headerBadge = within(group).getByTitle("The agent new tasks in this project start with");
     expect(headerBadge.textContent).toBe("Envoy");
+    expect(within(group).getByText("E")).toBeTruthy();
+    const tones = ["envoymesh", "payments-api", "site"].map(
+      (label) => document.querySelector(`[data-testid="project-${label}"] .project__mark`)?.getAttribute("data-tone"),
+    );
+    expect(new Set(tones).size).toBe(3);
     expect(within(group).getByText("Tasks")).toBeTruthy();
     // …and the tasks under it.
     expect(within(group).getByText("Wire product attach into the new node service")).toBeTruthy();

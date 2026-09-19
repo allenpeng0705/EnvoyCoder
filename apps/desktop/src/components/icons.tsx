@@ -191,3 +191,102 @@ export function ThinkingIcon({ size = 16 }: IconProps): JSX.Element {
     </svg>
   );
 }
+
+/** Fast inference — a bolt. Icon only; the hint says what it toggles. */
+export function FastIcon({ size = 16 }: IconProps): JSX.Element {
+  return (
+    <svg {...frame(size)}>
+      <path d="M13 2 4 14h7l-1 8 10-14h-7z" />
+    </svg>
+  );
+}
+
+/** Plan — a short list. Icon only; the hint says what it toggles. */
+export function PlanIcon({ size = 16 }: IconProps): JSX.Element {
+  return (
+    <svg {...frame(size)}>
+      <path d="M9 6h12M9 12h12M9 18h12" />
+      <path d="M4 6h.01M4 12h.01M4 18h.01" />
+    </svg>
+  );
+}
+
+/** A file in the explorer — a page with a folded corner. */
+export function FileIcon({ size = 16 }: IconProps): JSX.Element {
+  return (
+    <svg {...frame(size)}>
+      <path d="M6 3h8l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+      <path d="M14 3v5h5" />
+    </svg>
+  );
+}
+
+/** Show or hide the explorer — a panel on the right of a window. */
+export function PanelRightIcon({ size = 16 }: IconProps): JSX.Element {
+  return (
+    <svg {...frame(size)}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M15 3v18" />
+    </svg>
+  );
+}
+
+/** A new file — a page with a plus. */
+export function FilePlusIcon({ size = 16 }: IconProps): JSX.Element {
+  return (
+    <svg {...frame(size)}>
+      <path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V8z" />
+      <path d="M14 3v5h5M12 12v6M9 15h6" />
+    </svg>
+  );
+}
+
+/** A new folder — a folder with a plus. */
+export function FolderPlusIcon({ size = 16 }: IconProps): JSX.Element {
+  return (
+    <svg {...frame(size)}>
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <path d="M12 11v6M9 14h6" />
+    </svg>
+  );
+}
+
+/** Hidden files are visible. */
+export function EyeIcon({ size = 16 }: IconProps): JSX.Element {
+  return (
+    <svg {...frame(size)}>
+      <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
+      <circle cx="12" cy="12" r="2.5" />
+    </svg>
+  );
+}
+
+/** Hidden files are hidden. */
+export function EyeOffIcon({ size = 16 }: IconProps): JSX.Element {
+  return (
+    <svg {...frame(size)}>
+      <path d="M3 4l18 16" />
+      <path d="M10.5 6.3A10 10 0 0 1 12 6c6.5 0 10 6 10 6a18 18 0 0 1-3.2 3.8" />
+      <path d="M6.2 7.8C3.8 9.4 2 12 2 12s3.5 6 10 6c1.2 0 2.3-.2 3.3-.6" />
+    </svg>
+  );
+}
+
+/** Reload the file list. */
+export function RefreshIcon({ size = 16 }: IconProps): JSX.Element {
+  return (
+    <svg {...frame(size)}>
+      <path d="M20 12a8 8 0 1 1-2.2-5.5" />
+      <path d="M20 4v5h-5" />
+    </svg>
+  );
+}
+
+/** Attach a file — a paperclip. */
+export function PaperclipIcon({ size = 16 }: IconProps): JSX.Element {
+  return (
+    <svg {...frame(size)}>
+      <path d="M21.4 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </svg>
+  );
+}

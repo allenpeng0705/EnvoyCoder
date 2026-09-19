@@ -58,7 +58,7 @@ const settings: CoderSettings = {
 /**
  * The keys the shell mounts actions for, which is what the Shortcuts page lists.
  *
- * The same five ids `CoderApp` wires (`shortcutActions` there); declared here as data so this file does
+ * The same four ids `CoderApp` wires (`shortcutActions` there); declared here as data so this file does
  * not have to render the shell to test the pane's own translation of them.
  */
 const WIRED: ShortcutActions = {
@@ -66,7 +66,6 @@ const WIRED: ShortcutActions = {
   "search.find": () => {},
   newTask: () => {},
   "settings.open": () => {},
-  "sidebar.toggle": () => {},
 };
 
 function stateWith(over: Partial<CoderState> = {}): CoderState {

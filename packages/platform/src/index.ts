@@ -552,6 +552,16 @@ export function normalizeUserPath(input: string, home: string): string {
  * Same wire shape as EnvoyMesh's home-fs helpers, so EnvoyGo-style Flutter browsers stay portable.
  */
 export * from "./home-fs.js";
+export * from "./home-fs-file.js";
+
+/**
+ * Git changes for the explorer sidebar.
+ *
+ * Separate from the directory listing: a folder picker does not need git, and a missing
+ * repository is an answer, not a browse failure.
+ */
+export * from "./worktree-changes.js";
+export * from "./worktree-diff.js";
 
 /**
  * The `PATH` a GUI-launched process should search, and the provenance of what it found.

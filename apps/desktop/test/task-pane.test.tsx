@@ -65,11 +65,8 @@ function event(payload: Record<string, unknown>): RunEvent {
  * One agent, exactly as `coder.listHarnesses` carries it.
  *
  * The two entries here are the two real ones, because the *point* of these controls is that the wire
- * decides what they offer: `envoy-harness` declares the three `ModeKind`s, accepts `session/set_mode`,
- * and publishes its provider defaults as a model list; `deepseek-harness` has no such mode method and
- * publishes no model list we can read before a run — it takes free text instead. The model facts are
- * read from the catalogue rather than typed out here, so a change to what the catalogue claims shows up
- * in this test instead of being shadowed by a stale copy of the old answer.
+ * decides what they offer. Modes and `agentMode` are read from the catalogue, so a change to what it
+ * claims shows up here instead of being shadowed by a stale copy.
  */
 function harnessFor(
   id: "envoy-harness" | "deepseek-harness",
@@ -82,7 +79,7 @@ function harnessFor(
     structuredTools: true,
     streaming: true,
     images: false,
-    agentMode: id === "envoy-harness",
+    agentMode: HARNESS_CATALOG[id].capabilities.agentMode,
     model: canApplyModel(id),
     thinking: canApplyThinking(id),
     // The fourth delivery flag, added by settings slice 1, and read from the catalogue like the three
@@ -95,14 +92,7 @@ function harnessFor(
     label: id === "envoy-harness" ? "Envoy Harness" : "DeepSeek Harness",
     tier: id === "envoy-harness" ? "built-in" : "catalogued",
     summary: "…",
-    modes:
-      id === "envoy-harness"
-        ? [
-            { id: "default", label: "Default", labelKey: "task.agentMode.default.label", descriptionKey: "task.agentMode.default.description" },
-            { id: "plan", label: "Plan", labelKey: "task.agentMode.plan.label", descriptionKey: "task.agentMode.plan.description" },
-            { id: "review", label: "Review", labelKey: "task.agentMode.review.label", descriptionKey: "task.agentMode.review.description" },
-          ]
-        : [],
+    modes: [...HARNESS_CATALOG[id].modes],
     models: harnessModels(id),
     // Read from the catalogue rather than typed out here, on the same principle as `models`: a change to
     // what the catalogue claims shows up in this test instead of being shadowed by a stale copy. For
@@ -351,7 +341,7 @@ describe("the composer", () => {
     // Nothing in the field yet: no primary action is drawn at all (see the leg below), so this one types first.
     fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "and then this" } });
     const send = screen.getByRole("button", { name: "Send" });
-    expect(send.getAttribute("title")).toBe("The agent finishes the turn it is on, then reads this.");
+    expect(send.getAttribute("data-hint")).toBe("The agent finishes the turn it is on, then reads this.");
     // And the picker is gone: one fewer control on the row, and no unexplained vocabulary on it.
     expect(screen.queryByLabelText("How to deliver the message")).toBeNull();
     expect(screen.queryByText("Queue")).toBeNull();
@@ -364,7 +354,7 @@ describe("the composer", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
     // The task's model travels with the first message: `task` here remembers
     // `deepseek-official/deepseek-v4-flash`, and a run started from this pane has to be the run on the
-    // model the pane shows. The mode is `undefined` because `deepseek-harness` has none to offer.
+    // model the pane shows. The mode is `undefined` because this pane was given no harness summary.
     expect(pane.onStart).toHaveBeenCalledWith(
       "bump the SDK",
       undefined,
@@ -619,7 +609,11 @@ describe("the folder control", () => {
     // settings it started with, and that fact is on the controls (§7.33) rather than in a line under them.
     expect(document.querySelectorAll(".composer__control-note")).toHaveLength(0);
     for (const label of ["Mode", "Model", "Thinking"]) {
-      expect(screen.getByLabelText(label).closest(".composer__chip")?.getAttribute("title")).toContain(
+      const control = screen.getByLabelText(label);
+      expect(control.closest(".composer__chip")?.getAttribute("data-hint")).not.toContain(
+        "Applies to the next run.",
+      );
+      expect(document.getElementById(control.getAttribute("aria-describedby") as string)?.textContent).toContain(
         "Applies to the next run.",
       );
     }
@@ -640,24 +634,38 @@ describe("the agent's mode control", () => {
     expect(picker.disabled).toBe(false);
     // The labels come from the catalogue, by key, because *we* wrote them — an agent's own mode names
     // would arrive without keys and be shown as the agent wrote them.
-    expect([...picker.options].map((option) => option.textContent)).toEqual(["Default", "Plan", "Review"]);
+    expect([...picker.options].map((option) => option.textContent)).toEqual([
+      "Default",
+      "Plan",
+      "Review",
+      "Read only",
+      "Workspace change",
+      "Full access",
+    ]);
 
     fireEvent.change(picker, { target: { value: "plan" } });
     expect(onChangeMode).toHaveBeenCalledWith("plan");
   });
 
-  it("is disabled with the reason shown for an agent whose protocol has no modes", () => {
-    // The real `deepseek-harness` shape: it speaks ACP, it has no `session/set_mode`, and its own
-    // per-session configuration is the model and the reasoning effort. Offering a plan picker here
-    // would be offering a control that does nothing.
-    renderPane([], { task, harnesses: [harnessFor("deepseek-harness")] });
+  it("is disabled with the reason shown for an agent that offers no modes", () => {
+    // Synthetic: an agent with an empty list and a daemon that cannot set one. DeepSeek is not this
+    // shape — it offers Read only, Workspace change, and Full access.
+    const base = harnessFor("deepseek-harness");
+    renderPane([], {
+      task,
+      harnesses: [
+        {
+          ...base,
+          modes: [],
+          capabilities: { ...base.capabilities, agentMode: false },
+        },
+      ],
+    });
     const picker = screen.getByLabelText("Mode") as HTMLSelectElement;
     expect(picker.disabled).toBe(true);
     // The reason is on the control — its tooltip and its `aria-describedby` — rather than as a paragraph under
     // the row (§7.30's rule, applied to the reason as well).
-    expect(picker.closest(".composer__chip")?.getAttribute("title")).toContain(
-      "DeepSeek Harness does not offer selectable modes.",
-    );
+    expect(picker.closest(".composer__chip")?.getAttribute("data-hint")).toBe("Change mode");
     const describedBy = picker.getAttribute("aria-describedby");
     expect(document.getElementById(describedBy as string)?.textContent).toContain(
       "DeepSeek Harness does not offer selectable modes.",
@@ -678,7 +686,14 @@ describe("the agent's mode control", () => {
     expect(picker.disabled).toBe(true);
     // …and the options are still *listed*, so a user can see what the agent offers even though this
     // build cannot choose for it.
-    expect([...picker.options].map((option) => option.textContent)).toEqual(["Default", "Plan", "Review"]);
+    expect([...picker.options].map((option) => option.textContent)).toEqual([
+      "Default",
+      "Plan",
+      "Review",
+      "Read only",
+      "Workspace change",
+      "Full access",
+    ]);
     expect(screen.getByText(/not wired up yet/)).toBeTruthy();
   });
 
@@ -687,7 +702,7 @@ describe("the agent's mode control", () => {
     // *lack* of modes when the truth is our own ignorance is the mistake this asserts against.
     renderPane([], { task: envoyTask });
     expect(screen.getByText(/has not been told which modes Envoy Harness offers yet/)).toBeTruthy();
-    expect(screen.getByLabelText("Mode").closest(".composer__chip")?.getAttribute("title") ?? "").not.toContain(
+    expect(screen.getByLabelText("Mode").closest(".composer__chip")?.getAttribute("data-hint") ?? "").not.toContain(
       "does not offer selectable modes",
     );
   });
@@ -718,7 +733,13 @@ describe("the agent's mode control", () => {
     // app that always sent something would override whatever the user configured in the agent itself.
     const { onStart } = renderPane([], {
       task,
-      harnesses: [harnessFor("deepseek-harness")],
+      harnesses: [
+        {
+          ...harnessFor("deepseek-harness"),
+          modes: [],
+          capabilities: { ...harnessFor("deepseek-harness").capabilities, agentMode: false },
+        },
+      ],
       runLive: false,
     });
     fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "just do it" } });
@@ -799,7 +820,7 @@ describe("the model control", () => {
     expect(field.placeholder).toBe("provider/model");
     // The instruction about the value's shape travels **with the field** — its tooltip, and the paragraph its
     // `aria-describedby` names — instead of as a paragraph under the row.
-    expect(field.title).toMatch(/publishes its models only inside a running session/);
+    expect(field.closest(".composer__chip")?.getAttribute("data-hint")).toBe("Change model");
     const describedBy = field.getAttribute("aria-describedby");
     expect(document.getElementById(describedBy as string)?.textContent).toMatch(
       /publishes its models only inside a running session/,
@@ -978,11 +999,12 @@ describe("the thinking control", () => {
     fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "think hard" } });
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
 
-    // All four arguments, because they are one call: the model this task remembers, no mode
-    // (`deepseek-harness` has none), and the level the user just chose.
+    // All four arguments, because they are one call: the model this task remembers, the permission
+    // level a new DeepSeek task shows (Workspace change — the process default), and the level the
+    // user just chose.
     expect(onStart).toHaveBeenCalledWith(
       "think hard",
-      undefined,
+      "workspace-write",
       "deepseek-official/deepseek-v4-flash",
       "max",
     );
@@ -1055,7 +1077,11 @@ describe("the thinking control", () => {
     expect(screen.queryByText(/keeps the model it started on/)).toBeNull();
     expect(document.querySelectorAll(".composer__control-note")).toHaveLength(0);
     for (const label of ["Mode", "Model", "Thinking"]) {
-      expect(screen.getByLabelText(label).closest(".composer__chip")?.getAttribute("title")).toContain(
+      const control = screen.getByLabelText(label);
+      expect(control.closest(".composer__chip")?.getAttribute("data-hint")).not.toContain(
+        "Applies to the next run.",
+      );
+      expect(document.getElementById(control.getAttribute("aria-describedby") as string)?.textContent).toContain(
         "Applies to the next run.",
       );
     }
@@ -1271,6 +1297,69 @@ describe("asking the agent what it offers, before the first run", () => {
 
     expect(screen.queryByRole("button", { name: /Ask DeepSeek Harness/ })).toBeNull();
     expect(ask).not.toHaveBeenCalled();
+  });
+});
+
+describe("fast and plan", () => {
+  it("shows Codex's toggles, flips Plan, and hides both for an agent that has neither", () => {
+    const onToggleFeature = vi.fn();
+    const shown = renderPane([], {
+      task: { ...task, harness: "codex", model: "gpt-5.5" },
+      onToggleFeature,
+    });
+    expect(screen.getByRole("button", { name: "Toggle fast mode" })).toBeTruthy();
+    const plan = screen.getByRole("button", { name: "Toggle plan mode" });
+    expect(plan.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(plan);
+    expect(onToggleFeature).toHaveBeenCalledWith("plan_mode", true);
+    expect(plan.getAttribute("aria-pressed")).toBe("true");
+    shown.unmount();
+
+    renderPane([], { task: { ...task, harness: "envoy-harness" } });
+    expect(screen.queryByRole("button", { name: "Toggle plan mode" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Toggle fast mode" })).toBeNull();
+  });
+});
+
+describe("attachments", () => {
+  function chooseFile(kind: "file" | "image", file: File): void {
+    const input = document.querySelector(`input[data-attach="${kind}"]`) as HTMLInputElement;
+    Object.defineProperty(input, "files", { configurable: true, value: [file] });
+    fireEvent.change(input);
+  }
+
+  it("shows a file above the field and sends it with the message", async () => {
+    const pane = renderPane([]);
+    chooseFile("file", new File(["export const n = 1;\n"], "lib.ts", { type: "text/plain" }));
+
+    expect(await screen.findByText("lib.ts")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(pane.onSend).toHaveBeenCalledWith(
+      expect.stringContaining("export const n = 1;"),
+      "queue",
+    );
+    const sent = pane.onSend.mock.calls[0]?.[0] as string;
+    expect(sent.startsWith("Attached: lib.ts")).toBe(true);
+  });
+
+  it("sends a picture even when the field is empty, and a removed pill is not sent", async () => {
+    const pane = renderPane([]);
+    const file = new File([Uint8Array.from([1, 2, 3])], "shot.png", { type: "image/png" });
+    chooseFile("image", file);
+
+    expect(await screen.findByText("shot.png")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Remove shot.png" }));
+    expect(screen.queryByText("shot.png")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
+
+    chooseFile("image", file);
+    expect(await screen.findByText("shot.png")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(pane.onSend.mock.calls[0]?.[0]).toContain("Look at the attached image.");
+    expect(pane.onSend.mock.calls[0]?.[2]).toEqual([
+      expect.objectContaining({ mimeType: "image/png" }),
+    ]);
   });
 });
 

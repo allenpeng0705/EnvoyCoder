@@ -44,6 +44,7 @@ import type {
   Project,
   RunEvent,
   RunMode,
+  PromptImage,
   SignInOutcome,
   Task,
   TaskDefaults,
@@ -719,7 +720,13 @@ export class CoderStore {
   async startRun(
     taskId: string,
     prompt: string,
-    options: { resume?: boolean; agentModeId?: string; model?: string; thinkingLevel?: string } = {},
+    options: {
+      resume?: boolean;
+      agentModeId?: string;
+      model?: string;
+      thinkingLevel?: string;
+      images?: PromptImage[];
+    } = {},
   ): Promise<{ ok: true; run: AgentRun } | Refusal> {
     const result = await this.mutate(
       "coder.startRun",
@@ -739,6 +746,7 @@ export class CoderStore {
         ...(options.thinkingLevel !== undefined && options.thinkingLevel !== ""
           ? { thinkingLevel: options.thinkingLevel }
           : {}),
+        ...(options.images !== undefined && options.images.length > 0 ? { images: options.images } : {}),
       },
       (answer) => ({ ok: true as const, run: (answer as { run: AgentRun }).run }),
     );
@@ -754,8 +762,17 @@ export class CoderStore {
     runId: string,
     text: string,
     mode: RunMode,
+    images?: PromptImage[],
   ): Promise<{ ok: true; delivered: "queued" | "steered" } | Refusal> {
-    const answer = await this.mutate("coder.sendToRun", { runId, text, mode }, (result) => ({
+    const answer = await this.mutate(
+      "coder.sendToRun",
+      {
+        runId,
+        text,
+        mode,
+        ...(images !== undefined && images.length > 0 ? { images } : {}),
+      },
+      (result) => ({
       ok: true as const,
       delivered: (result as { delivered: "queued" | "steered" }).delivered,
     }));
@@ -797,6 +814,122 @@ export class CoderStore {
     optionId: string,
   ): Promise<{ ok: true } | Refusal> {
     return this.mutate("coder.answerApproval", { runId, requestId, optionId }, () => ({ ok: true as const }));
+  }
+
+  /**
+   * List one folder for the explorer.
+   *
+   * A refusal stays with the caller. A browse that failed is about the sidebar, not the window,
+   * so this does not raise `state.error`.
+   */
+  async listDirectory(
+    path: string,
+  ): Promise<
+    | { ok: true; entries: { name: string; kind: "dir" | "file"; path: string; size?: number; modifiedAt?: string }[] }
+    | Refusal
+  > {
+    return this.mutate("coder.listHomeFsEntries", { path }, (answer) => {
+      const result = answer as {
+        entries: { name: string; kind: "dir" | "file"; path: string; size?: number; modifiedAt?: string }[];
+      };
+      return { ok: true as const, entries: result.entries };
+    });
+  }
+
+  /** One file for a tab. A refusal stays with the tab, not the window banner. */
+  async readFile(path: string): Promise<
+    | {
+        ok: true;
+        file: {
+          path: string;
+          name: string;
+          kind: "text" | "image" | "pdf" | "binary" | "tooLarge";
+          size: number;
+          mimeType?: string;
+          content?: string;
+        };
+      }
+    | Refusal
+  > {
+    return this.mutate("coder.readHomeFsFile", { path }, (answer) => {
+      const file = answer as {
+        path: string;
+        name: string;
+        kind: "text" | "image" | "pdf" | "binary" | "tooLarge";
+        size: number;
+        mimeType?: string;
+        content?: string;
+      };
+      return { ok: true as const, file };
+    });
+  }
+
+  /** An empty file or a folder in a directory the explorer is showing. */
+  async createEntry(
+    directory: string,
+    name: string,
+    kind: "file" | "dir",
+  ): Promise<{ ok: true; path: string; kind: "file" | "dir" } | Refusal> {
+    return this.mutate("coder.createHomeFsEntry", { directory, name, kind }, (answer) => {
+      const created = answer as { path: string; kind: "file" | "dir" };
+      return { ok: true as const, path: created.path, kind: created.kind };
+    });
+  }
+
+  /**
+   * Git changes in the task's folder.
+   *
+   * `repo: false` is an answer (not a git repository). Only a failed call is a refusal.
+   */
+  async listWorktreeChanges(path: string): Promise<
+    | {
+        ok: true;
+        repo: boolean;
+        changes: { path: string; kind: "added" | "modified" | "deleted" | "renamed" | "untracked" | "conflict"; from?: string }[];
+      }
+    | Refusal
+  > {
+    return this.mutate("coder.listWorktreeChanges", { path }, (answer) => {
+      const result = answer as {
+        repo: boolean;
+        changes: { path: string; kind: "added" | "modified" | "deleted" | "renamed" | "untracked" | "conflict"; from?: string }[];
+      };
+      return { ok: true as const, repo: result.repo, changes: result.changes };
+    });
+  }
+
+  /** The difference for one file in Changes. A refusal stays with the tab. */
+  async readWorktreeDiff(
+    directory: string,
+    path: string,
+    from?: string,
+  ): Promise<
+    | {
+        ok: true;
+        diff: {
+          path: string;
+          name: string;
+          kind: "text" | "binary" | "tooLarge" | "empty";
+          size: number;
+          content?: string;
+        };
+      }
+    | Refusal
+  > {
+    return this.mutate(
+      "coder.readWorktreeDiff",
+      { directory, path, ...(from !== undefined ? { from } : {}) },
+      (answer) => {
+        const diff = answer as {
+          path: string;
+          name: string;
+          kind: "text" | "binary" | "tooLarge" | "empty";
+          size: number;
+          content?: string;
+        };
+        return { ok: true as const, diff };
+      },
+    );
   }
 
   /**
@@ -960,6 +1093,8 @@ export class CoderStore {
        * equivalent of the model's free-text case: it is stored exactly as the agent published it.
        */
       thinkingLevel?: string;
+      fastMode?: boolean;
+      planMode?: boolean;
     },
   ): Promise<{ ok: true; task: Task } | Refusal> {
     return this.mutate("coder.updateTask", input, (result) => ({

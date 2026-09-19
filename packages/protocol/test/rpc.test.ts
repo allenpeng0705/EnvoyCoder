@@ -196,6 +196,11 @@ describe("run events", () => {
     "run.approval-resolved": { ...base, kind: "run.approval-resolved", requestId: "req-1", optionId: "allow", by: "desktop" },
     "run.diff": { ...base, kind: "run.diff", files: [{ path: "a.ts", added: 3, removed: 1 }] },
     "run.usage": { ...base, kind: "run.usage", inputTokens: 10, outputTokens: 20, contextUsed: 100, contextSize: 1000 },
+    "run.commands": {
+      ...base,
+      kind: "run.commands",
+      commands: [{ name: "compact", description: "Summarize the conversation", argumentHint: "[focus]" }],
+    },
     "run.status": { ...base, kind: "run.status", status: "needs-attention", note: "waiting" },
     "run.ended": { ...base, kind: "run.ended", exitCode: 0, status: "done" },
   };

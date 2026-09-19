@@ -319,21 +319,19 @@ describe("a refused press is read where it was made", () => {
     expect(actions.startRun).not.toHaveBeenCalled();
   });
 
-  it("keeps the rail's toggle out of the top bar, and reachable from the palette", () => {
-    // **Removing a control is only honest if the capability survives it.** The owner asked for the button left of
-    // the app logo to go; the rail is not stranded, because the command palette carries the same action as a row
-    // and `⌘B` is bound to it (`input/shortcuts.ts`, listed on Settings → Keyboard shortcuts).
+  it("keeps a rail toggle out of the window", () => {
+    // Hiding the project list used to collapse the window and take the button that opened this list
+    // with it. The title bar does not offer that, and neither does the command list.
     show();
     const titlebar = document.querySelector(".titlebar") as HTMLElement;
-    // Title bar is brand + connection only — Pair, Settings and Command Center sit on the rail top row.
-    expect(titlebar.querySelectorAll("button")).toHaveLength(0);
+    expect(titlebar.querySelectorAll("button")).toHaveLength(1);
+    expect(titlebar.querySelector("button")?.getAttribute("aria-label")).toBe(en["explorer.toggle"]);
     expect(titlebar.textContent ?? "").not.toContain("▤");
     expect(screen.getByRole("button", { name: en["sidebar.pair"] })).toBeTruthy();
     expect(screen.getByRole("button", { name: en["sidebar.settings"] })).toBeTruthy();
 
-    // …and the toggle row is still there, in the palette opened from the rail's ⌘K.
     fireEvent.click(screen.getByRole("button", { name: en["sidebar.command.title"] }));
-    expect(screen.getByText(en["palette.toggleRail.title"])).toBeTruthy();
+    expect(screen.queryByText("Toggle the project rail")).toBeNull();
   });
 
   it("still raises the bar for what the *window* could not do", () => {

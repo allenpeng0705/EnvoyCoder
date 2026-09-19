@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./features": {
+      "types": "./src/features.ts",
+      "import": "./src/features.ts"
     }
   },
   "dependencies": {

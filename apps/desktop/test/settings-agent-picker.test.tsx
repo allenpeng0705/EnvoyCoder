@@ -76,7 +76,6 @@ const WIRED: ShortcutActions = {
   "search.find": () => {},
   newTask: () => {},
   "settings.open": () => {},
-  "sidebar.toggle": () => {},
 };
 
 function availability(state: HarnessState): HarnessAvailability {

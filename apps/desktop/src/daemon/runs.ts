@@ -21,6 +21,7 @@
  * | `tool_call { toolCallId, title, status, rawInput }` | `run.tool { status: "running" }` | `updates.ts:51-59` |
  * | `tool_call_update { toolCallId, status, content }` | `run.tool` terminal | `updates.ts:76-86` |
  * | `usage_update { used, size }` | `run.usage { contextUsed, contextSize }` | `updates.ts:93-99` |
+ * | `available_commands_update { availableCommands }` | `run.commands` | ACP session update; the agent's own `/` list |
  * | `session/request_permission { toolCall, options }` | `run.approval-requested` | `packages/acp/acp/src/index.ts:157-172` |
  * | the `session/prompt` result's `stopReason` | `run.ended` | observed against the real binary |
  *
@@ -58,19 +59,28 @@ import {
   type RunEvent,
   type RunMode,
   type TaskStatus,
+  type PromptImage,
   coderError,
 } from "@envoydev/protocol";
 // Only what this file uses: the three delivery helpers (`harnessModelDelivery`, `resolveModelChoice`,
 // `thinkingDelivery`) are `run-options.ts`'s, and were imported here without being read — dead
 // references the compiler does not flag because `noUnusedLocals` is off. Removed while this import
 // block was already being edited.
-import { harnessDefinition, observeSessionOptions } from "@envoydev/agent-catalog";
+import {
+  envoyPermissionPolicy,
+  featureSessionConfigs,
+  harnessDefinition,
+  modeLaunchEnv,
+  observeSessionOptions,
+  sessionSetModeId,
+} from "@envoydev/agent-catalog";
 import type { PlatformId } from "@envoydev/platform";
 
 import type { CoderPaths } from "@envoydev/host-bridge";
 
-import { AcpClient, type AcpAutoRunPolicy, type AcpLaunch, type AcpPermissionRequest, type AcpUpdate } from "./acp/client.js";
+import { AcpClient, type AcpLaunch, type AcpPermissionRequest, type AcpSessionPolicy, type AcpUpdate } from "./acp/client.js";
 import { launchForHarness } from "./launch.js";
+import { slashCommandsFromAcp } from "../composer/slash-commands.js";
 import { keyed, ref } from "./messages.js";
 // The values a run asks for, checked against the catalogue before anything is spawned — and the
 // refusals a user reads when this build cannot deliver one. They live in their own module because they
@@ -94,6 +104,8 @@ export interface RunManagerDeps {
     cwd: string;
     extraArgs?: string;
     model?: string;
+    /** Extra environment for this launch — a DeepSeek permission level. */
+    extraEnv?: Record<string, string>;
   }) => AcpLaunch;
   /** Which platform's argv and spawn rules to use, so the Windows branch is testable. */
   platform?: PlatformId;
@@ -148,11 +160,11 @@ interface LiveRun {
    * the settings again a moment later — a user who flips the switch mid-run should not get a posture
    * the run's own record disagrees with.
    */
-  sessionPolicy: { autoRun: AcpAutoRunPolicy } | undefined;
+  sessionPolicy: AcpSessionPolicy | undefined;
   /** The turn currently in flight, so `send` can tell "queued" from "steered". */
   turn: Promise<{ stopReason: string }> | undefined;
   /** Messages the user sent, oldest first. */
-  queued: { text: string; mode: RunMode }[];
+  queued: { text: string; mode: RunMode; images?: PromptImage[] }[];
   /** Why the turn in flight was interrupted — the difference between `cancel` and `steer`. */
   intent: "none" | "cancel" | "steer";
   /** The approval the run is blocked on, if any. */
@@ -193,6 +205,8 @@ export interface StartRunInput {
    * the observed option list, which is a record of an earlier session rather than a promise.
    */
   thinkingLevel?: string;
+  /** Pictures for this turn. Absent when the message is only words. */
+  images?: PromptImage[];
 }
 
 export class RunManager {
@@ -270,6 +284,12 @@ export class RunManager {
     // user did not ask for. The second is not a smaller version of the first — a user who chose
     // `plan` and got an unrestricted agent has been told something false about what is running.
     const agentModeId = resolveAgentMode(task.harness, input.agentModeId ?? task.agentModeId);
+    // A permission level is not `session/set_mode`. DeepSeek takes it as `DSH_PERMISSION_MODE` on the
+    // process; Envoy Harness takes it as `session/set_policy`. `default` / `plan` / `review` stay on
+    // `session/set_mode`, and those runs still get the settings switch as `autoRun`.
+    const permissionEnv = modeLaunchEnv(task.harness, agentModeId);
+    const permissionPolicy = envoyPermissionPolicy(task.harness, agentModeId);
+    const modeToSet = sessionSetModeId(agentModeId);
     // The model, on exactly the same terms and for a failure that is easier to miss: `envoy-harness`
     // parses `--model` whether or not `--provider` is there and *then ignores it*
     // (`../envoy-harness/packages/envoy-harness/src/cli/run/acp.ts:100-106`), so a model we could not
@@ -298,16 +318,19 @@ export class RunManager {
      * `undefined` for an agent with no `session/set_policy` — deliberately not a refusal, for the
      * reasons `resolveApprovalPolicy` records, and disclosed on screen by the settings row instead.
      */
-    const sessionPolicy = resolveApprovalPolicy(
-      task.harness,
-      this.settings().requireApprovalForDestructive,
-    );
+    const sessionPolicy =
+      permissionPolicy ??
+      resolveApprovalPolicy(
+        task.harness,
+        this.settings().requireApprovalForDestructive,
+      );
     const launch = this.deps.resolveLaunch
       ? this.deps.resolveLaunch({
           harness: task.harness,
           cwd: task.cwd,
           ...(task.extraArgs ? { extraArgs: task.extraArgs } : {}),
           ...(model ? { model } : {}),
+          ...(permissionEnv ? { extraEnv: permissionEnv } : {}),
         })
       : // **The same function the probe calls** (`launch.ts`), which is the point of it being a module
         // rather than a method here: a probe starts the agent exactly the way a run does, so a change to
@@ -323,6 +346,7 @@ export class RunManager {
           // pure function of its input on purpose; which route this machine takes is daemon state, and this is
           // the one place a run is started from.
           ...(this.deps.deliveryOf ? { delivery: this.deps.deliveryOf(task.harness) } : {}),
+          ...(permissionEnv ? { extraEnv: permissionEnv } : {}),
         });
 
     const run: AgentRun = {
@@ -351,6 +375,11 @@ export class RunManager {
         // Model first: an agent derives its thinking levels from the model it has resolved.
         ...(modelConfig ? [modelConfig] : []),
         ...(thinkingConfig && thinkingLevel ? [{ ...thinkingConfig, value: thinkingLevel }] : []),
+        // Plan, when this agent accepts it. Fast is remembered and not sent — see features.ts.
+        ...featureSessionConfigs(task.harness, model, {
+          ...(task.fastMode !== undefined ? { fastMode: task.fastMode } : {}),
+          ...(task.planMode !== undefined ? { planMode: task.planMode } : {}),
+        }),
       ],
       sessionPolicy,
       turn: undefined,
@@ -375,7 +404,7 @@ export class RunManager {
 
     // The turn runs in the background: `coder.startRun` answers as soon as the run *exists*, so the
     // UI renders a task starting rather than blocking until it finishes.
-    void this.drive(live, input.prompt, input.resume === true, agentModeId);
+    void this.drive(live, input.prompt, input.resume === true, modeToSet, input.images);
     return run;
   }
 
@@ -393,6 +422,7 @@ export class RunManager {
     firstPrompt: string,
     resume: boolean,
     agentModeId: string | undefined,
+    firstImages?: PromptImage[],
   ): Promise<void> {
     const startClient = this.deps.startClient ?? AcpClient.start;
     try {
@@ -440,8 +470,9 @@ export class RunManager {
       });
 
       let prompt = firstPrompt;
+      let images = firstImages;
       for (;;) {
-        live.turn = client.prompt(prompt);
+        live.turn = client.prompt(prompt, images);
         const result = await live.turn;
         live.turn = undefined;
 
@@ -457,6 +488,7 @@ export class RunManager {
         }
         if (next) {
           prompt = next.text;
+          images = next.images;
           continue;
         }
         await this.finish(live, statusForStopReason(result.stopReason), null);
@@ -566,6 +598,13 @@ export class RunManager {
         });
         return;
       }
+      case "available_commands_update": {
+        void this.record(live, {
+          kind: "run.commands",
+          commands: slashCommandsFromAcp(update),
+        });
+        return;
+      }
       default:
         // A kind this build does not render is dropped rather than guessed at. Showing a user raw
         // JSON for an unknown payload is worse than showing nothing.
@@ -640,7 +679,12 @@ export class RunManager {
    * are the two things the protocol can actually do — and note that both are *delivered*, so neither
    * mode silently drops a message.
    */
-  async send(runId: string, text: string, mode: RunMode): Promise<"queued" | "steered"> {
+  async send(
+    runId: string,
+    text: string,
+    mode: RunMode,
+    images?: PromptImage[],
+  ): Promise<"queued" | "steered"> {
     const live = this.active.get(runId);
     if (!live || live.settled) {
       throw coderError(
@@ -659,7 +703,11 @@ export class RunManager {
       );
     }
 
-    live.queued.push({ text, mode });
+    live.queued.push({
+      text,
+      mode,
+      ...(images !== undefined && images.length > 0 ? { images } : {}),
+    });
     const delivered = mode === "steer" ? "steered" : "queued";
     await this.record(live, { kind: "run.message", text, mode, delivered });
 

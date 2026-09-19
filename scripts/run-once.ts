@@ -146,6 +146,8 @@ function describeEvent(event: RunEvent): string {
       return `diff           ${event.files.length} file(s)`;
     case "run.usage":
       return `context        ${event.contextUsed ?? "?"}/${event.contextSize ?? "?"}`;
+    case "run.commands":
+      return `commands       ${event.commands.map((command) => command.name).join(", ")}`;
     case "run.status":
       return `status         ${event.status}${event.note ? ` — ${event.note}` : ""}`;
     case "run.ended":

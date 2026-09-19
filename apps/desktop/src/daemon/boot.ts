@@ -156,7 +156,7 @@ export function alreadyRunningOutcome(descriptor: {
     headline: "EnvoyDev is already running on this machine.",
     detail: [
       `Daemon pid ${descriptor.pid}, on port ${descriptor.port}, started ${descriptor.startedAt} (version ${descriptor.version}).`,
-      "One daemon serves this machine, so that a task keeps running when you close a window.",
+      "One daemon serves this machine while EnvoyDev is open. Quitting the app stops it.",
       "Open a window and it will attach to the daemon that is already there.",
     ],
   };

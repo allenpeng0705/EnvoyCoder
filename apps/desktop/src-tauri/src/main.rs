@@ -6,8 +6,11 @@
 //! and the paired phone, and it is the only process positioned to reap it. Four rules are carried
 //! over from EnvoyMesh's shell, each of which cost it a bug:
 //!
-//!   1. **Kill only the child you started.** Resolving "who is on port 4770" and killing them is how
-//!      a supervisor kills another app's process. The pid we recorded is the only safe target.
+//!   1. **Quitting the app stops our daemon.** The claim file names the pid — the daemon this app
+//!      started, including one an earlier launch left behind and this window only attached to.
+//!      Stopping the app stops that pid, so the next open does not talk to yesterday's build.
+//!      Never by port and never by process name: a stranger on 4770 is not ours. The claim's
+//!      product check is what makes the pid ours.
 //!   2. **A liveness answer must identify the process.** A health endpoint answering proves a server
 //!      exists, not that it is ours — two products serving the same ports is exactly this family's
 //!      situation. Here the identity check happens in the **window**, over the protocol
@@ -33,12 +36,18 @@ use std::collections::HashMap;
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
+
+mod browser;
+mod terminal;
+
+use browser::{browser_close, browser_frame, browser_navigate, browser_open};
+use terminal::{terminal_close, terminal_open, terminal_resize, terminal_write};
 
 /// The family's product name, used for the shared-home segment and the pairing `app` claim.
 const PRODUCT_NAME: &str = "EnvoyDev";
@@ -375,7 +384,7 @@ fn open_daemon_log() -> Option<File> {
 /// The wait is on the **claim file**, not on the port: the claim is written after the socket is
 /// listening and records the port the OS actually bound, so a daemon started with port `0` is still
 /// reachable without the shell having to find out which port it chose.
-fn spawn_daemon(port: u16) -> Result<DaemonClaim, String> {
+fn spawn_daemon(port: u16) -> Result<(DaemonClaim, Child), String> {
     let entry = resolve_daemon_entry()?;
     let node = resolve_node_exe();
 
@@ -426,7 +435,7 @@ fn spawn_daemon(port: u16) -> Result<DaemonClaim, String> {
             // which is normal when two open at once — attach, and let our child exit on its own when
             // it notices the claim belongs to somebody else.
             if claim.pid == pid || is_alive(claim.pid) {
-                return Ok(claim);
+                return Ok((claim, child));
             }
         }
         if let Ok(Some(status)) = child.try_wait() {
@@ -438,6 +447,7 @@ fn spawn_daemon(port: u16) -> Result<DaemonClaim, String> {
         std::thread::sleep(Duration::from_millis(100));
     }
 
+    stop_child(pid);
     Err(format!(
         "EnvoyDev's daemon did not finish starting within {} seconds. Its output is in {}.",
         CLAIM_TIMEOUT.as_secs(),
@@ -447,12 +457,14 @@ fn spawn_daemon(port: u16) -> Result<DaemonClaim, String> {
 
 /* ────────────────────────────── stopping it ────────────────────────────── */
 
-/// Stop a child and everything it started.
+/// Stop a daemon and everything it started.
 ///
-/// Never by port, never by name, and never "whatever is listening": only the pid we spawned, and on
-/// POSIX only its own process group. The family's shell learned this the expensive way — it used to
-/// kill whatever held its ports, by pid from `lsof`, which is correct on a developer's machine and
-/// dangerous the moment it is not.
+/// Never by port, never by name, and never "whatever is listening": only a pid this shell spawned
+/// or the pid in our own claim file. On POSIX the signal goes to that process group, because the
+/// shell starts the daemon in its own group (`process_group(0)`) so the agents it spawned die with
+/// it. The family's shell learned the other way the expensive way — it used to kill whatever held
+/// its ports, by pid from `lsof`, which is correct on a developer's machine and dangerous the
+/// moment it is not.
 fn stop_child(pid: u32) {
     #[cfg(unix)]
     {
@@ -560,9 +572,14 @@ fn daemon_endpoint(supervisor: State<'_, Supervisor>) -> Result<DaemonEndpoint, 
         }
     }
 
-    let claim = spawn_daemon(daemon_port())?;
-    // Only recorded when it is genuinely ours — an attached daemon is somebody else's child, and
-    // ExitRequested must not kill it.
+    let (claim, child) = spawn_daemon(daemon_port())?;
+    // Recorded only when the claim is this child. Another launch that won the race is the daemon
+    // quit will stop, via the claim; this child notices and exits on its own.
+    if claim.pid == child.id() {
+        if let Ok(mut slot) = supervisor.child.lock() {
+            *slot = Some(child);
+        }
+    }
     Ok(endpoint_from(claim, "started"))
 }
 
@@ -594,6 +611,8 @@ fn main() {
     tauri::Builder::default()
         .manage(Supervisor::default())
         .manage(PendingProjects::default())
+        .manage(terminal::Sessions::default())
+        .manage(browser::Pages::default())
         // `daemon_port` is deliberately *not* a command any more. The window asks where the daemon
         // is (`daemon_endpoint`) rather than which port to dial: the shell decides what "the daemon"
         // means, and a command that handed out a port would invite the window to build a URL of its
@@ -608,29 +627,87 @@ fn main() {
                 copy_text,
                 // Multi-window: open another window on the same daemon, optionally focused on a project.
                 new_window,
-                take_pending_project
+                take_pending_project,
+                terminal_open,
+                terminal_write,
+                terminal_resize,
+                terminal_close,
+                browser_open,
+                browser_frame,
+                browser_navigate,
+                browser_close
             ])
         .build(tauri::generate_context!())
         .expect("EnvoyDev failed to start")
         .run(|app, event| {
-            // On the way out, stop **only** the daemon this shell started. A daemon that was already
-            // running when this window opened belongs to whatever started it, and a window that
-            // killed it would take every other window's tasks with it.
-            if let tauri::RunEvent::ExitRequested { .. } = event {
-                let supervisor = app.state::<Supervisor>();
-                // The guard is taken and dropped inside its own scope: `State` borrows the app, and a
-                // guard that outlives the statement borrows it past the end of the closure body.
-                let stopped = {
-                    match supervisor.child.lock() {
-                        Ok(mut slot) => slot.take(),
-                        Err(_) => None,
+            match event {
+                // Quit, including the exit requested when the last window closes. One path, so the
+                // grace wait below cannot run twice.
+                tauri::RunEvent::ExitRequested { .. } => stop_daemon_for_exit(app),
+                // macOS leaves the process running after the last window closes. A shipped app does
+                // not: closing the window is how a person stops it, and the daemon has to go with it.
+                // Another window of this same process keeps the daemon — `webview_windows` is not empty.
+                tauri::RunEvent::WindowEvent {
+                    event: tauri::WindowEvent::Destroyed,
+                    ..
+                } => {
+                    if app.webview_windows().is_empty() {
+                        app.exit(0);
                     }
-                };
-                if let Some(child) = stopped {
-                    stop_child(child.id());
                 }
+                _ => {}
             }
         });
+}
+
+/// Set once `stop_daemon_for_exit` has begun, so a second `ExitRequested` (last-window close, then
+/// the exit it requests) does not wait out the grace period twice.
+static DAEMON_STOP_STARTED: AtomicBool = AtomicBool::new(false);
+
+/// Pids to signal when the app is quitting.
+///
+/// The child this process spawned, and the daemon the claim names when this window only attached.
+/// The same pid is listed once. Pid 0 is never a process.
+fn daemon_pids_to_stop(managed: Option<u32>, claim_pid: Option<u32>) -> Vec<u32> {
+    let mut pids = Vec::new();
+    if let Some(pid) = managed {
+        if pid != 0 {
+            pids.push(pid);
+        }
+    }
+    if let Some(pid) = claim_pid {
+        if pid != 0 && !pids.contains(&pid) {
+            pids.push(pid);
+        }
+    }
+    pids
+}
+
+/// Stop the daemon this app is responsible for.
+///
+/// A window that attached still names that daemon in the claim. Leaving it running is how a later
+/// launch talks to an older build after the person quit. A second copy of the app shares the one
+/// daemon; quitting either copy stops it, which is the same rule as quitting the only copy.
+fn stop_daemon_for_exit(app: &tauri::AppHandle) {
+    // Terminals are our children in their own session, so they do not die with the process
+    // group. Same exit path as the daemon, including the second call that returns below.
+    terminal::shutdown(app);
+    if DAEMON_STOP_STARTED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let supervisor = app.state::<Supervisor>();
+    // The guard is taken and dropped inside its own scope: `State` borrows the app, and a guard
+    // that outlives the statement borrows it past the end of the function.
+    let managed = {
+        match supervisor.child.lock() {
+            Ok(mut slot) => slot.take().map(|child| child.id()),
+            Err(_) => None,
+        }
+    };
+    let claim_pid = live_claim().map(|claim| claim.pid);
+    for pid in daemon_pids_to_stop(managed, claim_pid) {
+        stop_child(pid);
+    }
 }
 
 /* ────────────────────────────── multi-window ────────────────────────────── */
@@ -1115,6 +1192,17 @@ mod tests {
         assert!(read_claim(&file).is_some());
 
         let _ = std::fs::remove_file(&file);
+    }
+
+    #[test]
+    fn quitting_stops_the_daemon_we_started_and_the_one_we_only_attached_to() {
+        // The same pid is one stop. An attached daemon is still ours to stop. Pid 0 is not a process.
+        assert_eq!(daemon_pids_to_stop(Some(10), Some(10)), vec![10]);
+        assert_eq!(daemon_pids_to_stop(None, Some(10)), vec![10]);
+        assert_eq!(daemon_pids_to_stop(Some(10), None), vec![10]);
+        assert_eq!(daemon_pids_to_stop(Some(10), Some(11)), vec![10, 11]);
+        assert!(daemon_pids_to_stop(Some(0), Some(0)).is_empty());
+        assert!(daemon_pids_to_stop(None, None).is_empty());
     }
 
     #[test]

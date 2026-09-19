@@ -148,6 +148,8 @@ const pendingPrompts = new Map();
  * that omits the key; the defaults it is built over are `session-backend.ts:417-420`).
  */
 let autoRunPolicy = null;
+let sandboxPolicy = null;
+let approvalPolicy = null;
 
 /**
  * The `autoRun` values `envoy-harness` validates, verbatim (`protocol/acp-params.ts:237-295`).
@@ -157,6 +159,8 @@ let autoRunPolicy = null;
  * client with a misspelled posture — or a translated one — pass every test here.
  */
 const AUTO_RUN_POLICIES = ["always-confirm", "safe-only", "off"];
+const SANDBOX_MODES = ["read-only", "workspace-write", "danger-full-access"];
+const APPROVAL_MODES = ["unless-trusted", "on-request", "granular", "never"];
 
 const MODEL_DEFAULT = '["fake","flash"]';
 
@@ -299,6 +303,21 @@ function handlePrompt(id, params) {
     return;
   }
 
+  if (text.includes("commands")) {
+    // The shape ACP agents use to publish their own slash commands (`available_commands_update`).
+    // A leading slash and a nameless entry are noise the daemon must drop, not offer.
+    update({
+      sessionUpdate: "available_commands_update",
+      availableCommands: [
+        { name: "compact", description: "Summarize the conversation", input: { hint: "[focus]" } },
+        { name: "/review", description: "Review the diff" },
+        { name: "", description: "dropped" },
+      ],
+    });
+    ok(id, { stopReason: "end_turn" });
+    return;
+  }
+
   if (text.includes("resume-me")) {
     // Proves *which* session answered, so a test can tell a resume from a fresh start.
     update({ sessionUpdate: "agent_message_chunk", messageId: "m-r", content: { type: "text", text: `session ${sessionId}` } });
@@ -337,7 +356,7 @@ function handlePrompt(id, params) {
     // the same reason: a test that asserted several at once could not tell the posture that reached the
     // agent from one that was dropped while the model arrived. `(none)` is the peer's own "no autoRun
     // has been set" state, and it is a different answer from any of the three values.
-    update({ sessionUpdate: "agent_message_chunk", messageId: "m-policy", content: { type: "text", text: `autoRun: ${autoRunPolicy ?? "(none)"}` } });
+    update({ sessionUpdate: "agent_message_chunk", messageId: "m-policy", content: { type: "text", text: `autoRun: ${autoRunPolicy ?? "(none)"} sandbox: ${sandboxPolicy ?? "(none)"} approval: ${approvalPolicy ?? "(none)"}` } });
     ok(id, { stopReason: "end_turn" });
     return;
   }
@@ -509,14 +528,26 @@ function handle(message) {
         fail(id, -32602, `unknown session: ${String(params?.sessionId)}`);
         return;
       }
-      if (!AUTO_RUN_POLICIES.includes(params?.autoRun)) {
+      const hasAuto = AUTO_RUN_POLICIES.includes(params?.autoRun);
+      const hasSandbox = SANDBOX_MODES.includes(params?.sandbox);
+      const hasApproval = APPROVAL_MODES.includes(params?.approval);
+      if (!hasAuto && !hasSandbox && !hasApproval && typeof params?.preset !== "string") {
         fail(id, -32602, "preset, sandbox, approval, or autoRun required");
         return;
       }
-      autoRunPolicy = params.autoRun;
+      if (hasAuto) autoRunPolicy = params.autoRun;
+      if (hasSandbox) sandboxPolicy = params.sandbox;
+      if (hasApproval) approvalPolicy = params.approval;
       // Only the keys that were handed over, inside the peer's envelope — so a client that reads
-      // `result.result.autoRun` to learn the posture works here too.
-      ok(id, { result: { autoRun: autoRunPolicy } });
+      // `result.result.autoRun` to learn the posture works here too. A sandbox sent alone must not
+      // invent an `autoRun` the caller did not set.
+      ok(id, {
+        result: {
+          ...(hasAuto ? { autoRun: autoRunPolicy } : {}),
+          ...(hasSandbox ? { sandbox: sandboxPolicy } : {}),
+          ...(hasApproval ? { approval: approvalPolicy } : {}),
+        },
+      });
       return;
     }
     case "session/set_config_option": {

@@ -22,13 +22,19 @@ const { version } = JSON.parse(
 export default defineConfig({
   define: { __ENVOYDEV_VERSION__: JSON.stringify(version) },
   resolve: {
-    alias: {
-      "@envoydev/protocol": `${here}packages/protocol/src/index.ts`,
-      "@envoydev/platform": `${here}packages/platform/src/index.ts`,
-      "@envoydev/task-model": `${here}packages/task-model/src/index.ts`,
-      "@envoydev/agent-catalog": `${here}packages/agent-catalog/src/index.ts`,
-      "@envoydev/host-bridge": `${here}packages/host-bridge/src/index.ts`,
-    },
+    alias: [
+      // Before the package root. A prefix alias for the root would turn this subpath into
+      // `index.ts/features` and the window tests would load the Node barrel.
+      {
+        find: "@envoydev/agent-catalog/features",
+        replacement: `${here}packages/agent-catalog/src/features.ts`,
+      },
+      { find: "@envoydev/protocol", replacement: `${here}packages/protocol/src/index.ts` },
+      { find: "@envoydev/platform", replacement: `${here}packages/platform/src/index.ts` },
+      { find: "@envoydev/task-model", replacement: `${here}packages/task-model/src/index.ts` },
+      { find: "@envoydev/agent-catalog", replacement: `${here}packages/agent-catalog/src/index.ts` },
+      { find: "@envoydev/host-bridge", replacement: `${here}packages/host-bridge/src/index.ts` },
+    ],
   },
   test: {
     environment: "node",

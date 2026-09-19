@@ -36,10 +36,11 @@ function scopeOf(target: EventTarget | null): FocusScope {
   const element = target as HTMLElement | null;
   if (!element) return "other";
   const tag = element.tagName?.toLowerCase();
+  // Before the editable check: xterm's own field is a textarea, and a terminal owns Escape
+  // (the shell, vim) rather than "stop the agent".
+  if (element.closest?.("[data-terminal]")) return "terminal";
   if (tag === "input" || tag === "textarea" || tag === "select") return "editable";
   if (element.isContentEditable) return "editable";
-  // A terminal pane will set this when it lands; until then nothing claims the scope.
-  if (element.closest?.("[data-terminal]")) return "terminal";
   return "other";
 }
 

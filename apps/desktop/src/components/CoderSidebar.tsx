@@ -150,6 +150,27 @@ export interface CoderSidebarProps {
   focusProjectId?: string | undefined;
 }
 
+/** The mark beside a project name: the first letter, upper case. */
+function projectMark(label: string): string {
+  const letter = label.trim().charAt(0);
+  return letter === "" ? "?" : letter.toUpperCase();
+}
+
+/**
+ * Ten muted fills, one per project. The index is a hash of the project id, so a rename does not
+ * recolor the row and a reload does not shuffle the list. These are not status colours: green,
+ * amber, red and blue already mean finished, needs you, failed and working.
+ */
+const MARK_TONES = ["violet", "sky", "emerald", "orange", "pink", "indigo", "teal", "red", "amber", "blue"] as const;
+
+function projectMarkTone(id: string): (typeof MARK_TONES)[number] {
+  let hash = 0;
+  for (const character of id) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+  return MARK_TONES[hash % MARK_TONES.length] ?? "violet";
+}
+
 export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
   const t = useT();
   const [collapsed, setCollapsed] = useState<readonly string[]>([]);
@@ -286,6 +307,9 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                   >
                     <span className="project__chevron" aria-hidden>
                       {isCollapsed ? "▶" : "▼"}
+                    </span>
+                    <span className="project__mark" data-tone={projectMarkTone(group.project.id)} aria-hidden>
+                      {projectMark(group.project.label)}
                     </span>
                     <span className="project__label">{group.project.label}</span>
                     {group.counts.needsAttention > 0 ? (

@@ -45,11 +45,12 @@ import process from "node:process";
 import {
   AcpRequestError,
   type AcpAgentInfo,
-  type AcpAutoRunPolicy,
   type AcpLaunch,
+  type AcpSessionPolicy,
   type AcpPermissionRequest,
   type AcpUpdate,
 } from "./protocol.js";
+import { sessionPromptAttempts } from "./prompt-attempts.js";
 
 // The shapes themselves live in `./protocol.ts` — see its header for why the seam is there — and are
 // re-exported so that the module a caller has always reached for stays this one.
@@ -57,6 +58,7 @@ export type {
   AcpAgentInfo,
   AcpAutoRunPolicy,
   AcpLaunch,
+  AcpSessionPolicy,
   AcpPermissionRequest,
   AcpUpdate,
 } from "./protocol.js";
@@ -133,7 +135,7 @@ export interface AcpClientOptions {
    * transcript — the agent simply stops asking, or keeps asking — and the run would report a safety
    * posture it is not in. Throwing fails the run with the agent's own words instead.
    */
-  sessionPolicy?: { autoRun: AcpAutoRunPolicy };
+  sessionPolicy?: AcpSessionPolicy;
   /**
    * Stop after `initialize`, and let the caller drive the rest — **for the two callers whose question is
    * about the agent rather than about a session.**
@@ -291,7 +293,7 @@ export class AcpClient {
       // what it *asks about*, and the peer accepts it only while the session is idle — before the first
       // prompt, which is exactly where this is. It is also the only one of the four whose absence means
       // "leave the agent's own policy alone", so a failure here has nothing to fall back to.
-      if (options.sessionPolicy) await client.setPolicy(options.sessionPolicy.autoRun)
+      if (options.sessionPolicy) await client.setPolicy(options.sessionPolicy)
       return client;
     } catch (error) {
       // A half-started agent is a process we own and must not leak.
@@ -486,10 +488,10 @@ export class AcpClient {
     const sessionId = this.requireSession();
     const param = this.options.launch.modeParam;
     if (param === undefined) {
-      // Unreachable from a run — `resolveAgentMode` refuses a mode for any entry whose
-      // `capabilities.agentMode` is false, and `drivable.test.ts` asserts that every entry claiming one
-      // declares this field. It is here so that the day those two drift, the failure is a sentence
-      // rather than a mode silently applied to a field the agent ignores.
+      // Unreachable from a run that went through `sessionSetModeId`. A permission level is not sent
+      // here — DeepSeek has no `modeParam`, and Envoy Harness refuses those ids on `session/set_mode`.
+      // This throw is what is left if those two drift: a sentence, rather than a mode applied to a
+      // field the agent ignores.
       throw new Error(
         "EnvoyDev does not know which parameter this agent's session/set_mode reads, so it did " +
           "not ask for a mode. The agent's catalogue entry has to record it before one can be set.",
@@ -538,16 +540,20 @@ export class AcpClient {
    * the built binary rather than inferred from its source — the daemon does not call it, because a
    * policy this daemon set is one it already knows.
    *
-   * **Only one field is sent, and only ever a bare value.** The method also carries `sandbox` and
-   * `approval` (and a `preset` that expands to all three), and those are the agent's own security
-   * posture — `session/set_mode` is what EnvoyDev uses to bound what an agent may do, and a settings
-   * row about approvals has no business changing the sandbox underneath it.
+   * **The fields that are set are the ones that are sent.** `autoRun` alone is the settings switch.
+   * A permission level also sends `sandbox` and `approval`, and Full access sends `autoRun: "off"`
+   * so the settings switch does not keep asking after the user chose not to be asked.
    */
-  private async setPolicy(autoRun: AcpAutoRunPolicy): Promise<void> {
+  private async setPolicy(policy: AcpSessionPolicy): Promise<void> {
     const sessionId = this.requireSession();
     await this.request(
       "session/set_policy",
-      { sessionId, autoRun },
+      {
+        sessionId,
+        ...(policy.sandbox !== undefined ? { sandbox: policy.sandbox } : {}),
+        ...(policy.approval !== undefined ? { approval: policy.approval } : {}),
+        ...(policy.autoRun !== undefined ? { autoRun: policy.autoRun } : {}),
+      },
       this.options.handshakeTimeoutMs ?? 30_000,
     );
   }
@@ -561,32 +567,32 @@ export class AcpClient {
    * request that reports cancellation, and treating it as a failure would show a user an error for
    * something they asked for.
    */
-  async prompt(text: string): Promise<{ stopReason: string }> {
+  async prompt(
+    text: string,
+    images?: readonly { mimeType: string; data: string }[],
+  ): Promise<{ stopReason: string }> {
     const sessionId = this.requireSession();
     // A turn is minutes of work, not a handshake. The timeout exists so a wedged agent does not hold
     // a run open forever; it is generous because the alternative is killing real work.
     const timeoutMs = this.options.requestTimeoutMs ?? 30 * 60_000;
+    // Which body goes first is `prompt-attempts.ts`. Retrying is safe because `invalid params` is
+    // thrown by the parser, before the agent has done anything — there is no half-run turn to
+    // duplicate. A retry on any other failure would run the task twice. A picture never falls through
+    // to `{text}`: that shape would drop it.
+    const attempts = sessionPromptAttempts(sessionId, text, images);
 
     try {
-      const result = (await this.request(
-        "session/prompt",
-        // The **standard** ACP shape: a list of content blocks.
-        { sessionId, prompt: [{ type: "text", text }] },
-        timeoutMs,
-      )) as { stopReason?: string };
+      const result = (await this.request("session/prompt", attempts.first, timeoutMs)) as {
+        stopReason?: string;
+      };
       return { stopReason: result.stopReason ?? "unknown" };
     } catch (error) {
-      if (!isPromptShapeRefusal(error)) throw error;
-      // The two native harnesses disagree about how a prompt is shaped, and the standard form is not
-      // the one the built-in agent accepts: `envoy-harness` parses `{sessionId, text}` (or a
-      // `content` block list), and rejects the standard array with `-32602 text required`
-      // (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:120-133`), while `dsh`
-      // takes the array and not the flat string.
-      //
-      // Retrying is safe *here* specifically because `invalid params` is thrown by the parser, before
-      // the agent has done anything — there is no half-run turn to duplicate. A retry on any other
-      // failure would be exactly the kind of thing that runs a task twice.
-      const result = (await this.request("session/prompt", { sessionId, text }, timeoutMs)) as {
+      if (attempts.pictures) {
+        if (!(error instanceof AcpRequestError) || error.code !== INVALID_PARAMS) throw error;
+      } else if (!isPromptShapeRefusal(error)) {
+        throw error;
+      }
+      const result = (await this.request("session/prompt", attempts.second, timeoutMs)) as {
         stopReason?: string;
       };
       return { stopReason: result.stopReason ?? "unknown" };

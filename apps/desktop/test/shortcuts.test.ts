@@ -83,7 +83,7 @@ describe("when a binding applies", () => {
       when: { terminal: true },
     };
     expect(bindingApplies(interrupt, { ...mac, scope: "terminal" })).toBe(true);
-    expect(bindingApplies(SHELL_BINDINGS.find((b) => b.id === "sidebar.toggle")!, { ...mac, scope: "terminal" }))
+    expect(bindingApplies(SHELL_BINDINGS.find((b) => b.id === "commandCenter.open")!, { ...mac, scope: "terminal" }))
       .toBe(false);
   });
 

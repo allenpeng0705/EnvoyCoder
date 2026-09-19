@@ -47,6 +47,7 @@ import {
 } from "../i18n/notice.js";
 import { CoderSidebar } from "./CoderSidebar.js";
 import { CommandCenter, buildCommandContributions } from "./CommandCenter.js";
+import { PanelRightIcon } from "./icons.js";
 import { TaskPane } from "./TaskPane.js";
 import { MeshStatusBar } from "./MeshStatusBar.js";
 import { SettingsPane } from "./SettingsPane.js";
@@ -343,7 +344,8 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
     if (newest) setActiveId(newest.id);
   }, [focusProjectId, state.projects, state.tasks, activeId]);
 
-  const [railOpen, setRailOpen] = useState(true);
+  /** The explorer sits on the right of the open task. The control itself is in the title bar. */
+  const [explorerOpen, setExplorerOpen] = useState(false);
   /**
    * **The two failures this shell routes, because it is what holds the press.**
    *
@@ -460,7 +462,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
   // It is a named value rather than an inline argument because the settings pane renders the *same*
   // object: `wiredBindings` below is the table filtered by the actions here, which is what makes the
   // Shortcuts section a report of what the window listens for instead of a list of what the table
-  // declares — three of the eight bindings have no action in this build, and a page that printed their
+  // declares — three of the seven bindings have no action in this build, and a page that printed their
   // combos would be advertising keys that do nothing.
   const shortcutActions: ShortcutActions = {
     // ⌘K and ⌘P stay the catalogue: that is what a command palette is for, and a user who presses it is
@@ -480,7 +482,6 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
       openPalette(intent);
     },
     "settings.open": openAppSettings,
-    "sidebar.toggle": () => setRailOpen((open) => !open),
   };
   useShortcuts(shortcutActions);
   // Cheap (eight comparisons) and derived, so no `useMemo`: memoising it would add a dependency array
@@ -570,14 +571,13 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
         },
         onOpenSettings: openAppSettings,
         onPairPhone: openPairing,
-        onToggleRail: () => setRailOpen((open) => !open),
         onRevealTask: (taskId) => setActiveId(taskId),
       }),
     [state.projects, state.tasks, state.settings.defaultProjectPath, props.actions, t],
   );
 
   return (
-    <div className={`shell${railOpen ? "" : " shell--rail-hidden"}`}>
+    <div className="shell">
       {/* **Tauri drags a window by an attribute, not by CSS.** `-webkit-app-region: drag` is the Electron
           mechanism and Tauri ignores it, which is why this bar could not move the window at all — and why
           the same rule swallowed clicks on the controls inside it. The attribute applies to the element it
@@ -590,13 +590,8 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
            control behaves normally. */
         onMouseDown={(event) => startWindowDrag(event)}
       >
-        {/* **The rail's toggle used to stand here, and it is gone.**
-            The owner: *"I think we don't [need] the icon button at the left side of app logo on the app's window."*
-            It was a `▤` glyph before the mark and the name, which is the one place in the window reserved for
-            *which product this is*. The rail is not stranded without it: `⌘B` toggles it
-            (`input/shortcuts.ts`, listed on *Settings → Keyboard shortcuts*) and the command palette carries
-            *Toggle the project rail* as a row — the same shape the reference product uses for the commands it does
-            not put in its chrome. */}
+        {/* The product mark stays here. Hiding the project list used to live beside it, and that
+            took the list — and the button that brought it back — off the window. The list stays. */}
         {/* **The app's own mark, from the asset the product ships** (`apps/desktop/assets/logo.png`, rendered at
             18px from a 128px copy so a window does not decode a megabyte for a favicon-sized slot). It is
             decorative — `alt=""` — because the name is right beside it and a screen reader that read both would
@@ -604,6 +599,16 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
         <img className="titlebar__logo" src={logo} alt="" width={18} height={18} data-tauri-drag-region />
         <span className="titlebar__title" data-tauri-drag-region>{t("app.name")}</span>
         <span className="titlebar__spacer" data-tauri-drag-region />
+        <button
+          type="button"
+          className="button button--ghost button--icon has-hint"
+          aria-label={t("explorer.toggle")}
+          data-hint={t("explorer.toggle")}
+          aria-pressed={explorerOpen}
+          onClick={() => setExplorerOpen((open) => !open)}
+        >
+          <PanelRightIcon />
+        </button>
         <ConnectionChip state={state} />
         {/* Pair, Settings and Command Center live on the rail's top row (`CoderSidebar`), beside
             "+ Add project" — not duplicated here. The palette still opens via ⌘K on that row. */}
@@ -629,8 +634,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
       ) : null}
 
       <div className="shell__body">
-        {railOpen ? (
-          <CoderSidebar
+        <CoderSidebar
             projects={state.projects}
             tasks={state.tasks}
             activeTaskId={activeId}
@@ -662,7 +666,6 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
             unavailable={projectsUnavailable}
             tasksUnknown={!state.tasksKnown}
           />
-        ) : null}
 
         <main className="work">
           {settingsScope !== undefined ? (
@@ -738,15 +741,25 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               probeSupported={
                 state.hello?.methods.includes("coder.probeSessionOptions") === true
               }
+              explorerOpen={explorerOpen}
+              onListDirectory={(path) => props.actions.listDirectory(path)}
+              onListChanges={(path) => props.actions.listWorktreeChanges(path)}
+              onReadFile={(path) => props.actions.readFile(path)}
+              onReadDiff={(directory, path, from) => props.actions.readWorktreeDiff(directory, path, from)}
+              onCreateEntry={(directory, name, kind) => props.actions.createEntry(directory, name, kind)}
               onProbeAgent={(harness, options) =>
                 props.actions.probeSessionOptions(harness, options)
               }
               notice={active && paneFailure?.taskId === active.id ? localize(t, paneFailure.notice) : undefined}
-              onStart={async (prompt, agentModeId, model, thinkingLevel) => {
+              onNewTask={() => {
+                void startNewTask(active.projectId).then((failure) => toRail(active.projectId, failure));
+              }}
+              onStart={async (prompt, agentModeId, model, thinkingLevel, images) => {
                 const result = await props.actions.startRun(active.id, prompt, {
                   ...(agentModeId !== undefined ? { agentModeId } : {}),
                   ...(model !== undefined ? { model } : {}),
                   ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
+                  ...(images !== undefined && images.length > 0 ? { images } : {}),
                 });
                 if (!result.ok) {
                   // **The answer, back to the composer**, which keeps the prompt in the field rather than
@@ -782,14 +795,24 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               onChangeThinking={async (thinkingLevel) => {
                 toPane(active.id, asFailure(await props.actions.updateTask({ id: active.id, thinkingLevel })));
               }}
+              onToggleFeature={async (id, value) => {
+                toPane(
+                  active.id,
+                  asFailure(
+                    await props.actions.updateTask(
+                      id === "fast_mode" ? { id: active.id, fastMode: value } : { id: active.id, planMode: value },
+                    ),
+                  ),
+                );
+              }}
               // A refusal here is worth showing: "that is not a folder on this machine" is the one
               // thing the user has to fix before the next run can start.
               onChangeFolder={async (path) => {
                 toPane(active.id, asFailure(await props.actions.updateTask({ id: active.id, cwd: path })));
               }}
-              onSend={async (text, mode) => {
+              onSend={async (text, mode, images) => {
                 if (!active.runId) return undefined;
-                const failure = asFailure(await props.actions.sendToRun(active.runId, text, mode));
+                const failure = asFailure(await props.actions.sendToRun(active.runId, text, mode, images));
                 return toPane(active.id, failure);
               }}
               onCancel={async () => {

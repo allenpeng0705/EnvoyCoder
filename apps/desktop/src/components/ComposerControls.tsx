@@ -62,10 +62,13 @@
  * testable without a DOM, the same split `state/transcript.ts` and `TaskPane` already use.
  */
 
-// No hooks: this component keeps no state of its own (the free-text draft moved into `ModelChoice`,
-// which owns the field that needs it). The `useEffect`/`useState` imports had been dead here since that
-// move — removed while this file was being edited.
-import type { JSX } from "react";
+// The free-text draft lives in `ModelChoice`. The only state here is the Fast/Plan press, so a click
+// paints before `updateTask` comes back — the same reason the mode picker keeps its own choice.
+import { useEffect, useState, type JSX } from "react";
+
+// `./features`, not the package root. The root pulls `node:fs` and the window goes white.
+import { composerFeatures, type AgentFeatureId } from "@envoydev/agent-catalog/features";
+import type { HarnessId } from "@envoydev/protocol";
 
 import {
   modeDescription,
@@ -86,7 +89,7 @@ import type { MessageKey } from "../i18n/messages/en.js";
 import { localize, type Notice } from "../i18n/notice.js";
 import { formatWhen } from "../i18n/when.js";
 import { ModelChoice } from "./ModelChoice.js";
-import { ModeIcon, ModelIcon, ThinkingIcon } from "./icons.js";
+import { FastIcon, ModeIcon, ModelIcon, PlanIcon, ThinkingIcon } from "./icons.js";
 
 export interface ComposerControlsProps {
   /** The modes the agent declares, in the agent's own order. Empty is a fact, not a gap. */
@@ -170,6 +173,14 @@ export interface ComposerControlsProps {
    * DeepSeek keeps the provider/model shape.
    */
   modelBareId?: boolean;
+  /** Which task these toggles belong to. A change resets a press that has not been saved yet. */
+  taskId?: string;
+  harness?: HarnessId;
+  /** Remembered Fast. Absent is off, which is also the agent's own default. */
+  fastMode?: boolean;
+  /** Remembered Plan. Absent is off. */
+  planMode?: boolean;
+  onToggleFeature?: (id: AgentFeatureId, value: boolean) => void;
 }
 
 export function ComposerControls(props: ComposerControlsProps): JSX.Element {
@@ -242,7 +253,7 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
    * pointer opens, and the description a screen reader reads with the control.
    */
   const nextRun = running ? t("task.composer.appliesNextRun") : undefined;
-  /** A control's tooltip: its own reason, then the fact the whole row shares. */
+  /** A control's description for a screen reader. The hover hint is the short name, not this. */
   const chipTitle = (...parts: (string | undefined)[]): string | undefined => {
     const said = parts.filter((part): part is string => part !== undefined && part !== "");
     return said.length === 0 ? undefined : said.join(" · ");
@@ -261,6 +272,18 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
       : thinkingObservedNote !== undefined
         ? t(thinkingObservedNote, { agent: props.agentLabel, at: observedAt(props.thinkingObservedAt) ?? "" })
         : undefined;
+
+  const features =
+    props.harness === undefined ? [] : composerFeatures(props.harness, props.selectedModelId);
+  const [pending, setPending] = useState<Partial<Record<AgentFeatureId, boolean>>>({});
+  useEffect(() => {
+    setPending({});
+  }, [props.taskId]);
+  const featureOn = (id: AgentFeatureId): boolean => {
+    const pressed = pending[id];
+    if (pressed !== undefined) return pressed;
+    return id === "fast_mode" ? props.fastMode === true : props.planMode === true;
+  };
 
   /**
    * **The toolbar, in Paseo's shape: a glyph and a value, no label and no box.**
@@ -281,8 +304,8 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
       <div className="composer__controls">
         <div className="composer__chips">
         <span
-          className="composer__chip"
-          title={chipTitle(modeReason ?? modeDescription(selectedMode, t) ?? t("task.composer.agentMode.title"), nextRun)}
+          className="composer__chip has-hint"
+          data-hint={t("task.composer.hint.mode")}
         >
           <ModeIcon size={14} />
           <select
@@ -321,8 +344,8 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
             The control itself is shared with the settings pane (`ModelChoice`), so the app's default model, a
             project's default model and a task's model cannot come to mean three things; only its *skin* differs. */}
         <span
-          className="composer__chip"
-          title={chipTitle(modelReason ?? selectedModel?.description ?? t("task.composer.model.title"), nextRun)}
+          className="composer__chip has-hint"
+          data-hint={t("task.composer.hint.model")}
         >
           <ModelIcon size={14} />
           <ModelChoice
@@ -333,12 +356,7 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
             off={modelOff}
             bareId={props.modelBareId === true}
             {...(chipTitle(modelReason, nextRun) !== undefined ? { descriptionId: "composer-model-reason" } : {})}
-            title={
-              chipTitle(
-                modelReason ?? selectedModel?.description ?? t("task.composer.model.title"),
-                nextRun,
-              ) ?? t("task.composer.model.title")
-            }
+            title=""
             onChoose={props.onChooseModel}
             fieldClassName="composer__chip-field"
             inputClassName="composer__chip-field composer__chip-field--text"
@@ -361,11 +379,8 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
             "the agent decides", which is also the state a task is in before anybody picks — and the only way to
             undo a choice. */}
         <span
-          className="composer__chip"
-          title={chipTitle(
-            thinkingReason ?? optionDescription(selectedThinking, t) ?? t("task.composer.thinking.title"),
-            nextRun,
-          )}
+          className="composer__chip has-hint"
+          data-hint={t("task.composer.hint.thinking")}
         >
           <ThinkingIcon size={14} />
           <select
@@ -398,6 +413,28 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
             </p>
           )}
           </span>
+          {features.map((feature) => {
+            const on = featureOn(feature.id);
+            const hint =
+              feature.id === "fast_mode" ? t("task.composer.hint.fast") : t("task.composer.hint.plan");
+            return (
+              <button
+                key={feature.id}
+                type="button"
+                className={`composer__chip composer__feature composer__feature--${feature.highlight}${on ? " is-on" : ""} has-hint`}
+                data-hint={hint}
+                aria-label={hint}
+                aria-pressed={on}
+                onClick={() => {
+                  const next = !on;
+                  setPending((current) => ({ ...current, [feature.id]: next }));
+                  props.onToggleFeature?.(feature.id, next);
+                }}
+              >
+                {feature.id === "fast_mode" ? <FastIcon size={14} /> : <PlanIcon size={14} />}
+              </button>
+            );
+          })}
         </div>
 
       {/* **One line, and only when the user needs it now.**

@@ -57,6 +57,7 @@ import {
 import { type PlatformId, detectPlatform, spawnTreeOptions } from "@envoydev/platform";
 
 import { modelArgs, modelIdOf } from "./models.js";
+import { permissionModes } from "./mode-delivery.js";
 import { ACP_AGENT_CATALOG, cataloguedRecipe } from "./acp-catalog.js";
 import { probeRecipe, type ProbeFinding, type ProbeHarnessOptions, type ProbeRecipe } from "./probe.js";
 import { splitArgs } from "./args.js";
@@ -297,11 +298,11 @@ export interface HarnessDefinition {
    * The modes the *agent* offers, for the composer's picker (see `AgentMode` in the protocol).
    *
    * Evidence-based, and empty where we genuinely do not know. The lists for the four third-party CLIs
-   * come from Paseo's provider manifest, which drives them every day. `envoy-harness`'s list is its
-   * own `ModeKind`, read out of the peer checkout. `deepseek-harness` is empty **and that is the
-   * answer, not a gap**: its ACP surface has no `session/set_mode`, so it offers nothing here to
-   * choose. `capabilities.agentMode` is the flag a caller branches on; this array is only what to
-   * put in a picker.
+   * come from Paseo's provider manifest, which drives them every day. `envoy-harness`'s first three
+   * are its own `ModeKind`; the permission levels after them are `session/set_policy`, not another
+   * mode. `deepseek-harness` has the same three permission levels, delivered as `DSH_PERMISSION_MODE`
+   * because its ACP surface has no `session/set_mode`. `capabilities.agentMode` is the flag a caller
+   * branches on; this array is only what to put in a picker.
    *
    * (This comment used to claim both harnesses were empty because "ACP reports its session modes in
    * the `session/new` response". That was wrong about both of them: `envoy-harness` answers
@@ -366,10 +367,11 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
     id: "envoy-harness",
     label: "Envoy Harness",
     tier: "built-in",
-    // Exactly the peer's `ModeKind`, one for one and in its order
-    // (`../envoy-harness/packages/envoy-harness/src/plan/mode-kind.ts`), because a mode id we invent
-    // is a mode id `session/set_mode` refuses with `mode must be default|plan|review`. The labels are
-    // ours — the ids are passed through verbatim and are the contract.
+    // The first three are the peer's `ModeKind`, one for one and in its order
+    // (`../envoy-harness/packages/envoy-harness/src/plan/mode-kind.ts`). A mode id we invent is a
+    // mode id `session/set_mode` refuses with `mode must be default|plan|review`. The three after
+    // them are permission levels (`PermissionModeSchema`), sent on `session/set_policy` rather than
+    // as a mode — see `mode-delivery.ts`. The labels are ours; the ids are passed through verbatim.
     modes: [
       {
         id: "default",
@@ -392,6 +394,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
         description: "Check and report. Change nothing.",
         descriptionKey: "task.agentMode.review.description",
       },
+      ...permissionModes(),
     ],
     summary: "EnvoyDev's built-in agent — structured tools, approvals and sessions.",
     launch: {
@@ -483,7 +486,10 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
     id: "deepseek-harness",
     label: "DeepSeek Harness",
     tier: "catalogued",
-    modes: [],
+    // The process's own presets (`packages/bundle/base/cordis.patch.yml`), not a `session/set_mode`
+    // list — that method is absent. `workspace-write` is preferred because that is the default when
+    // `DSH_PERMISSION_MODE` is unset; listing Read only first must not start every new task read-only.
+    modes: permissionModes("workspace-write"),
     summary: "DeepSeek's harness, driven over ACP — the same adapter as the built-in agent.",
     launch: {
       kind: "child-process",
@@ -512,14 +518,12 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       structuredTools: true,
       streaming: true,
       images: false,
-      // **False, and not a gap to be filled.** This surface has no `session/set_mode`
-      // (`../deepseek-harness/packages/acp/acp/src/index.ts:384-390` registers
-      // new/list/resume/close/setConfigOption/prompt/cancel and nothing else), and the per-session
-      // configuration it does report is the model and the reasoning effort
-      // (`.../src/model-control.ts:188-220`). So there is no mode for the composer to offer, and
-      // `runs.ts` refuses a run that asks for one rather than quietly starting an unrestricted agent
-      // in what the user believed was plan mode.
-      agentMode: false,
+      // True, and **not** via `session/set_mode`. That method is absent
+      // (`../deepseek-harness/packages/acp/acp/src/index.ts` registers
+      // new/list/resume/close/setConfigOption/prompt/cancel and nothing else). The three permission
+      // levels travel as `DSH_PERMISSION_MODE` on the process (`mode-delivery.ts`). There is no
+      // `modeParam`: calling `session/set_mode` here would fail the run.
+      agentMode: true,
       // **False for the same reason, and it is the reason the approvals row is disabled with a reason
       // when this agent is the one in play.** The request table above lists every method this surface
       // answers and `session/set_policy` is not among them, so asking this agent to stop asking — or to
@@ -1458,3 +1462,5 @@ export * from "./models.js";
 // thinking level — in a third, for the same reason: it is the one subject no catalogue can answer on
 // its own, because the answer arrives from a session and is kept with the time it was seen.
 export * from "./session-options.js";
+export * from "./features.js";
+export * from "./mode-delivery.js";

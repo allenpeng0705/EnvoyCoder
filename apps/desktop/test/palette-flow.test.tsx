@@ -211,7 +211,6 @@ describe("the project row as the product registers it", () => {
       onNewTask: vi.fn(),
       onOpenSettings: vi.fn(),
       onPairPhone: vi.fn(),
-      onToggleRail: vi.fn(),
       onRevealTask: vi.fn(),
     }).map((row) => (row.id === "project.add" ? { ...row, pick } : row));
 
@@ -243,7 +242,6 @@ describe("the project row as the product registers it", () => {
       onNewTask: vi.fn(),
       onOpenSettings: vi.fn(),
       onPairPhone: vi.fn(),
-      onToggleRail: vi.fn(),
       onRevealTask: vi.fn(),
     });
 
@@ -283,7 +281,6 @@ describe("the project row as the product registers it", () => {
       onNewTask: vi.fn(),
       onOpenSettings: vi.fn(),
       onPairPhone: vi.fn(),
-      onToggleRail: vi.fn(),
       onRevealTask: vi.fn(),
       defaultProjectPath: "/Users/you/work",
     });
@@ -316,7 +313,6 @@ describe("the project row as the product registers it", () => {
       onNewTask: vi.fn(),
       onOpenSettings: vi.fn(),
       onPairPhone: vi.fn(),
-      onToggleRail: vi.fn(),
       onRevealTask: vi.fn(),
     });
 
@@ -351,7 +347,6 @@ describe("the task row as the product registers it", () => {
       onNewTask,
       onOpenSettings: vi.fn(),
       onPairPhone: vi.fn(),
-      onToggleRail: vi.fn(),
       onRevealTask: vi.fn(),
     });
 

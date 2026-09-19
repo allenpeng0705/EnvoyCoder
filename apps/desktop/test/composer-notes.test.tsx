@@ -86,7 +86,9 @@ describe("the composer's notes", () => {
 
     const sentence = en["task.composer.appliesNextRun"];
     const thinking = screen.getByLabelText(en["task.composer.thinking.label"]);
-    expect(thinking.closest(".composer__chip")?.getAttribute("title")).toContain(sentence);
+    expect(thinking.closest(".composer__chip")?.getAttribute("data-hint")).toBe(
+      en["task.composer.hint.thinking"],
+    );
     const describedBy = thinking.getAttribute("aria-describedby");
     expect(document.getElementById(describedBy as string)?.textContent).toContain(sentence);
   });
@@ -101,7 +103,7 @@ describe("the composer's notes", () => {
       en["task.composer.thinking.label"],
     ]) {
       const control = screen.getByLabelText(label);
-      expect(control.closest(".composer__chip")?.getAttribute("title")).not.toContain(
+      expect(control.closest(".composer__chip")?.getAttribute("data-hint")).not.toContain(
         en["task.composer.appliesNextRun"],
       );
     }
@@ -122,8 +124,8 @@ describe("the composer's notes", () => {
     // The tooltip is on the **chip**, not on the bare `<select>`: the chip is what a pointer lands on, and a
     // disabled control inside it takes no hover of its own. It carries the control's own reason, and — because
     // this leg renders a live turn — the fact the whole row shares, joined by a middle dot.
-    expect(picker.closest(".composer__chip")?.getAttribute("title")).toBe(
-      `${reason} · ${en["task.composer.appliesNextRun"]}`,
+    expect(picker.closest(".composer__chip")?.getAttribute("data-hint")).toBe(
+      en["task.composer.hint.thinking"],
     );
     const describedBy = picker.getAttribute("aria-describedby");
     expect(describedBy).toBe("composer-thinking-reason");
@@ -147,8 +149,8 @@ describe("the composer's notes", () => {
 
     // The mode and the model are described by their own reasons…
     expect(
-      screen.getByLabelText(en["task.composer.agentMode.label"]).closest(".composer__chip")?.getAttribute("title"),
-    ).toBe(en["task.composer.agentMode.none"].replace("{agent}", "Envoy Harness"));
+      screen.getByLabelText(en["task.composer.agentMode.label"]).closest(".composer__chip")?.getAttribute("data-hint"),
+    ).toBe(en["task.composer.hint.mode"]);
     // Nothing is running in this leg, so the description is the refusal alone — no "next run" sentence, which
     // would be a claim about a turn that does not exist.
     expect(document.getElementById("composer-model-reason")?.textContent).toBe(

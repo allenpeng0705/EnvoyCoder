@@ -123,7 +123,7 @@ export function ModelChoice(props: ModelChoiceProps): JSX.Element {
             ? t("task.composer.model.placeholderBare")
             : t("task.composer.model.placeholder")
         }
-        title={props.title}
+        {...(props.title !== "" ? { title: props.title } : {})}
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={(event) => {
@@ -147,7 +147,7 @@ export function ModelChoice(props: ModelChoiceProps): JSX.Element {
       {...(props.labelId !== undefined ? { "aria-labelledby": props.labelId } : {})}
       {...(props.ariaLabel !== undefined ? { "aria-label": props.ariaLabel } : {})}
       {...(props.descriptionId !== undefined ? { "aria-describedby": props.descriptionId } : {})}
-      title={props.title}
+      {...(props.title !== "" ? { title: props.title } : {})}
       value={props.selected ?? ""}
       onChange={(event) => props.onChoose(event.target.value)}
     >

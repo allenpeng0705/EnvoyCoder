@@ -24,20 +24,17 @@
  * `task.remove.*` keys this pane used, including the sentence that says the task leaves the rail and is
  * archived and that the folder and its files are not touched. Its two tests moved with it rather than
  * being dropped — "ask before removing, and Cancel removes nothing" is asserted in `sidebar.test.tsx`.
- *
- * The trade-off, stated rather than hidden: with the rail hidden (the titlebar's toggle, `⌘B`) there is
- * no removal control on screen, because the rail *is* the task list. Unhiding it is one keystroke, and
- * the alternative — a second removal control in the pane — is the thing this comment argues against.
  */
 
 import type { JSX } from "react";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type {
   HarnessId,
   HarnessSummary,
   ProbeOutcome,
   Project,
+  PromptImage,
   RunEvent,
   Task,
   TaskDefaults,
@@ -46,6 +43,15 @@ import type {
 import { hasShellPicker, pickFolder } from "../client/folder-picker.js";
 import { agentFor } from "../composer/agent-for.js";
 import {
+    canSend,
+    composeTurn,
+    ingestFiles,
+    MAX_ATTACHMENTS,
+    pastedImages,
+  type ComposerAttachment,
+  type IngestNotice,
+} from "../composer/attachments.js";
+import {
   composerControls,
   modeOffReason,
   modelOffReason,
@@ -53,6 +59,11 @@ import {
   thinkingOffReason,
 } from "../composer/controls.js";
 import { harnessBadge, harnessLabel, modelAcceptsBareId } from "../composer/harness-label.js";
+import {
+  filterSlashCommands,
+  latestSlashCommands,
+  slashQuery,
+} from "../composer/slash-commands.js";
 import { probeAsk, publishesOnlyInSession, type ProbeState } from "../composer/probe.js";
 import { useT } from "../i18n/context.js";
 import {
@@ -65,6 +76,11 @@ import {
 } from "../i18n/notice.js";
 import { buildTranscript, type TranscriptEntry } from "../state/transcript.js";
 import { ComposerControls } from "./ComposerControls.js";
+import { AttachButton, AttachmentTray } from "./ComposerAttach.js";
+import { ExplorerSidebar, type ChangeListing, type DirectoryListing } from "./ExplorerSidebar.js";
+import type { OpenedFile } from "./FileView.js";
+import { SlashCommandList } from "./SlashCommandList.js";
+import { WorkArea, type FileOpenRequest, type OpenedDiff } from "./WorkArea.js";
 import { FolderIcon } from "./icons.js";
 import { MessageMarkdown } from "./markdown/MessageMarkdown.js";
 import { ProjectAgentPicker } from "./ProjectAgentPicker.js";
@@ -84,7 +100,11 @@ export interface TaskPaneProps {
    * composer, and the next press can try again (or, when the daemon said the run is finished, start a new one).
    * A composer that cleared the field on the way out lost the message to a refusal nobody had answered yet.
    */
-  onSend: (text: string, mode: "queue" | "steer") => WriteFailure | Promise<WriteFailure>;
+  onSend: (
+    text: string,
+    mode: "queue" | "steer",
+    images?: PromptImage[],
+  ) => WriteFailure | Promise<WriteFailure>;
   onCancel: () => void | Promise<void>;
   onAnswer: (requestId: string, optionId: string) => void | Promise<void>;
   /**
@@ -101,6 +121,7 @@ export interface TaskPaneProps {
     agentModeId?: string,
     model?: string,
     thinkingLevel?: string,
+    images?: PromptImage[],
   ) => WriteFailure | Promise<WriteFailure>;
   /** Remember the agent's mode for this task, so the next run starts the way the user left it. */
   onChangeMode?: (agentModeId: string) => void | Promise<void>;
@@ -116,6 +137,8 @@ export interface TaskPaneProps {
    * cleared rather than stored, and the next run leaves the choice to the agent.
    */
   onChangeThinking?: (level: string) => void | Promise<void>;
+  /** Remember Fast or Plan for this task. The next run applies whichever the agent accepts. */
+  onToggleFeature?: (id: "fast_mode" | "plan_mode", value: boolean) => void | Promise<void>;
   /** Move this task to another folder. Applies to the next run — the agent keeps the one it started in. */
   onChangeFolder?: (path: string) => void | Promise<void>;
   /**
@@ -154,8 +177,36 @@ export interface TaskPaneProps {
    * "Method not found". `undefined` is no.
    */
   probeSupported?: boolean;
+  /**
+   * Whether the title bar's explorer control is on.
+   *
+   * The button lives in the window chrome, not in this pane: that is the top-right control, and it
+   * has to be there even before a daemon has advertised the listing methods. This pane only draws
+   * the sidebar.
+   */
+  explorerOpen?: boolean;
+  /** List one folder. A refusal is shown in the sidebar, not the window banner. */
+  onListDirectory?: (path: string) => Promise<DirectoryListing>;
+  /** Git changes in the task folder. `repo: false` is an answer, not a failure. */
+  onListChanges?: (path: string) => Promise<ChangeListing>;
+  /** Open one file from the explorer into a tab. */
+  onReadFile?: (path: string) => Promise<{ ok: true; file: OpenedFile } | Refusal>;
+  /** Open one change as a diff tab. `directory` is the task folder. */
+  onReadDiff?: (
+    directory: string,
+    path: string,
+    from?: string,
+  ) => Promise<{ ok: true; diff: OpenedDiff } | Refusal>;
+  /** Create an empty file or a folder in the task's directory. */
+  onCreateEntry?: (
+    directory: string,
+    name: string,
+    kind: "file" | "dir",
+  ) => Promise<{ ok: true; path: string } | Refusal>;
   /** Shown under the composer when a send was refused, in the daemon's words. */
   notice?: string | undefined;
+  /** Start another conversation in this project. The tab row's Task item. */
+  onNewTask?: () => void;
 }
 
 /**
@@ -176,7 +227,12 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   const t = useT();
   const { task, project, events } = props;
   const running = props.runLive;
+  const [viewingFile, setViewingFile] = useState(false);
+  const [openRequest, setOpenRequest] = useState<FileOpenRequest | undefined>(undefined);
   const [text, setText] = useState("");
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [attachNotice, setAttachNotice] = useState<string | undefined>(undefined);
+  const [dropping, setDropping] = useState(false);
   /** A mode the user has just chosen, before the task's saved copy comes back. */
   const [pickedMode, setPickedMode] = useState<string | undefined>(undefined);
   /** A model the user has just chosen, for the same reason and with the same lifetime. */
@@ -195,11 +251,31 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   const [probes, setProbes] = useState<Record<string, ProbeState>>({});
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
-  /** The task the transcript was last scrolled for — a new task always starts at its end. */
-  const scrolledFor = useRef<string | undefined>(undefined);
+  /**
+   * Follow the newest row until the reader scrolls up.
+   *
+   * A selected task's history often arrives a moment later (`openRun`). Marking the task "already
+   * scrolled" on the empty pane left the real transcript at the top. Sticking until a scroll-up
+   * means that late history, and a live reply while the reader is already at the end, still land
+   * at the bottom — and reading earlier messages is not yanked.
+   */
+  const stickToEnd = useRef(true);
+  const stickTask = useRef<string | undefined>(undefined);
 
   const transcript = buildTranscript(events);
   const approvalOpen = transcript.pendingApprovalId !== undefined;
+  const commandQuery = slashQuery(text);
+  const commandMatches =
+    commandQuery === undefined ? [] : filterSlashCommands(latestSlashCommands(events), commandQuery);
+  const [commandIndex, setCommandIndex] = useState(0);
+  const commandActive =
+    commandMatches.length === 0 ? 0 : ((commandIndex % commandMatches.length) + commandMatches.length) % commandMatches.length;
+
+  const pickCommand = (name: string): void => {
+    setText(`/${name} `);
+    setCommandIndex(0);
+    inputRef.current?.focus();
+  };
 
   // A different task in the same pane is a different agent with different modes, so a choice made for
   // the previous one must not appear to be in force here.
@@ -208,6 +284,9 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     setPickedModel(undefined);
     setPickedThinking(undefined);
     setPickerProblem(undefined);
+    setAttachments([]);
+    setAttachNotice(undefined);
+    setDropping(false);
   }, [task.id]);
 
   /* ── the controls above the field: what they offer is decided in `composer/controls.ts` ── */
@@ -318,18 +397,33 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     if (result.kind === "unavailable") setPickerProblem(result.reason);
   };
 
-  // **Follow the newest row, but do not steal the scrollbar.** An agent writes while the user reads:
-  // jumping to the bottom on every event makes the history unreachable, and never moving means the
-  // answer to what you just sent arrives off screen. So it follows only when the reader is already at
-  // the end — and a task opened for the first time jumps there once, because that is where the
-  // conversation is.
-  useEffect(() => {
+  // Follow the newest row when a task is opened, and whenever its history arrives after that.
+  // Instant, not the pane's smooth scroll: a smooth jump starts from the previous task's position
+  // and finishes on whatever height the transcript had at that moment, which is often empty.
+  const onTranscriptScroll = (): void => {
     const node = transcriptRef.current;
     if (!node) return;
-    const first = scrolledFor.current !== task.id;
-    scrolledFor.current = task.id;
-    const atEnd = node.scrollHeight - node.scrollTop - node.clientHeight < 120;
-    if (first || atEnd) node.scrollTop = node.scrollHeight;
+    stickToEnd.current = node.scrollHeight - node.scrollTop - node.clientHeight < 120;
+  };
+
+  useLayoutEffect(() => {
+    if (stickTask.current !== task.id) {
+      stickTask.current = task.id;
+      stickToEnd.current = true;
+    }
+    const jump = (): void => {
+      const node = transcriptRef.current;
+      if (!node || !stickToEnd.current) return;
+      const previous = node.style.scrollBehavior;
+      node.style.scrollBehavior = "auto";
+      node.scrollTop = node.scrollHeight;
+      node.style.scrollBehavior = previous;
+    };
+    jump();
+    // Code fences and diagrams change the height after the first layout. One more frame
+    // catches that without waiting for another event.
+    const frame = requestAnimationFrame(jump);
+    return () => cancelAnimationFrame(frame);
   }, [task.id, transcript.entries.length]);
 
   /**
@@ -341,25 +435,58 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
    * under the composer by the shell.
    */
   /** Keep the words unless the send lands — see `submit`, and `settle`'s two shapes. */
+  const clearDraft = (): void => {
+    setText("");
+    setAttachments([]);
+    setAttachNotice(undefined);
+  };
+
   const settle = (answer: WriteFailure | Promise<WriteFailure>): void => {
     if (answer !== undefined && typeof (answer as Promise<WriteFailure>).then === "function") {
       void (answer as Promise<WriteFailure>).then((failure) => {
-        if (failure === undefined) setText("");
+        if (failure === undefined) clearDraft();
       });
       return;
     }
     // A caller that answered **synchronously** has already landed: cleared now, in the same tick as the press.
-    if (answer === undefined) setText("");
+    if (answer === undefined) clearDraft();
+  };
+
+  const noticeFor = (reason: IngestNotice): string =>
+    reason === "limit"
+      ? t("task.composer.attach.limit", { count: MAX_ATTACHMENTS })
+      : reason === "too-big"
+        ? t("task.composer.attach.tooBig")
+        : reason === "empty"
+          ? t("task.composer.attach.empty")
+          : reason === "unreadable"
+            ? t("task.composer.attach.unreadable")
+            : t("task.composer.attach.binary");
+
+  const addFiles = (files: readonly File[]): void => {
+    if (approvalOpen || files.length === 0) return;
+    void ingestFiles(attachments, files).then((result) => {
+      setAttachments(result.attachments);
+      setAttachNotice(result.reason === undefined ? undefined : noticeFor(result.reason));
+    });
   };
 
   const submit = (): void => {
-    const value = text.trim();
-    if (value === "") return;
+    if (!canSend(text, attachments)) return;
+    const turn = composeTurn(text, attachments, {
+      imageOnly: t("task.composer.attach.imagesOnly"),
+      imagesOnly: t("task.composer.attach.imagesOnlyMany"),
+      named: t("task.composer.attach.named", {
+        names: attachments.map((attachment) => attachment.name).join(", "),
+      }),
+    });
+    if (turn.prompt === "") return;
+    const images = turn.images.length > 0 ? turn.images : undefined;
     // **`queue`, always.** A message sent while the agent is working waits for the turn in flight and is
     // delivered as the next prompt — the daemon's own default, and the one behaviour the window has a control
     // for no longer. `steer` remains on the wire (`coder.sendToRun {mode}`) for a client that offers it.
     if (running) {
-      settle(props.onSend(value, "queue"));
+      settle(images === undefined ? props.onSend(turn.prompt, "queue") : props.onSend(turn.prompt, "queue", images));
       return;
     }
     // The mode travels only when the picker is on and something is chosen. Passing it always would
@@ -377,12 +504,24 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
         thinkingOff === undefined && selectedThinkingLevel !== undefined && selectedThinkingLevel !== ""
           ? selectedThinkingLevel
           : undefined;
-      settle(props.onStart(value, modeEnabled ? selectedModeId : undefined, chosenModel, chosenThinking));
+      settle(
+        images === undefined
+          ? props.onStart(turn.prompt, modeEnabled ? selectedModeId : undefined, chosenModel, chosenThinking)
+          : props.onStart(turn.prompt, modeEnabled ? selectedModeId : undefined, chosenModel, chosenThinking, images),
+      );
     }
   };
 
+  const explorer =
+    props.explorerOpen === true &&
+    props.onListDirectory !== undefined &&
+    props.onListChanges !== undefined;
+
   return (
-    <section className="pane" aria-label={t("task.aria", { title: task.title || t("task.untitled") })}>
+    <section
+      className={["pane", explorer ? "pane--explorer" : "", viewingFile ? "pane--file" : ""].filter(Boolean).join(" ")}
+      aria-label={t("task.aria", { title: task.title || t("task.untitled") })}
+    >
       <header className="pane__header">
         <div className="pane__title-group">
           <h1 className="pane__title">{task.title || t("task.untitled")}</h1>
@@ -486,7 +625,15 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
         </div>
       </header>
 
-      <div className="transcript" data-testid="transcript" ref={transcriptRef}>
+      <WorkArea
+        openRequest={openRequest}
+        cwd={task.cwd}
+        onNewTask={props.onNewTask}
+        onReadFile={props.onReadFile}
+        onReadDiff={props.onReadDiff ? (path, from) => props.onReadDiff!(task.cwd, path, from) : undefined}
+        onViewingFile={setViewingFile}
+      >
+      <div className="transcript" data-testid="transcript" ref={transcriptRef} onScroll={onTranscriptScroll}>
         {transcript.hasGap ? (
           <p className="transcript__gap" role="status">
             {t("task.transcript.gap")}
@@ -537,16 +684,97 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
           </ol>
         )}
       </div>
+      </WorkArea>
 
+      {explorer && props.onListDirectory && props.onListChanges ? (
+        <ExplorerSidebar
+          cwd={task.cwd}
+          onListDirectory={props.onListDirectory}
+          onListChanges={props.onListChanges}
+          onOpenFile={(entry) => setOpenRequest({ path: entry.path, name: entry.name, nonce: Date.now() })}
+          onOpenChange={(change) =>
+            setOpenRequest({
+              path: change.path,
+              name: change.path.split(/[/\\]/).pop() || change.path,
+              nonce: Date.now(),
+              view: "diff",
+              from: change.from,
+            })
+          }
+          onCreateEntry={props.onCreateEntry}
+        />
+      ) : null}
+
+      {viewingFile ? null : (
       <footer className="composer">
-        <div className="composer__card">
+        <div
+          className={dropping ? "composer__card composer__card--drop" : "composer__card"}
+          onDragOver={(event) => {
+            if (approvalOpen || !event.dataTransfer.types.includes("Files")) return;
+            event.preventDefault();
+            setDropping(true);
+          }}
+          onDragLeave={() => setDropping(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDropping(false);
+            addFiles([...event.dataTransfer.files]);
+          }}
+        >
+          {commandMatches.length > 0 ? (
+            <SlashCommandList
+              commands={commandMatches}
+              active={commandActive}
+              label={t("task.composer.commands")}
+              onPick={(command) => pickCommand(command.name)}
+            />
+          ) : null}
+          <AttachmentTray
+            attachments={attachments}
+            onRemove={(id) => {
+              setAttachments((current) => current.filter((attachment) => attachment.id !== id));
+              setAttachNotice(undefined);
+            }}
+          />
           <textarea
             ref={inputRef}
             className="composer__input"
             rows={2}
             value={text}
-            onChange={(event) => setText(event.target.value)}
+            onChange={(event) => {
+              setText(event.target.value);
+              setCommandIndex(0);
+            }}
+            onPaste={(event) => {
+              const images = pastedImages(event.clipboardData);
+              if (images.length === 0) return;
+              event.preventDefault();
+              addFiles(images);
+            }}
             onKeyDown={(event) => {
+              if (commandMatches.length > 0) {
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setCommandIndex((index) => index + 1);
+                  return;
+                }
+                if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setCommandIndex((index) => index - 1);
+                  return;
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setText("");
+                  return;
+                }
+                if ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab") {
+                  event.preventDefault();
+                  const chosen = commandMatches[commandActive];
+                  if (chosen) pickCommand(chosen.name);
+                  return;
+                }
+              }
               // Enter sends, Shift+Enter is a newline. Not Cmd+Enter: a prompt is one thought, and a
               // modifier for "send" is what makes people paste half a message.
               if (event.key === "Enter" && !event.shiftKey) {
@@ -565,6 +793,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
             // The keyboard contract, where a user looks for it: on the field they are typing into.
             title={t("task.composer.hint")}
           />
+          {attachNotice ? <p className="composer__notice">{attachNotice}</p> : null}
           {props.notice ? <p className="composer__notice">{props.notice}</p> : null}
           {/* **The row under the field: agent settings on the left, the action on the right.**
               Paseo's composer is a field with one button row beneath it — the attach button and the agent's
@@ -572,6 +801,11 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               that shape now. It used to draw a second row *above* the field holding three labelled form controls,
               which is what the owner read as *"too ugly and nosing"*. */}
           <div className="composer__toolbar">
+            <AttachButton
+              disabled={approvalOpen}
+              onAdd={addFiles}
+              onPasteFailed={() => setAttachNotice(t("task.composer.attach.pasteFailed"))}
+            />
             {/* **The agent's settings, as a toolbar.** Each applies to the *next run* — the agent is
                 launched with `task.cwd` and put into its mode right after `session/new` — so none of them
                 pretends to move or re-mode a run that is already going. */}
@@ -607,6 +841,13 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                 setPickedThinking(chosen);
                 void props.onChangeThinking?.(chosen);
               }}
+              taskId={task.id}
+              harness={task.harness}
+              fastMode={task.fastMode}
+              planMode={task.planMode}
+              onToggleFeature={(id, value) => {
+                void props.onToggleFeature?.(id, value);
+              }}
               running={running}
               probeNote={probe.note}
               // Drawn only when there is a button to draw: `probe.buttonKey` is absent for an agent the
@@ -640,13 +881,13 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                 The name a screen reader reads is still a sentence — `visually-hidden`, so it is announced and not
                 drawn — and the tooltip stays: it is where "this queues behind the turn in flight" is said
                 (§7.33). */}
-            {text.trim() === "" ? null : (
+            {canSend(text, attachments) ? (
               <button
                 type="button"
-                className="button button--primary button--icon composer__send"
+                className="button button--primary button--icon composer__send has-hint"
                 onClick={submit}
                 disabled={approvalOpen}
-                title={
+                data-hint={
                   approvalOpen
                     ? t("task.composer.submit.blocked")
                     : running
@@ -670,11 +911,12 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                 </svg>
                 <span className="visually-hidden">{running ? t("task.composer.send") : t("task.composer.start")}</span>
               </button>
-            )}
+            ) : null}
             </div>
           </div>
         </div>
       </footer>
+      )}
     </section>
   );
 }

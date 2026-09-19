@@ -433,7 +433,6 @@ export function buildCommandContributions(input: {
   onNewTaskInFirstProject?: () => void;
   onOpenSettings: () => void;
   onPairPhone: () => void;
-  onToggleRail: () => void;
   onRevealTask: (taskId: string) => void;
   tasks: readonly { id: string; title: string; projectId: string }[];
   /**
@@ -539,17 +538,6 @@ export function buildCommandContributions(input: {
       // minted (`CoderApp.openPairing`), which is the same flow the *This machine* row runs, so there is
       // nothing to keep the palette open for: it closes like any command that landed.
       run: () => input.onPairPhone(),
-    },
-    {
-      id: "view.rail",
-      title: t("palette.toggleRail.title"),
-      group: t("palette.group.machine"),
-      kind: "action",
-      keywords: ["sidebar", "hide", "show"],
-      run: () => {
-        input.onToggleRail();
-        return undefined;
-      },
     },
     {
       id: "settings.open",

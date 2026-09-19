@@ -130,6 +130,30 @@ describe("Envoy Harness LLM settings", () => {
     expect(saved.provider).toBe("ollama");
   });
 
+  it("clears a saved API key when asked, including for a provider that needs one", async () => {
+    const home = tempDir("envoydev-llm-clear-");
+    const paths = coderPaths(home);
+    const store = await CoderStore.open({ paths });
+
+    await setEnvoyLlm(paths, store, {
+      provider: "openai",
+      model: "gpt-4o",
+      apiKey: "sk-clear-me",
+    });
+    expect(envoyLlmLaunchEnv(paths, "openai")).toEqual({ OPENAI_API_KEY: "sk-clear-me" });
+
+    const cleared = await setEnvoyLlm(paths, store, {
+      provider: "openai",
+      model: "gpt-4o",
+      clearApiKey: true,
+    });
+    expect(cleared.apiKeySet).toBe(false);
+    expect(JSON.stringify(cleared)).not.toContain("sk-clear-me");
+    expect(envoyLlmLaunchEnv(paths, "openai")).toEqual({});
+    const secretBody = readFileSync(join(paths.secretsDir, "envoy-llm-key.json"), "utf8");
+    expect(secretBody).not.toContain("sk-clear-me");
+  });
+
   it("stores a free model string and derives the provider from a slash form", async () => {
     const home = tempDir("envoydev-llm-free-");
     const paths = coderPaths(home);

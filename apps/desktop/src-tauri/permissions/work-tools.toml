@@ -1,0 +1,16 @@
+# The tab row's Terminal and Browser. Neither is a daemon method: a terminal is a process this
+# shell owns, and a browser is a child webview of this window. `invoke_handler!` alone does not
+# make a command callable in Tauri v2 — the capability has to name this permission.
+[[permission]]
+identifier = "allow-work-tools"
+description = "Open a terminal or a browser tab in the project."
+commands.allow = [
+  "terminal_open",
+  "terminal_write",
+  "terminal_resize",
+  "terminal_close",
+  "browser_open",
+  "browser_frame",
+  "browser_navigate",
+  "browser_close",
+]
