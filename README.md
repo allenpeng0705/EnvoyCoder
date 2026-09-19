@@ -23,6 +23,8 @@ EnvoyDev is part of the **[EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh
 
 ## What can it do?
 
+### Desktop
+
 - **One window, every agent.** Pick the coding agent per task. Switch models and CLIs without learning a new UI.
 - **Projects on the left, tasks in the middle.** A project is the folder you work in. A task is one unit of work in it — with its own branch, agent, and model.
 - **See what the agent is doing.** A live transcript with messages, tool calls, file changes, and approval cards.
@@ -30,6 +32,13 @@ EnvoyDev is part of the **[EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh
 - **Cancel, queue, or steer.** Queue waits for the turn. Steer interrupts it. The transcript records which one happened.
 - **Resume after a disconnect.** Your work is on your machine — pick it up where you left off.
 - **macOS, Windows, and Linux.** All three are first-class.
+
+### Phone (EnvoyDev Mobile)
+
+- **Pair with any desktop.** Scan a QR code, paste `host:port`, or use an SSH hop — your choice. Same protocol, same security.
+- **Continue on the go.** The desktop runs the agent; the phone is a window into the same task. Browse projects, read the live transcript, answer approvals, queue a follow-up, or steer the run.
+- **Reach your own machines from anywhere.** Home network, office LAN, or a server on the other side of the world — if you can SSH to a host that can see the desktop, the phone can talk to it. No public IP required.
+- **Thin client by design.** Your model keys never leave the desktop. The phone never runs an agent.
 
 ---
 
