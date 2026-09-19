@@ -74,6 +74,7 @@ export interface AcpPermissionRequest {
    */
   toolName?: string;
   description?: string;
+  args?: unknown;
   options?: readonly { optionId?: string; name?: string; kind?: string }[];
 }
 

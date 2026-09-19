@@ -126,7 +126,7 @@ async function harness(paths: CoderPaths, devices: PairedDeviceStore, withPeer =
   // The only use the pairing handlers make of the host is `pairingUri` at mint time, which none of
   // these tests reaches; a stub keeps this about revocation rather than a second boot of the daemon.
   const host = {
-    pairingUri: () => "envoy://pair?test=1",
+    pairingUri: async () => "envoy://pair?test=1",
     port: 0,
     path: "/ws",
   } as unknown as CoderDaemonHost

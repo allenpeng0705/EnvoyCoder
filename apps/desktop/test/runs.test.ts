@@ -285,6 +285,26 @@ describe("approvals", () => {
     expect(b.store.findTask(b.taskId)?.status).toBe("done");
   });
 
+  it("does not ask again for a command this project already allowed", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "please approve this" });
+    await b.until((events) => kinds(events, "run.approval-requested").length === 1, "the approval card");
+    const requested = kinds(b.events, "run.approval-requested")[0];
+    if (requested?.kind !== "run.approval-requested") throw new Error("unreachable");
+    await b.manager.answerApproval(requested.runId, requested.requestId, "allow-once");
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the first run to end");
+
+    b.events.length = 0;
+    await b.manager.start({ taskId: b.taskId, prompt: "please approve this" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the second run to end");
+    expect(kinds(b.events, "run.approval-requested")).toHaveLength(0);
+    expect(
+      kinds(b.events, "run.output").some(
+        (event) => event.kind === "run.output" && event.text.includes("permission: allow-once"),
+      ),
+    ).toBe(true);
+  });
+
   it("refuses a second answer to the same request, so a double click cannot decide twice", async () => {
     const b = await bench();
     await b.manager.start({ taskId: b.taskId, prompt: "please approve this" });
@@ -444,12 +464,12 @@ describe("the agent's own mode", () => {
 
   it("reuses the mode the task remembers, so a choice survives to the next run", async () => {
     const b = await bench();
-    await b.store.updateTask({ id: b.taskId, agentModeId: "review" });
+    await b.store.updateTask({ id: b.taskId, agentModeId: "plan" });
 
     await b.manager.start({ taskId: b.taskId, prompt: "mode-me" });
     await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
 
-    expect(said(b.events, "mode: review")).toBe(true);
+    expect(said(b.events, "mode: plan")).toBe(true);
   });
 
   it("refuses a mode the agent does not declare, before anything is spawned", async () => {

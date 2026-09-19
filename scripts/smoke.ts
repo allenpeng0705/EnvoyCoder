@@ -180,23 +180,32 @@ step("product state lives under the shared home", () => {
   }
 });
 
-step("a pairing code carries this app's name, and another app's is refused", () => {
+step("a pairing code carries this app's name, and another app's is refused", async () => {
   const host = createCoderDaemonHost({
     port: 0,
     sessionIdentity: coderSessionIdentity(),
     dispatch: async () => undefined,
   });
   try {
-    const mine = host.pairingUri({
+    const mine = await host.pairingUri({
       token: "t",
       ownerPublicKey: "KEY",
       ownerId: "envoy:owner:abc",
       host: "127.0.0.1",
     });
-    const accepted = checkPairingCode(mine);
+    const accepted = await checkPairingCode(mine);
     if (!accepted.ok) throw new Error(`our own code was refused: ${accepted.message}`);
-    const theirs = mine.replace("app=EnvoyDev", "app=EnvoyMesh");
-    const refused = checkPairingCode(theirs);
+    // The name check has to hold for **both** forms, because `pairingUri` now mints the compressed one and
+    // a refusal that only understood query params would wave the real QR through.
+    if (!mine.startsWith("envoy://pair?pairing=")) {
+      throw new Error(`the QR route minted an uncompressed code: ${mine.slice(0, 40)}…`);
+    }
+    const theirs = await host.pairingUri(
+      { token: "t", ownerPublicKey: "KEY", ownerId: "envoy:owner:abc", host: "127.0.0.1" },
+      { compressed: false },
+    );
+    if (theirs === mine) throw new Error("the legacy opt-out minted the compressed form");
+    const refused = await checkPairingCode(theirs.replace("app=EnvoyDev", "app=EnvoyMesh"));
     if (refused.ok) throw new Error("a code from another app was accepted");
     return refused.message;
   } finally {
@@ -398,7 +407,7 @@ step("a paired phone's token is answered from the LAN, and revoking it stops bei
       throw new Error(`minting answered without a code and a device: ${JSON.stringify(minted.result)}`);
     }
 
-    const code = checkPairingCode(uri);
+    const code = await checkPairingCode(uri);
     if (!code.ok) {
       throw new Error(`the daemon minted a code its own window would refuse: ${code.message}`);
     }

@@ -309,7 +309,11 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
 
   // What each picker shows: the user's just-made choice, else what the task remembers, else the agent's
   // own default. In that order, so a click is never overwritten by a request still in flight.
-  const selectedModeId = pickedMode ?? task.agentModeId ?? controls.mode.selected ?? undefined;
+  const storedMode =
+    task.agentModeId !== undefined && controls.mode.options.some((mode) => mode.id === task.agentModeId)
+      ? task.agentModeId
+      : undefined;
+  const selectedModeId = pickedMode ?? storedMode ?? controls.mode.selected ?? undefined;
   const modeEnabled = controls.mode.enabled;
   const modeOff = modeOffReason(controls.mode, { known: summary !== undefined, agent: agent.label });
   // The model's half of the same rule, and it reads the *logic's* answer rather than the task again:
@@ -855,7 +859,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               taskId={task.id}
               harness={task.harness}
               fastMode={task.fastMode}
-              planMode={task.planMode}
+              planMode={task.planMode === true || task.agentModeId === "plan"}
               onToggleFeature={(id, value) => {
                 void props.onToggleFeature?.(id, value);
               }}

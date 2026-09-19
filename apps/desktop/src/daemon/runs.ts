@@ -70,9 +70,10 @@ import {
   envoyPermissionPolicy,
   featureSessionConfigs,
   harnessDefinition,
+  mapRetiredEnvoyMode,
   modeLaunchEnv,
   observeSessionOptions,
-  sessionSetModeId,
+  collaborationModeToSet,
 } from "@envoydev/agent-catalog";
 import type { PlatformId } from "@envoydev/platform";
 
@@ -93,6 +94,7 @@ import {
   resolveThinkingDelivery,
 } from "./run-options.js";
 import type { CoderStore } from "./store.js";
+import { allowChoiceId, choiceAllows, isCommandAllowed, permissionMemoryKey, rememberCommand } from "./allowed-commands.js";
 
 export interface RunManagerDeps {
   paths: CoderPaths;
@@ -291,13 +293,15 @@ export class RunManager {
     // outcomes and only one of them is honest: refuse the call, or start an agent in a posture the
     // user did not ask for. The second is not a smaller version of the first — a user who chose
     // `plan` and got an unrestricted agent has been told something false about what is running.
-    const agentModeId = resolveAgentMode(task.harness, input.agentModeId ?? task.agentModeId);
+    const requestedMode = input.agentModeId ?? task.agentModeId;
+    const agentModeId = resolveAgentMode(task.harness, requestedMode);
     // A permission level is not `session/set_mode`. DeepSeek takes it as `DSH_PERMISSION_MODE` on the
     // process; Envoy Harness takes it as `session/set_policy`. `default` / `plan` / `review` stay on
     // `session/set_mode`, and those runs still get the settings switch as `autoRun`.
     const permissionEnv = modeLaunchEnv(task.harness, agentModeId);
     const permissionPolicy = envoyPermissionPolicy(task.harness, agentModeId);
-    const modeToSet = sessionSetModeId(agentModeId);
+    const planMode = task.planMode === true || (task.harness === "envoy-harness" && requestedMode === "plan");
+    const modeToSet = collaborationModeToSet(task.harness, agentModeId, planMode);
     // The model, on exactly the same terms and for a failure that is easier to miss: `envoy-harness`
     // parses `--model` whether or not `--provider` is there and *then ignores it*
     // (`../envoy-harness/packages/envoy-harness/src/cli/run/acp.ts:100-106`), so a model we could not
@@ -631,6 +635,30 @@ export class RunManager {
    */
   private onPermissionRequest(live: LiveRun, request: AcpPermissionRequest): Promise<string | null> {
     const requestId = request.toolCall?.toolCallId ?? randomUUID();
+    const key = permissionMemoryKey({
+      toolName:
+        (typeof request.toolName === "string" && request.toolName !== "" ? request.toolName : undefined) ??
+        this.toolName(live, request.toolCall?.toolCallId ?? ""),
+      args: request.args ?? this.toolInput(live, request.toolCall?.toolCallId ?? ""),
+    });
+    const remembered = key
+      ? isCommandAllowed(this.deps.paths.stateDir, live.launch.cwd, key)
+      : Promise.resolve(false);
+    return remembered.then((known) => {
+      if (known) {
+        const choice = allowChoiceId(request.options);
+        if (choice !== undefined) return choice;
+      }
+      return this.askPermission(live, request, requestId, key);
+    });
+  }
+
+  private askPermission(
+    live: LiveRun,
+    request: AcpPermissionRequest,
+    requestId: string,
+    key: string | undefined,
+  ): Promise<string | null> {
     const fromAgent = (request.options ?? []).map((option, index) => ({
       id: typeof option.optionId === "string" && option.optionId !== "" ? option.optionId : `option-${index}`,
       label: typeof option.name === "string" && option.name !== "" ? option.name : `Option ${index + 1}`,
@@ -657,8 +685,14 @@ export class RunManager {
       const settle = (choice: string | AcpUserQuestionChoice | null): void => {
         if (live.approval?.requestId !== requestId) return;
         live.approval = undefined;
-        if (typeof choice === "string") resolve(choice);
-        else resolve(choice?.optionIds?.[0] ?? null);
+        const optionId = typeof choice === "string" ? choice : choice?.optionIds?.[0];
+        void (async () => {
+          if (optionId !== undefined && key !== undefined && choiceAllows(request.options, optionId)) {
+            await rememberCommand(this.deps.paths.stateDir, live.launch.cwd, key);
+          }
+          if (typeof choice === "string") resolve(choice);
+          else resolve(choice?.optionIds?.[0] ?? null);
+        })();
       };
       live.approval = { requestId, settle };
 
@@ -675,7 +709,7 @@ export class RunManager {
             : keyed("approval.question.generic", "Allow the agent to continue?"),
           detail: keyed(
             "approval.detail",
-            "It has stopped before this step and will not continue until you answer. Answering this one request does not allow anything else.",
+            "It has stopped before this step and will not continue until you answer. Allowing it lets this same step run again in this project without asking.",
           ),
           options,
         });
@@ -735,6 +769,18 @@ export class RunManager {
         });
       })();
     });
+  }
+
+  /** The arguments of a tool call we have already streamed, so a remembered command can be named. */
+  private toolInput(live: LiveRun, callId: string): unknown {
+    if (callId === "") return undefined;
+    for (let index = live.events.length - 1; index >= 0; index -= 1) {
+      const event = live.events[index];
+      if (event && event.kind === "run.tool" && event.callId === callId && event.input !== undefined) {
+        return event.input;
+      }
+    }
+    return undefined;
   }
 
   /** The label of a tool call we have already streamed, so the card can name it. */

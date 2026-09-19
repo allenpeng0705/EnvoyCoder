@@ -31,7 +31,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { HarnessId } from "@envoydev/protocol";
-import { harnessAcpFacts, harnessDefinition, probeHarness } from "@envoydev/agent-catalog";
+import { harnessAcpFacts, harnessDefinition, probeHarness, sessionSetModeId } from "@envoydev/agent-catalog";
 import { coderPaths } from "@envoydev/host-bridge";
 
 import { AcpClient, type AcpUpdate } from "../src/daemon/acp/client.js";
@@ -120,8 +120,10 @@ for (const { id, categories } of VERIFIED_AGENTS) {
       }
 
       it("opens a session, publishes the options its entry's wiring rests on, and accepts its mode ids", async () => {
-        const requested = definition.modes[0]?.id;
-        expect(requested, `${id} declares no modes`).toBeTruthy();
+        expect(definition.modes.length, `${id} declares no modes`).toBeGreaterThan(0);
+        // A permission level is not `session/set_mode`. Envoy Harness's list is only those, so this
+        // leg sends a mode only when the entry actually has one the agent accepts as a mode.
+        const requested = definition.modes.map((mode) => mode.id).find((id) => sessionSetModeId(id) !== undefined);
 
         // **One session proving three things, because starting two costs a real agent two handshakes.**
         // On the machine this was written on `cursor-agent acp`'s `authenticate` step alone took ~13 s,
@@ -134,7 +136,7 @@ for (const { id, categories } of VERIFIED_AGENTS) {
         // same way). The options are then read from the same client, which is the state a run is in.
         const client = await AcpClient.start({
           launch: await launch(),
-          agentModeId: requested,
+          ...(requested !== undefined ? { agentModeId: requested } : {}),
           // Generous, and one of these genuinely needs it: `cursor-agent acp`'s `authenticate` re-reads
           // the user's own login state before answering, which is seconds of work, not milliseconds.
           handshakeTimeoutMs: 60_000,

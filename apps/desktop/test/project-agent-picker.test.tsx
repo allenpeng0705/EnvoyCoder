@@ -18,7 +18,8 @@ const project: Project = {
   id: "proj-1",
   path: "/tmp/repo",
   label: "repo",
-  createdAt: "2026-01-01T00:00:00.000Z",
+  hostId: "local",
+  addedAt: "2026-01-01T00:00:00.000Z",
   defaults: { harness: "envoy-harness" },
 };
 

@@ -658,21 +658,18 @@ describe("the agent's mode control", () => {
     // The labels come from the catalogue, by key, because *we* wrote them — an agent's own mode names
     // would arrive without keys and be shown as the agent wrote them.
     expect([...picker.options].map((option) => option.textContent)).toEqual([
-      "Default",
-      "Plan",
-      "Review",
       "Read only",
-      "Workspace change",
+      "Project change",
       "Full access",
     ]);
 
-    fireEvent.change(picker, { target: { value: "plan" } });
-    expect(onChangeMode).toHaveBeenCalledWith("plan");
+    fireEvent.change(picker, { target: { value: "read-only" } });
+    expect(onChangeMode).toHaveBeenCalledWith("read-only");
   });
 
   it("is disabled with the reason shown for an agent that offers no modes", () => {
     // Synthetic: an agent with an empty list and a daemon that cannot set one. DeepSeek is not this
-    // shape — it offers Read only, Workspace change, and Full access.
+    // shape — it offers Read only, Project change, and Full access.
     const base = harnessFor("deepseek-harness");
     renderPane([], {
       task,
@@ -712,11 +709,8 @@ describe("the agent's mode control", () => {
     // …and the options are still *listed*, so a user can see what the agent offers even though this
     // build cannot choose for it.
     expect([...picker.options].map((option) => option.textContent)).toEqual([
-      "Default",
-      "Plan",
-      "Review",
       "Read only",
-      "Workspace change",
+      "Project change",
       "Full access",
     ]);
     expect(screen.getByText(/not wired up yet/)).toBeTruthy();
@@ -738,7 +732,7 @@ describe("the agent's mode control", () => {
       harnesses: [harnessFor("envoy-harness")],
       runLive: false,
     });
-    fireEvent.change(screen.getByLabelText("Mode"), { target: { value: "plan" } });
+    fireEvent.change(screen.getByLabelText("Mode"), { target: { value: "read-only" } });
     fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "plan it out" } });
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
 
@@ -747,7 +741,7 @@ describe("the agent's mode control", () => {
     // accident and one that carried a level would otherwise look identical to this test.
     expect(onStart).toHaveBeenCalledWith(
       "plan it out",
-      "plan",
+      "read-only",
       "deepseek-official/deepseek-v4-flash",
       undefined,
     );
@@ -1031,7 +1025,7 @@ describe("the thinking control", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
 
     // All four arguments, because they are one call: the model this task remembers, the permission
-    // level a new DeepSeek task shows (Workspace change — the process default), and the level the
+    // level a new DeepSeek task shows (Project change — the process default), and the level the
     // user just chose.
     expect(onStart).toHaveBeenCalledWith(
       "think hard",
@@ -1346,9 +1340,15 @@ describe("fast and plan", () => {
     expect(plan.getAttribute("aria-pressed")).toBe("true");
     shown.unmount();
 
-    renderPane([], { task: { ...task, harness: "envoy-harness" } });
+    onToggleFeature.mockClear();
+    renderPane([], { task: { ...task, harness: "envoy-harness" }, onToggleFeature });
     expect(screen.queryByRole("button", { name: "Toggle plan mode" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Toggle fast mode" })).toBeNull();
+    const work = screen.getByLabelText("Work") as HTMLSelectElement;
+    expect([...work.options].map((option) => option.textContent)).toEqual(["Agent", "Plan"]);
+    expect(work.value).toBe("agent");
+    fireEvent.change(work, { target: { value: "plan" } });
+    expect(onToggleFeature).toHaveBeenCalledWith("plan_mode", true);
   });
 });
 

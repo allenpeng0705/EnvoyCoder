@@ -415,6 +415,34 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
           )}
           </span>
           {features.map((feature) => {
+            if (feature.id === "plan_mode" && props.harness === "envoy-harness") {
+              const on = featureOn("plan_mode");
+              return (
+                <span
+                  key={feature.id}
+                  className="composer__chip has-hint"
+                  data-hint={t("task.composer.hint.work")}
+                >
+                  <PlanIcon size={14} />
+                  <select
+                    className="composer__chip-field"
+                    aria-label={t("task.composer.work.label")}
+                    value={on ? "plan" : "agent"}
+                    onChange={(event) => {
+                      const next = event.target.value === "plan";
+                      setPending((current) => ({ ...current, plan_mode: next }));
+                      props.onToggleFeature?.("plan_mode", next);
+                    }}
+                  >
+                    <option value="agent">{t("task.composer.work.agent")}</option>
+                    <option value="plan">{t("task.composer.work.plan")}</option>
+                  </select>
+                  <span className="composer__chip-caret" aria-hidden>
+                    ▾
+                  </span>
+                </span>
+              );
+            }
             const on = featureOn(feature.id);
             const hint =
               feature.id === "fast_mode" ? t("task.composer.hint.fast") : t("task.composer.hint.plan");

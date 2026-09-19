@@ -8,6 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { decodePairingTokenAsync } from "@envoymesh/reuse-host";
 import {
   CAPABILITY_CODING,
   ENVOYDEV_ERRORS,
@@ -54,8 +55,8 @@ describe("pairing", () => {
   const built = (app: string): string =>
     `envoy://pair?wsUrl=${encodeURIComponent(NODE_WS)}&token=t0ken&ownerPublicKey=KEY&ownerId=envoy%3Aowner%3Aabc&app=${app}`;
 
-  it("accepts this app's code and returns what a client needs", () => {
-    const result = checkPairingCode(built(ENVOYDEV_PRODUCT_NAME));
+  it("accepts this app's code and returns what a client needs", async () => {
+    const result = await checkPairingCode(built(ENVOYDEV_PRODUCT_NAME));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.wsUrl).toBe(NODE_WS);
@@ -63,8 +64,8 @@ describe("pairing", () => {
     expect(result.ownerId).toBe("envoy:owner:abc");
   });
 
-  it("refuses another family member's code, in the family's own sentence", () => {
-    const result = checkPairingCode(built("EnvoyMesh"));
+  it("refuses another family member's code, in the family's own sentence", async () => {
+    const result = await checkPairingCode(built("EnvoyMesh"));
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.code).toBe(ENVOYDEV_ERRORS.appMismatch);
@@ -74,10 +75,127 @@ describe("pairing", () => {
     expect(result.message).toMatch(/this is EnvoyDev/);
   });
 
-  it("treats a code with no app claim as usable (older codes) and garbage as unreadable", () => {
+  it("treats a code with no app claim as usable (older codes) and garbage as unreadable", async () => {
     const legacy = `envoy://pair?wsUrl=${encodeURIComponent(NODE_WS)}&token=t&ownerPublicKey=K&ownerId=o`;
-    expect(checkPairingCode(legacy).ok).toBe(true);
-    expect(checkPairingCode("not a uri").ok).toBe(false);
+    expect((await checkPairingCode(legacy)).ok).toBe(true);
+    expect((await checkPairingCode("not a uri")).ok).toBe(false);
+  });
+
+  /**
+   * **The code this product mints is a code this product can read.**
+   *
+   * `pairingUri` now mints the compressed `pairing=` form (see `CoderPairUriOptions`), and
+   * `checkPairingCode` used to understand only the legacy query form — so the smoke's "the daemon minted a
+   * code its own window would refuse" leg would fail on the very fix that made the QR scannable. Both
+   * halves are asserted here: the minted URI really is compressed, and the reader resolves it back to the
+   * same fields plus the app claim that drives the family's refusal.
+   */
+  it("reads back the compressed form it mints, including the app claim", async () => {
+    const host = createCoderDaemonHost({
+      port: 0,
+      sessionIdentity: coderSessionIdentity(),
+      dispatch: async () => undefined,
+    });
+    try {
+      const uri = await host.pairingUri({
+        token: "t0ken",
+        ownerPublicKey: "KEY",
+        ownerId: "envoy:owner:abc",
+        host: "10.0.0.5",
+      });
+      expect(uri.startsWith("envoy://pair?pairing=")).toBe(true);
+
+      const read = await checkPairingCode(uri);
+      expect(read.ok).toBe(true);
+      if (!read.ok) return;
+      expect(read.wsUrl).toBe(`ws://10.0.0.5:${host.port}/ws`);
+      expect(read.token).toBe("t0ken");
+      expect(read.ownerId).toBe("envoy:owner:abc");
+
+      // …and the same code from another app is refused with the family's sentence, so compression did not
+      // route around the `app` check.
+      const theirs = await host.pairingUri(
+        { token: "t0ken", ownerPublicKey: "KEY", ownerId: "envoy:owner:abc", host: "10.0.0.5" },
+        { compressed: false },
+      );
+      const refused = await checkPairingCode(theirs.replace("app=EnvoyDev", "app=EnvoyMesh"));
+      expect(refused.ok).toBe(false);
+      if (refused.ok) return;
+      expect(refused.code).toBe(ENVOYDEV_ERRORS.appMismatch);
+    } finally {
+      host.stop();
+    }
+  });
+
+  /**
+   * **Both community relays survive compression — bare hint and circuit.**
+   *
+   * The Dart compressed reader was once wrong in exactly this field (it aliased the relay-URL list into
+   * `bootstrapPeers`), so compression is precisely where a relay can silently disappear — and a missing
+   * relay fails only for the users on the wrong side of the world, unlike a dense QR that fails visibly.
+   * The payload shape asserted is the one `serve.ts` supplies: two direct/LAN addresses, one circuit address
+   * per relay, and the two bare relay hints, deduped into `bootstrapPeers` by `pairingUri`. There is no
+   * separate contract field for relay hints — they ride in `bootstrapPeers`
+   * (`@envoymesh/protocol` `pairing-contract.ts:119-131`) — so this list is the whole relay story.
+   */
+  it("keeps both community relays through the compressed token, as hints and as circuits", async () => {
+    const home = "12D3KooWHomeNodeForRelayTest00000000000000000000000";
+    const cn = "/ip4/47.93.11.212/tcp/4001/p2p/12D3KooWLNR4WYWHBswe8ux5zWsy6cuGywnYPJbdbaAbbpmJMjbo";
+    const us = "/ip4/47.251.91.97/tcp/4001/p2p/12D3KooWAWiVSpsCjpjauz83ijLugxwScRJi89N4PA1VQ1Czsncb";
+    const cnPeer = "12D3KooWLNR4WYWHBswe8ux5zWsy6cuGywnYPJbdbaAbbpmJMjbo";
+    const usPeer = "12D3KooWAWiVSpsCjpjauz83ijLugxwScRJi89N4PA1VQ1Czsncb";
+    const relays = [
+      { name: "cn", hint: cn, peer: cnPeer },
+      { name: "us", hint: us, peer: usPeer },
+    ] as const;
+
+    const host = createCoderDaemonHost({
+      port: 0,
+      sessionIdentity: coderSessionIdentity(),
+      dispatch: async () => undefined,
+    });
+    try {
+      const uri = await host.pairingUri({
+        token: "t",
+        ownerPublicKey: "KEY",
+        ownerId: "envoy:owner:abc",
+        host: "192.168.1.20",
+        lanHost: "192.168.1.20",
+        meshPeerId: home,
+        meshMultiaddrs: [
+          `/ip4/192.168.1.20/tcp/4001/p2p/${home}`,
+          `/ip4/203.0.113.7/tcp/4001/p2p/${home}`,
+          ...relays.map((relay) => `${relay.hint}/p2p-circuit/p2p/${home}`),
+        ],
+        meshRelayHints: relays.map((relay) => relay.hint),
+      });
+      expect(uri.startsWith("envoy://pair?pairing=")).toBe(true);
+      const token = new URL(uri).searchParams.get("pairing");
+      expect(token).toBeTruthy();
+
+      // Decoded with the *shared* decoder — the same V1 `bp` codec the phone's `_decodePairingToken`
+      // mirrors — so a token that loses a relay here is a token that loses it on the phone.
+      const decoded = await decodePairingTokenAsync(token!);
+      const peers = decoded.bootstrapPeers ?? [];
+
+      for (const relay of relays) {
+        // By peer id, not by whole-address equality: a legitimate reformat of the address must not fail it.
+        expect(
+          peers.some((addr) => addr.includes(relay.peer)),
+          `relay ${relay.name} (${relay.peer}) missing from ${JSON.stringify(peers)}`,
+        ).toBe(true);
+        // …and both of its shapes survive: the bare hint, and the circuit address through this node.
+        expect(peers, `relay ${relay.name} bare hint missing`).toContain(relay.hint);
+        expect(
+          peers.some((addr) => addr.includes(relay.peer) && addr.includes("/p2p-circuit/")),
+          `relay ${relay.name} circuit address missing from ${JSON.stringify(peers)}`,
+        ).toBe(true);
+      }
+      // The whole shape, deduped: 2 direct + 2 circuits + 2 hints. A cap or a bad merge would show here.
+      expect(peers).toHaveLength(6);
+    } finally {
+      host.stop();
+    }
   });
 });
 
@@ -211,7 +329,7 @@ describe("guide alignment (§4.4, §4.5, §4.6, §9)", () => {
     expect(coderProductName({ ENVOYMESH_APP_NAME: "  " })).toBe("EnvoyDev");
   });
 
-  it("passes the shared relay roster through a pairing code unchanged (§9)", () => {
+  it("passes the shared relay roster through a compressed pairing code unchanged (§9)", async () => {
     const host = createCoderDaemonHost({
       port: 0,
       // The real resolver, not a stub: a host whose identity port is a bare `() => undefined` is
@@ -221,7 +339,7 @@ describe("guide alignment (§4.4, §4.5, §4.6, §9)", () => {
       dispatch: async () => undefined,
     });
     try {
-      const uri = host.pairingUri({
+      const uri = await host.pairingUri({
         token: "t",
         ownerPublicKey: "KEY",
         ownerId: "envoy:owner:abc",
@@ -230,11 +348,17 @@ describe("guide alignment (§4.4, §4.5, §4.6, §9)", () => {
         relayPeerId: "12D3KooWrelay",
         relayWsUrls: ["wss://relay.example/ws"],
       });
+      // The QR form is `pairing=` now, so the roster is asserted through the family's own decoder rather
+      // than by string-matching the query the compressed form deliberately does not have.
+      const token = new URL(uri).searchParams.get("pairing");
+      expect(token).toBeTruthy();
+      const decoded = await decodePairingTokenAsync(token!);
       // The roster is the family's; a product that rewrote it would be a second network wearing
       // the first one's name.
-      expect(uri).toContain("relayPeerId=12D3KooWrelay");
-      expect(uri).toContain(encodeURIComponent("wss://relay.example/ws"));
-      expect(uri).toContain("app=EnvoyDev");
+      expect(decoded.relayPeerId).toBe("12D3KooWrelay");
+      expect(decoded.relayWsUrls).toEqual(["wss://relay.example/ws"]);
+      expect(decoded.lanWsUrl).toBe(`ws://192.168.1.20:${host.port}/ws`);
+      expect(decoded.app).toBe("EnvoyDev");
     } finally {
       host.stop();
     }

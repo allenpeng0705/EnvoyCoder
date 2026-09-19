@@ -2,7 +2,7 @@
   "name": "envoydev",
   "private": true,
   "version": "0.1.0",
-  "description": "EnvoyDev \u2014 the control plane for coding agents, in the EnvoyMesh apps group",
+  "description": "EnvoyDev — the control plane for coding agents, in the EnvoyMesh apps group",
   "license": "UNLICENSED",
   "type": "module",
   "engines": {
@@ -52,7 +52,10 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "@types/pngjs": "^6.0.5",
     "@types/ws": "^8.18.1",
+    "jsqr": "^1.4.0",
+    "pngjs": "^7.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^4.1.5"

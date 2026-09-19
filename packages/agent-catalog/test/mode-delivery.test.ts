@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  collaborationModeToSet,
   envoyPermissionPolicy,
+  mapRetiredEnvoyMode,
   modeLaunchEnv,
   permissionModes,
   sessionSetModeId,
 } from "../src/mode-delivery.js"
 
 describe("permission levels", () => {
-  it("lists Read only, Workspace change, then Full access", () => {
+  it("lists Read only, Project change, then Full access", () => {
     expect(permissionModes().map((mode) => mode.id)).toEqual([
       "read-only",
       "workspace-write",
@@ -29,6 +31,16 @@ describe("permission levels", () => {
     expect(sessionSetModeId("workspace-write")).toBeUndefined()
     expect(sessionSetModeId("danger-full-access")).toBeUndefined()
     expect(sessionSetModeId(undefined)).toBeUndefined()
+  })
+
+  it("leaves Plan when a permission level is chosen, and keeps an old task's meaning", () => {
+    expect(collaborationModeToSet("envoy-harness", "workspace-write")).toBe("default")
+    expect(collaborationModeToSet("envoy-harness", "workspace-write", true)).toBe("plan")
+    expect(collaborationModeToSet("envoy-harness", "plan")).toBe("plan")
+    expect(collaborationModeToSet("deepseek-harness", "workspace-write")).toBeUndefined()
+    expect(mapRetiredEnvoyMode("default")).toBe("workspace-write")
+    expect(mapRetiredEnvoyMode("plan")).toBe("workspace-write")
+    expect(mapRetiredEnvoyMode("review")).toBe("read-only")
   })
 
   it("starts DeepSeek with DSH_PERMISSION_MODE and nobody else", () => {

@@ -59,7 +59,7 @@ beforeAll(async () => {
   // The pairing handlers' only use of the host is `pairingUri` at mint time, which the owner-window
   // case never reaches. A stub keeps this a table test rather than a second boot of the daemon.
   const host = {
-    pairingUri: () => "envoy://pair?audit=1",
+    pairingUri: async () => "envoy://pair?audit=1",
     port: 0,
     path: "/ws",
   } as unknown as CoderDaemonHost;

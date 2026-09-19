@@ -53,10 +53,10 @@ import {
   type SessionIdentityResolver,
   type ReuseHost,
   type ReuseHostOptions,
-  buildPairingUri,
+  buildEnvoyPairUri,
+  buildEnvoyPairUriCompressed,
   createReuseHost,
   createShellHostNodeService,
-  parsePairingUri,
   requestProductSession,
 } from "@envoymesh/reuse-host";
 // `@envoymesh/api/core` — the *reusable* half. The bare `@envoymesh/api` barrel reaches product-bound
@@ -91,7 +91,6 @@ export {
 } from "@envoymesh/reuse-host";
 
 import { ENVOYMESH_VERSION } from "@envoymesh/api/core";
-import { pairingAppMismatch } from "@envoymesh/protocol";
 import {
   type CoderHostDescriptor,
   DEFAULT_DAEMON_PATH,
@@ -474,45 +473,76 @@ export interface CoderDaemonHostOptions extends Omit<ReuseHostOptions, "port"> {
   nodeService?: HostNodeService;
 }
 
+/**
+ * How {@link CoderDaemonHost.pairingUri} should encode the payload.
+ *
+ * `compressed` defaults to **true**: a QR is the one consumer that has to survive a camera, and the legacy
+ * query form of a real payload is ~1 kB (PEM key, owner id, peer id and a multiaddr list, all
+ * percent-encoded), which renders a version-25 symbol too dense to scan. The only caller that opts out is
+ * the typed `host:port` route, for the reasons on `pairingUri` itself.
+ */
+export interface CoderPairUriOptions {
+  compressed?: boolean;
+}
+
 export interface CoderDaemonHost {
   /** The port actually bound (the OS picks one when `port: 0`). */
   readonly port: number;
   readonly path: string;
   serve(): Promise<void>;
-  /** A pairing code for a client, carrying this app's name. */
-  pairingUri(input: {
-    token: string;
-    ownerPublicKey: string;
-    ownerId: string;
-    /** Reachable `host:port` for the client; LAN IP, tailnet address, or a tunnel. */
-    host: string;
-    /** A LAN address the phone may prefer over the wide-area one. */
-    lanHost?: string;
-    /**
-     * Relay fallback, from the family's **shared roster** — the same one every product uses
-     * (`DEFAULT_ENVOY_COMMUNITY_RELAY_BOOTSTRAP_ADDR`), never a per-product relay. A phone that is
-     * not on the LAN reaches the desktop through it, which is the route this app would otherwise
-     * have to invent.
-     */
-    relayPeerId?: string;
-    relayWsUrls?: readonly string[];
-    ssh?: CoderHostDescriptor["ssh"];
-    /**
-     * This daemon's **own** libp2p identity — the third route to it, after the LAN socket and SSH.
-     *
-     * Passed straight through as the contract's `homeNodePeerId` / `bootstrapPeers` rather than under
-     * new names: `pairing-contract.ts` already names both concepts, and a synonym here would be a
-     * second truth the phone's parser does not know.
-     *
-     * `meshMultiaddrs` is expected to carry the relay-**circuit** addresses when a reservation exists,
-     * not just the local ones — a bare relay hint without this peer's id in it does not reach us.
-     * `meshRelayHints` is added as well, so a phone can seed the relays it may later need.
-     */
-    meshPeerId?: string;
-    meshMultiaddrs?: readonly string[];
-    meshRelayHints?: readonly string[];
-    secure?: boolean;
-  }): string;
+  /**
+   * A pairing code for a client, carrying this app's name.
+   *
+   * **Async, because the code a phone has to scan is the gzip-compressed `pairing=` form.** The family's
+   * one builder compresses through `CompressionStream`, which has no synchronous twin; the alternative —
+   * assembling the payload a second time in the daemon and calling the compressed builder there — would
+   * have put the field mapping in two places, which is exactly the drift the family's "one builder, one
+   * format" rule exists to prevent. The QR encoder is the only caller of the default (compressed) form, and
+   * it already runs asynchronously.
+   *
+   * The legacy query form is still the default of the family builder and stays reachable with
+   * `{ compressed: false }`. That is not compatibility sugar: the typed `host:port` route mints a *short*
+   * payload (a user-chosen 8–10 character token, no multiaddrs) that no camera scans, and `PairingSection`'s
+   * `readPairingLink` reads the address and token back out of the URI **synchronously** in the window. A
+   * compressed URI there would be a longer string nobody scans, and would force a decompression step into a
+   * form the user reads with their eyes.
+   */
+  pairingUri(
+    input: {
+      token: string;
+      ownerPublicKey: string;
+      ownerId: string;
+      /** Reachable `host:port` for the client; LAN IP, tailnet address, or a tunnel. */
+      host: string;
+      /** A LAN address the phone may prefer over the wide-area one. */
+      lanHost?: string;
+      /**
+       * Relay fallback, from the family's **shared roster** — the same one every product uses
+       * (`DEFAULT_ENVOY_COMMUNITY_RELAY_BOOTSTRAP_ADDR`), never a per-product relay. A phone that is
+       * not on the LAN reaches the desktop through it, which is the route this app would otherwise
+       * have to invent.
+       */
+      relayPeerId?: string;
+      relayWsUrls?: readonly string[];
+      ssh?: CoderHostDescriptor["ssh"];
+      /**
+       * This daemon's **own** libp2p identity — the third route to it, after the LAN socket and SSH.
+       *
+       * Passed straight through as the contract's `homeNodePeerId` / `bootstrapPeers` rather than under
+       * new names: `pairing-contract.ts` already names both concepts, and a synonym here would be a
+       * second truth the phone's parser does not know.
+       *
+       * `meshMultiaddrs` is expected to carry the relay-**circuit** addresses when a reservation exists,
+       * not just the local ones — a bare relay hint without this peer's id in it does not reach us.
+       * `meshRelayHints` is added as well, so a phone can seed the relays it may later need.
+       */
+      meshPeerId?: string;
+      meshMultiaddrs?: readonly string[];
+      meshRelayHints?: readonly string[];
+      secure?: boolean;
+    },
+    options?: CoderPairUriOptions,
+  ): Promise<string>;
   /** What a client needs to connect, without the secret. */
   descriptor(ssh?: CoderHostDescriptor["ssh"]): CoderHostDescriptor;
   /**
@@ -561,7 +591,7 @@ export function createCoderDaemonHost(
     async serve() {
       await host.serve(options.nodeService ?? createShellHostNodeService());
     },
-    pairingUri(input) {
+    async pairingUri(input, options = {}) {
       const wsUrl = `${input.secure ? "wss" : "ws"}://${input.host}:${host.port}${host.path}`;
       // One deduped list, because `bootstrapPeers` *is* the multiaddr half of the payload — the
       // contract describes it as the addresses a phone seeds its peer store with. Our own addresses
@@ -575,7 +605,7 @@ export function createCoderDaemonHost(
             .filter((addr) => addr.length > 0),
         ),
       ];
-      return buildPairingUri({
+      const params = {
         wsUrl,
         token: input.token,
         ownerPublicKey: input.ownerPublicKey,
@@ -592,7 +622,12 @@ export function createCoderDaemonHost(
           : {}),
         ...(input.meshPeerId ? { homeNodePeerId: input.meshPeerId } : {}),
         ...(meshBootstrapPeers.length > 0 ? { bootstrapPeers: meshBootstrapPeers } : {}),
-      });
+      };
+      // Compressed by default — see `CoderPairUriOptions`. Both calls come from the family's one builder,
+      // so the format decision is the only thing this branch makes.
+      return options.compressed === false
+        ? buildEnvoyPairUri(params)
+        : buildEnvoyPairUriCompressed(params);
     },
     descriptor,
     disconnectClientsForDevice(deviceId) {
@@ -606,49 +641,9 @@ export function createCoderDaemonHost(
 
 /* ────────────────────────────── pairing checks ───────────────────────────── */
 
-export type PairingCheck =
-  | { ok: true; wsUrl: string; token: string; ownerId: string; lanWsUrl?: string }
-  | { ok: false; code: string; /** End-user wording. */ message: string };
-
-/**
- * Read a pairing code the way a client must: refuse another app's code, with the family's sentence.
- *
- * `pairingAppMismatch` is shared with every other app in the family, so all of them refuse each
- * other's codes in the same words — "That code was made by EnvoyMesh, and this is EnvoyDev.
- * Open EnvoyMesh and show its pairing code, or install EnvoyMesh here." A per-product variation of
- * that sentence would be a UX bug, which is why it lives in `@envoymesh/protocol` and not here.
- */
-export function checkPairingCode(
-  input: string,
-  product: string = ENVOYDEV_PRODUCT_NAME,
-): PairingCheck {
-  let parsed: ReturnType<typeof parsePairingUri>;
-  try {
-    parsed = parsePairingUri(input);
-  } catch (error) {
-    return {
-      ok: false,
-      code: ENVOYDEV_ERRORS.daemonUnreachable,
-      message: `That does not look like a pairing code: ${error instanceof Error ? error.message : String(error)}`,
-    };
-  }
-  if (!parsed) {
-    return {
-      ok: false,
-      code: ENVOYDEV_ERRORS.daemonUnreachable,
-      message: "That pairing code is empty or could not be read.",
-    };
-  }
-  const mismatch = pairingAppMismatch(parsed.app, product);
-  if (mismatch) return { ok: false, code: ENVOYDEV_ERRORS.appMismatch, message: mismatch };
-  return {
-    ok: true,
-    wsUrl: parsed.wsUrl,
-    token: parsed.token,
-    ownerId: parsed.ownerId,
-    ...(parsed.lanWsUrl ? { lanWsUrl: parsed.lanWsUrl } : {}),
-  };
-}
+// The reader lives in its own module: minting a code (the host above) and reading one (this) are two
+// jobs, and `index.ts` crossed the family's 800-line hard cap with both of them here.
+export { checkPairingCode, type PairingCheck } from "./pairing-code.js";
 
 /* ────────────────────────────── who may call this daemon ────────────────────────────── */
 

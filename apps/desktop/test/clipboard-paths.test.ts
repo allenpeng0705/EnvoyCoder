@@ -155,7 +155,10 @@ describe("the three files that have to agree for the shell's clipboard to exist"
     // **Anchored to the start of a line**, not `toContain`: commenting a definition out is the quietest way to
     // remove it (the string is still in the file) and a substring check passes on it happily.
     expect(main, "the command is not defined").toMatch(/^fn copy_text\(/m);
-    expect(main, "the command is not registered").toMatch(/^\s*copy_text$/m);
+    // The optional comma is the handler list's separator, not part of the name: `copy_text` was registered
+    // without one until `new_window` was added after it (`424ed71`), and the anchored match must survive the
+    // punctuation a list grows without losing the "a commented-out line does not count" property.
+    expect(main, "the command is not registered").toMatch(/^\s*copy_text,?$/m);
     expect(permission, "the permission does not name the command").toMatch(/commands\.allow = \["copy_text"\]/);
     const granted = JSON.parse(capability) as { permissions: string[] };
     expect(granted.permissions).toContain("allow-copy-text");

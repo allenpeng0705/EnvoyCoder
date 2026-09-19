@@ -33,11 +33,11 @@
 import type { JSX } from "react";
 
 import { useEffect, useState } from "react";
-import QRCode from "qrcode";
 
 import { useI18n } from "../../i18n/context.js";
 import type { AgentActions } from "../../state/agent-actions.js";
 import { canCopyText, copyText } from "./clipboard.js";
+import { renderPairingQr, type RenderedPairingQr } from "./pairing-qr.js";
 
 /**
  * What one press on a pairing control produced: the code, or the daemon's own refusal in its words.
@@ -97,7 +97,7 @@ export interface PairPhonePanelProps {
  */
 export function PairPhonePanel(props: PairPhonePanelProps): JSX.Element {
   const { t } = useI18n();
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [qr, setQr] = useState<RenderedPairingQr | null>(null);
   const [copied, setCopied] = useState(false);
   // Read once, outside the callbacks: the discriminant narrows `props.outcome` here but not inside a
   // handler that may run later, and re-checking it in every branch is how the two halves of this panel
@@ -108,12 +108,15 @@ export function PairPhonePanel(props: PairPhonePanelProps): JSX.Element {
     // A refusal has no code to draw, and a second press replaces the first: regenerating on the URI (and
     // clearing when there is none) is what keeps a superseded QR from sitting beside a new one.
     if (uri === null) {
-      setQrDataUrl(null);
+      setQr(null);
       return;
     }
     let cancelled = false;
-    void QRCode.toDataURL(uri, { margin: 1, width: 220 }).then((url) => {
-      if (!cancelled) setQrDataUrl(url);
+    // `renderPairingQr` owns the dimensions (module count read back from the encoder, integer px per
+    // module, four-module quiet zone); the panel's only job is to display the result at exactly the size
+    // that was generated, which the inline width/height below guarantee.
+    void renderPairingQr(uri).then((rendered) => {
+      if (!cancelled) setQr(rendered);
     });
     return () => {
       cancelled = true;
@@ -127,8 +130,18 @@ export function PairPhonePanel(props: PairPhonePanelProps): JSX.Element {
 
   return (
     <div className="settings__pairing" data-testid="pairing-panel">
-      {qrDataUrl ? (
-        <img className="settings__pairing-qr" src={qrDataUrl} alt={t("settings.pairing.qr.alt")} />
+      {qr ? (
+        <img
+          className="settings__pairing-qr"
+          src={qr.dataUrl}
+          alt={t("settings.pairing.qr.alt")}
+          data-qr-modules={qr.modules}
+          data-qr-px-per-module={qr.pxPerModule}
+          data-qr-size={qr.sizePx}
+          // Inline rather than in the stylesheet: the bitmap is `sizePx` square, and a CSS rule that
+          // resized it would resample the modules — the exact failure this replaced.
+          style={{ width: qr.sizePx, height: qr.sizePx }}
+        />
       ) : null}
       <label className="settings__pairing-label">
         {t("settings.pairing.uriLabel")}

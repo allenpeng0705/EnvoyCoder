@@ -137,13 +137,10 @@ describe("which agents this product can actually run", () => {
  * checkouts' own source rather than against memory.
  */
 describe("which agents can be put into a mode", () => {
-  it("names the peer's three mode ids, then the three permission levels", () => {
+  it("names the three permission levels, and not a working mode", () => {
     // The first three are `session/set_mode` (`ModeKind`). The last three are `session/set_policy`
     // sandboxes — sending one of them as a mode is refused with `mode must be default|plan|review`.
     expect(HARNESS_CATALOG["envoy-harness"].modes.map((mode) => mode.id)).toEqual([
-      "default",
-      "plan",
-      "review",
       "read-only",
       "workspace-write",
       "danger-full-access",

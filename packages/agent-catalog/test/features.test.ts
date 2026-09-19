@@ -17,7 +17,10 @@ describe("composer feature toggles", () => {
       "fast_mode",
     ]);
     expect(composerFeatures("claudecode", "claude-sonnet-4-6")).toEqual([]);
-    expect(composerFeatures("envoy-harness", "gpt-5.5")).toEqual([]);
+    expect(composerFeatures("envoy-harness", "gpt-5.5").map((feature) => feature.id)).toEqual([
+      "plan_mode",
+    ]);
+    expect(composerFeatures("envoy-harness", "gpt-5.5")[0]?.config).toBeUndefined();
   });
 
   it("sends Codex plan as collaboration_mode, and does not invent a Fast config", () => {

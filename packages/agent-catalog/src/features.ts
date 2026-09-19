@@ -4,7 +4,7 @@
  * They are agent features, not a fourth mode: Codex shows Plan always and Fast only for the models
  * that accept priority inference; Claude shows Fast only, and only for the Opus models that take it.
  * Every other agent shows neither — a toggle that does nothing is the bug the mode picker already
- * refuses.
+ * refuses. Envoy Harness is the exception that shows Plan as a working mode, not as a permission.
  *
  * Plan is the one this daemon can actually apply. Codex publishes `collaboration_mode` (`default` |
  * `plan`) and accepts it through `session/set_config_option`. Fast is a service tier on Codex's
@@ -75,6 +75,11 @@ export function composerFeatures(
   }
   if (harness === "claudecode" && CLAUDE_FAST_MODELS.has(bareModelId(modelId))) {
     return [{ id: "fast_mode", highlight: "yellow" }];
+  }
+  if (harness === "envoy-harness") {
+    // Plan is a working mode, not a permission. It is sent as `session/set_mode`, not as a config
+    // option, so this entry has no `config`.
+    return [{ id: "plan_mode", highlight: "blue" }];
   }
   return [];
 }

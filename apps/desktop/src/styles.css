@@ -3691,11 +3691,15 @@ button.explorer__change:hover {
   border-radius: 8px;
 }
 .settings__pairing-qr {
-  width: 220px;
-  height: 220px;
+  /* **No width/height here on purpose.** The size is derived per payload in `pairing-qr.ts` and set
+     inline; a fixed rule here would resample the bitmap — a 220 px image stretched by CSS is
+     interpolated and stays unscannable however large it looks. `pixelated` is the belt to that braces:
+     if anything ever does scale it, modules stay square instead of blurring. */
   align-self: center;
   background: #fff;
   border-radius: 4px;
+  image-rendering: pixelated;
+  max-width: none;
 }
 .settings__pairing-label {
   display: flex;

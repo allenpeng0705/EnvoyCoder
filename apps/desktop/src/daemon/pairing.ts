@@ -213,22 +213,32 @@ export function createPairingHandlers(deps: PairingHandlerDeps): Partial<Record<
       }
       const relay = deps.relay?.() ?? {};
       const mesh = deps.mesh?.() ?? { multiaddrs: [], relayHints: [] };
-      const uri = host.pairingUri({
-        token: record.token,
-        ownerId: identity.ownerId,
-        ownerPublicKey: identity.ownerPublicKey,
-        host: reach,
-        ...(lanHost ? { lanHost } : {}),
-        ...(relay.relayPeerId ? { relayPeerId: relay.relayPeerId } : {}),
-        ...(relay.relayWsUrls && relay.relayWsUrls.length > 0 ? { relayWsUrls: relay.relayWsUrls } : {}),
-        ...(mesh.peerId && mesh.multiaddrs.length > 0
-          ? {
-              meshPeerId: mesh.peerId,
-              meshMultiaddrs: mesh.multiaddrs,
-              meshRelayHints: mesh.relayHints,
-            }
-          : {}),
-      });
+      const uri = await host.pairingUri(
+        {
+          token: record.token,
+          ownerId: identity.ownerId,
+          ownerPublicKey: identity.ownerPublicKey,
+          host: reach,
+          ...(lanHost ? { lanHost } : {}),
+          ...(relay.relayPeerId ? { relayPeerId: relay.relayPeerId } : {}),
+          ...(relay.relayWsUrls && relay.relayWsUrls.length > 0 ? { relayWsUrls: relay.relayWsUrls } : {}),
+          ...(mesh.peerId && mesh.multiaddrs.length > 0
+            ? {
+                meshPeerId: mesh.peerId,
+                meshMultiaddrs: mesh.multiaddrs,
+                meshRelayHints: mesh.relayHints,
+              }
+            : {}),
+        },
+        // **The QR route compresses; the typed route does not.** A user-supplied short token means this
+        // is the manual `host:port` route (`PairingSection`'s form), whose payload is short by
+        // construction and which the window reads back synchronously with `readPairingLink` — the user
+        // types those two fields into the phone, so nothing scans the URI. The QR route (no user token)
+        // carries a long random secret and the mesh multiaddrs, and is the one a camera resolves: at the
+        // family's 512 px render the measured legacy payload is a version-26 symbol at 4.10 px/module —
+        // barely the 4 px/module floor — while the compressed `pairing=` form is version 18 at 5.51.
+        { compressed: input.token === undefined },
+      );
       return { uri, device };
     },
 

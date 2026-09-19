@@ -257,6 +257,10 @@ export const en = {
   "task.composer.hint.thinking": "Thinking mode",
   "task.composer.hint.fast": "Toggle fast mode",
   "task.composer.hint.plan": "Toggle plan mode",
+  "task.composer.work.label": "Work",
+  "task.composer.hint.work": "Agent does the work. Plan only looks and proposes.",
+  "task.composer.work.agent": "Agent",
+  "task.composer.work.plan": "Plan",
   "task.composer.folder.aria": "Change this task's folder",
   "task.composer.folder.noPicker":
     "This window has no folder chooser, so this task's folder cannot be changed here.",
@@ -378,7 +382,7 @@ export const en = {
   "task.agentMode.review.description": "Check and report. Change nothing.",
   "task.agentMode.readOnly.label": "Read only",
   "task.agentMode.readOnly.description": "Read files. Do not change them, and do not ask before each read.",
-  "task.agentMode.workspace.label": "Workspace change",
+  "task.agentMode.workspace.label": "Project change",
   "task.agentMode.workspace.description": "Change files in this project. Ask only before a command or a change outside it.",
   "task.agentMode.fullAccess.label": "Full access",
   "task.agentMode.fullAccess.description": "The whole computer, without asking.",
@@ -491,7 +495,7 @@ export const en = {
   "settings.extraArgs.detail": "Added to the agent's command line for every task.",
   "settings.extraArgs.placeholder": "--verbose",
   "settings.approvals.title": "Ask before anything destructive",
-  "settings.approvals.detail": "Ask before a command or a change. Reading a file does not ask. The mode on a task can allow more.",
+  "settings.approvals.detail": "Ask before commands and changes, not reads. A task's mode can allow more.",
   "settings.approvals.reaches":
     "Handed to {agent} as its own policy for every run, so the asking happens where the work does.",
   "settings.approvals.unsupported":
@@ -587,7 +591,7 @@ export const en = {
   "settings.agents.envoyLlm.baseUrl": "Base URL",
   "settings.agents.envoyLlm.baseUrl.placeholder": "Optional — LiteLLM or a proxy",
   "settings.agents.envoyLlm.baseUrl.detail":
-    "Leave empty to use that provider’s own address. MiniMax uses the OpenAI format. A model written anthropic/… uses the Anthropic format. One address is not both.",
+    "Leave empty to use the provider's own address; one address is not both formats.",
   "settings.agents.envoyLlm.apiKey": "API key",
   "settings.agents.envoyLlm.apiKey.placeholder": "Paste a new key to replace the saved one",
   "settings.agents.envoyLlm.apiKey.detail": "Write-only: EnvoyDev never shows a saved key again.",
@@ -1189,7 +1193,7 @@ export const en = {
   "approval.question.tool": "Allow the agent to run “{tool}”?",
   "approval.question.generic": "Allow the agent to continue?",
   "approval.detail":
-    "It has stopped before this step and will not continue until you answer. Answering this one request does not allow anything else.",
+    "It has stopped before this step and will not continue until you answer. Allowing it lets this same step run again in this project without asking.",
   "approval.allow": "Allow",
   "approval.deny": "Don't allow",
   "approval.question.ask": "The agent asked a question.",

@@ -201,6 +201,19 @@ export interface CoderStoreOptions {
   resolveEndpoint?: () => Promise<ResolvedEndpoint>;
 }
 
+/**
+ * Is this approval answer the bare list of chosen option ids?
+ *
+ * A named predicate rather than an inline `Array.isArray`, because TypeScript narrows `readonly string[]`
+ * with neither `Array.isArray` nor `"text" in choice` — so the only way to reach the `{ optionIds }` branch
+ * without a cast is a guard that says what it means. `TaskPane`'s approval picker emits exactly this list.
+ */
+function isOptionIdList(
+  choice: string | readonly string[] | { optionIds: readonly string[] } | { text: string },
+): choice is readonly string[] {
+  return Array.isArray(choice);
+}
+
 export class CoderStore {
   private readonly options: CoderStoreOptions;
   private state: CoderState = initialState;
@@ -811,14 +824,19 @@ export class CoderStore {
   async answerApproval(
     runId: string,
     requestId: string,
-    choice: string | { optionIds: readonly string[] } | { text: string },
+    // The array form is what `TaskPane`'s approval picker emits for a multi-option answer, so the store
+    // accepts it directly rather than making every caller wrap it as `{ optionIds }` — the adapter that
+    // used to be missing is why `tsc -b` failed on `CoderApp`'s `onAnswer` handler.
+    choice: string | readonly string[] | { optionIds: readonly string[] } | { text: string },
   ): Promise<{ ok: true } | Refusal> {
     const params =
       typeof choice === "string"
         ? { runId, requestId, optionId: choice }
-        : "text" in choice
-          ? { runId, requestId, text: choice.text }
-          : { runId, requestId, optionId: choice.optionIds[0], optionIds: [...choice.optionIds] };
+        : isOptionIdList(choice)
+          ? { runId, requestId, optionId: choice[0], optionIds: [...choice] }
+          : "text" in choice
+            ? { runId, requestId, text: choice.text }
+            : { runId, requestId, optionId: choice.optionIds[0], optionIds: [...choice.optionIds] };
     return this.mutate("coder.answerApproval", params, () => ({ ok: true as const }));
   }
 

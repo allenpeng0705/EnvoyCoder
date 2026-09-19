@@ -55,7 +55,7 @@ import {
   coderErrorMessage,
   coderErrorRef,
 } from "@envoydev/protocol";
-import { coderPaths } from "@envoydev/host-bridge";
+import { checkPairingCode, coderPaths } from "@envoydev/host-bridge";
 import { resetSearchPathCacheForTests } from "@envoydev/platform";
 
 import { AcpClient } from "../src/daemon/acp/client.js";
@@ -1472,9 +1472,6 @@ describe("changing the folder a task runs in", () => {
     // an agent's own wording would arrive without one and be shown as the agent wrote it.
     const envoy = byId.get("envoy-harness");
     expect(envoy?.modes.map((mode) => mode.id)).toEqual([
-      "default",
-      "plan",
-      "review",
       "read-only",
       "workspace-write",
       "danger-full-access",
@@ -2250,10 +2247,15 @@ describe("paired-device sessions (M4)", () => {
     };
     expect(minted.device.deviceLabel).toBe("Test phone");
     expect(minted.uri).toContain("envoy://pair?");
-    expect(minted.uri).toContain("app=EnvoyDev");
-    expect(minted.uri).toContain("token=");
+    // The QR route mints the **compressed** form now (see `CoderPairUriOptions`): the legacy query string
+    // of a real payload is ~1 kB and renders a version-25 symbol a camera cannot resolve. Read it back with
+    // this product's own reader, which is also the assertion that the code it mints is one it can read.
+    expect(minted.uri).toContain("pairing=");
+    const code = await checkPairingCode(minted.uri);
+    expect(code.ok).toBe(true);
+    if (!code.ok) throw new Error(`the daemon minted a code its own reader refuses: ${code.message}`);
 
-    const token = new URL(minted.uri).searchParams.get("token");
+    const token = code.token;
     expect(token).toBeTruthy();
 
     const listed = (await window.call("coder.listPairedDevices", {})) as {

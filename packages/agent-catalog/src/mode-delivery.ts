@@ -1,7 +1,7 @@
 /**
  * How a permission level reaches the agent — separate from `session/set_mode`.
  *
- * Read only, Workspace change, and Full access are the same three postures on DeepSeek Harness
+ * Read only, Project change, and Full access are the same three postures on DeepSeek Harness
  * and on Envoy Harness. They are not a collaboration mode (`default` / `plan` / `review`).
  * DeepSeek has no `session/set_mode`; it reads `DSH_PERMISSION_MODE` when the process starts.
  * Envoy Harness keeps those three on `session/set_mode`, and takes a sandbox through
@@ -36,7 +36,7 @@ export function permissionModes(preferredId?: PermissionModeId): AgentMode[] {
     },
     {
       id: "workspace-write",
-      label: "Workspace change",
+      label: "Project change",
       labelKey: "task.agentMode.workspace.label",
       description: "Change files in this project. Ask only before a command or a change outside it.",
       descriptionKey: "task.agentMode.workspace.description",
@@ -62,6 +62,40 @@ export function permissionModes(preferredId?: PermissionModeId): AgentMode[] {
  */
 export function sessionSetModeId(modeId: string | undefined): string | undefined {
   if (modeId === undefined || isPermissionModeId(modeId)) return undefined
+  return modeId
+}
+
+/**
+ * The collaboration mode to send with this choice.
+ *
+ * A permission level is not itself a mode. Leaving Plan still has to, or the agent keeps drafting
+ * after the person picked Project change. `default` is that "do the work" mode, and it is not shown
+ * in the menu: Project change is the same choice.
+ */
+export function collaborationModeToSet(
+  harness: HarnessId,
+  modeId: string | undefined,
+  planMode?: boolean,
+): string | undefined {
+  const direct = sessionSetModeId(modeId)
+  if (direct !== undefined) return direct
+  if (harness !== "envoy-harness") return undefined
+  // Plan is the working mode, chosen on its own control. It wins over the permission level: the
+  // sandbox stays what they picked, and the agent only looks and proposes until they switch back.
+  if (planMode === true) return "plan"
+  if (modeId !== undefined && isPermissionModeId(modeId)) return "default"
+  return undefined
+}
+
+/**
+ * Modes the menu used to list and no longer does.
+ *
+ * Default and Plan were the same work as Project change once Plan moved to its own control. Review was
+ * the same limit as Read only. A task that still stores the old id keeps that meaning.
+ */
+export function mapRetiredEnvoyMode(modeId: string): string {
+  if (modeId === "default" || modeId === "plan") return "workspace-write"
+  if (modeId === "review") return "read-only"
   return modeId
 }
 

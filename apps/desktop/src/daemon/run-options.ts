@@ -35,6 +35,7 @@
 import {
   harnessDefinition,
   harnessModelDelivery,
+  mapRetiredEnvoyMode,
   resolveModelChoice,
   thinkingDelivery,
 } from "@envoydev/agent-catalog";
@@ -66,6 +67,7 @@ import { ref } from "./messages.js";
  */
 export function resolveAgentMode(harness: HarnessId, requested: string | undefined): string | undefined {
   if (requested === undefined) return undefined;
+  const mode = harness === "envoy-harness" ? mapRetiredEnvoyMode(requested) : requested;
   const definition = harnessDefinition(harness);
 
   if (!definition.capabilities.agentMode) {
@@ -75,14 +77,14 @@ export function resolveAgentMode(harness: HarnessId, requested: string | undefin
       ref("error.agentModeUnsupported", { harness: definition.label }),
     );
   }
-  if (!definition.modes.some((mode) => mode.id === requested)) {
+  if (!definition.modes.some((entry) => entry.id === mode)) {
     throw coderError(
       ENVOYDEV_ERRORS.badRequest,
       `${definition.label} does not offer a mode called "${requested}", so the run was not started. Pick one of its modes and try again.`,
       ref("error.agentModeUnknown", { harness: definition.label, mode: requested }),
     );
   }
-  return requested;
+  return mode;
 }
 
 /**

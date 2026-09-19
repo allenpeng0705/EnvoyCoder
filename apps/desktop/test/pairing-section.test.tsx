@@ -251,12 +251,6 @@ describe("the three routes, separately", () => {
       mintedPairing: {
         ok: true,
         uri: MINTED_URI,
-        device: {
-          id: "device-1",
-          deviceLabel: "Phone",
-          createdAt: "2026-09-14T10:00:00.000Z",
-          expiresAt: "2026-09-14T10:10:00.000Z",
-        },
       },
     });
 

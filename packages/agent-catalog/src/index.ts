@@ -367,37 +367,10 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
     id: "envoy-harness",
     label: "Envoy Harness",
     tier: "built-in",
-    // The first three are the peer's `ModeKind`, one for one and in its order
-    // (`../envoy-harness/packages/envoy-harness/src/plan/mode-kind.ts`). A mode id we invent is a
-    // mode id `session/set_mode` refuses with `mode must be default|plan|review`. The three after
-    // them are permission levels (`PermissionModeSchema`), sent on `session/set_policy` rather than
-    // as a mode — see `mode-delivery.ts`. Workspace change is preferred: it is the level a new task
-    // should start on, the same default DeepSeek uses, so a person is not asked before every read.
-    // The labels are ours; the ids are passed through verbatim.
-    modes: [
-      {
-        id: "default",
-        label: "Default",
-        labelKey: "task.agentMode.default.label",
-        description: "Do the work. Ask before a command or a change, not before each read.",
-        descriptionKey: "task.agentMode.default.description",
-      },
-      {
-        id: "plan",
-        label: "Plan",
-        labelKey: "task.agentMode.plan.label",
-        description: "Investigate and propose a plan. Change nothing yet.",
-        descriptionKey: "task.agentMode.plan.description",
-      },
-      {
-        id: "review",
-        label: "Review",
-        labelKey: "task.agentMode.review.label",
-        description: "Check and report. Change nothing.",
-        descriptionKey: "task.agentMode.review.description",
-      },
-      ...permissionModes("workspace-write"),
-    ],
+    // Permission levels only (`mode-delivery.ts`). Plan is not one of them: it is a working mode
+    // (Agent or Plan), chosen on its own control and sent as `session/set_mode`. A permission id
+    // sent as a mode is refused with `mode must be default|plan|review`.
+    modes: permissionModes("workspace-write"),
     summary: "EnvoyDev's built-in agent — structured tools, approvals and sessions.",
     launch: {
       kind: "child-process",

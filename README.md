@@ -33,6 +33,11 @@ EnvoyDev is part of the **[EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh
 - **Resume after a disconnect.** Your work is on your machine — pick it up where you left off.
 - **macOS, Windows, and Linux.** All three are first-class.
 
+<p align="center">
+  <img src="project.png" alt="EnvoyDev project view" width="800">
+</p>
+<p align="center"><em>The project view — one task, one transcript, every agent.</em></p>
+
 ### Phone (EnvoyDev Mobile)
 
 - **Pair with any desktop.** Scan a QR code, paste `host:port`, or use an SSH hop — your choice. Same protocol, same security.
@@ -53,6 +58,11 @@ EnvoyDev ships with one unified UI for every first-class coding harness. Install
 | **ACP catalog** (third-party recipes) | 38 more — including Gemini, Grok, Kiro, Kimi, Qwen Code, CodeWhale, MiniMax Code, TraeCLI, Qoder, Cline, Hermes, Goose, Junie, Nova, Poolside, Kilo, Stakpak, and others — probed at runtime, install only what you use |
 
 Your model credentials live with the agent that uses them — EnvoyDev never proxies them, never asks for an account.
+
+<p align="center">
+  <img src="agents.png" alt="EnvoyDev coding agents settings" width="800">
+</p>
+<p align="center"><em>The agents settings page lists every catalogued harness with what this machine can do with each.</em></p>
 
 ---
 
