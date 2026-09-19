@@ -6,14 +6,14 @@
 
 <p align="center"><strong>The control plane for coding agents.</strong></p>
 
-<p align="center">Run Claude Code, Codex, OpenCode, Cursor, Pi, and more — on your own machines.<br>
+<p align="center">Run Claude Code, Codex, OpenCode, Cursor, and more — on your own machines.<br>
 Reach them from a window or a phone. Open source, self-hosted, local-first.</p>
 
 ---
 
 ## What is EnvoyDev?
 
-EnvoyDev is a desktop app that drives coding agents on the computer where your code lives. It does not try to *be* an agent — it gives Claude Code, Codex, OpenCode, Cursor, Pi, DeepSeek's CLI, and others **one unified window**: the same timeline, the same approvals, the same diff review, on every agent.
+EnvoyDev is a desktop app that drives coding agents on the computer where your code lives. It does not try to *be* an agent — it gives Claude Code, Codex, OpenCode, Cursor, DeepSeek's CLI, and others **one unified window**: the same timeline, the same approvals, the same diff review, on every agent.
 
 Your code never leaves your machine. Your model keys stay with the agent that uses them. EnvoyDev never asks for an account.
 
@@ -39,8 +39,9 @@ EnvoyDev ships with one unified UI for every first-class coding harness. Install
 
 | Tier | Agents |
 | --- | --- |
-| **Built-in** | Envoy Harness (ACP), Pi |
-| **Tier B catalog** | Claude Code, Codex, OpenCode, Cursor, CodeWhale, DeepSeek Harness, MiniMax Code, Grok, Gemini, TraeCLI, Qoder, Copilot |
+| **Built-in** | Envoy Harness (ACP) |
+| **Catalogued** (EnvoyDev-tested) | DeepSeek Harness, Claude Code, Codex, GitHub Copilot, OpenCode, Cursor, OMP |
+| **ACP catalog** (third-party recipes) | 38 more — including Gemini, Grok, Kiro, Kimi, Qwen Code, CodeWhale, MiniMax Code, TraeCLI, Qoder, Cline, Hermes, Goose, Junie, Nova, Poolside, Kilo, Stakpak, and others — probed at runtime, install only what you use |
 
 Your model credentials live with the agent that uses them — EnvoyDev never proxies them, never asks for an account.
 
