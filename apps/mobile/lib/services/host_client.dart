@@ -32,6 +32,8 @@ import 'dart:io';
 import 'package:envoy_thin_client/envoy_thin_client.dart';
 import 'package:envoy_thin_client/services/platform_web_socket.dart';
 
+import 'install_id.dart';
+
 import '../l10n/l10n.dart';
 import '../models/host.dart';
 import 'libp2p_transport.dart';
@@ -594,6 +596,9 @@ class HostClient {
         'client': {
           'name': 'envoydev-mobile',
           'platform': Platform.operatingSystem,
+          // **Who this phone is, stably.** Without it the daemon cannot tell a re-pairing from a new device, so
+          // every pairing left another paired-device row — each a live token, all labelled "Phone".
+          'id': await installId(),
         },
       },
       const Duration(seconds: 30),
