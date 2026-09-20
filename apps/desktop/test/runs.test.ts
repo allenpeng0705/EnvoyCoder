@@ -1314,7 +1314,20 @@ describe("the bounds that keep a long run finite", () => {
     await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
 
     const file = join(coderPaths(b.home).transcriptsDir, `${run.id}.jsonl`);
-    const text = await readFile(file, "utf8");
+    /**
+     * **Wait for the write, not merely for the event.**
+     *
+     * `record` publishes the event to the in-memory buffer *before* it awaits the transcript append, so a test that
+     * reacts to the event can read the file a moment too early. That is how this failed once in a full-suite run
+     * while passing alone, twice — a gate that has to be re-run trains people to ignore it.
+     */
+    const deadline = Date.now() + 5_000;
+    let text = "";
+    for (;;) {
+      text = await readFile(file, "utf8").catch(() => "");
+      if (text.includes('"kind":"run.ended"') || Date.now() > deadline) break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
     expect(text).toContain('"kind":"run.ended"');
     // Nothing else got through, which is what the cap is for.
     expect(text).not.toContain('"kind":"run.session"');

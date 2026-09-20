@@ -544,7 +544,7 @@ step("the bundled daemon starts as a child process and answers over its own sock
     return `pid ${claim.pid} on port ${claim.port}, hello verified, claim removed on stop`;
   } finally {
     child.kill("SIGKILL");
-    await rm(home, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 });
 
@@ -585,7 +585,7 @@ step("a second daemon refuses to start while one owns the machine", async () => 
     return `second daemon exited 0 and named the first`;
   } finally {
     first.kill("SIGTERM");
-    await rm(home, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 });
 
@@ -745,8 +745,8 @@ step("a project added through the window's store reaches the rail, and a second 
   } finally {
     first.dispose();
     await daemon.stop();
-    await rm(home, { recursive: true, force: true });
-    await rm(projectDir, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    await rm(projectDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 });
 

@@ -3,8 +3,9 @@
  *
  *   * the daemon, embedded so a packaged app has no checkout to import from
  *   * a Node runtime, because the shell starts the daemon with node
- *   * Envoy Harness, cloned from its repo and built, the way EnvoyMesh clones
- *     OpenClaw when the tree is missing and fetches Pi at package time
+ *   * Envoy Harness, cloned at the commit `scripts/envoy-harness.pin` names and
+ *     built, the way EnvoyMesh clones OpenClaw when the tree is missing and
+ *     fetches Pi at package time
  *
  * The shell already starts that daemon with the first window and stops it when
  * the last window closes. This script only puts the files where that lookup
@@ -12,6 +13,7 @@
  *
  * Env:
  *   ENVOY_HARNESS_REPO_URL   clone URL (default the public repo)
+ *   ENVOY_HARNESS_COMMIT     build this commit instead of the tracked pin
  *   ENVOY_HARNESS_DIR        use this checkout instead of cloning. Not reset.
  *   ENVOYDEV_NODE_VERSION    Node runtime to download (default 22.19.0)
  *   FETCH_NODE_SIDECAR=1     download Node again even if one is already staged
@@ -24,6 +26,8 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
+
+import { checkoutHarnessCommit, readHarnessCommit } from "./lib/harness-pin.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const resources = path.join(root, "apps", "desktop", "src-tauri", "resources");
@@ -103,17 +107,22 @@ function stageHarness() {
     if (!existsSync(path.join(local, "packages", "envoy-harness", "package.json"))) {
       fail(`ENVOY_HARNESS_DIR is not an envoy-harness checkout: ${local}`);
     }
-    say(`Using the checkout at ${local} (not fetching; unset ENVOY_HARNESS_DIR to clone the latest).`);
+    say(`Using the checkout at ${local} (not fetching; unset ENVOY_HARNESS_DIR to build the pinned commit).`);
   } else {
-    if (!existsSync(path.join(cache, ".git"))) {
-      rmSync(cache, { recursive: true, force: true });
-      mkdirSync(path.dirname(cache), { recursive: true });
-      say(`Cloning ${harnessUrl}…`);
-      run("git", ["clone", "--depth", "1", harnessUrl, cache]);
-    } else {
-      say("Updating the Envoy Harness checkout to the latest commit…");
-      run("git", ["-C", cache, "fetch", "--depth", "1", "origin"]);
-      run("git", ["-C", cache, "reset", "--hard", "FETCH_HEAD"]);
+    let pin;
+    try {
+      pin = readHarnessCommit();
+    } catch (error) {
+      fail(error instanceof Error ? error.message : String(error));
+    }
+    say(
+      `Checking out Envoy Harness ${pin.commit} (${pin.from}` +
+        `${pin.source === "override" ? " — an override of the tracked pin" : ""})…`,
+    );
+    try {
+      checkoutHarnessCommit({ dest: cache, url: harnessUrl, commit: pin.commit });
+    } catch (error) {
+      fail(error instanceof Error ? error.message : String(error));
     }
     source = cache;
   }

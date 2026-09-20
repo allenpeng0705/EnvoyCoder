@@ -217,10 +217,11 @@ requirement the moment a manifest does. When the built-in agent lands:
 }
 ```
 
-Then `npm install` here, and add the pin: a tracked one-line file naming the harness commit, checked by
-`peers:check` exactly as it now reports the commit it found. The rule that does **not** bend: never take
-it through EnvoyMesh's `file:` link, because that would make us depend on EnvoyMesh for someone else's
-package and inherit its release cadence for code it does not own.
+Then `npm install` here. The pin the packaging step needs already exists — `scripts/envoy-harness.pin`
+(§3.5), a tracked one-line file naming the harness commit; what M2 still adds is the *check*: `peers:check`
+comparing the sibling it found against the pin, exactly as it now reports the commit it found. The rule
+that does **not** bend: never take it through EnvoyMesh's `file:` link, because that would make us depend
+on EnvoyMesh for someone else's package and inherit its release cadence for code it does not own.
 
 ### 3.4 Upgrading it
 
@@ -231,13 +232,19 @@ cd ../envoy-harness && pnpm install && pnpm -r run build
 cd ../EnvoyDev && npm install && npm run gates && npm run smoke
 ```
 
+**Then bump the pin** — `scripts/envoy-harness.pin`, one line, the full `<sha>` from above (§3.5). The
+sibling checkout is what this machine *runs against* while developing; the pin is what a release *ships*,
+and they are allowed to differ until the upgrade is proved. The bump belongs in the same deliberate commit
+as the upgrade, so the release notes and the artifact cannot disagree about which harness they mean. To
+try one build without touching the pin: `ENVOY_HARNESS_COMMIT=<sha> node scripts/stage-desktop-bundle.mjs`.
+
 Upgrading the harness is a **product decision**, not maintenance: it changes what our agents do. So it is
 always a deliberate commit bump with a readable diff, and the smoke run is where you see the consequence —
 its agent-catalogue probe must still report the harness present, and the capabilities it advertises
 (cancel, approvals, structured tools) are what the UI is allowed to promise. A harness that gains or
 loses one of those must change our UI, not silently break a button.
 
-Rolling back is the same three commands with the previous sha.
+Rolling back is the same three commands with the previous sha — and the pin back with it.
 
 ### 3.5 What ships, and what a user needs
 
@@ -245,6 +252,23 @@ A user never sees any of this. The packaged desktop app **stages the built harne
 (roadmap M6), so an installed EnvoyDev carries the harness it was built with — no checkout, no
 `pnpm install`, no sibling directory. That is also why the release must record the harness commit: it is
 the only handle on the agent runtime inside a shipped artifact.
+
+**The commit is recorded in `scripts/envoy-harness.pin`** — one line, the full 40 characters — and
+`scripts/stage-desktop-bundle.mjs` builds exactly it, never the default branch HEAD:
+
+```bash
+node scripts/stage-desktop-bundle.mjs                              # the pinned commit
+ENVOY_HARNESS_COMMIT=<sha> node scripts/stage-desktop-bundle.mjs   # that commit, for one build
+```
+
+The clone names the commit (`git fetch --depth 1 <url> <sha>`, falling back to a full fetch and then the
+*same* commit when a server refuses an arbitrary sha) and finishes by asserting `HEAD` is the pin. If the
+repository cannot reach the commit the build **fails**, naming the sha and quoting git: there is no path
+from a bad pin to a bundle built from a branch tip. `ENVOY_HARNESS_DIR` still bypasses the clone for a
+checkout already on disk.
+
+Bumping it is editing the one line, in the same commit as the §3.4 upgrade. The reader is
+`scripts/lib/harness-pin.mjs` (`readHarnessCommit` / `checkoutHarnessCommit`).
 
 ---
 
@@ -289,7 +313,7 @@ so "we support X" is a statement with a source rather than an assumption.
 |---|---|
 | Which EnvoyMesh is this checkout linked to? | `npm run peers:check` → the commit and subject; the upgrade script prints it too; CI logs it |
 | Which EnvoyMesh did the family node see? | `ENVOYMESH_VERSION`, recorded in the product session when this app attaches |
-| Which harness is this? | `npm run peers:check` → its commit (all ten packages are `0.0.0`, so a version number says nothing); the pin names it once M2 declares the dependency |
+| Which harness is this? | `npm run peers:check` → the sibling checkout's commit (all ten packages are `0.0.0`, so a version number says nothing); `scripts/envoy-harness.pin` → the commit a release **ships** (§3.5) |
 | Which family documents were copied, from where? | the header of each file in `docs/family/` (`source-head` + body hash), checked by `npm run docs:check` |
 | Which agent CLIs are installed, and what can each do? | `npm run smoke` probe output, and the `evidence` field of each entry in `packages/agent-catalog` |
 
@@ -306,9 +330,11 @@ npm run gates && npm run smoke                # §2.5 if the script already veri
 # the harness, when its turn comes
 git -C ../envoy-harness checkout <sha> && (cd ../envoy-harness && pnpm install && pnpm -r run build)
 npm install && npm run gates && npm run smoke
+# then bump scripts/envoy-harness.pin to <sha> — that is the commit the bundle ships (§3.5)
 
 # before a release
 npm run upgrade:mesh -- --commit <sha> --verify
 npm run docs:check -- --strict                # no stale family documents
-# then record both commits in the release notes
+# then record the EnvoyMesh commit in the release notes; the harness commit is already
+# recorded in scripts/envoy-harness.pin (§3.5)
 ```
