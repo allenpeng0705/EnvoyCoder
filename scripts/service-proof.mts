@@ -29,7 +29,7 @@
  * temporary home, and points the unit at that payload — not at the checkout's build directory, which is the path
  * an app upgrade replaces and therefore the one thing a unit must never name.
  *
- *     ENVOYDEV_DAEMON_PACKAGE=1 node apps/desktop/scripts/build-daemon.mjs
+ *     npm run daemon:package
  *     npm run service:proof
  */
 
@@ -83,7 +83,7 @@ const bundleDir = join(process.cwd(), "apps/desktop/dist-daemon");
 if (!existsSync(join(bundleDir, "node_modules"))) {
   console.error(
     `no packaged daemon bundle at ${bundleDir}.\n` +
-      "Build it first: ENVOYDEV_DAEMON_PACKAGE=1 node apps/desktop/scripts/build-daemon.mjs",
+      "Build it first: npm run daemon:package",
   );
   process.exit(1);
 }

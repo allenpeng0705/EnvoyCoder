@@ -45,6 +45,7 @@
     "scripts:check": "node scripts/check-scripts.mjs",
     "upgrade:mesh": "node scripts/upgrade-mesh.mjs",
     "daemon:build": "npm run daemon:build -w @envoydev/desktop",
+    "daemon:package": "npm run daemon:package -w @envoydev/desktop",
     "rust:test": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml",
     "run": "tsx scripts/run-once.ts",
     "verify:language": "tsx scripts/verify-language.ts",
