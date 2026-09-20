@@ -75,6 +75,9 @@ export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   /** One measurement per project per window, unless something asks again. */
   const asked = useRef(false);
+  /** The read, through a ref so the effect that runs it can depend on `open` and nothing else. */
+  const read = useRef(props.onRead);
+  read.current = props.onRead;
 
   const status: GitStatus | undefined = props.snapshot?.status;
   const branches = props.snapshot?.branches ?? [];
@@ -99,9 +102,13 @@ export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null
      * window would leave *Finish* disabled after an agent had done its work, with no way to find out except
      * pressing something that refuses. The mount read below stays guarded, so a folder git cannot answer about
      * is still asked once rather than on every render.
+     *
+     * Read through a ref, and keyed on `open` alone: callers pass an inline arrow, so a dependency on the
+     * callback would re-run this on **every** render — and since the read updates the snapshot that renders
+     * the caller, that is a spawn loop, not a re-measure.
      */
-    void props.onRead();
-  }, [open, props.onRead]);
+    void read.current();
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;

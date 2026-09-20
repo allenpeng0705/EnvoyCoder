@@ -8,6 +8,8 @@
  */
 
 /** @vitest-environment jsdom */
+import type { JSX } from "react";
+
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -130,6 +132,44 @@ describe("ProjectBranches", () => {
       </I18nProvider>,
     );
     expect(screen.queryByRole("button", { name: new RegExp(en["git.branches.aria"].replace("{project}", "repo")) })).toBeNull();
+  });
+
+  it("measures once per open, not once per render of its caller", async () => {
+    /**
+     * **Callers pass an inline arrow**, so the read's identity changes whenever the rail re-renders — which
+     * happens on any state change anywhere in the window. Depending on the callback would therefore re-run the
+     * effect on every one of those renders, and since the read updates the snapshot that renders the caller,
+     * that is a spawn loop rather than a re-measure. The ref is what makes "on open" mean once.
+     *
+     * The re-render has to come from the *caller*: a child that re-renders because of its own state keeps the
+     * props object it was given, which is why the first version of this test passed against the bug.
+     */
+    const onRead = vi.fn(async () => ({ ok: true as const }));
+    const tree = (): JSX.Element => (
+      <I18nProvider preference="en">
+        <ProjectBranches
+          project={project({ kind: "git" })}
+          snapshot={{ status: status(), branches: BRANCHES }}
+          onRead={() => onRead()}
+          onCheckout={vi.fn(async () => ({ ok: true as const }))}
+          onCreate={vi.fn(async () => ({ ok: true as const }))}
+          onMerge={vi.fn(async () => ({ ok: true as const }))}
+          onFetch={vi.fn(async () => ({ ok: true as const, summary: "" }))}
+          onPull={vi.fn(async () => ({ ok: true as const, summary: "" }))}
+          onResolve={vi.fn(async () => ({ ok: true as const, outcome: "merged" as const }))}
+          onFinishMerge={vi.fn(async () => ({ ok: true as const, sha: "abc1234" }))}
+          onAbortMerge={vi.fn(async () => ({ ok: true as const }))}
+        />
+      </I18nProvider>
+    );
+    const { rerender } = render(tree());
+
+    fireEvent.click(trigger());
+    await waitFor(() => expect(onRead).toHaveBeenCalledTimes(1));
+    // The rail re-renders: the same panel, handed a fresh callback.
+    rerender(tree());
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+    expect(onRead).toHaveBeenCalledTimes(1);
   });
 
   it("shows the branch, and measures once for a project that has no snapshot yet", async () => {
