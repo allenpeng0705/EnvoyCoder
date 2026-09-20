@@ -298,6 +298,60 @@ class AppLocalizationsIt extends AppLocalizations {
       'Queste impostazioni vivono sulla macchina abbinata. Il telefono si limita a modificarle.';
 
   @override
+  String get settingsPairingHeading => 'Abbinamento';
+
+  @override
+  String settingsPairingPairedWith(Object name) {
+    return 'Questo telefono è abbinato a $name.';
+  }
+
+  @override
+  String get settingsPairingNotPaired =>
+      'Questo telefono non ha un abbinamento per quel computer. Scansiona il codice sul computer per abbinare di nuovo.';
+
+  @override
+  String get settingsPairingUnavailable =>
+      'Questo telefono non ha potuto leggere il suo abbinamento salvato.';
+
+  @override
+  String get settingsPairingNotReached =>
+      'Non ancora connesso su questo telefono.';
+
+  @override
+  String settingsPairingMinutesAgo(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Connesso $count minuti fa',
+      one: 'Connesso 1 minuto fa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String settingsPairingHoursAgo(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Connesso $count ore fa',
+      one: 'Connesso 1 ora fa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingsPairingJustNow => 'Connesso proprio ora';
+
+  @override
+  String get settingsPairingPhoneClock =>
+      'Registrato su questo telefono, secondo l\'orologio di questo telefono.';
+
+  @override
+  String settingsPairingOnDate(Object date) {
+    return 'Ultima connessione il $date';
+  }
+
+  @override
   String get settingsApprovals =>
       'Chiedi prima di qualsiasi azione distruttiva';
 

@@ -93,10 +93,15 @@ String _dialablePeerId(CoderHost host) {
 /// on the LAN cannot reach the desktop from cellular. [DialBudget] at the call site is what bounds
 /// the walk further.
 ///
+/// [token] is the credential every candidate must carry, and it is a parameter rather than
+/// `host.token` on purpose: the token this daemon issued (`PairingStore`) is the one that proves the
+/// phone is already paired, and a caller that forgot to pass it would silently re-pair. Defaults to
+/// the host's own token for the callers that have only a host record.
+///
 /// `setCommunityHomePeerId` is process-wide state on the resolver (the family's own design). Setting
 /// it here, on every resolve, is what stops one host's peer id being used to build another host's
 /// relay candidate.
-List<thin.HomeRemoteCandidate> candidatesFor(CoderHost host, {bool isOnWifi = false}) {
+List<thin.HomeRemoteCandidate> candidatesFor(CoderHost host, {bool isOnWifi = false, String? token}) {
   final node = storedNodeFor(host);
   final peerId = node.homePeerId.trim();
   thin.CandidateResolver.setCommunityHomePeerId(peerId.isEmpty ? null : peerId);
@@ -104,5 +109,5 @@ List<thin.HomeRemoteCandidate> candidatesFor(CoderHost host, {bool isOnWifi = fa
   // candidate without one is a dial at shared infrastructure with nothing to route to. The default
   // (a token-only fallback) is EnvoyGo's and is left alone.
   const resolver = thin.CandidateResolver(communityRelayRequiresPeerId: true);
-  return resolver.resolve(node, sessionToken: host.token, isOnWifi: isOnWifi);
+  return resolver.resolve(node, sessionToken: token ?? host.token, isOnWifi: isOnWifi);
 }

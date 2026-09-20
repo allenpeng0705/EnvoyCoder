@@ -34,6 +34,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _saving = false;
   String? _error;
 
+  /// The pairing this phone holds with the daemon behind [SettingsScreen.client], read once when the
+  /// screen opens. A `Future`, not a field, because the read is a keychain call.
+  late final Future<PairingState> _pairing = widget.client.pairingState();
+
   bool _requireApproval = true;
   bool _keepTranscripts = true;
   String _language = kSystemLanguagePreference;
@@ -211,6 +215,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: Text(l10n.settingsComputerHeading),
                   subtitle: Text(l10n.settingsComputerDetail),
                 ),
+                _PairingTile(pairing: _pairing, hostLabel: widget.client.host.label),
                 SwitchListTile(
                   title: Text(l10n.settingsApprovals),
                   value: _requireApproval,
@@ -318,4 +323,87 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
     );
   }
+}
+
+/// The current pairing, in the phone's own words.
+///
+/// **What it shows, and the one thing it deliberately does not.** The line names the desktop with the
+/// *connection's own label* — the name the user chose in this app, read out of the host record the
+/// client was built with, not a name the daemon sent — and the last time **this phone** reached it.
+///
+/// That timestamp is the phone's own record, made when the daemon accepted the token and answered
+/// `coder.hello`. The wire carries no client-facing last-seen field (`coder.hello`'s result has no
+/// such member), so presenting one would be inventing data. The subtitle says whose clock it is, in
+/// the user's language, rather than leaving a bare timestamp that reads as the desktop's report.
+class _PairingTile extends StatelessWidget {
+  const _PairingTile({required this.pairing, required this.hostLabel});
+
+  final Future<PairingState> pairing;
+
+  /// The connection's own name, from the host record this client was built with. Shown rather than
+  /// sent: the daemon has no name for itself in this app's list (`ConnectionsController.renameHost`
+  /// is local-only), so the phone's word for the machine is the only one there is.
+  final String hostLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return FutureBuilder<PairingState>(
+      future: pairing,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return ListTile(
+            title: Text(l10n.settingsPairingHeading),
+            trailing: const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+        // A read that threw is a different sentence from "there is no pairing": one says the phone
+        // could not read what it stored, the other says there is nothing stored. Collapsing them
+        // would tell a user with a pairing that they have none.
+        if (snapshot.hasError) {
+          return ListTile(
+            title: Text(l10n.settingsPairingHeading),
+            subtitle: Text(l10n.settingsPairingUnavailable),
+          );
+        }
+        final state = snapshot.data;
+        final record = state?.record;
+        if (record == null || record.token.isEmpty) {
+          return ListTile(
+            title: Text(l10n.settingsPairingHeading),
+            subtitle: Text(state?.refused == true
+                ? l10n.settingsPairingNotPaired
+                : l10n.settingsPairingNotReached),
+          );
+        }
+        return ListTile(
+          title: Text(l10n.settingsPairingPairedWith(hostLabel)),
+          subtitle: Text(
+            record.lastSeenAt == null
+                ? l10n.settingsPairingNotReached
+                : _pairingSeenLabel(context, record.lastSeenAt!),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// When this phone last reached the paired desktop, as a sentence.
+///
+/// Buckets rather than a live clock: a Settings page that re-rendered "just now" into "1 minute ago"
+/// under the user is churn, and the page is opened to read a fact, not to watch one.
+String _pairingSeenLabel(BuildContext context, DateTime seen) {
+  final l10n = context.l10n;
+  final elapsed = DateTime.now().difference(seen);
+  if (elapsed.inMinutes < 1) return l10n.settingsPairingJustNow;
+  if (elapsed.inHours < 1) return l10n.settingsPairingMinutesAgo(elapsed.inMinutes);
+  if (elapsed.inDays < 1) return l10n.settingsPairingHoursAgo(elapsed.inHours);
+  // Older than a day: the date is the fact, formatted by the framework's own localized patterns so
+  // the ordering and the separators are the user's, not this app's.
+  return l10n.settingsPairingOnDate(MaterialLocalizations.of(context).formatShortDate(seen));
 }

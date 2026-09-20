@@ -28,7 +28,7 @@ import { coderPaths } from "@envoydev/host-bridge";
 
 import { en, isMessageKey } from "../src/i18n/messages/en.js";
 import type { AcpLaunch } from "../src/daemon/acp/client.js";
-import { RunManager } from "../src/daemon/runs.js";
+import { RunManager, type RunManagerDeps } from "../src/daemon/runs.js";
 import { CoderStore } from "../src/daemon/store.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -69,6 +69,8 @@ async function bench(
     agentEnv?: Record<string, string>;
     /** Skip the model default for agents that require one (refusal tests). */
     noModel?: boolean;
+    /** The memory bounds, so a test can cross one in a couple of events instead of a couple of thousand. */
+    limits?: RunManagerDeps["limits"];
     onLaunch?: (input: { extraEnv?: Record<string, string> }) => void;
   } = {},
 ): Promise<Bench> {
@@ -108,6 +110,7 @@ async function bench(
   const manager = new RunManager({
     paths,
     store,
+    ...(options.limits ? { limits: options.limits } : {}),
     onEvent: (event) => events.push(event),
     resolveLaunch: (input) => {
       options.onLaunch?.(input);
@@ -1276,5 +1279,55 @@ describe("the record of what agents published, on disk", () => {
     expect(note?.reason).toMatch(/not readable as JSON/);
     // The bytes survive, in the same directory — the difference between preserving them and losing them.
     expect(await readFile(note!.movedTo, "utf8")).toBe("{ this is not json");
+  });
+});
+
+describe("the bounds that keep a long run finite", () => {
+  it("keeps the newest events in memory and lets the sequence numbers show what was dropped", async () => {
+    // A run that streams for hours must not grow the daemon's memory until the daemon dies; the transcript is the
+    // record, and this buffer is only a catch-up window for a reconnecting client.
+    const b = await bench({ limits: { events: 4 } });
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "run a tool" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const kept = b.manager.events(run.id);
+    expect(kept).toHaveLength(4);
+    // The proof that events were *dropped* rather than never produced: the sequence has climbed well past the
+    // window, so a client whose `sinceSeq` fell outside it sees a gap instead of silence.
+    const last = kept[kept.length - 1];
+    expect(last?.seq).toBeGreaterThan(4);
+    expect(b.manager.events(run.id, last?.seq)).toHaveLength(0);
+    // Bounded memory must not break the run itself.
+    expect(b.manager.get(run.id)?.status).toBe("done");
+  });
+
+  it("stops writing a transcript past its cap rather than filling the disk, and says so once", async () => {
+    // A 1-byte cap means the very first line is refused, so nothing is written at all — deterministic, and the
+    // same code path as the real 8 MB cap. Transcripts are on by default in this bench, so an absent file here is
+    // the cap's doing and nothing else.
+    const b = await bench({ limits: { transcriptBytes: 1 } });
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "run a tool" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const file = join(coderPaths(b.home).transcriptsDir, `${run.id}.jsonl`);
+    await expect(readFile(file, "utf8")).rejects.toThrow();
+    // The run is unaffected: only its record stops growing.
+    expect(b.manager.get(run.id)?.status).toBe("done");
+  });
+});
+
+describe("draining when the daemon stops", () => {
+  it("waits for a live run to settle instead of abandoning it", async () => {
+    // Item 7: a restart must not cut an agent's turn in half silently. `stopAll` asks the client to stop and waits
+    // for the run to end, and the run record must show it ended rather than staying "live" for ever.
+    const b = await bench();
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "keep working" });
+    await b.until((events) => kinds(events, "run.started").length === 1, "the run to start");
+    expect(b.manager.isLive(run.id)).toBe(true);
+
+    await b.manager.stopAll();
+
+    expect(b.manager.isLive(run.id)).toBe(false);
+    expect(b.manager.get(run.id)?.endedAt).toBeDefined();
   });
 });

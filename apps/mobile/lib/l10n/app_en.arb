@@ -376,6 +376,46 @@
   "@settingsComputerDetail": {
     "description": "settings.computerDetail — What the section means."
   },
+  "settingsPairingHeading": "Pairing",
+  "@settingsPairingHeading": {
+    "description": "settings.pairing.heading — Pairing"
+  },
+  "settingsPairingPairedWith": "This phone is paired with {name}.",
+  "@settingsPairingPairedWith": {
+    "description": "settings.pairing.pairedWith — This phone is paired with {name}."
+  },
+  "settingsPairingNotPaired": "This phone holds no pairing for that computer. Scan the code on the computer to pair again.",
+  "@settingsPairingNotPaired": {
+    "description": "settings.pairing.notPaired — This phone holds no pairing for that computer. Scan the code on the computer to pair again."
+  },
+  "settingsPairingUnavailable": "This phone could not read its stored pairing.",
+  "@settingsPairingUnavailable": {
+    "description": "settings.pairing.unavailable — This phone could not read its stored pairing."
+  },
+  "settingsPairingNotReached": "Not connected on this phone yet.",
+  "@settingsPairingNotReached": {
+    "description": "settings.pairing.notReached — Not connected on this phone yet."
+  },
+  "settingsPairingMinutesAgo": "{count, plural, =1{Last connected 1 minute ago} other{Last connected {count} minutes ago}}",
+  "@settingsPairingMinutesAgo": {
+    "description": "settings.pairing.minutesAgo — {count, plural, =1{Last connected 1 minute ago} other{Last connected {count} minutes ago}}"
+  },
+  "settingsPairingHoursAgo": "{count, plural, =1{Last connected 1 hour ago} other{Last connected {count} hours ago}}",
+  "@settingsPairingHoursAgo": {
+    "description": "settings.pairing.hoursAgo — {count, plural, =1{Last connected 1 hour ago} other{Last connected {count} hours ago}}"
+  },
+  "settingsPairingJustNow": "Last connected just now",
+  "@settingsPairingJustNow": {
+    "description": "settings.pairing.justNow — Last connected just now"
+  },
+  "settingsPairingPhoneClock": "Recorded on this phone, from this phone's clock.",
+  "@settingsPairingPhoneClock": {
+    "description": "settings.pairing.phoneClock — Recorded on this phone, from this phone's clock."
+  },
+  "settingsPairingOnDate": "Last connected {date}",
+  "@settingsPairingOnDate": {
+    "description": "settings.pairing.onDate — Last connected {date}"
+  },
   "settingsApprovals": "Ask before anything destructive",
   "@settingsApprovals": {
     "description": "settings.approvals — The approval switch."

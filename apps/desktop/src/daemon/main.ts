@@ -13,8 +13,10 @@
  *      inferred from a failed bind, so the message can name the daemon that is running instead of
  *      reporting "address in use" for something that is working correctly.
  *   3. **Start** — state, handlers, the mesh attach, the socket, the claim.
- *   4. **Stop cleanly** on `SIGINT`/`SIGTERM`, leaving a running agent alone. Closing the last window
- *      must not kill a task; that is the whole point of a control plane you can walk away from.
+ *   4. **Stop cleanly** on `SIGINT`, `SIGTERM` or a client's `coder.shutdown`: live runs are asked to
+ *      stop and given up to ten seconds (`runs.stopAll`), so nothing is cut in half silently. A daemon
+ *      owned by a supervisor is *not* stopped when the window closes (§3 of the lifecycle doc), and
+ *      that is what makes walking away safe rather than merely possible.
  *
  * ```bash
  * npm run daemon                            # port 4770
@@ -47,11 +49,12 @@ import process from "node:process";
 import { DEFAULT_DAEMON_PORT, ENVOYDEV_DAEMON_PORT_ENV } from "@envoydev/protocol";
 import { coderPaths, inspectCoderHome } from "@envoydev/host-bridge";
 
-import { alreadyRunningOutcome, decideBoot, serveFailureOutcome } from "./boot.js";
+import { EXIT_FAILED, EXIT_OK, alreadyRunningOutcome, decideBoot, serveFailureOutcome } from "./boot.js";
 import { readDaemonClaim } from "./lock.js";
 import { heartbeatPath, startHeartbeat } from "./heartbeat.js";
 import { readLifecycle, recordBoot, recordStop } from "./lifecycle.js";
-import { startCoderDaemon } from "./serve.js";
+import { DAEMON_VERSION } from "./version.js";
+import { startCoderDaemon, type StartedCoderDaemon } from "./serve.js";
 
 /**
  * **The one switch that turns the background warm-up off, and why it is an environment variable.**
@@ -74,7 +77,8 @@ function warmAgents(env: NodeJS.ProcessEnv = process.env): boolean {
 }
 
 /** Kept in step with `apps/desktop/package.json`: a process cannot read its own version. */
-const VERSION = "0.1.0";
+// Re-exported rather than restated: `version.ts` explains why one copy is the whole point.
+const VERSION = DAEMON_VERSION;
 
 /**
  * Who manages this process, from `--managed-by app|service`.
@@ -111,7 +115,7 @@ function say(lines: string[]): void {
  * installer) runs the *bundled* node with the *bundled* `main.mjs` and this flag; the app passes `--harness`
  * because it is the half that knows where it staged the agent binaries.
  */
-async function installPayloadAndExit(): Promise<never> {
+async function installCurrentPayload(): Promise<void> {
   const { installPayload, pruneVersions, readCurrent } = await import("./payload.js");
   const readCurrentText = readCurrent;
   const paths = coderPaths();
@@ -149,7 +153,43 @@ async function installPayloadAndExit(): Promise<never> {
       `current: ${(await readCurrentText(paths)) ?? "?"}`,
     ].join("\n") + "\n",
   );
+}
+
+/** `--install-payload`: put a payload where a supervisor can find it, then exit without touching a claim. */
+async function installPayloadAndExit(): Promise<never> {
+  await installCurrentPayload();
   process.exit(0);
+}
+
+/**
+ * `service <action>`: carry out the switch, print a sentence a person can read, and exit.
+ *
+ * **Before the boot decision, like `--install-payload`, and for the same reason**: installing or removing a
+ * service must never read a claim, touch a running daemon or bind a port. `install` also installs the payload the
+ * unit will run — the app's installer runs this before any daemon exists, and a unit naming a version that was
+ * never copied would restart forever against nothing.
+ */
+async function serviceCommandAndExit(): Promise<never> {
+  const { describeService, serviceActionFrom } = await import("./service-cli.js");
+  const action = serviceActionFrom(process.argv);
+  if (action === undefined) {
+    say(["Usage: main.mjs service <install|uninstall|status|restart>"]);
+    process.exit(EXIT_FAILED);
+  }
+  const { daemonServiceStatus, installDaemonService, restartDaemonService, uninstallDaemonService } =
+    await import("./supervisor.js");
+  if (action === "install") await installCurrentPayload();
+  const status =
+    action === "install"
+      ? await installDaemonService()
+      : action === "uninstall"
+        ? await uninstallDaemonService()
+        : action === "restart"
+          ? await restartDaemonService()
+          : await daemonServiceStatus();
+  const { lines, ok } = describeService(action, status);
+  say(lines);
+  process.exit(ok ? EXIT_OK : EXIT_FAILED);
 }
 
 /**
@@ -174,6 +214,7 @@ const homeOverride = homeOverrideFrom(process.argv);
 if (homeOverride !== undefined) process.env.ENVOYMESH_HOME = homeOverride;
 
 if (process.argv.includes("--install-payload")) await installPayloadAndExit();
+if (process.argv[2] === "service") await serviceCommandAndExit();
 
 const port = readPort();
 const paths = coderPaths();
@@ -202,7 +243,12 @@ say([
     ? restart.lastStartedAt !== undefined
       ? ["  previous: the last daemon did not stop on purpose (no stop record)"]
       : []
-    : [`  previous: stopped on ${restart.lastStop.signal} at ${restart.lastStop.at}`]),
+    : [
+        `  previous: stopped on ${restart.lastStop.signal} at ${restart.lastStop.at}` +
+          (restart.lastStop.exitCode !== undefined
+            ? ` (exit code ${restart.lastStop.exitCode})`
+            : ""),
+      ]),
   ...(facts.detail ? [`  ${facts.detail}`] : []),
   ...facts.facts.map((fact) => `  ${fact}`),
 ]);
@@ -210,6 +256,9 @@ say([
 const decision = decideBoot(facts);
 if (!decision.serve) {
   say([`\n${decision.headline}`, ...decision.detail.map((line) => `  ${line}`)]);
+  // A refused boot is a *deliberate* exit with a documented code, so it is recorded as a stop — with the code, so
+  // the next boot can say which refusal this was instead of reporting a crash that never happened.
+  await recordStop(paths, { signal: "refused", exitCode: decision.exitCode }).catch(() => undefined);
   process.exit(decision.exitCode);
 }
 say(decision.notes.map((note) => `  ${note}`));
@@ -241,7 +290,7 @@ const heartbeat = startHeartbeat(paths);
 // this point is counted, deliberately — that is a boot that may be looping.
 await recordBoot(paths);
 
-let daemon;
+let daemon: StartedCoderDaemon;
 try {
   /**
    * `warm: true` — **the one place the background pass is turned on.**
@@ -264,10 +313,16 @@ try {
     version: VERSION,
     warm: warmAgents(process.env),
     managedBy: managedByFrom(process.argv),
+    // The wire's way into the same stop the signals use: `coder.shutdown`, answered before the drain begins.
+    onShutdown: () => void shutdown("requested over the connection"),
   });
 } catch (error) {
   const outcome = serveFailureOutcome(port, error);
   say([`\n${outcome.headline}`, ...outcome.detail.map((line) => `  ${line}`)]);
+  // Same reasoning as a refused boot: a failure this process *understood* leaves its code on the record.
+  await recordStop(paths, { signal: "failed to serve", exitCode: outcome.exitCode }).catch(
+    () => undefined,
+  );
   process.exit(outcome.exitCode);
 }
 
@@ -296,26 +351,34 @@ say([
 ]);
 
 /**
- * Shut down without disturbing a running agent.
+ * **The one graceful stop**, whichever way somebody asks for it.
  *
- * `SIGINT` exists everywhere, including Windows consoles; `SIGTERM` is what a service manager sends
- * on the other two platforms. Neither has a Windows equivalent for an unrelated process to send,
- * which is why terminating a process *tree* belongs to the family's platform layer rather than here.
+ * Three ways in, one implementation: a signal (`SIGINT` from a terminal, `SIGTERM` from launchd or systemd), a
+ * client's `coder.shutdown` over the socket, and — through the service switch — a supervisor's restart. Windows has
+ * no signal an unrelated process can send, which is why the wire path exists at all (`shutdown.ts`), and the
+ * service CLI's restart relies on it too.
+ *
+ * The order is the part worth keeping: **stop is recorded before the process stops**, so the reason survives a
+ * drain that runs long; and `daemon.stop()` is where live runs are asked to stop and given up to ten seconds
+ * (`runs.stopAll`), so a restart does not cut an agent's turn in half without a trace. A `SIGKILL` never gets here,
+ * and that is exactly why the *absence* of this record means "it died" rather than "unknown".
  */
 let stopping = false;
+function shutdown(reason: string): Promise<void> {
+  // Idempotent: a second signal, or a window asking at the same moment, must not start a second drain. The promise
+  // never settles, which is right — the process is on its way out and nothing after this should run.
+  if (stopping) return new Promise<void>(() => undefined);
+  stopping = true;
+  say(["\nstopping the daemon; live runs are asked to stop and given up to ten seconds"]);
+  // Told before the stop, so the unit's state shows a deliberate shutdown rather than a process that vanished.
+  heartbeat.stopping();
+  heartbeat.stop();
+  return recordStop(paths, { signal: reason })
+    .catch(() => undefined)
+    .then(() => daemon.stop().catch(() => undefined))
+    .finally(() => process.exit(EXIT_OK));
+}
+
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.on(signal, () => {
-    if (stopping) return;
-    stopping = true;
-    say(["\nstopping the daemon"]);
-    // Told before the stop, so the unit's state shows a deliberate shutdown rather than a process that vanished.
-    heartbeat.stopping();
-    heartbeat.stop();
-    // Written before the stop so the reason survives even if the shutdown itself is slow: a SIGKILL cannot
-    // reach us at all, which is why the *absence* of this record means "it died" rather than "unknown".
-    void recordStop(paths, { signal })
-      .catch(() => undefined)
-      .then(() => daemon.stop())
-      .finally(() => process.exit(0));
-  });
+  process.on(signal, () => void shutdown(signal));
 }

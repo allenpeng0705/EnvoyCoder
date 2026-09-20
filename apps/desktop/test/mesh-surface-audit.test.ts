@@ -165,12 +165,25 @@ describe("the coder.* handler table, measured with and without a session", () =>
     //
     //    Written as a property rather than a frozen list: adding a method that mints or names a
     //    credential (there is a `coder.forgetPairedDevice` in flight as this is written) must not fail
-    //    an audit test, while adding a session rule to an unrelated method must.
+    //    an audit test, while adding a session rule to an unrelated method must. The **service** family
+    //    and `coder.shutdown` join the pairing family for the same reason: changing the machine's own
+    //    service or stopping the daemon is the owner's act at the machine, and the frozen service
+    //    contract makes the three mutating calls owner-window-only while leaving the status readable
+    //    (`apps/desktop/src/daemon/supervisor-rpc.ts`; `docs/daemon-lifecycle.md` §10).
     const refusedWithSession = rows.filter((row) => isSessionRefusal(row.withSession)).map((row) => row.method);
     expect(refusedWithSession).toEqual(
-      expect.arrayContaining(["coder.mintPairing", "coder.listPairedDevices", "coder.revokePairedDevice"]),
+      expect.arrayContaining([
+        "coder.mintPairing",
+        "coder.listPairedDevices",
+        "coder.revokePairedDevice",
+        "coder.installService",
+        "coder.uninstallService",
+        "coder.restartService",
+      ]),
     );
-    expect(refusedWithSession.filter((method) => !/Pairing|PairedDevice/.test(method))).toEqual([]);
+    expect(refusedWithSession.filter((method) => !/Pairing|PairedDevice|Service|shutdown/.test(method))).toEqual(
+      [],
+    );
 
     // 2. The property the mesh gate is the only guard for: with no session, **no method refuses**.
     //    Every `coder.*` call that reaches the dispatcher without one runs as the owner's window.

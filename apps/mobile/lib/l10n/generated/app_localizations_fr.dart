@@ -301,6 +301,60 @@ class AppLocalizationsFr extends AppLocalizations {
       'Ces réglages vivent sur la machine associée. Le téléphone ne fait que les modifier.';
 
   @override
+  String get settingsPairingHeading => 'Appairage';
+
+  @override
+  String settingsPairingPairedWith(Object name) {
+    return 'Ce téléphone est appairé avec $name.';
+  }
+
+  @override
+  String get settingsPairingNotPaired =>
+      'Ce téléphone n\'a aucune paire pour cet ordinateur. Scanne le code sur l\'ordinateur pour appairer à nouveau.';
+
+  @override
+  String get settingsPairingUnavailable =>
+      'Ce téléphone n\'a pas pu lire sa paire enregistrée.';
+
+  @override
+  String get settingsPairingNotReached =>
+      'Pas encore connecté sur ce téléphone.';
+
+  @override
+  String settingsPairingMinutesAgo(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Connecté il y a $count minutes',
+      one: 'Connecté il y a 1 minute',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String settingsPairingHoursAgo(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Connecté il y a $count heures',
+      one: 'Connecté il y a 1 heure',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingsPairingJustNow => 'Connecté à l\'instant';
+
+  @override
+  String get settingsPairingPhoneClock =>
+      'Enregistré sur ce téléphone, selon l\'horloge de ce téléphone.';
+
+  @override
+  String settingsPairingOnDate(Object date) {
+    return 'Dernière connexion le $date';
+  }
+
+  @override
   String get settingsApprovals => 'Demander avant toute action destructrice';
 
   @override

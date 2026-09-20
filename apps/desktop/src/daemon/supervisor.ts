@@ -33,7 +33,8 @@ import {
   type ServiceStatus,
 } from "@envoydev/platform";
 
-import { payloadPaths, readCurrent, versionDir } from "./payload.js";
+import { installRunningBundle, payloadPaths, readCurrent, versionDir } from "./payload.js";
+import { DAEMON_VERSION } from "./version.js";
 
 /** Beside the restart ledger and the heartbeat file, so one directory tells the whole story of a restarted daemon. */
 export const SERVICE_LOG_NAME = "service.log";
@@ -44,6 +45,11 @@ export function serviceLogPath(paths: CoderPaths = coderPaths()): string {
 
 export interface ServiceOptions {
   paths?: CoderPaths;
+  /** The version to install when a payload has to be created. Injected so a test never depends on the real one. */
+  version?: string;
+  /** The argv whose entry point gets installed, and the node binary to run it with (injected for tests). */
+  argv?: readonly string[];
+  node?: string;
   /** The OS user's home, where a per-user unit file lives. Injected so a test can write into a temporary one. */
   userHome?: string;
   io?: ServiceIo;
@@ -115,6 +121,21 @@ export async function daemonServiceStatus(options: ServiceOptions = {}): Promise
 
 export async function installDaemonService(options: ServiceOptions = {}): Promise<ServiceStatus> {
   const paths = options.paths ?? coderPaths();
+  /**
+   * **A service needs a payload, and a fresh machine has none.**
+   *
+   * The switch is meant to take somebody from "the phone can only reach me while the window is open" to "it can
+   * always reach me" in one press, so pressing it installs the payload the unit will run and then the unit. A unit
+   * installed without one names a version that was never copied, which a supervisor answers by restarting for ever
+   * against nothing.
+   */
+  if ((await readCurrent(paths)) === undefined) {
+    await installRunningBundle(paths, {
+      version: options.version ?? DAEMON_VERSION,
+      ...(options.argv ? { argv: options.argv } : {}),
+      ...(options.node ? { node: options.node } : {}),
+    });
+  }
   const input = await planInput(paths, options.userHome ?? homedir(), { requirePayload: true });
   if (input === undefined) return noPayload;
   return installService(options.io ?? realServiceIo, input);

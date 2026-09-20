@@ -32,5 +32,15 @@
  "composerAgentBare",
  "composerModelValue",
  "composerModeValue",
- "composerThinkingValue"
+ "composerThinkingValue",
+ "settingsPairingHeading",
+ "settingsPairingPairedWith",
+ "settingsPairingNotPaired",
+ "settingsPairingUnavailable",
+ "settingsPairingNotReached",
+ "settingsPairingMinutesAgo",
+ "settingsPairingHoursAgo",
+ "settingsPairingJustNow",
+ "settingsPairingPhoneClock",
+ "settingsPairingOnDate"
 ]

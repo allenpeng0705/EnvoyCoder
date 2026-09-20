@@ -1351,6 +1351,30 @@ export const RPC_METHODS = [
   "coder.getEnvoyLlm",
   /** Write Envoy Harness LLM settings (and optionally replace or clear the stored API key). */
   "coder.setEnvoyLlm",
+  /**
+   * Whether this machine's daemon runs under a *supervisor* — a launchd agent, a systemd user unit or a Windows
+   * task — rather than only while the window is open. Read-only, and about the service rather than about the
+   * daemon answering: "installed and stopped" is a real state, and the one a failed start leaves behind.
+   */
+  "coder.getServiceStatus",
+  /**
+   * Install the daemon as a service, so a phone can still reach this machine with the window closed. The unit
+   * runs the *installed payload*, never the app bundle, because an app upgrade replaces its own directory.
+   */
+  "coder.installService",
+  /** Remove the service. The user's projects, tasks and pairings are untouched by this. */
+  "coder.uninstallService",
+  /**
+   * Ask the supervisor to restart the daemon. A restart has to go *through* the supervisor — stopping the
+   * process directly would leave the unit to decide whether that counts as a crash.
+   */
+  "coder.restartService",
+  /**
+   * Ask the daemon to stop **gracefully**: live runs are asked to stop and given ten seconds, the reason is
+   * recorded, and it exits 0. The one stop that works on every platform — Windows has no signal an unrelated
+   * process can send — and the one an installer or a person at a terminal can use without knowing a pid.
+   */
+  "coder.shutdown",
 ] as const;
 
 export type RpcMethod = (typeof RPC_METHODS)[number];

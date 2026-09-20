@@ -2797,6 +2797,22 @@ button.explorer__change:hover {
   color: var(--status-danger);
 }
 
+/* **The machine's own words, last, and never our sentence.** The supervisor's `detail` is raw output from
+   `launchctl` / `systemctl` / `schtasks` — untranslated, unparsed, and sometimes many lines — so it sits below
+   everything in the quietest band the pane has, keeps its own line breaks, and scrolls rather than pushing the
+   row's control off the page. It is deliberately not `.setting__note`: the density budget is about *our*
+   prose, and a command's answer is not prose we chose. */
+.setting__developer {
+  margin: 6px 0 0;
+  max-width: 34ch;
+  max-height: 96px;
+  overflow: auto;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  color: var(--text-dim, #8b8f98);
+}
+
 /* A text field with the system's folder chooser beside it: the field takes the width, the button stays
    its own size. Without this the button drops to its own line, which reads as a second step rather than
    the same one — and the chooser is an alternative to typing, not a follow-up to it. */

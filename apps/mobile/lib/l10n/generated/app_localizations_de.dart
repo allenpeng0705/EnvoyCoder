@@ -299,6 +299,60 @@ class AppLocalizationsDe extends AppLocalizations {
       'Diese Einstellungen liegen auf dem gekoppelten Rechner. Das Telefon ändert sie nur.';
 
   @override
+  String get settingsPairingHeading => 'Kopplung';
+
+  @override
+  String settingsPairingPairedWith(Object name) {
+    return 'Dieses Telefon ist mit $name gekoppelt.';
+  }
+
+  @override
+  String get settingsPairingNotPaired =>
+      'Dieses Telefon hat keine Kopplung für diesen Rechner. Scanne den Code auf dem Rechner, um erneut zu koppeln.';
+
+  @override
+  String get settingsPairingUnavailable =>
+      'Dieses Telefon konnte seine gespeicherte Kopplung nicht lesen.';
+
+  @override
+  String get settingsPairingNotReached =>
+      'Auf diesem Telefon noch nicht verbunden.';
+
+  @override
+  String settingsPairingMinutesAgo(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vor $count Minuten verbunden',
+      one: 'Vor 1 Minute verbunden',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String settingsPairingHoursAgo(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vor $count Stunden verbunden',
+      one: 'Vor 1 Stunde verbunden',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingsPairingJustNow => 'Gerade eben verbunden';
+
+  @override
+  String get settingsPairingPhoneClock =>
+      'Auf diesem Telefon vermerkt, nach der Uhr dieses Telefons.';
+
+  @override
+  String settingsPairingOnDate(Object date) {
+    return 'Zuletzt verbunden am $date';
+  }
+
+  @override
   String get settingsApprovals => 'Vor allem Destruktiven fragen';
 
   @override

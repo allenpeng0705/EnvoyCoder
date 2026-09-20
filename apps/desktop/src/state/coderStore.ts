@@ -37,6 +37,7 @@ import type {
   AgentRun,
   CatalogEntry,
   CoderSettings,
+  DaemonServiceStatus,
   FixTarget,
   GitBranch,
   GitStatus,
@@ -56,7 +57,7 @@ import type { AgentDelivery as AgentDeliveryWire, FixRunResult as FixRunResultWi
 
 import { localNotice, noticeFromError, type Notice, type Refusal } from "../i18n/notice.js";
 import { buildTranscript, type Transcript } from "./transcript.js";
-import type { EnvoyLlmPublic, EnvoyLlmSetInput } from "./agent-actions.js";
+import type { EnvoyLlmPublic, EnvoyLlmSetInput, ServiceAnswer } from "./agent-actions.js";
 
 import { CoderConnection, type ConnectionStatus, type HelloResult } from "../client/connection.js";
 import { resolveDaemonEndpoint, type ResolvedEndpoint } from "../client/endpoint.js";
@@ -151,6 +152,19 @@ export interface CoderState {
    */
   catalog: readonly CatalogEntry[];
   mesh: MeshStatus;
+  /**
+   * The daemon service, as the operating system's own service manager last answered.
+   *
+   * **Not a setting, and there is no field for it anywhere on disk.** The value lives in a launchd
+   * LaunchAgent, a systemd user unit or a per-user Task Scheduler job, and this field is a read-through cache
+   * of that supervisor's answer — which is why every service call replaces it with the status the daemon
+   * *returned* rather than with the one a press was expected to produce.
+   *
+   * Optional, on the same rule as `git`: "this window has not asked yet" is a real state, the store starts
+   * empty, and a hand-built snapshot should not have to spell an empty answer to say so. `undefined` renders
+   * as *could not tell* with a Refresh — never as "off".
+   */
+  service?: DaemonServiceStatus;
   /**
    * Runs this window knows about, by run id.
    *
@@ -1706,6 +1720,59 @@ export class CoderStore {
       this.set({ settings: (result as { settings: CoderSettings }).settings });
       return { ok: true };
     });
+  }
+
+  /* ─────────────── the daemon service, which belongs to the OS (§10 of docs/daemon-lifecycle.md) ───────────────
+     Four calls and one cached answer. **The value is never stored by us**: the operating system's service
+     manager owns it, the daemon asks it, and each answer here replaces `state.service` with what the supervisor
+     said *after* the steps ran — never with what the press was supposed to achieve. A press that could not be
+     granted (no supervisor, a declined prompt, another account's unit) comes back as a refusal the row renders
+     under its own control. */
+
+  /**
+   * Ask the service manager what it thinks of the daemon service.
+   *
+   * A read, and deliberately **not** part of `loadAll`: the answer costs a supervisor process
+   * (`launchctl print` / `systemctl --user show` / `schtasks /Query`), and it is only worth asking when a user
+   * is looking at the control. The row asks when its page opens and when its Refresh press is used.
+   *
+   * `read` is the version-skew-aware path: a daemon that does not serve this method is not called, and the
+   * synthetic "Method not found" becomes the same "restart so both come from one build" sentence the window
+   * raises anywhere else.
+   */
+  async getServiceStatus(): Promise<ServiceAnswer> {
+    const answer = await this.read<{ service: DaemonServiceStatus }>("coder.getServiceStatus", {});
+    if (!answer.ok) return { ok: false, ...noticeFromError(answer.error) };
+    this.set({ service: answer.value.service });
+    return { ok: true, service: answer.value.service };
+  }
+
+  /** Turn the service on. Idempotent on every platform, and the attempt can still be refused (no supervisor). */
+  async installService(): Promise<ServiceAnswer> {
+    return this.mutate("coder.installService", {}, (result) => this.adoptService(result));
+  }
+
+  /** Turn the service off, unit and all. The daemon's own state (projects, tasks, pairings) is untouched. */
+  async uninstallService(): Promise<ServiceAnswer> {
+    return this.mutate("coder.uninstallService", {}, (result) => this.adoptService(result));
+  }
+
+  /** Start it again, through the supervisor — for a service that is installed but not running. */
+  async restartService(): Promise<ServiceAnswer> {
+    return this.mutate("coder.restartService", {}, (result) => this.adoptService(result));
+  }
+
+  /**
+   * **The returned status is the truth of a service press**, so this is where it becomes the state.
+   *
+   * The alternative — leaving `state.service` alone and letting the next read correct it — is how a window
+   * shows "running" for a service the supervisor refused to bootstrap, which is the precise class of lie this
+   * pane exists to remove.
+   */
+  private adoptService(result: unknown): { ok: true; service: DaemonServiceStatus } {
+    const answer = result as { service: DaemonServiceStatus };
+    this.set({ service: answer.service });
+    return { ok: true as const, service: answer.service };
   }
 
   /**

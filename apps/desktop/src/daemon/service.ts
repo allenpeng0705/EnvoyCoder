@@ -84,6 +84,8 @@ import { summarize } from "./summaries.js";
 import type { RunManager } from "./runs.js";
 import type { SessionProbe } from "./session-probe.js";
 import type { CoderStore } from "./store.js";
+import { createShutdownHandlers } from "./shutdown.js";
+import { createSupervisorHandlers } from "./supervisor-rpc.js";
 
 /** Identity of the running process — what makes `coder.hello` answer *which* daemon this is. */
 export interface CoderInstance {
@@ -136,6 +138,11 @@ export interface CoderServiceDeps {
    * for a table built without one — the same shape `runs` uses when M1 builds a daemon that cannot run.
    */
   recheckAgents?: () => Promise<void>;
+  /**
+   * Begin a graceful stop, for `coder.shutdown`. Wired by the boot, which knows how to record the reason and end
+   * the process; absent in a build with no way to stop (a bench, or a daemon whose boot did not pass one).
+   */
+  shutdown?: () => void;
   /**
    * **How each agent's connector is delivered** — the user's stored choice.
    *
@@ -308,6 +315,11 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     // behalf. The window sends an id; the commands come from the same probes that drew the row, at the moment of
     // the press, so a command the user read is the command that runs and a window cannot name one. `fixes.ts`
     // carries the four outcomes, the deadline and the group kill.
+    // The graceful stop a client can ask for, which is the only one Windows has.
+    ...createShutdownHandlers(deps.shutdown ? { shutdown: deps.shutdown } : {}),
+    // The service switch: whether this machine runs the daemon under a supervisor, and the three changes to it.
+    // The changes are owner-window-only, like minting a pairing code.
+    ...createSupervisorHandlers(),
     // The supervisor's question, answered from the instance facts `coder.hello` already uses.
     ...createHealthHandlers({
       instance: deps.instance,

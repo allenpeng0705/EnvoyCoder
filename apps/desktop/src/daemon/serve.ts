@@ -75,9 +75,20 @@ import { CoderStore } from "./store.js";
 import { AgentDeliveries } from "./deliveries.js";
 import { createPairingHandlers } from "./pairing.js";
 import { PairedDeviceStore, pairedDevicesFile, readPairingIdentity } from "./paired-devices.js";
+import { reconcileInterruptedRuns } from "./reconcile.js";
+import { readTranscript, transcriptFile } from "./transcript-log.js";
+import { DAEMON_VERSION } from "./version.js";
 import type { CoderDaemonHost } from "@envoydev/host-bridge";
 
 export interface StartCoderDaemonOptions {
+  /**
+   * How to begin a graceful stop when a *client* asks for one (`coder.shutdown`).
+   *
+   * Injected rather than implemented here: the stop has to record why it happened and then end the process, and
+   * this module owns neither the ledger nor the process. Everything else about stopping — draining live runs — is
+   * `stop()`, which the hook ends up calling.
+   */
+  onShutdown?: () => void;
   /** `0` lets the OS choose, which is what tests use. */
   port?: number;
   path?: string;
@@ -168,7 +179,7 @@ export interface StartedCoderDaemon {
 export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): Promise<StartedCoderDaemon> {
   const paths = options.paths ?? coderPaths(options.home);
   const instanceId = options.instanceId ?? randomUUID();
-  const version = options.version ?? "0.1.0";
+  const version = options.version ?? DAEMON_VERSION;
   let connections = 1;
 
   const store = await CoderStore.open({ paths });
@@ -214,6 +225,30 @@ export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): P
     ...(options.resolveLaunch ? { resolveLaunch: options.resolveLaunch } : {}),
     ...(options.platform ? { platform: options.platform } : {}),
   });
+
+  /**
+   * **Close the books on the last daemon's runs before anybody can look at them.**
+   *
+   * A killed daemon leaves task rows claiming a live run with no process behind them, and the product's one
+   * promise about a task — "this is still working" — would be wrong for ever. This runs after the store is open
+   * and before the first client can connect, so no window ever sees the stale state, and a restart that
+   * interrupted work is reported rather than quietly tidied away.
+   */
+  const stranded = await reconcileInterruptedRuns({
+    tasks: () => store.tasks(),
+    eventsFor: async (runId) => {
+      const file = transcriptFile(paths.transcriptsDir, runId);
+      return file === undefined ? [] : await readTranscript(file);
+    },
+    setTaskStatus: async (taskId, status) => {
+      await store.setTaskRun(taskId, { status });
+    },
+  });
+  if (stranded.length > 0) {
+    console.log(
+      `closed ${stranded.length} run(s) a previous daemon left open: ${stranded.join(", ")}`,
+    );
+  }
 
   /**
    * The probe: built here beside the run manager, and **started by nothing**.
@@ -353,6 +388,8 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
     probe: harnessProbe,
     // The one method whose subject is the measurement itself: the page's "Check again".
     recheckAgents,
+    // The portable stop: Windows has no signal an unrelated process can send (item 8).
+    ...(options.onShutdown ? { shutdown: options.onShutdown } : {}),
     // The user's delivery choices: read by the list (so a row says which route is in force), written by
     // `coder.setAgentDelivery`, and read by every launch (`deliveryOf`, above).
     deliveries: { of: (harness) => deliveries.of(harness), set: (harness, next) => deliveries.set(harness, next) },

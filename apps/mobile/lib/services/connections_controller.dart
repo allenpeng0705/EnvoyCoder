@@ -47,11 +47,21 @@ import 'package:flutter/foundation.dart';
 import '../models/host.dart';
 import 'host_client.dart';
 import 'host_store.dart';
+import 'pairing_store.dart';
 
 class ConnectionsController extends ChangeNotifier {
-  ConnectionsController(this.store);
+  ConnectionsController(this.store, {PairingStore? pairings})
+      : pairings = pairings ?? PairingStore();
 
   final HostStore store;
+
+  /// The pairings this phone holds, keyed by daemon identity.
+  ///
+  /// Owned here so one store serves every client: the pairing a Settings screen reads is the record
+  /// the dial offered, which is the property that makes "already paired" mean something. A second
+  /// instance would still work — the store is stateless apart from a per-launch memo — but the two
+  /// would disagree about a record cleared a moment ago.
+  final PairingStore pairings;
 
   final List<CoderHost> _hosts = [];
   final Map<String, HostClient> _clients = {};
@@ -127,7 +137,7 @@ class ConnectionsController extends ChangeNotifier {
 
   void _ensureClient(CoderHost host) {
     if (_disposed || _clients.containsKey(host.id)) return;
-    final client = clientFactory?.call(host) ?? HostClient(host);
+    final client = clientFactory?.call(host) ?? HostClient(host, pairingStore: pairings);
     _clients[host.id] = client;
     _subs[host.id] = client.states.listen((state) {
       if (_disposed) return;

@@ -181,6 +181,8 @@ describe("the sections bar, in the same language", () => {
     "LLM",
     // Mobile pairing sits above Projects in the registry — same order the bar renders.
     "Mobile Kopplung",
+    // …and the background service is the other half of that answer, so it sits directly under it.
+    "Hintergrunddienst",
     "Projekte",
     "Tastenkürzel",
     "Dieser Computer",

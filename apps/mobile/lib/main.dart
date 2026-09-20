@@ -46,6 +46,7 @@ import 'services/connections_controller.dart';
 import 'services/host_client.dart';
 import 'services/host_pairing_flow.dart';
 import 'services/host_store.dart';
+import 'services/pairing_store.dart';
 import 'theme/tokens.dart';
 
 void main() {
@@ -116,9 +117,14 @@ class _EnvoyDevAppState extends State<EnvoyDevApp> {
 /// Connections view would be a set of spinners. What changed is who reads them — now it is the shell
 /// handing one of them to the project list.
 class AppShell extends StatefulWidget {
-  const AppShell({super.key, this.store, required this.localeController});
+  const AppShell({super.key, this.store, this.pairings, required this.localeController});
 
   final HostStore? store;
+
+  /// The pairings this phone holds, keyed by daemon identity. Injected by a test; production builds
+  /// one. The shell owns it because [ConnectionsController] needs it for every client it starts, and
+  /// Settings needs to read the same records those clients write.
+  final PairingStore? pairings;
 
   /// Handed to [SettingsScreen], which is the only surface that changes the language.
   final LocaleController localeController;
@@ -129,7 +135,7 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   late final ConnectionsController _connections =
-      ConnectionsController(widget.store ?? HostStore());
+      ConnectionsController(widget.store ?? HostStore(), pairings: widget.pairings);
 
   /// What the last build put on screen — the loading flag, the active host, and its name — so
   /// [_onConnectionsChanged] can tell a real change from a connection heartbeat.

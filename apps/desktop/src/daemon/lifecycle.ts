@@ -38,7 +38,14 @@ export interface LifecycleFacts {
   /** The last start, when there was one. */
   lastStartedAt?: string;
   /** Why the previous process stopped, when it stopped on purpose. Absent means it was killed or crashed. */
-  lastStop?: { at: string; signal: string };
+  /**
+   * Why the previous process stopped, when it stopped on purpose. Absent means it was killed or crashed.
+   *
+   * `exitCode` is present when the process chose a specific one — a refused boot is a deliberate exit with a
+   * documented code (`boot.ts`), and carrying it forward is what turns "the last daemon did not stop on purpose"
+   * into "the last daemon exited 4, and here is what 4 means".
+   */
+  lastStop?: { at: string; signal: string; exitCode?: number };
   /** How many starts fall inside the last hour — the number a restart storm shows up in. */
   bootsInLastHour: number;
 }
@@ -56,12 +63,24 @@ function parse(raw: string): Omit<LifecycleFacts, "bootsInLastHour"> {
     const boots = Array.isArray(record.boots)
       ? record.boots.filter((value): value is string => typeof value === "string").slice(-LIFECYCLE_BOOTS_KEPT)
       : [];
-    const stop = record.lastStop as { at?: unknown; signal?: unknown } | undefined;
+    const stop = record.lastStop as
+      | { at?: unknown; signal?: unknown; exitCode?: unknown }
+      | undefined;
     return {
       boots,
       ...(boots.length > 0 ? { lastStartedAt: boots[boots.length - 1] as string } : {}),
       ...(stop !== undefined && typeof stop.at === "string" && typeof stop.signal === "string"
-        ? { lastStop: { at: stop.at, signal: stop.signal } }
+        ? {
+            lastStop: {
+              at: stop.at,
+              signal: stop.signal,
+              // Kept only when it is a whole number. An exit code is what makes a repeated refusal diagnosable, and
+              // a value that merely claims to be one would be worse than no value at all.
+              ...(typeof stop.exitCode === "number" && Number.isInteger(stop.exitCode)
+                ? { exitCode: stop.exitCode }
+                : {}),
+            },
+          }
         : {}),
     };
   } catch {
@@ -125,7 +144,7 @@ export async function recordBoot(
  */
 export async function recordStop(
   paths: CoderPaths,
-  options: { signal: string; at?: Date } = { signal: "unknown" },
+  options: { signal: string; at?: Date; exitCode?: number } = { signal: "unknown" },
 ): Promise<void> {
   const at = (options.at ?? new Date()).toISOString();
   const previous = await readLifecycle(paths, options.at ?? new Date());
@@ -134,7 +153,18 @@ export async function recordStop(
   const temp = `${file}.tmp-${process.pid}`;
   await writeFile(
     temp,
-    `${JSON.stringify({ boots: previous.boots, lastStop: { at, signal: options.signal } }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        boots: previous.boots,
+        lastStop: {
+          at,
+          signal: options.signal,
+          ...(options.exitCode !== undefined ? { exitCode: options.exitCode } : {}),
+        },
+      },
+      null,
+      2,
+    )}\n`,
     { encoding: "utf8", mode: 0o600 },
   );
   await rename(temp, file);

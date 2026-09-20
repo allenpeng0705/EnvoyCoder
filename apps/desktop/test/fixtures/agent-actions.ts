@@ -56,6 +56,13 @@ export function stubAgentActions(overrides: Partial<AgentActions> = {}): AgentAc
     forgetPairedDevice: vi.fn(async () => REFUSAL),
     getEnvoyLlm: vi.fn(async () => REFUSAL),
     setEnvoyLlm: vi.fn(async () => REFUSAL),
+    // The service surface's four calls. A refusal, like every other default, is the answer that cannot be
+    // mistaken for success — and it is also what makes the *Background service* row render its "could not
+    // tell" copy, so a section-rendering test has a visible, harmless state to assert against.
+    getServiceStatus: vi.fn(async () => REFUSAL),
+    installService: vi.fn(async () => REFUSAL),
+    uninstallService: vi.fn(async () => REFUSAL),
+    restartService: vi.fn(async () => REFUSAL),
   };
   return { ...base, ...overrides };
 }

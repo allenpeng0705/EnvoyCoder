@@ -131,6 +131,11 @@ export interface RunManagerDeps {
   now?: () => Date;
   /** The ACP client constructor. Overridden by tests, which must not spawn real agents. */
   startClient?: typeof AcpClient.start;
+  /**
+   * The two memory bounds, injectable **so a test can cross them in two events rather than two thousand**.
+   * Defaults are the constants above this interface; production never passes this.
+   */
+  limits?: { events?: number; transcriptBytes?: number };
 }
 
 /**
@@ -140,6 +145,31 @@ export interface RunManagerDeps {
  */
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
+/**
+ * How many events of one live run are kept in memory.
+ *
+ * The buffer is a **catch-up window**, not the record: a client that reconnects asks for everything after the
+ * sequence number it last saw, and the transcript on disk is what answers for history. Without a bound, a long
+ * agent turn that streams output for hours would grow this array without limit — the run would still be fine and
+ * the *daemon* would be the thing that died, which is the opposite of what a 7×24 daemon is for.
+ *
+ * Truncation is **visible rather than silent**: sequence numbers continue to climb, so a client whose `sinceSeq`
+ * fell out of the window sees a gap in them. 2 000 events is a few megabytes of agent output — more than any
+ * window can display, and enough that a reconnect after a minute of scrolling misses nothing.
+ */
+const EVENT_BUFFER_LIMIT = 2_000;
+
+/**
+ * How large one run's transcript may grow before it stops growing.
+ *
+ * 8 MB is deliberately generous: a real agent turn is tens of kilobytes, and 8 MB is where a run has stopped being
+ * a conversation and become a log. Past it the file keeps what it has — the beginning, which is what a person
+ * actually reads — and says so once on stderr, which is the daemon's log. Truncating agent output silently would
+ * be worse than either bounding it or not.
+ */
+const TRANSCRIPT_LIMIT_BYTES = 8 * 1024 * 1024;
+
+
 /** An event before the daemon stamps it with its run, task, time and sequence. */
 type RunEventInput = DistributiveOmit<RunEvent, "runId" | "taskId" | "at" | "seq">;
 
@@ -147,6 +177,8 @@ interface LiveRun {
   run: AgentRun;
   events: RunEvent[];
   seq: number;
+  /** Bytes appended to the transcript so far, counted rather than `stat`-ed: this is on the hot path. */
+  transcriptBytes: number;
   /**
    * When this run last produced an event.
    *
@@ -244,11 +276,18 @@ export class RunManager {
    */
   private readonly finished = new Map<string, LiveRun>();
   private static readonly RECENT_LIMIT = 50;
+
+  /* ───────────────────────── the two bounds that keep a long run finite ───────────────────────── */
   /** The agent session each task last used, so `resume` has something to rejoin. */
   private readonly lastSession = new Map<string, string>();
 
+  private readonly eventLimit: number;
+  private readonly transcriptLimitBytes: number;
+
   constructor(deps: RunManagerDeps) {
     this.deps = deps;
+    this.eventLimit = deps.limits?.events ?? EVENT_BUFFER_LIMIT;
+    this.transcriptLimitBytes = deps.limits?.transcriptBytes ?? TRANSCRIPT_LIMIT_BYTES;
   }
 
   /* ────────────────────────────── queries ────────────────────────────── */
@@ -417,6 +456,7 @@ export class RunManager {
     const live: LiveRun = {
       run,
       events: [],
+      transcriptBytes: 0,
       seq: 0,
       client: undefined,
       launch,
@@ -479,7 +519,9 @@ export class RunManager {
     const seq = events.reduce((max, event) => Math.max(max, event.seq), 0);
     this.finished.set(runId, {
       run,
-      events: [...events],
+      events: events.slice(-this.eventLimit),
+      // A recalled run is finished: nothing will be appended, so an unmeasured size cannot let one grow.
+      transcriptBytes: 0,
       seq,
       client: undefined,
       launch: { command: "", args: [], cwd: "" },
@@ -1041,6 +1083,10 @@ export class RunManager {
       seq: live.seq,
     } as RunEvent;
     live.events.push(full);
+    if (live.events.length > this.eventLimit) {
+      // Drop from the front: the newest events are the ones a client is waiting for.
+      live.events.splice(0, live.events.length - this.eventLimit);
+    }
     live.lastEventAt = full.at;
     this.deps.onEvent(full);
     await this.appendTranscript(live, full);
@@ -1058,9 +1104,22 @@ export class RunManager {
     if (!this.settings().keepTranscripts) return;
     const file = live.run.transcriptPath;
     if (!file) return;
+    const line = `${JSON.stringify(event)}\n`;
+    if (live.transcriptBytes + line.length > this.transcriptLimitBytes) {
+      // Once, at the crossing — not once per event afterwards, which would fill the log it is complaining in.
+      if (live.transcriptBytes <= this.transcriptLimitBytes) {
+        live.transcriptBytes = this.transcriptLimitBytes + line.length;
+        process.stderr.write(
+          `transcript for run ${live.run.id} reached ${Math.round(this.transcriptLimitBytes / (1024 * 1024))} MB ` +
+            "and is no longer being written; the run itself continues\n",
+        );
+      }
+      return;
+    }
     try {
       await mkdir(this.deps.paths.transcriptsDir, { recursive: true });
-      await appendFile(file, `${JSON.stringify(event)}\n`, "utf8");
+      await appendFile(file, line, "utf8");
+      live.transcriptBytes += line.length;
     } catch {
       // See the doc above.
     }

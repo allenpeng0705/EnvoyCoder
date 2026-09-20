@@ -606,6 +606,66 @@ abstract class AppLocalizations {
   /// **'These settings live on the paired machine. The phone only changes them.'**
   String get settingsComputerDetail;
 
+  /// settings.pairing.heading — Pairing
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing'**
+  String get settingsPairingHeading;
+
+  /// settings.pairing.pairedWith — This phone is paired with {name}.
+  ///
+  /// In en, this message translates to:
+  /// **'This phone is paired with {name}.'**
+  String settingsPairingPairedWith(Object name);
+
+  /// settings.pairing.notPaired — This phone holds no pairing for that computer. Scan the code on the computer to pair again.
+  ///
+  /// In en, this message translates to:
+  /// **'This phone holds no pairing for that computer. Scan the code on the computer to pair again.'**
+  String get settingsPairingNotPaired;
+
+  /// settings.pairing.unavailable — This phone could not read its stored pairing.
+  ///
+  /// In en, this message translates to:
+  /// **'This phone could not read its stored pairing.'**
+  String get settingsPairingUnavailable;
+
+  /// settings.pairing.notReached — Not connected on this phone yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not connected on this phone yet.'**
+  String get settingsPairingNotReached;
+
+  /// settings.pairing.minutesAgo — {count, plural, =1{Last connected 1 minute ago} other{Last connected {count} minutes ago}}
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Last connected 1 minute ago} other{Last connected {count} minutes ago}}'**
+  String settingsPairingMinutesAgo(num count);
+
+  /// settings.pairing.hoursAgo — {count, plural, =1{Last connected 1 hour ago} other{Last connected {count} hours ago}}
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Last connected 1 hour ago} other{Last connected {count} hours ago}}'**
+  String settingsPairingHoursAgo(num count);
+
+  /// settings.pairing.justNow — Last connected just now
+  ///
+  /// In en, this message translates to:
+  /// **'Last connected just now'**
+  String get settingsPairingJustNow;
+
+  /// settings.pairing.phoneClock — Recorded on this phone, from this phone's clock.
+  ///
+  /// In en, this message translates to:
+  /// **'Recorded on this phone, from this phone\'s clock.'**
+  String get settingsPairingPhoneClock;
+
+  /// settings.pairing.onDate — Last connected {date}
+  ///
+  /// In en, this message translates to:
+  /// **'Last connected {date}'**
+  String settingsPairingOnDate(Object date);
+
   /// settings.approvals — The approval switch.
   ///
   /// In en, this message translates to:

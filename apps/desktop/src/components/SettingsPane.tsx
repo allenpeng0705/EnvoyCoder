@@ -114,6 +114,7 @@ import { AboutSection, MachineSection, ShortcutsSection } from "./settings/Secti
 import { AgentsSection } from "./settings/SectionsAgents.js";
 import { GeneralSection, SafetySection, TasksSection } from "./settings/SectionsControls.js";
 import { PairingSection } from "./settings/PairingSection.js";
+import { ServiceSection } from "./settings/SectionsService.js";
 import { LlmSection } from "./settings/EnvoyLlmPanel.js";
 import { ProjectSection, ProjectsSection } from "./settings/SectionsProjects.js";
 import type { PairPhoneOutcome } from "./settings/PairPhone.js";
@@ -153,8 +154,9 @@ export interface SettingsPaneProps {
    */
   onNavigate: (scope: SettingsScope) => void;
   /**
-   * The five calls the **Agents** page is allowed to make: declare an agent, forget one, hide one, measure
-   * one, sign one in. See `AgentActions` for why this is an interface rather than the store.
+   * The daemon calls a **settings surface** is allowed to make — the agents page's, the pairing page's, the
+   * LLM panel's and the service page's. See `AgentActions` for why this is an interface rather than the store,
+   * and for why its historical name still carries the service calls.
    *
    * Required, on the same reasoning as `onNavigate`: the agents page is the screen this product is built
    * around, and a caller that could render it with no way to act would render four controls that do nothing
@@ -402,6 +404,10 @@ function sectionBody(props: SettingsPaneProps & { section: SettingsSectionId }):
           {...(props.mintedPairing !== undefined ? { mintedPairing: props.mintedPairing } : {})}
         />
       );
+    case "service":
+      // The one page whose value lives in the operating system rather than in a settings file: the row reads
+      // the supervisor's own answer and can only offer the presses that answer allows. See `SectionsService`.
+      return <ServiceSection state={props.state} onUpdate={props.onUpdate} agents={props.agents} />;
     case "about":
       return <AboutSection state={props.state} onUpdate={props.onUpdate} agents={props.agents} />;
     // The Projects section is not a page of rows at level 1: its page *is* the list of projects, one

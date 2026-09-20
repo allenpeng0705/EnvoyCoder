@@ -285,6 +285,57 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsComputerDetail => '이 설정은 페어링된 컴퓨터에 있습니다. 휴대폰은 값을 바꿀 뿐입니다.';
 
   @override
+  String get settingsPairingHeading => '페어링';
+
+  @override
+  String settingsPairingPairedWith(Object name) {
+    return '이 휴대폰은 $name와(과) 페어링되어 있습니다.';
+  }
+
+  @override
+  String get settingsPairingNotPaired =>
+      '이 휴대폰에는 해당 컴퓨터와의 페어링이 없습니다. 컴퓨터의 코드를 스캔해 다시 페어링하세요.';
+
+  @override
+  String get settingsPairingUnavailable => '이 휴대폰은 저장된 페어링을 읽을 수 없습니다.';
+
+  @override
+  String get settingsPairingNotReached => '이 휴대폰에서는 아직 연결되지 않았습니다.';
+
+  @override
+  String settingsPairingMinutesAgo(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count분 전 연결',
+      one: '1분 전 연결',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String settingsPairingHoursAgo(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count시간 전 연결',
+      one: '1시간 전 연결',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingsPairingJustNow => '방금 연결됨';
+
+  @override
+  String get settingsPairingPhoneClock => '이 휴대폰에 이 휴대폰의 시계로 기록되었습니다.';
+
+  @override
+  String settingsPairingOnDate(Object date) {
+    return '마지막 연결 $date';
+  }
+
+  @override
   String get settingsApprovals => '파괴적인 작업 전에 확인';
 
   @override

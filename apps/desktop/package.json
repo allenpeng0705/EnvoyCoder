@@ -8,11 +8,12 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "tauri:dev": "npm run daemon:build && tauri dev",
-    "tauri:build": "npm run daemon:build && tauri build",
-    "tauri:build:mac": "npm run daemon:build && tauri build --bundles dmg,app",
-    "tauri:build:win": "npm run daemon:build && tauri build --bundles msi,nsis",
-    "tauri:build:linux": "npm run daemon:build && tauri build --bundles appimage,deb,rpm",
-    "daemon:build": "node scripts/build-daemon.mjs"
+    "tauri:build": "npm run daemon:package && tauri build",
+    "tauri:build:mac": "npm run daemon:package && tauri build --bundles dmg,app",
+    "tauri:build:win": "npm run daemon:package && tauri build --bundles msi,nsis",
+    "tauri:build:linux": "npm run daemon:package && tauri build --bundles appimage,deb,rpm",
+    "daemon:build": "node scripts/build-daemon.mjs",
+    "daemon:package": "node scripts/build-daemon.mjs --package"
   },
   "dependencies": {
     "@envoydev/agent-catalog": "0.1.0",

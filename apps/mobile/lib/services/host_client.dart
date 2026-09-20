@@ -38,6 +38,7 @@ import '../l10n/l10n.dart';
 import '../models/host.dart';
 import 'libp2p_transport.dart';
 import 'net_diagnostics.dart';
+import 'pairing_store.dart';
 import 'route_plan.dart';
 import 'ssh_tunnel.dart';
 
@@ -78,16 +79,50 @@ extension HostConnectionStateText on HostConnectionState {
 /// difference.
 typedef WsDialer = Future<WebSocketLike> Function(String url);
 
+/// The code a daemon puts in a JSON-RPC error when it will not accept the credential it was offered.
+///
+/// The catalogue literal, not the transport's `"UNAUTHORIZED"` token. A token that fails to resolve
+/// at the socket is refused by the family's transport before any product method runs, and that
+/// refusal arrives as `code: "UNAUTHORIZED"`; a refusal raised by a product handler arrives as this
+/// code **inside the message** (`packages/protocol/src/rpc.ts` — the family's transport derives
+/// `error.code` from its own closed catalogue, so an `envoydev.*` code cannot ride there). Both mean
+/// the same thing to this client, so both are recognised.
+const String kUnauthorizedErrorCode = 'envoydev.unauthorized';
+
+/// Whether [error] is the daemon refusing the credential it was handed, rather than a failure to
+/// reach it at all.
+///
+/// The distinction is the whole reason a rejected pairing may be retired and a timeout may not: a
+/// network fault says nothing about the token, and clearing a working pairing on one flaky dial would
+/// force a re-pair for a machine that was merely asleep.
+bool isCredentialRefusal(Object error) {
+  final text = error.toString();
+  if (text.contains(kUnauthorizedErrorCode)) return true;
+  // The family client's typed refusal (`UnauthorizedException`), and the sentence its own transport
+  // pairs with `code: "UNAUTHORIZED"` (`EnvoyMesh/packages/host-connect/src/ws-server.ts`).
+  if (error is UnauthorizedException) return true;
+  return text.contains('Authentication required');
+}
+
+/// What a [HostClient] knows about its pairing, for a screen: the record, the daemon it is filed
+/// under, and whether that daemon has refused it.
+///
+/// [lastSeenAt] is the phone's own record (see `pairing_store.dart`); [instanceId] is what the daemon
+/// reported, which is the one fact that proves *which* daemon answered. Both are null when the phone
+/// is paired but has not reached the daemon since the pairing was recorded.
+typedef PairingState = ({PairingRecord? record, String daemonKey, bool refused});
+
 class HostClient {
   HostClient(
     this.host, {
     this.dialer,
     this.sshTunnelOpener,
     this.libp2pDialer,
+    PairingStore? pairingStore,
     this.budget = const DialBudget(),
     this.minDelay = const Duration(seconds: 1),
     this.maxDelay = const Duration(seconds: 20),
-  }) {
+  }) : pairings = pairingStore ?? PairingStore() {
     _client = HomeRemoteClient(
       HomeRemoteClientOptions(
         resolveCandidates: _resolveCandidates,
@@ -111,6 +146,22 @@ class HostClient {
   final DialBudget budget;
   final Duration minDelay;
   final Duration maxDelay;
+
+  /// Where the token this daemon issued is kept, keyed by the daemon's identity.
+  ///
+  /// Injected so one store serves every host on the phone — the pairing a Settings screen reads is
+  /// then the same record the dial offered — and so a test can supply an in-memory one.
+  final PairingStore pairings;
+
+  /// The daemon this client is paired to, as [daemonKeyFor] names it. Computed once: the host record
+  /// is mutable in tests (`host` is reassigned by a caller that re-pairs), and a key that moved under
+  /// a live connection would address a different machine's credential.
+  late final String daemonKey =
+      daemonKeyFor(endpoint: host.endpoint, owner: host.ownerId);
+
+  /// Asked once per client, not once per dial. A walk is retried on every reconnect, and a refused
+  /// token must not send the user a re-pair prompt once a backoff.
+  bool _pairingRefused = false;
 
   late final HomeRemoteClient _client;
   late final void Function() _eventUnsub;
@@ -164,6 +215,24 @@ class HostClient {
 
   /// Daemon-pushed events as `{event, data}` maps, whatever the event is called.
   Stream<Map<String, dynamic>> get events => _eventController.stream;
+
+  /// Whether this daemon has refused the pairing this phone holds.
+  ///
+  /// True from the moment a stored token is refused until the daemon accepts one again. It is the
+  /// honest half of "try the stored token first": a client that cleared the token and then kept
+  /// dialling would be a re-pair loop wearing a retry's clothes.
+  bool get pairingRefused => _pairingRefused;
+
+  /// The pairing this phone holds for the daemon behind this client, for the Settings surface.
+  ///
+  /// Reads the store rather than a cached field so a screen opened before the first hello still shows
+  /// the pairing that was recorded on a previous launch. A null record means "this phone holds no
+  /// token this daemon issued" — a sentence the screen words, not an error.
+  Future<PairingState> pairingState() async => (
+        record: await pairings.pairingFor(daemonKey),
+        daemonKey: daemonKey,
+        refused: _pairingRefused,
+      );
 
   /// The rung in use, for the screens.
   ///
@@ -417,15 +486,22 @@ class HostClient {
   // -- Candidates and transports --
 
   Future<List<HomeRemoteCandidate>> _resolveCandidates() async {
+    // The credential is resolved once per pass, **before** any candidate exists, and it is the token
+    // this daemon issued when the phone holds one. That is the whole fix in one line: a phone that
+    // still holds a grant presents the grant, so the daemon sees the same client it already recorded
+    // instead of a stranger minting another pairing. The host's own token is the fallback for the
+    // hosts that were never paired this way (a typed address, an SSH hop, a grant recorded before
+    // this store existed) — never a replacement for one.
+    final token = (await pairings.tokenFor(daemonKey)) ?? host.token;
     final pinned = _pinnedUrl;
     if (pinned != null) {
       // A pinned URL is not a walk: no budget, no deferral, one dial. The budget meters a ladder,
       // and there is no ladder here to meter.
       return <HomeRemoteCandidate>[
-        HomeRemoteCandidate(name: 'direct', url: pinned, sessionToken: host.token),
+        HomeRemoteCandidate(name: 'direct', url: pinned, sessionToken: token),
       ];
     }
-    final produced = candidatesFor(host);
+    final produced = candidatesFor(host, token: token);
     final planned = _meter.plan(produced);
     _planLimit = budget.maxAttemptsPerWalk;
     // A **held** walk planned nothing, and that is not a cap: leaving the ladder empty is what lets
@@ -590,23 +666,67 @@ class HostClient {
     // loads" — a live transport and a refused handshake — is invisible on the device. The 30 s
     // budget is the family client's own default, kept so this stays a recording change and not a
     // new timeout.
-    await _recorded(
-      'coder.hello',
-      {
-        'client': {
-          'name': 'envoydev-mobile',
-          'platform': Platform.operatingSystem,
-          // **Who this phone is, stably.** Without it the daemon cannot tell a re-pairing from a new device, so
-          // every pairing left another paired-device row — each a live token, all labelled "Phone".
-          'id': await installId(),
+    final Map<String, dynamic> hello;
+    try {
+      hello = await _recorded(
+        'coder.hello',
+        {
+          'client': {
+            'name': 'envoydev-mobile',
+            'platform': Platform.operatingSystem,
+            // **Who this phone is, stably.** Without it the daemon cannot tell a re-pairing from a new
+            // device, so every pairing left another paired-device row — each a live token, all labelled
+            // "Phone".
+            'id': await installId(),
+          },
         },
-      },
-      const Duration(seconds: 30),
+        const Duration(seconds: 30),
+      );
+    } catch (error) {
+      // A refusal is not a connection failure: the daemon answered, and what it refused is the
+      // credential this phone is holding. That is the one case where the stored pairing must go, and
+      // the case the old client could not tell apart from a timeout.
+      if (isCredentialRefusal(error)) await _onPairingRefused();
+      rethrow;
+    }
+    // The daemon accepted the token, so this is the pairing — and a pairing that has been refused is
+    // live again, because the user paired this phone to this daemon afresh.
+    _pairingRefused = false;
+    // `instanceId` is what proves which daemon answered. It is *recorded*, never used as the storage
+    // key: the daemon mints a new one on every start, and keying on it would make every desktop
+    // reboot look like a different machine.
+    final instanceId = hello['instanceId'];
+    await pairings.record(
+      daemonKey,
+      await _offeredToken(),
+      instanceId: instanceId is String && instanceId.isNotEmpty ? instanceId : null,
+      at: DateTime.now(),
     );
     // Subscribe before reporting connected so a refetch cannot land between list and events. The
     // daemon keeps one subscription per connection and replaces it on re-subscribe, so repeating
     // this after a reconnect is the intended way to get events back.
     await _recorded('coder.subscribe', const {}, const Duration(seconds: 30));
+  }
+
+  /// The token this pass put on the wire: the daemon-issued one when the phone holds it, else the
+  /// host's own. Read back rather than assumed, so a record is never written for a credential that
+  /// was not the one offered.
+  Future<String> _offeredToken() async =>
+      (await pairings.tokenFor(daemonKey)) ?? host.token;
+
+  /// Retire the pairing this daemon has refused, **once**.
+  ///
+  /// The single-shot guard is the difference between a fallback and a loop. The walk retries on a
+  /// backoff, so without it a revoked token would clear-and-retry forever, and every retry is another
+  /// refusal the user never sees. After this returns, the phone holds no token for this daemon: the
+  /// next dial offers whatever the host row holds (usually the same dead credential, refused again)
+  /// and the surface shows "not paired" instead of a spinner — which is the state the user fixes by
+  /// scanning a new code. Pairing itself is a user act; this client never mints one.
+  Future<void> _onPairingRefused() async {
+    if (_pairingRefused) return;
+    _pairingRefused = true;
+    await pairings.clear(daemonKey);
+    _publishState();
   }
 
   void _onActiveTransportChange(HomeRemoteCandidate? candidate) {

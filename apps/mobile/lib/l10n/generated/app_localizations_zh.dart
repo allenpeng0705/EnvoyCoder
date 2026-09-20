@@ -283,6 +283,56 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsComputerDetail => '这些设置保存在已配对的机器上，手机只负责修改。';
 
   @override
+  String get settingsPairingHeading => '配对';
+
+  @override
+  String settingsPairingPairedWith(Object name) {
+    return '此手机已与 $name 配对。';
+  }
+
+  @override
+  String get settingsPairingNotPaired => '此手机没有与那台电脑的配对。扫描电脑上的代码以重新配对。';
+
+  @override
+  String get settingsPairingUnavailable => '此手机无法读取已保存的配对。';
+
+  @override
+  String get settingsPairingNotReached => '此手机尚未连接。';
+
+  @override
+  String settingsPairingMinutesAgo(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 分钟前连接',
+      one: '1 分钟前连接',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String settingsPairingHoursAgo(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 小时前连接',
+      one: '1 小时前连接',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingsPairingJustNow => '刚刚连接';
+
+  @override
+  String get settingsPairingPhoneClock => '记录在此手机上，使用此手机的时钟。';
+
+  @override
+  String settingsPairingOnDate(Object date) {
+    return '上次连接：$date';
+  }
+
+  @override
   String get settingsApprovals => '执行任何破坏性操作前先询问';
 
   @override

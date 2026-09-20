@@ -66,6 +66,12 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      # The unit *text* against this OS's own linter: `plutil -lint` here, `systemd-analyze verify` on Linux,
+      # PowerShell's XML cast on Windows. The suite asserts what the text says; only the owning tool can say whether
+      # the supervisor would accept it, which is the one thing that cannot be checked from a single OS.
+      - name: Service units (this OS's own linter)
+        run: node scripts/check-service-units.mjs
+
       # A green suite does not prove a bundle builds. This is the family's rule and it has earned
       # its place: the web build once failed on an alias while every test passed.
       - name: Desktop UI bundle

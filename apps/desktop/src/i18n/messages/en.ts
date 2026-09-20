@@ -483,6 +483,9 @@ export const en = {
   "settings.section.pairing.title": "Mobile Pairing",
   "settings.section.pairing.detail":
     "Let a phone reach this machine: scan a code, type its address, or go through SSH.",
+  "settings.section.service.title": "Background service",
+  "settings.section.service.detail":
+    "Keep the daemon running under this system's service manager, so a paired phone can reach it while the window is closed.",
   "settings.section.about.title": "About",
   "settings.section.about.detail":
     "Which build this window is, and which build the daemon is.",
@@ -1010,6 +1013,49 @@ export const en = {
   "settings.machine.paired.forget": "Forget",
   "settings.machine.paired.forget.title":
     "Remove this revoked record from the list. The device stays revoked.",
+
+  /* ── the daemon service, which belongs to the operating system and not to a settings file ──
+     The value this row reports lives in launchd / a systemd user unit / a Task Scheduler job, so the row says
+     what that supervisor answered rather than what a user chose. Two rules the words below keep, and
+     `test/service-state.test.ts` holds them: the service starts **at login** (never "at boot", which is a
+     different and unsupported arrangement), and the sentence promising it is only used when the supervisor
+     said `enabled: true` — a machine with `enabled: false` will not bring it back. The supervisor's own
+     `detail` is not in the catalogue at all: it is raw output, shown verbatim and last. */
+  "settings.service.title": "Background service",
+  "settings.service.detail":
+    "Run the daemon as a service so a phone can reach this machine while closed.",
+  "settings.service.state.notInstalled.title": "Off",
+  "settings.service.state.notInstalled.detail":
+    "Your phone can only reach this machine while the EnvoyDev window is open.",
+  "settings.service.state.running.title": "On, running",
+  "settings.service.state.running.atLogin":
+    "The service is running now, and it starts again when you log in.",
+  "settings.service.state.running.notAtLogin":
+    "The service is running now, but it is not set to start when you log in.",
+  "settings.service.state.running.plain": "The service is running now.",
+  "settings.service.state.installedStopped.title": "On, not running",
+  "settings.service.state.installedStopped.atLogin":
+    "It is installed and starts when you log in.",
+  "settings.service.state.installedStopped.notAtLogin":
+    "It is installed, but it is not set to start when you log in.",
+  "settings.service.state.installedStopped.plain": "It is installed but not running right now.",
+  "settings.service.state.failed.title": "Something went wrong",
+  "settings.service.state.failed.detail":
+    "The service could not be started. What your system's service manager said is below.",
+  "settings.service.state.unsupported.title": "Not available here",
+  "settings.service.state.unsupported.detail":
+    "EnvoyDev found no service manager it can use on this system. The app still works while the window is open.",
+  "settings.service.state.unknown.title": "Could not tell",
+  "settings.service.state.unknown.detail":
+    "EnvoyDev could not read the service's state from the system's service manager.",
+  "settings.service.pid": "Process {pid}.",
+  "settings.service.checking": "Checking with your system's service manager…",
+  "settings.service.action.turnOn": "Turn on",
+  "settings.service.action.restart": "Restart",
+  "settings.service.action.turnOff": "Turn off",
+  "settings.service.action.tryAgain": "Try again",
+  "settings.service.action.refresh": "Refresh",
+  "settings.service.busy": "Working…",
 
   /* ── the one comparison a control plane needs ──
      Both halves of EnvoyDev are built together, so a difference means one of them is a build behind —

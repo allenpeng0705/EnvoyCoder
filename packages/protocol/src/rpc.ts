@@ -1891,6 +1891,26 @@ export const GitStashSchema = z
 
 export type GitStash = z.infer<typeof GitStashSchema>;
 
+/**
+ * What a supervisor says about the daemon service, as it travels on the wire.
+ *
+ * `state` is the closed vocabulary the window draws controls from, and it is the *platform package's*
+ * vocabulary (`@envoydev/platform`'s `ServiceStatus`) rather than a second one invented here: the daemon
+ * restates it so the window and the supervisor cannot drift apart. `detail` is the supervisor's own words — a
+ * log line, not a translated sentence — because when something is wrong they are the most useful thing there is.
+ */
+export const ServiceStatusSchema = z
+  .object({
+    state: z.enum(["not-installed", "installed-stopped", "running", "failed", "unsupported", "unknown"]),
+    /** Whether it will come back at login. Absent where the platform does not say. */
+    enabled: z.boolean().optional(),
+    pid: z.number().int().positive().optional(),
+    detail: z.string(),
+  })
+  .strict();
+
+export type DaemonServiceStatus = z.infer<typeof ServiceStatusSchema>;
+
 export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.freeze({
   /* — who am I talking to, and what does this daemon do — */
   "coder.hello": {
@@ -3052,6 +3072,29 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
   "coder.getSettings": {
     params: EmptyParams,
     result: z.object({ settings: CoderSettingsSchema }).strict(),
+  },
+  /* — the service switch (§10 of docs/daemon-lifecycle.md) — */
+  "coder.getServiceStatus": {
+    params: EmptyParams,
+    result: z.object({ service: ServiceStatusSchema }).strict(),
+  },
+  "coder.installService": {
+    params: EmptyParams,
+    result: z.object({ service: ServiceStatusSchema }).strict(),
+  },
+  "coder.uninstallService": {
+    params: EmptyParams,
+    result: z.object({ service: ServiceStatusSchema }).strict(),
+  },
+  "coder.restartService": {
+    params: EmptyParams,
+    result: z.object({ service: ServiceStatusSchema }).strict(),
+  },
+  "coder.shutdown": {
+    params: EmptyParams,
+    // `true` rather than an empty object: the client is told the request was *accepted*, not that the process is
+    // gone — the drain can take ten seconds, and the socket may close before a later answer could be sent.
+    result: z.object({ stopping: z.literal(true) }).strict(),
   },
   "coder.updateSettings": {
     params: z

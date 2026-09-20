@@ -16,7 +16,8 @@
  * the checkout at run time. That is the development arrangement: those packages are siblings on
  * disk, and a day-to-day rebuild should pick up a pulled sibling rather than a frozen copy.
  *
- * The installer sets `ENVOYDEV_DAEMON_PACKAGE=1`. A shipped app has no checkout, so that build
+ * `--package` (or `ENVOYDEV_DAEMON_PACKAGE=1`, which the flag exists to avoid needing on Windows) selects the
+ * packaged build. A shipped app has no checkout, so that build
  * embeds our own packages. Third-party packages stay as imports and are copied into
  * `dist-daemon/node_modules`, because several of them are native addons (a `.node` file) and
  * cannot be folded into the script. `scripts/stage-desktop-bundle.mjs` refuses a bundle that
@@ -43,7 +44,8 @@ const entry = join(appDir, "src", "daemon", "main.ts");
 await rm(outDir, { recursive: true, force: true });
 await mkdir(outDir, { recursive: true });
 
-const packaged = process.env.ENVOYDEV_DAEMON_PACKAGE === "1";
+const packaged =
+  process.env.ENVOYDEV_DAEMON_PACKAGE === "1" || process.argv.includes("--package");
 
 const result = await build({
   entryPoints: [entry],

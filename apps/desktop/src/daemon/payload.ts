@@ -32,7 +32,7 @@
 
 import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import type { CoderPaths } from "@envoydev/host-bridge";
 
@@ -63,6 +63,45 @@ export function currentPointer(paths: CoderPaths): string {
 export function payloadPaths(dir: string): { node: string; entry: string } {
   const inBundle = join(dir, "app", "main.mjs");
   return { node: join(dir, "node"), entry: existsSync(inBundle) ? inBundle : join(dir, "main.mjs") };
+}
+
+/**
+ * Install **the bundle this process is running from**, so a supervisor has something to point at.
+ *
+ * This is the fresh-machine path, and it exists because of what the service switch has to be able to do in one
+ * press: a machine that has never run the daemon as a service has no payload at all, so "turn it on" means *install
+ * a payload* and *install the unit*, in that order. Doing only the second produced a unit naming a version that was
+ * never copied — a supervisor restarting for ever against nothing.
+ *
+ * It is also the only place that knows how to carry the **staged agent binaries** across: the app's shell spawns
+ * the daemon with `--harness <dir>`, and a service started later by launchd is not spawned by the shell at all, so
+ * a payload without them would run a daemon that cannot find any agent.
+ *
+ * The previous `current` is protected rather than pruned: a live daemon may still be running from it (`pruneVersions`
+ * explains what deleting that costs).
+ */
+export async function installRunningBundle(
+  paths: CoderPaths,
+  options: { version: string; argv?: readonly string[]; node?: string },
+): Promise<{ installed: InstalledPayload; removed: string[] }> {
+  const argv = options.argv ?? process.argv;
+  const entry = argv[1] ?? "main.mjs";
+  const harnessFlag = argv.indexOf("--harness");
+  const harness = harnessFlag >= 0 ? argv[harnessFlag + 1] : undefined;
+  const previous = await readCurrent(paths);
+  const installed = await installPayload(paths, {
+    version: options.version,
+    node: options.node ?? process.execPath,
+    entry,
+    // The bundle is the directory the entry lives in, dependencies included: a bare import resolves upward from
+    // the importing file, so an entry alone cannot start.
+    bundle: dirname(entry),
+    ...(harness !== undefined ? { harness } : {}),
+  });
+  const removed = await pruneVersions(paths, {
+    protect: previous !== undefined ? [previous] : [],
+  });
+  return { installed, removed };
 }
 
 export interface PayloadSource {

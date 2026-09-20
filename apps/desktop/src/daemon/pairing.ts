@@ -144,7 +144,7 @@ export function hostnameOfReach(raw: string): string {
  * The wording is a sentence rather than a code because a phone that tries this is not a broken
  * client; it is asking for something only the machine can do, and the message says where to go.
  */
-function requireOwnerWindow(context: CoderCallContext, method: string): void {
+export function requireOwnerWindow(context: CoderCallContext, method: string): void {
   if (context.session === undefined) return;
   throw coderError(
     ENVOYDEV_ERRORS.unauthorized,

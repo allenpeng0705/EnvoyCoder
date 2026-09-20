@@ -182,13 +182,30 @@ A checklist, in build order:
      systemd's own `WatchdogSec` needs `systemd-notify` (it ships with systemd) or `ExecStartPost`; the file is
      what every platform's probe reads, which is the option launchd and Windows have anyway;
    * `daemon.log` is rotated at 5 MB with one previous file, before the append;
-   * **still owed:** the exit *code* on a controlled failure. This build records starts and deliberate stops, so a
-     crash reads as "no stop record" — but a boot that failed with a specific code does not carry that code
-     forward to the next boot;
-5. bounds on the live run-event buffer and on transcripts;
-6. boot-time run reconciliation;
-7. drain-on-restart;
-8. a portable graceful stop for Windows;
+   * ~~the exit *code* on a controlled failure~~ **landed**: a refused boot and a failure the process understood
+     are recorded as deliberate stops *with their code* (`recordStop({ signal: "refused", exitCode })`), and the
+     next boot prints it — "exited 4" rather than "did not stop on purpose (no stop record)". The code is kept by
+     the parser only when it is a whole number: a value that merely claims to be an exit code is worse than none;
+5. ~~bounds on the live run-event buffer and on transcripts~~ **landed**: the in-memory buffer keeps the newest
+   2 000 events of a run and drops from the front, so a client whose `sinceSeq` fell out of the window sees a *gap
+   in the sequence numbers* rather than silent loss — the transcript is the record, this is only a catch-up
+   window. One run's transcript stops growing at 8 MB, keeps the beginning (which is what a person reads) and says
+   so once on stderr; both bounds are injectable, because a test that must cross 2 000 events or 8 MB is not a
+   test anybody runs. `recall()` loads a transcript through the same window;
+6. ~~boot-time run reconciliation~~ **landed**: `daemon/reconcile.ts` runs after the store opens and before the
+   first client can connect, and it distinguishes the three cases reading is prone to confuse — a run whose
+   transcript recorded an ending is carried forward *as that ending*, a run that never ended is failed and
+   reported in the boot log as stranded, and `needs-attention` is left completely alone (it is active for the
+   sidebar, but its run has ended and a person still owes it an answer);
+7. ~~drain-on-restart~~ **landed**: the stop asks live runs to stop and waits up to ten seconds for them
+   (`runs.stopAll`), and the boot report's old claim about "leaving a running agent alone" is corrected — what is
+   true is that a *supervisor-owned* daemon is not stopped when the window closes (§3). A test drives a live run
+   through `stopAll` and asserts it ends rather than staying live for ever;
+8. ~~a portable graceful stop for Windows~~ **landed, with the shell's half owed**: `coder.shutdown` is on the
+   wire — answered *before* the drain begins, owner-window-only (a lost phone must not be able to end the
+   desktop's daemon), and it records why the process stopped. It is the only stop Windows has, because there is
+   no signal an unrelated process can send; the remaining half is the Tauri shell calling it before it resorts to
+   `taskkill`;
 9. ~~the service module with per-platform unit text as a pure function in `@envoydev/platform`~~ **landed**:
    `service.ts` writes the launchd plist, the systemd user unit and the Task Scheduler definition — at login and
    not at boot, restarting on failure and never on a deliberate stop (`SuccessfulExit=false`,

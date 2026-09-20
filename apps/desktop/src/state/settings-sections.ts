@@ -1,7 +1,7 @@
 /**
  * The settings sections — **as data**, because the bar, the list and the gate all have to agree.
  *
- * ## Why this is a registry and not eight `<li>`s
+ * ## Why this is a registry and not nine `<li>`s
  *
  * The pane used to be one scrolling column with four headings. Adding a bar to it makes the same
  * question arrive from three directions at once: the bar renders the sections, the sections-list page
@@ -52,6 +52,7 @@ export type SettingsSectionId =
   | "shortcuts"
   | "machine"
   | "pairing"
+  | "service"
   | "about";
 
 /**
@@ -102,7 +103,10 @@ export interface SettingsSection {
  * what a new task starts with, what an agent may do without asking, what the agents on this machine
  * can actually do, how a phone reaches it, which folders this machine works in, what the keyboard
  * does, what this window is attached to, and which build it is. Mobile pairing sits above Projects
- * because pairing is how another device reaches this machine — a setup step, not a project default.
+ * because pairing is how another device reaches this machine — a setup step, not a project default —
+ * and **Background service** sits directly under it because it is the other half of that same answer:
+ * pairing says *who may reach this machine*, and the service says *whether the machine answers while
+ * the window is closed*.
  * The reference product's order is not copied: its host sections are a per-machine fleet surface we
  * do not have (§5 of `docs/settings-parity.md`).
  */
@@ -247,6 +251,27 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
         file: "apps/desktop/src/components/settings/PairPhone.tsx",
         needle: "coder.mintPairing",
         because: "the shared module itself, which the section reuses rather than reimplements",
+      },
+    ],
+  },
+  {
+    id: "service",
+    titleKey: "settings.section.service.title",
+    band: { kind: "sentence", key: "settings.section.service.detail" },
+    content: [
+      {
+        file: "apps/desktop/src/components/settings/SectionsService.tsx",
+        needle: 't("settings.service.title")',
+        because:
+          "the row itself — six states read back from the OS service manager through `coder.getServiceStatus`, " +
+          "with only the presses a state allows",
+      },
+      {
+        file: "apps/desktop/src/components/settings/service-state.ts",
+        needle: "satisfies Record<ServiceState",
+        because:
+          "the projection from the wire's closed state vocabulary to a headline, one sentence and its buttons, " +
+          "held total against `DaemonServiceStatus` so a state cannot exist on the wire without words here",
       },
     ],
   },
