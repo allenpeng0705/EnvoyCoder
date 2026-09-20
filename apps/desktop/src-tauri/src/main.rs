@@ -586,8 +586,44 @@ fn stop_child(pid: u32) {
     }
     #[cfg(windows)]
     {
-        // There is no process-group signal for an unrelated process on Windows; the platform layer
-        // owns process-tree termination for the daemon's own children, and this is the last resort.
+        // **Ask first, kill last.** `taskkill /F` is a *kill*: an agent's process is left behind and the daemon's
+        // drain is skipped, so a window closing would cut work in half. Windows has no signal an unrelated process
+        // can send — which is exactly why the daemon answers `coder.shutdown` over its own socket, and why it can
+        // be asked politely from here. Same home as the daemon was started with, or the two could disagree about
+        // which daemon is being addressed.
+        //
+        // The grace is longer than `STOP_GRACE` on purpose: that is how long a *signal* gets, while this waits for
+        // the daemon's own drain, which is allowed ten seconds (`runs.stopAll`). Killing at five would cut short a
+        // shutdown that was going perfectly well.
+        let ask_grace = Duration::from_secs(15);
+        if let Ok(entry) = resolve_daemon_entry() {
+            let asked = Command::new(resolve_node_exe())
+                .arg(&entry)
+                .arg("stop")
+                .env("ENVOYMESH_HOME", resolve_shared_home())
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn();
+            if let Ok(mut ask) = asked {
+                let deadline = Instant::now() + ask_grace;
+                while Instant::now() < deadline {
+                    if !is_alive(pid) {
+                        // Gone, on its own terms. The daemon is what matters here, not the asker's exit status.
+                        let _ = ask.wait();
+                        return;
+                    }
+                    if matches!(ask.try_wait(), Ok(Some(_))) {
+                        // The asker finished and the daemon did not: asking is not going to work, so stop waiting.
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+                let _ = ask.kill();
+                let _ = ask.wait();
+            }
+        }
+        // The last resort, and only that: whatever is still alive here was not stopped by asking.
         let _ = Command::new("taskkill")
             .args(["/PID", &pid.to_string(), "/T", "/F"])
             .status();
