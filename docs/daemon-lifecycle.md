@@ -226,10 +226,14 @@ A checklist, in build order:
 10. **partly landed** — the Settings page exists (`components/settings/SectionsService.tsx`): one row with the
     six states the supervisor can report, and one press per state — *Turn on*, *Restart*, *Turn off*, *Try again*,
     *Refresh* — with the supervisor's own words shown only when something is wrong, and the verdict row in
-    `docs/settings-parity.md` (§5.1). **Still owed from this item**: the *restart count* (the ledger already knows
-    it — `lifecycle.ts`'s `bootsInLastHour` — but nothing puts it on the page yet), the **log tail**, and a plain
-    *stop* that leaves the service installed — `main.mjs stop` asks the running daemon over the wire now, but no
-    **UI button** sends it yet;
+    `docs/settings-parity.md` (§5.1). **Landed in full since**: the *restart count* (`restartsInLastHour`, read from this file's own ledger and shown
+    only when it is above zero), the **last stop** with the diagnosis that matters — a restart with *no* stop record
+    means the previous daemon was killed or crashed — the **log tail** behind a *Show the log* disclosure that reads
+    the last 200 lines out of at most 64 KB on first open, and a **Stop** button that asks over the wire and whose
+    copy draws the distinction from *Turn off*: Stop ends it now and the service returns it at login, Turn off
+    removes the service so it stays off. Two residuals remain outside this item: the shell's Windows stop path
+    (written, first compiled by the Windows CI lane — item 8) and macOS app-deletion cleanup, which is documentation
+    rather than code because deleting an app there runs none.
 
 ## 10. What this does not decide yet
 
