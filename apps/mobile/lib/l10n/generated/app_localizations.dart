@@ -120,12 +120,6 @@ abstract class AppLocalizations {
   /// **'Add'**
   String get commonAdd;
 
-  /// common.browse — Opens the folder picker.
-  ///
-  /// In en, this message translates to:
-  /// **'Browse'**
-  String get commonBrowse;
-
   /// common.cancel — Dismisses a dialog without acting.
   ///
   /// In en, this message translates to:
@@ -149,12 +143,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Continue'**
   String get commonContinue;
-
-  /// common.delete — Destructive verb, used only where something is really deleted.
-  ///
-  /// In en, this message translates to:
-  /// **'Delete'**
-  String get commonDelete;
 
   /// common.none — Stands in for a value that is absent, not zero.
   ///
@@ -701,12 +689,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Paste a new key to replace the saved one'**
   String get settingsApiKeyHint;
-
-  /// settings.languageChangedLocal — The phone's UI changed; the daemon write failed.
-  ///
-  /// In en, this message translates to:
-  /// **'Language changed on this phone.'**
-  String get settingsLanguageChangedLocal;
 
   /// settings.languageDaemonFailed — Says which half did not save.
   ///

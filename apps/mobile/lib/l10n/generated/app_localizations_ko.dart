@@ -15,9 +15,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get commonAdd => '추가';
 
   @override
-  String get commonBrowse => '선택…';
-
-  @override
   String get commonCancel => '취소';
 
   @override
@@ -28,9 +25,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get commonContinue => '계속';
-
-  @override
-  String get commonDelete => '삭제';
 
   @override
   String get commonNone => '없음';
@@ -331,9 +325,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsApiKeyHint => '저장된 키를 바꾸려면 새 키를 붙여넣으세요';
-
-  @override
-  String get settingsLanguageChangedLocal => '이 휴대폰의 언어를 바꿨습니다.';
 
   @override
   String get settingsLanguageDaemonFailed => '휴대폰은 이 언어로 바뀌었지만 컴퓨터는 바꾸지 못했습니다.';

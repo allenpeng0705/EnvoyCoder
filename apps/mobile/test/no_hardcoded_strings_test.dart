@@ -21,10 +21,10 @@
 ///
 /// ## The pending list
 ///
-/// Three files are still being migrated in a concurrent change and are listed in
-/// [_pendingMigration]. The list is the honest half of the gate: it is empty when the migration is
-/// done, and adding a file to it is a visible decision rather than a silent exception. Nothing else
-/// may be added — a new screen with an English literal fails here.
+/// [_pendingMigration] is **empty**: every screen reads its text through `context.l10n`, so no file is
+/// exempt. The list stays here as the honest half of the gate — a file that is genuinely mid-migration
+/// goes in it as a visible decision rather than a silent exception, with a note saying who owns the
+/// work. Nothing else may be added: a new screen with an English literal fails here.
 library;
 
 import 'dart:io';

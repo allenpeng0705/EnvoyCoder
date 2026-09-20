@@ -15,9 +15,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get commonAdd => '添加';
 
   @override
-  String get commonBrowse => '浏览';
-
-  @override
   String get commonCancel => '取消';
 
   @override
@@ -28,9 +25,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get commonContinue => '继续';
-
-  @override
-  String get commonDelete => '删除';
 
   @override
   String get commonNone => '无';
@@ -329,9 +323,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsApiKeyHint => '粘贴新密钥以替换已保存的密钥';
-
-  @override
-  String get settingsLanguageChangedLocal => '语言已在这台手机上更改。';
 
   @override
   String get settingsLanguageDaemonFailed => '手机已改用这种语言，但无法更新电脑。';

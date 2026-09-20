@@ -8,10 +8,6 @@
   "@commonAdd": {
     "description": "common.add — Generic add button."
   },
-  "commonBrowse": "Browse",
-  "@commonBrowse": {
-    "description": "common.browse — Opens the folder picker."
-  },
   "commonCancel": "Cancel",
   "@commonCancel": {
     "description": "common.cancel — Dismisses a dialog without acting."
@@ -27,10 +23,6 @@
   "commonContinue": "Continue",
   "@commonContinue": {
     "description": "common.continue — Accepts a typed value and closes the dialog."
-  },
-  "commonDelete": "Delete",
-  "@commonDelete": {
-    "description": "common.delete — Destructive verb, used only where something is really deleted."
   },
   "commonNone": "none",
   "@commonNone": {
@@ -439,10 +431,6 @@
   "settingsApiKeyHint": "Paste a new key to replace the saved one",
   "@settingsApiKeyHint": {
     "description": "settings.apiKeyHint — Field hint."
-  },
-  "settingsLanguageChangedLocal": "Language changed on this phone.",
-  "@settingsLanguageChangedLocal": {
-    "description": "settings.languageChangedLocal — The phone's UI changed; the daemon write failed."
   },
   "settingsLanguageDaemonFailed": "The phone is now in this language, but the computer could not be updated.",
   "@settingsLanguageDaemonFailed": {

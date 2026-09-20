@@ -88,8 +88,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  # Runs `flutter gen-l10n` from `l10n.yaml` during `flutter pub get`. Without this the generated
-  # `lib/l10n/generated/app_localizations.dart` is absent on a clean checkout (the directory is
-  # gitignored) and `flutter analyze`/`flutter test` fail on a missing import — see `l10n.yaml` and
-  # `lib/l10n/README.md`.
+  # Runs `flutter gen-l10n` from `l10n.yaml` during `flutter pub get`, which is what refreshes
+  # `lib/l10n/generated/` after an ARB edit. The generated files are **committed**, not ignored —
+  # `flutter analyze` does not run the generator, so a checkout without them cannot be analysed; see
+  # `l10n.yaml` and `lib/l10n/README.md`.
   generate: true

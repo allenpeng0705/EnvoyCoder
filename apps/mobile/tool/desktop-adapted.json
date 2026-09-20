@@ -1,0 +1,7 @@
+{
+  "settingsDefaultAgent": "settings.defaultHarness.title",
+  "settingsLlmDetail": "settings.section.llm.detail",
+  "settingsApiKeySaved": "settings.agents.envoyLlm.apiKey.saved",
+  "addProjectBrowse": "settings.folder.choose",
+  "folderTitle": "palette.addProject.pickPrompt"
+}

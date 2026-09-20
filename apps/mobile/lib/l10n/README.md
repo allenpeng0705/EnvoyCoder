@@ -48,12 +48,23 @@ commit by convention.
   `context.l10n` fails the suite. It scans UI positions only, so the developer text above is not a
   false positive.
 
-## Reusing the desktop's wording
+## Reusing the window's wording, and recording it
 
-`tool/desktop-reuse.json` maps a mobile ARB key to the desktop message key it was taken from
-(`apps/desktop/src/i18n/messages/*.ts`). Those values are copied verbatim in every locale, so one
-concept has one sentence in both apps. `tool/mobile-only-keys.json` lists the keys with no desktop
-counterpart — the ones that had to be translated fresh.
+Three files in `tool/` account for every key in `app_en.arb`, and `npm run l10n:check` — part of
+`npm run gates` — fails if they stop adding up:
+
+| File | What it records |
+|---|---|
+| `desktop-reuse.json` | the value is **character-identical** to that key in `apps/desktop/src/i18n/messages/*.ts`, so one concept has one sentence in both apps |
+| `desktop-adapted.json` | the sentence came from the window and was reworded for a phone: a shorter label, or a detail the phone needs and the window does not |
+| `mobile-only-keys.json` and `-2.json` | no counterpart in the window; translated fresh. Two files because they are two translation batches, not two rules |
+
+The check enforces three things: every ARB key is claimed by exactly one file, nothing is claimed that
+no ARB has, and every "reused" value really is identical to the window's. It exists because the records
+had already drifted by the time anyone read them together — six entries named keys the controls redesign
+had deleted, thirteen live keys were in no list at all, and five mappings claimed a verbatim reuse they
+did not have. `scripts/check-l10n-provenance.ts` is that check, and its header says which rule came from
+which drift.
 
 ## The system language and the fallback
 

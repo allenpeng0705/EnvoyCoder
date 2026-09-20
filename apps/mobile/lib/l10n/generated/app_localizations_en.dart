@@ -15,9 +15,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get commonAdd => 'Add';
 
   @override
-  String get commonBrowse => 'Browse';
-
-  @override
   String get commonCancel => 'Cancel';
 
   @override
@@ -28,9 +25,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get commonContinue => 'Continue';
-
-  @override
-  String get commonDelete => 'Delete';
 
   @override
   String get commonNone => 'none';
@@ -342,9 +336,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsApiKeyHint => 'Paste a new key to replace the saved one';
-
-  @override
-  String get settingsLanguageChangedLocal => 'Language changed on this phone.';
 
   @override
   String get settingsLanguageDaemonFailed =>
