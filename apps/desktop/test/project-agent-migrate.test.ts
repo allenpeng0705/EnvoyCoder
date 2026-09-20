@@ -119,6 +119,59 @@ describe("updateProject migrates idle tasks onto the new agent", () => {
     expect(migrated.model).toBe("openai/gpt-4o");
   });
 
+  it("moves a task onto the project's agent once the run it was waiting for ends", async () => {
+    // The gap this closes: a run in flight cannot change agent, so `updateProject` skipped the task —
+    // and nothing ever came back for it. The project said one agent and the task kept another until
+    // somebody changed the project again.
+    const b = await bench();
+    const task = await b.store.createTask({
+      projectId: b.projectId,
+      title: "was-running",
+      harness: "envoy-harness",
+    });
+    await b.store.setTaskRun(task!.id, { status: "running", runId: "run-1" });
+
+    await b.store.updateProject(b.projectId, { defaults: { harness: "deepseek-harness" } });
+    // Still on the agent it was launched with: the live process is the reason.
+    expect(b.store.findTask(task!.id)?.harness).toBe("envoy-harness");
+
+    // And the moment the run stops, the project governs.
+    await b.store.setTaskRun(task!.id, { status: "done" });
+    await b.store.followProjectHarness(task!.id);
+    expect(b.store.findTask(task!.id)?.harness).toBe("deepseek-harness");
+  });
+
+  it("leaves a task alone when no project change was waiting on its run", async () => {
+    // A task created with an explicit harness (the wire still allows one) is not overwritten merely
+    // because a run ended: only a project change can say a divergent harness was meant to follow.
+    const b = await bench();
+    const task = await b.store.createTask({
+      projectId: b.projectId,
+      title: "chose-its-own",
+      harness: "claudecode",
+    });
+    await b.store.setTaskRun(task!.id, { status: "running", runId: "run-1" });
+    await b.store.setTaskRun(task!.id, { status: "done" });
+
+    await b.store.followProjectHarness(task!.id);
+    expect(b.store.findTask(task!.id)?.harness).toBe("claudecode");
+  });
+
+  it("does not resurrect an archived task to follow the project", async () => {
+    const b = await bench();
+    const task = await b.store.createTask({
+      projectId: b.projectId,
+      title: "archived-mid-run",
+      harness: "envoy-harness",
+    });
+    await b.store.setTaskRun(task!.id, { status: "running", runId: "run-1" });
+    await b.store.updateProject(b.projectId, { defaults: { harness: "deepseek-harness" } });
+    await b.store.archiveTask(task!.id, true);
+
+    await b.store.followProjectHarness(task!.id);
+    expect(b.store.findTask(task!.id)?.harness).toBe("envoy-harness");
+  });
+
   it("moves a task that had chosen its own agent, and leaves another project's tasks alone", async () => {
     const b = await bench();
     // A task created through the old mobile Agent chip carried its own harness. The owner's rule is

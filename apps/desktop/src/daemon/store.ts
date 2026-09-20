@@ -192,6 +192,23 @@ export class CoderStore {
 
   private readonly listeners = new Set<(change: StoreChange) => void>();
 
+  /**
+   * Tasks that were **running** when their project's agent changed, and so could not move with it.
+   *
+   * The rule is that the project's agent governs its tasks, and `updateProject` carries a change to
+   * every task that can take it — but a run in flight keeps the harness it was launched with, because
+   * switching it would contradict the process already on disk. Skipping such a task *permanently* was
+   * the gap: the project said one agent, the task silently kept another until somebody changed the
+   * project again. So the skip is now remembered, and applied the moment the run stops.
+   *
+   * Deliberately in memory, and deliberately not every divergent task: a task whose harness nobody
+   * derived from the project — created with an explicit `harness` over the API — must keep it, and only
+   * a project change can say which divergent tasks were meant to follow. A daemon that restarts
+   * mid-run forgets the mark and behaves exactly as it did before this existed: no worse, and the next
+   * project change picks the task up.
+   */
+  private readonly harnessFollowPending = new Set<string>();
+
   /** The write chain. See the module doc: one mutation at a time, in request order. */
   private tail: Promise<unknown> = Promise.resolve();
 
@@ -462,7 +479,13 @@ export class CoderStore {
         const at = this.now().toISOString();
         const migratedIds: string[] = [];
         this.tasksState = this.tasksState.map((task) => {
-          if (task.projectId !== id || !taskMayFollowProjectHarness(task)) return task;
+          if (task.projectId !== id || task.archivedAt !== undefined) return task;
+          if (!taskMayFollowProjectHarness(task)) {
+            // Running: it cannot move now, and it must not be left behind for good. Remember it, and
+            // `followProjectHarness` applies the same switch the moment the run stops.
+            if (task.harness !== nextHarness) this.harnessFollowPending.add(task.id);
+            return task;
+          }
           if (task.harness === nextHarness) return task;
           migratedIds.push(task.id);
           return applyHarnessSwitch(
@@ -475,6 +498,42 @@ export class CoderStore {
       }
     }
 
+    return next;
+  }
+
+  /**
+   * Move a task onto its project's agent, if it was waiting for its run to stop to do so.
+   *
+   * The other half of `updateProject`'s rule. A run in flight cannot change harness, so a project change
+   * during one is remembered in `harnessFollowPending` rather than applied — and this is what applies it,
+   * which the daemon calls when a run ends (`RunManager.finish`). A task that was not waiting is left
+   * alone, however its harness was chosen: "the project changed" is the only thing that can say a
+   * divergent harness was meant to follow, and a task created with an explicit one never heard it.
+   *
+   * Safe to call for every task on every run end: the pending set is the guard, so the ordinary case is
+   * one `Set.delete` and no write at all.
+   */
+  async followProjectHarness(taskId: string): Promise<Task | undefined> {
+    if (!this.harnessFollowPending.delete(taskId)) return this.findTask(taskId);
+    const task = this.tasksState.find((candidate) => candidate.id === taskId);
+    if (!task || task.archivedAt !== undefined) return task;
+    if (!taskMayFollowProjectHarness(task)) {
+      // Spoken for again before the last run's ending landed — put it back in the queue.
+      this.harnessFollowPending.add(taskId);
+      return task;
+    }
+    const project = this.projectsState.find((candidate) => candidate.id === task.projectId);
+    if (!project) return task;
+    const nextHarness =
+      project.defaults?.harness ?? this.settingsState.defaults.harness ?? "envoy-harness";
+    if (task.harness === nextHarness) return task;
+    const next = applyHarnessSwitch(
+      task,
+      harnessSwitchPatch(task, nextHarness, project.defaults?.model),
+      this.now().toISOString(),
+    );
+    this.tasksState = this.tasksState.map((candidate) => (candidate.id === taskId ? next : candidate));
+    await this.persistTasks([taskId]);
     return next;
   }
 

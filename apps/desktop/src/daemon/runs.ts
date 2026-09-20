@@ -1082,6 +1082,17 @@ export class RunManager {
       // run again, while the tail below (`active`, `finished`, `markDone`) would be skipped — the run
       // left in `active` with `live.done` never resolved, which is a daemon that hangs on quit.
     }
+    // **A task that was running when its project's agent changed follows it now.** `updateProject`
+    // cannot move a live run — the agent on disk was launched with the old harness — so it remembers
+    // the task instead, and this is the moment that memory is spent. A task that was not waiting costs
+    // one `Set.delete`: a harness chosen explicitly, through the API, is never overwritten merely
+    // because a run ended.
+    try {
+      await this.deps.store.followProjectHarness(live.run.taskId);
+    } catch {
+      // The same rule as the row above: the ending is the record, and a store that cannot write must
+      // not cost it. The next project change picks the task up.
+    }
     await this.record(live, { kind: "run.ended", exitCode, status });
     this.active.delete(live.run.id);
     // Kept for reading, not for control: `settled` is already true, so every mutating path refuses.
