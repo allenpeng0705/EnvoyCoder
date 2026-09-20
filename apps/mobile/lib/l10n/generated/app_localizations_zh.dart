@@ -311,36 +311,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPairingNotReached => '此手机尚未连接。';
 
   @override
-  String settingsPairingMinutesAgo(num count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 分钟前连接',
-      one: '1 分钟前连接',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String settingsPairingHoursAgo(num count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 小时前连接',
-      one: '1 小时前连接',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get settingsPairingJustNow => '刚刚连接';
 
   @override
   String get settingsPairingPhoneClock => '记录在此手机上，使用此手机的时钟。';
 
   @override
-  String settingsPairingOnDate(Object date) {
-    return '上次连接：$date';
+  String get settingsPairingLastSeenRecent => '刚刚连接。记录在此手机上，使用此手机的时钟。';
+
+  @override
+  String settingsPairingLastSeenOn(Object date) {
+    return '上次连接：$date。记录在此手机上，使用此手机的时钟。';
   }
 
   @override

@@ -79,6 +79,14 @@ describe("the plan a supervisor gets", () => {
     expect(windows?.install[0]?.args).toContain(label);
   });
 
+  it("asks the Task Scheduler for the invariant XML first, then the localized LIST as a hint", () => {
+    const windows = servicePlan(input("windows"));
+    expect(windows?.status.map((step) => step.args.join(" "))).toEqual([
+      `/Query /TN ${label} /XML`,
+      `/Query /TN ${label} /FO LIST`,
+    ]);
+  });
+
   it("has no plan for a platform this build cannot install on", () => {
     expect(servicePlan(input("other"))).toBeUndefined();
   });
@@ -129,6 +137,19 @@ describe("installing", () => {
     expect(status).toMatchObject({ state: "running", enabled: true, pid: 99 });
   });
 
+  it("runs both Windows status questions and keeps the XML answer as the fact", async () => {
+    const { io, calls } = fakeIo([
+      { code: 0, stdout: `<Task><Settings><Enabled>true</Enabled></Settings></Task>` },
+      { code: 0, stdout: "Status:        Running\n" },
+    ]);
+    const status = await readServiceStatus(io, input("windows"));
+    expect(calls.map((step) => step.args.join(" "))).toEqual([
+      `/Query /TN ${label} /XML`,
+      `/Query /TN ${label} /FO LIST`,
+    ]);
+    expect(status).toMatchObject({ state: "running", enabled: true });
+  });
+
   it("cannot install on a platform it does not understand, and says so rather than guessing", async () => {
     const { io, calls } = fakeIo();
     expect(await installService(io, input("other"))).toEqual({
@@ -142,7 +163,12 @@ describe("installing", () => {
 
 describe("uninstalling and restarting", () => {
   it("unloads before deleting the file, and tolerates a service that was not there", async () => {
-    const { io, calls, files } = fakeIo([{ code: 1, stderr: "Could not find service" }, { code: 113 }]);
+    // The status read that follows is launchd's own words: the exit code alone is not an absence any more, so the
+    // fixture carries the sentence the supervisor prints.
+    const { io, calls, files } = fakeIo([
+      { code: 1, stderr: "Could not find service" },
+      { code: 113, stderr: "Could not find service" },
+    ]);
     const status = await uninstallService(io, input("macos"));
     expect(calls[0]?.args[0]).toBe("bootout");
     expect(files.size).toBe(0);
@@ -165,7 +191,25 @@ describe("what the supervisors each mean", () => {
       state: "installed-stopped",
       enabled: true,
     });
+    // macOS 15 says `state = not running` rather than `state = waiting`, and both are a loaded job between runs.
+    expect(parseServiceStatus("launchd", 0, "state = not running\n", "")).toMatchObject({
+      state: "installed-stopped",
+    });
     expect(parseServiceStatus("launchd", 0, "something else\n", "")).toMatchObject({ state: "unknown" });
+  });
+
+  it("does not read 'I could not ask' as 'not installed'", () => {
+    // `launchctl print` answers `Bad request.` when there is no `gui/<uid>` domain (SSH, no GUI session), and it
+    // exits 127 when `launchctl` itself is missing. Both mean we could not ask, not that the service is gone, and
+    // the exit code alone cannot tell them apart from launchd's not-found words.
+    expect(parseServiceStatus("launchd", 113, "", "Bad request.")).toMatchObject({ state: "unknown" });
+    expect(parseServiceStatus("launchd", 127, "", "spawn launchctl ENOENT")).toMatchObject({ state: "unknown" });
+    // `schtasks /Query` fails the same way on access denied and on a stopped Task Scheduler, with a task that may
+    // well be installed and running.
+    expect(parseServiceStatus("schtasks", 1, "", "ERROR: Access is denied.")).toMatchObject({ state: "unknown" });
+    expect(parseServiceStatus("schtasks", 1, "", "ERROR: The Task Scheduler service is not running.")).toMatchObject({
+      state: "unknown",
+    });
   });
 
   it("reads systemd, which says absent with exit 0", () => {
@@ -181,15 +225,52 @@ describe("what the supervisors each mean", () => {
     ).toMatchObject({ state: "installed-stopped", enabled: false });
   });
 
-  it("reads the Task Scheduler, which reports status in a sentence", () => {
-    expect(parseServiceStatus("schtasks", 1, "", "ERROR: cannot find")).toMatchObject({
+  it("does not turn a UnitFileState it cannot classify into a login promise either way", () => {
+    const parse = (unitFileState: string) =>
+      parseServiceStatus(
+        "systemd",
+        0,
+        `LoadState=loaded\nActiveState=inactive\nUnitFileState=${unitFileState}\n`,
+        "",
+      );
+    // `enabled` and `disabled` are facts; `static` has no `[Install]` for `enable` to promise anything with, and an
+    // empty state is a transient unit. Saying `false` there told the window "not set to start when you log in"
+    // about a unit nothing had established that about.
+    expect(parse("enabled").enabled).toBe(true);
+    expect(parse("disabled").enabled).toBe(false);
+    expect(parse("masked").enabled).toBe(false);
+    expect(parse("static").enabled).toBeUndefined();
+    expect(parse("indirect").enabled).toBeUndefined();
+    expect(parse("").enabled).toBeUndefined();
+  });
+
+  it("reads the Task Scheduler's invariant XML, and treats a localized Status as a hint only", () => {
+    const xml = (enabled: string) => `<Task><Settings><Enabled>${enabled}</Enabled></Settings></Task>`;
+    // `Scheduled Task State` is only printed with `/V`, which the plan never asked for, so `enabled` used to be
+    // false for every task. `<Settings><Enabled>` is a boolean with no translation.
+    expect(parseServiceStatus("schtasks", 0, xml("true"), "", { code: 0, stdout: "Status:        Running\n" })).toMatchObject(
+      { state: "running", enabled: true },
+    );
+    expect(parseServiceStatus("schtasks", 0, xml("false"), "", { code: 0, stdout: "Status:        Ready\n" })).toMatchObject(
+      { state: "installed-stopped", enabled: false },
+    );
+    // German prints `Wird ausgeführt` under the same `Status:` label. Mapping it to "stopped" would be a wrong state
+    // rather than an admitted unknown; the enabled fact from the XML still stands.
+    expect(
+      parseServiceStatus("schtasks", 0, xml("true"), "", { code: 0, stdout: "Status:        Wird ausgeführt\n" }),
+    ).toMatchObject({ state: "unknown", enabled: true });
+    // A Chinese build labels the field differently, so there is no word to read at all.
+    expect(
+      parseServiceStatus("schtasks", 0, xml("true"), "", { code: 0, stdout: "状态:  正在运行\n" }),
+    ).toMatchObject({ state: "unknown", enabled: true });
+    // No second answer at all: installed, and which run state it is in is not something this answer says.
+    expect(parseServiceStatus("schtasks", 0, xml("true"), "")).toMatchObject({ state: "unknown", enabled: true });
+    // The known not-found words still report absence.
+    expect(parseServiceStatus("schtasks", 1, "", "ERROR: The system cannot find the file specified.")).toMatchObject({
       state: "not-installed",
     });
-    expect(
-      parseServiceStatus("schtasks", 0, "TaskName:      x\nStatus:        Running\nScheduled Task State: Enabled\n", ""),
-    ).toMatchObject({ state: "running", enabled: true });
-    expect(
-      parseServiceStatus("schtasks", 0, "Status:        Ready\nScheduled Task State: Disabled\n", ""),
-    ).toMatchObject({ state: "installed-stopped", enabled: false });
+    expect(parseServiceStatus("schtasks", 1, "", 'ERROR: The specified task name "x" does not exist in the system.')).toMatchObject(
+      { state: "not-installed" },
+    );
   });
 });

@@ -3,8 +3,9 @@
  *
  * `npm run service:proof` — **not** part of `npm run gates`, for the same reason `npm run smoke` is not: it
  * installs a genuine supervisor job (a launchd agent, a systemd user unit), starts a real daemon from a real
- * installed payload, and kills that daemon to watch the supervisor bring it back. That is the only proof that
- * catches what unit tests cannot, and this file exists because it caught two things reading had not:
+ * installed payload, kills that daemon to watch the supervisor bring it back, and then stops it cleanly to watch
+ * the supervisor leave it down. That is the only proof that catches what unit tests cannot, and this file exists
+ * because it caught two things reading had not:
  *
  *   * `launchctl bootout gui/501 <label>` — the domain and the label as two arguments — boots nothing out and
  *     says nothing, so an uninstall reported success and left the service *running*.
@@ -17,10 +18,12 @@
  *     person's own session and nothing loads at their next login;
  *   * the daemon runs against a **temporary shared home**, so it has its own claim, state and port;
  *   * the one deviation from the product's plist text is an injected `ENVOYDEV_DAEMON_PORT=0`, so the proof cannot
- *     collide with a daemon the owner is already running on the default port. The plist text itself is proven
- *     byte-for-byte by `packages/platform/test/service.test.ts`;
- *   * a `finally` block boots the job out, so a failure half way through cannot leave a job that restarts forever
- *     against a directory that is about to be deleted.
+ *     collide with a daemon the owner is already running on the default port. `packages/platform/test/service.test.ts`
+ *     pins the text's shape by `toContain` on its own fixture paths, not these bytes, so the checks below read the
+ *     installed file and are what pins *this* plist;
+ *   * `finally` **and** a `SIGINT`/`SIGTERM` handler boot the job out and remove the temporary homes, because
+ *     `finally` does not run when Ctrl-C stops the proof, and a job left loaded would restart forever against a
+ *     directory that is about to be deleted.
  *
  * It needs a **packaged** daemon bundle (`ENVOYDEV_DAEMON_PACKAGE=1`), installs it as a payload into its own
  * temporary home, and points the unit at that payload — not at the checkout's build directory, which is the path
@@ -32,7 +35,7 @@
 
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -94,13 +97,23 @@ const payload = payloadPaths(versionDir(paths, version));
 console.log(`payload ${version}: ${payload.entry}`);
 // The product's unit file, with one extra environment key: port 0 lets the proof's daemon pick its own port
 // instead of fighting a daemon the owner may already be running on the default one.
+//
+// The injection is a string replacement, so it would silently no-op the day the plist's marker changes — and the
+// proof would then fight the owner's daemon on the default port while claiming to have exercised the real text.
+// It refuses instead, and the check below reads the installed file to prove the replacement landed.
+const injectedKey = "<key>ENVOYDEV_DAEMON_PORT</key>";
 const io: ServiceIo = {
   ...realServiceIo,
-  writeFile: (path, contents) =>
-    realServiceIo.writeFile(
+  writeFile: (path, contents) => {
+    const marker = "<key>ENVOYMESH_HOME</key>";
+    if (!contents.includes(marker)) {
+      throw new Error(`the plist no longer contains ${marker}, so the proof's port injection cannot be applied`);
+    }
+    return realServiceIo.writeFile(
       path,
-      contents.replace("<key>ENVOYMESH_HOME</key>", "<key>ENVOYDEV_DAEMON_PORT</key>\n    <string>0</string>\n    <key>ENVOYMESH_HOME</key>"),
-    ),
+      contents.replace(marker, `${injectedKey}\n    <string>0</string>\n    ${marker}`),
+    );
+  },
 };
 
 const input = {
@@ -113,6 +126,34 @@ const input = {
   uid: process.getuid?.() ?? 0,
   label: "dev.envoy.envoydev.daemon.proof",
 };
+
+/**
+ * Put the machine back the way it was found: no loaded job, no temporary homes, no marker an older run left in
+ * `/tmp`. Runs once, from `finally` or from a signal, and is idempotent so both paths can call it.
+ */
+const markerPath = join(tmpdir(), "envoydev-service-proof-done");
+let cleaned = false;
+async function cleanup(): Promise<void> {
+  if (cleaned) return;
+  cleaned = true;
+  // Belt and braces: a stray job from a failed run would restart forever against a deleted program.
+  await realServiceIo.run({ command: "launchctl", args: ["bootout", `gui/${input.uid}/${input.label}`], tolerate: "failure" });
+  await rm(home, { recursive: true, force: true });
+  await rm(userHome, { recursive: true, force: true });
+  // Nothing reads the completion marker, and a stale one left in /tmp is litter that makes the next run look done
+  // before it started.
+  await rm(markerPath, { force: true });
+}
+
+// `finally` does not run when a signal ends the process, and Ctrl-C is how a person stops a proof that installed a
+// real supervisor job: without these the job stays loaded and restarts forever against a home about to be deleted.
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.on(signal, () => {
+    void cleanup()
+      .catch(() => undefined)
+      .then(() => process.exit(signal === "SIGINT" ? 130 : 143));
+  });
+}
 
 try {
   const before = await readServiceStatus(io, input);
@@ -135,6 +176,13 @@ try {
   check("the plist is where launchd looks", text.includes("<key>KeepAlive</key>"));
   check("the plist runs the --managed-by service form", text.includes("--managed-by") && text.includes("<string>service</string>"));
   check("the plist passes the home the app reads", text.includes(home));
+  // The injection is a replacement over the plist text; if the marker moved, the first check above would still pass
+  // on the un-injected file and the proof's daemon would land on the owner's default port. Reading the installed
+  // file is what proves the replacement actually happened.
+  check(
+    "the port injection reached the installed plist",
+    text.includes(injectedKey) && text.includes("<string>0</string>"),
+  );
 
   // `launchctl print` says "running" as soon as the process exists, which is before the daemon has published its
   // claim — so wait for the file rather than for the supervisor's opinion about the process.
@@ -161,6 +209,33 @@ try {
     return status.state === "running" && status.pid !== undefined && status.pid !== claim.pid ? status : undefined;
   });
   check("launchd restarts a crashed daemon (KeepAlive)", restarted.pid !== claim.pid, `pid ${claim.pid} -> ${restarted.pid}`);
+  // The predicate above proved a pid is present; narrowing it here keeps `process.kill` honest rather than casting.
+  const restartedPid = restarted.pid;
+  if (restartedPid === undefined) throw new Error("launchd brought the daemon back without reporting a pid");
+
+  // The other half of `KeepAlive { SuccessfulExit: false }`, and the half the stop button relies on: a deliberate
+  // stop must *stay* stopped. SIGTERM is the daemon's clean path — it drains and exits 0 — so launchd must not bring
+  // it back, or the switch's "stop" and the app's own quit would be undone by the supervisor.
+  process.kill(restartedPid, "SIGTERM");
+  const stopped = await waitFor("the daemon to exit on SIGTERM", 20_000, async () => {
+    try {
+      process.kill(restartedPid, 0);
+      return undefined;
+    } catch {
+      return true;
+    }
+  }).catch(() => undefined);
+  check("a clean stop takes the daemon down", stopped === true, `pid ${restartedPid}`);
+  // `ThrottleInterval` is 10s, so a relaunch — if the policy were wrong — would appear inside this window.
+  const relaunched = await waitFor("launchd to relaunch a deliberately stopped daemon", 12_000, async () => {
+    const status = await readServiceStatus(io, input);
+    return status.state === "running" ? status : undefined;
+  }).catch(() => undefined);
+  check(
+    "a clean stop stays down (SuccessfulExit=false)",
+    relaunched === undefined,
+    relaunched?.pid === undefined ? "" : `it came back as pid ${relaunched.pid}`,
+  );
 
   const removed = await uninstallService(io, input);
   check("the plist is gone", await readFile(plist, "utf8").then(() => false, () => true));
@@ -173,17 +248,15 @@ try {
   check("launchd no longer has the service", unloaded !== undefined, (unloaded ?? removed).detail.split("\n")[0]);
   const died = await waitFor("the restarted daemon to exit", 20_000, async () => {
     try {
-      process.kill(restarted.pid, 0);
+      process.kill(restartedPid, 0);
       return undefined;
     } catch {
       return true;
     }
   }).catch(() => undefined);
-  check("the daemon launchd started is gone too", died === true, `pid ${restarted.pid}`);
+  check("the daemon launchd started is gone too", died === true, `pid ${restartedPid}`);
 } finally {
-  // Belt and braces: a stray job from a failed run would restart forever against a deleted program.
-  await realServiceIo.run({ command: "launchctl", args: ["bootout", `gui/${input.uid}/${input.label}`], tolerate: "failure" });
-  await writeFile(join(tmpdir(), "envoydev-service-proof-done"), new Date().toISOString());
+  await cleanup();
 }
 
 console.log(fail.length === 0 ? "\nservice proof: all checks passed" : `\nservice proof: ${fail.length} FAILED — ${fail.join(", ")}`);

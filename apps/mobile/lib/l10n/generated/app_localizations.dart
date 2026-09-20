@@ -654,18 +654,6 @@ abstract class AppLocalizations {
   /// **'Not connected on this phone yet.'**
   String get settingsPairingNotReached;
 
-  /// settings.pairing.minutesAgo — {count, plural, =1{Last connected 1 minute ago} other{Last connected {count} minutes ago}}
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{Last connected 1 minute ago} other{Last connected {count} minutes ago}}'**
-  String settingsPairingMinutesAgo(num count);
-
-  /// settings.pairing.hoursAgo — {count, plural, =1{Last connected 1 hour ago} other{Last connected {count} hours ago}}
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{Last connected 1 hour ago} other{Last connected {count} hours ago}}'**
-  String settingsPairingHoursAgo(num count);
-
   /// settings.pairing.justNow — Last connected just now
   ///
   /// In en, this message translates to:
@@ -678,11 +666,17 @@ abstract class AppLocalizations {
   /// **'Recorded on this phone, from this phone\'s clock.'**
   String get settingsPairingPhoneClock;
 
-  /// settings.pairing.onDate — Last connected {date}
+  /// settings.pairing.LastSeenRecent — Last connected just now. Recorded on this phone, from this phone's clock.
   ///
   /// In en, this message translates to:
-  /// **'Last connected {date}'**
-  String settingsPairingOnDate(Object date);
+  /// **'Last connected just now. Recorded on this phone, from this phone\'s clock.'**
+  String get settingsPairingLastSeenRecent;
+
+  /// settings.pairing.LastSeenOn — Last connected {date}. Recorded on this phone, from this phone's clock.
+  ///
+  /// In en, this message translates to:
+  /// **'Last connected {date}. Recorded on this phone, from this phone\'s clock.'**
+  String settingsPairingLastSeenOn(Object date);
 
   /// settings.approvals — The approval switch.
   ///

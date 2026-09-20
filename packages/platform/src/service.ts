@@ -19,13 +19,15 @@
  *     action in the product. Starting before anyone logs in needs a privileged step on macOS and Windows — a
  *     LaunchDaemon, stored credentials — which is a decision for the person installing it, not a default.
  *   * **Restart on failure, never on a clean stop.** A deliberate stop exits `0`; `KeepAlive { SuccessfulExit: false }`
- *     and systemd's `Restart=always` with `RestartPreventExitStatus=4` (this family's damaged-profile code) mean
- *     "bring it back when it crashed, and leave it down when I meant it". A supervisor that ignored that distinction
- *     would fight the user.
+ *     and systemd's `Restart=always` with `RestartPreventExitStatus=0 4` (`0` is a deliberate stop, `4` is this
+ *     family's damaged-profile code) mean "bring it back when it crashed, and leave it down when I meant it". A
+ *     supervisor that ignored that distinction would fight the user.
  *   * **Throttle, so a crash loop is not a storm.** launchd's minimum `ThrottleInterval` and systemd's `RestartSec`
  *     are set explicitly rather than left to defaults.
- *   * **Logs go where the daemon already writes them**, so one directory holds the whole story of a restarted daemon:
- *     the log, the restart ledger and the heartbeat file.
+ *   * **Logs go where each platform can put them.** launchd redirects stdout and stderr to the plist's
+ *     `StandardOutPath`/`StandardErrorPath`, so macOS gets the daemon's output *and* its own log, restart ledger and
+ *     heartbeat in one directory; systemd collects the output in the journal; the Task Scheduler's XML has no
+ *     redirection, so on Windows the daemon's own log under the product's state is the only record.
  */
 
 // Type-only: erased at runtime, so the barrel that re-exports this module is not a runtime cycle.
@@ -68,9 +70,30 @@ function xml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** systemd splits `ExecStart` on whitespace, so a path with a space must be quoted. */
+/**
+ * A value for `ExecStart`.
+ *
+ * systemd parses the command line itself: it splits on whitespace, applies C-style escapes even to an unquoted
+ * word, and only then expands `$VAR` and `%` specifiers — so a home containing `\`, `$` or `%` is mangled even when
+ * it contains no space, and quoting only the values with a space was never enough. Always quote, and double the
+ * backslash (the table's C escapes), the quote, the dollar (a literal `$` is `$$`) and the percent (`%%`).
+ */
 function systemdArg(value: string): string {
-  return /[\s"']/.test(value) ? `"${value.replace(/(["\\])/g, "\\$1")}"` : value;
+  return `"${value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\$/g, () => "$$")
+    .replace(/%/g, "%%")}"`;
+}
+
+/**
+ * A value for `Environment=`.
+ *
+ * The same quoting minus the `$` doubling: `Environment=` does not expand variables — the manual's own example
+ * keeps `$word` literal — but `%` is still a specifier there, so it (and `\`/`"`) must still be doubled/escaped.
+ */
+function systemdEnvironment(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/%/g, "%%")}"`;
 }
 
 /**
@@ -140,7 +163,7 @@ Description=EnvoyDev daemon (${label})
 [Service]
 Type=simple
 ExecStart=${command}
-Environment=ENVOYMESH_HOME=${systemdArg(input.home)}
+Environment=ENVOYMESH_HOME=${systemdEnvironment(input.home)}
 # Restart when it failed; exit 4 is this family's damaged-profile code, which no restart can fix, and exit 0 is a
 # deliberate stop. Restarting either would fight the person who stopped it.
 Restart=always
@@ -164,7 +187,7 @@ function schtasksDefinition(input: ServiceDefinitionInput, label: string): Servi
     kind: "schtasks",
     label,
     relativePath: `AppData/Local/EnvoyDev/${label}.xml`,
-    contents: `<?xml version="1.0" encoding="UTF-16"?>
+    contents: `<?xml version="1.0" encoding="UTF-8"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
     <Description>EnvoyDev daemon</Description>
@@ -187,6 +210,9 @@ function schtasksDefinition(input: ServiceDefinitionInput, label: string): Servi
       <Interval>PT1M</Interval>
       <Count>3</Count>
     </RestartOnFailure>
+    <!-- Both battery defaults are wrong for a daemon whose whole point is to keep answering: the scheduler's
+         defaults would refuse to start the task on battery and stop it when the laptop unplugs. -->
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
     <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
   </Settings>

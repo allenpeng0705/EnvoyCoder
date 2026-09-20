@@ -62,6 +62,6 @@ export const service: Catalogue = {
   "settings.service.log.title": "デーモンのログ",
   "settings.service.log.reading": "ログを読み込んでいます…",
   "settings.service.log.refresh": "更新",
-  "settings.service.log.truncated": "最後の 200 行のみ表示しています。ログはさらに長いです。",
-  "settings.service.log.empty": "ログファイルはまだありません — このマシンではまだ何も書き込んでいません。",
+  "settings.service.log.truncated": "ログの末尾を表示しています — この前に続きがあります。",
+  "settings.service.log.empty": "ログにはまだ何も書き込まれていません。",
 };

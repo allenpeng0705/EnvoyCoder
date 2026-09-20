@@ -27,7 +27,7 @@
  *     naming, and **the absence of a record when something restarted is the diagnosis** — a deliberate stop
  *     always leaves one (`lifecycle.recordStop`).
  *
- * @see docs/daemon-lifecycle.md §10 — the Settings control this is half of.
+ * @see docs/daemon-lifecycle.md §11 — the Settings control this is half of, and what a paired phone may read.
  * @see docs/settings-parity.md §5.1 — the row that records where the control lives.
  */
 

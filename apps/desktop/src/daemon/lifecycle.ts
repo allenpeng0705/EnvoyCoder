@@ -168,3 +168,25 @@ export async function recordStop(
   );
   await rename(temp, file);
 }
+
+/**
+ * The restart facts a window is shown: how many starts preceded this one, and how the last process stopped.
+ *
+ * **Why this is a function and not a subtraction at the call site.** The ledger's newest row is *this* process —
+ * `recordBoot` appended it when the daemon reached the point of serving — so the raw `bootsInLastHour` counts this
+ * start as a restart, and a perfectly healthy daemon reported "Restarted once in the last hour" on its first day.
+ * Worse, on a fresh home there is no stop record either, so the same daemon also got the sentence for a crash that
+ * never happened. Both are user-facing claims, and both were false in the most ordinary state there is.
+ *
+ * `recordBoot` already returns the right number (it computes the facts from *before* the new row); this exists so
+ * the count and `lastStop` are read from one place and cannot describe different histories.
+ */
+export function serviceFactsFrom(facts: LifecycleFacts): {
+  restartsInLastHour: number;
+  lastStop?: { at: string; signal: string; exitCode?: number };
+} {
+  return {
+    restartsInLastHour: Math.max(0, facts.bootsInLastHour - 1),
+    ...(facts.lastStop ? { lastStop: facts.lastStop } : {}),
+  };
+}

@@ -9,8 +9,9 @@
  * disables every button** so a supervisor cannot be asked twice for the same change.
  *
  * Stop gets its own cases because its answer is not a status. `coder.shutdown` is acknowledged and then the
- * daemon exits, so the follow-up read can fail — and that failure has to read as *stopped* on the row rather
- * than as a red line, which is the one place this control could turn "it did what you asked" into a scare.
+ * daemon drains for up to ten seconds; a re-read inside that window legitimately succeeds and says "running",
+ * so the row renders the stopped state from the **accepted answer** instead — the one place this control could
+ * turn "it did what you asked" into a lie about the machine.
  *
  * The pane renders through `SettingsPane` at the service scope rather than `ServiceSection` alone, because the
  * wiring under test includes the section registry and the pane's `switch` — a section registered in the bar
@@ -240,25 +241,24 @@ describe("Stop, beside Restart and Turn off", () => {
     expect(button(container, "uninstall").title).toBe(en["settings.service.action.turnOff.title"]);
   });
 
-  it("re-reads the status after a stop, and treats a read that cannot arrive as stopped", async () => {
-    // **The mutation this fails on:** rendering the failed read as a refusal. `coder.shutdown` answers and the
-    // daemon exits, so the socket closing is the *expected* next event; a red line there would report the
-    // press's success as a failure.
-    const running = service({ state: "running", enabled: true, pid: 9 });
+  it("renders the stopped state from the accepted answer, even when a re-read would still report it running", async () => {
+    // **The mutation this fails on:** re-reading the status after `coder.shutdown`. The daemon answers before it
+    // drains, so for up to ten seconds a real read *succeeds* and honestly says "running" — which restored the
+    // running row for a service the user had just stopped. The acknowledgement is the state; a later visit to
+    // the page is what corrects it if the daemon really is still there.
+    const runningNow = service({ state: "running", enabled: true, pid: 9 });
     const shutdown = vi.fn(async () => ({ ok: true as const, stopping: true as const }));
-    const getServiceStatus = vi
-      .fn()
-      .mockResolvedValueOnce({ ok: true as const, service: running })
-      .mockResolvedValueOnce({ ok: false as const, message: "The daemon closed the connection." });
-    const { container } = show(running, { shutdown, getServiceStatus });
+    // Deliberately the *success* case: the read the old code depended on, answering with the truth it saw.
+    const getServiceStatus = vi.fn(async () => ({ ok: true as const, service: runningNow }));
+    const { container } = show(runningNow, { shutdown, getServiceStatus });
     await ready(container);
 
     fireEvent.click(button(container, "stop"));
     await waitFor(() => expect(shutdown).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(getServiceStatus).toHaveBeenCalledTimes(2));
-    // It is installed and will return at the next login — the honest reading of a daemon that has gone.
     expect(await screen.findByText(en["settings.service.state.installedStopped.title"])).toBeTruthy();
     expect(screen.getByText(en["settings.service.state.installedStopped.atLogin"])).toBeTruthy();
+    // The page's own load is the only status read: a stop does not ask a second time.
+    expect(getServiceStatus).toHaveBeenCalledTimes(1);
     expect(container.querySelector(".setting__failure")).toBeNull();
   });
 
@@ -277,7 +277,10 @@ describe("Stop, beside Restart and Turn off", () => {
 });
 
 describe("what the presses do", () => {
-  it("calls the call the button names, and adopts the status it returns", async () => {
+  it("calls the call the button names, and re-enables the row when the answer lands", async () => {
+    // Adoption — the returned status becoming `state.service` — is asserted at its own seam in
+    // `service-store.test.ts`; here the subject is the wiring: the button reaches the call it names, and the
+    // busy slot clears so the row is usable again.
     const installed = service({ state: "running", enabled: true, pid: 7 });
     const installService = vi.fn(async () => ({ ok: true as const, service: installed }));
     const { container } = show(service({ state: "not-installed" }), { installService });

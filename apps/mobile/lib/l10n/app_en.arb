@@ -408,14 +408,6 @@
   "@settingsPairingNotReached": {
     "description": "settings.pairing.notReached — Not connected on this phone yet."
   },
-  "settingsPairingMinutesAgo": "{count, plural, =1{Last connected 1 minute ago} other{Last connected {count} minutes ago}}",
-  "@settingsPairingMinutesAgo": {
-    "description": "settings.pairing.minutesAgo — {count, plural, =1{Last connected 1 minute ago} other{Last connected {count} minutes ago}}"
-  },
-  "settingsPairingHoursAgo": "{count, plural, =1{Last connected 1 hour ago} other{Last connected {count} hours ago}}",
-  "@settingsPairingHoursAgo": {
-    "description": "settings.pairing.hoursAgo — {count, plural, =1{Last connected 1 hour ago} other{Last connected {count} hours ago}}"
-  },
   "settingsPairingJustNow": "Last connected just now",
   "@settingsPairingJustNow": {
     "description": "settings.pairing.justNow — Last connected just now"
@@ -424,9 +416,13 @@
   "@settingsPairingPhoneClock": {
     "description": "settings.pairing.phoneClock — Recorded on this phone, from this phone's clock."
   },
-  "settingsPairingOnDate": "Last connected {date}",
-  "@settingsPairingOnDate": {
-    "description": "settings.pairing.onDate — Last connected {date}"
+  "settingsPairingLastSeenRecent": "Last connected just now. Recorded on this phone, from this phone's clock.",
+  "@settingsPairingLastSeenRecent": {
+    "description": "settings.pairing.LastSeenRecent — Last connected just now. Recorded on this phone, from this phone's clock."
+  },
+  "settingsPairingLastSeenOn": "Last connected {date}. Recorded on this phone, from this phone's clock.",
+  "@settingsPairingLastSeenOn": {
+    "description": "settings.pairing.LastSeenOn — Last connected {date}. Recorded on this phone, from this phone's clock."
   },
   "settingsApprovals": "Ask before anything destructive",
   "@settingsApprovals": {

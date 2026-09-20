@@ -132,6 +132,20 @@ describe("the login promise", () => {
   });
 });
 
+describe("the log tail's copy", () => {
+  it("repeats neither of the daemon's two bounds, so neither number can go stale", () => {
+    // **The mutation this fails on:** putting a number back into the truncation sentence. The daemon bounds the
+    // read by bytes *and* lines (`daemon/log-tail.ts` owns both), so a byte-truncated read can show far fewer
+    // than the line limit — a sentence naming either number is wrong for the other bound, and the number was
+    // already stale once (200 lines while the file showed 31). A digit anywhere here is the drift returning.
+    expect(en["settings.service.log.truncated"]).not.toMatch(/\d/);
+    expect(en["settings.service.log.empty"]).not.toMatch(/\d/);
+    // And the empty state must be true of a file that exists but is empty as well as one that is absent: the
+    // wire says `lines: []` for both, so claiming "no log file" describes only one of them.
+    expect(en["settings.service.log.empty"]).not.toMatch(/file/i);
+  });
+});
+
 describe("the presses a state allows", () => {
   it("offers only what the state can honestly do", () => {
     // **The mutation this fails on:** rendering the same on/off pair for every state — the dead switch this

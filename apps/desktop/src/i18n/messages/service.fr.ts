@@ -62,6 +62,6 @@ export const service: Catalogue = {
   "settings.service.log.title": "Journal du démon",
   "settings.service.log.reading": "Lecture du journal…",
   "settings.service.log.refresh": "Actualiser",
-  "settings.service.log.truncated": "Seules les 200 dernières lignes sont affichées. Le journal est plus long.",
-  "settings.service.log.empty": "Pas encore de journal — rien n'en a écrit sur cette machine.",
+  "settings.service.log.truncated": "Fin du journal affichée — il y a davantage avant.",
+  "settings.service.log.empty": "Rien n'a encore été écrit dans le journal.",
 };

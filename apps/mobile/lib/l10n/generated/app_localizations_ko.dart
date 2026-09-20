@@ -314,36 +314,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsPairingNotReached => '이 휴대폰에서는 아직 연결되지 않았습니다.';
 
   @override
-  String settingsPairingMinutesAgo(num count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count분 전 연결',
-      one: '1분 전 연결',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String settingsPairingHoursAgo(num count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count시간 전 연결',
-      one: '1시간 전 연결',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get settingsPairingJustNow => '방금 연결됨';
 
   @override
   String get settingsPairingPhoneClock => '이 휴대폰에 이 휴대폰의 시계로 기록되었습니다.';
 
   @override
-  String settingsPairingOnDate(Object date) {
-    return '마지막 연결 $date';
+  String get settingsPairingLastSeenRecent =>
+      '방금 연결됨. 이 휴대폰에 이 휴대폰의 시계로 기록되었습니다.';
+
+  @override
+  String settingsPairingLastSeenOn(Object date) {
+    return '마지막 연결 $date. 이 휴대폰에 이 휴대폰의 시계로 기록되었습니다.';
   }
 
   @override

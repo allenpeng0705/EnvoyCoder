@@ -69,14 +69,10 @@ class PairingRecord {
 /// `shared_preferences` — the same rule `HostStore` follows, and the reason a prefs dump is not a
 /// credential dump.
 class PairingStore {
-  PairingStore({
-    FlutterSecureStorage? secure,
-    DateTime Function()? clock,
-  })  : _secure = secure ?? const FlutterSecureStorage(),
-        _clock = clock ?? DateTime.now;
+  PairingStore({FlutterSecureStorage? secure})
+      : _secure = secure ?? const FlutterSecureStorage();
 
   final FlutterSecureStorage _secure;
-  final DateTime Function() _clock;
 
   /// Records written or read in this launch, so a reconnect does not pay a keychain round trip (or a
   /// write) for a fact that has not changed. A `clear` removes the entry rather than leaving a stale
@@ -109,8 +105,8 @@ class PairingStore {
 
   /// Remember the [token] this daemon issued, and stamp the moment that is being attempted.
   ///
-  /// A token re-recorded unchanged does not touch storage: reconnects are the common case, and the
-  /// only fact that moves is `lastSeenAt` — which [markSeen] owns, so one connect does one write.
+  /// One write per accepted hello, and this is the only writer of `lastSeenAt` — a token re-recorded
+  /// with the same identity and the same instant does not touch storage at all.
   ///
   /// Best-effort, like `installId`: a pairing that cannot be written must not fail the connection
   /// that just succeeded. The in-memory copy still serves this launch.
@@ -151,20 +147,13 @@ class PairingStore {
     }
   }
 
-  /// Stamp [daemonKey] as connected at [at] (default now), for the Settings surface.
-  Future<void> markSeen(String daemonKey, {DateTime? at}) async {
-    final current = _memo[daemonKey] ?? await pairingFor(daemonKey);
-    if (current == null || current.token.isEmpty) return;
-    await record(daemonKey, current.token,
-        instanceId: current.instanceId, at: at ?? _clock());
-  }
-
   /// Retire a pairing the daemon has refused — a revoked or expired token.
   ///
-  /// The record is **deleted**, not flagged: a token the daemon has rejected has no value this phone
-  /// can use, and leaving it stored is what makes a rejected credential get offered again on the next
-  /// dial. Deleting is also what makes the fallback single-shot — after this call there is nothing
-  /// left to present, so the flow cannot loop.
+  /// The record is **deleted**, not flagged. That is about not *re-offering* a dead grant: leaving it
+  /// stored is what makes a rejected credential go back on the wire on the next dial. It is not what
+  /// keeps the fallback single-shot — the guard against a clear-and-retry loop is the caller's own
+  /// one-shot flag (`HostClient._pairingRefused`), because a host row can hold the same dead
+  /// credential and this store has no way to know that.
   Future<void> clear(String daemonKey) async {
     _memo.remove(daemonKey);
     try {
@@ -173,18 +162,6 @@ class PairingStore {
       // A delete that failed leaves the record, but the memo is gone for this launch; the daemon's
       // refusal is what decides the next step either way.
     }
-  }
-
-  /// Every pairing recorded for [daemonKeys] that this phone actually holds a token for.
-  ///
-  /// One key, one read; absent keys are simply not in the map. A caller with no keys does no I/O.
-  Future<Map<String, PairingRecord>> pairingsFor(Iterable<String> daemonKeys) async {
-    final found = <String, PairingRecord>{};
-    for (final key in daemonKeys) {
-      final record = await pairingFor(key);
-      if (record != null && record.token.isNotEmpty) found[key] = record;
-    }
-    return found;
   }
 
   static PairingRecord? _decode(String? raw) {

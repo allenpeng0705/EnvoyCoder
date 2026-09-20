@@ -24,10 +24,11 @@ describe("a service definition says how to run the daemon without the app", () =
   it("always passes --managed-by service, which is what makes the window leave it running", () => {
     // The daemon's claim records this, and the shell only stops a pid it started itself. Drop the flag and the
     // window silently starts killing a service it no longer owns.
-    // launchd takes the arguments as separate array entries, so the pair is split by tags there.
+    // launchd takes the arguments as separate array entries, so the pair is split by tags there; systemd's
+    // `ExecStart` quotes every argument, and the task's raw command line only quotes the ones with a space.
     const flagThenValue = {
       macos: "--managed-by</string>\n    <string>service</string>",
-      linux: "--managed-by service",
+      linux: '"--managed-by" "service"',
       windows: "--managed-by service",
     } as const;
     for (const platform of ["macos", "linux", "windows"] as const) {
@@ -93,6 +94,18 @@ describe("the systemd user unit", () => {
     });
     expect(contents).toContain('ExecStart="/home/anna/Envoy Dev/runtime/node"');
   });
+
+  it("always quotes and escapes, so a home systemd would expand is passed through literally", () => {
+    const home = String.raw`/home/a\b$c%d`;
+    const { contents } = define({ platform: "linux", home });
+    // ExecStart: a backslash is doubled (the C-escape table), `$` is doubled (a literal dollar is `$$`) and `%` is
+    // doubled (`%%`) — and the value is quoted even though it has no space, because systemd parses and expands an
+    // unquoted word too.
+    expect(contents).toContain(String.raw`"--home" "/home/a\\b$$c%%d"`);
+    // `Environment=` does not expand variables — the manual's own example keeps `$word` literal — but `%` is still a
+    // specifier there, so it is doubled while `$` is left alone.
+    expect(contents).toContain(String.raw`Environment=ENVOYMESH_HOME="/home/a\\b$c%%d"`);
+  });
 });
 
 describe("the Windows task", () => {
@@ -103,6 +116,22 @@ describe("the Windows task", () => {
     expect(contents).toContain("<LogonType>InteractiveToken</LogonType>");
     expect(contents).toContain("<RestartOnFailure>");
     expect(contents).toContain("<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>");
+  });
+
+  it("does not refuse to start, or stop, on battery, because a laptop is the normal case", () => {
+    const { contents } = define({ platform: "windows" });
+    // Both default to true in the Task Scheduler: `DisallowStartIfOnBatteries` refuses to start the task on a laptop
+    // on battery, and `StopIfGoingOnBatteries` kills it when the charger comes out.
+    expect(contents).toContain("<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>");
+    expect(contents).toContain("<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>");
+  });
+
+  it("declares the encoding it is actually written in", () => {
+    // `realServiceIo.writeFile` writes UTF-8 with no BOM. A UTF-16 declaration over those bytes makes expat say
+    // `encoding specified in XML declaration is incorrect` and .NET report no Unicode byte order mark, so
+    // `schtasks /Create /XML` refuses the file — while every string-level assertion above still passes.
+    expect(define({ platform: "windows" }).contents).toContain('<?xml version="1.0" encoding="UTF-8"?>');
+    expect(define({ platform: "windows" }).contents).not.toContain("UTF-16");
   });
 
   it("puts the flag in the action's arguments, where the task actually runs them", () => {

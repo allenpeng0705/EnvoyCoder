@@ -325,28 +325,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsPairingNotReached => 'Not connected on this phone yet.';
 
   @override
-  String settingsPairingMinutesAgo(num count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Last connected $count minutes ago',
-      one: 'Last connected 1 minute ago',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String settingsPairingHoursAgo(num count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Last connected $count hours ago',
-      one: 'Last connected 1 hour ago',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get settingsPairingJustNow => 'Last connected just now';
 
   @override
@@ -354,8 +332,12 @@ class AppLocalizationsEn extends AppLocalizations {
       'Recorded on this phone, from this phone\'s clock.';
 
   @override
-  String settingsPairingOnDate(Object date) {
-    return 'Last connected $date';
+  String get settingsPairingLastSeenRecent =>
+      'Last connected just now. Recorded on this phone, from this phone\'s clock.';
+
+  @override
+  String settingsPairingLastSeenOn(Object date) {
+    return 'Last connected $date. Recorded on this phone, from this phone\'s clock.';
   }
 
   @override

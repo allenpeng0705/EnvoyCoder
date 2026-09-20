@@ -330,8 +330,9 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     // The graceful stop a client can ask for, which is the only one Windows has.
     ...createShutdownHandlers(deps.shutdown ? { shutdown: deps.shutdown } : {}),
     // The service switch: whether this machine runs the daemon under a supervisor, and the three changes to it.
-    // The changes are owner-window-only, like minting a pairing code.
-    ...createSupervisorHandlers(deps.service ?? {}),
+    // The changes are owner-window-only, like minting a pairing code. The shutdown hook rides along so the
+    // switch can drain this daemon before a restart, and hand over after an install (`supervisor-rpc.ts`, §11).
+    ...createSupervisorHandlers({ ...deps.service, ...(deps.shutdown ? { shutdown: deps.shutdown } : {}) }),
     // The supervisor's question, answered from the instance facts `coder.hello` already uses.
     ...createHealthHandlers({
       instance: deps.instance,

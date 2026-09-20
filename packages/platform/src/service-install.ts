@@ -59,6 +59,10 @@ export interface ServicePlan {
   directories: string[];
   install: ServiceStep[];
   uninstall: ServiceStep[];
+  /**
+   * A relaunch, not a kill: the daemon asks the running daemon to stop first (the `coder.shutdown` path), so
+   * `kickstart -k`, `systemctl restart` and `/Run` start a fresh process rather than cutting a live run.
+   */
   restart: ServiceStep[];
   /** Ask the supervisor what it thinks. Its exit code and output are the only source of truth. */
   status: ServiceStep[];
@@ -159,7 +163,15 @@ function schtasksPlan(input: ServicePlanInput, definition: ServiceDefinition): S
       { command: "schtasks", args: ["/End", "/TN", definition.label], tolerate: "failure" },
       { command: "schtasks", args: ["/Run", "/TN", definition.label] },
     ],
-    status: [{ command: "schtasks", args: ["/Query", "/TN", definition.label, "/FO", "LIST"] }],
+    status: [
+      // The XML form is the invariant one: exit 0 means the task exists, and `<Settings><Enabled>` is a boolean the
+      // scheduler writes in every language. `Scheduled Task State` — which `/FO LIST` only prints with `/V` — is a
+      // translated string, and reading that without `/V` was why an enabled task always reported `enabled: false`.
+      { command: "schtasks", args: ["/Query", "/TN", definition.label, "/XML"] },
+      // The LIST form carries the run state, but only as a translated word (`Status: Running`, `Wird ausgeführt`,
+      // and a different field label again in Chinese): a hint the parse recognises or admits it does not.
+      { command: "schtasks", args: ["/Query", "/TN", definition.label, "/FO", "LIST"] },
+    ],
   };
 }
 
@@ -195,6 +207,56 @@ export function servicePlan(input: ServicePlanInput): ServicePlan | undefined {
   };
 }
 
+/** One supervisor answer. `stderr` is optional because a second answer is only ever read for its stdout. */
+export interface ServiceAnswer {
+  code: number;
+  stdout: string;
+  stderr?: string;
+}
+
+/**
+ * Whether systemd's `UnitFileState` promises the unit comes back at login, or `undefined` where the word is not a
+ * fact about the next login.
+ *
+ * `enabled`/`enabled-runtime` are the promise and `disabled`/`masked` are its refusal (a masked unit cannot start
+ * at all). Everything else — `static` (no `[Install]`, so `enable` cannot promise anything), `indirect`,
+ * `generated`, `transient`, and the empty value a transient unit has — is not a fact, and answering `true` or
+ * `false` there would put a sentence in the window the unit cannot honour.
+ */
+function unitFileEnabled(unitFileState: string): boolean | undefined {
+  if (["enabled", "enabled-runtime", "linked", "linked-runtime", "alias"].includes(unitFileState)) return true;
+  if (["disabled", "masked", "masked-runtime"].includes(unitFileState)) return false;
+  return undefined;
+}
+
+/** `enabled` omitted rather than present-and-undefined, so nothing downstream has to tell the two apart. */
+function withEnabled(enabled: boolean | undefined): { enabled?: boolean } {
+  return enabled === undefined ? {} : { enabled };
+}
+
+/**
+ * The Task Scheduler's own words for "there is no such task".
+ *
+ * Only the shapes that mean the *name* is absent. `/Query` also fails with `Access is denied`, and when the Task
+ * Scheduler service is stopped, and those say "I could not ask": reporting the task as absent would offer an
+ * install that cannot work and hide a machine whose scheduler is broken. The HRESULT is matched too because some
+ * builds print it instead of the sentence.
+ */
+function schtasksAbsent(text: string): boolean {
+  return /cannot find the file specified|0x80070002|does not exist in the system/i.test(text);
+}
+
+/**
+ * launchd's own words for "there is no such label".
+ *
+ * `launchctl print` also fails when it cannot be asked at all: with no `gui/<uid>` domain — SSH, no GUI session —
+ * it answers `Bad request.`, and matching the exit code alone would report a service as absent on a machine that
+ * never had a chance to load it.
+ */
+function launchdAbsent(text: string): boolean {
+  return /could not find (?:the )?(?:specified )?service|service not found|no such process/i.test(text);
+}
+
 /**
  * Read one supervisor's answer.
  *
@@ -202,22 +264,35 @@ export function servicePlan(input: ServicePlanInput): ServicePlan | undefined {
  * function exists: launchd and `schtasks` exit non-zero, while systemd exits **zero** and reports
  * `LoadState=not-found`. Treating a non-zero exit as an error in the first two, or a zero exit as success in the
  * third, would show somebody "failed" for a service that is simply not installed yet.
+ *
+ * A non-zero exit is not by itself an absence, either: a missing `gui` domain, an access denial and a stopped
+ * scheduler all exit non-zero for a service that may well be installed. Only the known not-found words mean
+ * `not-installed`; anything else is `unknown`, which is how the window says "we could not ask".
+ *
+ * `secondary` is the plan's second question, where one is not enough: Windows cannot report "running" in a
+ * locale-independent way, so the XML answer gives installed/enabled and the LIST answer is only a hint.
  */
 export function parseServiceStatus(
   kind: ServiceDefinition["kind"],
   code: number,
   stdout: string,
   stderr: string,
+  secondary?: ServiceAnswer,
 ): ServiceStatus {
   const detail = (code === 0 ? stdout : `${stdout}${stderr}`).trim();
 
   if (kind === "launchd") {
-    if (code !== 0) return { state: "not-installed", detail };
+    if (code !== 0) {
+      return launchdAbsent(`${stdout}\n${stderr}`)
+        ? { state: "not-installed", detail }
+        : { state: "unknown", detail };
+    }
     const pid = /pid = (\d+)/.exec(stdout);
     if (/state = running/.test(stdout)) {
       return { state: "running", enabled: true, ...(pid ? { pid: Number(pid[1]) } : {}), detail };
     }
-    // `state = waiting` is a loaded launchd job between runs — installed, and it will come back.
+    // `state = waiting` (older launchd) and `state = not running` (macOS 15) are a loaded job between runs —
+    // installed, and it will come back.
     if (/state = /.test(stdout)) return { state: "installed-stopped", enabled: true, detail };
     return { state: "unknown", detail };
   }
@@ -226,26 +301,36 @@ export function parseServiceStatus(
     if (code !== 0) return { state: "unknown", detail };
     const field = (name: string): string => new RegExp(`^${name}=(.*)$`, "m").exec(stdout)?.[1]?.trim() ?? "";
     if (field("LoadState") === "not-found") return { state: "not-installed", detail };
-    // `enabled-runtime` and `static` both mean it is there; only `disabled` means it will not come back.
-    const unitFileState = field("UnitFileState");
-    const enabled = unitFileState !== "" && unitFileState !== "disabled";
+    const enabled = unitFileEnabled(field("UnitFileState"));
     const active = field("ActiveState");
     const mainPid = Number(field("MainPID"));
     const pid = Number.isInteger(mainPid) && mainPid > 0 ? { pid: mainPid } : {};
-    if (active === "active") return { state: "running", enabled, ...pid, detail };
-    if (active === "failed") return { state: "failed", enabled, ...pid, detail };
+    if (active === "active") return { state: "running", ...withEnabled(enabled), ...pid, detail };
+    if (active === "failed") return { state: "failed", ...withEnabled(enabled), ...pid, detail };
     if (active === "inactive" || active === "activating" || active === "deactivating") {
-      return { state: "installed-stopped", enabled, detail };
+      return { state: "installed-stopped", ...withEnabled(enabled), detail };
     }
     return { state: "unknown", detail };
   }
 
-  if (code !== 0) return { state: "not-installed", detail };
-  const status = /Status:\s*(\S+)/i.exec(stdout)?.[1] ?? "";
-  const enabled = /Scheduled Task State:\s*Enabled/i.test(stdout);
-  if (/^running$/i.test(status)) return { state: "running", enabled, detail };
-  if (status !== "") return { state: "installed-stopped", enabled, detail };
-  return { state: "unknown", detail };
+  // The Task Scheduler. `code` is the XML query's exit, so zero means the task exists; `<Settings><Enabled>` is
+  // the one boolean it writes without translating.
+  if (code !== 0) {
+    return schtasksAbsent(`${stdout}\n${stderr}`)
+      ? { state: "not-installed", detail }
+      : { state: "unknown", detail };
+  }
+  const settings = /<Settings>([\s\S]*?)<\/Settings>/i.exec(stdout)?.[1];
+  const enabledXml =
+    settings === undefined ? undefined : /<Enabled>\s*(true|false)\s*<\/Enabled>/i.exec(settings)?.[1]?.toLowerCase();
+  const enabled = enabledXml === undefined ? undefined : enabledXml === "true";
+  const hint = secondary?.code === 0 ? secondary.stdout : "";
+  const status = /Status:\s*(\S+)/i.exec(hint)?.[1] ?? "";
+  if (/^running$/i.test(status)) return { state: "running", ...withEnabled(enabled), detail };
+  if (/^ready$/i.test(status)) return { state: "installed-stopped", ...withEnabled(enabled), detail };
+  // German prints `Wird ausgeführt` and a Chinese build labels the field differently, so an installed task must
+  // not be reported as stopped — or as running — on a word this parse does not recognise.
+  return { state: "unknown", ...withEnabled(enabled), detail };
 }
 
 /** The result every entry point returns. `unsupported` is not `unknown`: one means "cannot", the other "asked". */
@@ -276,7 +361,10 @@ export async function installService(io: ServiceIo, input: ServicePlanInput): Pr
   return readServiceStatus(io, input);
 }
 
-/** Tell the supervisor to forget it, then take the file away — in that order, or it writes the file back. */
+/**
+ * Tell the supervisor to forget it, then take the file away — in that order: a supervisor still holding a job
+ * whose file has vanished is a job that keeps being started against a program that is no longer there.
+ */
 export async function uninstallService(io: ServiceIo, input: ServicePlanInput): Promise<ServiceStatus> {
   const plan = servicePlan(input);
   if (plan === undefined) return unsupported(input.platform);
@@ -302,8 +390,11 @@ export async function restartService(io: ServiceIo, input: ServicePlanInput): Pr
 export async function readServiceStatus(io: ServiceIo, input: ServicePlanInput): Promise<ServiceStatus> {
   const plan = servicePlan(input);
   if (plan === undefined) return unsupported(input.platform);
-  const step = plan.status[0];
-  if (step === undefined) return { state: "unknown", detail: "no status command for this platform" };
-  const result = await io.run(step);
-  return parseServiceStatus(plan.definition.kind, result.code, result.stdout, result.stderr);
+  const [primary, ...rest] = plan.status;
+  if (primary === undefined) return { state: "unknown", detail: "no status command for this platform" };
+  const result = await io.run(primary);
+  // A plan may ask two questions — the Task Scheduler's localized `Status` is one — and the second answer is
+  // handed to the parse separately so a translated word can never overwrite the invariant one.
+  const secondary = rest[0] === undefined ? undefined : await io.run(rest[0]);
+  return parseServiceStatus(plan.definition.kind, result.code, result.stdout, result.stderr, secondary);
 }

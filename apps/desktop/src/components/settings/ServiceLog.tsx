@@ -13,10 +13,13 @@
  *   1. **Which file it is.** The daemon answers with the live log's path; it is shown shortened (`shortPath`, the
  *      same abbreviation the pane's chips use) with the whole path on hover, because "the log" is two files on a
  *      machine that has run both ways.
- *   2. **Whether this is all of it.** `truncated: true` gets a sentence, not an implication: the daemon read at
- *      most the last 64 KB / 200 lines, and a tail that looked complete is a lie somebody debugs from.
- *   3. **Nothing, said as nothing.** `lines: []` with a path is the normal state of a machine that has never run
- *      the daemon — an empty state naming the situation, never an error.
+ *   2. **Whether this is all of it.** `truncated: true` gets a sentence, not an implication: the daemon bounds
+ *      the read twice (bytes and lines, `daemon/log-tail.ts` owns both), and a tail that looked complete is a
+ *      lie somebody debugs from. The sentence names no number, because either bound can be the one that bit and
+ *      a number that is wrong for the other is worse than none.
+ *   3. **Nothing, said as nothing.** `lines: []` is the ordinary state of a machine where no daemon has written
+ *      a log yet — a file that is absent and one that is present but empty read the same way on the wire — so
+ *      the empty state says what is true of both rather than guessing which one this is.
  *   4. **The supervisor's refusal, where the press was.** A daemon log is owner-window-only, so a refusal is a
  *      real answer and is rendered on the panel rather than swallowed.
  *
@@ -44,7 +47,6 @@ export interface ServiceLogPanelProps {
 
 export function ServiceLogPanel(props: ServiceLogPanelProps): JSX.Element {
   const { t } = useI18n();
-  const log = props.answer?.ok === true ? props.answer.log : undefined;
 
   return (
     <section className="settings__log" id={props.id} aria-label={t("settings.service.log.title")}>
@@ -69,26 +71,26 @@ export function ServiceLogPanel(props: ServiceLogPanelProps): JSX.Element {
         <p className="setting__failure" role="status">
           {localize(t, props.answer)}
         </p>
-      ) : log === undefined ? null : (
+      ) : (
         <>
-          {log.path !== "" ? (
-            <p className="settings__log-path" title={log.path} data-service-log-path="">
-              {shortPath(log.path)}
+          {props.answer.log.path !== "" ? (
+            <p className="settings__log-path" title={props.answer.log.path} data-service-log-path="">
+              {shortPath(props.answer.log.path)}
             </p>
           ) : null}
           {/* **Said, never implied.** The daemon bounds the read twice; this is the sentence that admits it. */}
-          {log.truncated ? (
+          {props.answer.log.truncated ? (
             <p className="settings__log-note" data-service-log-truncated="">
               {t("settings.service.log.truncated")}
             </p>
           ) : null}
-          {log.lines.length === 0 ? (
+          {props.answer.log.lines.length === 0 ? (
             <p className="settings__log-empty" data-service-log-empty="">
               {t("settings.service.log.empty")}
             </p>
           ) : (
             <pre className="settings__log-lines" data-service-log-lines="">
-              {log.lines.join("\n")}
+              {props.answer.log.lines.join("\n")}
             </pre>
           )}
         </>

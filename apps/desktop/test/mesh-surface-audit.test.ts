@@ -187,9 +187,10 @@ describe("the coder.* handler table, measured with and without a session", () =>
     //    credential (there is a `coder.forgetPairedDevice` in flight as this is written) must not fail
     //    an audit test, while adding a session rule to an unrelated method must. The **service** family
     //    and `coder.shutdown` join the pairing family for the same reason: changing the machine's own
-    //    service or stopping the daemon is the owner's act at the machine, and the frozen service
-    //    contract makes the three mutating calls owner-window-only while leaving the status readable
-    //    (`apps/desktop/src/daemon/supervisor-rpc.ts`; `docs/daemon-lifecycle.md` §10).
+    //    service or stopping the daemon is the owner's act at the machine. The contract is stated in
+    //    `docs/daemon-lifecycle.md` §11 — the three mutating calls owner-window-only, the status readable
+    //    by a phone but stripped of the supervisor's path-bearing `detail`
+    //    (`apps/desktop/src/daemon/supervisor-rpc.ts`).
     const refusedWithSession = rows.filter((row) => isSessionRefusal(row.withSession)).map((row) => row.method);
     expect(refusedWithSession).toEqual(
       expect.arrayContaining([
@@ -219,6 +220,19 @@ describe("the coder.* handler table, measured with and without a session", () =>
     expect(refusedWithSession.filter((method) => !OWNER_ONLY.includes(method))).toEqual([]);
     expect(refusedWithSession).toEqual(expect.arrayContaining(OWNER_ONLY));
     expect(refusedWithSession).not.toContain("coder.getServiceStatus");
+
+    // 2b. The one method a phone may read in this family answers it — with the state, and without the
+    //     supervisor's own words. `detail` is the whole `launchctl print` dump for a running job (program,
+    //     argv with `--home`, log paths), which is why `coder.getDaemonLog` is owner-window-only; the
+    //     policy would contradict itself if this readable method kept it. §11 of the lifecycle doc.
+    const phoneStatus = (await dispatch("coder.getServiceStatus", {}, PHONE_SESSION as never)) as {
+      service: { detail: string };
+    };
+    expect(phoneStatus.service.detail).toBe("");
+    const ownerStatus = (await dispatch("coder.getServiceStatus", {}, undefined as never)) as {
+      service: { detail: string };
+    };
+    expect(ownerStatus.service.detail).toBe("audit stub");
 
     // 3. And the surface is not accidentally empty: the table really has handlers behind it. The
     //    count is of methods the dispatcher did not answer with "not implemented".

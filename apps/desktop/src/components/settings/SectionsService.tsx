@@ -7,7 +7,7 @@
  * This row does not store a preference. The value it reports lives in the **operating system's own service
  * manager** — a launchd LaunchAgent, a systemd *user* unit, a per-user Task Scheduler job — and the row asks
  * that supervisor through `coder.getServiceStatus` and changes it through `coder.installService`,
- * `coder.uninstallService`, `coder.restartService` and `coder.shutdown` (`docs/daemon-lifecycle.md` §10). That
+ * `coder.uninstallService`, `coder.restartService` and `coder.shutdown` (`docs/daemon-lifecycle.md` §11). That
  * is why the row's words are the supervisor's *answer* rather than a checkbox: turning it on is a request that
  * can be refused, so a boolean here would be a claim about the machine made from our own optimism.
  *
@@ -23,10 +23,11 @@
  * says that difference in words (`settings.service.stopVsOff`) *and* puts it on each button's tooltip, because
  * the two labels alone are the kind of ambiguity that ends with somebody removing a service they meant to stop.
  *
- * **A stop is not a status we can read back yet, and it is not an error either.** `coder.shutdown` answers
- * `{ stopping: true }` and the process then exits, so the follow-up status read can legitimately fail. That
- * failure is treated as *stopped* — the service is installed and comes back at the next login — rather than as
- * a refusal on the row, which is the only reading that does not turn "it did what you asked" into a red line.
+ * **An accepted stop is the state, not a re-read.** `coder.shutdown` answers `{ stopping: true }` and the
+ * process then drains for up to ten seconds; a status read inside that window can legitimately succeed and
+ * report the daemon still running. Re-reading therefore used to restore "On, running" while the daemon was on
+ * its way out. The accepted answer is what the row renders — `installed-stopped`, the shape a daemon that has
+ * gone leaves behind — and a later visit to this page is what corrects it if the daemon really is still there.
  *
  * ## The log, which is read when asked and not before
  *
@@ -75,11 +76,12 @@ import { serviceCopy, serviceEvidence, type ServiceActionId } from "./service-st
 const LOG_PANEL_ID = "service-log";
 
 /**
- * What to show when a successful stop left nothing to ask.
+ * What to show once a stop has been accepted.
  *
  * Only `coder.shutdown` reaches this path, and it is honest for the same reason the button was offered: the
  * press exists only for a service that is installed, so "installed and not running" is what a daemon that has
- * gone leaves behind — and the `enabled` it had is the only thing that says whether it comes back.
+ * gone leaves behind — and the `enabled` it had is the only thing that says whether it comes back. The
+ * accepted answer is the evidence; the re-read this replaced was not (`docs/daemon-lifecycle.md` §11).
  */
 function stoppedFallback(previous: DaemonServiceStatus | undefined): DaemonServiceStatus {
   return {
@@ -105,10 +107,11 @@ export function ServiceSection(props: SettingsSectionProps): JSX.Element {
   /** The last refusal from the page's own presses, read under the control that produced it. */
   const [notice, setNotice] = useState<Notice | undefined>(undefined);
   /**
-   * The status to render after a stop the daemon could no longer answer about.
+   * The status to render from a stop that was accepted.
    *
-   * `undefined` means "use the store's". A successful re-read clears it; a failed one sets `stoppedFallback`,
-   * so the row shows the machine's real situation rather than the running state the daemon had a moment ago.
+   * `undefined` means "use the store's". An accepted stop sets `stoppedFallback`, so the row shows the machine
+   * the way the acknowledgement says it is rather than the running state a re-read could still report for up to
+   * ten seconds. Any later status load — reopening the page — clears it.
    */
   const [stopped, setStopped] = useState<DaemonServiceStatus | undefined>(undefined);
   /**
@@ -166,10 +169,10 @@ export function ServiceSection(props: SettingsSectionProps): JSX.Element {
             setNotice(accepted);
             return;
           }
-          // The daemon is on its way out. Ask once more: a read that cannot arrive means it is gone, which is
-          // what Stop asked for — never a refusal on the row.
-          const after = await props.agents.getServiceStatus();
-          setStopped(after.ok ? undefined : stoppedFallback(status));
+          // The daemon is on its way out, and the acknowledgement is what says so. **Not a re-read**: inside
+          // the drain the daemon still answers, and the status it reports is honestly "running" — which would
+          // restore the running row for up to ten seconds for a service the user just stopped.
+          setStopped(stoppedFallback(status));
           setNotice(undefined);
           setBusy(undefined);
           return;

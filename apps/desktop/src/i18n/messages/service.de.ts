@@ -62,6 +62,6 @@ export const service: Catalogue = {
   "settings.service.log.title": "Daemon-Protokoll",
   "settings.service.log.reading": "Protokoll wird gelesen…",
   "settings.service.log.refresh": "Aktualisieren",
-  "settings.service.log.truncated": "Es werden die letzten 200 Zeilen gezeigt. Das Protokoll ist länger.",
-  "settings.service.log.empty": "Noch keine Protokolldatei — auf dieser Maschine hat noch nichts eine geschrieben.",
+  "settings.service.log.truncated": "Es wird das Ende des Protokolls gezeigt — davor steht mehr.",
+  "settings.service.log.empty": "Es wurde noch nichts ins Protokoll geschrieben.",
 };

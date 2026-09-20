@@ -1896,10 +1896,17 @@ export type GitStash = z.infer<typeof GitStashSchema>;
  *
  * `state` is the closed vocabulary the window draws controls from, and it is the *platform package's*
  * vocabulary (`@envoydev/platform`'s `ServiceStatus`) rather than a second one invented here: the daemon
- * restates it so the window and the supervisor cannot drift apart. `detail` is the supervisor's own words — a
- * log line, not a translated sentence — because when something is wrong they are the most useful thing there is.
+ * restates it so the window and the supervisor cannot drift apart, and `supervisor-rpc.ts` carries the
+ * compile-time binding that makes a drift on either side a `tsc` error. `detail` is the supervisor's own
+ * words — a log line, not a translated sentence — because when something is wrong they are the most useful
+ * thing there is; it is **emptied for a paired session**, because a supervisor's dump names paths, argv and
+ * the home (`docs/daemon-lifecycle.md` §11).
+ *
+ * Named `DaemonServiceStatus` rather than `ServiceStatus` deliberately: it is *not* the platform's type, it
+ * is that shape plus the daemon's own `restartsInLastHour`/`lastStop`, and the `XSchema`/`X` pair is the
+ * convention every other result in this module follows (`DaemonLogSchema`/`DaemonLog`).
  */
-export const ServiceStatusSchema = z
+export const DaemonServiceStatusSchema = z
   .object({
     state: z.enum(["not-installed", "installed-stopped", "running", "failed", "unsupported", "unknown"]),
     /** Whether it will come back at login. Absent where the platform does not say. */
@@ -1930,12 +1937,12 @@ export const ServiceStatusSchema = z
   })
   .strict();
 
-export type DaemonServiceStatus = z.infer<typeof ServiceStatusSchema>;
+export type DaemonServiceStatus = z.infer<typeof DaemonServiceStatusSchema>;
 
 /**
  * The tail of the daemon's log, as it travels on the wire.
  *
- * Named for the same reason `ServiceStatusSchema` is: a client that wants to *name* this shape should import it
+ * Named for the same reason `DaemonServiceStatusSchema` is: a client that wants to *name* this shape should import it
  * rather than mirror it, because a mirror is a second definition that can drift from the one the daemon actually
  * sends — and a client that mirrors it has nothing to warn it when it does.
  */
@@ -3113,22 +3120,22 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
     params: EmptyParams,
     result: z.object({ settings: CoderSettingsSchema }).strict(),
   },
-  /* — the service switch (§10 of docs/daemon-lifecycle.md) — */
+  /* — the service switch (§11 of docs/daemon-lifecycle.md) — */
   "coder.getServiceStatus": {
     params: EmptyParams,
-    result: z.object({ service: ServiceStatusSchema }).strict(),
+    result: z.object({ service: DaemonServiceStatusSchema }).strict(),
   },
   "coder.installService": {
     params: EmptyParams,
-    result: z.object({ service: ServiceStatusSchema }).strict(),
+    result: z.object({ service: DaemonServiceStatusSchema }).strict(),
   },
   "coder.uninstallService": {
     params: EmptyParams,
-    result: z.object({ service: ServiceStatusSchema }).strict(),
+    result: z.object({ service: DaemonServiceStatusSchema }).strict(),
   },
   "coder.restartService": {
     params: EmptyParams,
-    result: z.object({ service: ServiceStatusSchema }).strict(),
+    result: z.object({ service: DaemonServiceStatusSchema }).strict(),
   },
   "coder.getDaemonLog": {
     params: EmptyParams,

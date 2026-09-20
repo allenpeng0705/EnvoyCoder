@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { coderPaths } from "@envoydev/host-bridge";
 
-import { readLifecycle, recordBoot, recordStop } from "../src/daemon/lifecycle.js";
+import { readLifecycle, recordBoot, recordStop, serviceFactsFrom } from "../src/daemon/lifecycle.js";
 
 const homes: string[] = [];
 
@@ -39,5 +39,38 @@ describe("the exit code a controlled failure leaves behind", () => {
     const stop = (await readLifecycle(paths)).lastStop;
     expect(stop?.signal).toBe("SIGTERM");
     expect(stop).not.toHaveProperty("exitCode");
+  });
+});
+
+describe("the restart count a window is shown", () => {
+  it("does not count this process's own start as a restart", async () => {
+    // The ledger's newest row is this process, written when it reached the point of serving. Counting it made a
+    // healthy daemon say "Restarted once in the last hour" and, with no stop record on a fresh home, also say the
+    // previous daemon was killed or crashed — two false claims in the most ordinary state there is.
+    const paths = await tempPaths();
+    await recordBoot(paths);
+    expect(serviceFactsFrom(await readLifecycle(paths)).restartsInLastHour).toBe(0);
+    // Two earlier starts are two restarts, and that number is what the row shows.
+    await recordBoot(paths);
+    await recordBoot(paths);
+    expect(serviceFactsFrom(await readLifecycle(paths)).restartsInLastHour).toBe(2);
+  });
+
+  it("carries how the last process stopped through unchanged", async () => {
+    const paths = await tempPaths();
+    await recordStop(paths, { signal: "requested over the connection" });
+    await recordBoot(paths);
+    expect(serviceFactsFrom(await readLifecycle(paths)).lastStop?.signal).toBe(
+      "requested over the connection",
+    );
+  });
+
+  it("never reports a negative count when the ledger is older than an hour", async () => {
+    // `bootsInLastHour` can be 0 while the ledger still holds rows from yesterday; subtracting must not go below
+    // zero, because a window showing "-1 restarts" would be its own kind of lie.
+    const paths = await tempPaths();
+    const longAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    await recordBoot(paths, { at: longAgo });
+    expect(serviceFactsFrom(await readLifecycle(paths)).restartsInLastHour).toBe(0);
   });
 });

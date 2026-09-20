@@ -86,13 +86,14 @@ extension HostConnectionStateText on HostConnectionState {
 /// difference.
 typedef WsDialer = Future<WebSocketLike> Function(String url);
 
-/// What a [HostClient] knows about its pairing, for a screen: the record, the daemon it is filed
-/// under, and whether that daemon has refused it.
+/// What a [HostClient] knows about its pairing, for a screen: the record, and whether the daemon has
+/// refused it.
 ///
-/// [lastSeenAt] is the phone's own record (see `pairing_store.dart`); [instanceId] is what the daemon
-/// reported, which is the one fact that proves *which* daemon answered. Both are null when the phone
-/// is paired but has not reached the daemon since the pairing was recorded.
-typedef PairingState = ({PairingRecord? record, String daemonKey, bool refused});
+/// [PairingRecord.lastSeenAt] is the phone's own record (see `pairing_store.dart`);
+/// [PairingRecord.instanceId] is what the daemon reported, which is the one fact that proves *which*
+/// daemon answered. Both are null when the phone is paired but has not reached the daemon since the
+/// pairing was recorded.
+typedef PairingState = ({PairingRecord? record, bool refused});
 
 class HostClient {
   HostClient(
@@ -199,8 +200,9 @@ class HostClient {
   ///
   /// True from the moment a stored token is refused until the daemon accepts one again. It is the
   /// honest half of "try the stored token first": a client that cleared the token and then kept
-  /// dialling would be a re-pair loop wearing a retry's clothes. The connection surface reads it to
-  /// offer the one action that fixes the state — pairing again with the code the desktop shows.
+  /// dialling would be a re-pair loop wearing a retry's clothes, so this flag — not the store's
+  /// deletion — is what makes the fallback single-shot (see [._onPairingRefused]). The connection
+  /// surface reads it to offer the one action that fixes the state: pairing again.
   bool get pairingRefused => _pairingRefused;
 
   /// The pairing this phone holds for the daemon behind this client, for the Settings surface.
@@ -210,7 +212,6 @@ class HostClient {
   /// token this daemon issued" — a sentence the screen words, not an error.
   Future<PairingState> pairingState() async => (
         record: await pairing.record(),
-        daemonKey: pairing.daemonKey,
         refused: _pairingRefused,
       );
 
@@ -574,17 +575,17 @@ class HostClient {
 
   /// Retire the pairing this daemon has refused, and say so **once**.
   ///
-  /// The single-shot guard is the difference between a fallback and a loop. The walk retries on a
-  /// backoff, so without it a revoked token would clear-and-retry forever, and every retry is another
-  /// refusal the user never sees. Once retired, the phone holds no token for this daemon: the next
-  /// dial offers whatever the host row holds (usually the same dead credential, refused again) and
-  /// the connection surface offers the one action that fixes it — pairing again. Nothing here mints a
-  /// pairing: pairing is the user's act, performed with the code the desktop shows.
+  /// **This boolean is the single-shot guard**, and it is the only thing that can be. The walk retries
+  /// on a backoff, so without it a refused token would clear-and-retry forever and every retry would be
+  /// another refusal the user never sees. Clearing the store is not that guard: the host row usually
+  /// holds the same dead credential (`HostClient.host.token`), so the next dial presents it and is
+  /// refused again — one refusal the person is told about, not a loop they are not. Once retired, the
+  /// connection surface offers the one action that fixes the state: pairing again, with the code the
+  /// desktop shows. Nothing here mints a pairing.
   Future<void> _onPairingRefused() async {
     if (_pairingRefused) return;
     _pairingRefused = true;
-    // The store is the truth and it is cleared either way; the return value says whether *this* call
-    // was the one that retired something, which is what decides if the surface needs to be told.
+    // Delete the dead grant so it is never offered again — a different job from the flag above.
     await pairing.retire();
     _publishState();
   }

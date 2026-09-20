@@ -1,10 +1,17 @@
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import type { ServiceStatus } from "@envoydev/platform";
-import { describe, expect, it, vi } from "vitest";
+import { RPC_SPECS } from "@envoydev/protocol";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { CoderPaths } from "@envoydev/host-bridge";
+import { coderPaths, type CoderPaths } from "@envoydev/host-bridge";
 
+import { writeDaemonClaim } from "../src/daemon/lock.js";
 import { createSupervisorHandlers } from "../src/daemon/supervisor-rpc.js";
 import type { CoderCallContext } from "../src/daemon/service.js";
+import type { ServiceOptions } from "../src/daemon/supervisor.js";
 
 const running: ServiceStatus = { state: "running", pid: 42, detail: "" };
 
@@ -24,6 +31,11 @@ const owner: CoderCallContext = { session: undefined };
 /** A paired phone. */
 const phone: CoderCallContext = { session: { deviceId: "device-1" } };
 
+const homes: string[] = [];
+afterEach(async () => {
+  for (const home of homes.splice(0)) await rm(home, { recursive: true, force: true });
+});
+
 function table(overrides: Parameters<typeof createSupervisorHandlers>[0] = {}) {
   const install = vi.fn(async () => running);
   const uninstall = vi.fn(async () => ({ state: "not-installed", detail: "" }) as ServiceStatus);
@@ -33,7 +45,10 @@ function table(overrides: Parameters<typeof createSupervisorHandlers>[0] = {}) {
   const call = async (method: keyof typeof handlers, params: unknown, context = owner) => {
     const handler = handlers[method];
     if (!handler) throw new Error(`${method} is not served`);
-    return handler(params, context);
+    // **The dispatcher does not parse results, so this is the only place the wire shape is exercised.**
+    // Parsing here is what makes `RPC_SPECS[method].result` a tested contract rather than a document: a
+    // handler that returned a shape the window cannot read fails this line, not a user's Settings pane.
+    return RPC_SPECS[method].result.parse(await handler(params, context));
   };
   return { call, install, uninstall, restart, status };
 }
@@ -54,6 +69,29 @@ describe("the service switch on the wire", () => {
     expect(install).toHaveBeenCalledTimes(1);
     expect(uninstall).toHaveBeenCalledTimes(1);
     expect(restart).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives a paired phone the state and the owner the supervisor's own words", async () => {
+    // **D.** `detail` is the whole `launchctl print` dump for a running job — the program, the argv with
+    // `--home`, the log paths — and `schtasks /Query` prints "Task To Run". The log read is owner-window-only
+    // for exactly that reason, so a readable status that carried the paths contradicted the policy. The state
+    // is what a phone can act on; the paths are not.
+    const withPaths: ServiceStatus = {
+      state: "running",
+      pid: 42,
+      detail:
+        "program = /Users/you/Library/Application Support/EnvoyMesh/runtime/0.1.0/app/node\n" +
+        "arguments = { /Users/you/…/node /Users/you/…/main.mjs --home /Users/you/.envoymesh --managed-by service }",
+    };
+    const { call } = table({ status: async () => withPaths });
+
+    const forPhone = await call("coder.getServiceStatus", {}, phone);
+    expect(forPhone.service.state).toBe("running");
+    expect(forPhone.service.detail).toBe("");
+    expect(JSON.stringify(forPhone)).not.toContain("/Users/you");
+
+    const forOwner = await call("coder.getServiceStatus", {}, owner);
+    expect(forOwner.service.detail).toBe(withPaths.detail);
   });
 
   it("carries the daemon's own restart history beside the supervisor's answer", async () => {
@@ -106,6 +144,75 @@ describe("the service switch on the wire", () => {
   it("complains about a parameter it does not have, rather than ignoring it", async () => {
     const { call } = table();
     await expect(call("coder.getServiceStatus", { surprise: true })).rejects.toThrow();
+  });
+});
+
+describe("the hand-over a successful install owes (C)", () => {
+  /** The deferred hand-over runs a macrotask later than the handler; two ticks let it finish. */
+  const settleHandOver = async (): Promise<void> => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+
+  it("drains this daemon and asks the supervisor for its job, after the reply", async () => {
+    // **The defect this pins.** B exits 0 — "already running" — and 0 is every supervisor's "stay down" code,
+    // so nothing ever started the service while the app's own daemon still held the claim. The install
+    // therefore hands over: the reply first (so the window reads it), then the drain, then the supervisor's
+    // job is asked for once more so it starts after the claim is free.
+    const shutdown = vi.fn();
+    const restart = vi.fn(async (_options?: ServiceOptions) => ({ state: "installed-stopped", detail: "" }) as ServiceStatus);
+    const { call } = table({ install: async () => running, restart, shutdown });
+
+    await expect(call("coder.installService", {})).resolves.toEqual(runningAnswer);
+    // The acknowledgement reaches the window before this daemon starts closing sockets.
+    expect(shutdown).not.toHaveBeenCalled();
+    await settleHandOver();
+    expect(shutdown).toHaveBeenCalledTimes(1);
+    expect(restart).toHaveBeenCalledTimes(1);
+    // The drain began here, so the operation it delegates to must not ask for a second stop — the daemon
+    // treats a second request as "exit now", which is not what pressing Turn on means.
+    expect(restart.mock.calls[0]?.[0]?.shutdown).toBeUndefined();
+  });
+
+  it("does not hand over when the supervisor refused the install", async () => {
+    const shutdown = vi.fn();
+    const restart = vi.fn(async () => running);
+    const { call } = table({ install: async () => ({ state: "failed", detail: "Bootstrap failed: 5" }), restart, shutdown });
+
+    await call("coder.installService", {});
+    await settleHandOver();
+    expect(shutdown).not.toHaveBeenCalled();
+    expect(restart).not.toHaveBeenCalled();
+  });
+
+  it("leaves a daemon the supervisor already owns alone", async () => {
+    // **Re-pressing Turn on must not stop a running service.** The daemon that answers a reinstall *is* the
+    // supervisor's own process in that case, and the claim's `managedBy` is what says so.
+    const home = await mkdtemp(join(tmpdir(), "envoydev-handover-"));
+    homes.push(home);
+    const paths = coderPaths(home);
+    await mkdir(paths.stateDir, { recursive: true });
+    await writeDaemonClaim(paths, {
+      product: "EnvoyDev",
+      instanceId: "test",
+      pid: process.pid,
+      host: "127.0.0.1",
+      port: 4770,
+      path: "/ws",
+      home: paths.home,
+      stateDir: paths.stateDir,
+      startedAt: "2026-09-14T00:00:00.000Z",
+      version: "0.1.0",
+      managedBy: "service",
+    });
+    const shutdown = vi.fn();
+    const restart = vi.fn(async () => running);
+    const { call } = table({ paths, install: async () => running, restart, shutdown });
+
+    await call("coder.installService", {});
+    await settleHandOver();
+    expect(shutdown).not.toHaveBeenCalled();
+    expect(restart).not.toHaveBeenCalled();
   });
 });
 

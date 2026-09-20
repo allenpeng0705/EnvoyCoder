@@ -228,8 +228,9 @@ A checklist, in build order:
     *Refresh* — with the supervisor's own words shown only when something is wrong, and the verdict row in
     `docs/settings-parity.md` (§5.1). **Landed in full since**: the *restart count* (`restartsInLastHour`, read from this file's own ledger and shown
     only when it is above zero), the **last stop** with the diagnosis that matters — a restart with *no* stop record
-    means the previous daemon was killed or crashed — the **log tail** behind a *Show the log* disclosure that reads
-    the last 200 lines out of at most 64 KB on first open, and a **Stop** button that asks over the wire and whose
+    means the previous daemon was killed or crashed — the **log tail** behind a *Show the log* disclosure that
+    reads the bounded end of the live log on first open (`daemon/log-tail.ts` owns the byte and line bounds),
+    and a **Stop** button that asks over the wire and whose
     copy draws the distinction from *Turn off*: Stop ends it now and the service returns it at login, Turn off
     removes the service so it stays off. Two residuals remain outside this item: the shell's Windows stop path
     (written, first compiled by the Windows CI lane — item 8) and macOS app-deletion cleanup, which is documentation
@@ -241,7 +242,6 @@ A checklist, in build order:
   service belongs to the account that installed it, and a second account's window is expected to report the
   daemon as owned elsewhere rather than hijack it. (That reporting behaviour is still to build; the *question*
   is closed so the service layout can be.)
-* **Whether the phone may read service state** (this document assumes yes for reading, no for changing).
 * **Whether EnvoyMesh's supervisor is reused verbatim.** The family reserved exit `2` for
   `exitForNodeSupervisor`; the family rule is to reuse that implementation rather than to write a second one,
   so the slice must find and read it first.
@@ -250,3 +250,41 @@ A checklist, in build order:
   here.
 * **Whether service mode narrows the socket bind** while the machine is unattended.
 * **Whether uninstall removes user state** or only the service and payload.
+
+## 11. The service switch on the wire: who may change it, and what a phone may read
+
+§10 left "whether the phone may read service state" open. It is decided here, together with the decisions the
+switch's first adversarial review forced.
+
+* **Changing the service is owner-window-only.** `coder.installService`, `coder.uninstallService` and
+  `coder.restartService` use the same guard as minting a pairing code (`requireOwnerWindow`,
+  `daemon/pairing.ts`): a paired device is the owner's own phone, but installing or removing a service on the
+  desktop is a privilege nobody granted it by scanning a code. `coder.shutdown` is guarded the same way.
+* **A paired phone may read the state, not the supervisor's words.** `coder.getServiceStatus` is readable by
+  any authenticated caller, and the *state* — off, running, installed-but-stopped, failed, unsupported,
+  could-not-tell — is what a phone can act on. Its `detail` is the supervisor's raw output, and for launchd that
+  is the entire `launchctl print` dump: the program, the argv (which carries `--home <path>`) and the log paths.
+  `schtasks /Query` prints "Task To Run". `coder.getDaemonLog` is owner-window-only for exactly that reason, so
+  a path-bearing `detail` on a readable method was the policy contradicting itself. The wire therefore **empties
+  `detail` for a paired session** (`supervisor-rpc.ts`'s `forCaller`) and keeps it for the owner's window, which
+  is where the row renders a diagnosis.
+* **`uninstall` and `restart` run out of process.** On systemd both are synchronous: `disable --now` and
+  `restart` SIGTERM the daemon that invoked them, wait for it to become inactive, and only then return. A step
+  sequenced after that call — the `removeFile` that makes "turn off" mean the unit file is gone, the second
+  `daemon-reload`, the status read, the RPC reply — never runs, so "turn off" left the unit on disk. Both
+  operations are performed by `<node> <payload entry> service uninstall|restart` instead, spawned with the
+  daemon's own `ENVOYMESH_HOME` and a bounded wait (`daemon/supervisor.ts`).
+* **A restart asks before it kills.** The supervisor's stop is a `SIGTERM`, which cuts a live agent's turn in
+  half. So `coder.restartService` begins this daemon's graceful drain (the hook `coder.shutdown` and
+  `main.mjs stop` both reach) and only then lets the supervisor relaunch it — §7's drain rule applied to the
+  switch itself.
+* **An install hands over.** When the window's install is answered by the app's own daemon (A), the supervisor
+  starts its own (B); B finds A's live claim on the port, prints "already running" and exits **0** — every
+  supervisor's "stay down" code — so B never retries. Nothing stopped A, and quitting the window stopped it,
+  leaving the phone with no host right after "always reachable" was switched on. A successful install on an
+  **app-managed** daemon now drains it and asks the supervisor for its job once more, so the job starts after
+  the claim is free; a daemon the supervisor already owns is left running, because re-pressing *Turn on* on a
+  running service must not stop it.
+* **The log tail's two bounds are the daemon's, and no sentence repeats them.** `daemon/log-tail.ts` owns the
+  byte and line limits; the panel's copy names neither, because a byte-truncated read can show far fewer lines
+  than the line limit and a number that is wrong for the other bound is worse than none.

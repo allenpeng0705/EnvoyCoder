@@ -23,11 +23,7 @@ class _StubClient extends HostClient {
   @override
   Future<PairingState> pairingState() async {
     if (failing) throw Exception('keychain unavailable');
-    return (
-      record: pairingRecord,
-      daemonKey: daemonKeyFor(endpoint: host.endpoint, owner: host.ownerId),
-      refused: refused,
-    );
+    return (record: pairingRecord, refused: refused);
   }
 
   @override
@@ -101,11 +97,39 @@ void main() {
     await _pumpSettings(tester, client);
 
     expect(find.text('This phone is paired with Studio.'), findsOneWidget);
-    expect(find.text('Last connected just now'), findsOneWidget);
+    // The phone's own clock, said out loud: the wire carries no client-facing last-seen field, so a
+    // bare timestamp would read as the desktop's report.
+    expect(
+      find.text('Last connected just now. '
+          "Recorded on this phone, from this phone's clock."),
+      findsOneWidget,
+    );
     // The record's own id is provenance, never something the user reads here.
     expect(find.textContaining('process-7'), findsNothing);
     // And the token itself is a credential: it must not be on the screen.
     expect(find.textContaining('grant-1'), findsNothing);
+    await client.dispose();
+  });
+
+  testWidgets('an older connection shows the date, and still says whose clock it was', (tester) async {
+    final client = _StubClient(
+      hostWithLabel('Studio'),
+      // A fixed past date: the bucket changes at 24 hours, so this lands on the dated sentence in
+      // any run of the suite.
+      pairingRecord: PairingRecord(
+        token: 'grant-1',
+        lastSeenAt: DateTime(2026, 1, 2, 3, 4, 5),
+      ),
+    );
+    await _pumpSettings(tester, client);
+
+    // The date is `MaterialLocalizations`' own short format, so the assertion holds only the parts
+    // this app owns: the sentence's own wording and the clock note that keeps the timestamp honest.
+    expect(
+      find.textContaining("Recorded on this phone, from this phone's clock."),
+      findsOneWidget,
+    );
+    expect(find.textContaining('2026'), findsOneWidget);
     await client.dispose();
   });
 
@@ -165,7 +189,11 @@ void main() {
     );
 
     expect(find.text('Dieses Telefon ist mit Studio gekoppelt.'), findsOneWidget);
-    expect(find.text('Gerade eben verbunden'), findsOneWidget);
+    expect(
+      find.text('Gerade eben verbunden. '
+          'Auf diesem Telefon vermerkt, nach der Uhr dieses Telefons.'),
+      findsOneWidget,
+    );
     await client.dispose();
   });
 }

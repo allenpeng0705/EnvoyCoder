@@ -168,22 +168,6 @@ void main() {
     });
   });
 
-  group('pairingsFor', () {
-    test('answers only the daemons this phone actually holds a token for', () async {
-      final secure = MemorySecureStorage();
-      final store = storeOn(secure);
-      final a = daemonKeyFor(endpoint: '10.0.0.4:4770', owner: 'owner-a');
-      final b = daemonKeyFor(endpoint: '10.0.0.5:4770', owner: 'owner-a');
-      final c = daemonKeyFor(endpoint: '10.0.0.6:4770', owner: 'owner-a');
-      await store.record(a, 'grant-a');
-      await store.record(c, 'grant-c');
-
-      final found = await store.pairingsFor([a, b, c]);
-      expect(found.keys.toSet(), {a, c});
-      expect(found[a]!.token, 'grant-a');
-    });
-  });
-
   group('a record this build cannot read', () {
     test('is treated as no pairing rather than as a token', () async {
       final secure = MemorySecureStorage();

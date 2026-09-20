@@ -1729,7 +1729,7 @@ export class CoderStore {
     });
   }
 
-  /* ─────────────── the daemon service, which belongs to the OS (§10 of docs/daemon-lifecycle.md) ───────────────
+  /* ─────────────── the daemon service, which belongs to the OS (§11 of docs/daemon-lifecycle.md) ───────────────
      Four calls and one cached answer. **The value is never stored by us**: the operating system's service
      manager owns it, the daemon asks it, and each answer here replaces `state.service` with what the supervisor
      said *after* the steps ran — never with what the press was supposed to achieve. A press that could not be
@@ -1772,11 +1772,12 @@ export class CoderStore {
   /**
    * **End the daemon now, leaving the service installed so it returns at the next login.**
    *
-   * The answer is `{stopping: true}` — the request was accepted, not that the process is gone — so this method
-   * deliberately does **not** touch `state.service`: the daemon is about to exit, and the honest next status is
-   * whatever a later read says (or "installed, stopped", when a read can no longer arrive at all). A caller
-   * that guessed `not-installed` here would be describing the machine from our own optimism, one press before
-   * the OS has done anything.
+   * The answer is `{ stopping: true }` — the request was accepted, not that the process is gone — so this
+   * method deliberately does **not** touch `state.service`: the daemon is about to exit, and a caller that
+   * *renders* the stop reads the acknowledgement rather than re-reading a daemon that is still draining and
+   * will honestly report itself running for up to ten seconds (`SectionsService.tsx`). A caller that guessed
+   * `not-installed` here would be describing the machine from our own optimism, one press before the OS has
+   * done anything.
    */
   async shutdown(): Promise<ShutdownAnswer> {
     return this.mutate("coder.shutdown", {}, () => ({ ok: true as const, stopping: true as const }));

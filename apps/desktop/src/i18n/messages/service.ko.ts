@@ -62,6 +62,6 @@ export const service: Catalogue = {
   "settings.service.log.title": "데몬 로그",
   "settings.service.log.reading": "로그를 읽는 중…",
   "settings.service.log.refresh": "새로 고침",
-  "settings.service.log.truncated": "마지막 200줄만 표시합니다. 로그가 더 깁니다.",
-  "settings.service.log.empty": "아직 로그 파일이 없습니다 — 이 컴퓨터에서 아직 아무것도 기록하지 않았습니다.",
+  "settings.service.log.truncated": "로그의 끝부분을 표시합니다 — 앞에 더 있습니다.",
+  "settings.service.log.empty": "로그에 아직 아무것도 기록되지 않았습니다.",
 };

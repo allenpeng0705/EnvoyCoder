@@ -38,12 +38,11 @@
  "settingsPairingNotPaired",
  "settingsPairingUnavailable",
  "settingsPairingNotReached",
- "settingsPairingMinutesAgo",
- "settingsPairingHoursAgo",
  "settingsPairingJustNow",
  "settingsPairingPhoneClock",
- "settingsPairingOnDate",
  "connectionsPairingRefused",
  "connectionsPairingRefusedDetail",
- "connectionsPairingRePair"
+ "connectionsPairingRePair",
+ "settingsPairingLastSeenRecent",
+ "settingsPairingLastSeenOn"
 ]

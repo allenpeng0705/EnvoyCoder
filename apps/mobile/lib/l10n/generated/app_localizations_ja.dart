@@ -314,36 +314,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsPairingNotReached => 'このスマートフォンではまだ接続していません。';
 
   @override
-  String settingsPairingMinutesAgo(num count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 分前に接続',
-      one: '1 分前に接続',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String settingsPairingHoursAgo(num count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 時間前に接続',
-      one: '1 時間前に接続',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get settingsPairingJustNow => 'たった今接続';
 
   @override
   String get settingsPairingPhoneClock => 'このスマートフォンに、このスマートフォンの時計で記録されています。';
 
   @override
-  String settingsPairingOnDate(Object date) {
-    return '最終接続 $date';
+  String get settingsPairingLastSeenRecent =>
+      'たった今接続。このスマートフォンに、このスマートフォンの時計で記録されています。';
+
+  @override
+  String settingsPairingLastSeenOn(Object date) {
+    return '最終接続 $date。このスマートフォンに、このスマートフォンの時計で記録されています。';
   }
 
   @override

@@ -583,4 +583,5 @@ export * from "./path-discovery.js";
  */
 export * from "./shell-binaries.js";
 export * from "./service.js";
+export * from "./service-check.js";
 export * from "./service-install.js";

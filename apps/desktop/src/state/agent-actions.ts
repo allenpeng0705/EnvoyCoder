@@ -77,15 +77,11 @@ export type ShutdownAnswer = { ok: true; stopping: true } | Refusal;
 /**
  * The daemon's log tail, as `coder.getDaemonLog` serves it.
  *
- * **There is no exported protocol type to import for this one.** `coder.getDaemonLog`'s result is an inline
- * `z.object({ log: … })` in `packages/protocol/src/rpc.ts`, the same shape the daemon's own `LogTail` carries;
- * every other service answer has a named schema (`ServiceStatusSchema`) and this one does not. So this is a
- * deliberate mirror rather than a second source of truth, and the honest fix is one named export upstream —
- * not a window that reads `unknown` and casts. `truncated` is the field the UI owes the user: a tail that
- * reads like a complete log is a lie somebody debugs from.
+ * The wire's own type, imported rather than mirrored: `DaemonLogSchema` names the shape and every other
+ * service answer does the same (`DaemonServiceStatusSchema`), so a second definition here could only drift
+ * from the one the daemon sends. `truncated` is the field the UI owes the user: a tail that reads like a
+ * complete log is a lie somebody debugs from.
  */
-// The wire's own type, imported rather than mirrored: a second definition of a result shape can drift from the
-// one the daemon sends, and a mirror has nothing to warn it when it does (`DaemonLogSchema` in @envoydev/protocol).
 export type DaemonLogRead = DaemonLog;
 
 /** What a log read answers: the bounded tail, or a refusal (a daemon log is owner-window-only). */
@@ -231,14 +227,15 @@ export interface AgentActions {
    * This is the difference the row's copy exists to make: `shutdown` answers `{stopping: true}` and the process
    * drains and exits, so the installed service brings it back at the next login — while `uninstallService`
    * takes the service away entirely. The answer says the *request was accepted*, not that the process is gone
-   * (the drain can take a while), which is why the row re-reads the status afterwards and treats a read that
-   * cannot arrive as "stopped" rather than as a failure.
+   * (the drain can take ten seconds), so the row renders the stopped state from **that accepted answer** and
+   * does not depend on a re-read — a re-read here can legitimately succeed and report the daemon still
+   * running while it is on its way out. A later visit to the page is what corrects it.
    */
   shutdown(): Promise<ShutdownAnswer>;
 
   /**
-   * **Read the end of the live daemon log** — the last 200 lines out of at most the last 64 KB, whichever of
-   * the supervisor's log or the shell's is live. Both bounds are the daemon's; a caller reads nothing itself.
+   * **Read the end of the live daemon log** — the bounded end of whichever of the supervisor's log or the
+   * shell's is live. The daemon owns both bounds (`log-tail.ts`) and a caller reads nothing itself.
    *
    * Owner-window-only, like the mutations: a log carries absolute paths, prompts and command lines. It is also
    * the one service call fetched **on demand** — the row's disclosure asks when it is opened, and its Refresh

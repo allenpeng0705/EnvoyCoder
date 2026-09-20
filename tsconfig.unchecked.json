@@ -13,7 +13,7 @@
     "types": ["node", "vite/client"]
   },
   "include": [
-    "scripts/**/*.ts",
+    "scripts/**/*.ts", "scripts/**/*.mts",
     "packages/*/test/**/*.ts",
     "apps/desktop/test/**/*.ts",
     "apps/desktop/test/**/*.tsx"

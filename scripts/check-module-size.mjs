@@ -101,6 +101,29 @@ for (const entry of doc.entries) {
   }
 }
 
+/**
+ * **The recorded `lines` is a baseline, and it is compared here.**
+ *
+ * The family checker takes only the paths (its format is a bare string array), so an exempt file could grow
+ * without limit while the number beside its entry — the number a reader trusts as "how big this debt is" —
+ * stayed at whatever it was when the gate landed. Growth is a warning rather than a failure because it can be
+ * legitimate; what must not happen silently is the record going stale. Update the entry, or split the file.
+ */
+const grown = [];
+for (const entry of doc.entries) {
+  if (typeof entry.lines !== "number") continue;
+  const absolute = path.resolve(root, entry.path);
+  // A dead entry is already an ERROR in the family checker; a missing file here is not a second report.
+  if (!existsSync(absolute)) continue;
+  const lines = (readFileSync(absolute, "utf8").match(/\n/g) ?? []).length;
+  if (lines > entry.lines) {
+    grown.push(
+      `${entry.path}: recorded ${entry.lines} lines, now ${lines} — update ` +
+        "scripts/module-size-allowlist.json (or split it); the exemption is not a licence to grow",
+    );
+  }
+}
+
 // The family checker keys its allowlist by path relative to *its* root. Derive that here so the
 // allowlist can stay EnvoyDev-relative and layout-independent.
 const meshRelative = (envoyDevRelative) =>
@@ -150,4 +173,7 @@ try {
 } finally {
   rmSync(temp, { recursive: true, force: true });
 }
+// Printed after the family checker's own lines so the two kinds of warning read as a list, and after cleanup
+// so `process.exitCode` below is still the only exit path.
+for (const line of grown) process.stderr.write(`[warn] ${line}\n`);
 process.exitCode = status;

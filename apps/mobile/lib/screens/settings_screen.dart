@@ -382,28 +382,28 @@ class _PairingTile extends StatelessWidget {
         }
         return ListTile(
           title: Text(l10n.settingsPairingPairedWith(hostLabel)),
-          subtitle: Text(
-            record.lastSeenAt == null
-                ? l10n.settingsPairingNotReached
-                : _pairingSeenLabel(context, record.lastSeenAt!),
-          ),
+          subtitle: Text(_pairingSeenLabel(context, record.lastSeenAt)),
         );
       },
     );
   }
 }
 
-/// When this phone last reached the paired desktop, as a sentence.
+/// When this phone last reached the paired desktop, as a sentence — **and whose clock said so**.
+///
+/// The clock note is part of the sentence rather than a second line: a bare timestamp reads as the
+/// desktop's report, and the wire carries no client-facing last-seen field, so the reader has to be
+/// told this is the phone's own record. Anything under a day is "just now"; past that the date is the
+/// fact, formatted by the framework's own localized patterns so the ordering and separators are the
+/// user's, not this app's.
 ///
 /// Buckets rather than a live clock: a Settings page that re-rendered "just now" into "1 minute ago"
 /// under the user is churn, and the page is opened to read a fact, not to watch one.
-String _pairingSeenLabel(BuildContext context, DateTime seen) {
+String _pairingSeenLabel(BuildContext context, DateTime? seen) {
   final l10n = context.l10n;
-  final elapsed = DateTime.now().difference(seen);
-  if (elapsed.inMinutes < 1) return l10n.settingsPairingJustNow;
-  if (elapsed.inHours < 1) return l10n.settingsPairingMinutesAgo(elapsed.inMinutes);
-  if (elapsed.inDays < 1) return l10n.settingsPairingHoursAgo(elapsed.inHours);
-  // Older than a day: the date is the fact, formatted by the framework's own localized patterns so
-  // the ordering and the separators are the user's, not this app's.
-  return l10n.settingsPairingOnDate(MaterialLocalizations.of(context).formatShortDate(seen));
+  if (seen == null) return l10n.settingsPairingNotReached;
+  if (DateTime.now().difference(seen).inHours < 24) return l10n.settingsPairingLastSeenRecent;
+  return l10n.settingsPairingLastSeenOn(
+    MaterialLocalizations.of(context).formatShortDate(seen),
+  );
 }

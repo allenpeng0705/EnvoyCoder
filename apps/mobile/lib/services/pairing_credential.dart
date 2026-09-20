@@ -96,19 +96,18 @@ class PairingCredential {
   /// Write down the grant the daemon just accepted, with the identity it reported.
   ///
   /// Called only after an accepted hello: until the daemon has answered, "the token it issued" is
-  /// only a claim this phone is making.
+  /// only a claim this phone is making. [at] is the moment this phone saw it accepted, which is the
+  /// only "last seen" the wire gives a client — the daemon reports no such field to the phone.
   Future<void> accept({String? instanceId, DateTime? at}) async {
     await _store.record(daemonKey, await offered(), instanceId: instanceId, at: at);
   }
 
   /// Retire the grant this daemon has refused.
   ///
-  /// Answers true only for the first refusal since the last accepted pairing — the caller's cue to
-  /// publish "pair again". The grant is deleted either way, so it can never be presented twice, and
-  /// with nothing left to present the flow cannot loop.
-  Future<bool> retire() async {
-    if (await _store.pairingFor(daemonKey) == null) return false;
-    await _store.clear(daemonKey);
-    return true;
-  }
+  /// Deliberately `void`. An earlier version answered whether the grant existed, as a cue to publish
+  /// a re-pair prompt — but its one caller already had that fact from its own one-shot guard, and a
+  /// return value nobody reads invites the belief that it drives something. The guard lives in
+  /// `HostClient._pairingRefused`, which is the only thing that can see a host row holding the same
+  /// dead credential.
+  Future<void> retire() => _store.clear(daemonKey);
 }

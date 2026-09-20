@@ -77,7 +77,7 @@ import { CoderStore } from "./store.js";
 import { AgentDeliveries } from "./deliveries.js";
 import { createPairingHandlers } from "./pairing.js";
 import { PairedDeviceStore, pairedDevicesFile, readPairingIdentity } from "./paired-devices.js";
-import { readLifecycle } from "./lifecycle.js";
+import { readLifecycle, serviceFactsFrom } from "./lifecycle.js";
 import { reconcileInterruptedRuns } from "./reconcile.js";
 import { readTranscript, transcriptFile } from "./transcript-log.js";
 import { DAEMON_VERSION } from "./version.js";
@@ -406,13 +406,9 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
     // which made a stubbed test reach the real supervisor on the machine running it.
     service: {
       paths,
-      facts: async () => {
-        const facts = await readLifecycle(paths);
-        return {
-          restartsInLastHour: facts.bootsInLastHour,
-          ...(facts.lastStop ? { lastStop: facts.lastStop } : {}),
-        };
-      },
+      // `serviceFactsFrom` exists for the off-by-one this used to have: the ledger's newest row is *this* process,
+      // so the raw count made every healthy daemon claim a restart — and, with no stop record, a crash.
+      facts: async () => serviceFactsFrom(await readLifecycle(paths)),
     },
     // The user's delivery choices: read by the list (so a row says which route is in force), written by
     // `coder.setAgentDelivery`, and read by every launch (`deliveryOf`, above).

@@ -62,6 +62,6 @@ export const service: Catalogue = {
   "settings.service.log.title": "Registro del demone",
   "settings.service.log.reading": "Lettura del registro…",
   "settings.service.log.refresh": "Aggiorna",
-  "settings.service.log.truncated": "Sono mostrate le ultime 200 righe. Il registro è più lungo.",
-  "settings.service.log.empty": "Nessun file di registro — su questa macchina non ne è ancora stato scritto uno.",
+  "settings.service.log.truncated": "Viene mostrata la fine del registro — prima c'è dell'altro.",
+  "settings.service.log.empty": "Non è ancora stato scritto nulla nel registro.",
 };
