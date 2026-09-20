@@ -1,0 +1,60 @@
+name: release
+
+# **Staging is the one part of the installer path that no gate can cover.**
+#
+# `npm run gates` never stages: it would need the network (a Node runtime download and an Envoy Harness clone and
+# build) and minutes of work on every push. But staging is exactly what makes a packaged app runnable on a machine
+# without a checkout — `tauri.conf.bundle.json` embeds `resources/{daemon,node-runtime,envoy-harness,bin}/**`, and a
+# build that stages nothing succeeds and produces an app whose daemon cannot start. That failure shipped once.
+#
+# So it runs where it matters: on a release tag, and on demand before tagging. Staging itself needs only Node, git
+# and npm, so all three platforms can run it — the app *build* is not attempted here, because a Linux bundle also
+# needs webkit2gtk and that is a packaging decision rather than a check.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  stage:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The daemon imports the family's packages by name, so the sibling checkout has to be here whether we are
+      # testing or packaging (docs/envoymesh-integration.md) — staging builds the daemon in its packaged mode.
+      - name: Clone the mesh sibling (EnvoyMesh)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/allenpeng0705/EnvoyMesh.git ../EnvoyMesh
+          cd ../EnvoyMesh
+          npm install
+          npx tsc -b packages/protocol packages/identity packages/vault packages/api \
+                     packages/node-core packages/harness packages/host-connect packages/reuse-host
+
+      - name: Install
+        run: npm install
+
+      # Downloads the Node runtime, clones and builds Envoy Harness, and builds the daemon in packaging mode.
+      - name: Stage the bundle (the daemon, Node, Envoy Harness, the bin shims)
+        run: node scripts/stage-desktop-bundle.mjs
+
+      # The assertion, and the reason this job exists: what the bundle config embeds must be there, and the daemon
+      # must be an installed-style bundle (entry point plus the `node_modules` beside it).
+      - name: Assert what the app embeds is staged and runnable
+        run: node scripts/check-bundle-resources.mjs
+
+      # The installer scripts themselves, by their own parser — a shell script is not compiled until it runs, and
+      # the run that matters is on somebody else's machine after the tag.
+      - name: Installer scripts parse
+        run: node scripts/check-installer-scripts.mjs
