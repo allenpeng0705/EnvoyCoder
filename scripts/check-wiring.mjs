@@ -26,6 +26,15 @@
  * npm workspace links resolve the package names, with project references doing the ordering, and
  * keeps source resolution where it belongs: the vitest aliases (R6), which are checked.
  *
+ * **R3 is about the package, and a subpath used to break it.** `@envoydev/agent-catalog/features`
+ * was read as a package name, so a consumer that *had* declared `@envoydev/agent-catalog` was told it
+ * had not — and it cannot: npm has no per-subpath dependency, and the guide's R3 is "each consumer's
+ * `dependencies`". The declaration is checked against the package name (`@scope/name`), while the raw
+ * specifier still travels, because two rules are *about* the subpath: §4.2 (which rejects the bare
+ * `@envoymesh/api` barrel) and the `exports` entry-point check below, which replaces the false
+ * positive with a real question — declaring the package makes a subpath resolvable only if the
+ * package publishes it.
+ *
  * Usage: `node scripts/check-wiring.mjs`
  */
 
@@ -120,19 +129,22 @@ function importedPackages(dir) {
       while ((match = specifier.exec(source))) {
         const spec = match[1];
         if (!spec.startsWith("@envoydev/") && !spec.startsWith("@envoymesh/")) continue;
-        const name = spec.startsWith("@envoymesh/")
-          ? spec.split("/").slice(0, 2).join("/")
-          : spec;
+        // **The package, then the entry point.** Every specifier here is scoped, so the first two
+        // segments are the package and the rest is the subpath (`""` for the bare import). Reading the
+        // whole specifier as the name is what made a declared package look undeclared (see the header).
+        const [scope, pkg, ...rest] = spec.split("/");
+        const name = `${scope}/${pkg}`;
+        const subpath = rest.join("/");
         // The raw specifier travels with it: whether it was `@envoymesh/api` or
         // `@envoymesh/api/core` is the difference rule 4.2 is about.
-        imports.add(`${name}\u0000${spec}\u0000${path.relative(root, full)}`);
+        imports.add(`${name}\u0000${spec}\u0000${subpath}\u0000${path.relative(root, full)}`);
       }
     }
   };
   if (exists(path.join(dir, "src"))) walk(path.join(dir, "src"));
   return [...imports].map((entry) => {
-    const [name, spec, file] = entry.split("\u0000");
-    return { name, spec, file };
+    const [name, spec, subpath, file] = entry.split("\u0000");
+    return { name, spec, subpath, file };
   });
 }
 
@@ -149,9 +161,29 @@ for (const { name, manifest, dir } of packages.values()) {
 
   // One message per (package, file) pair, not per import site.
   const seen = new Set();
-  for (const { name: imported, spec, file } of importedPackages(dir)) {
+  for (const { name: imported, spec, subpath, file } of importedPackages(dir)) {
     // Mesh packages are `file:` links to the sibling checkout; they are not project references.
     const isLocal = localNames.includes(imported);
+    /**
+     * **A subpath has to be a published entry point, and this is checked before the dedupe.**
+     *
+     * Declaring the package is what makes `@envoydev/agent-catalog/features` legal; whether it
+     * *resolves* is a question about the target's `exports` map, which is the one fact that can change
+     * under a consumer without the consumer's manifest moving — an entry point renamed or dropped
+     * upstream (`upgrade:mesh` pulls the sibling; the harness clone is a pin that moves) would
+     * otherwise be a build failure on somebody else's machine. It runs before `seen`, which is keyed on
+     * the package, so a file importing one good subpath and one bad one still hears about the bad one.
+     * Only our own packages are checked: for a linked sibling the map is not ours to keep honest.
+     */
+    if (subpath !== "") {
+      const target = packages.get(imported);
+      if (target?.manifest.exports !== undefined && !(`./${subpath}` in target.manifest.exports)) {
+        failures.push(
+          `R3 ${name}: ${file} imports "${spec}", but ${imported} publishes no \`./${subpath}\` in ` +
+            "its `exports` — the specifier resolves to nothing.",
+        );
+      }
+    }
     const key = imported;
     if (seen.has(key)) continue;
     seen.add(key);
