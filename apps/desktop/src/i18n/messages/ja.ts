@@ -671,6 +671,14 @@ export const ja: Catalogue = {
   "error.envoyLlmApiKeyRequired":
     "Envoy Harness には {provider} の API キーが必要です。LLM 設定で入力して保存してください。",
   "error.thinkingUnsupported": "{harness} は EnvoyDev が話しかけているプロトコルでは思考レベルを受け取れないため、この実行は開始されませんでした。思考レベルを未設定にすると、{harness} 自身の判断で実行されます。",
+  "error.gitTimedOut": "git が時間内に終わらなかったため、EnvoyDev が停止しました。リポジトリが非常に大きいか、git が何かを待っている可能性があります。",
+  "error.gitMissing": "このマシンに git がインストールされていないため、EnvoyDev はこのリポジトリを読めません。git をインストールしてからもう一度お試しください。",
+  "error.gitNotARepository": "「{path}」は git リポジトリではありません。ブランチは git が追跡しているフォルダーでのみ使えます。",
+  "error.gitBusy": "このプロジェクトでは「{title}」が実行中です。ブランチを切り替える前に終了するか停止してください — エージェントの作業中に checkout すると作業が失われます。",
+  "error.gitFailed": "git は実行できませんでした: {detail}",
+  "error.gitBranchInvalid": "「{name}」はブランチ名にできません。英数字、ピリオド、ハイフン、スラッシュが使え、先頭をハイフンにはできません。",
+  "error.gitBranchTooLong": "ブランチ名は最大 {count} 文字です。",
+  "error.gitBranchEmpty": "ブランチには名前が必要です。",
   "error.projectNotFound": "このコンピューターに「{id}」というプロジェクトはありません。別のウィンドウで削除された可能性があります。",
   "error.taskNotFound": "このコンピューターに「{id}」というタスクはありません。別のウィンドウで削除された可能性があります。",
   "error.pairedDeviceMissing":

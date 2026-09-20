@@ -665,6 +665,14 @@ export const zh: Catalogue = {
   "error.envoyLlmApiKeyRequired":
     "Envoy Harness 需要 {provider} 的 API 密钥。请在 LLM 设置中输入并保存。",
   "error.thinkingUnsupported": "{harness} 无法通过 EnvoyDev 与它交流的协议获得思考档位，因此这次运行没有启动。不设置思考档位，即可让 {harness} 按自己的方式运行。",
+  "error.gitTimedOut": "git 没有及时完成，EnvoyDev 已将它停止。仓库可能很大，或者 git 在等待什么。",
+  "error.gitMissing": "这台电脑上没有安装 git，EnvoyDev 无法读取这个仓库。请先安装 git 再试。",
+  "error.gitNotARepository": "“{path}”不是 git 仓库。只有 git 跟踪的文件夹才有分支。",
+  "error.gitBusy": "这个项目里“{title}”正在运行。切换分支之前请先结束或停止它——智能体正在工作时 checkout 会丢失工作。",
+  "error.gitFailed": "git 无法完成：{detail}",
+  "error.gitBranchInvalid": "“{name}”不能作为分支名。可以使用字母、数字、点、连字符和斜杠，且不能以连字符开头。",
+  "error.gitBranchTooLong": "分支名最多 {count} 个字符。",
+  "error.gitBranchEmpty": "分支需要一个名字。",
   "error.projectNotFound": "这台机器上没有名为“{id}”的项目。它可能已在另一个窗口中被移除。",
   "error.taskNotFound": "这台机器上没有名为“{id}”的任务。它可能已在另一个窗口中被移除。",
   "error.pairedDeviceMissing":

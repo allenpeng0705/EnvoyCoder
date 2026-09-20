@@ -673,6 +673,14 @@ export const it: Catalogue = {
   "error.envoyLlmApiKeyRequired":
     "Envoy Harness richiede una chiave API per {provider}. Inseriscine una nelle impostazioni LLM e salva.",
   "error.thinkingUnsupported": "{harness} non può ricevere un livello di ragionamento tramite il protocollo che EnvoyDev parla con lui, quindi l'esecuzione non è partita. Lascia il livello di ragionamento non impostato per far decidere {harness} da sé.",
+  "error.gitTimedOut": "Git non ha finito in tempo, quindi EnvoyDev lo ha fermato. Il repository è forse molto grande, oppure git sta aspettando qualcosa.",
+  "error.gitMissing": "Git non è installato su questa macchina, quindi EnvoyDev non può leggere questo repository. Installa git e riprova.",
+  "error.gitNotARepository": "«{path}» non è un repository git. I branch esistono solo per le cartelle che git segue.",
+  "error.gitBusy": "«{title}» è in esecuzione in questo progetto. Finiscila o fermala prima di cambiare branch — un checkout sotto un agente al lavoro fa perdere lavoro.",
+  "error.gitFailed": "Git non ha potuto farlo: {detail}",
+  "error.gitBranchInvalid": "«{name}» non può essere un nome di branch. Sono ammessi lettere, cifre, punti, trattini e barre, e non può iniziare con un trattino.",
+  "error.gitBranchTooLong": "Un nome di branch può avere al massimo {count} caratteri.",
+  "error.gitBranchEmpty": "Un branch ha bisogno di un nome.",
   "error.projectNotFound": "Non esiste un progetto chiamato «{id}» su questo computer. Potrebbe essere stato rimosso da un'altra finestra.",
   "error.taskNotFound": "Non esiste un'attività chiamata «{id}» su questo computer. Potrebbe essere stata rimossa da un'altra finestra.",
   "error.pairedDeviceMissing":

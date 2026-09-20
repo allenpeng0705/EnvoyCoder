@@ -72,6 +72,8 @@ import { createCatalogHandlers } from "./catalog.js";
 import { getEnvoyLlmPublic, setEnvoyLlm, envoyHarnessModels } from "./envoy-llm.js";
 import { harnessSwitchPatch } from "./task-harness-switch.js";
 import { createFixHandlers } from "./fixes.js";
+import { createGitHandlers, measureProjectVcs, type GitDeps } from "./git.js";
+import { notFound } from "./not-found.js";
 import { createRecheckHandlers } from "./recheck.js";
 import { createProviderHandlers } from "./providers.js";
 import { createSignInHandlers } from "./sign-in.js";
@@ -147,6 +149,14 @@ export interface CoderServiceDeps {
    * scripts, and these two fields let the same be done through a daemon if a leg ever needs the whole path.
    */
   fixSpawn?: typeof import("node:child_process").spawn;
+  /**
+   * The `git` binary the branch actions run, and the spawn that starts it.
+   *
+   * Injectable on the same terms as `fixSpawn`: the test that has to see *"git is not installed"* must be
+   * able to name a program that is not there, and every other test drives the real git.
+   */
+  gitCommand?: string;
+  gitSpawn?: typeof import("node:child_process").spawn;
   fixTimeoutMs?: number;
   /**
    * The environment a provider's named variables are read from.
@@ -224,6 +234,15 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
    * same list to the child so the two cannot disagree. `searchable` travels with it, because a list that
    * could not be assembled is `unknown` rather than `not-installed`.
    */
+  /**
+   * The git program and spawn, read once so the branch handlers and `coder.addProject` — which measures a
+   * folder's version control to label the row — cannot disagree about which git they run.
+   */
+  const gitRun: GitDeps = {
+    ...(deps.gitCommand !== undefined ? { command: deps.gitCommand } : {}),
+    ...(deps.gitSpawn !== undefined ? { spawn: deps.gitSpawn } : {}),
+  };
+
   const search = currentSearchPath();
   const probe =
     deps.probe ??
@@ -271,6 +290,11 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     // behalf. The window sends an id; the commands come from the same probes that drew the row, at the moment of
     // the press, so a command the user read is the command that runs and a window cannot name one. `fixes.ts`
     // carries the four outcomes, the deadline and the group kill.
+    ...createGitHandlers({
+      store: deps.store,
+      ...(deps.runs !== undefined ? { runs: deps.runs } : {}),
+      ...gitRun,
+    }),
     ...createFixHandlers({
       probe,
       providers: () => deps.store.providers(),
@@ -338,7 +362,15 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
           ref("error.addProject.notDirectory", { path }),
         );
       }
-      const { project } = await deps.store.addProject({ ...input, path });
+      // **Best effort, and never a reason to refuse.** A project is a directory; whether git tracks it only
+      // decides which label the row wears. A machine without git, or a folder git cannot answer about,
+      // leaves `vcs` unset — and `coder.gitStatus` is where a user is told the real reason.
+      const vcs = await measureProjectVcs(gitRun, path).catch(() => undefined);
+      const { project } = await deps.store.addProject({
+        ...input,
+        path,
+        ...(vcs !== undefined ? { vcs: { kind: vcs } } : {}),
+      });
       return { project };
     },
 
@@ -975,26 +1007,6 @@ async function snapshot(runs: RunManager, runId: string, sinceSeq: number): Prom
   };
 }
 
-/**
- * "There is no such project / task."
- *
- * Two keys rather than one with a `{kind}` value, deliberately: German, French, Italian and the rest
- * inflect the noun ("kein Projekt" / "keine Aufgabe"), so a template with the noun substituted into
- * it would be wrong in exactly the languages this work exists for.
- */
-function notFound(kind: "project" | "task", id: string): Error {
-  const sentence =
-    `There is no ${kind} called "${id}" on this machine. It may have been removed from another window.`;
-  // The code follows the noun too, for the same reason the key does: a caller that has just been told
-  // its project is gone and one that has been told its task is gone do different things next.
-  return coderError(
-    kind === "project" ? ENVOYDEV_ERRORS.projectMissing : ENVOYDEV_ERRORS.taskMissing,
-    sentence,
-    kind === "project"
-      ? ref("error.projectNotFound", { id })
-      : ref("error.taskNotFound", { id }),
-  );
-}
 
 async function defaultIsDirectory(path: string): Promise<boolean> {
   try {

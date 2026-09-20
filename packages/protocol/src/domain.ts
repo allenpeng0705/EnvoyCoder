@@ -936,6 +936,40 @@ export const ENVOYDEV_ERRORS = {
   peerRefused: "envoydev.peer-refused",
   /** The operation is not supported on this platform. */
   unsupportedPlatform: "envoydev.unsupported-platform",
+  /**
+   * `git` is not on the path this daemon searched, so nothing about a repository can be read or changed.
+   *
+   * Its own code rather than `badRequest` because the answer is an action — install git — and because a
+   * user who has a repository open on the desktop should be told that this machine, not the folder, is
+   * what is missing.
+   */
+  gitMissing: "envoydev.git-missing",
+  /**
+   * The folder is not a git repository, or is one this build does not drive (`jj`, on the wire, is not
+   * driven yet).
+   *
+   * A refusal rather than an empty answer: "no branches" for a folder that is not a repository reads as a
+   * broken repository, and the sentence a user needs is about the folder.
+   */
+  gitNotARepository: "envoydev.git-not-a-repository",
+  /**
+   * Git itself refused the operation, and its own sentence is the detail.
+   *
+   * The `detail` the window shows is git's `stderr` — the one place in this product where a program's own
+   * words are passed through, because a user who has hit a git edge case (an unrelated history, a
+   * protected branch, a missing author) can only act on git's own explanation of it.
+   */
+  gitFailed: "envoydev.git-failed",
+  /**
+   * A run is live in this project, so a command that would rewrite the working tree is refused.
+   *
+   * The refusal that keeps two writers out of one folder: an agent part-way through an edit and a
+   * `checkout` in the same tree is how a user loses work, and neither program can see the other. Reads are
+   * never refused — looking is not the dangerous half.
+   */
+  gitBusy: "envoydev.git-busy",
+  /** The name the user typed cannot be a branch name. */
+  gitBranchInvalid: "envoydev.git-branch-invalid",
 } as const;
 
 export type EnvoyDevErrorCode = (typeof ENVOYDEV_ERRORS)[keyof typeof ENVOYDEV_ERRORS];
@@ -1017,6 +1051,19 @@ export const RPC_METHODS = [
    * stay inside the repository.
    */
   "coder.readWorktreeDiff",
+  /**
+   * The repository's state, the branches it has, and the two branch actions — all on the **project's own
+   * folder**, never on a task's, and all executed by the daemon on the desktop the folder lives on.
+   *
+   * Four methods rather than one `coder.git` with an action field: each has its own parameters and its own
+   * result, and a single method with a union would let a client send a `checkout` where a `status` belongs.
+   * The operations themselves are closed — the client names a branch, never a command — which is the same
+   * property `coder.runFix` states for the one other place this product runs something for a user.
+   */
+  "coder.gitStatus",
+  "coder.gitBranches",
+  "coder.gitCheckout",
+  "coder.gitCreateBranch", 
   "coder.listTasks",
   "coder.createTask",
   "coder.updateTask",

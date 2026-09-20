@@ -37,15 +37,14 @@
  */
 
 import { spawn as nodeSpawn } from "node:child_process";
-import type { ChildProcessWithoutNullStreams, SpawnOptions } from "node:child_process";
+
+import { runBounded, tailText } from "./bounded-process.js";
 
 import {
   buildShellCommand,
   capabilitiesFor,
   currentSearchPath,
   detectPlatform,
-  processGroupTarget,
-  spawnTreeOptions,
   type PlatformId,
 } from "@envoydev/platform";
 import {
@@ -122,16 +121,18 @@ export async function runFixCommands(input: FixRunInput): Promise<FixRunResult> 
   let output = "";
   for (const command of commands) {
     const shell = buildShellCommand(command, { platform: input.platform });
-    const options: SpawnOptions = {
+    // One deadline per command, the whole process group killed on expiry, `stdin` at `/dev/null` — the
+    // properties are `bounded-process.ts`'s now, because `git` needs the same three for its own reasons.
+    const collected = await runBounded(shell.command, shell.args, {
       cwd: input.cwd,
       env,
-      // `/dev/null`, so a prompt cannot hold a window open: EOF is an answer.
-      stdio: ["ignore", "pipe", "pipe"],
-      ...spawnTreeOptions(input.platform),
-    };
-    const child = input.spawn(shell.command, [...shell.args], options) as ChildProcessWithoutNullStreams;
-    const collected = await collect(child, input.timeoutMs, input.platform);
-    output = tail(output + collected.text, FIX_OUTPUT_LIMIT);
+      timeoutMs: input.timeoutMs,
+      outputLimit: FIX_OUTPUT_LIMIT,
+      killGraceMs: FIX_KILL_GRACE_MS,
+      platform: input.platform,
+      spawn: input.spawn,
+    });
+    output = tailText(output + collected.text, FIX_OUTPUT_LIMIT);
     if (collected.timedOut) {
       return {
         outcome: "failed",
@@ -146,72 +147,6 @@ export async function runFixCommands(input: FixRunInput): Promise<FixRunResult> 
     }
   }
   return { outcome: "succeeded", commands, exitCode: 0, output };
-}
-
-interface Collected {
-  text: string;
-  code: number | null;
-  timedOut: boolean;
-}
-
-/**
- * Wait for one command, bounded — and kill the **group** if the bound is reached.
- *
- * The two streams are joined in arrival order rather than kept apart: a user reading this wants the story npm
- * told, and a stderr block printed after the stdout block is not that story. `timedOut` is a local rather than
- * a property of the child because `close` reports a *signal* as a null code, and a command killed by its own
- * timeout and one killed by the user would otherwise be the same event — "it was stopped" and "it failed" are
- * different sentences to the person waiting.
- */
-function collect(
-  child: ChildProcessWithoutNullStreams,
-  timeoutMs: number,
-  platform: PlatformId,
-): Promise<Collected> {
-  return new Promise((resolve) => {
-    let text = "";
-    let settled = false;
-    let timedOut = false;
-
-    const append = (chunk: Buffer): void => {
-      text = tail(text + chunk.toString("utf8"), FIX_OUTPUT_LIMIT);
-    };
-    child.stdout.on("data", append);
-    child.stderr.on("data", append);
-
-    const kill = (signal: NodeJS.Signals): void => {
-      try {
-        // The group, not the leader: `npm install` spawns children, and a timeout that killed only the leader
-        // would leave the work running with nobody reading its output.
-        process.kill(processGroupTarget(child.pid ?? 0, platform), signal);
-      } catch {
-        // Already gone, which is what the `close` below reports.
-      }
-    };
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      kill("SIGTERM");
-      // A group that ignores SIGTERM is killed outright. `unref` so a straggler cannot hold the daemon open.
-      setTimeout(() => kill("SIGKILL"), FIX_KILL_GRACE_MS).unref();
-    }, timeoutMs);
-
-    const finish = (code: number | null): void => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve({ text, code, timedOut });
-    };
-
-    child.on("error", () => finish(null));
-    child.on("close", (code) => finish(code));
-  });
-}
-
-/** The last `limit` characters, with a marker when something was dropped. */
-function tail(text: string, limit: number): string {
-  if (text.length <= limit) return text;
-  return `…\n${text.slice(text.length - limit)}`;
 }
 
 export interface FixHandlerDeps {

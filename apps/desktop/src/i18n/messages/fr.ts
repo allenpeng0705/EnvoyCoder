@@ -673,6 +673,14 @@ export const fr: Catalogue = {
   "error.envoyLlmApiKeyRequired":
     "Envoy Harness a besoin d’une clé API pour {provider}. Saisissez-en une dans les réglages LLM, puis enregistrez.",
   "error.thinkingUnsupported": "{harness} ne peut pas recevoir de niveau de réflexion via le protocole qu'EnvoyDev parle avec lui, cette exécution n'a donc pas été lancée. Laissez le niveau de réflexion vide pour que {harness} décide lui-même.",
+  "error.gitTimedOut": "Git n'a pas terminé à temps, donc EnvoyDev l'a arrêté. Le dépôt est peut-être très volumineux, ou git attend quelque chose.",
+  "error.gitMissing": "Git n'est pas installé sur cette machine, donc EnvoyDev ne peut pas lire ce dépôt. Installez git et réessayez.",
+  "error.gitNotARepository": "« {path} » n'est pas un dépôt git. Les branches n'existent que pour les dossiers suivis par git.",
+  "error.gitBusy": "« {title} » est en cours dans ce projet. Terminez-la ou arrêtez-la avant de changer de branche — un checkout sous un agent au travail fait perdre du travail.",
+  "error.gitFailed": "Git n'a pas pu le faire : {detail}",
+  "error.gitBranchInvalid": "« {name} » ne peut pas être un nom de branche. Les lettres, chiffres, points, tirets et barres obliques sont acceptés, et il ne peut pas commencer par un tiret.",
+  "error.gitBranchTooLong": "Un nom de branche peut faire au plus {count} caractères.",
+  "error.gitBranchEmpty": "Une branche a besoin d'un nom.",
   "error.projectNotFound": "Il n'y a pas de projet nommé « {id} » sur cet ordinateur. Il a peut-être été supprimé depuis une autre fenêtre.",
   "error.taskNotFound": "Il n'y a pas de tâche nommée « {id} » sur cet ordinateur. Elle a peut-être été supprimée depuis une autre fenêtre.",
   "error.pairedDeviceMissing":

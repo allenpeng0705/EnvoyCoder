@@ -70,6 +70,14 @@ export interface AddProjectInput {
   label?: string;
   hostId?: string;
   defaults?: { harness?: HarnessId; model?: string; extraArgs?: string };
+  /**
+   * What kind of version control the folder is, **measured by the caller**.
+   *
+   * The store owns data and not the filesystem, so it does not run `git`; the daemon's `coder.addProject`
+   * measures it and passes it in. Only the *kind* is stored — the branch is measured on every read, because
+   * a branch moves under us and a stored one is a lie the window cannot notice.
+   */
+  vcs?: Project["vcs"];
 }
 
 export interface CreateTaskInput {
@@ -435,6 +443,7 @@ export class CoderStore {
       hostId,
       addedAt: this.now().toISOString(),
       ...(input.defaults ? { defaults: input.defaults } : {}),
+      ...(input.vcs ? { vcs: input.vcs } : {}),
     };
     this.projectsState = [...this.projectsState, project];
     await this.persistProjects(["added"]);

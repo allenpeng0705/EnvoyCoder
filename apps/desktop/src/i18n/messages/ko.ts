@@ -671,6 +671,14 @@ export const ko: Catalogue = {
   "error.envoyLlmApiKeyRequired":
     "Envoy Harness에는 {provider}용 API 키가 필요합니다. LLM 설정에서 입력한 뒤 저장하세요.",
   "error.thinkingUnsupported": "{harness}는 EnvoyDev가 이 에이전트와 주고받는 프로토콜로는 사고 단계를 받을 수 없어서 이 실행을 시작하지 않았습니다. 사고 단계를 설정하지 않으면 {harness}가 스스로 판단해 실행됩니다.",
+  "error.gitTimedOut": "git이 제때 끝나지 않아 EnvoyDev가 중지했습니다. 저장소가 매우 크거나 git이 무언가를 기다리고 있을 수 있습니다.",
+  "error.gitMissing": "이 컴퓨터에 git이 설치되어 있지 않아 EnvoyDev가 이 저장소를 읽을 수 없습니다. git을 설치한 뒤 다시 시도하세요.",
+  "error.gitNotARepository": "\"{path}\"은(는) git 저장소가 아닙니다. 브랜치는 git이 추적하는 폴더에서만 쓸 수 있습니다.",
+  "error.gitBusy": "이 프로젝트에서 \"{title}\"이(가) 실행 중입니다. 브랜치를 바꾸기 전에 끝내거나 중지하세요 — 에이전트가 작업하는 중에 checkout하면 작업이 사라집니다.",
+  "error.gitFailed": "git이 실행하지 못했습니다: {detail}",
+  "error.gitBranchInvalid": "\"{name}\"은(는) 브랜치 이름이 될 수 없습니다. 문자, 숫자, 점, 하이픈, 슬래시를 쓸 수 있고 하이픈으로 시작할 수 없습니다.",
+  "error.gitBranchTooLong": "브랜치 이름은 최대 {count}자입니다.",
+  "error.gitBranchEmpty": "브랜치에는 이름이 필요합니다.",
   "error.projectNotFound": "이 컴퓨터에 “{id}”라는 프로젝트가 없습니다. 다른 창에서 제거되었을 수 있습니다.",
   "error.taskNotFound": "이 컴퓨터에 “{id}”라는 작업이 없습니다. 다른 창에서 제거되었을 수 있습니다.",
   "error.pairedDeviceMissing":

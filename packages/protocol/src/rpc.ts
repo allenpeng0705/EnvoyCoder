@@ -1806,6 +1806,40 @@ export type PromptImage = z.infer<typeof PromptImageSchema>;
  * Grouped by the question it answers, because that is how a client consumes them: the rail asks for
  * projects and tasks, the pane asks for a run, settings asks for settings.
  */
+/**
+ * A repository's state, as the rail and the branch picker need it.
+ *
+ * One shape for three answers — `coder.gitStatus`, and the result of both write actions — because every
+ * one of them leaves a repository whose state the caller now has to render, and a second shape would be a
+ * second thing for a client to learn.
+ */
+export const GitStatusSchema = z
+  .object({
+    kind: z.enum(["git", "jj", "none"]),
+    /** Absent when HEAD is detached, or when this folder is not a repository. */
+    branch: z.string().min(1).optional(),
+    detached: z.boolean(),
+    upstream: z.string().min(1).optional(),
+    ahead: z.number().int().nonnegative(),
+    behind: z.number().int().nonnegative(),
+    /** Entries git reported: staged, modified and untracked. */
+    dirty: z.number().int().nonnegative(),
+    conflicted: z.boolean(),
+  })
+  .strict();
+
+export type GitStatus = z.infer<typeof GitStatusSchema>;
+
+export const GitBranchSchema = z
+  .object({
+    name: z.string().min(1),
+    current: z.boolean(),
+    upstream: z.string().min(1).optional(),
+  })
+  .strict();
+
+export type GitBranch = z.infer<typeof GitBranchSchema>;
+
 export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.freeze({
   /* — who am I talking to, and what does this daemon do — */
   "coder.hello": {
@@ -2022,6 +2056,55 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
   },
 
   /* — tasks — */
+  /**
+   * The repository's state: which branch, how far from its upstream, and whether there is work in the tree.
+   *
+   * Every field is measured on the read rather than stored on the project. A branch changes under us — a
+   * user's terminal, an agent, another window — and a cached branch is a lie the UI has no way to notice;
+   * `Project.vcs` stores only *what kind* of repository this folder is, which is the fact that does not move.
+   */
+  "coder.gitStatus": {
+    params: z.object({ projectId: z.string().min(1) }).strict(),
+    result: GitStatusSchema,
+  },
+  /**
+   * The branches this repository has, and which one HEAD is on.
+   *
+   * Read-only, so it is never refused while a run is live: a picker that cannot be opened during a run is
+   * a picker a user stops trusting.
+   */
+  "coder.gitBranches": {
+    params: z.object({ projectId: z.string().min(1) }).strict(),
+    result: z
+      .object({
+        branches: z.array(GitBranchSchema).readonly(),
+        /** True when no branch is current — the state git calls a detached HEAD. */
+        detached: z.boolean(),
+      })
+      .strict(),
+  },
+  /**
+   * Switch to an existing branch, in the project's own folder.
+   *
+   * The daemon builds the argv; the client sends a branch **name**. Git refuses by itself when the switch
+   * would overwrite local changes, and that refusal is surfaced rather than pre-empted — we do not know
+   * which changes a user is willing to lose.
+   */
+  "coder.gitCheckout": {
+    params: z.object({ projectId: z.string().min(1), branch: z.string().min(1) }).strict(),
+    result: GitStatusSchema,
+  },
+  /**
+   * Create a branch at HEAD and switch to it, which is the first half of the workflow this exists for.
+   *
+   * `git` remains the authority on names: a name this build accepts can still be refused by git, and that
+   * refusal arrives as `gitBranchInvalid` with git's own sentence as the detail.
+   */
+  "coder.gitCreateBranch": {
+    params: z.object({ projectId: z.string().min(1), name: z.string().min(1) }).strict(),
+    result: GitStatusSchema,
+  },
+
   "coder.listTasks": {
     params: z
       .object({ projectId: z.string().min(1).optional(), includeArchived: z.boolean().optional() })

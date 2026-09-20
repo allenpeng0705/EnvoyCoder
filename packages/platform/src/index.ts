@@ -560,6 +560,7 @@ export * from "./home-fs-file.js";
  * Separate from the directory listing: a folder picker does not need git, and a missing
  * repository is an answer, not a browse failure.
  */
+export * from "./git.js";
 export * from "./worktree-changes.js";
 export * from "./worktree-diff.js";
 

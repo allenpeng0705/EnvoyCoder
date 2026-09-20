@@ -1070,6 +1070,14 @@ export const en = {
   // The straight quotes are the daemon's own (`service.ts`, `runs.ts` write `${id}` inside `"…"`),
   // and they are kept here deliberately: this entry *is* the sentence an English user already reads,
   // and an equality test in `daemon-errors-i18n.test.ts` fails if the two ever drift.
+  "error.gitTimedOut": "Git did not finish in time, so EnvoyDev stopped it. The repository may be very large, or git may be waiting for something.",
+  "error.gitMissing": "Git is not installed on this machine, so EnvoyDev cannot read this repository. Install git and try again.",
+  "error.gitNotARepository": "\"{path}\" is not a git repository. Branches exist only for folders git tracks.",
+  "error.gitBusy": "\"{title}\" is running in this project. Finish or stop it before changing branches — a checkout under a working agent loses work.",
+  "error.gitFailed": "Git could not do that: {detail}",
+  "error.gitBranchInvalid": "\"{name}\" cannot be a branch name. Letters, digits, dots, dashes and slashes are allowed, and it cannot start with a dash.",
+  "error.gitBranchTooLong": "A branch name can be at most {count} characters.",
+  "error.gitBranchEmpty": "A branch needs a name.",
   "error.projectNotFound":
     "There is no project called \"{id}\" on this machine. It may have been removed from another window.",
   "error.taskNotFound":
