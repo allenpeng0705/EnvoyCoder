@@ -50,6 +50,15 @@ export interface ProjectBranchesProps {
   onFetch: () => Promise<{ ok: true; summary: string } | Refusal>;
   /** Pull: a fast-forward, or a refusal saying the histories have diverged. */
   onPull: () => Promise<{ ok: true; summary: string } | Refusal>;
+  /**
+   * Merge a branch **and hand a conflict to an agent**, which is the one path that leaves the repository
+   * mid-merge on purpose. Offered where a merge has just conflicted, so the branch is the one the user chose.
+   */
+  onResolve: (branch: string) => Promise<{ ok: true; outcome: "merged"; into?: string } | { ok: true; outcome: "resolving"; task: string } | Refusal>;
+  /** Record a merge whose conflicts are resolved. Refused while any remain, naming them. */
+  onFinishMerge: () => Promise<{ ok: true; sha: string } | Refusal>;
+  /** Take a merge in progress back — the way out, and the only one when nobody resolves it. */
+  onAbortMerge: () => Promise<{ ok: true } | Refusal>;
 }
 
 export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null {
@@ -59,6 +68,8 @@ export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null
   const [draft, setDraft] = useState("");
   const [notice, setNotice] = useState<string | undefined>(undefined);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  /** The branch whose merge just conflicted, so the offer to resolve it names the one the user chose. */
+  const [conflicted, setConflicted] = useState<string | undefined>(undefined);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -77,6 +88,20 @@ export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null
     asked.current = true;
     void props.onRead();
   }, [kind, props.snapshot, props.onRead]);
+
+  useEffect(() => {
+    if (!open) return;
+    /**
+     * **Opening the panel measures again.**
+     *
+     * The branch and the merge state both move under this window — a terminal, another window, an agent that
+     * has just resolved a conflict — and the panel is where a user acts on those facts. Measuring once per
+     * window would leave *Finish* disabled after an agent had done its work, with no way to find out except
+     * pressing something that refuses. The mount read below stays guarded, so a folder git cannot answer about
+     * is still asked once rather than on every render.
+     */
+    void props.onRead();
+  }, [open, props.onRead]);
 
   useEffect(() => {
     if (!open) return;
@@ -100,8 +125,18 @@ export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null
 
   if (kind !== "git") return null;
 
-  const label =
+  /**
+   * What the trigger says, and the branch name it needs as a *value* elsewhere.
+   *
+   * A conflict outranks the branch in the chip: it is the one state here a user has to act on, and the title
+   * still names the branch. The two are kept apart because `label` is interpolated into the merge sentences
+   * ("Merge {branch} into {current}"), and a chip word leaking into one of those would read as a branch
+   * called "Conflicts".
+   */
+  const currentBranch =
     status?.branch ?? (status?.detached === true ? t("git.branches.detachedChip") : t("sidebar.project.branch", { branch: "…" }));
+  const label =
+    status?.merge !== undefined && status.conflicted ? t("git.branches.conflictsChip") : currentBranch;
 
   const close = (returnFocus = true): void => {
     setOpen(false);
@@ -136,13 +171,52 @@ export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null
     setBusy(true);
     setRefusal(undefined);
     setNotice(undefined);
+    setConflicted(undefined);
     const result = await props.onMerge(branch.name);
+    setBusy(false);
+    if (!result.ok) {
+      setRefusal(localize(t, result));
+      // **A conflict is the one refusal with a second act to it**, and the keys are how this panel knows
+      // which refusal it is holding without re-reading the sentence: the branch is still here to hand over.
+      setConflicted(result.key === "error.gitMergeConflict" ? branch.name : undefined);
+      return;
+    }
+    setNotice(t("git.merge.done", { branch: branch.name, into: result.into ?? currentBranch }));
+  };
+
+  /** Merge again — this time keeping the conflict — and let an agent resolve it. */
+  const resolve = async (branch: string): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    setRefusal(undefined);
+    setNotice(undefined);
+    const result = await props.onResolve(branch);
+    setBusy(false);
+    setConflicted(undefined);
+    if (!result.ok) {
+      setRefusal(localize(t, result));
+      return;
+    }
+    setNotice(
+      result.outcome === "merged"
+        ? t("git.merge.done", { branch, into: result.into ?? currentBranch })
+        : t("git.merge.resolving", { task: result.task }),
+    );
+  };
+
+  /** Record a resolved merge, or take one back — the two ends of the state the block above reports. */
+  const settleMerge = async (finish: boolean): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    setRefusal(undefined);
+    setNotice(undefined);
+    const result = finish ? await props.onFinishMerge() : await props.onAbortMerge();
     setBusy(false);
     if (!result.ok) {
       setRefusal(localize(t, result));
       return;
     }
-    setNotice(t("git.merge.done", { branch: branch.name, into: result.into ?? label }));
+    setNotice(t(finish ? "git.merge.recorded" : "git.merge.aborted"));
   };
 
   /** A fetch or a pull, which differ only in which call they make and what they say afterwards. */
@@ -190,7 +264,7 @@ export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={t("git.branches.aria", { project: props.project.label })}
-        title={t("sidebar.project.branch", { branch: label })}
+        title={t("sidebar.project.branch", { branch: currentBranch })}
         onClick={() => (open ? close() : setOpen(true))}
       >
         <BranchIcon size={13} />
@@ -200,6 +274,42 @@ export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null
       {open ? (
         <div className="project__branch-panel row-menu__list" role="dialog" aria-label={t("git.branches.aria", { project: props.project.label })}>
           <p className="project__branch-title">{t("git.branches.title")}</p>
+
+          {/* **A merge in progress is the state of the repository**, so it comes before the list of branches
+              a user could switch to — and it is where Finish and Abort live, because a merge without them is
+              the state this product refuses to leave behind. */}
+          {status?.merge !== undefined ? (
+            <div className="project__branch-merge-state" data-testid="merge-state">
+              <p className="project__branch-note">
+                {status.merge.branch !== undefined
+                  ? t("git.merge.stoppedFrom", { branch: status.merge.branch })
+                  : t("git.merge.stopped")}
+              </p>
+              {status.conflicted ? null : (
+                <p className="project__branch-note">{t("git.merge.resolved")}</p>
+              )}
+              <div className="project__branch-sync">
+                <button
+                  type="button"
+                  className="button"
+                  // Off while files are still in conflict: the daemon would refuse, and the sentence above is
+                  // what tells the user what has to happen first.
+                  disabled={busy || status.conflicted}
+                  onClick={() => void settleMerge(true)}
+                >
+                  {t("git.merge.finish")}
+                </button>
+                <button
+                  type="button"
+                  className="button button--ghost"
+                  disabled={busy}
+                  onClick={() => void settleMerge(false)}
+                >
+                  {t("git.merge.abort")}
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           {status?.detached === true ? (
             <p className="project__branch-note">{t("git.branches.detached")}</p>
@@ -228,8 +338,8 @@ export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null
                     <button
                       type="button"
                       className="project__branch-merge"
-                      title={t("git.merge.into", { branch: branch.name, current: label })}
-                      aria-label={t("git.merge.into", { branch: branch.name, current: label })}
+                      title={t("git.merge.into", { branch: branch.name, current: currentBranch })}
+                      aria-label={t("git.merge.into", { branch: branch.name, current: currentBranch })}
                       disabled={busy}
                       onClick={() => void merge(branch)}
                     >
@@ -292,6 +402,19 @@ export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null
             <p className="project__branch-refusal" role="alert">
               {refusal}
             </p>
+          ) : null}
+          {/* The refusal above names the files; this is the act that follows from it. It stays here, under
+              the sentence, rather than being one of the branch rows' own controls: the conflict belongs to the
+              merge that just failed, not to the branch list. */}
+          {conflicted !== undefined ? (
+            <button
+              type="button"
+              className="button button--ghost project__branch-resolve"
+              disabled={busy}
+              onClick={() => void resolve(conflicted)}
+            >
+              {t("git.merge.resolve")}
+            </button>
           ) : null}
         </div>
       ) : null}

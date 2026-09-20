@@ -18,6 +18,10 @@ import {
   GIT_BRANCHES_ARGS,
   GIT_HAS_HEAD_ARGS,
   GIT_HAS_STAGED_ARGS,
+  GIT_MERGE_ABORT_ARGS,
+  GIT_MERGE_CONTINUE_ARGS,
+  GIT_MERGE_HEAD_ARGS,
+  GIT_MERGE_HEAD_BRANCH_ARGS,
   GIT_STASH_LIST_ARGS,
   GIT_STASH_PUSH_ARGS,
   GIT_STASH_POP_UNDO_ARGS,
@@ -33,6 +37,7 @@ import {
   gitStashDropArgs,
   gitStashPopArgs,
   gitUnstageArgs,
+  mergeBranchName,
   parseGitBranches,
   parseGitStashList,
   parseGitStatus,
@@ -293,6 +298,59 @@ describe("detectVcsKind", () => {
     expect(detectVcsKind(root, { gitRepository: false })).toBe("jj");
     // A colocated repository answers git: that is the interface this product drives.
     expect(detectVcsKind(root, { gitRepository: true })).toBe("git");
+  });
+});
+
+describe("a merge in progress", () => {
+  it("names a merge head only when git gave a name", () => {
+    expect(mergeBranchName("work")).toBe("work");
+    expect(mergeBranchName("origin/work")).toBe("origin/work");
+    // What `name-rev` really prints, measured: a commit no ref reaches is the literal `undefined`, with exit
+    // code 0 — so the code cannot be the guard and the parser is.
+    expect(mergeBranchName("undefined")).toBeUndefined();
+    expect(mergeBranchName("")).toBeUndefined();
+    expect(mergeBranchName("   ")).toBeUndefined();
+    // A diagnostic line, and a name-rev answer this build would not know how to show.
+    expect(mergeBranchName("Could not get sha1 for MERGE_HEAD. Skipping.")).toBeUndefined();
+    // A distance suffix is kept: it is what the merge brought in.
+    expect(mergeBranchName("work~1")).toBe("work~1");
+  });
+
+  itGit("measures a merge in progress from the repository itself", () => {
+    const root = repository();
+    writeFileSync(join(root, "a.txt"), "theirs\n");
+    run(root, ["commit", "-qam", "theirs"]);
+    // A second branch that conflicts with it, merged from `work`.
+    run(root, ["checkout", "-q", "main"]);
+    writeFileSync(join(root, "a.txt"), "ours\n");
+    run(root, ["commit", "-qam", "ours"]);
+    const merged = spawnSync("git", ["-C", root, "merge", "--no-edit", "work"], { encoding: "utf8" });
+    expect(merged.status).not.toBe(0);
+
+    // `MERGE_HEAD` is what makes `commit` a merge commit, and asking by exit code is how the daemon decides
+    // which operation is in progress without reading git's localised sentence about it.
+    expect(spawnSync("git", ["-C", root, ...GIT_MERGE_HEAD_ARGS], { encoding: "utf8" }).status).toBe(0);
+    expect(mergeBranchName(gitOut(root, GIT_MERGE_HEAD_BRANCH_ARGS))).toBe("work");
+
+    // Unresolved entries are what `merge --continue` refuses on and what the abort clears.
+    expect(gitOut(root, ["status", "--porcelain"])).toContain("UU a.txt");
+
+    run(root, GIT_MERGE_ABORT_ARGS);
+    expect(spawnSync("git", ["-C", root, ...GIT_MERGE_HEAD_ARGS], { encoding: "utf8" }).status).not.toBe(0);
+    expect(gitOut(root, ["status", "--porcelain"])).toBe("");
+
+    // And with the merge in progress again, resolving the file is what lets git finish it: `commit --no-edit`
+    // writes git's own merge message, which is what a terminal would have written. The merge conflicts, so its
+    // exit code is asserted rather than run through the helper that throws on any failure.
+    expect(
+      spawnSync("git", ["-C", root, "merge", "--no-edit", "work"], { encoding: "utf8" }).status,
+    ).not.toBe(0);
+    expect(spawnSync("git", ["-C", root, ...GIT_MERGE_CONTINUE_ARGS], { encoding: "utf8" }).status).not.toBe(0);
+    writeFileSync(join(root, "a.txt"), "resolved\n");
+    run(root, ["add", "a.txt"]);
+    run(root, GIT_MERGE_CONTINUE_ARGS);
+    expect(gitOut(root, ["log", "-1", "--format=%s"]).trim()).toBe("Merge branch 'work'");
+    expect(spawnSync("git", ["-C", root, ...GIT_MERGE_HEAD_ARGS], { encoding: "utf8" }).status).not.toBe(0);
   });
 });
 

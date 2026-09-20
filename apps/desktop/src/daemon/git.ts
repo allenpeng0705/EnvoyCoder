@@ -1,111 +1,62 @@
-/**
- * Branch actions on a project's own folder — the daemon side of `coder.git*`.
- *
- * ## The property, taken from the one other place this product runs something for a user
- *
- * `coder.runFix` states it: **the client sends a name, never a command.** Here the name is a branch, a
- * project id, a stash number, or nothing at all, and the argv is built in this file from
- * `@envoydev/platform`'s builders. There is no field in any request that could carry a command line, so a
- * window — or a phone, or a mesh peer, or a buggy client — cannot turn this into a shell. Reads are
- * `../packages/platform/src/git.ts`'s parsers, pure and pinned against a real repository.
- *
- * ## What refuses while a run is live, and the criterion behind it
- *
- * An agent mid-edit and a `checkout` in the same working tree is how a user loses work, and neither program
- * can see the other: the agent is holding file handles the daemon knows nothing about, and git only knows
- * that the tree is dirty. The rule is therefore **a command that would move the working tree or a branch is
- * refused while a run is live anywhere in the project** (a run's own folder is inside it), and the refusal
- * names the task, because "something is running" is not something a user can act on.
- *
- *   * refused: `gitCheckout`, `gitCreateBranch`, `gitMerge`, `gitPull`, `gitStage`, `gitUnstage`,
- *     `gitCommit`, `gitStashPush`, `gitStashPop` — every one of them rewrites a file in the tree;
- *   * allowed: `gitStatus`, `gitBranches`, `gitStashList`, `gitWorktreeDiff`, `gitFetch` and
- *     `gitStashDrop` — looking is not the dangerous half, a fetch moves only remote-tracking refs, and
- *     dropping a stash moves no branch and no file. A picker nobody can open during a run is a picker
- *     nobody trusts.
- *
- * ## What is deliberately absent
- *
- * No force-push, no rebase, no `reset --hard` as a *user* action, and no `push`: each of the first three
- * destroys work that git cannot get back, and each needs a confirmation that names what is about to be lost
- * — which is a conversation, not a method. The one `reset --hard` in here is not a user action at all: it
- * is `gitStashPop` taking back a *pop it just made onto a tree it measured as clean*, and `platform/git.ts`
- * records why that is exact. Credentials are not this file's business either: a `fetch`/`pull` runs with the
- * user's own git and helper, which is the whole credential story this product has.
- */
-
-import { spawn as nodeSpawn } from "node:child_process";
-
 import {
   GIT_BRANCHES_ARGS,
   GIT_FETCH_ARGS,
-  GIT_HAS_HEAD_ARGS,
-  GIT_HAS_STAGED_ARGS,
   GIT_MERGE_ABORT_ARGS,
+  GIT_MERGE_CONTINUE_ARGS,
   GIT_PULL_ARGS,
-  GIT_STASH_LIST_ARGS,
   GIT_STASH_PUSH_ARGS,
   GIT_STASH_POP_UNDO_ARGS,
   GIT_STASH_POP_UNDO_CLEAN_ARGS,
-  GIT_STATUS_ARGS,
   branchNameRefusal,
-  currentSearchPath,
-  detectVcsKind,
   gitCheckoutBranchArgs,
   gitCommitArgs,
   gitCreateBranchArgs,
-  gitEnv,
   gitMergeArgs,
   gitStageArgs,
   gitStashDropArgs,
   gitStashPopArgs,
   gitUnstageArgs,
-  listWorktreeChanges,
   parseGitBranches,
-  parseGitStashList,
-  parseGitStatus,
   type BranchNameRefusal,
-  type GitStash,
-  type VcsKind,
-  type WorktreeChange,
 } from "@envoydev/platform";
 import {
   ENVOYDEV_ERRORS,
   coderError,
+  coderErrorMessage,
   parseRpcParams,
   type GitStatus,
   type RpcMethod,
 } from "@envoydev/protocol";
 
-import { runBounded, tailText, type BoundedOutput } from "./bounded-process.js";
+import type { BoundedOutput } from "./bounded-process.js";
+import {
+  changesOf,
+  conflictsOf,
+  gitFailed,
+  gitRoot,
+  hasHead,
+  hasStaged,
+  invalidBranch,
+  listOf,
+  measureProjectVcs,
+  readStatus,
+  runGit,
+  stashAnswer,
+  statusOf,
+  stashesOf,
+  summaryOf,
+  type GitRunDeps,
+} from "./git-runner.js";
 import { ref } from "./messages.js";
-import { notFound } from "./not-found.js";
-import type { RunManager } from "./runs.js";
-import type { CoderHandler } from "./service.js";
-import type { CoderStore } from "./store.js";
-
-/** A read. `git status` on a very large repository is the slow case, and it is still a read. */
-export const GIT_READ_TIMEOUT_MS = 10_000;
-
-/** A write. A checkout rewrites the working tree, and a filter (LFS, say) may have to fetch first. */
-export const GIT_WRITE_TIMEOUT_MS = 60_000;
-
-/** How much of git's own output is kept. Enough for the `fatal:` line, not enough to be a transcript. */
-export const GIT_OUTPUT_LIMIT = 16 * 1024;
-
-/** How much of it goes into the sentence a user reads. */
-const GIT_DETAIL_LIMIT = 400;
 
 /**
  * The English sentences, byte-identical to the catalogue's.
  *
- * Duplicated on purpose, exactly as `service.ts` duplicates its own: the sentence is the wire's fallback
- * and the log line, and `daemon-errors-i18n.test.ts` compares the two so they cannot drift.
+ * Duplicated on purpose, exactly as `service.ts` duplicates its own: the sentence is the wire's fallback and
+ * the log line, and `daemon-errors-i18n.test.ts` compares the two so they cannot drift. The two the *runner*
+ * raises (`gitMissing`, `gitTimedOut`) travel with it, because they are about starting a child rather than
+ * about a method.
  */
-const MISSING_SENTENCE =
-  "Git is not installed on this machine, so EnvoyDev cannot read this repository. Install git and try again.";
-const TIMED_OUT_SENTENCE =
-  "Git did not finish in time, so EnvoyDev stopped it. The repository may be very large, or git may be waiting for something.";
 const NOTHING_STAGED_SENTENCE =
   "Nothing is staged, so there is nothing to commit. Stage a file first — or stage everything and commit that.";
 const COMMIT_EMPTY_SENTENCE = "A commit needs a message.";
@@ -115,235 +66,99 @@ const NOTHING_TO_STASH_SENTENCE =
   "There is nothing to stash — no file in this folder has uncommitted changes.";
 const STASH_DIRTY_SENTENCE =
   "Putting a stash back needs a clean working tree. Commit or stash the changes in this folder first.";
+import { notFound } from "./not-found.js";
+import type { RunManager } from "./runs.js";
+import type { CoderHandler } from "./service.js";
+import type { CoderStore } from "./store.js";
 
-export interface GitHandlerDeps {
+// Re-exported because this is the module a caller reaches for: the runner and the measurements are the
+// implementation of these methods, not a second thing to know about.
+export { measureProjectVcs } from "./git-runner.js";
+
+/** A read. `git status` on a very large repository is the slow case, and it is still a read. */
+export interface GitHandlerDeps extends GitRunDeps {
   store: CoderStore;
   /**
-   * The runs, so a write can refuse while an agent is working in the same folder.
+   * The runs, so a write can refuse while an agent is working in the same folder — and, for
+   * `coder.gitMergeResolve`, so an agent can be *started* on a conflict.
    *
-   * Structural rather than the whole manager: this file needs one question answered ("is this task
-   * running") and nothing else, and a daemon built without a runtime simply has nothing running.
+   * `liveFor` is what every daemon with a runtime has; `start` is optional because the two facts are
+   * different: a daemon built without any runtime has no `runs` at all (and `gitMergeResolve` refuses by
+   * name), while the tests that only exercise the busy rule hand in a `liveFor` and nothing else. Structural
+   * rather than the whole manager, which is what the read side needs and no more.
    */
-  runs?: Pick<RunManager, "liveFor">;
-  /** Injectable for tests; the daemon passes the real `spawn`. */
-  spawn?: typeof nodeSpawn;
-  /** The program to run. `git`, and injectable so a test can prove what "not installed" says. */
-  command?: string;
-  /**
-   * The environment the git children start from — this daemon's own, unless a test says otherwise.
-   *
-   * Injected for the one case that cannot be arranged any other way: **a machine with no author identity**.
-   * Git refuses a commit then, with a sentence naming the `git config` to run, and that refusal is one a
-   * fresh install really meets — so it is proven here with an empty `HOME` rather than assumed.
-   */
-  env?: () => NodeJS.ProcessEnv;
-  readTimeoutMs?: number;
-  writeTimeoutMs?: number;
+  runs?: Pick<RunManager, "liveFor"> & { start?: RunManager["start"] };
+  // The injected spawn, program, environment and deadlines are `GitRunDeps`, which the runner publishes:
+  // this interface adds the two things only a *handler* needs — where projects live, and what is running.
 }
 
 export type GitDeps = Omit<GitHandlerDeps, "store" | "runs">;
 
-/** The refusal for a failed command, with git's own sentence as the detail. */
-function gitFailed(output: BoundedOutput): Error {
-  const detail = tailText(output.text.trim(), GIT_DETAIL_LIMIT);
-  return coderError(
-    ENVOYDEV_ERRORS.gitFailed,
-    `Git could not do that: ${detail}`,
-    ref("error.gitFailed", { detail }),
+/**
+ * Refuse anything a **conflicted** repository must not do, naming the files and the way out.
+ *
+ * Two situations, because the advice differs and the difference is measurable:
+ *
+ *   * a **merge** is in progress (`MERGE_HEAD`) — this product can finish it or abort it, so the sentence
+ *     points at those;
+ *   * conflicts without one — a rebase or cherry-pick somebody started in their terminal. EnvoyDev has no
+ *     control that could finish or undo that, and saying otherwise would be offering a button that is not
+ *     there.
+ *
+ * The rule needs stating because git's own behaviour is **not** uniform: `git checkout` and `git merge` refuse
+ * on their own, but **`git checkout -b <name>` succeeds**, carrying the half-finished merge onto a branch the
+ * user never asked for it on. That is the case this exists for; the others get a sentence in the user's
+ * language instead of git's `you need to resolve your current index first`.
+ */
+function refuseWhileConflicted(status: GitStatus, files: readonly string[]): void {
+  if (!status.conflicted) return;
+  const list = files.join(", ");
+  const shown = listOf(files);
+  if (status.merge !== undefined) {
+    throw coderError(
+      ENVOYDEV_ERRORS.gitMergeUnresolved,
+      `A merge is not finished: ${list} still has conflicts. Resolve them and finish the merge, or abort it.`,
+      ref("error.gitMergeUnresolved", { files: shown }),
+    );
+  }
+  throw coderError(
+    ENVOYDEV_ERRORS.gitConflicted,
+    `This repository has unresolved conflicts in ${list}, from an operation EnvoyDev did not start. Finish or undo it there before doing anything else here.`,
+    ref("error.gitConflicted", { files: shown }),
   );
 }
 
 /**
- * What kind of version control this folder is — measured, for `Project.vcs`.
+ * The instruction the resolving agent starts with.
  *
- * The stored answer exists so a project **list** does not have to spawn git per row to know whether to
- * offer branches at all; the branch itself is never stored, because a branch moves under us and a cached
- * one is a lie the window has no way to notice.
+ * **English, and written for a program rather than for a person.** The window composes the prompts a user
+ * sends; this one is the daemon's because the daemon is what knows which files conflicted and what must be
+ * true when the agent stops. It is deliberately closed about what the agent may *not* do — no `commit`, no
+ * `merge --abort`, no branch change — because the merge has to still be in progress when the user records it,
+ * and an agent that finished the merge itself would leave the two surfaces disagreeing about the repository.
+ *
+ * The last line asks for the short account a person reads before recording the merge, which is the review
+ * step this product exists for: the agent's work is in the working tree, and the diff is there to be read.
  */
-export async function measureProjectVcs(deps: GitDeps, dir: string): Promise<VcsKind> {
-  const inside = await runGit(deps, dir, ["rev-parse", "--is-inside-work-tree"], { read: true });
-  const isRepository = inside.code === 0 && inside.text.trim() === "true";
-  return detectVcsKind(dir, { gitRepository: isRepository });
+function resolvePrompt(input: {
+  branch: string;
+  into?: string;
+  files: readonly string[];
+}): string {
+  return [
+    `A merge of "${input.branch}" into "${input.into ?? "the current branch"}" stopped with conflicts in this repository. Resolve them.`,
+    "",
+    "Conflicted files:",
+    ...input.files.map((file) => `- ${file}`),
+    "",
+    "For each file, read both sides of the conflict and keep the intent of both changes. A resolution that simply keeps one side is only right when the other side is already covered elsewhere — say so if that is what you did. Remove the conflict markers, then stage the file with `git add <file>` so git records the resolution.",
+    "",
+    "Do not run `git commit`, `git merge --abort`, `git checkout`, `git rebase` or `git stash`. The merge must still be in progress when you stop: EnvoyDev records it once every conflicted file is staged.",
+    "",
+    "Finish with a short paragraph: what you changed in each file, and anything a person should read before the merge is recorded.",
+  ].join("\n");
 }
 
-/**
- * The environment a git child runs in: the user's world, and never a question.
- *
- * Two things are taken from what the daemon has already measured rather than from its own environment, and
- * they are the same two things a bundled app gets wrong:
- *
- *   * **`PATH`** — the list the login shell named, which is the list the probes searched. Without it, a
- *     `git` installed outside `/usr/bin` is invisible to us and visible to the user's terminal, and the
- *     refusal we would produce ("git is not installed") would be a lie about their machine.
- *   * **`SSH_AUTH_SOCK`** — the agent socket the login shell named, only when this process has none. It is
- *     what makes an `ssh` remote work from an app that was not started in a terminal.
- *
- * Everything else in the environment is inherited, and `gitEnv` adds the parts that keep git from asking a
- * question it cannot get an answer to.
- */
-function gitChildEnv(deps: GitDeps, read: boolean): NodeJS.ProcessEnv {
-  const search = currentSearchPath();
-  return gitEnv(deps.env?.() ?? process.env, {
-    read,
-    ...(search.searchable ? { path: search.path } : {}),
-    ...(search.sshAuthSock !== undefined ? { sshAuthSock: search.sshAuthSock } : {}),
-  });
-}
-
-/** Run git in `dir`, bounded, with the environment that keeps it from asking a question. */
-async function runGit(
-  deps: GitDeps,
-  dir: string,
-  args: readonly string[],
-  options: { read: boolean },
-): Promise<BoundedOutput> {
-  const output = await runBounded(deps.command ?? "git", ["-C", dir, ...args], {
-    env: gitChildEnv(deps, options.read),
-    timeoutMs:
-      options.read
-        ? (deps.readTimeoutMs ?? GIT_READ_TIMEOUT_MS)
-        : (deps.writeTimeoutMs ?? GIT_WRITE_TIMEOUT_MS),
-    outputLimit: GIT_OUTPUT_LIMIT,
-    ...(deps.spawn !== undefined ? { spawn: deps.spawn } : {}),
-  });
-  if (output.spawnError?.code === "ENOENT") {
-    throw coderError(ENVOYDEV_ERRORS.gitMissing, MISSING_SENTENCE, ref("error.gitMissing"));
-  }
-  if (output.timedOut) {
-    throw coderError(ENVOYDEV_ERRORS.gitFailed, TIMED_OUT_SENTENCE, ref("error.gitTimedOut"));
-  }
-  return output;
-}
-
-/** The repository's state. Not being a repository is a *state*, not a refusal. */
-async function readStatus(deps: GitDeps, dir: string): Promise<GitStatus> {
-  const inside = await runGit(deps, dir, ["rev-parse", "--is-inside-work-tree"], { read: true });
-  const isRepository = inside.code === 0 && inside.text.trim() === "true";
-  const kind = detectVcsKind(dir, { gitRepository: isRepository });
-  // `rev-parse` answering "no" is the normal answer for a folder git does not track; a *failed* answer for
-  // any other reason is not, and the two must not be folded together.
-  if (kind !== "git") {
-    return { kind, detached: false, ahead: 0, behind: 0, dirty: 0, conflicted: false };
-  }
-  const status = await runGit(deps, dir, GIT_STATUS_ARGS, { read: true });
-  if (status.code !== 0) throw gitFailed(status);
-  return parseGitStatus(status.text, { kind: "git" });
-}
-
-/** One shape for the three answers that leave a repository whose state the caller must now render. */
-async function statusOf(deps: GitDeps, dir: string): Promise<GitStatus> {
-  return await readStatus(deps, dir);
-}
-
-/**
- * The refusals a branch name can earn, worded per reason.
- *
- * Three sentences rather than one with a `{reason}` value: a user who typed nothing and a user who typed
- * something git cannot accept need different next actions, and a substituted reason reads as a machine
- * talking. `looks-like-an-option` shares the sentence about allowed characters, because that *is* the
- * advice for it.
- */
-function invalidBranch(name: string, refusal: BranchNameRefusal): Error {
-  if (refusal === "empty") {
-    return coderError(
-      ENVOYDEV_ERRORS.gitBranchInvalid,
-      "A branch needs a name.",
-      ref("error.gitBranchEmpty"),
-    );
-  }
-  if (refusal === "too-long") {
-    return coderError(
-      ENVOYDEV_ERRORS.gitBranchInvalid,
-      "A branch name can be at most 255 characters.",
-      ref("error.gitBranchTooLong", { count: 255 }),
-    );
-  }
-  return coderError(
-    ENVOYDEV_ERRORS.gitBranchInvalid,
-    `"${name}" cannot be a branch name. Letters, digits, dots, dashes and slashes are allowed, and it cannot start with a dash.`,
-    ref("error.gitBranchInvalid", { name }),
-  );
-}
-
-/**
- * The **repository root**, which is where the changed paths are relative to.
- *
- * Measured rather than assumed, because it is not the same directory as the project: `git -C <subdir>
- * status --porcelain` answers with paths relative to the *repository* (`sub/a.txt`, not `a.txt`), so a
- * project that is itself a subdirectory of a larger repository would have every path resolved twice if the
- * write ran in the project folder. `--show-toplevel` names the directory that makes the paths mean what the
- * list says they mean.
- */
-async function gitRoot(deps: GitDeps, dir: string): Promise<string> {
-  const root = await runGit(deps, dir, ["rev-parse", "--show-toplevel"], { read: true });
-  const named = root.text.trim();
-  return root.code === 0 && named !== "" ? named : dir;
-}
-
-/**
- * A list of names as a sentence value.
- *
- * The template is localised, so the *joining* rule has to be ours and language-neutral: a comma and a space is
- * what every one of the seven catalogues expects, and a list longer than a few names is truncated because a
- * refusal is read on a phone.
- */
-function listOf(names: readonly string[]): string {
-  const shown = names.slice(0, 5);
-  return names.length > shown.length ? `${shown.join(", ")} …` : shown.join(", ");
-}
-
-/** Git's own one-line summary, tailed: what a fetch or a pull actually brought. */
-function summaryOf(output: BoundedOutput): string {
-  const lines = output.text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line !== "" && !line.startsWith("From "));
-  return tailText(lines.slice(-3).join(" · "), 300);
-}
-
-/** The changed files, as every staging answer reports them. */
-function changesOf(dir: string): WorktreeChange[] {
-  return listWorktreeChanges(dir).changes;
-}
-
-/** Does the repository have a commit? Only unstaging needs the answer. */
-async function hasHead(deps: GitDeps, dir: string): Promise<boolean> {
-  const head = await runGit(deps, dir, GIT_HAS_HEAD_ARGS, { read: true });
-  return head.code === 0;
-}
-
-/** Is anything staged? By exit code: 0 nothing, 1 something, anything else a failure. */
-async function hasStaged(deps: GitDeps, dir: string): Promise<boolean> {
-  const staged = await runGit(deps, dir, GIT_HAS_STAGED_ARGS, { read: true });
-  if (staged.code === 0) return false;
-  if (staged.code === 1) return true;
-  throw gitFailed(staged);
-}
-
-/** The stashes this repository is holding — a read, and the answer every stash write ends with. */
-async function stashesOf(deps: GitDeps, dir: string): Promise<GitStash[]> {
-  const listed = await runGit(deps, dir, GIT_STASH_LIST_ARGS, { read: true });
-  if (listed.code !== 0) throw gitFailed(listed);
-  return parseGitStashList(listed.text);
-}
-
-/**
- * Everything a stash write answers with: what the repository is now, and what is still set aside.
- *
- * One shape for the three writes, because each of them leaves both a tree and a list a caller has to render
- * — and a client that had to re-read the list after a push would show the old one until it did.
- */
-async function stashAnswer(deps: GitDeps, root: string): Promise<{
-  status: GitStatus;
-  changes: WorktreeChange[];
-  stashes: GitStash[];
-}> {
-  return {
-    status: await statusOf(deps, root),
-    changes: changesOf(root),
-    stashes: await stashesOf(deps, root),
-  };
-}
 
 /** One handler table, ready to spread into the daemon's. */
 export function createGitHandlers(deps: GitHandlerDeps): Partial<Record<RpcMethod, CoderHandler>> {
@@ -380,6 +195,12 @@ export function createGitHandlers(deps: GitHandlerDeps): Partial<Record<RpcMetho
     }
   };
 
+  /** The conflict rule, with the paths measured only when there is a conflict to name. */
+  const refuseConflict = (dir: string, status: GitStatus): void => {
+    if (!status.conflicted) return;
+    refuseWhileConflicted(status, conflictsOf(dir));
+  };
+
   return {
     "coder.gitStatus": async (params) => {
       const input = parseRpcParams("coder.gitStatus", params) as { projectId: string };
@@ -410,6 +231,9 @@ export function createGitHandlers(deps: GitHandlerDeps): Partial<Record<RpcMetho
       if (refusal !== undefined) throw invalidBranch(input.branch, refusal);
       await repositoryFor(project.path);
       refuseWhileRunning(project.id);
+      // Git refuses a switch with a conflicted index on its own, but with `you need to resolve your current
+      // index first` — a sentence about an index rather than about the merge the user has to finish.
+      refuseConflict(project.path, await statusOf(deps, project.path));
 
       const switched = await runGit(deps, project.path, gitCheckoutBranchArgs(input.branch), {
         read: false,
@@ -506,6 +330,13 @@ export function createGitHandlers(deps: GitHandlerDeps): Partial<Record<RpcMetho
       if (refusal !== undefined) throw invalidBranch(input.name, refusal);
       await repositoryFor(project.path);
       refuseWhileRunning(project.id);
+      /**
+       * **This one git would allow**, and that is the whole reason the check is here: `git checkout -b <name>`
+       * succeeds in a repository with a conflicted index, so a merge part-way through would follow the user
+       * onto a new branch — a branch they never asked to carry it, with `MERGE_HEAD` intact and the conflicted
+       * files staged against the old one.
+       */
+      refuseConflict(project.path, await statusOf(deps, project.path));
 
       const created = await runGit(deps, project.path, gitCreateBranchArgs(input.name), {
         read: false,
@@ -527,8 +358,11 @@ export function createGitHandlers(deps: GitHandlerDeps): Partial<Record<RpcMetho
       refuseWhileRunning(project.id);
       const root = await gitRoot(deps, project.path);
 
-      // The branch being merged *into*, measured before the merge for the sentence that names it.
-      const into = (await statusOf(deps, root)).branch;
+      // The branch being merged *into*, measured before the merge for the sentence that names it — and the
+      // measurement that also refuses a merge while another one is unfinished.
+      const before = await statusOf(deps, root);
+      refuseConflict(root, before);
+      const into = before.branch;
 
       const merged = await runGit(
         deps,
@@ -574,6 +408,186 @@ export function createGitHandlers(deps: GitHandlerDeps): Partial<Record<RpcMetho
       };
     },
 
+    /**
+     * The merge a person asks for **only if an agent can resolve a conflict**: the one place in this product
+     * that knowingly leaves a repository mid-operation.
+     *
+     * Everything about the order below is a promise to the user:
+     *
+     *   1. a merge already in progress is refused before anything is run — the way out of one is `Continue` or
+     *      `Abort`, not a second merge;
+     *   2. **the agent runtime is checked before the merge is started**, so this can never leave a conflicted
+     *      repository with nobody to hand it to;
+     *   3. a merge that goes through cleanly is *not* a resolution: the answer says `merged`, and no task is
+     *      created for work that does not exist;
+     *   4. a conflict creates the task and starts the run, and if the agent cannot be started the merge is
+     *      **taken back** and the refusal says so — the press changed nothing.
+     */
+    "coder.gitMergeResolve": async (params) => {
+      const input = parseRpcParams("coder.gitMergeResolve", params) as {
+        projectId: string;
+        branch: string;
+      };
+      const project = projectFor(input.projectId);
+
+      const refusal = branchNameRefusal(input.branch);
+      if (refusal !== undefined) throw invalidBranch(input.branch, refusal);
+      await repositoryFor(project.path);
+      refuseWhileRunning(project.id);
+      const root = await gitRoot(deps, project.path);
+
+      const before = await statusOf(deps, root);
+      refuseConflict(root, before);
+
+      // **Before the merge, not after it.** A daemon without an agent runtime cannot resolve anything, and
+      // the honest moment to say so is while there is still nothing to clean up.
+      const runs = deps.runs;
+      if (runs?.start === undefined) {
+        throw coderError(
+          ENVOYDEV_ERRORS.harnessFailed,
+          "This daemon was started without an agent runtime, so it cannot run tasks.",
+          ref("error.noRunRuntime"),
+        );
+      }
+
+      const merged = await runGit(deps, root, gitMergeArgs(input.branch), { read: false });
+      if (merged.code === 0) {
+        const sha = await runGit(deps, root, ["rev-parse", "HEAD"], { read: true });
+        return {
+          outcome: "merged" as const,
+          sha: sha.text.trim(),
+          ...(before.branch !== undefined ? { into: before.branch } : {}),
+          status: await statusOf(deps, root),
+          changes: changesOf(root),
+        };
+      }
+
+      const files = conflictsOf(root);
+      if (files.length === 0) {
+        // Nothing was started — a local change the merge would overwrite, a branch that is not there. Anything
+        // half-done is taken back first, because this answer promises a repository that did not move.
+        await runGit(deps, root, GIT_MERGE_ABORT_ARGS, { read: false });
+        throw gitFailed(merged);
+      }
+
+      /**
+       * The task is created **first**, and it is an ordinary task in the project: it follows the project's own
+       * agent setting, it appears in the rail beside the user's other work, and its run can be watched,
+       * steered and answered like any other. A resolution that happened in a hidden mechanism would be a
+       * second, less trustworthy kind of run.
+       *
+       * Its folder is the **repository root** rather than the project's directory, because that is where the
+       * conflicted paths in the prompt are relative to, and the merge itself runs there.
+       */
+      const task = await deps.store.createTask({
+        projectId: project.id,
+        title: `Resolve the merge of ${input.branch}`,
+        cwd: root,
+      });
+      if (task === undefined) {
+        await runGit(deps, root, GIT_MERGE_ABORT_ARGS, { read: false });
+        throw gitFailed(merged);
+      }
+
+      let run;
+      try {
+        run = await runs.start({
+          taskId: task.id,
+          prompt: resolvePrompt({
+            branch: input.branch,
+            ...(before.branch !== undefined ? { into: before.branch } : {}),
+            files,
+          }),
+        });
+      } catch (error) {
+        /**
+         * **The merge is taken back when no agent would take it.** The alternative — leaving a conflict behind
+         * with nobody working on it — is a repository the user has to notice and clean up, for a press whose
+         * whole point was that an agent would handle it. The refusal carries the agent's own sentence, which is
+         * the part a person can act on (a model that is not configured, a CLI that is not installed).
+         */
+        await runGit(deps, root, GIT_MERGE_ABORT_ARGS, { read: false });
+        // The task was created a moment ago for a merge that no longer exists, so it is archived rather than
+        // left in the rail: its title would send a user (or a later run) looking for a conflict that is gone.
+        await deps.store.archiveTask(task.id);
+        const detail = error instanceof Error ? coderErrorMessage(error.message) : String(error);
+        throw coderError(
+          ENVOYDEV_ERRORS.gitMergeResolveFailed,
+          `The agent could not be started, so the merge was taken back and nothing changed: ${detail}`,
+          ref("error.gitMergeResolveFailed", { detail }),
+        );
+      }
+
+      return {
+        outcome: "resolving" as const,
+        files,
+        merge: { branch: input.branch, ...(before.branch !== undefined ? { into: before.branch } : {}) },
+        task,
+        run,
+        status: await statusOf(deps, root),
+        changes: changesOf(root),
+      };
+    },
+
+    /**
+     * Record a resolved merge — the commit, which is git's own (`Merge branch 'x'`).
+     *
+     * Only when the index has **no unmerged entries**: that is the fact `git commit` refuses on, and it is
+     * measured here so the refusal names the files rather than relaying `Committing is not possible because you
+     * have unmerged files` — a complaint about work the user may believe they finished.
+     */
+    "coder.gitMergeContinue": async (params) => {
+      const input = parseRpcParams("coder.gitMergeContinue", params) as { projectId: string };
+      const project = projectFor(input.projectId);
+      await repositoryFor(project.path);
+      refuseWhileRunning(project.id);
+      const root = await gitRoot(deps, project.path);
+
+      const before = await statusOf(deps, root);
+      if (before.merge === undefined) {
+        throw coderError(
+          ENVOYDEV_ERRORS.gitMergeNone,
+          "No merge is in progress, so there is nothing to finish or abort.",
+          ref("error.gitMergeNone"),
+        );
+      }
+      // The same sentence a conflicting write gets, and for the same reason: the files are the work left.
+      refuseConflict(root, before);
+
+      const committed = await runGit(deps, root, GIT_MERGE_CONTINUE_ARGS, { read: false });
+      // A failing hook, a signing key, a missing identity: git names what to fix.
+      if (committed.code !== 0) throw gitFailed(committed);
+
+      const sha = await runGit(deps, root, ["rev-parse", "HEAD"], { read: true });
+      return {
+        sha: sha.text.trim(),
+        status: await statusOf(deps, root),
+        changes: changesOf(root),
+      };
+    },
+
+    /** Take a merge in progress back — the way out, and the only one for a conflict nobody resolved. */
+    "coder.gitMergeAbort": async (params) => {
+      const input = parseRpcParams("coder.gitMergeAbort", params) as { projectId: string };
+      const project = projectFor(input.projectId);
+      await repositoryFor(project.path);
+      refuseWhileRunning(project.id);
+      const root = await gitRoot(deps, project.path);
+
+      const before = await statusOf(deps, root);
+      if (before.merge === undefined) {
+        throw coderError(
+          ENVOYDEV_ERRORS.gitMergeNone,
+          "No merge is in progress, so there is nothing to finish or abort.",
+          ref("error.gitMergeNone"),
+        );
+      }
+
+      const aborted = await runGit(deps, root, GIT_MERGE_ABORT_ARGS, { read: false });
+      if (aborted.code !== 0) throw gitFailed(aborted);
+      return { status: await statusOf(deps, root), changes: changesOf(root) };
+    },
+
     "coder.gitFetch": async (params) => {
       const input = parseRpcParams("coder.gitFetch", params) as { projectId: string };
       const project = projectFor(input.projectId);
@@ -598,6 +612,7 @@ export function createGitHandlers(deps: GitHandlerDeps): Partial<Record<RpcMetho
       // A write: a fast-forward *moves the branch* and rewrites the working tree.
       refuseWhileRunning(project.id);
       const root = await gitRoot(deps, project.path);
+      refuseConflict(root, await statusOf(deps, root));
 
       const pulled = await runGit(deps, root, GIT_PULL_ARGS, { read: false });
       if (pulled.code !== 0) {
@@ -640,6 +655,7 @@ export function createGitHandlers(deps: GitHandlerDeps): Partial<Record<RpcMetho
        * our own status read rather than of git's output, which is localised and versioned.
        */
       const before = await statusOf(deps, root);
+      refuseConflict(root, before);
       if (before.dirty === 0 && !before.conflicted) {
         throw coderError(
           ENVOYDEV_ERRORS.gitNothingToStash,
@@ -668,7 +684,10 @@ export function createGitHandlers(deps: GitHandlerDeps): Partial<Record<RpcMetho
        * a stash to put back has to decide which of the two matters, and this code cannot decide for them.
        */
       const before = await statusOf(deps, root);
-      if (before.dirty > 0 || before.conflicted) {
+      // Before the clean-tree rule, so a conflicted repository gets the sentence about the merge rather than
+      // the one advising a user to commit or stash work they cannot commit or stash yet.
+      refuseConflict(root, before);
+      if (before.dirty > 0) {
         throw coderError(ENVOYDEV_ERRORS.gitStashDirty, STASH_DIRTY_SENTENCE, ref("error.gitStashDirty"));
       }
 

@@ -14,7 +14,15 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync,mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -22,9 +30,16 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { coderPaths } from "@envoydev/host-bridge";
-import { coderErrorCode, coderErrorMessage, coderErrorRef } from "@envoydev/protocol";
+import {
+  ENVOYDEV_ERRORS,
+  coderError,
+  coderErrorCode,
+  coderErrorMessage,
+  coderErrorRef,
+} from "@envoydev/protocol";
 
 import { createGitHandlers } from "../src/daemon/git.js";
+import { ref } from "../src/daemon/messages.js";
 import { createCoderHandlers, type CoderHandler } from "../src/daemon/service.js";
 import { CoderStore } from "../src/daemon/store.js";
 import { createTranslator } from "../src/i18n/translate.js";
@@ -117,8 +132,31 @@ interface Bench {
   home: string;
 }
 
+/**
+ * A **conflicting** pair of branches: `work` and the current branch both changed `a.txt`.
+ *
+ * The fixture every merge test needs, and it is built the way a person's repository gets there rather than by
+ * writing conflict markers by hand — so what the daemon meets is what git actually leaves.
+ */
+function withConflict(): string {
+  const root = repository();
+  writeFileSync(join(root, "a.txt"), "theirs\n");
+  run(root, ["commit", "-qam", "theirs"]);
+  run(root, ["checkout", "-q", "main"]);
+  writeFileSync(join(root, "a.txt"), "ours\n");
+  run(root, ["commit", "-qam", "ours"]);
+  return root;
+}
+
 /** The daemon's real handler table, over a throwaway home. */
-async function bench(options: { gitCommand?: string; env?: () => NodeJS.ProcessEnv } = {}): Promise<Bench> {
+async function bench(
+  options: {
+    gitCommand?: string;
+    env?: () => NodeJS.ProcessEnv;
+    /** The agent runtime, when a test needs one. Absent means a daemon that cannot run anything. */
+    startRun?: (input: { taskId: string; prompt: string }) => Promise<unknown>;
+  } = {},
+): Promise<Bench> {
   const home = await mkdtemp(join(tmpdir(), "envoydev-gitsvc-home-"));
   const paths = coderPaths(home);
   const store = await CoderStore.open({ paths });
@@ -860,5 +898,265 @@ describe("one writer at a time", () => {
 
     expect(await call(handlers, "coder.gitCheckout", { projectId: mine.project.id, branch: "main" }))
       .toMatchObject({ branch: "main" });
+  });
+});
+
+/**
+ * The git handlers **alone**, with a runtime that is only what the resolve path asks for.
+ *
+ * `coder.gitMergeResolve` needs one thing from a run manager — "start this task with this prompt" — and the
+ * stub is the point: what is under test is *what the daemon hands an agent*, and whether it cleans up after
+ * itself when that hand-off fails. How a run actually behaves is `runs.test.ts`'s subject, with a real child
+ * process; repeating it here would prove nothing about git and would make every test below need an agent CLI.
+ */
+function gitOnly(
+  store: CoderStore,
+  options: { start?: (input: { taskId: string; prompt: string }) => Promise<unknown> } = {},
+): Record<string, CoderHandler> {
+  return createGitHandlers({
+    store,
+    runs: {
+      liveFor: () => undefined,
+      ...(options.start !== undefined
+        ? { start: options.start as unknown as (input: never) => Promise<never> }
+        : {}),
+    },
+  }) as Record<string, CoderHandler>;
+}
+
+describe("a conflicting merge, resolved by an agent", () => {
+  itGit("merges without a task when there is nothing to resolve", async () => {
+    // The same method, and the branch git can merge by itself: no conflict means no agent, and the answer says
+    // so rather than leaving a client to guess from a task that does not exist.
+    const b = await bench();
+    const repo = repository();
+    writeFileSync(join(repo, "work.txt"), "work side\n");
+    run(repo, ["add", "."]);
+    run(repo, ["commit", "-qm", "work side"]);
+    run(repo, ["checkout", "-q", "main"]);
+    writeFileSync(join(repo, "other.txt"), "main side\n");
+    run(repo, ["add", "."]);
+    run(repo, ["commit", "-qm", "main side"]);
+    const projectId = await addProject(b, repo);
+
+    // A runtime *is* required (the method refuses without one, tested below) but is never asked to do
+    // anything when git resolves the merge by itself.
+    const started: string[] = [];
+    const answer = (await call(
+      gitOnly(b.store, {
+        start: async (input) => {
+          started.push(input.taskId);
+          return { id: "r-never" };
+        },
+      }),
+      "coder.gitMergeResolve",
+      { projectId, branch: "work" },
+    )) as { outcome: string; into?: string; status: { conflicted: boolean; merge?: unknown } };
+
+    expect(answer.outcome).toBe("merged");
+    expect(answer.into).toBe("main");
+    expect(answer.status.conflicted).toBe(false);
+    expect(answer.status.merge).toBeUndefined();
+    expect(started).toEqual([]);
+    expect(b.store.tasks({ projectId })).toEqual([]);
+  });
+
+  itGit("leaves the conflict, creates the task and hands the files to a run", async () => {
+    const b = await bench();
+    const repo = withConflict();
+    const projectId = await addProject(b, repo);
+    const started: { taskId: string; prompt: string }[] = [];
+    const handlers = gitOnly(b.store, {
+      start: async (input) => {
+        started.push(input);
+        return { id: "r-merge", taskId: input.taskId };
+      },
+    });
+
+    const answer = (await call(handlers, "coder.gitMergeResolve", { projectId, branch: "work" })) as {
+      outcome: string;
+      files: string[];
+      merge: { branch: string; into?: string };
+      task: { id: string; title: string; cwd: string; harness: string };
+      status: { conflicted: boolean; merge?: { branch?: string } };
+    };
+
+    expect(answer.outcome).toBe("resolving");
+    expect(answer.files).toEqual(["a.txt"]);
+    expect(answer.merge).toEqual({ branch: "work", into: "main" });
+    expect(answer.task.title).toBe("Resolve the merge of work");
+    // The **repository root**, because that is what the paths in the prompt are relative to. `realpath`
+    // because git answers with the resolved path (`/private/var/...` for a temp directory on macOS) while the
+    // fixture holds the one it was handed.
+    expect(answer.task.cwd).toBe(realpathSync(repo));
+    // An ordinary task of this project, so it follows the project's agent setting like every other one.
+    expect(answer.task.harness).toBe("envoy-harness");
+
+    expect(started).toHaveLength(1);
+    expect(started[0]?.taskId).toBe(answer.task.id);
+    const prompt = started[0]?.prompt ?? "";
+    expect(prompt).toContain('"work"');
+    expect(prompt).toContain("a.txt");
+    // The two rules the agent must keep for the surfaces to agree about the repository.
+    expect(prompt).toContain("git add");
+    expect(prompt).toContain("Do not run `git commit`");
+
+    // **The merge is still in progress**: that is what makes the conflict resolvable at all, and what the
+    // status has to say for a window to offer Finish and Abort.
+    expect(answer.status.conflicted).toBe(true);
+    expect(answer.status.merge).toEqual({ branch: "work" });
+    expect(readFileSync(join(repo, "a.txt"), "utf8")).toContain("<<<<<<<");
+  });
+
+  itGit("takes the merge back when the agent cannot be started", async () => {
+    const b = await bench();
+    const repo = withConflict();
+    const projectId = await addProject(b, repo);
+    const handlers = gitOnly(b.store, {
+      start: async () => {
+        throw coderError(
+          ENVOYDEV_ERRORS.harnessFailed,
+          "deepseek-harness has no model configured.",
+          ref("error.modelRequired"),
+        );
+      },
+    });
+
+    const message = await refusalOf(handlers, "coder.gitMergeResolve", { projectId, branch: "work" });
+    expectRefusal(message, "error.gitMergeResolveFailed");
+    // The agent's own sentence is the part a person can act on, and it arrives whole.
+    expect(coderErrorMessage(message)).toContain("has no model configured");
+
+    // **Nothing moved**: no `MERGE_HEAD`, no conflict, and the branch where it was.
+    const status = (await call(handlers, "coder.gitStatus", { projectId })) as {
+      conflicted: boolean;
+      dirty: number;
+      merge?: unknown;
+    };
+    expect(status).toMatchObject({ conflicted: false, dirty: 0 });
+    expect(status.merge).toBeUndefined();
+    expect(readFileSync(join(repo, "a.txt"), "utf8")).toBe("ours\n");
+    // And no stray task in the rail: the row existed for a moment and its premise is gone.
+    expect(b.store.tasks({ projectId })).toEqual([]);
+    expect(b.store.tasks({ projectId, includeArchived: true })).toHaveLength(1);
+  });
+
+  itGit("refuses before merging when this daemon has no agent runtime", async () => {
+    // The ordering is the promise: with nothing to hand a conflict to, the merge must not be started at all.
+    const b = await bench();
+    const repo = withConflict();
+    const projectId = await addProject(b, repo);
+
+    const message = await refusalOf(gitOnly(b.store), "coder.gitMergeResolve", {
+      projectId,
+      branch: "work",
+    });
+    expectRefusal(message, "error.noRunRuntime");
+    const status = (await call(gitOnly(b.store), "coder.gitStatus", { projectId })) as {
+      conflicted: boolean;
+      merge?: unknown;
+    };
+    expect(status.conflicted).toBe(false);
+    expect(status.merge).toBeUndefined();
+  });
+
+  itGit("refuses to finish while files are unresolved, and records the merge once they are", async () => {
+    const b = await bench();
+    const repo = withConflict();
+    const projectId = await addProject(b, repo);
+    const handlers = gitOnly(b.store, { start: async () => ({ id: "r-merge" }) });
+    await call(handlers, "coder.gitMergeResolve", { projectId, branch: "work" });
+
+    // The measurement, not git's `Committing is not possible because you have unmerged files`.
+    const unresolved = await refusalOf(handlers, "coder.gitMergeContinue", { projectId });
+    expectRefusal(unresolved, "error.gitMergeUnresolved");
+    expect(coderErrorMessage(unresolved)).toContain("a.txt");
+
+    // What the agent would have done — and the merge is recorded with git's own message.
+    writeFileSync(join(repo, "a.txt"), "theirs and ours\n");
+    run(repo, ["add", "a.txt"]);
+    const finished = (await call(handlers, "coder.gitMergeContinue", { projectId })) as {
+      sha: string;
+      status: { conflicted: boolean; merge?: unknown };
+      changes: unknown[];
+    };
+    expect(finished.sha).toMatch(/^[0-9a-f]{7,}$/);
+    expect(finished.status).toMatchObject({ conflicted: false });
+    expect(finished.status.merge).toBeUndefined();
+    expect(finished.changes).toEqual([]);
+    expect(spawnSync("git", ["-C", repo, "log", "-1", "--format=%s"], { encoding: "utf8" }).stdout.trim()).toBe(
+      "Merge branch 'work'",
+    );
+  });
+
+  itGit("aborts a merge in progress, and says so when there is none", async () => {
+    const b = await bench();
+    const repo = withConflict();
+    const projectId = await addProject(b, repo);
+    const handlers = gitOnly(b.store, { start: async () => ({ id: "r-merge" }) });
+    await call(handlers, "coder.gitMergeResolve", { projectId, branch: "work" });
+
+    const aborted = (await call(handlers, "coder.gitMergeAbort", { projectId })) as {
+      status: { conflicted: boolean; dirty: number; merge?: unknown };
+      changes: unknown[];
+    };
+    expect(aborted.status).toMatchObject({ conflicted: false, dirty: 0 });
+    expect(aborted.status.merge).toBeUndefined();
+    expect(aborted.changes).toEqual([]);
+    expect(readFileSync(join(repo, "a.txt"), "utf8")).toBe("ours\n");
+
+    // A second abort is a *state*, not a failure of git's: there is nothing to take back.
+    const again = await refusalOf(handlers, "coder.gitMergeAbort", { projectId });
+    expectRefusal(again, "error.gitMergeNone");
+  });
+
+  itGit("refuses the actions git would allow, or word badly, while a merge is unfinished", async () => {
+    const b = await bench();
+    const projectId = await addProject(b, withConflict());
+    const handlers = gitOnly(b.store, { start: async () => ({ id: "r-merge" }) });
+    await call(handlers, "coder.gitMergeResolve", { projectId, branch: "work" });
+
+    // `checkout -b` is the one git **allows** here, carrying the half-finished merge onto a new branch; the
+    // others git refuses with a sentence about the index. All of them get one answer from us.
+    for (const [method, params] of [
+      ["coder.gitCreateBranch", { name: "somewhere-else" }],
+      ["coder.gitCheckout", { branch: "main" }],
+      ["coder.gitMerge", { branch: "work" }],
+      ["coder.gitMergeResolve", { branch: "work" }],
+      ["coder.gitPull", {}],
+      ["coder.gitStashPush", {}],
+    ] as const) {
+      const refusal = await refusalOf(handlers, method, { projectId, ...params });
+      expectRefusal(refusal, "error.gitMergeUnresolved");
+      expect(coderErrorMessage(refusal)).toContain("a.txt");
+    }
+    // And nothing was started by any of them.
+    expect(spawnSync("git", ["-C", b.store.findProject(projectId)!.path, "rev-parse", "--abbrev-ref", "HEAD"], {
+      encoding: "utf8",
+    }).stdout.trim()).toBe("main");
+  });
+
+  itGit("names conflicts that no merge explains, rather than pointing at its own controls", async () => {
+    // A rebase or a cherry-pick stopped in the user's terminal: the state is real, but EnvoyDev has no control
+    // that could finish or undo it — so the sentence says where the way out is instead of offering one here.
+    const b = await bench();
+    const repo = withConflict();
+    const projectId = await addProject(b, repo);
+    const handlers = gitOnly(b.store, { start: async () => ({ id: "r-merge" }) });
+    await call(handlers, "coder.gitMergeResolve", { projectId, branch: "work" });
+    // What is left when the operation in progress is not a merge: the unmerged index stays, `MERGE_HEAD` does
+    // not. (This is the state a rebase leaves, reproduced without running one.)
+    rmSync(join(repo, ".git", "MERGE_HEAD"));
+
+    const status = (await call(handlers, "coder.gitStatus", { projectId })) as {
+      conflicted: boolean;
+      merge?: unknown;
+    };
+    expect(status.conflicted).toBe(true);
+    expect(status.merge).toBeUndefined();
+
+    const refusal = await refusalOf(handlers, "coder.gitCheckout", { projectId, branch: "main" });
+    expectRefusal(refusal, "error.gitConflicted");
+    expect(coderErrorMessage(refusal)).toContain("a.txt");
   });
 });

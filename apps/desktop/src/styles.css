@@ -730,6 +730,18 @@ button.project__agent:hover {
   color: var(--text);
 }
 
+/* A merge in progress: the repository's own state, above the list of branches a user could switch to. It gets
+   a border of its own so it reads as a block about *now* rather than another section of the picker. */
+.project__branch-merge-state {
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.project__branch-resolve {
+  margin-top: var(--space-1);
+}
+
 .project__branch-sync {
   display: flex;
   gap: var(--space-1);

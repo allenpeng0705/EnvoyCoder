@@ -1221,6 +1221,62 @@ export class CoderStore {
     });
   }
 
+  /**
+   * Merge a branch, and let an agent resolve a conflict rather than aborting it.
+   *
+   * Two outcomes, and the window must not confuse them: `merged` is a merge git finished by itself — nothing
+   * to resolve, and no task — while `resolving` means an agent now has the conflict, and the title it carries
+   * is what the notice names so the user can find the run. The status is remembered either way, because a
+   * conflicted repository is exactly what puts *Finish* and *Abort* on screen.
+   */
+  async gitMergeResolve(
+    projectId: string,
+    branch: string,
+  ): Promise<
+    | { ok: true; outcome: "merged"; into?: string }
+    | { ok: true; outcome: "resolving"; task: string }
+    | Refusal
+  > {
+    const resolved = await this.mutate("coder.gitMergeResolve", { projectId, branch }, (answer) => {
+      const result = answer as
+        | { outcome: "merged"; status: GitStatus; into?: string }
+        | { outcome: "resolving"; status: GitStatus; task: { title: string } };
+      return result.outcome === "merged"
+        ? {
+            outcome: "merged" as const,
+            status: result.status,
+            ...(result.into !== undefined ? { into: result.into } : {}),
+          }
+        : { outcome: "resolving" as const, status: result.status, task: result.task.title };
+    });
+    if ("ok" in resolved) return resolved;
+    this.rememberStatus(projectId, resolved.status);
+    return resolved.outcome === "merged"
+      ? { ok: true, outcome: "merged", ...(resolved.into !== undefined ? { into: resolved.into } : {}) }
+      : { ok: true, outcome: "resolving", task: resolved.task };
+  }
+
+  /** Record a resolved merge. A refusal names the files still in conflict, or that none is in progress. */
+  async gitMergeContinue(projectId: string): Promise<{ ok: true; sha: string } | Refusal> {
+    const finished = await this.mutate("coder.gitMergeContinue", { projectId }, (answer) => {
+      const result = answer as { sha: string; status: GitStatus };
+      return { sha: result.sha, status: result.status };
+    });
+    if ("ok" in finished) return finished;
+    this.rememberStatus(projectId, finished.status);
+    return { ok: true, sha: finished.sha };
+  }
+
+  /** Take a merge in progress back — the way out when nobody resolved it. */
+  async gitMergeAbort(projectId: string): Promise<{ ok: true } | Refusal> {
+    const aborted = await this.mutate("coder.gitMergeAbort", { projectId }, (answer) => ({
+      status: (answer as { status: GitStatus }).status,
+    }));
+    if ("ok" in aborted) return aborted;
+    this.rememberStatus(projectId, aborted.status);
+    return { ok: true };
+  }
+
   /** The difference for one file in Changes. A refusal stays with the tab. */
   async readWorktreeDiff(
     directory: string,

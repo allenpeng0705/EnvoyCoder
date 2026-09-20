@@ -60,6 +60,15 @@ function renderControl(options: {
   onMerge?: (branch: string) => Promise<{ ok: true; into?: string } | Refusal>;
   onFetch?: () => Promise<{ ok: true; summary: string } | Refusal>;
   onPull?: () => Promise<{ ok: true; summary: string } | Refusal>;
+  onResolve?: (
+    branch: string,
+  ) => Promise<
+    | { ok: true; outcome: "merged"; into?: string }
+    | { ok: true; outcome: "resolving"; task: string }
+    | Refusal
+  >;
+  onFinishMerge?: () => Promise<{ ok: true; sha: string } | Refusal>;
+  onAbortMerge?: () => Promise<{ ok: true } | Refusal>;
 } = {}) {
   const onRead = options.onRead ?? vi.fn(async () => ({ ok: true as const }));
   const onCheckout = options.onCheckout ?? vi.fn(async () => ({ ok: true as const }));
@@ -67,6 +76,9 @@ function renderControl(options: {
   const onMerge = options.onMerge ?? vi.fn(async () => ({ ok: true as const }));
   const onFetch = options.onFetch ?? vi.fn(async () => ({ ok: true as const, summary: "" }));
   const onPull = options.onPull ?? vi.fn(async () => ({ ok: true as const, summary: "" }));
+  const onResolve = options.onResolve ?? vi.fn(async () => ({ ok: true as const, outcome: "merged" as const }));
+  const onFinishMerge = options.onFinishMerge ?? vi.fn(async () => ({ ok: true as const, sha: "abc1234" }));
+  const onAbortMerge = options.onAbortMerge ?? vi.fn(async () => ({ ok: true as const }));
   const view = render(
     <I18nProvider preference="en">
       <ProjectBranches
@@ -78,10 +90,13 @@ function renderControl(options: {
         onMerge={onMerge}
         onFetch={onFetch}
         onPull={onPull}
+        onResolve={onResolve}
+        onFinishMerge={onFinishMerge}
+        onAbortMerge={onAbortMerge}
       />
     </I18nProvider>,
   );
-  return { ...view, onRead, onCheckout, onCreate, onMerge, onFetch, onPull };
+  return { ...view, onRead, onCheckout, onCreate, onMerge, onFetch, onPull, onResolve, onFinishMerge, onAbortMerge };
 }
 
 const trigger = (): HTMLElement =>
@@ -108,6 +123,9 @@ describe("ProjectBranches", () => {
           onMerge={vi.fn(async () => ({ ok: true as const }))}
           onFetch={vi.fn(async () => ({ ok: true as const, summary: "" }))}
           onPull={vi.fn(async () => ({ ok: true as const, summary: "" }))}
+          onResolve={vi.fn(async () => ({ ok: true as const, outcome: "merged" as const }))}
+          onFinishMerge={vi.fn(async () => ({ ok: true as const, sha: "abc1234" }))}
+          onAbortMerge={vi.fn(async () => ({ ok: true as const }))}
         />
       </I18nProvider>,
     );
@@ -255,5 +273,111 @@ describe("ProjectBranches", () => {
     fireEvent.click(screen.getByRole("button", { name: "Pull" }));
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("both changed");
+  });
+});
+
+describe("a merge that stops on conflicts", () => {
+  it("offers to resolve it with an agent, naming the branch that conflicted", async () => {
+    const onMerge = vi.fn(
+      async (): Promise<{ ok: false; message: string; key: string } & Refusal> => ({
+        ok: false as const,
+        message: "work cannot be merged automatically.",
+        key: "error.gitMergeConflict",
+      }),
+    );
+    const onResolve = vi.fn(async () => ({
+      ok: true as const,
+      outcome: "resolving" as const,
+      task: "Resolve the merge of main",
+    }));
+    renderControl({ onMerge, onResolve });
+
+    fireEvent.click(trigger());
+    fireEvent.click(screen.getByRole("button", { name: en["git.merge.into"].replace("{branch}", "main").replace("{current}", "work") }));
+
+    // The refusal is the daemon's sentence, and the act that follows from it is beside it.
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: en["git.merge.resolve"] }));
+    await waitFor(() => expect(onResolve).toHaveBeenCalledWith("main"));
+    // The notice names the task, which is how a user finds the run in the rail.
+    expect(
+      await screen.findByText(en["git.merge.resolving"].replace("{task}", "Resolve the merge of main")),
+    ).toBeTruthy();
+  });
+
+  it("says a merge that needed no agent merged, rather than claiming one is working", async () => {
+    const onMerge = vi.fn(
+      async (): Promise<{ ok: false; message: string; key: string } & Refusal> => ({
+        ok: false as const,
+        message: "conflict",
+        key: "error.gitMergeConflict",
+      }),
+    );
+    const onResolve = vi.fn(async () => ({ ok: true as const, outcome: "merged" as const, into: "work" }));
+    const { onResolve: _never } = renderControl({ onMerge, onResolve });
+    void _never;
+
+    fireEvent.click(trigger());
+    fireEvent.click(screen.getByRole("button", { name: en["git.merge.into"].replace("{branch}", "main").replace("{current}", "work") }));
+    await screen.findByRole("alert");
+    fireEvent.click(screen.getByRole("button", { name: en["git.merge.resolve"] }));
+
+    expect(await screen.findByText(en["git.merge.done"].replace("{branch}", "main").replace("{into}", "work"))).toBeTruthy();
+  });
+
+  it("reports a merge in progress, and takes it back when asked", async () => {
+    const onAbortMerge = vi.fn(async () => ({ ok: true as const }));
+    renderControl({
+      snapshot: {
+        status: status({ conflicted: true, dirty: 1, merge: { branch: "main" } }),
+        branches: BRANCHES,
+      },
+      onAbortMerge,
+    });
+
+    // The chip says what the state *is*, and its title still names the branch.
+    expect(trigger().textContent).toContain(en["git.branches.conflictsChip"]);
+    expect(trigger().getAttribute("title")).toBe(en["sidebar.project.branch"].replace("{branch}", "work"));
+
+    fireEvent.click(trigger());
+    expect(screen.getByText(en["git.merge.stoppedFrom"].replace("{branch}", "main"))).toBeTruthy();
+    // Finish is not offered while files are still in conflict — the daemon would refuse it.
+    expect((screen.getByRole("button", { name: en["git.merge.finish"] }) as HTMLButtonElement).disabled).toBe(true);
+    // And the branch list still reads as branches: a chip word must not leak into a merge sentence.
+    expect(screen.getByRole("button", { name: en["git.merge.into"].replace("{branch}", "main").replace("{current}", "work") })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: en["git.merge.abort"] }));
+    await waitFor(() => expect(onAbortMerge).toHaveBeenCalled());
+    expect(await screen.findByText(en["git.merge.aborted"])).toBeTruthy();
+  });
+
+  it("finishes a merge once every conflict is staged", async () => {
+    const onFinishMerge = vi.fn(async () => ({ ok: true as const, sha: "abc1234" }));
+    renderControl({
+      snapshot: {
+        status: status({ conflicted: false, dirty: 1, merge: { branch: "main" } }),
+        branches: BRANCHES,
+      },
+      onFinishMerge,
+    });
+
+    fireEvent.click(trigger());
+    expect(screen.getByText(en["git.merge.resolved"])).toBeTruthy();
+    const finish = screen.getByRole("button", { name: en["git.merge.finish"] }) as HTMLButtonElement;
+    expect(finish.disabled).toBe(false);
+    fireEvent.click(finish);
+
+    await waitFor(() => expect(onFinishMerge).toHaveBeenCalled());
+    expect(await screen.findByText(en["git.merge.recorded"])).toBeTruthy();
+  });
+
+  it("says a merge stopped without naming a branch git could not name", async () => {
+    // `name-rev` answers nothing for a commit no ref reaches, and a sentence with an empty name in it is worse
+    // than one without a name at all.
+    renderControl({
+      snapshot: { status: status({ conflicted: true, dirty: 1, merge: {} }), branches: BRANCHES },
+    });
+    fireEvent.click(trigger());
+    expect(screen.getByText(en["git.merge.stopped"])).toBeTruthy();
   });
 });

@@ -1825,6 +1825,19 @@ export const GitStatusSchema = z
     /** Entries git reported: staged, modified and untracked. */
     dirty: z.number().int().nonnegative(),
     conflicted: z.boolean(),
+    /**
+     * A **merge** is in progress — `MERGE_HEAD` exists — with the branch it is bringing in when git could
+     * name one.
+     *
+     * Its own field rather than a second meaning for `conflicted`, because the two facts are different and
+     * the advice follows from which one holds: `conflicted` alone means *some* operation stopped on
+     * conflicts (a rebase, a cherry-pick), while `merge` present means this product can finish or abort it.
+     * Optional so a window meeting a daemon without it still reads a status rather than a schema error.
+     */
+    merge: z
+      .object({ branch: z.string().min(1).optional() })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -2280,6 +2293,68 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
         stashes: z.array(GitStashSchema).readonly(),
       })
       .strict(),
+  },
+
+  /**
+   * Merge `branch` into the branch the project is on, and **hand a conflict to an agent**.
+   *
+   * Where `coder.gitMerge` answers a conflict by aborting and refusing, this one *keeps* it: the merge is left
+   * in the working tree, a task is created in the project and a run is started with a prompt naming the
+   * conflicted files. The repository is knowingly left mid-merge — which is only honest because
+   * `coder.gitMergeContinue` and `coder.gitMergeAbort` are the two ways out, and because the status says so
+   * (`GitStatus.merge`).
+   *
+   * Two outcomes in one result, and they are not the same event: `merged` means there was nothing to resolve
+   * after all (a fast-forward or a clean merge), and `resolving` means an agent now has the conflict. A client
+   * must not tell a user an agent is working on a merge that git resolved by itself.
+   */
+  "coder.gitMergeResolve": {
+    params: z.object({ projectId: z.string().min(1), branch: z.string().min(1) }).strict(),
+    result: z.union([
+      z
+        .object({
+          outcome: z.literal("merged"),
+          sha: z.string().min(1),
+          into: z.string().optional(),
+          status: GitStatusSchema,
+          changes: WorktreeChangeListSchema,
+        })
+        .strict(),
+      z
+        .object({
+          outcome: z.literal("resolving"),
+          /** The conflicted paths, as the prompt names them. */
+          files: z.array(z.string().min(1)).readonly(),
+          merge: z
+            .object({ branch: z.string().min(1), into: z.string().optional() })
+            .strict(),
+          /** The task the agent is running in, so a client can point at it rather than describe it. */
+          task: TaskSchema,
+          run: AgentRunSchema,
+          status: GitStatusSchema,
+          changes: WorktreeChangeListSchema,
+        })
+        .strict(),
+    ]),
+  },
+  /**
+   * Finish a merge whose conflicts are resolved: the commit that records it.
+   *
+   * Run only when the index has no unmerged entries — the daemon measures that and refuses with the file list
+   * otherwise, because git's own answer (`Committing is not possible because you have unmerged files`) reads
+   * as a complaint about work in progress. The message is git's (`Merge branch 'x'`), so the commit is the one
+   * a terminal would have made.
+   */
+  "coder.gitMergeContinue": {
+    params: z.object({ projectId: z.string().min(1) }).strict(),
+    result: z
+      .object({ sha: z.string().min(1), status: GitStatusSchema, changes: WorktreeChangeListSchema })
+      .strict(),
+  },
+  /** Take a merge in progress back, leaving the branch and the working tree exactly as they were. */
+  "coder.gitMergeAbort": {
+    params: z.object({ projectId: z.string().min(1) }).strict(),
+    result: z.object({ status: GitStatusSchema, changes: WorktreeChangeListSchema }).strict(),
   },
 
   "coder.listTasks": {

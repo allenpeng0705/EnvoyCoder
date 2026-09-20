@@ -659,6 +659,11 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
             onGitMerge={(projectId, branch) => props.actions.gitMerge(projectId, branch)}
             onGitFetch={(projectId) => props.actions.gitFetch(projectId)}
             onGitPull={(projectId) => props.actions.gitPull(projectId)}
+            // The conflict path: a merge that keeps its conflict for an agent, and the two ways out of the
+            // repository that leaves behind.
+            onGitResolveMerge={(projectId, branch) => props.actions.gitMergeResolve(projectId, branch)}
+            onGitMergeContinue={(projectId) => props.actions.gitMergeContinue(projectId)}
+            onGitMergeAbort={(projectId) => props.actions.gitMergeAbort(projectId)}
             harnesses={state.harnesses}
             appHarness={state.settings.defaults.harness ?? "envoy-harness"}
             onOpenProjectInNewWindow={canOpenProjectInNewWindow() ? openProjectWindow : undefined}

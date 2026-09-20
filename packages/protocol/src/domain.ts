@@ -1017,6 +1017,31 @@ export const ENVOYDEV_ERRORS = {
    * to know: nothing was lost, and nothing was applied.
    */
   gitStashConflict: "envoydev.git-stash-conflict",
+  /**
+   * A merge is in progress and its conflicts are not all resolved.
+   *
+   * Named for what the user has to do rather than for what failed: the daemon refuses to finish a merge, or to
+   * change branches under one, until every conflicted file is resolved — and git itself would allow
+   * `checkout -b` in that state, moving the merge onto a new branch where the user never expected it.
+   */
+  gitMergeUnresolved: "envoydev.git-merge-unresolved",
+  /** A merge was to be finished or aborted, and none is in progress. */
+  gitMergeNone: "envoydev.git-merge-none",
+  /**
+   * Unresolved conflicts that no merge explains — a rebase or cherry-pick a user started in their terminal.
+   *
+   * Its own code because the advice is different: this product cannot finish or abort an operation it did not
+   * start, so the sentence says where the way out is rather than pointing at a control that is not there.
+   */
+  gitConflicted: "envoydev.git-conflicted",
+  /**
+   * The agent that was to resolve a merge could not be started, so the merge was taken back.
+   *
+   * The values carry the agent's own refusal, which is the part a person can act on (a missing model, an
+   * uninstalled CLI). Its own code rather than `gitFailed` because nothing git did failed: the honest statement
+   * is that the press changed nothing.
+   */
+  gitMergeResolveFailed: "envoydev.git-merge-resolve-failed",
 } as const;
 
 export type EnvoyDevErrorCode = (typeof ENVOYDEV_ERRORS)[keyof typeof ENVOYDEV_ERRORS];
@@ -1141,6 +1166,17 @@ export const RPC_METHODS = [
   "coder.gitStashPush",
   "coder.gitStashPop",
   "coder.gitStashDrop",
+  /**
+   * A merge that stops on conflicts, and the two ways out of one.
+   *
+   * `gitMerge` **aborts** a conflicted merge and refuses — the merge a person asked for directly leaves nothing
+   * behind. `gitMergeResolve` does the opposite on purpose: it keeps the conflict, hands the files to an agent
+   * in a task of its own, and leaves a repository that `gitMergeContinue` finishes or `gitMergeAbort` takes
+   * back. Both of those refuse when no merge is in progress, so a stale window cannot commit one that is gone.
+   */
+  "coder.gitMergeResolve",
+  "coder.gitMergeContinue",
+  "coder.gitMergeAbort",
   "coder.listTasks",
   "coder.createTask",
   "coder.updateTask",

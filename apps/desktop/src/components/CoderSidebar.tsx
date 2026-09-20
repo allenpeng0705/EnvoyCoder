@@ -92,6 +92,19 @@ export interface CoderSidebarProps {
   onGitFetch?: (projectId: string) => Promise<{ ok: true; summary: string } | Refusal>;
   /** Pull a project's branch — a fast-forward, or a refusal saying the histories diverged. */
   onGitPull?: (projectId: string) => Promise<{ ok: true; summary: string } | Refusal>;
+  /** Merge a branch and hand a conflict to an agent, in a task of its own. */
+  onGitResolveMerge?: (
+    projectId: string,
+    branch: string,
+  ) => Promise<
+    | { ok: true; outcome: "merged"; into?: string }
+    | { ok: true; outcome: "resolving"; task: string }
+    | Refusal
+  >;
+  /** Record a merge whose conflicts are resolved. */
+  onGitMergeContinue?: (projectId: string) => Promise<{ ok: true; sha: string } | Refusal>;
+  /** Take a merge in progress back. */
+  onGitMergeAbort?: (projectId: string) => Promise<{ ok: true } | Refusal>;
   /** Agents this daemon lists — for the project agent menu. */
   harnesses?: readonly HarnessSummary[];
   /** App-wide default agent when a project has not set its own. */
@@ -353,7 +366,10 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                   props.onGitCreateBranch !== undefined &&
                   props.onGitMerge !== undefined &&
                   props.onGitFetch !== undefined &&
-                  props.onGitPull !== undefined ? (
+                  props.onGitPull !== undefined &&
+                  props.onGitResolveMerge !== undefined &&
+                  props.onGitMergeContinue !== undefined &&
+                  props.onGitMergeAbort !== undefined ? (
                     <ProjectBranches
                       project={group.project}
                       snapshot={props.git?.[group.project.id]}
@@ -363,6 +379,9 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                       onMerge={(branch) => props.onGitMerge!(group.project.id, branch)}
                       onFetch={() => props.onGitFetch!(group.project.id)}
                       onPull={() => props.onGitPull!(group.project.id)}
+                      onResolve={(branch) => props.onGitResolveMerge!(group.project.id, branch)}
+                      onFinishMerge={() => props.onGitMergeContinue!(group.project.id)}
+                      onAbortMerge={() => props.onGitMergeAbort!(group.project.id)}
                     />
                   ) : null}
                   {/* The row's `…`, which used to be a bare `⋯` that opened project settings and nothing
