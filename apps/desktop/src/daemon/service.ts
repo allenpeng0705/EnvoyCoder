@@ -68,6 +68,7 @@ import {
 import type { CoderPaths } from "@envoydev/host-bridge";
 
 import { keyed, ref } from "./messages.js";
+import { createHealthHandlers } from "./health.js";
 import { createCatalogHandlers } from "./catalog.js";
 import { getEnvoyLlmPublic, setEnvoyLlm, envoyHarnessModels } from "./envoy-llm.js";
 import { harnessSwitchPatch } from "./task-harness-switch.js";
@@ -297,6 +298,11 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     // behalf. The window sends an id; the commands come from the same probes that drew the row, at the moment of
     // the press, so a command the user read is the command that runs and a window cannot name one. `fixes.ts`
     // carries the four outcomes, the deadline and the group kill.
+    // The supervisor's question, answered from the instance facts `coder.hello` already uses.
+    ...createHealthHandlers({
+      instance: deps.instance,
+      ...(deps.runs !== undefined ? { runs: deps.runs } : {}),
+    }),
     ...createGitHandlers({
       store: deps.store,
       ...(deps.runs !== undefined ? { runs: deps.runs } : {}),

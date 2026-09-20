@@ -148,7 +148,8 @@ A checklist, in build order:
 
 1. the claim's `managedBy`, and the shell attaching instead of killing (§3);
 2. the payload copy under the runtime directory, versioned (§7);
-3. `coder.health` — uptime, pid, version, active runs, last-event age, event-loop lag, heap;
+3. ~~`coder.health` — uptime, pid, version, active runs, event-loop lag, heap~~ **landed** (`daemon/health.ts`;
+   last-event age comes with the heartbeat below, because a per-event stamp belongs with the recorder);
 4. the heartbeat (`sd_notify` where it exists), the last-exit record, and log rotation;
 5. bounds on the live run-event buffer and on transcripts;
 6. boot-time run reconciliation;
@@ -161,8 +162,10 @@ A checklist, in build order:
 
 ## 10. What this does not decide yet
 
-* **Multi-user machines:** whose unit, and what a second account's window reports when another user's service
-  owns the daemon.
+* **Multi-user machines — assumed away, by decision.** This design assumes **one user per machine**: the
+  service belongs to the account that installed it, and a second account's window is expected to report the
+  daemon as owned elsewhere rather than hijack it. (That reporting behaviour is still to build; the *question*
+  is closed so the service layout can be.)
 * **Whether the phone may read service state** (this document assumes yes for reading, no for changing).
 * **Whether EnvoyMesh's supervisor is reused verbatim.** The family reserved exit `2` for
   `exitForNodeSupervisor`; the family rule is to reuse that implementation rather than to write a second one,

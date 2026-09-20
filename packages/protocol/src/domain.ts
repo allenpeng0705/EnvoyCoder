@@ -1079,6 +1079,14 @@ export interface CoderHostDescriptor {
 export const RPC_METHODS = [
   "coder.hello",
   /**
+   * Whether the daemon can still work, and how much it is carrying — the supervisor's question.
+   *
+   * Separate from `coder.hello` on purpose: that one is identity, and a wedged process answers it too. This one
+   * reports the process's own uptime, its clients and active runs, its memory, and the lag of a trivial timer,
+   * which is what tells "up" from "alive" (`docs/daemon-lifecycle.md` §5).
+   */
+  "coder.health",
+  /**
    * Subscribe this connection to the daemon's events.
    *
    * **Handled before the dispatcher**, by the product's socket-method port, so a client should not

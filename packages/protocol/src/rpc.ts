@@ -1933,6 +1933,55 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
       .strict(),
   },
 
+  /**
+   * Is this daemon still able to work, and how much is it carrying?
+   *
+   * The counterpart to `coder.hello`, and deliberately not merged with it: `hello` is *identity* (product,
+   * version, `instanceId`, methods) and a wedged process answers it as well as a healthy one. This is
+   * *liveness* — the process's own uptime, the number of attached clients and active runs, its memory, and how
+   * late a trivial timer fired when it was asked.
+   *
+   * Read-only and cheap enough to poll: a supervisor (launchd, systemd, a Windows task, the window's service
+   * page) is the intended caller, and it is the only way a process that has stopped doing work is ever
+   * noticed — a process cannot reliably report its own hang.
+   */
+  "coder.health": {
+    params: z.object({}).strict().optional(),
+    result: z
+      .object({
+        version: z.string(),
+        instanceId: z.string().min(1),
+        startedAt: z.string(),
+        /** This *process's* uptime, which is not necessarily the age of `startedAt` (a clock step, or a state
+         * file from an earlier boot). */
+        uptimeMs: z.number().int().nonnegative(),
+        pid: z.number().int().positive(),
+        /** Windows and phones attached right now. */
+        connections: z.number().int().nonnegative(),
+        runs: z
+          .object({
+            /** Runs not yet ended. A count, never a judgement about whether they are *progressing*. */
+            active: z.number().int().nonnegative(),
+          })
+          .strict(),
+        memory: z
+          .object({
+            rssBytes: z.number().int().nonnegative(),
+            heapUsedBytes: z.number().int().nonnegative(),
+          })
+          .strict(),
+        eventLoop: z
+          .object({
+            /** How long the probe asked to wait. */
+            probeMs: z.number().int().positive(),
+            /** How much later than that the callback actually ran. */
+            lagMs: z.number().int().nonnegative(),
+          })
+          .strict(),
+      })
+      .strict(),
+  },
+
   /* — events — */
   "coder.subscribe": {
     params: z
