@@ -48,6 +48,7 @@ import { coderPaths, inspectCoderHome } from "@envoydev/host-bridge";
 
 import { alreadyRunningOutcome, decideBoot, serveFailureOutcome } from "./boot.js";
 import { readDaemonClaim } from "./lock.js";
+import { recordBoot, recordStop } from "./lifecycle.js";
 import { startCoderDaemon } from "./serve.js";
 
 /**
@@ -143,11 +144,28 @@ const port = readPort();
 const paths = coderPaths();
 const facts = await inspectCoderHome(paths.home);
 
+/**
+ * Record this start **before serving**, so a kill that lands during startup is still counted by the next boot.
+ *
+ * The number printed is of *previous* starts: this one is not evidence of a restart, and counting it would make
+ * every healthy boot claim one. `docs/daemon-lifecycle.md` §5 asks for restarts to be visible — a supervisor
+ * brings the daemon back in a second, which is exactly what makes a crash loop look like a slow morning.
+ */
+const restart = await recordBoot(paths);
+
 say([
   `EnvoyDev daemon — ${facts.headline}`,
   `  home:     ${facts.home}`,
   `  profile:  ${facts.profileDir} (${facts.state})`,
   `  state:    ${paths.stateDir}`,
+  ...(restart.bootsInLastHour > 0
+    ? [`  restarts: ${restart.bootsInLastHour} earlier start(s) in the last hour`]
+    : []),
+  ...(restart.lastStop === undefined
+    ? restart.lastStartedAt !== undefined
+      ? ["  previous: the last daemon did not stop on purpose (no stop record)"]
+      : []
+    : [`  previous: stopped on ${restart.lastStop.signal} at ${restart.lastStop.at}`]),
   ...(facts.detail ? [`  ${facts.detail}`] : []),
   ...facts.facts.map((fact) => `  ${fact}`),
 ]);
@@ -239,6 +257,11 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     if (stopping) return;
     stopping = true;
     say(["\nstopping the daemon"]);
-    void daemon.stop().finally(() => process.exit(0));
+    // Written before the stop so the reason survives even if the shutdown itself is slow: a SIGKILL cannot
+    // reach us at all, which is why the *absence* of this record means "it died" rather than "unknown".
+    void recordStop(paths, { signal })
+      .catch(() => undefined)
+      .then(() => daemon.stop())
+      .finally(() => process.exit(0));
   });
 }

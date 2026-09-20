@@ -147,6 +147,14 @@ interface LiveRun {
   run: AgentRun;
   events: RunEvent[];
   seq: number;
+  /**
+   * When this run last produced an event.
+   *
+   * **The one fact that separates "working" from "stuck".** A count of active runs cannot: a long agent turn is
+   * normal and an agent silent for an hour is not, and the two look identical from outside. Stamped on the hot
+   * path because that is where the answer already is — one assignment per event, no timer.
+   */
+  lastEventAt?: string;
   client: AcpClient | undefined;
   launch: AcpLaunch;
   /**
@@ -258,6 +266,22 @@ export class RunManager {
   isLive(runId: string): boolean {
     const live = this.active.get(runId);
     return live !== undefined && !live.settled;
+  }
+
+  /**
+   * When any live run last produced an event, or nothing when none is running.
+   *
+   * Absent is not the same as "long ago": a daemon with no runs has no staleness to report, and the health
+   * endpoint says so by omitting the field rather than by inventing a timestamp.
+   */
+  lastEventAt(): string | undefined {
+    let newest: string | undefined;
+    for (const live of this.active.values()) {
+      const at = live.lastEventAt;
+      if (at === undefined) continue;
+      if (newest === undefined || at > newest) newest = at;
+    }
+    return newest;
   }
 
   liveFor(taskId: string): AgentRun | undefined {
@@ -1017,6 +1041,7 @@ export class RunManager {
       seq: live.seq,
     } as RunEvent;
     live.events.push(full);
+    live.lastEventAt = full.at;
     this.deps.onEvent(full);
     await this.appendTranscript(live, full);
   }

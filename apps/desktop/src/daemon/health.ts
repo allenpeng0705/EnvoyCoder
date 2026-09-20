@@ -49,7 +49,7 @@ export interface HealthDeps {
    */
   instance: Pick<CoderInstance, "instanceId" | "version" | "startedAt" | "connectionCount">;
   /** The runs, when this daemon has a runtime at all. Absent means one that cannot run anything. */
-  runs?: Pick<RunManager, "list">;
+  runs?: Pick<RunManager, "list"> & { lastEventAt?: RunManager["lastEventAt"] };
 }
 
 /** How late a trivial timer fired. Never negative: a clock that stepped backwards is not "early work". */
@@ -81,7 +81,12 @@ export function createHealthHandlers(deps: HealthDeps): Partial<Record<RpcMethod
         uptimeMs: Math.round(process.uptime() * 1000),
         pid: process.pid,
         connections: deps.instance.connectionCount(),
-        runs: { active: active.length },
+        // The staleness signal, and the reason `active` alone is not one: a run that has produced nothing for
+        // an hour is the failure a supervisor exists to catch, and it is invisible in a count.
+        runs: {
+          active: active.length,
+          ...(deps.runs?.lastEventAt?.() !== undefined ? { lastEventAt: deps.runs.lastEventAt() } : {}),
+        },
         memory: { rssBytes: memory.rss, heapUsedBytes: memory.heapUsed },
         eventLoop: { probeMs: HEALTH_PROBE_MS, lagMs },
       };

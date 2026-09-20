@@ -1962,6 +1962,15 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
           .object({
             /** Runs not yet ended. A count, never a judgement about whether they are *progressing*. */
             active: z.number().int().nonnegative(),
+            /**
+             * When any live run last produced an event — **the staleness signal a count cannot give**.
+             *
+             * Absent when nothing is running: a daemon with no runs has no staleness, and a synthesised
+             * timestamp would make an idle host look busy. A supervisor watching for a stuck agent compares this
+             * against now; the *decision* stays with the supervisor, because how long is too long depends on
+             * what the agent was asked to do.
+             */
+            lastEventAt: z.string().min(1).optional(),
           })
           .strict(),
         memory: z

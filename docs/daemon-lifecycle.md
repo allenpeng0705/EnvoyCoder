@@ -155,7 +155,11 @@ A checklist, in build order:
    does not protect — with `--install-payload` as the entry point the app or a service install runs;
 3. ~~`coder.health` — uptime, pid, version, active runs, event-loop lag, heap~~ **landed** (`daemon/health.ts`;
    last-event age comes with the heartbeat below, because a per-event stamp belongs with the recorder);
-4. the heartbeat (`sd_notify` where it exists), the last-exit record, and log rotation;
+4. the heartbeat (`sd_notify` where it exists), the last-exit record, and log rotation — **partly landed**: the
+   *signals* a heartbeat would poll are in (`coder.health`'s `runs.lastEventAt`, and a restart ledger in
+   `daemon/lifecycle.ts` recording every start plus every deliberate stop, printed at boot so a crash loop cannot
+   hide). The heartbeat itself and `daemon.log` rotation are still owed; both are platform-specific and belong
+   with the unit text (item 9);
 5. bounds on the live run-event buffer and on transcripts;
 6. boot-time run reconciliation;
 7. drain-on-restart;
