@@ -133,6 +133,7 @@
   "folderEmpty",
   "runStopping",
   "runLive",
+  "runApprovalNeedsDecision",
   "runCouldNotAnswer",
   "runCouldNotUpdateTask",
   "runCouldNotSend",

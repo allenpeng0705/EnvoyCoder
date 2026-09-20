@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../l10n/daemon_text.dart';
 import '../l10n/l10n.dart';
 import '../models/transcript.dart';
 import '../theme/tokens.dart';
@@ -248,20 +249,23 @@ class ApprovalCard extends StatelessWidget {
     final answered = approval.resolvedWith;
     final closed = approval.closed;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colors.surface1,
-        borderRadius: BorderRadius.circular(8),
-        border: Border(
-          left: BorderSide(color: colors.statusWarning, width: 3),
-          top: BorderSide(color: colors.border),
-          right: BorderSide(color: colors.border),
-          bottom: BorderSide(color: colors.border),
-        ),
-      ),
-      child: Column(
+    // **The accent is a stripe, not a border.** A `Border` whose left side is wider than the others
+    // cannot carry a `borderRadius`: Flutter asserts "A borderRadius can only be given for a uniform
+    // Border" the moment the card is *painted*, so this card could not survive a debug-mode approval —
+    // no test had ever rendered it until `test/approval_card_test.dart` did, and the stripe is a
+    // clipped positioned child now, with a uniform border underneath it.
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Stack(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: colors.surface1,
+              border: Border.all(color: colors.border),
+            ),
+            child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
@@ -269,16 +273,26 @@ class ApprovalCard extends StatelessWidget {
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 6),
-          if (approval.question.isNotEmpty)
-            Text(approval.question, style: TextStyle(color: colors.foreground, fontWeight: FontWeight.w600)),
+          // **`isEmpty` is a daemon older than the question**, not a question with no words: a
+          // conforming daemon always sends one, in its own catalogue's words when it has no tool name
+          // to name. The fallback says so in the user's language rather than leaving a blank line.
+          Text(
+            approval.question.isEmpty
+                ? l10n.runApprovalNeedsDecision
+                : daemonText(l10n, approval.question),
+            style: TextStyle(color: colors.foreground, fontWeight: FontWeight.w600),
+          ),
           if (approval.detail != null && approval.detail!.isNotEmpty) ...[
             const SizedBox(height: 4),
-            Text(approval.detail!, style: TextStyle(color: colors.foregroundMuted, fontSize: 13)),
+            Text(
+              daemonText(l10n, approval.detail!),
+              style: TextStyle(color: colors.foregroundMuted, fontSize: 13),
+            ),
           ],
           const SizedBox(height: 12),
           if (answered != null)
             Text(
-              l10n.runAnsweredWith(_answeredLabel(approval)),
+              l10n.runAnsweredWith(_answeredLabel(l10n, approval)),
               style: TextStyle(color: colors.foregroundMuted, fontSize: 12),
             )
           else if (closed)
@@ -300,10 +314,21 @@ class ApprovalCard extends StatelessWidget {
                     onPressed: onAnswer == null
                         ? null
                         : () => onAnswer!(approval.requestId, optionId: option.id),
-                    child: Text(option.label),
+                    // The daemon's own Allow / Don't allow labels arrive keyed, like every other
+                    // sentence it authors.
+                    child: Text(daemonText(l10n, option.label)),
                   ),
               ],
             ),
+              ],
+            ),
+          ),
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: Container(width: 3, color: colors.statusWarning),
+          ),
         ],
       ),
     );
@@ -312,9 +337,10 @@ class ApprovalCard extends StatelessWidget {
 
 /// The sentence for a note row.
 ///
-/// A note the daemon sent already carries its text and is rendered verbatim (the daemon owns that
-/// wording). A note the app generated carries a kind and its numbers instead, and is worded here —
-/// which is what keeps plural rules correct and the sentence in the phone's language.
+/// A note the daemon sent carries its text plus the key for it, and goes through [daemonText] so the
+/// user reads it in their own language (the daemon owns the wording; the phone owns the language). A
+/// note the app generated carries a kind and its numbers instead, and is worded here — which is what
+/// keeps plural rules and the sentence in the phone's language correct.
 String _noteText(AppLocalizations l10n, TranscriptEntry entry) {
   switch (entry.noteKind) {
     case 'diff':
@@ -329,21 +355,21 @@ String _noteText(AppLocalizations l10n, TranscriptEntry entry) {
         _ => l10n.runNoteEnded,
       };
     default:
-      return entry.text;
+      return daemonText(l10n, entry.text);
   }
 }
 
-String _answeredLabel(TranscriptApproval approval) {
+String _answeredLabel(AppLocalizations l10n, TranscriptApproval approval) {
   final ids = approval.resolvedWithIds;
   if (ids != null && ids.length > 1) {
-    return ids.map((id) => _labelFor(approval.options, id)).join(', ');
+    return ids.map((id) => _labelFor(l10n, approval.options, id)).join(', ');
   }
-  return _labelFor(approval.options, approval.resolvedWith ?? '');
+  return _labelFor(l10n, approval.options, approval.resolvedWith ?? '');
 }
 
-String _labelFor(List<TranscriptOption> options, String optionId) {
+String _labelFor(AppLocalizations l10n, List<TranscriptOption> options, String optionId) {
   for (final option in options) {
-    if (option.id == optionId) return option.label;
+    if (option.id == optionId) return daemonText(l10n, option.label);
   }
   return optionId;
 }
@@ -364,33 +390,44 @@ class _ManyChoicesState extends State<_ManyChoices> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final option in widget.approval.options)
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-            value: _picked.contains(option.id),
-            title: Text(option.label, style: TextStyle(color: widget.colors.foreground)),
-            controlAffinity: ListTileControlAffinity.leading,
-            onChanged: (checked) {
-              setState(() {
-                if (checked == true) {
-                  _picked.add(option.id);
-                } else {
-                  _picked.remove(option.id);
-                }
-              });
-            },
+    // **A `Material` above the checkboxes, or Flutter's own assertion fires.** `CheckboxListTile` paints
+    // its background and ink on the nearest `Material`, and this card's background is a decorated box —
+    // a combination Flutter refuses in debug ("ListTile background color or ink splashes may be
+    // invisible"), which nothing had painted before `approval_card_test.dart`. A transparent `Material`
+    // gives the ink somewhere to land without changing what the card looks like.
+    return Material(
+      type: MaterialType.transparency,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final option in widget.approval.options)
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              value: _picked.contains(option.id),
+              title: Text(
+                daemonText(context.l10n, option.label),
+                style: TextStyle(color: widget.colors.foreground),
+              ),
+              controlAffinity: ListTileControlAffinity.leading,
+              onChanged: (checked) {
+                setState(() {
+                  if (checked == true) {
+                    _picked.add(option.id);
+                  } else {
+                    _picked.remove(option.id);
+                  }
+                });
+              },
+            ),
+          FilledButton(
+            onPressed: widget.onAnswer == null || _picked.isEmpty
+                ? null
+                : () => widget.onAnswer!(widget.approval.requestId, optionIds: _picked.toList()),
+            child: Text(context.l10n.commonConfirm),
           ),
-        FilledButton(
-          onPressed: widget.onAnswer == null || _picked.isEmpty
-              ? null
-              : () => widget.onAnswer!(widget.approval.requestId, optionIds: _picked.toList()),
-          child: Text(context.l10n.commonConfirm),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

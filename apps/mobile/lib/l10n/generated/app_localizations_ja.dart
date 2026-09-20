@@ -649,6 +649,40 @@ class AppLocalizationsJa extends AppLocalizations {
   String get runNeedsAnswer => 'エージェントがあなたの回答を待っています';
 
   @override
+  String approvalQuestionTool(String tool) {
+    return 'エージェントに「$tool」の実行を許可しますか？';
+  }
+
+  @override
+  String get approvalQuestionGeneric => 'エージェントの続行を許可しますか？';
+
+  @override
+  String get approvalQuestionAsk => 'エージェントが質問しました。';
+
+  @override
+  String get approvalDetail =>
+      'この手順の前で止まっており、あなたが答えるまで続けません。許可すると、同じ操作はこのプロジェクトではもう尋ねません。';
+
+  @override
+  String get approvalDetailPick => '一つ選んでください。この回答はこの質問だけに対するものです。';
+
+  @override
+  String get approvalDetailMultiple =>
+      '当てはまるものをすべて選んで、確認してください。この回答はこの質問だけに対するものです。';
+
+  @override
+  String get approvalDetailText => '回答を入力してください。送信するまでエージェントは続きません。';
+
+  @override
+  String get approvalAllow => '許可';
+
+  @override
+  String get approvalDeny => '許可しない';
+
+  @override
+  String get runApprovalNeedsDecision => 'エージェントが判断を待っています。';
+
+  @override
   String get runNoLongerWaiting => 'もう待っていません。';
 
   @override

@@ -675,6 +675,42 @@ class AppLocalizationsIt extends AppLocalizations {
   String get runNeedsAnswer => 'L\'agente attende la tua risposta';
 
   @override
+  String approvalQuestionTool(String tool) {
+    return 'Consentire all\'agente di eseguire «$tool»?';
+  }
+
+  @override
+  String get approvalQuestionGeneric => 'Consentire all\'agente di proseguire?';
+
+  @override
+  String get approvalQuestionAsk => 'L\'agente ha fatto una domanda.';
+
+  @override
+  String get approvalDetail =>
+      'Si è fermato prima di questo passo e non proseguirà finché non rispondi. Autorizzarlo fa ripetere lo stesso passo in questo progetto senza chiedere di nuovo.';
+
+  @override
+  String get approvalDetailPick =>
+      'Scegline una. Questa risposta vale solo per questa domanda.';
+
+  @override
+  String get approvalDetailMultiple =>
+      'Seleziona ogni opzione che vale, poi conferma. Questa risposta vale solo per questa domanda.';
+
+  @override
+  String get approvalDetailText =>
+      'Scrivi la risposta. L\'agente non prosegue finché non la invii.';
+
+  @override
+  String get approvalAllow => 'Consenti';
+
+  @override
+  String get approvalDeny => 'Non consentire';
+
+  @override
+  String get runApprovalNeedsDecision => 'L\'agente attende una decisione.';
+
+  @override
   String get runNoLongerWaiting => 'Non è più in attesa.';
 
   @override

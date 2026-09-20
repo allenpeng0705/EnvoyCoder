@@ -643,6 +643,38 @@ class AppLocalizationsZh extends AppLocalizations {
   String get runNeedsAnswer => '智能体需要你的答复';
 
   @override
+  String approvalQuestionTool(String tool) {
+    return '允许智能体运行“$tool”吗？';
+  }
+
+  @override
+  String get approvalQuestionGeneric => '允许智能体继续吗？';
+
+  @override
+  String get approvalQuestionAsk => '智能体提了一个问题。';
+
+  @override
+  String get approvalDetail => '它已在此步骤前停下，在你答复之前不会继续。允许之后，同样的操作在这个项目里不会再询问。';
+
+  @override
+  String get approvalDetailPick => '请选一个。这个回答只针对这个问题。';
+
+  @override
+  String get approvalDetailMultiple => '勾选所有适用的选项，然后确认。这个回答只针对这个问题。';
+
+  @override
+  String get approvalDetailText => '请输入你的回答。在你发送之前，智能体不会继续。';
+
+  @override
+  String get approvalAllow => '允许';
+
+  @override
+  String get approvalDeny => '不允许';
+
+  @override
+  String get runApprovalNeedsDecision => '智能体需要你做个决定。';
+
+  @override
   String get runNoLongerWaiting => '不再等待。';
 
   @override

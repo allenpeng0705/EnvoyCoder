@@ -648,6 +648,40 @@ class AppLocalizationsKo extends AppLocalizations {
   String get runNeedsAnswer => '에이전트가 당신의 답변을 기다립니다';
 
   @override
+  String approvalQuestionTool(String tool) {
+    return '에이전트가 “$tool”을(를) 실행하도록 허용할까요?';
+  }
+
+  @override
+  String get approvalQuestionGeneric => '에이전트가 계속하도록 허용할까요?';
+
+  @override
+  String get approvalQuestionAsk => '에이전트가 질문을 했습니다.';
+
+  @override
+  String get approvalDetail =>
+      '이 단계 전에 멈춰 있고 당신이 답하기 전에는 계속하지 않습니다. 허용하면 같은 작업은 이 프로젝트에서 다시 묻지 않습니다.';
+
+  @override
+  String get approvalDetailPick => '하나를 고르세요. 이 답은 이 질문에만 적용됩니다.';
+
+  @override
+  String get approvalDetailMultiple =>
+      '해당하는 항목을 모두 고른 다음 확인하세요. 이 답은 이 질문에만 적용됩니다.';
+
+  @override
+  String get approvalDetailText => '답을 입력하세요. 보내기 전에는 에이전트가 계속하지 않습니다.';
+
+  @override
+  String get approvalAllow => '허용';
+
+  @override
+  String get approvalDeny => '허용 안 함';
+
+  @override
+  String get runApprovalNeedsDecision => '에이전트가 결정을 기다리고 있습니다.';
+
+  @override
   String get runNoLongerWaiting => '더 이상 기다리지 않습니다.';
 
   @override

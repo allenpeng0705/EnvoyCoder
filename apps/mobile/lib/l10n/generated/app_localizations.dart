@@ -1308,6 +1308,66 @@ abstract class AppLocalizations {
   /// **'The agent needs your answer'**
   String get runNeedsAnswer;
 
+  /// approvalquestiontool — The permission the agent is asking for, naming the tool.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow the agent to run “{tool}”?'**
+  String approvalQuestionTool(String tool);
+
+  /// approvalquestiongeneric — The permission question when no tool name is known.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow the agent to continue?'**
+  String get approvalQuestionGeneric;
+
+  /// approvalquestionask — A question the model asked with no prompt of its own.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent asked a question.'**
+  String get approvalQuestionAsk;
+
+  /// approvaldetail — Under a permission question: what answering does.
+  ///
+  /// In en, this message translates to:
+  /// **'It has stopped before this step and will not continue until you answer. Allowing it lets this same step run again in this project without asking.'**
+  String get approvalDetail;
+
+  /// approvaldetailpick — Under a single-choice question.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick one. This answer is only for this question.'**
+  String get approvalDetailPick;
+
+  /// approvaldetailmultiple — Under a checkbox question.
+  ///
+  /// In en, this message translates to:
+  /// **'Tick every option that applies, then confirm. This answer is only for this question.'**
+  String get approvalDetailMultiple;
+
+  /// approvaldetailtext — Under a typed-answer question.
+  ///
+  /// In en, this message translates to:
+  /// **'Type your answer. The agent will not continue until you send it.'**
+  String get approvalDetailText;
+
+  /// approvalallow — The permission button that lets the step run.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow'**
+  String get approvalAllow;
+
+  /// approvaldeny — The permission button that refuses.
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t allow'**
+  String get approvalDeny;
+
+  /// runapprovalneedsdecision — Question line when the daemon sent none.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent needs a decision.'**
+  String get runApprovalNeedsDecision;
+
   /// run.noLongerWaiting — The run ended while the card was open.
   ///
   /// In en, this message translates to:

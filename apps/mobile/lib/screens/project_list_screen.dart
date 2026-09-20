@@ -16,6 +16,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/daemon_text.dart';
 import '../l10n/l10n.dart';
 import '../models/harness.dart';
 import '../models/host.dart';
@@ -144,7 +145,8 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
       final l10n = context.l10n;
       setState(() {
         _loading = false;
-        _error = l10n.projectListCouldNotLoad(_friendly(l10n, "$error"));
+        // The daemon prefixes its code and appends its catalogue key; neither belongs on screen.
+        _error = l10n.projectListCouldNotLoad(_friendly(l10n, daemonErrorText(l10n, "$error")));
       });
     }
   }

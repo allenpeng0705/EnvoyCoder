@@ -865,6 +865,51 @@
   "@runNeedsAnswer": {
     "description": "run.needsAnswer — An approval that is still open."
   },
+  "approvalQuestionTool": "Allow the agent to run “{tool}”?",
+  "@approvalQuestionTool": {
+    "description": "approvalquestiontool — The permission the agent is asking for, naming the tool.",
+    "placeholders": {
+      "tool": {
+        "type": "String"
+      }
+    }
+  },
+  "approvalQuestionGeneric": "Allow the agent to continue?",
+  "@approvalQuestionGeneric": {
+    "description": "approvalquestiongeneric — The permission question when no tool name is known."
+  },
+  "approvalQuestionAsk": "The agent asked a question.",
+  "@approvalQuestionAsk": {
+    "description": "approvalquestionask — A question the model asked with no prompt of its own."
+  },
+  "approvalDetail": "It has stopped before this step and will not continue until you answer. Allowing it lets this same step run again in this project without asking.",
+  "@approvalDetail": {
+    "description": "approvaldetail — Under a permission question: what answering does."
+  },
+  "approvalDetailPick": "Pick one. This answer is only for this question.",
+  "@approvalDetailPick": {
+    "description": "approvaldetailpick — Under a single-choice question."
+  },
+  "approvalDetailMultiple": "Tick every option that applies, then confirm. This answer is only for this question.",
+  "@approvalDetailMultiple": {
+    "description": "approvaldetailmultiple — Under a checkbox question."
+  },
+  "approvalDetailText": "Type your answer. The agent will not continue until you send it.",
+  "@approvalDetailText": {
+    "description": "approvaldetailtext — Under a typed-answer question."
+  },
+  "approvalAllow": "Allow",
+  "@approvalAllow": {
+    "description": "approvalallow — The permission button that lets the step run."
+  },
+  "approvalDeny": "Don't allow",
+  "@approvalDeny": {
+    "description": "approvaldeny — The permission button that refuses."
+  },
+  "runApprovalNeedsDecision": "The agent needs a decision.",
+  "@runApprovalNeedsDecision": {
+    "description": "runapprovalneedsdecision — Question line when the daemon sent none."
+  },
   "runNoLongerWaiting": "No longer waiting.",
   "@runNoLongerWaiting": {
     "description": "run.noLongerWaiting — The run ended while the card was open."

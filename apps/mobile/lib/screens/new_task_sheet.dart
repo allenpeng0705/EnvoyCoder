@@ -26,6 +26,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/daemon_text.dart';
 import '../l10n/l10n.dart';
 import '../models/harness.dart';
 import '../models/project_rail.dart';
@@ -199,7 +200,10 @@ class _NewTaskSheetState extends State<_NewTaskSheet> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = context.l10n.newTaskCouldNotStart(_short(context.l10n, "$error"));
+        // Code and key marker off first: a user reads the sentence, not the wire format.
+        _error = context.l10n.newTaskCouldNotStart(
+          _short(context.l10n, daemonErrorText(context.l10n, "$error")),
+        );
       });
     }
   }
