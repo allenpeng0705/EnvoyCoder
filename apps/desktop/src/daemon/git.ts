@@ -31,16 +31,24 @@ import { spawn as nodeSpawn } from "node:child_process";
 
 import {
   GIT_BRANCHES_ARGS,
+  GIT_HAS_HEAD_ARGS,
+  GIT_HAS_STAGED_ARGS,
   GIT_STATUS_ARGS,
   branchNameRefusal,
+  currentSearchPath,
   detectVcsKind,
   gitCheckoutBranchArgs,
+  gitCommitArgs,
   gitCreateBranchArgs,
   gitEnv,
+  gitStageArgs,
+  gitUnstageArgs,
+  listWorktreeChanges,
   parseGitBranches,
   parseGitStatus,
   type BranchNameRefusal,
   type VcsKind,
+  type WorktreeChange,
 } from "@envoydev/platform";
 import {
   ENVOYDEV_ERRORS,
@@ -79,6 +87,9 @@ const MISSING_SENTENCE =
   "Git is not installed on this machine, so EnvoyDev cannot read this repository. Install git and try again.";
 const TIMED_OUT_SENTENCE =
   "Git did not finish in time, so EnvoyDev stopped it. The repository may be very large, or git may be waiting for something.";
+const NOTHING_STAGED_SENTENCE =
+  "Nothing is staged, so there is nothing to commit. Stage a file first — or stage everything and commit that.";
+const COMMIT_EMPTY_SENTENCE = "A commit needs a message.";
 
 export interface GitHandlerDeps {
   store: CoderStore;
@@ -93,6 +104,14 @@ export interface GitHandlerDeps {
   spawn?: typeof nodeSpawn;
   /** The program to run. `git`, and injectable so a test can prove what "not installed" says. */
   command?: string;
+  /**
+   * The environment the git children start from — this daemon's own, unless a test says otherwise.
+   *
+   * Injected for the one case that cannot be arranged any other way: **a machine with no author identity**.
+   * Git refuses a commit then, with a sentence naming the `git config` to run, and that refusal is one a
+   * fresh install really meets — so it is proven here with an empty `HOME` rather than assumed.
+   */
+  env?: () => NodeJS.ProcessEnv;
   readTimeoutMs?: number;
   writeTimeoutMs?: number;
 }
@@ -122,6 +141,30 @@ export async function measureProjectVcs(deps: GitDeps, dir: string): Promise<Vcs
   return detectVcsKind(dir, { gitRepository: isRepository });
 }
 
+/**
+ * The environment a git child runs in: the user's world, and never a question.
+ *
+ * Two things are taken from what the daemon has already measured rather than from its own environment, and
+ * they are the same two things a bundled app gets wrong:
+ *
+ *   * **`PATH`** — the list the login shell named, which is the list the probes searched. Without it, a
+ *     `git` installed outside `/usr/bin` is invisible to us and visible to the user's terminal, and the
+ *     refusal we would produce ("git is not installed") would be a lie about their machine.
+ *   * **`SSH_AUTH_SOCK`** — the agent socket the login shell named, only when this process has none. It is
+ *     what makes an `ssh` remote work from an app that was not started in a terminal.
+ *
+ * Everything else in the environment is inherited, and `gitEnv` adds the parts that keep git from asking a
+ * question it cannot get an answer to.
+ */
+function gitChildEnv(deps: GitDeps, read: boolean): NodeJS.ProcessEnv {
+  const search = currentSearchPath();
+  return gitEnv(deps.env?.() ?? process.env, {
+    read,
+    ...(search.searchable ? { path: search.path } : {}),
+    ...(search.sshAuthSock !== undefined ? { sshAuthSock: search.sshAuthSock } : {}),
+  });
+}
+
 /** Run git in `dir`, bounded, with the environment that keeps it from asking a question. */
 async function runGit(
   deps: GitDeps,
@@ -130,7 +173,7 @@ async function runGit(
   options: { read: boolean },
 ): Promise<BoundedOutput> {
   const output = await runBounded(deps.command ?? "git", ["-C", dir, ...args], {
-    env: gitEnv(process.env, { read: options.read }),
+    env: gitChildEnv(deps, options.read),
     timeoutMs:
       options.read
         ? (deps.readTimeoutMs ?? GIT_READ_TIMEOUT_MS)
@@ -195,6 +238,40 @@ function invalidBranch(name: string, refusal: BranchNameRefusal): Error {
     `"${name}" cannot be a branch name. Letters, digits, dots, dashes and slashes are allowed, and it cannot start with a dash.`,
     ref("error.gitBranchInvalid", { name }),
   );
+}
+
+/**
+ * The **repository root**, which is where the changed paths are relative to.
+ *
+ * Measured rather than assumed, because it is not the same directory as the project: `git -C <subdir>
+ * status --porcelain` answers with paths relative to the *repository* (`sub/a.txt`, not `a.txt`), so a
+ * project that is itself a subdirectory of a larger repository would have every path resolved twice if the
+ * write ran in the project folder. `--show-toplevel` names the directory that makes the paths mean what the
+ * list says they mean.
+ */
+async function gitRoot(deps: GitDeps, dir: string): Promise<string> {
+  const root = await runGit(deps, dir, ["rev-parse", "--show-toplevel"], { read: true });
+  const named = root.text.trim();
+  return root.code === 0 && named !== "" ? named : dir;
+}
+
+/** The changed files, as every staging answer reports them. */
+function changesOf(dir: string): WorktreeChange[] {
+  return listWorktreeChanges(dir).changes;
+}
+
+/** Does the repository have a commit? Only unstaging needs the answer. */
+async function hasHead(deps: GitDeps, dir: string): Promise<boolean> {
+  const head = await runGit(deps, dir, GIT_HAS_HEAD_ARGS, { read: true });
+  return head.code === 0;
+}
+
+/** Is anything staged? By exit code: 0 nothing, 1 something, anything else a failure. */
+async function hasStaged(deps: GitDeps, dir: string): Promise<boolean> {
+  const staged = await runGit(deps, dir, GIT_HAS_STAGED_ARGS, { read: true });
+  if (staged.code === 0) return false;
+  if (staged.code === 1) return true;
+  throw gitFailed(staged);
 }
 
 /** One handler table, ready to spread into the daemon's. */
@@ -270,6 +347,81 @@ export function createGitHandlers(deps: GitHandlerDeps): Partial<Record<RpcMetho
       // uncommitted change, and it says which file.
       if (switched.code !== 0) throw gitFailed(switched);
       return await statusOf(deps, project.path);
+    },
+
+    "coder.gitStage": async (params) => {
+      const input = parseRpcParams("coder.gitStage", params) as {
+        projectId: string;
+        paths: readonly string[];
+      };
+      const project = projectFor(input.projectId);
+      await repositoryFor(project.path);
+      refuseWhileRunning(project.id);
+      const root = await gitRoot(deps, project.path);
+
+      const staged = await runGit(deps, root, gitStageArgs(input.paths), { read: false });
+      // A path outside the repository, a path that no longer exists: git names the file, and that sentence is
+      // more useful than anything this layer could invent about it.
+      if (staged.code !== 0) throw gitFailed(staged);
+      return { changes: changesOf(project.path) };
+    },
+
+    "coder.gitUnstage": async (params) => {
+      const input = parseRpcParams("coder.gitUnstage", params) as {
+        projectId: string;
+        paths: readonly string[];
+      };
+      const project = projectFor(input.projectId);
+      await repositoryFor(project.path);
+      refuseWhileRunning(project.id);
+      const root = await gitRoot(deps, project.path);
+
+      // Two shapes, and which one is right is a fact about the repository: `reset HEAD` needs a HEAD, and the
+      // first commit of a project made here has none (see `gitUnstageArgs`).
+      const unstaged = await runGit(
+        deps,
+        root,
+        gitUnstageArgs(input.paths, { hasHead: await hasHead(deps, root) }),
+        { read: false },
+      );
+      if (unstaged.code !== 0) throw gitFailed(unstaged);
+      return { changes: changesOf(project.path) };
+    },
+
+    "coder.gitCommit": async (params) => {
+      const input = parseRpcParams("coder.gitCommit", params) as { projectId: string; message: string };
+      const project = projectFor(input.projectId);
+      await repositoryFor(project.path);
+      refuseWhileRunning(project.id);
+      // The paths the index is relative to, and the directory the commit runs in.
+      const root = await gitRoot(deps, project.path);
+
+      // **The message is checked here, in the user's language**, rather than by letting git say
+      // "Aborting commit due to empty commit message" — which is a sentence about an internal step.
+      if (input.message.trim() === "") {
+        throw coderError(ENVOYDEV_ERRORS.gitCommitEmpty, COMMIT_EMPTY_SENTENCE, ref("error.gitCommitEmpty"));
+      }
+      // And an empty index is a state to name, not a failure to relay: git's own words for it read as a
+      // complaint about the work.
+      if (!(await hasStaged(deps, root))) {
+        throw coderError(
+          ENVOYDEV_ERRORS.gitNothingStaged,
+          NOTHING_STAGED_SENTENCE,
+          ref("error.gitNothingStaged"),
+        );
+      }
+
+      const committed = await runGit(deps, root, gitCommitArgs(input.message), { read: false });
+      // A missing author identity, a failing pre-commit hook, a signing key: git's own sentence is the detail,
+      // and it names the exact `git config` or key a person has to fix.
+      if (committed.code !== 0) throw gitFailed(committed);
+
+      const sha = await runGit(deps, root, ["rev-parse", "HEAD"], { read: true });
+      return {
+        sha: sha.text.trim(),
+        status: await statusOf(deps, project.path),
+        changes: changesOf(project.path),
+      };
     },
 
     "coder.gitCreateBranch": async (params) => {

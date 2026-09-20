@@ -157,6 +157,12 @@ export interface CoderServiceDeps {
    */
   gitCommand?: string;
   gitSpawn?: typeof import("node:child_process").spawn;
+  /**
+   * The environment the git children start from. Injected on the same terms as the two above, and for the one
+   * case that cannot be arranged otherwise: a machine with no author identity, whose refusal a fresh install
+   * really meets.
+   */
+  gitEnv?: () => NodeJS.ProcessEnv;
   fixTimeoutMs?: number;
   /**
    * The environment a provider's named variables are read from.
@@ -241,6 +247,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
   const gitRun: GitDeps = {
     ...(deps.gitCommand !== undefined ? { command: deps.gitCommand } : {}),
     ...(deps.gitSpawn !== undefined ? { spawn: deps.gitSpawn } : {}),
+    ...(deps.gitEnv !== undefined ? { env: deps.gitEnv } : {}),
   };
 
   const search = currentSearchPath();

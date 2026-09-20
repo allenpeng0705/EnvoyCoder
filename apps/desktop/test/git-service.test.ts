@@ -14,7 +14,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -60,6 +60,24 @@ function repository(): string {
   return root;
 }
 
+/**
+ * A repository with **no** author identity and no guessing allowed.
+ *
+ * `user.useConfigOnly` is the interesting half, and it was measured rather than assumed: git without an
+ * identity **invents one** from the username and hostname ("Your name and email address were configured
+ * automatically…") and the commit succeeds. Only a repository that forbids the guess refuses — which is the
+ * configuration a user who cares about their history sets, and the one whose refusal names the fix.
+ */
+function repositoryWithoutIdentity(): string {
+  const root = mkdtempSync(join(tmpdir(), "envoydev-gitsvc-noid-"));
+  roots.push(root);
+  run(root, ["init", "-q"]);
+  run(root, ["config", "user.useConfigOnly", "true"]);
+  writeFileSync(join(root, "a.txt"), "one\n");
+  run(root, ["add", "."]);
+  return root;
+}
+
 function plainDirectory(): string {
   const root = mkdtempSync(join(tmpdir(), "envoydev-plain-"));
   roots.push(root);
@@ -73,7 +91,7 @@ interface Bench {
 }
 
 /** The daemon's real handler table, over a throwaway home. */
-async function bench(options: { gitCommand?: string } = {}): Promise<Bench> {
+async function bench(options: { gitCommand?: string; env?: () => NodeJS.ProcessEnv } = {}): Promise<Bench> {
   const home = await mkdtemp(join(tmpdir(), "envoydev-gitsvc-home-"));
   const paths = coderPaths(home);
   const store = await CoderStore.open({ paths });
@@ -89,6 +107,7 @@ async function bench(options: { gitCommand?: string } = {}): Promise<Bench> {
     },
     mesh: () => ({ kind: "no-node", reason: "not attached in this test" }),
     ...(options.gitCommand !== undefined ? { gitCommand: options.gitCommand } : {}),
+    ...(options.env !== undefined ? { gitEnv: options.env } : {}),
   }) as Record<string, CoderHandler>;
   return { handlers, store, home };
 }
@@ -283,6 +302,139 @@ describe("the refusals a user can read", () => {
   });
 });
 
+describe("staging and committing", () => {
+  itGit("stages a path, commits it, and answers with the repository it left behind", async () => {
+    const b = await bench();
+    const repo = repository();
+    const projectId = await addProject(b, repo);
+    writeFileSync(join(repo, "a.txt"), "changed\n");
+
+    const staged = (await call(b.handlers, "coder.gitStage", { projectId, paths: ["a.txt"] })) as {
+      changes: { path: string; staged: boolean; unstaged: boolean }[];
+    };
+    // The file is in the index and the working tree matches it — two facts, and this is the interesting one.
+    expect(staged.changes).toEqual([
+      { path: "a.txt", kind: "modified", staged: true, unstaged: false },
+    ]);
+
+    const committed = (await call(b.handlers, "coder.gitCommit", {
+      projectId,
+      message: "change the note",
+    })) as { sha: string; status: { dirty: number }; changes: unknown[] };
+    expect(committed.sha).toMatch(/^[0-9a-f]{7,}$/);
+    expect(committed.changes).toEqual([]);
+    expect(committed.status.dirty).toBe(0);
+
+    // And it is a real commit, with the message the user typed.
+    const log = spawnSync("git", ["-C", repo, "log", "-1", "--format=%s"], { encoding: "utf8" });
+    expect(log.stdout.trim()).toBe("change the note");
+  });
+
+  itGit("unstages a path without touching what is on disk", async () => {
+    const b = await bench();
+    const repo = repository();
+    const projectId = await addProject(b, repo);
+    writeFileSync(join(repo, "a.txt"), "changed\n");
+    await call(b.handlers, "coder.gitStage", { projectId, paths: ["a.txt"] });
+
+    const unstaged = (await call(b.handlers, "coder.gitUnstage", { projectId, paths: ["a.txt"] })) as {
+      changes: { path: string; staged: boolean; unstaged: boolean }[];
+    };
+    expect(unstaged.changes).toEqual([
+      { path: "a.txt", kind: "modified", staged: false, unstaged: true },
+    ]);
+    // The edit survives: unstaging is a statement about the index, not about the file.
+    expect(readFileSync(join(repo, "a.txt"), "utf8")).toBe("changed\n");
+  });
+
+  itGit("commits the first commit of a repository that has none, and can unstage it again", async () => {
+    // **The shape a project made in EnvoyDev actually has**: `git init`, files, no commit. `git reset HEAD`
+    // cannot unstage anything here (there is no HEAD), which is why unstaging has a second form.
+    const b = await bench();
+    const repo = repositoryWithoutIdentity();
+    const projectId = await addProject(b, repo);
+
+    await call(b.handlers, "coder.gitStage", { projectId, paths: ["a.txt"] });
+    const unstaged = (await call(b.handlers, "coder.gitUnstage", { projectId, paths: ["a.txt"] })) as {
+      changes: { path: string; staged: boolean; unstaged: boolean }[];
+    };
+    expect(unstaged.changes).toEqual([
+      { path: "a.txt", kind: "untracked", staged: false, unstaged: true },
+    ]);
+
+    // With an identity (the repository has none, so this run brings one), the first commit lands.
+    await call(b.handlers, "coder.gitStage", { projectId, paths: ["a.txt"] });
+    const committed = (await call(b.handlers, "coder.gitCommit", {
+      projectId,
+      message: "first",
+    })) as { sha: string };
+    expect(committed.sha).toMatch(/^[0-9a-f]{7,}$/);
+  });
+
+  itGit("stages in a project that is a subdirectory of a larger repository", async () => {
+    // **The case `gitRoot` exists for.** `git -C sub status` answers with paths relative to the *repository*
+    // (`sub/a.txt`), so a write that ran in the project folder would look for `sub/sub/a.txt`. Measured here
+    // rather than reasoned about, because the paths and the directory have to agree or nothing stages.
+    const b = await bench();
+    const repo = repository();
+    const nested = join(repo, "sub");
+    mkdirSync(nested);
+    writeFileSync(join(nested, "a.txt"), "one\n");
+    run(repo, ["add", "."]);
+    run(repo, ["commit", "-qm", "sub"]);
+    writeFileSync(join(nested, "a.txt"), "changed\n");
+
+    const projectId = await addProject(b, nested);
+    const listed = (await call(b.handlers, "coder.gitStatus", { projectId })) as { kind: string };
+    expect(listed.kind).toBe("git");
+
+    const staged = (await call(b.handlers, "coder.gitStage", { projectId, paths: ["sub/a.txt"] })) as {
+      changes: { path: string; staged: boolean }[];
+    };
+    expect(staged.changes).toEqual([
+      { path: "sub/a.txt", kind: "modified", staged: true, unstaged: false },
+    ]);
+  });
+
+  itGit("refuses an empty index, in the user's language rather than git's", async () => {
+    const b = await bench();
+    const projectId = await addProject(b, repository());
+    expectRefusal(
+      await refusalOf(b.handlers, "coder.gitCommit", { projectId, message: "nothing to say" }),
+      "error.gitNothingStaged",
+    );
+  });
+
+  itGit("refuses a message that is only whitespace", async () => {
+    const b = await bench();
+    const repo = repository();
+    const projectId = await addProject(b, repo);
+    writeFileSync(join(repo, "a.txt"), "changed\n");
+    await call(b.handlers, "coder.gitStage", { projectId, paths: ["a.txt"] });
+
+    expectRefusal(
+      await refusalOf(b.handlers, "coder.gitCommit", { projectId, message: "   " }),
+      "error.gitCommitEmpty",
+    );
+  });
+
+  itGit("relays git's own refusal when the repository will not accept a guessed identity", async () => {
+    // **Measured, not assumed:** with no identity configured git *invents* one from the username and hostname
+    // and commits anyway. A repository that forbids the guess (`user.useConfigOnly`) refuses — and its
+    // sentence names the exact `git config` to run, which is why it is the *detail* rather than a paraphrase.
+    const b = await bench({
+      env: () => ({ ...process.env, HOME: plainDirectory(), GIT_CONFIG_GLOBAL: "/dev/null" }),
+    });
+    const repo = repositoryWithoutIdentity();
+    const projectId = await addProject(b, repo);
+    await call(b.handlers, "coder.gitStage", { projectId, paths: ["a.txt"] });
+
+    const message = await refusalOf(b.handlers, "coder.gitCommit", { projectId, message: "first" });
+    expectRefusal(message, "error.gitFailed");
+    expect(coderErrorMessage(message)).toMatch(/identity|who you are/i);
+  });
+});
+
 describe("one writer at a time", () => {
   itGit("refuses a write while a run is live in the project, and allows every read", async () => {
     // The repo's own scenario: an agent mid-edit and a checkout in the same working tree. The run is stubbed
@@ -304,16 +456,23 @@ describe("one writer at a time", () => {
     await expect(call(handlers, "coder.gitStatus", { projectId: project.project.id })).resolves.toBeDefined();
     await expect(call(handlers, "coder.gitBranches", { projectId: project.project.id })).resolves.toBeDefined();
 
-    const refusal = await Promise.resolve(call(handlers, "coder.gitCheckout", {
-      projectId: project.project.id,
-      branch: "main",
-    })).then(
-      () => "did not refuse",
-      (error: unknown) => (error instanceof Error ? error.message : String(error)),
-    );
-    // The sentence names the *task*, because "something is running" is not something a user can act on.
-    expectRefusal(refusal, "error.gitBusy");
-    expect(coderErrorMessage(refusal)).toContain("fix the tests");
+    // Every write, not just the branch one: a commit under a working agent is the same hazard.
+    for (const [method, params] of [
+      ["coder.gitCheckout", { branch: "main" }],
+      ["coder.gitStage", { paths: ["a.txt"] }],
+      ["coder.gitUnstage", { paths: ["a.txt"] }],
+      ["coder.gitCommit", { message: "from the phone" }],
+    ] as const) {
+      const refusal = await Promise.resolve(
+        call(handlers, method, { projectId: project.project.id, ...params }),
+      ).then(
+        () => "did not refuse",
+        (error: unknown) => (error instanceof Error ? error.message : String(error)),
+      );
+      // The sentence names the *task*, because "something is running" is not something a user can act on.
+      expectRefusal(refusal, "error.gitBusy");
+      expect(coderErrorMessage(refusal)).toContain("fix the tests");
+    }
 
     // And the write is allowed again the moment the run is not live.
     live = false;

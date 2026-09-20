@@ -103,6 +103,18 @@ export const LOGIN_SHELL_MAX_OUTPUT = 64 * 1024;
  */
 export const LOGIN_SHELL_PATH_MARKER = "__ENVOYDEV_LOGIN_PATH__=";
 
+/**
+ * The marker in front of the ssh agent socket, asked for in the **same** shell invocation as the `PATH`.
+ *
+ * A second line from one login shell rather than a second shell: the startup files are the expensive and
+ * the unpredictable part, and asking twice would pay for them twice for two facts that come from the same
+ * environment. The socket is what ssh finds a user's keys through, and a bundled app started from a window
+ * manager does not always have it — which is a fact about the *app's* environment, not about the user's
+ * git, and the one thing that would otherwise make an `ssh` remote fail from EnvoyDev and work in a
+ * terminal on the same machine.
+ */
+export const LOGIN_SHELL_SSH_MARKER = "__ENVOYDEV_LOGIN_SSH_AUTH_SOCK__=";
+
 /** Where the answer came from. The first thing a bug report needs. */
 export type SearchPathSource = "login-shell" | "process-env" | "well-known" | "cache" | "none";
 
@@ -129,6 +141,16 @@ export interface SearchPath {
   added: readonly string[];
   /** True when a login shell answered — for its `PATH`, for one of the names below, or for both. */
   fromLoginShell: boolean;
+  /**
+   * The ssh agent socket the login shell's environment names, when it named one.
+   *
+   * The second fact from the *same* login-shell ask as `path`, and the answer to a real failure: an app
+   * started from Finder (or a desktop launcher) does not always inherit `SSH_AUTH_SOCK`, so an `ssh` remote
+   * that works in the user's terminal would fail here with an authentication error about a key that is
+   * right there. Absent means "the shell did not name one" — a machine that does not use ssh — and a caller
+   * that passes it to a child must not invent a value instead.
+   */
+  sshAuthSock?: string;
   /**
    * The programs the user's own login shell named, one `command -v` at a time (`./shell-binaries.js`).
    *
@@ -323,22 +345,34 @@ export function looksLikePath(raw: string, platform: PlatformId = detectPlatform
 /** The `argv` for the login-shell probe: interactive, login, and printing the marked `PATH`. */
 export function loginShellCommand(
   shell: string,
-  options: { platform?: PlatformId; marker?: string } = {},
+  options: { platform?: PlatformId; marker?: string; sshMarker?: string } = {},
 ): { command: string; args: string[] } {
   const platform = options.platform ?? detectPlatform();
   const marker = options.marker ?? LOGIN_SHELL_PATH_MARKER;
+  const sshMarker = options.sshMarker ?? LOGIN_SHELL_SSH_MARKER;
   // `-i` is what runs the user's rc files, which is the entire point; `-l` gives a login shell, matching
-  // what a terminal window opens. The `printf` is the last thing the startup sequence runs, so our marker
-  // follows whatever noise the rc files made.
-  const script = `printf '\\n%s%s\\n' '${marker}' "$PATH"`;
-  if (platform === "windows") return { command: shell, args: ["/d", "/s", "/c", script] };
-  return { command: shell, args: ["-ilc", script] };
+  // what a terminal window opens. The `printf`s are the last thing the startup sequence runs, so our
+  // markers follow whatever noise the rc files made.
+  const pathLine = `printf '\\n%s%s\\n' '${marker}' "$PATH"`;
+  // The socket line has no leading newline of its own: it is printed on the line after the `PATH`, which is
+  // already terminated. On Windows the shell there is not the POSIX one this expansion needs, so only the
+  // `PATH` is asked for — the socket is a POSIX idea and reporting nothing is the honest answer.
+  const sshLine = `printf '%s%s\\n' '${sshMarker}' "$SSH_AUTH_SOCK"`;
+  if (platform === "windows") return { command: shell, args: ["/d", "/s", "/c", pathLine] };
+  return { command: shell, args: ["-ilc", `${pathLine}; ${sshLine}`] };
 }
 
 /** What `readLoginShellPath` walks away from, and what it hands back. */
 export interface LoginShellRead {
   /** The `PATH` the shell reported, when it reported a believable one. */
   path?: string;
+  /**
+   * The ssh agent socket the shell's environment names, when it names a believable one.
+   *
+   * Optional and never a failure: an unset `SSH_AUTH_SOCK` is a machine that does not use ssh (or a shell
+   * that is not POSIX), and the rest of the answer stands.
+   */
+  sshAuthSock?: string;
   /**
    * Why there is no path, in the order the checks run.
    *
@@ -436,7 +470,13 @@ export async function readLoginShellPath(
   if (!looksLikePath(value, platform)) {
     return { reason: "not-a-path", raw: value.slice(0, 256) };
   }
-  return { path: value };
+  // **The socket is read last and tolerated**, because it is the second fact of one answer: a machine with
+  // no agent, or an rc file that printed our marker itself, must not turn a usable `PATH` into a failure.
+  // A socket path is absolute and has no whitespace; anything else is ignored rather than passed to a child.
+  const sshAt = stdout.lastIndexOf(LOGIN_SHELL_SSH_MARKER);
+  const ssh = sshAt < 0 ? "" : (stdout.slice(sshAt + LOGIN_SHELL_SSH_MARKER.length).split(/\r?\n/)[0] ?? "").trim();
+  const sshAuthSock = ssh.startsWith("/") && !/\s/.test(ssh) ? ssh : undefined;
+  return { path: value, ...(sshAuthSock !== undefined ? { sshAuthSock } : {}) };
 }
 
 /** The empty answer table, shared so the "no shell answers for this world" case allocates nothing. */
@@ -446,6 +486,8 @@ const EMPTY_BINARIES: ReadonlyMap<string, string> = new Map();
 export interface ComposeSearchPathInput extends SearchPathOptions {
   /** The login shell's answer, when one arrived. */
   loginShell?: string | undefined;
+  /** The ssh agent socket the *same* login shell named, when it named one. */
+  sshAuthSock?: string | undefined;
   /** The process's own `PATH`. Read from `env` when omitted. */
   processPath?: string;
   /**
@@ -510,6 +552,7 @@ export function composeSearchPath(input: ComposeSearchPathInput = {}): SearchPat
   const loginShellAnswered = loginShell !== undefined && looksLikePath(loginShell, platform);
   if (loginShellAnswered) for (const entry of splitPathEntries(loginShell, input)) push(entry);
   const fromLoginShell = loginShellAnswered || shellBinaries.length > 0;
+  const sshAuthSock = input.sshAuthSock;
   const processDirs = splitPathEntries(processPath, input);
   for (const entry of processDirs) push(entry);
 
@@ -545,6 +588,7 @@ export function composeSearchPath(input: ComposeSearchPathInput = {}): SearchPat
     searchable: dirs.length > 0,
     added,
     fromLoginShell,
+    ...(sshAuthSock !== undefined ? { sshAuthSock } : {}),
     shellBinaries,
     cached,
   };
@@ -561,6 +605,7 @@ export function composeSearchPath(input: ComposeSearchPathInput = {}): SearchPat
  * machine whose rc file hangs would otherwise hang on every ask.
  */
 let loginShellAnswer: string | null | undefined;
+let loginShellSshAuthSock: string | undefined;
 let snapshot: SearchPath | undefined;
 let inFlight: Promise<SearchPath> | undefined;
 /** Bumped by the test hook, so an answer in flight cannot leak into the next case. */
@@ -586,7 +631,10 @@ export function currentSearchPath(options: SearchPathOptions = {}): SearchPath {
   if (namesItsOwnWorld(options)) return composeSearchPath(options);
   const shellGeneration = shellBinariesGeneration();
   if (snapshot === undefined || snapshotShellGeneration !== shellGeneration) {
-    snapshot = composeSearchPath(loginShellAnswer ? { loginShell: loginShellAnswer } : {});
+    snapshot = composeSearchPath({
+      ...(loginShellAnswer ? { loginShell: loginShellAnswer } : {}),
+      ...(loginShellSshAuthSock !== undefined ? { sshAuthSock: loginShellSshAuthSock } : {}),
+    });
     snapshotShellGeneration = shellGeneration;
   }
   return snapshot;
@@ -613,7 +661,11 @@ export async function refreshSearchPath(
   const ownWorld = namesItsOwnWorld(options);
   if (ownWorld) {
     const read = await readLoginShellPath(options);
-    return composeSearchPath({ ...options, loginShell: read.path });
+    return composeSearchPath({
+      ...options,
+      loginShell: read.path,
+      ...(read.sshAuthSock !== undefined ? { sshAuthSock: read.sshAuthSock } : {}),
+    });
   }
   if (inFlight) return inFlight;
   const mine = generation;
@@ -622,6 +674,9 @@ export async function refreshSearchPath(
     if (mine !== generation) return currentSearchPath();
     // `null` records "asked, got nothing, do not ask again from this process".
     loginShellAnswer = read.path ?? null;
+    // The socket is kept even when the `PATH` was not believable: they are two facts from one ask, and a
+    // shell that answered about the agent has told us something usable either way.
+    loginShellSshAuthSock = read.sshAuthSock;
     snapshot = undefined;
     return currentSearchPath();
   })().finally(() => {

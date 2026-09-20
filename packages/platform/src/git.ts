@@ -209,6 +209,49 @@ export function branchNameRefusal(name: string): BranchNameRefusal | undefined {
   return undefined;
 }
 
+/**
+ * Stage exactly these paths — what `git add` would pick up.
+ *
+ * `--` first, so a path that begins with a dash is a path rather than an option. Paths are **not** validated
+ * here beyond that: git refuses a path outside the repository with its own sentence, and that refusal names
+ * the file, which is more useful than anything this layer could invent. What a caller may not do is send a
+ * command line — the paths are argv elements, never a string a shell sees.
+ */
+export function gitStageArgs(paths: readonly string[]): string[] {
+  return ["add", "--", ...paths];
+}
+
+/**
+ * Unstage exactly these paths — and git has two shapes for it, which is the interesting part.
+ *
+ * `git reset HEAD -- <paths>` is the statement, and it means "the index goes back to what `HEAD` has". A
+ * repository with **no commits yet** has no `HEAD` to go back to, so that command fails with `fatal: Failed
+ * to resolve 'HEAD'` — and the first commit of a project made in EnvoyDev is exactly that repository. There
+ * the honest undo is `git rm --cached`, which drops the entry from the index and leaves the file on disk
+ * (the whole point of `--cached`).
+ */
+export function gitUnstageArgs(paths: readonly string[], options: { hasHead: boolean }): string[] {
+  return options.hasHead
+    ? ["reset", "-q", "HEAD", "--", ...paths]
+    : ["rm", "--cached", "-q", "--", ...paths];
+}
+
+/** Commit what is staged, with this message. Nothing else is inferred: no `--all`, no `--amend`, no hooks off. */
+export function gitCommitArgs(message: string): string[] {
+  return ["commit", "-m", message];
+}
+
+/**
+ * Is there anything staged? By **exit code**: 0 means nothing, 1 means something, anything else is a failure.
+ *
+ * Asked before the commit so the refusal can be a sentence in the user's language rather than git's English
+ * `nothing added to commit`. `--quiet` because the answer is the code, not the diff.
+ */
+export const GIT_HAS_STAGED_ARGS: readonly string[] = ["diff", "--cached", "--quiet"];
+
+/** Does this repository have a commit at all? Asked only where it changes the command (unstaging). */
+export const GIT_HAS_HEAD_ARGS: readonly string[] = ["rev-parse", "--verify", "--quiet", "HEAD"];
+
 /** Switch to an existing branch. See the module doc for why `checkout` and not `switch`. */
 export function gitCheckoutBranchArgs(branch: string): string[] {
   return ["checkout", branch];
@@ -229,9 +272,39 @@ export function gitCreateBranchArgs(name: string): string[] {
  *     lock while an agent is running git in the same folder. A checkout must *not* get this: it is a
  *     write, and it wants the lock.
  */
-export function gitEnv(base: NodeJS.ProcessEnv, options: { read: boolean }): NodeJS.ProcessEnv {
+export function gitEnv(
+  base: NodeJS.ProcessEnv,
+  options: {
+    read: boolean;
+    /**
+     * The `PATH` the daemon measured, already joined for this platform.
+     *
+     * **This is what makes "git is not installed" an honest sentence.** A window launched from Finder (or a
+     * Windows shortcut, or a desktop file) hands its child a minimal `PATH`, and a `git` the user installed
+     * somewhere else — Homebrew, `~/.local/bin`, Scoop — is then invisible to the daemon while their own
+     * terminal runs it happily. The daemon already solves exactly this for agent binaries by asking the
+     * login shell (`currentSearchPath`); a git child gets the same list, so the program the probe found is
+     * the program this runs. Absent when nothing could be measured, in which case the inherited `PATH`
+     * stands rather than a guess.
+     */
+    path?: string;
+    /**
+     * The ssh agent socket the user's login shell named, when this process does not have one.
+     *
+     * The other half of "a GUI process is not a terminal": `SSH_AUTH_SOCK` is what ssh finds your keys
+     * through, and a bundled app may start without it. It is a *path*, not a secret — the socket's own file
+     * permissions are what guard it — so passing the one the login shell named is not a credential decision,
+     * it is the same "ask the shell what world the user is in" rule as `PATH`.
+     */
+    sshAuthSock?: string;
+  },
+): NodeJS.ProcessEnv {
   return {
     ...base,
+    ...(options.path !== undefined && options.path !== "" ? { PATH: options.path } : {}),
+    ...(base.SSH_AUTH_SOCK === undefined && options.sshAuthSock !== undefined && options.sshAuthSock !== ""
+      ? { SSH_AUTH_SOCK: options.sshAuthSock }
+      : {}),
     GIT_TERMINAL_PROMPT: "0",
     GIT_ASKPASS: "",
     SSH_ASKPASS: "",

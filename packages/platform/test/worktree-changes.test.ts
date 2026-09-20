@@ -14,23 +14,29 @@ import { listWorktreeChanges, parsePorcelain } from "../src/worktree-changes.js"
 describe("parsePorcelain", () => {
   it("reads ordinary records and drops ignored files", () => {
     const raw = " M src/a.ts\0A  added.ts\0D  gone.ts\0?? new.ts\0!! secret.env\0";
+    // **The two sides of `XY`, kept apart.** `A ` is staged and clean in the tree; ` M` is the reverse;
+    // `??` has nothing in the index at all. A UI that collapsed these would offer to commit a file whose
+    // only change is still in the working tree.
     expect(parsePorcelain(raw)).toEqual([
-      { path: "src/a.ts", kind: "modified" },
-      { path: "added.ts", kind: "added" },
-      { path: "gone.ts", kind: "deleted" },
-      { path: "new.ts", kind: "untracked" },
+      { path: "src/a.ts", kind: "modified", staged: false, unstaged: true },
+      { path: "added.ts", kind: "added", staged: true, unstaged: false },
+      { path: "gone.ts", kind: "deleted", staged: true, unstaged: false },
+      { path: "new.ts", kind: "untracked", staged: false, unstaged: true },
     ]);
   });
 
   it("keeps both paths of a rename, including spaces", () => {
     const raw = "R  old name.ts\0new name.ts\0";
     expect(parsePorcelain(raw)).toEqual([
-      { path: "new name.ts", kind: "renamed", from: "old name.ts" },
+      { path: "new name.ts", kind: "renamed", from: "old name.ts", staged: true, unstaged: false },
     ]);
   });
 
   it("treats an unmerged record as a conflict", () => {
-    expect(parsePorcelain("UU both.ts\0")).toEqual([{ path: "both.ts", kind: "conflict" }]);
+    // Unmerged carries a change on *both* sides, which is exactly what a person has to resolve.
+    expect(parsePorcelain("UU both.ts\0")).toEqual([
+      { path: "both.ts", kind: "conflict", staged: true, unstaged: true },
+    ]);
   });
 });
 
@@ -48,7 +54,12 @@ describe("listWorktreeChanges", () => {
 
     const listed = listWorktreeChanges(repo);
     expect(listed.repo).toBe(true);
-    expect(listed.changes).toContainEqual({ path: "note.txt", kind: "untracked" });
+    expect(listed.changes).toContainEqual({
+      path: "note.txt",
+      kind: "untracked",
+      staged: false,
+      unstaged: true,
+    });
 
     const none = listWorktreeChanges(plain);
     expect(none.repo).toBe(false);

@@ -325,10 +325,17 @@ describe("the daemon over a socket", () => {
 
     const changes = (await client.call("coder.listWorktreeChanges", { path: repo })) as {
       repo: boolean;
-      changes: { path: string; kind: string }[];
+      changes: { path: string; kind: string; staged: boolean; unstaged: boolean }[];
     };
     expect(changes.repo).toBe(true);
-    expect(changes.changes).toContainEqual({ path: "note.txt", kind: "untracked" });
+    // The two index facts cross the socket with everything else: an untracked file is not in the index, and
+    // the working tree is where its change is.
+    expect(changes.changes).toContainEqual({
+      path: "note.txt",
+      kind: "untracked",
+      staged: false,
+      unstaged: true,
+    });
 
     const none = (await client.call("coder.listWorktreeChanges", { path: plain })) as {
       repo: boolean;

@@ -1840,6 +1840,24 @@ export const GitBranchSchema = z
 
 export type GitBranch = z.infer<typeof GitBranchSchema>;
 
+/**
+ * One changed file, as every git read and write answers with it.
+ *
+ * `staged` and `unstaged` are **two facts, not one state**: a file can be staged and then changed again, and
+ * a UI that collapsed them would offer to commit work that is still in the working tree.
+ */
+export const WorktreeChangeSchema = z
+  .object({
+    path: z.string().min(1),
+    kind: z.enum(["added", "modified", "deleted", "renamed", "untracked", "conflict"]),
+    from: z.string().min(1).optional(),
+    staged: z.boolean(),
+    unstaged: z.boolean(),
+  })
+  .strict();
+
+export const WorktreeChangeListSchema = z.array(WorktreeChangeSchema).readonly();
+
 export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.freeze({
   /* — who am I talking to, and what does this daemon do — */
   "coder.hello": {
@@ -2022,17 +2040,7 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
       .object({
         path: z.string().min(1),
         repo: z.boolean(),
-        changes: z
-          .array(
-            z
-              .object({
-                path: z.string().min(1),
-                kind: z.enum(["added", "modified", "deleted", "renamed", "untracked", "conflict"]),
-                from: z.string().min(1).optional(),
-              })
-              .strict(),
-          )
-          .readonly(),
+        changes: WorktreeChangeListSchema,
         })
         .strict(),
   },
@@ -2093,6 +2101,41 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
   "coder.gitCheckout": {
     params: z.object({ projectId: z.string().min(1), branch: z.string().min(1) }).strict(),
     result: GitStatusSchema,
+  },
+  /**
+   * Stage paths — a step towards a commit, and the reason the Changes list can be worked through a file at
+   * a time rather than all at once.
+   */
+  "coder.gitStage": {
+    params: z
+      .object({ projectId: z.string().min(1), paths: z.array(z.string().min(1)).min(1).readonly() })
+      .strict(),
+    result: z.object({ changes: WorktreeChangeListSchema }).strict(),
+  },
+  /** Unstage paths: the index goes back to what HEAD has, or to empty in a repository with no commits. */
+  "coder.gitUnstage": {
+    params: z
+      .object({ projectId: z.string().min(1), paths: z.array(z.string().min(1)).min(1).readonly() })
+      .strict(),
+    result: z.object({ changes: WorktreeChangeListSchema }).strict(),
+  },
+  /**
+   * Commit **what is staged**, with the message the user typed.
+   *
+   * Staged rather than "everything", because that is what a commit is; the window's composer offers "stage
+   * all" as a press on the list, which is a different, explicit decision. Nothing is inferred: no `--all`, no
+   * `--amend`, and the user's own hooks are left to run.
+   */
+  "coder.gitCommit": {
+    params: z.object({ projectId: z.string().min(1), message: z.string().min(1).max(10_000) }).strict(),
+    result: z
+      .object({
+        sha: z.string().min(1),
+        /** The repository as it is *after* the commit, so the rail and the list follow in one answer. */
+        status: GitStatusSchema,
+        changes: WorktreeChangeListSchema,
+      })
+      .strict(),
   },
   /**
    * Create a branch at HEAD and switch to it, which is the first half of the workflow this exists for.

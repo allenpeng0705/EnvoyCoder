@@ -28,6 +28,16 @@ export interface WorktreeChange {
   kind: WorktreeChangeKind;
   /** The previous path, when git reports a rename or a copy. */
   from?: string;
+  /**
+   * True when the **index** holds something for this path — what `git commit` would record.
+   *
+   * A file can be both staged and changed again afterwards, which is why this and [unstaged] are two facts
+   * rather than one state: a UI that collapsed them would tell a user their work is committed when half of
+   * it is still in the working tree.
+   */
+  staged: boolean;
+  /** True when the **working tree** differs from the index — what `git add` would pick up next. */
+  unstaged: boolean;
 }
 
 export interface ListWorktreeChangesResult {
@@ -52,6 +62,20 @@ function takesTwoPaths(xy: string): boolean {
 }
 
 /**
+ * Which of the two sides of `git status`'s `XY` carry a change.
+ *
+ * `X` is the index (HEAD → index, i.e. what a commit would record) and `Y` is the working tree
+ * (index → file). `??` is untracked: nothing in the index, and the file itself is the change. `!!` never
+ * reaches here — ignored entries are dropped above.
+ */
+function stagedness(xy: string): { staged: boolean; unstaged: boolean } {
+  if (xy === "??") return { staged: false, unstaged: true };
+  const x = xy[0] ?? " ";
+  const y = xy[1] ?? " ";
+  return { staged: x !== " ", unstaged: y !== " " };
+}
+
+/**
  * Parse `git status --porcelain=v1 -z`.
  *
  * Records are NUL-terminated. A rename or copy is two records: the old path, then the new one.
@@ -71,13 +95,13 @@ export function parsePorcelain(raw: string): WorktreeChange[] {
       const second = parts[i + 1];
       i += 1;
       if (kind === undefined || second === undefined || second.length === 0) continue;
-      const change: WorktreeChange = { path: second, kind };
+      const change: WorktreeChange = { path: second, kind, ...stagedness(xy) };
       if (first.length > 0) change.from = first;
       changes.push(change);
       continue;
     }
     if (kind === undefined || first.length === 0) continue;
-    changes.push({ path: first, kind });
+    changes.push({ path: first, kind, ...stagedness(xy) });
   }
   return changes;
 }

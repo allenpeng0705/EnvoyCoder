@@ -970,6 +970,16 @@ export const ENVOYDEV_ERRORS = {
   gitBusy: "envoydev.git-busy",
   /** The name the user typed cannot be a branch name. */
   gitBranchInvalid: "envoydev.git-branch-invalid",
+  /**
+   * A commit was asked for with nothing staged.
+   *
+   * Its own code rather than `gitFailed` because it is not a failure of git's: the user asked for a commit at
+   * a moment when the index was empty, and the sentence they need is about the index — git's own answer is
+   * `nothing added to commit`, which reads as a complaint about their work.
+   */
+  gitNothingStaged: "envoydev.git-nothing-staged",
+  /** A commit was asked for with a message that is empty (or only whitespace). */
+  gitCommitEmpty: "envoydev.git-commit-empty",
 } as const;
 
 export type EnvoyDevErrorCode = (typeof ENVOYDEV_ERRORS)[keyof typeof ENVOYDEV_ERRORS];
@@ -1064,6 +1074,15 @@ export const RPC_METHODS = [
   "coder.gitBranches",
   "coder.gitCheckout",
   "coder.gitCreateBranch", 
+  /**
+   * The working tree, one file at a time: stage it, unstage it, and commit what is staged.
+   *
+   * A commit takes the **index**, never "everything" — the window's "stage all" is a press on the list, which
+   * is a decision a user makes rather than one the daemon infers from a message being typed.
+   */
+  "coder.gitStage",
+  "coder.gitUnstage",
+  "coder.gitCommit", 
   "coder.listTasks",
   "coder.createTask",
   "coder.updateTask",

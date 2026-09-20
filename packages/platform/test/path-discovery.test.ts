@@ -24,6 +24,7 @@ import { describe, expect, it } from "vitest";
 import {
   LOGIN_SHELL_MAX_OUTPUT,
   LOGIN_SHELL_PATH_MARKER,
+  LOGIN_SHELL_SSH_MARKER,
   composeSearchPath,
   currentSearchPath,
   loginShellCommand,
@@ -52,8 +53,58 @@ describe("the login-shell probe", () => {
   it("builds an interactive login command, because running the rc files is the entire point", () => {
     expect(loginShellCommand("/bin/zsh")).toEqual({
       command: "/bin/zsh",
-      args: ["-ilc", `printf '\\n%s%s\\n' '${LOGIN_SHELL_PATH_MARKER}' "$PATH"`],
+      // Two questions, one shell: the `PATH` the user's terminal would have, and the ssh agent socket their
+      // session has. The startup files are the expensive part, so asking twice would pay for them twice.
+      args: [
+        "-ilc",
+        `printf '\\n%s%s\\n' '${LOGIN_SHELL_PATH_MARKER}' "$PATH"; printf '%s%s\\n' '${LOGIN_SHELL_SSH_MARKER}' "$SSH_AUTH_SOCK"`,
+      ],
     });
+  });
+
+  it("answers the ssh agent socket from the same ask, and tolerates it being absent", async () => {
+    // A machine that does not use ssh prints an empty value; that must leave the `PATH` answer intact.
+    const withSocket = await readLoginShellPath({
+      platform: "linux",
+      shell: "/bin/sh",
+      command: {
+        command: "/bin/sh",
+        args: [
+          "-c",
+          `printf '%s' '${LOGIN_SHELL_PATH_MARKER}/usr/bin:/bin
+${LOGIN_SHELL_SSH_MARKER}/run/user/1000/keyring/ssh
+'`,
+        ],
+      },
+    });
+    expect(withSocket.path).toBe("/usr/bin:/bin");
+    expect(withSocket.sshAuthSock).toBe("/run/user/1000/keyring/ssh");
+
+    const without = await readLoginShellPath({
+      platform: "linux",
+      shell: "/bin/sh",
+      command: {
+        command: "/bin/sh",
+        args: ["-c", `printf '%s' '${LOGIN_SHELL_PATH_MARKER}/usr/bin:/bin
+${LOGIN_SHELL_SSH_MARKER}
+'`],
+      },
+    });
+    expect(without.path).toBe("/usr/bin:/bin");
+    expect(without.sshAuthSock).toBeUndefined();
+
+    // And something that is not a socket path is ignored rather than passed to a child.
+    const nonsense = await readLoginShellPath({
+      platform: "linux",
+      shell: "/bin/sh",
+      command: {
+        command: "/bin/sh",
+        args: ["-c", `printf '%s' '${LOGIN_SHELL_PATH_MARKER}/usr/bin
+${LOGIN_SHELL_SSH_MARKER}not a path'`],
+      },
+    });
+    expect(nonsense.path).toBe("/usr/bin");
+    expect(nonsense.sshAuthSock).toBeUndefined();
   });
 
   it("reads the PATH out of output that also contains an rc file's chatter", async () => {

@@ -8,7 +8,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -16,12 +16,17 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   GIT_BRANCHES_ARGS,
+  GIT_HAS_HEAD_ARGS,
+  GIT_HAS_STAGED_ARGS,
   GIT_STATUS_ARGS,
   branchNameRefusal,
   detectVcsKind,
   gitCheckoutBranchArgs,
   gitCreateBranchArgs,
+  gitCommitArgs,
   gitEnv,
+  gitStageArgs,
+  gitUnstageArgs,
   parseGitBranches,
   parseGitStatus,
 } from "../src/git.js";
@@ -172,6 +177,55 @@ describe("the argv, measured against a real repository", () => {
     const status = statusOf(root);
     expect(status.branch).toBe("feature/thing");
     expect(parseGitBranches(gitOut(root, GIT_BRANCHES_ARGS)).map((b) => b.name)).toContain("feature/thing");
+  });
+});
+
+describe("the staging argv", () => {
+  it("stages after `--`, so a path that begins with a dash is a path", () => {
+    expect(gitStageArgs(["-weird.txt", "src/a.ts"])).toEqual(["add", "--", "-weird.txt", "src/a.ts"]);
+  });
+
+  it("unstages with `reset` when there is a HEAD, and `rm --cached` when there is not", () => {
+    // The second form is the measured one: `git reset HEAD` cannot resolve HEAD in a repository with no
+    // commits, and the first commit of a project made here is exactly that repository.
+    expect(gitUnstageArgs(["a.ts"], { hasHead: true })).toEqual(["reset", "-q", "HEAD", "--", "a.ts"]);
+    expect(gitUnstageArgs(["a.ts"], { hasHead: false })).toEqual(["rm", "--cached", "-q", "--", "a.ts"]);
+  });
+
+  it("commits with the message as one argument, and nothing else inferred", () => {
+    // No `--all`, no `--amend`, no `--no-verify`: a commit is what the user staged, with their hooks running.
+    expect(gitCommitArgs("add the keys")).toEqual(["commit", "-m", "add the keys"]);
+    expect(gitCommitArgs("one\ntwo")).toEqual(["commit", "-m", "one\ntwo"]);
+  });
+
+  itGit("unstages a real repository's first staged file, which has no HEAD to reset to", () => {
+    const root = mkdtempSync(join(tmpdir(), "envoydev-git-noh-"));
+    roots.push(root);
+    run(root, ["init", "-q"]);
+    run(root, ["config", "user.email", "t@t"]);
+    run(root, ["config", "user.name", "T"]);
+    writeFileSync(join(root, "a.txt"), "one\n");
+
+    run(root, gitStageArgs(["a.txt"]));
+    expect(parseGitStatus(gitOut(root, GIT_STATUS_ARGS))).toMatchObject({ dirty: 1 });
+    const hasHead = spawnSync("git", ["-C", root, ...GIT_HAS_HEAD_ARGS], { encoding: "utf8" }).status === 0;
+    expect(hasHead).toBe(false);
+
+    run(root, gitUnstageArgs(["a.txt"], { hasHead }));
+    // Back to untracked, and the file is still on disk — `--cached` is the whole point.
+    expect(readFileSync(join(root, "a.txt"), "utf8")).toBe("one\n");
+    expect(gitOut(root, GIT_STATUS_ARGS)).toContain("? a.txt");
+  });
+
+  itGit("commits what is staged, and the index says so afterwards", () => {
+    const root = repository();
+    writeFileSync(join(root, "a.txt"), "changed\n");
+    run(root, gitStageArgs(["a.txt"]));
+    expect(spawnSync("git", ["-C", root, ...GIT_HAS_STAGED_ARGS], { encoding: "utf8" }).status).toBe(1);
+
+    run(root, gitCommitArgs("change it"));
+    expect(spawnSync("git", ["-C", root, ...GIT_HAS_STAGED_ARGS], { encoding: "utf8" }).status).toBe(0);
+    expect(gitOut(root, ["log", "-1", "--format=%s"]).trim()).toBe("change it");
   });
 });
 
