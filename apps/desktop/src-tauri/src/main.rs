@@ -446,10 +446,34 @@ fn resolve_node_exe() -> PathBuf {
 /// A supervisor that discards its child's output cannot explain a start-up failure, and "it did not
 /// work" is the least actionable thing an app can say. The file lives in our own state directory, so
 /// it is the user's to read and to delete.
+/// A daemon expected to run for weeks must not fill a disk with its own log.
+const DAEMON_LOG_CAP_BYTES: u64 = 5 * 1024 * 1024;
+
+/// Is there enough in this log to be worth rotating?
+///
+/// A named predicate rather than an inline comparison, so the policy is testable without a filesystem — the same
+/// division `daemon_pids_to_stop` uses for the pids it signals.
+fn should_rotate(len: u64, cap: u64) -> bool {
+    len > cap
+}
+
+/// The daemon's log, rotated once per cap and then appended to.
+///
+/// One previous file (`daemon.log.1`) rather than a numbered set: the log is read by a person working out why a
+/// daemon restarted, and keeping more than the last one is not worth the disk. The rotation happens **before** the
+/// append, so the file this returns is the current one and the cap holds from the first write after it is crossed.
 fn open_daemon_log() -> Option<File> {
     let dir = product_state_dir().join("logs");
     create_dir_all(&dir).ok()?;
-    OpenOptions::new().create(true).append(true).open(dir.join("daemon.log")).ok()
+    let path = dir.join("daemon.log");
+    if let Ok(metadata) = std::fs::metadata(&path) {
+        if should_rotate(metadata.len(), DAEMON_LOG_CAP_BYTES) {
+            // Replacing the previous file is deliberate: `rename` over an existing path is atomic on POSIX, and a
+            // rotation that fails must not stop the daemon from logging at all.
+            let _ = std::fs::rename(&path, dir.join("daemon.log.1"));
+        }
+    }
+    OpenOptions::new().create(true).append(true).open(path).ok()
 }
 
 /// Start the daemon and wait for it to publish its claim.
@@ -1293,6 +1317,14 @@ mod tests {
             version: String::new(),
             managed_by: managed_by.to_string(),
         }
+    }
+
+    #[test]
+    fn a_log_is_rotated_once_it_passes_the_cap() {
+        // The boundary is the cap itself: a file exactly at the cap is left alone, one byte past it is not.
+        assert!(!should_rotate(0, 100));
+        assert!(!should_rotate(100, 100));
+        assert!(should_rotate(101, 100));
     }
 
     #[test]

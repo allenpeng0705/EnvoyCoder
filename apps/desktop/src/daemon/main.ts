@@ -48,6 +48,7 @@ import { coderPaths, inspectCoderHome } from "@envoydev/host-bridge";
 
 import { alreadyRunningOutcome, decideBoot, serveFailureOutcome } from "./boot.js";
 import { readDaemonClaim } from "./lock.js";
+import { heartbeatPath, startHeartbeat } from "./heartbeat.js";
 import { readLifecycle, recordBoot, recordStop } from "./lifecycle.js";
 import { startCoderDaemon } from "./serve.js";
 
@@ -201,6 +202,14 @@ if (existing.state === "unreadable") {
   say([`  note:     ${paths.daemonFile} could not be read (${existing.reason}); it will be replaced.`]);
 }
 
+/**
+ * The heartbeat a supervisor can read: a file under `logs/` whose **age** is the signal, refreshed on a timer.
+ *
+ * Started before serving so the messages can be sent in the protocol's order; its timer is `unref`'d, because a
+ * heartbeat is evidence of work rather than a reason to keep running.
+ */
+const heartbeat = startHeartbeat(paths);
+
 // Step 3 — start. **This is the moment a restart becomes real**, so the ledger records it here: everything above
 // can still decide this process is not needed, and a start that never serves is not a restart. A failure *after*
 // this point is counted, deliberately — that is a boot that may be looping.
@@ -237,6 +246,8 @@ try {
 }
 
 const mesh = daemon.mesh();
+// `READY=1` only once the socket is listening: a supervisor with `Type=notify` waits for exactly this.
+heartbeat?.ready();
 say([
   `  projects: ${daemon.store.projects().length}`,
   `  tasks:    ${daemon.store.tasks().length}`,
@@ -271,6 +282,9 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     if (stopping) return;
     stopping = true;
     say(["\nstopping the daemon"]);
+    // Told before the stop, so the unit's state shows a deliberate shutdown rather than a process that vanished.
+    heartbeat.stopping();
+    heartbeat.stop();
     // Written before the stop so the reason survives even if the shutdown itself is slow: a SIGKILL cannot
     // reach us at all, which is why the *absence* of this record means "it died" rather than "unknown".
     void recordStop(paths, { signal })

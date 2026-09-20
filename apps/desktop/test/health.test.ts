@@ -9,7 +9,7 @@
  *
  * @vitest-environment node
  */
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -18,6 +18,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { coderPaths } from "@envoydev/host-bridge";
 import { RPC_SPECS } from "@envoydev/protocol";
 
+import { heartbeatIsStale, heartbeatPath, readHeartbeat, startHeartbeat } from "../src/daemon/heartbeat.js";
 import { createHealthHandlers, HEALTH_PROBE_MS } from "../src/daemon/health.js";
 import { createCoderHandlers, type CoderHandler, type CoderInstance } from "../src/daemon/service.js";
 import { CoderStore } from "../src/daemon/store.js";
@@ -114,5 +115,93 @@ describe("coder.health", () => {
     const answer = (await table["coder.health"]?.({}, { session: undefined })) as Record<string, unknown>;
     // A daemon built without a runtime still answers — with zero runs, which is the truth for it.
     expect(answer).toMatchObject({ instanceId: "health-test", runs: { active: 0 } });
+  });
+});
+
+/**
+ * The heartbeat a supervisor reads: a file whose **age** is the signal.
+ *
+ * Tested through the filesystem rather than a mock, because the file *is* the protocol: what a probe does is read
+ * it and compare the timestamp, so an in-memory fake would prove nothing. The one thing these tests cannot cover is
+ * a real launchd or systemd reading it — neither exists on macOS, which is also why the design does not depend on
+ * a supervisor-specific protocol.
+ */
+describe("the heartbeat", () => {
+  /** Poll until [check] passes, so a beat arriving on a timer is not a race. */
+  async function eventually(check: () => Promise<void>, timeoutMs = 1_500): Promise<void> {
+    const until = Date.now() + timeoutMs;
+    for (;;) {
+      try {
+        await check();
+        return;
+      } catch (error) {
+        if (Date.now() > until) throw error;
+        await new Promise((done) => setTimeout(done, 10));
+      }
+    }
+  }
+
+  async function pathsFor(): Promise<ReturnType<typeof coderPaths>> {
+    const home = await mkdtemp(join(tmpdir(), "envoydev-heartbeat-"));
+    cleanups.push(() => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+    return coderPaths(home);
+  }
+
+  it("beats on a timer, marks ready and stopping, and stops when told", async () => {
+    const paths = await pathsFor();
+    const beat = startHeartbeat(paths, { everyMs: 20, now: () => new Date("2026-01-01T00:00:00.000Z") });
+
+    beat.ready();
+    await eventually(async () => {
+      expect((await readHeartbeat(paths))?.state).toBe("ready");
+    });
+    // The timer takes over: a probe that only ever saw "ready" would call a working daemon finished.
+    await eventually(async () => {
+      expect((await readHeartbeat(paths))?.state).toBe("beating");
+    });
+
+    beat.stopping();
+    await eventually(async () => {
+      expect((await readHeartbeat(paths))?.state).toBe("stopping");
+    });
+    // And once stopped, the file stops moving — a heartbeat that continued after the shutdown began would tell a
+    // supervisor the opposite of the truth.
+    const last = await readHeartbeat(paths);
+    beat.stop();
+    await new Promise((done) => setTimeout(done, 60));
+    expect(await readHeartbeat(paths)).toEqual(last);
+  });
+
+  it("reads as nothing when absent or unreadable, and leaves the staleness policy to the caller", async () => {
+    const paths = await pathsFor();
+    // Absent: the normal state before a first boot, and not an error.
+    expect(await readHeartbeat(paths)).toBeUndefined();
+    await mkdir(paths.logsDir, { recursive: true });
+    await writeFile(heartbeatPath(paths), "not json at all", "utf8");
+    expect(await readHeartbeat(paths)).toBeUndefined();
+    await writeFile(heartbeatPath(paths), '{"at":"2026-01-01T00:00:00.000Z"}', "utf8");
+    // A beat with no pid is not a beat: half a record is not evidence.
+    expect(await readHeartbeat(paths)).toBeUndefined();
+
+    // The window is the caller's: how long is too long depends on what the daemon was asked to do.
+    expect(heartbeatIsStale(1_000, 5_000)).toBe(false);
+    expect(heartbeatIsStale(5_000, 5_000)).toBe(false);
+    expect(heartbeatIsStale(5_001, 5_000)).toBe(true);
+  });
+
+  it("never takes the daemon down when a beat cannot be written", async () => {
+    // A read-only logs directory or a full disk: the beat fails, the daemon carries on, and the *absence* of a
+    // fresh beat is what tells the supervisor something is wrong.
+    const paths = await pathsFor();
+    const beat = startHeartbeat(paths, {
+      everyMs: 10,
+      write: async () => {
+        throw new Error("read-only logs directory");
+      },
+    });
+    beat.ready();
+    await new Promise((done) => setTimeout(done, 40));
+    beat.stop();
+    // Nothing thrown, and no timer left behind (vitest fails a suite that leaves handles open).
   });
 });

@@ -155,13 +155,20 @@ A checklist, in build order:
    does not protect — with `--install-payload` as the entry point the app or a service install runs;
 3. ~~`coder.health` — uptime, pid, version, active runs, event-loop lag, heap~~ **landed** (`daemon/health.ts`;
    last-event age comes with the heartbeat below, because a per-event stamp belongs with the recorder);
-4. the heartbeat (`sd_notify` where it exists), the last-exit record, and log rotation — **partly landed**: the
-   *signals* a heartbeat would poll are in (`coder.health`'s `runs.lastEventAt`, and a restart ledger in
-   `daemon/lifecycle.ts` recording every start plus every deliberate stop, printed at boot so a crash loop cannot
-   hide). The heartbeat itself and `daemon.log` rotation are still owed; both are platform-specific and belong
-   with the unit text (item 9). A boot is recorded only when the process actually **serves** — a launch that
-   finds another daemon already running is not a restart, which a real-boot check caught after reading had
-   missed it;
+4. the heartbeat, the last-exit record, and log rotation — **landed, with one sliver owed**:
+   * `coder.health`'s `runs.lastEventAt` and a restart ledger (`daemon/lifecycle.ts`) recording every start plus
+     every deliberate stop, printed at boot, so a crash loop cannot hide. A boot is recorded only when the process
+     actually **serves** — a launch that finds another daemon already running is not a restart, which a real-boot
+     check caught after reading had missed it;
+   * the heartbeat is a **file** (`logs/heartbeat.json`, states `ready`/`beating`/`stopping`) whose *age* is the
+     signal, because Node cannot speak systemd's datagram at all: `node:dgram` is UDP-only and answers
+     `unix_dgram` with "Bad socket type specified. Valid types are: udp4, udp6" (measured). A unit wanting
+     systemd's own `WatchdogSec` needs `systemd-notify` (it ships with systemd) or `ExecStartPost`; the file is
+     what every platform's probe reads, which is the option launchd and Windows have anyway;
+   * `daemon.log` is rotated at 5 MB with one previous file, before the append;
+   * **still owed:** the exit *code* on a controlled failure. This build records starts and deliberate stops, so a
+     crash reads as "no stop record" — but a boot that failed with a specific code does not carry that code
+     forward to the next boot;
 5. bounds on the live run-event buffer and on transcripts;
 6. boot-time run reconciliation;
 7. drain-on-restart;
