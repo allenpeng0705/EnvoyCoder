@@ -73,9 +73,13 @@ export function payloadPaths(dir: string): { node: string; entry: string } {
  * a payload* and *install the unit*, in that order. Doing only the second produced a unit naming a version that was
  * never copied — a supervisor restarting for ever against nothing.
  *
- * It is also the only place that knows how to carry the **staged agent binaries** across: the app's shell spawns
- * the daemon with `--harness <dir>`, and a service started later by launchd is not spawned by the shell at all, so
- * a payload without them would run a daemon that cannot find any agent.
+ * It is also the only place that knows how to carry the **staged agent binaries** across: the app passes
+ * `--harness <dir>` when it *installs* a payload, and a service started later by launchd is not spawned by the
+ * shell at all. **What is still missing is the other half** — nothing puts that directory back in front of the
+ * service daemon at run time. The shell sets `ENVOYDEV_BUNDLED_BIN` and prepends the bin directory to `PATH` when
+ * it spawns the daemon (`src-tauri/src/main.rs`), and `packages/platform`'s bundled-bin search reads exactly that
+ * variable, so a service-started daemon currently finds no harness. Fixing it means adding the payload's harness
+ * directory to the unit's environment (or to `programArguments`), which is an open item.
  *
  * The previous `current` is protected rather than pruned: a live daemon may still be running from it (`pruneVersions`
  * explains what deleting that costs).

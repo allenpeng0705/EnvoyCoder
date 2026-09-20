@@ -110,7 +110,10 @@ export function describeStop(result: StopResult, supervised: boolean): string[] 
     ];
   }
   return [
-    "EnvoyDev's daemon stopped. Live runs were given up to ten seconds to finish.",
+    // **"Accepted", not "stopped".** The daemon answers before it drains, so at this instant it is stopping rather
+    // than stopped — and on Windows the caller that asked may still kill it after its own grace expires.
+    "EnvoyDev's daemon accepted the request to stop and is stopping now.",
+    "Live runs were given up to ten seconds to finish.",
     supervised
       ? "It is installed as a service, so it will start again at your next login."
       : "It will start again the next time you open EnvoyDev.",

@@ -35,7 +35,10 @@ describe("the stop a client can ask for", () => {
     expect(stop).not.toHaveBeenCalled();
   });
 
-  it("still answers where no stop was wired, rather than pretending to stop", async () => {
-    await expect(handler()({}, owner)).resolves.toEqual({ stopping: true });
+  it("serves no such method at all when no stop was wired", () => {
+    // The handler used to answer `{stopping: true}` with nothing behind it — a promise this module could not keep,
+    // and this test pinned that as intended behaviour. A build with no way to stop now serves no method, and the
+    // dispatcher refuses it by name instead.
+    expect(Object.keys(createShutdownHandlers())).toEqual([]);
   });
 });

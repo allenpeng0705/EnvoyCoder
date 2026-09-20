@@ -37,13 +37,19 @@ export interface ShutdownDeps {
 export function createShutdownHandlers(
   deps: ShutdownDeps = {},
 ): Partial<Record<RpcMethod, CoderHandler>> {
+  /**
+   * **No hook, no method.** Answering `{stopping: true}` with nothing behind it would be a promise this module
+   * cannot keep, and the dispatcher's "not implemented in this build" is the honest answer for a daemon that cannot
+   * stop. (It also means a test bench that wires no hook cannot accidentally pin the lie as intended behaviour.)
+   */
+  if (deps.shutdown === undefined) return {};
+  const stop = deps.shutdown;
   return {
     "coder.shutdown": async (params, context) => {
       parseRpcParams("coder.shutdown", params);
       requireOwnerWindow(context, "coder.shutdown");
-      const stop = deps.shutdown;
       // Deferred, not immediate: the result below has to reach the client before the socket starts closing.
-      if (stop !== undefined) setTimeout(stop, 0);
+      setTimeout(stop, 0);
       return { stopping: true as const };
     },
   };

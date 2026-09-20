@@ -1301,18 +1301,36 @@ describe("the bounds that keep a long run finite", () => {
     expect(b.manager.get(run.id)?.status).toBe("done");
   });
 
-  it("stops writing a transcript past its cap rather than filling the disk, and says so once", async () => {
-    // A 1-byte cap means the very first line is refused, so nothing is written at all — deterministic, and the
-    // same code path as the real 8 MB cap. Transcripts are on by default in this bench, so an absent file here is
-    // the cap's doing and nothing else.
+  it("stops writing past its cap but always writes the ending, so a finished run never reads back as failed", async () => {
+    // A 1-byte cap refuses every ordinary line — deterministic, and the same code path as the real 8 MB cap. The
+    // **ending** is the exception, and that exception is the whole point: `agentRunFromTranscript` reads a
+    // transcript with no `run.ended` as a run that *failed*, so refusing the last line turned a run that finished
+    // into one that looked like it crashed — and after a restart nothing could tell the two apart.
+    //
+    // This test used to assert the file was *absent*. It passed, and it was passing for the wrong reason: it never
+    // checked that the ending survived, which is exactly the line that decides how the run reads back.
     const b = await bench({ limits: { transcriptBytes: 1 } });
     const run = await b.manager.start({ taskId: b.taskId, prompt: "run a tool" });
     await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
 
     const file = join(coderPaths(b.home).transcriptsDir, `${run.id}.jsonl`);
-    await expect(readFile(file, "utf8")).rejects.toThrow();
-    // The run is unaffected: only its record stops growing.
+    const text = await readFile(file, "utf8");
+    expect(text).toContain('"kind":"run.ended"');
+    // Nothing else got through, which is what the cap is for.
+    expect(text).not.toContain('"kind":"run.session"');
     expect(b.manager.get(run.id)?.status).toBe("done");
+
+    // And the read-back agrees — the defect this test exists for, seen from a daemon that has just started.
+    const revived = new RunManager({
+      paths: coderPaths(b.home),
+      store: b.store,
+      onEvent: () => undefined,
+    });
+    cleanups.push(async () => {
+      await revived.stopAll();
+    });
+    await revived.recall(run.id);
+    expect(revived.get(run.id)?.status).toBe("done");
   });
 });
 

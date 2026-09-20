@@ -61,13 +61,25 @@ export async function readLogTail(options: {
   }
   if (chosen === undefined) return { path: options.candidates[0] ?? "", lines: [], truncated: false };
 
-  const handle = await open(chosen, "r");
+  let handle;
+  try {
+    handle = await open(chosen, "r");
+  } catch {
+    // The file was rotated, replaced or removed between the `stat` above and here. That is not a failure to report
+    // at somebody: it is a log that is not there now, which is what an empty tail means.
+    return { path: chosen, lines: [], truncated: false };
+  }
   try {
     const size = (await handle.stat()).size;
     const start = Math.max(0, size - byteLimit);
-    const buffer = Buffer.alloc(size - start);
-    if (buffer.length > 0) await handle.read(buffer, 0, buffer.length, start);
-    const split = buffer.toString("utf8").split("\n");
+    // Read **one byte before** the offset when there is one. That byte says whether the offset happened to land on
+    // a line boundary; without it a boundary landing made the first *whole* line look like a fragment and threw a
+    // real line away. (The first split element is still dropped below: either it is the fragment, or it is the
+    // newline that preceded a whole line.)
+    const from = start > 0 ? start - 1 : 0;
+    const buffer = Buffer.alloc(size - from);
+    const read = buffer.length > 0 ? (await handle.read(buffer, 0, buffer.length, from)).bytesRead : 0;
+    const split = buffer.subarray(0, read).toString("utf8").split("\n");
     // A partial first line is not a line (see the doc above); a trailing newline is not an empty last line.
     const withoutPartial = start > 0 ? split.slice(1) : split;
     const complete = withoutPartial.filter(

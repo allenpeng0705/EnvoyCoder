@@ -37,7 +37,6 @@ export interface LifecycleFacts {
   boots: string[];
   /** The last start, when there was one. */
   lastStartedAt?: string;
-  /** Why the previous process stopped, when it stopped on purpose. Absent means it was killed or crashed. */
   /**
    * Why the previous process stopped, when it stopped on purpose. Absent means it was killed or crashed.
    *

@@ -1065,10 +1065,17 @@ export class RunManager {
       live.queued = [];
       await live.client?.stop().catch(() => undefined);
     }
+    const settled = Promise.allSettled(running.map((live) => live.done));
+    // `Promise.race` does not cancel the loser, and an outstanding timer keeps the event loop alive: without the
+    // `clearTimeout` below, every stop looked like a ten-second hang *after* the runs were already done.
+    let deadline: NodeJS.Timeout | undefined;
     await Promise.race([
-      Promise.allSettled(running.map((live) => live.done)),
-      new Promise((resolve) => setTimeout(resolve, 10_000)),
+      settled,
+      new Promise<void>((resolve) => {
+        deadline = setTimeout(resolve, 10_000);
+      }),
     ]);
+    if (deadline !== undefined) clearTimeout(deadline);
   }
 
   /* ────────────────────────────── recording ────────────────────────────── */
@@ -1105,7 +1112,23 @@ export class RunManager {
     const file = live.run.transcriptPath;
     if (!file) return;
     const line = `${JSON.stringify(event)}\n`;
-    if (live.transcriptBytes + line.length > this.transcriptLimitBytes) {
+    /**
+     * **A transcript's two structural lines are never refused: `run.started` and `run.ended`.**
+     *
+     * Everything between them is the *record* — what the agent said and did — and the cap exists to bound that.
+     * These two are not record, they are the frame, and dropping either makes the file lie:
+     *
+     *   * no `run.ended` → `agentRunFromTranscript` reports the run as **failed**, so a run that finished comes back
+     *     after a restart looking like it crashed, with nothing to tell the two apart;
+     *   * no `run.started` → it reports **no run at all**, because a transcript it cannot place is not one.
+     *
+     * Both were real: exempting only the ending left a file with an ending and no beginning, which `recall()`
+     * silently ignored. The residual is honest and worth naming: a capped transcript carries no marker saying it was
+     * capped, so a reader cannot tell "trimmed" from "a run that produced almost nothing" — the notice at the
+     * crossing goes to the daemon's log, which is where the truncation can be seen.
+     */
+    const mustWrite = event.kind === "run.started" || event.kind === "run.ended";
+    if (!mustWrite && live.transcriptBytes + line.length > this.transcriptLimitBytes) {
       // Once, at the crossing — not once per event afterwards, which would fill the log it is complaining in.
       if (live.transcriptBytes <= this.transcriptLimitBytes) {
         live.transcriptBytes = this.transcriptLimitBytes + line.length;

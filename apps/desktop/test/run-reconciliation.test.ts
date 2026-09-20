@@ -71,3 +71,67 @@ describe("closing the books on runs a dead daemon left open", () => {
     }
   });
 });
+
+describe("what the pass must survive", () => {
+  it("keeps going when one transcript cannot be read, instead of stopping the daemon from serving", async () => {
+    // `readTranscript` forgives a missing file and nothing else, and this runs during boot: a permission error or a
+    // directory wearing the run's name would otherwise take the whole daemon down over one old transcript.
+    const written: { taskId: string; status: TaskStatus }[] = [];
+    const stranded = await reconcileInterruptedRuns({
+      tasks: () => [
+        { id: "broken", status: "running", runId: "run-broken" },
+        { id: "fine", status: "running", runId: "run-fine" },
+      ],
+      eventsFor: async (runId) => {
+        if (runId === "run-broken") throw new Error("EACCES: permission denied, open '/state/run-broken.jsonl'");
+        return [started];
+      },
+      setTaskStatus: async (taskId, status) => void written.push({ taskId, status }),
+    });
+    // Both rows were dealt with: the unreadable one failed (a claim we cannot substantiate is still wrong) and the
+    // readable one was reconciled as usual.
+    expect(stranded).toEqual(["run-broken", "run-fine"]);
+    expect(written).toEqual([
+      { taskId: "broken", status: "failed" },
+      { taskId: "fine", status: "failed" },
+    ]);
+  });
+
+  it("keeps going when the store refuses the write as well", async () => {
+    // Both ends failing is the worst case, and it must still not throw out of boot.
+    const stranded = await reconcileInterruptedRuns({
+      tasks: () => [{ id: "task-1", status: "running", runId: "run-1" }],
+      eventsFor: async () => {
+        throw new Error("EIO");
+      },
+      setTaskStatus: async () => {
+        throw new Error("ENOSPC: no space left on device");
+      },
+    });
+    expect(stranded).toEqual(["run-1"]);
+  });
+
+  it("refuses an ending that belongs to another task, rather than marking the wrong row", async () => {
+    // A row whose `runId` points at another task's run is corrupt. Believing the ending would give this task
+    // another task's outcome while the real owner kept claiming "running" for ever — so it is failed, visibly.
+    const written: { taskId: string; status: TaskStatus }[] = [];
+    const stranded = await reconcileInterruptedRuns({
+      tasks: () => [{ id: "task-1", status: "running", runId: "run-1" }],
+      eventsFor: async () => [
+        event({ kind: "run.started", runId: "run-1", taskId: "task-2", at: "2026-01-01T00:00:00.000Z", seq: 1 }),
+        event({
+          kind: "run.ended",
+          runId: "run-1",
+          taskId: "task-2",
+          at: "2026-01-01T00:01:00.000Z",
+          seq: 2,
+          exitCode: 0,
+          status: "done",
+        }),
+      ],
+      setTaskStatus: async (taskId, status) => void written.push({ taskId, status }),
+    });
+    expect(stranded).toEqual(["run-1"]);
+    expect(written).toEqual([{ taskId: "task-1", status: "failed" }]);
+  });
+});

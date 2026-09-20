@@ -388,17 +388,33 @@ say([
  */
 let stopping = false;
 function shutdown(reason: string): Promise<void> {
-  // Idempotent: a second signal, or a window asking at the same moment, must not start a second drain. The promise
-  // never settles, which is right — the process is on its way out and nothing after this should run.
-  if (stopping) return new Promise<void>(() => undefined);
+  if (stopping) {
+    /**
+     * **A second request to stop is somebody saying "I know — stop now".**
+     *
+     * Absorbing it was wrong: the drain waits on work that can block (agents, sessions, the mesh peer), and trapping
+     * a signal replaces the default "die now". So a wedged shutdown could only be ended with `SIGKILL`, and the
+     * second `Ctrl-C` — the one everybody presses — did nothing at all.
+     */
+    process.exit(EXIT_FAILED);
+  }
   stopping = true;
   say(["\nstopping the daemon; live runs are asked to stop and given up to ten seconds"]);
   // Told before the stop, so the unit's state shows a deliberate shutdown rather than a process that vanished.
   heartbeat.stopping();
   heartbeat.stop();
-  return recordStop(paths, { signal: reason })
+  return daemon
+    .stop()
     .catch(() => undefined)
-    .then(() => daemon.stop().catch(() => undefined))
+    /**
+     * **Recorded after the drain, not before.**
+     *
+     * The ledger's promise is that an *absent* stop record means "it was killed or crashed". Writing one before the
+     * drain would let a process killed mid-drain leave a record claiming it stopped on purpose — the runner-up
+     * failure mode of the very invariant the record exists for.
+     */
+    .then(() => recordStop(paths, { signal: reason }))
+    .catch(() => undefined)
     .finally(() => process.exit(EXIT_OK));
 }
 
