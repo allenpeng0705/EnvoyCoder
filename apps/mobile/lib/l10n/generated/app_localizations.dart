@@ -246,6 +246,24 @@ abstract class AppLocalizations {
   /// **'No desktop paired yet.'**
   String get connectionsEmpty;
 
+  /// connections.pairingRefused* — The pairing step offered where the refusal is read.
+  ///
+  /// In en, this message translates to:
+  /// **'This computer refused this phone\'s pairing'**
+  String get connectionsPairingRefused;
+
+  /// connections.pairingRefused* — The pairing step offered where the refusal is read.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair again with {name}. This computer no longer accepts the pairing this phone holds.'**
+  String connectionsPairingRefusedDetail(Object name);
+
+  /// connections.pairingRefused* — The pairing step offered where the refusal is read.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair again'**
+  String get connectionsPairingRePair;
+
   /// connections.current — Marks the active machine in the list.
   ///
   /// In en, this message translates to:

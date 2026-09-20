@@ -75,6 +75,7 @@ import { CoderStore } from "./store.js";
 import { AgentDeliveries } from "./deliveries.js";
 import { createPairingHandlers } from "./pairing.js";
 import { PairedDeviceStore, pairedDevicesFile, readPairingIdentity } from "./paired-devices.js";
+import { readLifecycle } from "./lifecycle.js";
 import { reconcileInterruptedRuns } from "./reconcile.js";
 import { readTranscript, transcriptFile } from "./transcript-log.js";
 import { DAEMON_VERSION } from "./version.js";
@@ -390,6 +391,15 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
     recheckAgents,
     // The portable stop: Windows has no signal an unrelated process can send (item 8).
     ...(options.onShutdown ? { shutdown: options.onShutdown } : {}),
+    // The daemon's own restart history, beside the supervisor's answer: a unit restarted for ever still reports
+    // "running", so the count is what tells a person their daemon is in a crash loop.
+    serviceFacts: async () => {
+      const facts = await readLifecycle(paths);
+      return {
+        restartsInLastHour: facts.bootsInLastHour,
+        ...(facts.lastStop ? { lastStop: facts.lastStop } : {}),
+      };
+    },
     // The user's delivery choices: read by the list (so a row says which route is in force), written by
     // `coder.setAgentDelivery`, and read by every launch (`deliveryOf`, above).
     deliveries: { of: (harness) => deliveries.of(harness), set: (harness, next) => deliveries.set(harness, next) },

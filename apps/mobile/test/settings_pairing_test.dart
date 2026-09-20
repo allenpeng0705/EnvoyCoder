@@ -14,16 +14,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'support/l10n.dart';
 
 class _StubClient extends HostClient {
-  _StubClient(super.host, {this.pairing, this.refused = false, this.failing = false});
+  _StubClient(super.host, {this.pairingRecord, this.refused = false, this.failing = false});
 
-  final PairingRecord? pairing;
+  final PairingRecord? pairingRecord;
   final bool refused;
   final bool failing;
 
   @override
   Future<PairingState> pairingState() async {
     if (failing) throw Exception('keychain unavailable');
-    return (record: pairing, daemonKey: daemonKey, refused: refused);
+    return (
+      record: pairingRecord,
+      daemonKey: daemonKeyFor(endpoint: host.endpoint, owner: host.ownerId),
+      refused: refused,
+    );
   }
 
   @override
@@ -88,7 +92,7 @@ void main() {
       hostWithLabel('Studio'),
       // A minute-scale timestamp keeps this deterministic: the screen buckets time, so a record made
       // now is "just now" whenever the suite runs.
-      pairing: PairingRecord(
+      pairingRecord: PairingRecord(
         token: 'grant-1',
         instanceId: 'process-7',
         lastSeenAt: DateTime.now().subtract(const Duration(seconds: 5)),
@@ -108,7 +112,7 @@ void main() {
   testWidgets('a paired desktop this phone has not reached says so', (tester) async {
     final client = _StubClient(
       hostWithLabel('Studio'),
-      pairing: const PairingRecord(token: 'grant-1'),
+      pairingRecord: const PairingRecord(token: 'grant-1'),
     );
     await _pumpSettings(tester, client);
 
@@ -149,7 +153,7 @@ void main() {
   testWidgets('the paired line is in the phone\'s language, not English', (tester) async {
     final client = _StubClient(
       hostWithLabel('Studio'),
-      pairing: PairingRecord(
+      pairingRecord: PairingRecord(
         token: 'grant-1',
         lastSeenAt: DateTime.now().subtract(const Duration(seconds: 5)),
       ),

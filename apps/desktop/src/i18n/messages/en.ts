@@ -1050,8 +1050,36 @@ export const en = {
     "EnvoyDev could not read the service's state from the system's service manager.",
   "settings.service.pid": "Process {pid}.",
   "settings.service.checking": "Checking with your system's service manager…",
+  /* The daemon's own history — the half of the answer the supervisor cannot give. `restarts` is shown only
+     above zero, so there is no key for "0 restarts": a zero is not evidence of anything. `lastStop` is shown
+     only when it explains something, and `crash` is the sentence for the case where it explains the most —
+     a restart with no stop record behind it at all, which a deliberate stop always leaves. */
+  "settings.service.restarts.one": "Restarted once in the last hour",
+  "settings.service.restarts.many": "Restarted {count} times in the last hour",
+  "settings.service.lastStop.requested": "Last stop: you asked for it over the connection, at {when}",
+  "settings.service.lastStop.refused": "Last stop: it refused to serve and exited, at {when}",
+  "settings.service.lastStop.failed": "Last stop: it failed to serve and exited, at {when}",
+  "settings.service.lastStop.signal": "Last stop: {signal}, at {when}",
+  "settings.service.lastStop.signalExit": "Last stop: {signal} (exit code {code}), at {when}",
+  "settings.service.lastStop.crash":
+    "No stop request preceded this start — the previous daemon was killed or crashed",
   "settings.service.action.turnOn": "Turn on",
   "settings.service.action.restart": "Restart",
+  /* **Stop and Turn off both end the daemon, and only one of them ends the service.** The labels cannot carry
+     that difference alone, so the row says it in a sentence and each button repeats the half that belongs to
+     it in its tooltip. */
+  "settings.service.action.stop": "Stop",
+  "settings.service.action.stop.title":
+    "Stop the daemon now. Because the service is installed, it starts again at your next login.",
+  /* Stop's tooltip carries the same login promise the state sentence does, so it is gated on `enabled` the
+     same way: the flattering version in front of a machine that will stay stopped is the lie this gate exists
+     for. */
+  "settings.service.action.stop.title.notAtLogin":
+    "Stop the daemon now. The service is installed, but it is not set to start when you log in.",
+  "settings.service.action.stop.title.plain":
+    "Stop the daemon now. The service stays installed; Turn off removes it.",
+  "settings.service.action.turnOff.title": "Remove the service, so the daemon does not start again.",
+  "settings.service.stopVsOff": "Stop ends it now; Turn off removes the service so it stays off.",
   "settings.service.action.turnOff": "Turn off",
   "settings.service.action.tryAgain": "Try again",
   "settings.service.action.refresh": "Refresh",

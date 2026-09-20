@@ -88,6 +88,18 @@ class AppLocalizationsIt extends AppLocalizations {
   String get connectionsEmpty => 'Nessun computer ancora abbinato.';
 
   @override
+  String get connectionsPairingRefused =>
+      'Questo computer ha rifiutato l\'abbinamento di questo telefono';
+
+  @override
+  String connectionsPairingRefusedDetail(Object name) {
+    return 'Abbina di nuovo con $name. Questo computer non accetta più l\'abbinamento di questo telefono.';
+  }
+
+  @override
+  String get connectionsPairingRePair => 'Abbina di nuovo';
+
+  @override
   String connectionsCurrent(String name) {
     return '$name · attuale';
   }

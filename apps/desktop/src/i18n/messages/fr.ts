@@ -29,6 +29,7 @@
  */
 
 import { git } from "./git.fr.js";
+import { service } from "./service.fr.js";
 
 import type { Catalogue } from "../translate.js";
 
@@ -654,32 +655,8 @@ export const fr: Catalogue = {
   "settings.machine.paired.forget": "Oublier",
   "settings.machine.paired.forget.title":
     "Retirer cette entrée révoquée de la liste. L'appareil reste révoqué.",
-  "settings.service.title": "Service en arrière-plan",
-  "settings.service.detail": "Exécute le démon comme service pour qu'un téléphone joigne cette machine fenêtre fermée.",
-  "settings.service.state.notInstalled.title": "Désactivé",
-  "settings.service.state.notInstalled.detail": "Votre téléphone ne peut joindre cette machine que tant que la fenêtre EnvoyDev est ouverte.",
-  "settings.service.state.running.title": "Activé, en cours",
-  "settings.service.state.running.atLogin": "Le service tourne et redémarrera à l'ouverture de votre session.",
-  "settings.service.state.running.notAtLogin": "Le service tourne, mais il n'est pas configuré pour démarrer à l'ouverture de votre session.",
-  "settings.service.state.running.plain": "Le service tourne actuellement.",
-  "settings.service.state.installedStopped.title": "Activé, arrêté",
-  "settings.service.state.installedStopped.atLogin": "Il est installé et démarrera à l'ouverture de votre session.",
-  "settings.service.state.installedStopped.notAtLogin": "Il est installé, mais pas configuré pour démarrer à l'ouverture de votre session.",
-  "settings.service.state.installedStopped.plain": "Il est installé mais ne tourne pas pour le moment.",
-  "settings.service.state.failed.title": "Un problème est survenu",
-  "settings.service.state.failed.detail": "Le service n'a pas pu démarrer. Ce que le gestionnaire de services de votre système a répondu figure ci-dessous.",
-  "settings.service.state.unsupported.title": "Indisponible ici",
-  "settings.service.state.unsupported.detail": "EnvoyDev n'a trouvé aucun gestionnaire de services utilisable sur ce système. L'application fonctionne toujours tant que la fenêtre est ouverte.",
-  "settings.service.state.unknown.title": "Impossible à déterminer",
-  "settings.service.state.unknown.detail": "EnvoyDev n'a pas pu lire l'état du service auprès du gestionnaire de services du système.",
-  "settings.service.pid": "Processus {pid}.",
-  "settings.service.checking": "Interrogation du gestionnaire de services de votre système…",
-  "settings.service.action.turnOn": "Activer",
-  "settings.service.action.restart": "Redémarrer",
-  "settings.service.action.turnOff": "Désactiver",
-  "settings.service.action.tryAgain": "Réessayer",
-  "settings.service.action.refresh": "Actualiser",
-  "settings.service.busy": "En cours…",
+  // This namespace lives in `service.fr.ts` — see that file for why, and `git`.
+  ...service,
   "settings.about.note": "Les deux moitiés sont compilées ensemble : leurs versions devraient correspondre.",
   "settings.about.window.title": "Cette fenêtre",
   "settings.about.window.detail": "La version dont proviennent les fichiers de cette fenêtre.",

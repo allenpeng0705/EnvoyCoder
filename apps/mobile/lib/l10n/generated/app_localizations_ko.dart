@@ -86,6 +86,17 @@ class AppLocalizationsKo extends AppLocalizations {
   String get connectionsEmpty => '아직 페어링된 컴퓨터가 없습니다.';
 
   @override
+  String get connectionsPairingRefused => '이 컴퓨터가 이 휴대폰의 페어링을 거부했습니다';
+
+  @override
+  String connectionsPairingRefusedDetail(Object name) {
+    return '$name와(과) 다시 페어링하세요. 이 컴퓨터는 이 휴대폰의 페어링을 더 이상 받지 않습니다.';
+  }
+
+  @override
+  String get connectionsPairingRePair => '다시 페어링';
+
+  @override
   String connectionsCurrent(String name) {
     return '$name · 현재';
   }

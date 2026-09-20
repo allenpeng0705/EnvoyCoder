@@ -86,6 +86,17 @@ class AppLocalizationsJa extends AppLocalizations {
   String get connectionsEmpty => 'まだデスクトップがペアリングされていません。';
 
   @override
+  String get connectionsPairingRefused => 'このパソコンはこのスマートフォンのペアリングを拒否しました';
+
+  @override
+  String connectionsPairingRefusedDetail(Object name) {
+    return '$name と再度ペアリングしてください。このパソコンはこのスマートフォンのペアリングを受け付けなくなりました。';
+  }
+
+  @override
+  String get connectionsPairingRePair => '再度ペアリング';
+
+  @override
   String connectionsCurrent(String name) {
     return '$name · 現在';
   }

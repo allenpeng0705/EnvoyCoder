@@ -38,6 +38,21 @@ class _SilentClient extends HostClient {
   Future<void> dispose() async {}
 }
 
+/// A client that reports its pairing as refused — the one fact the Connections sheet's re-pair step
+/// keys off. Nothing else about it dials.
+class _RefusedPairingClient extends HostClient {
+  _RefusedPairingClient(super.host);
+
+  @override
+  bool get pairingRefused => true;
+
+  @override
+  Future<void> connectBest() async {}
+
+  @override
+  Future<void> dispose() async {}
+}
+
 /// A controller whose clients never dial, so these tests hold the rule and nothing else.
 ConnectionsController _controller(HostStore store) =>
     ConnectionsController(store)..clientFactory = (host) => _SilentClient(host);
@@ -352,5 +367,23 @@ void main() {
     clients['b']!.emit(HostConnectionState.connected);
     await pumpEventQueue();
     expect(await store.loadActiveHostId(), 'a');
+  });
+
+  test('the controller reports which host had its pairing refused', () async {
+    final store = await storeWith([_host('a', 'alpha'), _host('b', 'beta')]);
+
+    final controller = ConnectionsController(store)
+      ..clientFactory = (host) => host.id == 'a'
+          ? _RefusedPairingClient(host)
+          : _SilentClient(host);
+    await controller.load();
+
+    // The sheet asks per host, and the honest answer comes from that host's own client — the pair
+    // that did not refuse is not swept up in the one that did.
+    expect(controller.pairingRefusedFor('a'), isTrue);
+    expect(controller.pairingRefusedFor('b'), isFalse);
+    // A host with no client at all (never loaded, or already forgotten) is not "refused".
+    expect(controller.pairingRefusedFor('missing'), isFalse);
+    controller.dispose();
   });
 }

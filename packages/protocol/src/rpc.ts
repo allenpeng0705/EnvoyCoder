@@ -1906,6 +1906,27 @@ export const ServiceStatusSchema = z
     enabled: z.boolean().optional(),
     pid: z.number().int().positive().optional(),
     detail: z.string(),
+    /**
+     * How many times this daemon has **started** in the last hour — the number a crash loop shows up in.
+     *
+     * Not the supervisor's fact, the daemon's own: launchd will happily restart a broken unit for ever and report
+     * "running" each time. `lifecycle.ts`'s ledger is what knows, and §5.3 of the lifecycle doc is explicit that a
+     * restart the person cannot see is a restart they cannot act on.
+     */
+    restartsInLastHour: z.number().int().min(0),
+    /**
+     * Why the previous daemon stopped, when it stopped on purpose. **Absent is the interesting case**: it means the
+     * last process was killed or crashed, and that is exactly what a person whose daemon keeps disappearing needs
+     * to be told.
+     */
+    lastStop: z
+      .object({
+        at: z.string(),
+        signal: z.string(),
+        exitCode: z.number().int().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 

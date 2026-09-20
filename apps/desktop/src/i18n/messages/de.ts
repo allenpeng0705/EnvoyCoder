@@ -29,6 +29,7 @@
  */
 
 import { git } from "./git.de.js";
+import { service } from "./service.de.js";
 
 import type { Catalogue } from "../translate.js";
 
@@ -654,32 +655,8 @@ export const de: Catalogue = {
   "settings.machine.paired.forget": "Verwerfen",
   "settings.machine.paired.forget.title":
     "Diesen widerrufenen Eintrag aus der Liste entfernen. Das Gerät bleibt widerrufen.",
-  "settings.service.title": "Hintergrunddienst",
-  "settings.service.detail": "Führt den Daemon als Dienst aus, damit ein Telefon diese Maschine bei geschlossenem Fenster erreicht.",
-  "settings.service.state.notInstalled.title": "Aus",
-  "settings.service.state.notInstalled.detail": "Ihr Telefon erreicht diese Maschine nur, solange das EnvoyDev-Fenster offen ist.",
-  "settings.service.state.running.title": "An, läuft",
-  "settings.service.state.running.atLogin": "Der Dienst läuft jetzt und startet beim Anmelden erneut.",
-  "settings.service.state.running.notAtLogin": "Der Dienst läuft jetzt, ist aber nicht für den Start beim Anmelden eingerichtet.",
-  "settings.service.state.running.plain": "Der Dienst läuft jetzt.",
-  "settings.service.state.installedStopped.title": "An, läuft nicht",
-  "settings.service.state.installedStopped.atLogin": "Er ist installiert und startet beim Anmelden.",
-  "settings.service.state.installedStopped.notAtLogin": "Er ist installiert, aber nicht für den Start beim Anmelden eingerichtet.",
-  "settings.service.state.installedStopped.plain": "Er ist installiert, läuft aber gerade nicht.",
-  "settings.service.state.failed.title": "Etwas ist schiefgelaufen",
-  "settings.service.state.failed.detail": "Der Dienst konnte nicht gestartet werden. Was der Dienstmanager Ihres Systems dazu gesagt hat, steht unten.",
-  "settings.service.state.unsupported.title": "Hier nicht verfügbar",
-  "settings.service.state.unsupported.detail": "EnvoyDev hat auf diesem System keinen nutzbaren Dienstmanager gefunden. Die App funktioniert weiter, solange das Fenster offen ist.",
-  "settings.service.state.unknown.title": "Konnte nicht ermitteln",
-  "settings.service.state.unknown.detail": "EnvoyDev konnte den Zustand des Dienstes nicht vom Dienstmanager des Systems lesen.",
-  "settings.service.pid": "Prozess {pid}.",
-  "settings.service.checking": "Der Dienstmanager Ihres Systems wird gefragt…",
-  "settings.service.action.turnOn": "Einschalten",
-  "settings.service.action.restart": "Neu starten",
-  "settings.service.action.turnOff": "Ausschalten",
-  "settings.service.action.tryAgain": "Erneut versuchen",
-  "settings.service.action.refresh": "Aktualisieren",
-  "settings.service.busy": "Arbeitet…",
+  // This namespace lives in `service.de.ts` — see that file for why, and `git`.
+  ...service,
   "settings.about.note": "Beide Hälften werden zusammen gebaut, ihre Versionen sollten gleich sein.",
   "settings.about.window.title": "Dieses Fenster",
   "settings.about.window.detail": "Die Version, aus der die Dateien dieses Fensters gebaut wurden.",

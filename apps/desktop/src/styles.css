@@ -2801,16 +2801,27 @@ button.explorer__change:hover {
    `launchctl` / `systemctl` / `schtasks` — untranslated, unparsed, and sometimes many lines — so it sits below
    everything in the quietest band the pane has, keeps its own line breaks, and scrolls rather than pushing the
    row's control off the page. It is deliberately not `.setting__note`: the density budget is about *our*
-   prose, and a command's answer is not prose we chose. */
-.setting__developer {
+   prose, and a command's answer is not prose we chose.
+   The band holds up to three such lines — the daemon's restart count, the one sentence its last stop
+   deserves, then the supervisor's output — so the top margin lives on the block and each line is spaced from
+   the one above it. */
+.setting__diagnostics {
   margin: 6px 0 0;
   max-width: 34ch;
+}
+
+.setting__developer {
+  margin: 4px 0 0;
   max-height: 96px;
   overflow: auto;
   font-size: 11px;
   line-height: 1.4;
   white-space: pre-wrap;
   color: var(--text-dim, #8b8f98);
+}
+
+.setting__developer:first-child {
+  margin-top: 0;
 }
 
 /* A text field with the system's folder chooser beside it: the field takes the width, the button stays

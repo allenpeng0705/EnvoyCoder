@@ -29,6 +29,7 @@
  */
 
 import { git } from "./git.ja.js";
+import { service } from "./service.ja.js";
 
 import type { Catalogue } from "../translate.js";
 
@@ -652,32 +653,8 @@ export const ja: Catalogue = {
   "settings.machine.paired.forget": "削除",
   "settings.machine.paired.forget.title":
     "この取消済みの記録を一覧から削除します。デバイスは取り消されたままです。",
-  "settings.service.title": "バックグラウンドサービス",
-  "settings.service.detail": "デーモンをサービスとして実行し、ウィンドウを閉じていてもスマートフォンからこのマシンに接続できるようにします。",
-  "settings.service.state.notInstalled.title": "オフ",
-  "settings.service.state.notInstalled.detail": "EnvoyDev のウィンドウを開いている間だけ、スマートフォンからこのマシンに接続できます。",
-  "settings.service.state.running.title": "オン、実行中",
-  "settings.service.state.running.atLogin": "サービスは実行中で、ログイン時に再び起動します。",
-  "settings.service.state.running.notAtLogin": "サービスは実行中ですが、ログイン時に起動する設定にはなっていません。",
-  "settings.service.state.running.plain": "サービスは実行中です。",
-  "settings.service.state.installedStopped.title": "オン、停止中",
-  "settings.service.state.installedStopped.atLogin": "インストール済みで、ログイン時に起動します。",
-  "settings.service.state.installedStopped.notAtLogin": "インストール済みですが、ログイン時に起動する設定にはなっていません。",
-  "settings.service.state.installedStopped.plain": "インストール済みですが、現在は実行されていません。",
-  "settings.service.state.failed.title": "問題が発生しました",
-  "settings.service.state.failed.detail": "サービスを開始できませんでした。システムのサービスマネージャーの応答を下に示します。",
-  "settings.service.state.unsupported.title": "この環境では利用できません",
-  "settings.service.state.unsupported.detail": "EnvoyDev はこのシステムで利用できるサービスマネージャーを見つけられませんでした。ウィンドウを開いている間はアプリをそのまま使えます。",
-  "settings.service.state.unknown.title": "判別できませんでした",
-  "settings.service.state.unknown.detail": "システムのサービスマネージャーからサービスの状態を読み取れませんでした。",
-  "settings.service.pid": "プロセス {pid}。",
-  "settings.service.checking": "システムのサービスマネージャーに問い合わせています…",
-  "settings.service.action.turnOn": "オンにする",
-  "settings.service.action.restart": "再起動",
-  "settings.service.action.turnOff": "オフにする",
-  "settings.service.action.tryAgain": "再試行",
-  "settings.service.action.refresh": "更新",
-  "settings.service.busy": "処理中…",
+  // This namespace lives in `service.ja.ts` — see that file for why, and `git`.
+  ...service,
   "settings.about.note": "2 つは一緒にビルドされるので、バージョンは一致するはずです。",
   "settings.about.window.title": "このウィンドウ",
   "settings.about.window.detail": "このウィンドウのファイルが作られたバージョンです。",

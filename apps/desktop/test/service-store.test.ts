@@ -103,13 +103,22 @@ describe("the service calls, as the store records them", () => {
     // **The mutation this fails on:** storing a locally-guessed state after a press — "installing means
     // running" — which shows a running service the supervisor refused to bootstrap.
     const { store, connection } = await bench();
-    const off: DaemonServiceStatus = { state: "not-installed", detail: "Could not find service" };
+    const off: DaemonServiceStatus = {
+      state: "not-installed",
+      detail: "Could not find service",
+      restartsInLastHour: 0,
+    };
     connection.answers.set("coder.getServiceStatus", { service: off });
     await expect(store.getServiceStatus()).resolves.toEqual({ ok: true, service: off });
     expect(store.getSnapshot().service).toEqual(off);
 
     // The supervisor accepted the job and has not started it yet — the answer the store must keep.
-    const accepted: DaemonServiceStatus = { state: "installed-stopped", enabled: true, detail: "state = waiting" };
+    const accepted: DaemonServiceStatus = {
+      state: "installed-stopped",
+      enabled: true,
+      detail: "state = waiting",
+      restartsInLastHour: 0,
+    };
     connection.answers.set("coder.installService", { service: accepted });
     await expect(store.installService()).resolves.toEqual({ ok: true, service: accepted });
     expect(store.getSnapshot().service).toEqual(accepted);
@@ -119,13 +128,40 @@ describe("the service calls, as the store records them", () => {
     // **The mutation this fails on:** clearing `service` to `undefined` (or to a guess) on a refusal, which
     // turns "the OS would not let me change it" into "I do not know what it is".
     const { store, connection } = await bench();
-    const running: DaemonServiceStatus = { state: "running", enabled: true, pid: 9, detail: "" };
+    const running: DaemonServiceStatus = {
+      state: "running",
+      enabled: true,
+      pid: 9,
+      detail: "",
+      restartsInLastHour: 0,
+    };
     connection.answers.set("coder.getServiceStatus", { service: running });
     await store.getServiceStatus();
 
     connection.refusals.set("coder.uninstallService", "envoydev.owner-window-only: refused");
     const answer = await store.uninstallService();
     expect(answer.ok).toBe(false);
+    expect(store.getSnapshot().service).toEqual(running);
+  });
+
+  it("acknowledges a stop without inventing the status the daemon has not answered yet", async () => {
+    // **The mutation this fails on:** writing `not-installed` (or anything else) into `state.service` when
+    // `coder.shutdown` answers. The answer only says the request was accepted; the daemon is still draining,
+    // and the next read — or the service manager's own answer once it is gone — is what is true.
+    const { store, connection } = await bench();
+    const running: DaemonServiceStatus = {
+      state: "running",
+      enabled: true,
+      pid: 9,
+      detail: "",
+      restartsInLastHour: 0,
+    };
+    connection.answers.set("coder.getServiceStatus", { service: running });
+    await store.getServiceStatus();
+
+    connection.answers.set("coder.shutdown", { stopping: true });
+    await expect(store.shutdown()).resolves.toEqual({ ok: true, stopping: true });
+    // The row re-reads for the new status; the store has not guessed one in the meantime.
     expect(store.getSnapshot().service).toEqual(running);
   });
 

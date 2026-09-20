@@ -42,5 +42,8 @@
  "settingsPairingHoursAgo",
  "settingsPairingJustNow",
  "settingsPairingPhoneClock",
- "settingsPairingOnDate"
+ "settingsPairingOnDate",
+ "connectionsPairingRefused",
+ "connectionsPairingRefusedDetail",
+ "connectionsPairingRePair"
 ]

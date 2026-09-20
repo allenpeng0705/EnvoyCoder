@@ -88,6 +88,18 @@ class AppLocalizationsFr extends AppLocalizations {
   String get connectionsEmpty => 'Aucun ordinateur associé pour l\'instant.';
 
   @override
+  String get connectionsPairingRefused =>
+      'Cet ordinateur a refusé l\'appairage de ce téléphone';
+
+  @override
+  String connectionsPairingRefusedDetail(Object name) {
+    return 'Appairez à nouveau avec $name. Cet ordinateur n\'accepte plus la paire que ce téléphone détient.';
+  }
+
+  @override
+  String get connectionsPairingRePair => 'Appairer à nouveau';
+
+  @override
   String connectionsCurrent(String name) {
     return '$name · actuel';
   }

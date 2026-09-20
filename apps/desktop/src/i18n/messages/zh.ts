@@ -29,6 +29,7 @@
  */
 
 import { git } from "./git.zh.js";
+import { service } from "./service.zh.js";
 
 import type { Catalogue } from "../translate.js";
 
@@ -646,32 +647,8 @@ export const zh: Catalogue = {
   "settings.machine.paired.forget": "删除",
   "settings.machine.paired.forget.title":
     "从列表中删除这条已撤销记录。设备仍保持撤销状态。",
-  "settings.service.title": "后台服务",
-  "settings.service.detail": "以服务方式运行守护进程，这样关闭窗口后手机仍能访问这台机器。",
-  "settings.service.state.notInstalled.title": "已关闭",
-  "settings.service.state.notInstalled.detail": "只有在 EnvoyDev 窗口打开时，手机才能访问这台机器。",
-  "settings.service.state.running.title": "已开启，运行中",
-  "settings.service.state.running.atLogin": "服务正在运行，并会在您登录时再次启动。",
-  "settings.service.state.running.notAtLogin": "服务正在运行，但未设置为在您登录时启动。",
-  "settings.service.state.running.plain": "服务正在运行。",
-  "settings.service.state.installedStopped.title": "已开启，未运行",
-  "settings.service.state.installedStopped.atLogin": "服务已安装，并会在您登录时启动。",
-  "settings.service.state.installedStopped.notAtLogin": "服务已安装，但未设置为在您登录时启动。",
-  "settings.service.state.installedStopped.plain": "服务已安装，但目前没有运行。",
-  "settings.service.state.failed.title": "出了问题",
-  "settings.service.state.failed.detail": "服务无法启动。下方是系统服务管理器的说明。",
-  "settings.service.state.unsupported.title": "此系统不可用",
-  "settings.service.state.unsupported.detail": "EnvoyDev 在此系统上找不到可用的服务管理器。只要窗口打开，应用仍可正常使用。",
-  "settings.service.state.unknown.title": "无法确定",
-  "settings.service.state.unknown.detail": "EnvoyDev 无法从系统服务管理器读取服务状态。",
-  "settings.service.pid": "进程 {pid}。",
-  "settings.service.checking": "正在询问系统服务管理器…",
-  "settings.service.action.turnOn": "开启",
-  "settings.service.action.restart": "重启",
-  "settings.service.action.turnOff": "关闭",
-  "settings.service.action.tryAgain": "重试",
-  "settings.service.action.refresh": "刷新",
-  "settings.service.busy": "处理中…",
+  // This namespace lives in `service.zh.ts` — see that file for why, and `git`.
+  ...service,
   "settings.about.note": "两半一起构建，版本应当一致。",
   "settings.about.window.title": "这个窗口",
   "settings.about.window.detail": "这个窗口自身文件来自的版本。",

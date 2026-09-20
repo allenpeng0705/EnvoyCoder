@@ -86,6 +86,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectionsEmpty => '还没有配对电脑。';
 
   @override
+  String get connectionsPairingRefused => '这台电脑拒绝了此手机的配对';
+
+  @override
+  String connectionsPairingRefusedDetail(Object name) {
+    return '请与 $name 重新配对。这台电脑不再接受此手机的配对。';
+  }
+
+  @override
+  String get connectionsPairingRePair => '重新配对';
+
+  @override
   String connectionsCurrent(String name) {
     return '$name · 当前';
   }

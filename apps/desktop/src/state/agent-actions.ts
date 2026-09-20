@@ -72,6 +72,15 @@ export interface EnvoyLlmSetInput {
  */
 export type ServiceAnswer = { ok: true; service: DaemonServiceStatus } | Refusal;
 
+/**
+ * What `coder.shutdown` answers.
+ *
+ * `stopping: true` is an acknowledgement and not an outcome: the daemon puts the result on the wire *before* it
+ * starts draining and exits (the handler defers the stop by a tick for exactly that reason), so no caller may
+ * treat this as "the process is gone".
+ */
+export type ShutdownAnswer = { ok: true; stopping: true } | Refusal;
+
 export interface AgentActions {
   /**
    * Declare an agent — a catalogue entry, or one nobody catalogued.
@@ -182,11 +191,15 @@ export interface AgentActions {
   /**
    * **The daemon service, which the operating system owns.**
    *
-   * Four calls about one state, and they are here rather than in an interface of their own for the reason the
+   * Five calls about one state, and they are here rather than in an interface of their own for the reason the
    * pairing calls are: this is the bundle a settings surface is handed, and the *Background service* row is a
    * settings surface. What is different from every other call in this file is where the value lives — not in
    * a settings document but in launchd / systemd / the Task Scheduler — which is why the read is a status and
    * the answer to a change is *the supervisor's answer*, never our assumption (`ServiceAnswer`).
+   *
+   * `shutdown` is the odd one: its answer is an acknowledgement rather than a status, because the daemon is
+   * about to exit (`ShutdownAnswer`). It is the row's **Stop** — the press that ends the daemon without
+   * removing the service, which is what makes it different from `uninstallService`.
    *
    * The status is asked when the service page opens rather than at connect: it costs a supervisor process,
    * and nothing can act on the answer until the control is on screen.
@@ -201,4 +214,15 @@ export interface AgentActions {
 
   /** Start it again through the supervisor, for one that is installed but not running. */
   restartService(): Promise<ServiceAnswer>;
+
+  /**
+   * **End the daemon now, without removing the service.**
+   *
+   * This is the difference the row's copy exists to make: `shutdown` answers `{stopping: true}` and the process
+   * drains and exits, so the installed service brings it back at the next login — while `uninstallService`
+   * takes the service away entirely. The answer says the *request was accepted*, not that the process is gone
+   * (the drain can take a while), which is why the row re-reads the status afterwards and treats a read that
+   * cannot arrive as "stopped" rather than as a failure.
+   */
+  shutdown(): Promise<ShutdownAnswer>;
 }

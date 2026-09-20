@@ -35,12 +35,20 @@ import {
 
 type Operation = (options?: ServiceOptions) => Promise<ServiceStatus>;
 
+/** The daemon's own life, as the ledger keeps it — the half of the answer a supervisor cannot give. */
+export interface DaemonFacts {
+  restartsInLastHour: number;
+  lastStop?: { at: string; signal: string; exitCode?: number };
+}
+
 export interface SupervisorDeps {
   /** Injected so the table can be tested without touching a real supervisor. Defaults are the real thing. */
   status?: Operation;
   install?: Operation;
   uninstall?: Operation;
   restart?: Operation;
+  /** The daemon's restart history, read from its ledger. Absent means "nothing known", which is not an error. */
+  facts?: () => Promise<DaemonFacts>;
 }
 
 export function createSupervisorHandlers(
@@ -53,18 +61,30 @@ export function createSupervisorHandlers(
     restart: deps.restart ?? restartDaemonService,
   };
 
+  /**
+   * The daemon's own facts, never allowed to fail the answer.
+   *
+   * A ledger that cannot be read is "nothing known" rather than an error: the row's subject is the *service*, and
+   * refusing to say whether the service is running because a log file is unreadable would be a worse answer than
+   * saying it without the history.
+   */
+  const daemonFacts = async (): Promise<DaemonFacts> => {
+    try {
+      return (await deps.facts?.()) ?? { restartsInLastHour: 0 };
+    } catch {
+      return { restartsInLastHour: 0 };
+    }
+  };
+
   /** One shape for every answer, including the one where the supervisor refused to do anything. */
   const attempt = async (act: () => Promise<ServiceStatus>): Promise<{ service: ServiceStatus }> => {
+    let service: ServiceStatus;
     try {
-      return { service: await act() };
+      service = await act();
     } catch (error) {
-      return {
-        service: {
-          state: "failed",
-          detail: error instanceof Error ? error.message : String(error),
-        },
-      };
+      service = { state: "failed", detail: error instanceof Error ? error.message : String(error) };
     }
+    return { service: { ...service, ...(await daemonFacts()) } };
   };
 
   /** Every handler parses its (empty) params: a client that sends a typo hears about it here. */

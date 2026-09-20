@@ -85,6 +85,7 @@ import type { RunManager } from "./runs.js";
 import type { SessionProbe } from "./session-probe.js";
 import type { CoderStore } from "./store.js";
 import { createShutdownHandlers } from "./shutdown.js";
+import type { DaemonFacts } from "./supervisor-rpc.js";
 import { createSupervisorHandlers } from "./supervisor-rpc.js";
 
 /** Identity of the running process — what makes `coder.hello` answer *which* daemon this is. */
@@ -143,6 +144,11 @@ export interface CoderServiceDeps {
    * the process; absent in a build with no way to stop (a bench, or a daemon whose boot did not pass one).
    */
   shutdown?: () => void;
+  /**
+   * The daemon's restart history for the service row (§5.3): how many starts in the last hour and how the previous
+   * process stopped. Read from the ledger, which is the only thing that knows.
+   */
+  serviceFacts?: () => Promise<DaemonFacts>;
   /**
    * **How each agent's connector is delivered** — the user's stored choice.
    *
@@ -319,7 +325,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     ...createShutdownHandlers(deps.shutdown ? { shutdown: deps.shutdown } : {}),
     // The service switch: whether this machine runs the daemon under a supervisor, and the three changes to it.
     // The changes are owner-window-only, like minting a pairing code.
-    ...createSupervisorHandlers(),
+    ...createSupervisorHandlers(deps.serviceFacts ? { facts: deps.serviceFacts } : {}),
     // The supervisor's question, answered from the instance facts `coder.hello` already uses.
     ...createHealthHandlers({
       instance: deps.instance,

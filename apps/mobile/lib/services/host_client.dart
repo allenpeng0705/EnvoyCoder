@@ -38,9 +38,16 @@ import '../l10n/l10n.dart';
 import '../models/host.dart';
 import 'libp2p_transport.dart';
 import 'net_diagnostics.dart';
+import 'pairing_credential.dart';
 import 'pairing_store.dart';
 import 'route_plan.dart';
+import 'route_walk.dart';
 import 'ssh_tunnel.dart';
+
+// The wire detail and the refusal rule stay in one place (`pairing_credential.dart`); the public
+// names this library has always exported are re-exported here so the screens and tests that import
+// `host_client.dart` keep compiling and cannot end up with a second copy of either.
+export 'pairing_credential.dart' show kUnauthorizedErrorCode, isCredentialRefusal;
 
 enum HostConnectionState { idle, connecting, connected, reconnecting, failed }
 
@@ -79,31 +86,6 @@ extension HostConnectionStateText on HostConnectionState {
 /// difference.
 typedef WsDialer = Future<WebSocketLike> Function(String url);
 
-/// The code a daemon puts in a JSON-RPC error when it will not accept the credential it was offered.
-///
-/// The catalogue literal, not the transport's `"UNAUTHORIZED"` token. A token that fails to resolve
-/// at the socket is refused by the family's transport before any product method runs, and that
-/// refusal arrives as `code: "UNAUTHORIZED"`; a refusal raised by a product handler arrives as this
-/// code **inside the message** (`packages/protocol/src/rpc.ts` — the family's transport derives
-/// `error.code` from its own closed catalogue, so an `envoydev.*` code cannot ride there). Both mean
-/// the same thing to this client, so both are recognised.
-const String kUnauthorizedErrorCode = 'envoydev.unauthorized';
-
-/// Whether [error] is the daemon refusing the credential it was handed, rather than a failure to
-/// reach it at all.
-///
-/// The distinction is the whole reason a rejected pairing may be retired and a timeout may not: a
-/// network fault says nothing about the token, and clearing a working pairing on one flaky dial would
-/// force a re-pair for a machine that was merely asleep.
-bool isCredentialRefusal(Object error) {
-  final text = error.toString();
-  if (text.contains(kUnauthorizedErrorCode)) return true;
-  // The family client's typed refusal (`UnauthorizedException`), and the sentence its own transport
-  // pairs with `code: "UNAUTHORIZED"` (`EnvoyMesh/packages/host-connect/src/ws-server.ts`).
-  if (error is UnauthorizedException) return true;
-  return text.contains('Authentication required');
-}
-
 /// What a [HostClient] knows about its pairing, for a screen: the record, the daemon it is filed
 /// under, and whether that daemon has refused it.
 ///
@@ -122,7 +104,12 @@ class HostClient {
     this.budget = const DialBudget(),
     this.minDelay = const Duration(seconds: 1),
     this.maxDelay = const Duration(seconds: 20),
-  }) : pairings = pairingStore ?? PairingStore() {
+  }) : pairing = PairingCredential(
+          endpoint: host.endpoint,
+          owner: host.ownerId,
+          hostToken: host.token,
+          store: pairingStore ?? PairingStore(),
+        ) {
     _client = HomeRemoteClient(
       HomeRemoteClientOptions(
         resolveCandidates: _resolveCandidates,
@@ -147,17 +134,13 @@ class HostClient {
   final Duration minDelay;
   final Duration maxDelay;
 
-  /// Where the token this daemon issued is kept, keyed by the daemon's identity.
+  /// This daemon's credential: which token to present, and what to do when the daemon refuses it.
   ///
-  /// Injected so one store serves every host on the phone — the pairing a Settings screen reads is
-  /// then the same record the dial offered — and so a test can supply an in-memory one.
-  final PairingStore pairings;
-
-  /// The daemon this client is paired to, as [daemonKeyFor] names it. Computed once: the host record
-  /// is mutable in tests (`host` is reassigned by a caller that re-pairs), and a key that moved under
-  /// a live connection would address a different machine's credential.
-  late final String daemonKey =
-      daemonKeyFor(endpoint: host.endpoint, owner: host.ownerId);
+  /// Built here rather than passed in so exactly one credential exists per client, and keyed by the
+  /// daemon's identity at construction — the host record is mutable in tests (`host` is reassigned by
+  /// a caller that re-pairs), and a key that moved under a live connection would address a different
+  /// machine's credential. See `pairing_credential.dart` for the rules it holds.
+  final PairingCredential pairing;
 
   /// Asked once per client, not once per dial. A walk is retried on every reconnect, and a refused
   /// token must not send the user a re-pair prompt once a backoff.
@@ -165,7 +148,6 @@ class HostClient {
 
   late final HomeRemoteClient _client;
   late final void Function() _eventUnsub;
-  late final DialBudgetMeter _meter = DialBudgetMeter(budget);
   late final Libp2pTransport _defaultLibp2pDialer = Libp2pTransport();
   final SshTunnel _sshTunnel = SshTunnel();
 
@@ -176,7 +158,6 @@ class HostClient {
   Completer<void>? _handshakeDone;
   bool _disposed = false;
   int _attempt = 0;
-  int _attemptsInWalk = 0;
 
   /// Set by [connect]: dial exactly this URL and do not walk the ladder.
   String? _pinnedUrl;
@@ -192,19 +173,17 @@ class HostClient {
   //
   // The walk's own record, kept on the client rather than in the screen: the state a screen wants to
   // explain (`reconnecting` with no projects) outlives any one frame, and a screen that rebuilt the
-  // ladder from a fresh resolve would be describing a walk the client never walked.
+  // ladder from a fresh resolve would be describing a walk the client never walked. The record itself
+  // — the ladder, the per-rung timings, the dial budget — lives in `route_walk.dart`; what stays here
+  // is the RPC and mesh snapshot, which belong to the link rather than to one walk.
 
-  /// The ladder of the most recent walk, in the family's order, with what happened to each rung.
-  final List<RouteAttempt> _ladder = <RouteAttempt>[];
+  late final RouteWalkRecord _walk = RouteWalkRecord(budget);
 
-  /// The rung the last walk was dialling, so a failure can be timed. Keyed by [._key].
-  final Map<String, DateTime> _attemptStartedAt = <String, DateTime>{};
-
-  /// How many rungs one pass may dial (`DialBudget.maxAttemptsPerWalk`).
-  int _planLimit = 0;
-
+  /// Why the most recent walk reached no rung, and when it ran. Kept here rather than in the walk
+  /// record because they outlive one walk: the surface reads them while the next walk is dialling.
   String? _lastWalkError;
   DateTime? _lastWalkAt;
+
   RpcOutcome? _lastRpc;
   HomeMeshSnapshot? _homeMesh;
   String? _homeMeshError;
@@ -220,7 +199,8 @@ class HostClient {
   ///
   /// True from the moment a stored token is refused until the daemon accepts one again. It is the
   /// honest half of "try the stored token first": a client that cleared the token and then kept
-  /// dialling would be a re-pair loop wearing a retry's clothes.
+  /// dialling would be a re-pair loop wearing a retry's clothes. The connection surface reads it to
+  /// offer the one action that fixes the state — pairing again with the code the desktop shows.
   bool get pairingRefused => _pairingRefused;
 
   /// The pairing this phone holds for the daemon behind this client, for the Settings surface.
@@ -229,8 +209,8 @@ class HostClient {
   /// the pairing that was recorded on a previous launch. A null record means "this phone holds no
   /// token this daemon issued" — a sentence the screen words, not an error.
   Future<PairingState> pairingState() async => (
-        record: await pairings.pairingFor(daemonKey),
-        daemonKey: daemonKey,
+        record: await pairing.record(),
+        daemonKey: pairing.daemonKey,
         refused: _pairingRefused,
       );
 
@@ -242,10 +222,10 @@ class HostClient {
   String? get activeRoute => _activeRoute;
 
   /// The most recent walk's ladder, in the family's priority order. See [NetDiagnostics.ladder].
-  List<RouteAttempt> get routeLadder => List.unmodifiable(_ladder);
+  List<RouteAttempt> get routeLadder => _walk.ladder;
 
   /// How many rungs one pass may dial before the tail waits for the next pass.
-  int get ladderPlanLimit => _planLimit;
+  int get ladderPlanLimit => _walk.planLimit;
 
   /// Why the most recent walk reached no rung, or null when it reached one.
   String? get lastWalkError => _lastWalkError;
@@ -333,13 +313,13 @@ class HostClient {
     if (_disposed) return;
     _pinnedUrl = null;
     final now = DateTime.now();
-    if (_meter.isDeferredAt(now)) {
+    if (_walk.isDeferredAt(now)) {
       // The walk is **held**, not attempted and failed: the last few candidate dials failed inside
       // the pressure window, and the budget's whole point is that a bad network stops the radio for
       // a moment instead of spraying dials at every rung in turn. The caller is waiting for exactly
       // what the meter is waiting for, so the wait is scheduled rather than spun on.
       _setState(HostConnectionState.reconnecting);
-      _scheduleRetry(_meter.deferralRemainingAt(now));
+      _scheduleRetry(_walk.deferralRemainingAt(now));
       return;
     }
     await _connect();
@@ -354,19 +334,14 @@ class HostClient {
 
   Future<void> _connect() async {
     if (_disposed) return;
-    _attemptsInWalk = 0;
-    // A new walk's record. Clear the previous one rather than appending: the surface's job is to
-    // explain the connection as it is now, and a stale failure shown beside a fresh attempt reads as
-    // a failure of that attempt.
-    _ladder.clear();
-    _attemptStartedAt.clear();
+    _walk.begin();
     _setState(_attempt == 0 ? HostConnectionState.connecting : HostConnectionState.reconnecting);
     try {
       await _client.ensureConnected();
       // The transport is up; wait for the handshake `_announceOnline` started so the returned future
       // means what the old client's did — connected, with events live.
       await _handshakeDone?.future;
-      _meter.recordSuccess();
+      _walk.recordSuccess();
       _attempt = 0;
       // The most recent walk reached the daemon, so there is no last walk *failure* to report.
       _lastWalkError = null;
@@ -377,8 +352,8 @@ class HostClient {
       // bare `catch (_)`, which is why a phone stuck on "connecting" had nothing to show.
       _lastWalkError = _redactError(error);
       _lastWalkAt = DateTime.now();
-      _closeOpenAttempts();
-      _recordWalkFailure();
+      _walk.closeOpenAttempts();
+      _walk.recordWalkFailure();
       _attempt += 1;
       _setState(HostConnectionState.reconnecting);
       _scheduleRetry(_backoffDelay());
@@ -389,15 +364,12 @@ class HostClient {
   //
   // Everything below records what happens to each rung, for the network-status surface. It is
   // deliberately write-only from the walk's point of view: the walk's behaviour is unchanged by it,
-  // and a rung's outcome is never a reason to take a different route.
+  // and a rung's outcome is never a reason to take a different route. The record itself is
+  // `route_walk.dart`; these are the two seams the client owns — the callback the family calls, and
+  // the redaction rule for its error text.
 
-  /// Every candidate the client is about to try is a dial this walk attempted, and one rung of the
-  /// record the network-status surface shows.
-  void _onCandidateTrying(HomeRemoteCandidate candidate) {
-    _attemptsInWalk += 1;
-    _attemptStartedAt[_key(candidate)] = DateTime.now();
-    _markAttempt(candidate, status: RouteAttemptStatus.trying);
-  }
+  /// Every candidate the client is about to try is a dial this walk attempted.
+  void _onCandidateTrying(HomeRemoteCandidate candidate) => _walk.trying(candidate);
 
   /// Exception text with every secret query value replaced.
   ///
@@ -406,67 +378,6 @@ class HostClient {
   /// string is a credential sitting in a bug report. `redactSecretQueryValues` is the family's
   /// implementation, shared with its own transport layer.
   String _redactError(Object error) => redactSecretQueryValues(error.toString());
-
-  static String _key(HomeRemoteCandidate candidate) => '${candidate.name}|${candidate.url}';
-
-  void _markAttempt(
-    HomeRemoteCandidate candidate, {
-    required RouteAttemptStatus status,
-    String? error,
-    int? elapsedMs,
-    bool clearError = false,
-  }) {
-    final redacted = redactSecretQueryValues(candidate.url);
-    for (var i = 0; i < _ladder.length; i++) {
-      if (_ladder[i].name != candidate.name || _ladder[i].redactedUrl != redacted) continue;
-      _ladder[i] = _ladder[i].copyWith(
-        status: status,
-        error: error,
-        clearError: clearError,
-        elapsedMs: elapsedMs ?? _elapsedFor(candidate),
-      );
-      return;
-    }
-  }
-
-  int? _elapsedFor(HomeRemoteCandidate candidate) {
-    final started = _attemptStartedAt[_key(candidate)];
-    return started == null ? null : DateTime.now().difference(started).inMilliseconds;
-  }
-
-  /// Any rung that was being dialled or had opened a transport but never became the active one.
-  ///
-  /// Called when the walk ends and whenever a rung wins, so the record cannot be left saying "still
-  /// being dialled" about a rung the walk has already moved past. The reason is stated as what was
-  /// observed — no `connected` arrived — and never as a cause this app did not see.
-  void _closeOpenAttempts() {
-    for (var i = 0; i < _ladder.length; i++) {
-      final attempt = _ladder[i];
-      if (attempt.status != RouteAttemptStatus.trying &&
-          attempt.status != RouteAttemptStatus.opened) {
-        continue;
-      }
-      _ladder[i] = attempt.copyWith(
-        status: RouteAttemptStatus.failed,
-        error: attempt.error ??
-            (attempt.status == RouteAttemptStatus.opened
-                ? 'a transport opened, but the home never reported connected'
-                : 'the dial did not finish before the walk moved on'),
-      );
-    }
-  }
-
-  /// Every candidate the failed walk attempted, as a failure of its own.
-  ///
-  /// The budget counts *dials*, and a walk that burned four candidates burned four. Recording one
-  /// per walk would let a store with a long tail of dead addresses look like a healthy network.
-  void _recordWalkFailure() {
-    final attempted = _attemptsInWalk;
-    _attemptsInWalk = 0;
-    for (var i = 0; i < attempted; i++) {
-      _meter.recordFailure();
-    }
-  }
 
   Duration _backoffDelay() {
     final ms = (minDelay.inMilliseconds * (1 << (_attempt - 1).clamp(0, 4)))
@@ -492,7 +403,7 @@ class HostClient {
     // instead of a stranger minting another pairing. The host's own token is the fallback for the
     // hosts that were never paired this way (a typed address, an SSH hop, a grant recorded before
     // this store existed) — never a replacement for one.
-    final token = (await pairings.tokenFor(daemonKey)) ?? host.token;
+    final token = await pairing.offered();
     final pinned = _pinnedUrl;
     if (pinned != null) {
       // A pinned URL is not a walk: no budget, no deferral, one dial. The budget meters a ladder,
@@ -501,49 +412,9 @@ class HostClient {
         HomeRemoteCandidate(name: 'direct', url: pinned, sessionToken: token),
       ];
     }
-    final produced = candidatesFor(host, token: token);
-    final planned = _meter.plan(produced);
-    _planLimit = budget.maxAttemptsPerWalk;
-    // A **held** walk planned nothing, and that is not a cap: leaving the ladder empty is what lets
-    // the panel say "held back under dial pressure" instead of labelling every rung "not tried —
-    // past this walk's limit", which would blame a budget for a decision the budget makes elsewhere.
-    if (planned.isNotEmpty) _syncLadder(produced, planned);
-    return planned;
-  }
-
-  /// Rebuild the produced ladder without discarding what this walk already learned.
-  ///
-  /// Preserving by candidate rather than starting over is not an optimisation: the family's upgrade
-  /// sweep calls `resolveCandidates` again mid-connection, and a rebuild that dropped the record
-  /// would erase the reasons the connection is on a fallback rung the moment it found one.
-  ///
-  /// Rungs the budget left out are [RouteAttemptStatus.skipped], which is the honest label: they
-  /// were produced and not dialled, and showing them as "failed" would blame a network for a cap.
-  void _syncLadder(
-    List<HomeRemoteCandidate> produced,
-    List<HomeRemoteCandidate> planned,
-  ) {
-    final plannedKeys = <String>{for (final c in planned) _key(c)};
-    final previous = <String, RouteAttempt>{
-      for (final attempt in _ladder)
-        '${attempt.name}|${attempt.redactedUrl}': attempt,
-    };
-    final next = <RouteAttempt>[];
-    for (final candidate in produced) {
-      final redacted = redactSecretQueryValues(candidate.url);
-      final prior = previous['${candidate.name}|$redacted'];
-      next.add(prior ??
-          RouteAttempt(
-            name: candidate.name,
-            redactedUrl: redacted,
-            status: plannedKeys.contains(_key(candidate))
-                ? RouteAttemptStatus.planned
-                : RouteAttemptStatus.skipped,
-          ));
-    }
-    _ladder
-      ..clear()
-      ..addAll(next);
+    // The record owns the plan: which rungs this pass may dial, and the ladder the panel shows. A
+    // **held** walk plans nothing and leaves the ladder as it was — see `route_walk.dart`.
+    return _walk.plan(candidatesFor(host, token: token));
   }
 
   /// The transport factory the walk calls, wrapped so a rung that never opens is recorded.
@@ -557,18 +428,13 @@ class HostClient {
       final transport = await _createTransportFor(candidate);
       // Opened, but not yet the active rung: the home still has to answer `connected`, and whether
       // it does is the family's decision, not this factory's.
-      _markAttempt(
-        candidate,
-        status: RouteAttemptStatus.opened,
-        elapsedMs: _elapsedFor(candidate),
-      );
+      _walk.mark(candidate, status: RouteAttemptStatus.opened);
       return transport;
     } catch (error) {
-      _markAttempt(
+      _walk.mark(
         candidate,
         status: RouteAttemptStatus.failed,
         error: _redactError(error),
-        elapsedMs: _elapsedFor(candidate),
       );
       rethrow;
     }
@@ -696,9 +562,7 @@ class HostClient {
     // key: the daemon mints a new one on every start, and keying on it would make every desktop
     // reboot look like a different machine.
     final instanceId = hello['instanceId'];
-    await pairings.record(
-      daemonKey,
-      await _offeredToken(),
+    await pairing.accept(
       instanceId: instanceId is String && instanceId.isNotEmpty ? instanceId : null,
       at: DateTime.now(),
     );
@@ -708,24 +572,20 @@ class HostClient {
     await _recorded('coder.subscribe', const {}, const Duration(seconds: 30));
   }
 
-  /// The token this pass put on the wire: the daemon-issued one when the phone holds it, else the
-  /// host's own. Read back rather than assumed, so a record is never written for a credential that
-  /// was not the one offered.
-  Future<String> _offeredToken() async =>
-      (await pairings.tokenFor(daemonKey)) ?? host.token;
-
-  /// Retire the pairing this daemon has refused, **once**.
+  /// Retire the pairing this daemon has refused, and say so **once**.
   ///
   /// The single-shot guard is the difference between a fallback and a loop. The walk retries on a
   /// backoff, so without it a revoked token would clear-and-retry forever, and every retry is another
-  /// refusal the user never sees. After this returns, the phone holds no token for this daemon: the
-  /// next dial offers whatever the host row holds (usually the same dead credential, refused again)
-  /// and the surface shows "not paired" instead of a spinner — which is the state the user fixes by
-  /// scanning a new code. Pairing itself is a user act; this client never mints one.
+  /// refusal the user never sees. Once retired, the phone holds no token for this daemon: the next
+  /// dial offers whatever the host row holds (usually the same dead credential, refused again) and
+  /// the connection surface offers the one action that fixes it — pairing again. Nothing here mints a
+  /// pairing: pairing is the user's act, performed with the code the desktop shows.
   Future<void> _onPairingRefused() async {
     if (_pairingRefused) return;
     _pairingRefused = true;
-    await pairings.clear(daemonKey);
+    // The store is the truth and it is cleared either way; the return value says whether *this* call
+    // was the one that retired something, which is what decides if the surface needs to be told.
+    await pairing.retire();
     _publishState();
   }
 
@@ -736,12 +596,11 @@ class HostClient {
       // A rung won, so every rung the walk had left mid-dial never became the connection. Closing
       // them here — not only when the walk fails — is what stops a successful walk from showing an
       // earlier candidate as "still being dialled" forever.
-      _closeOpenAttempts();
-      _markAttempt(
+      _walk.closeOpenAttempts();
+      _walk.mark(
         candidate,
         status: RouteAttemptStatus.connected,
         clearError: true,
-        elapsedMs: _elapsedFor(candidate),
       );
       _activeRoute =
           _tunneledCandidates.contains(candidate.name) ? 'ssh' : candidate.name;

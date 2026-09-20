@@ -87,6 +87,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get connectionsEmpty => 'No desktop paired yet.';
 
   @override
+  String get connectionsPairingRefused =>
+      'This computer refused this phone\'s pairing';
+
+  @override
+  String connectionsPairingRefusedDetail(Object name) {
+    return 'Pair again with $name. This computer no longer accepts the pairing this phone holds.';
+  }
+
+  @override
+  String get connectionsPairingRePair => 'Pair again';
+
+  @override
   String connectionsCurrent(String name) {
     return '$name · current';
   }

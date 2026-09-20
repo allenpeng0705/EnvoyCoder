@@ -57,7 +57,7 @@ import type { AgentDelivery as AgentDeliveryWire, FixRunResult as FixRunResultWi
 
 import { localNotice, noticeFromError, type Notice, type Refusal } from "../i18n/notice.js";
 import { buildTranscript, type Transcript } from "./transcript.js";
-import type { EnvoyLlmPublic, EnvoyLlmSetInput, ServiceAnswer } from "./agent-actions.js";
+import type { EnvoyLlmPublic, EnvoyLlmSetInput, ServiceAnswer, ShutdownAnswer } from "./agent-actions.js";
 
 import { CoderConnection, type ConnectionStatus, type HelloResult } from "../client/connection.js";
 import { resolveDaemonEndpoint, type ResolvedEndpoint } from "../client/endpoint.js";
@@ -1760,6 +1760,19 @@ export class CoderStore {
   /** Start it again, through the supervisor — for a service that is installed but not running. */
   async restartService(): Promise<ServiceAnswer> {
     return this.mutate("coder.restartService", {}, (result) => this.adoptService(result));
+  }
+
+  /**
+   * **End the daemon now, leaving the service installed so it returns at the next login.**
+   *
+   * The answer is `{stopping: true}` — the request was accepted, not that the process is gone — so this method
+   * deliberately does **not** touch `state.service`: the daemon is about to exit, and the honest next status is
+   * whatever a later read says (or "installed, stopped", when a read can no longer arrive at all). A caller
+   * that guessed `not-installed` here would be describing the machine from our own optimism, one press before
+   * the OS has done anything.
+   */
+  async shutdown(): Promise<ShutdownAnswer> {
+    return this.mutate("coder.shutdown", {}, () => ({ ok: true as const, stopping: true as const }));
   }
 
   /**

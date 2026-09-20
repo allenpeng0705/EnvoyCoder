@@ -29,6 +29,7 @@
  */
 
 import { git } from "./git.ko.js";
+import { service } from "./service.ko.js";
 
 import type { Catalogue } from "../translate.js";
 
@@ -652,32 +653,8 @@ export const ko: Catalogue = {
   "settings.machine.paired.forget": "삭제",
   "settings.machine.paired.forget.title":
     "이 취소된 기록을 목록에서 삭제합니다. 기기는 계속 취소된 상태입니다.",
-  "settings.service.title": "백그라운드 서비스",
-  "settings.service.detail": "데몬을 서비스로 실행하여 창을 닫아도 휴대폰이 이 컴퓨터에 접속할 수 있게 합니다.",
-  "settings.service.state.notInstalled.title": "꺼짐",
-  "settings.service.state.notInstalled.detail": "EnvoyDev 창을 열어 둔 동안에만 휴대폰에서 이 컴퓨터에 접속할 수 있습니다.",
-  "settings.service.state.running.title": "켜짐, 실행 중",
-  "settings.service.state.running.atLogin": "서비스가 실행 중이며 로그인할 때 다시 시작됩니다.",
-  "settings.service.state.running.notAtLogin": "서비스가 실행 중이지만 로그인할 때 시작하도록 설정되어 있지 않습니다.",
-  "settings.service.state.running.plain": "서비스가 실행 중입니다.",
-  "settings.service.state.installedStopped.title": "켜짐, 중지됨",
-  "settings.service.state.installedStopped.atLogin": "설치되어 있으며 로그인할 때 시작됩니다.",
-  "settings.service.state.installedStopped.notAtLogin": "설치되어 있지만 로그인할 때 시작하도록 설정되어 있지 않습니다.",
-  "settings.service.state.installedStopped.plain": "설치되어 있지만 지금은 실행되고 있지 않습니다.",
-  "settings.service.state.failed.title": "문제가 발생했습니다",
-  "settings.service.state.failed.detail": "서비스를 시작하지 못했습니다. 시스템 서비스 관리자의 응답은 아래와 같습니다.",
-  "settings.service.state.unsupported.title": "여기서는 사용할 수 없음",
-  "settings.service.state.unsupported.detail": "EnvoyDev가 이 시스템에서 사용할 수 있는 서비스 관리자를 찾지 못했습니다. 창을 열어 둔 동안에는 앱이 계속 작동합니다.",
-  "settings.service.state.unknown.title": "확인할 수 없음",
-  "settings.service.state.unknown.detail": "시스템 서비스 관리자에서 서비스 상태를 읽지 못했습니다.",
-  "settings.service.pid": "프로세스 {pid}.",
-  "settings.service.checking": "시스템 서비스 관리자에 확인하는 중…",
-  "settings.service.action.turnOn": "켜기",
-  "settings.service.action.restart": "다시 시작",
-  "settings.service.action.turnOff": "끄기",
-  "settings.service.action.tryAgain": "다시 시도",
-  "settings.service.action.refresh": "새로 고침",
-  "settings.service.busy": "처리 중…",
+  // This namespace lives in `service.ko.ts` — see that file for why, and `git`.
+  ...service,
   "settings.about.note": "두 부분은 함께 빌드되므로 버전이 같아야 합니다.",
   "settings.about.window.title": "이 창",
   "settings.about.window.detail": "이 창의 파일이 만들어진 버전입니다.",

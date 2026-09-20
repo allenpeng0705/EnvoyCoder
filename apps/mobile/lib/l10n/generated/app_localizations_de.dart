@@ -87,6 +87,18 @@ class AppLocalizationsDe extends AppLocalizations {
   String get connectionsEmpty => 'Noch kein Rechner gekoppelt.';
 
   @override
+  String get connectionsPairingRefused =>
+      'Dieser Rechner hat die Kopplung dieses Telefons abgelehnt';
+
+  @override
+  String connectionsPairingRefusedDetail(Object name) {
+    return 'Erneut mit $name koppeln. Dieser Rechner akzeptiert die Kopplung dieses Telefons nicht mehr.';
+  }
+
+  @override
+  String get connectionsPairingRePair => 'Erneut koppeln';
+
+  @override
   String connectionsCurrent(String name) {
     return '$name · aktuell';
   }

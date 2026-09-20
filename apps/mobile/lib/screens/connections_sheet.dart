@@ -152,6 +152,18 @@ class _ConnectionsSheetState extends State<ConnectionsSheet> {
             onTap: () => unawaited(_addHost()),
           ),
           const Divider(),
+          // **The re-pairing step, where the failure is already read.** A computer that refused this
+          // phone's pairing leaves the row saying "Unreachable", which is true and useless: the state
+          // is recoverable, by exactly one action, and the person is standing in front of the screen
+          // that can take it. The button runs the *existing* pairing flow — it mints nothing, because
+          // pairing is the user's act with the code the desktop shows.
+          if (controller.activeHost != null &&
+              controller.pairingRefusedFor(controller.activeHost!.id))
+            _RePairNotice(
+              hostLabel: controller.activeHost!.label,
+              colors: colors,
+              onRePair: () => unawaited(_addHost()),
+            ),
           if (hosts.isEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(CoderSpace.lg, CoderSpace.md, CoderSpace.lg, CoderSpace.lg),
@@ -189,6 +201,66 @@ class _ConnectionsSheetState extends State<ConnectionsSheet> {
               ),
             ),
           const SizedBox(height: CoderSpace.md),
+        ],
+      ),
+    );
+  }
+}
+
+/// The state a refused pairing leaves, with the one action that clears it.
+///
+/// **Why it is a row and not a dialog.** The refusal arrives while the phone is reconnecting in the
+/// background, which can be long before anyone opens this sheet. A dialog would either interrupt the
+/// work the user was doing or arrive minutes late; a row in the sheet is read where the failure is
+/// already reported, and the button is there when they look.
+///
+/// **What it does not claim.** It does not say the desktop revoked anything — the phone cannot see
+/// why a token stopped working, only that the daemon refused it. And it does not pair by itself:
+/// `_addHost` runs the ordinary flow, so the person still brings the code the desktop shows.
+class _RePairNotice extends StatelessWidget {
+  const _RePairNotice({
+    required this.hostLabel,
+    required this.colors,
+    required this.onRePair,
+  });
+
+  final String hostLabel;
+  final CoderColors colors;
+  final VoidCallback onRePair;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(CoderSpace.lg, CoderSpace.sm, CoderSpace.lg, 0),
+      padding: const EdgeInsets.all(CoderSpace.md2),
+      decoration: BoxDecoration(
+        color: colors.surface2,
+        // The warning carries the left edge rather than the whole fill: the tokens have no tinted
+        // surface, and inventing one here is exactly the kind of local colour the theme exists to
+        // prevent (`design_tokens_test.dart` reads these tokens).
+        border: Border(left: BorderSide(color: colors.statusWarning, width: 3)),
+        borderRadius: BorderRadius.circular(CoderRadius.md),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l10n.connectionsPairingRefused,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: CoderSpace.xs),
+          Text(l10n.connectionsPairingRefusedDetail(hostLabel)),
+          const SizedBox(height: CoderSpace.sm),
+          // A `TextButton` aligned to the end: the row reads as information first, and the action sits
+          // where a secondary action belongs rather than competing with the sheet's Add host tile.
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: TextButton(
+              onPressed: onRePair,
+              child: Text(l10n.connectionsPairingRePair),
+            ),
+          ),
         ],
       ),
     );

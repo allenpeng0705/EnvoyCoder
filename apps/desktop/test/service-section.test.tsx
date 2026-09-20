@@ -1,12 +1,16 @@
 /**
- * The Background service row, rendered — which state it shows, and what its presses do.
+ * The Background service row, rendered — which state it shows, what its diagnostics say, and what its presses do.
  *
  * ## Why this file exists next to `service-state.test.ts`
  *
- * That test proves the *projection*: the six states, the login gate, the buttons each state allows. This one
- * proves the row is actually wired to it: the words reach the DOM, the press calls the call it names, the
- * supervisor's `detail` is on screen only where it is a diagnosis, and **a press in flight disables every
- * button** so a supervisor cannot be asked twice for the same change.
+ * That test proves the *projection*: the six states, the login gate, the buttons each state allows, and the
+ * evidence rules. This one proves the row is actually wired to it: the words reach the DOM, the press calls the
+ * call it names, the diagnostic band is on screen only where it has something to say, and **a press in flight
+ * disables every button** so a supervisor cannot be asked twice for the same change.
+ *
+ * Stop gets its own cases because its answer is not a status. `coder.shutdown` is acknowledged and then the
+ * daemon exits, so the follow-up read can fail — and that failure has to read as *stopped* on the row rather
+ * than as a red line, which is the one place this control could turn "it did what you asked" into a scare.
  *
  * The pane renders through `SettingsPane` at the service scope rather than `ServiceSection` alone, because the
  * wiring under test includes the section registry and the pane's `switch` — a section registered in the bar
@@ -37,7 +41,12 @@ const settings: CoderState["settings"] = {
   language: "en",
 };
 
-function stateWith(service: DaemonServiceStatus | undefined): CoderState {
+/** A status with the fields every case does not vary spelled out, so each case varies only what it tests. */
+function service(over: Partial<DaemonServiceStatus> & Pick<DaemonServiceStatus, "state">): DaemonServiceStatus {
+  return { detail: "", restartsInLastHour: 0, ...over };
+}
+
+function stateWith(status: DaemonServiceStatus | undefined): CoderState {
   return {
     connection: { state: "connected", endpoint: { host: "127.0.0.1", port: 4770, path: "/ws" } },
     resolved: undefined,
@@ -65,22 +74,25 @@ function stateWith(service: DaemonServiceStatus | undefined): CoderState {
     loaded: true,
     error: undefined,
     notes: [],
-    ...(service !== undefined ? { service } : {}),
+    ...(status !== undefined ? { service: status } : {}),
   };
 }
 
 /** The pane at the service scope, with the daemon calls a test cares about wired. */
-function show(service: DaemonServiceStatus | undefined, overrides: Partial<AgentActions> = {}) {
+function show(status: DaemonServiceStatus | undefined, overrides: Partial<AgentActions> = {}) {
   const agents = stubAgentActions({
     // The page's own load, which every case here needs to settle rather than refuse — otherwise the row is
     // rendering "could not tell" and the assertions below would be about a different state.
-    getServiceStatus: vi.fn(async () => ({ ok: true as const, service: service ?? { state: "unknown", detail: "" } })),
+    getServiceStatus: vi.fn(async () => ({
+      ok: true as const,
+      service: status ?? service({ state: "unknown" }),
+    })),
     ...overrides,
   });
   const { container } = render(
     <I18nProvider preference="en">
       <SettingsPane
-        state={stateWith(service)}
+        state={stateWith(status)}
         onClose={vi.fn()}
         onUpdate={vi.fn()}
         scope={appScope("service")}
@@ -116,11 +128,15 @@ const ready = async (container: HTMLElement): Promise<void> => {
   await waitFor(() => expect(allButtons(container).every((node) => !node.disabled)).toBe(true));
 };
 
+/** The diagnostic band's text, `""` when the band is not rendered at all. */
+const diagnostics = (container: HTMLElement): string =>
+  container.querySelector('[data-testid="service-detail"]')?.textContent ?? "";
+
 describe("what the row shows", () => {
   it("renders the off state with the price of being off and the one press that changes it", async () => {
-    const { container } = show({ state: "not-installed", detail: "Could not find service" });
+    const { container } = show(service({ state: "not-installed", detail: "Could not find service" }));
     // The supervisor's "not found" words are a status report, not a diagnosis — they are not on the row.
-    expect(container.querySelector('[data-testid="service-detail"]')).toBeNull();
+    expect(diagnostics(container)).toBe("");
     expect(await screen.findByText(en["settings.service.state.notInstalled.title"])).toBeTruthy();
     expect(screen.getByText(en["settings.service.state.notInstalled.detail"])).toBeTruthy();
     // Only the on press: there is nothing to restart and nothing to turn off.
@@ -129,23 +145,27 @@ describe("what the row shows", () => {
   });
 
   it("shows the login promise and the pid for a running, enabled service", async () => {
-    show({ state: "running", enabled: true, pid: 4242, detail: "pid = 4242\nstate = running" });
+    const { container } = show(
+      service({ state: "running", enabled: true, pid: 4242, detail: "pid = 4242\nstate = running" }),
+    );
     expect(await screen.findByText(en["settings.service.state.running.title"])).toBeTruthy();
     expect(screen.getByText(en["settings.service.state.running.atLogin"])).toBeTruthy();
     expect(screen.getByText(en["settings.service.pid"].replace("{pid}", "4242"))).toBeTruthy();
     // The running state's `detail` is `launchctl print`'s whole dump — not something to put on the row.
-    expect(screen.queryByTestId("service-detail")).toBeNull();
+    expect(diagnostics(container)).toBe("");
   });
 
   it("does not promise a login restart the supervisor did not confirm", async () => {
-    show({ state: "running", enabled: false, detail: "" });
+    show(service({ state: "running", enabled: false }));
     expect(await screen.findByText(en["settings.service.state.running.title"])).toBeTruthy();
     expect(screen.getByText(en["settings.service.state.running.notAtLogin"])).toBeTruthy();
     expect(screen.queryByText(en["settings.service.state.running.atLogin"])).toBeNull();
   });
 
   it("offers no buttons at all where this system has no service manager", async () => {
-    const { container } = show({ state: "unsupported", detail: "this build cannot install a service on linux" });
+    const { container } = show(
+      service({ state: "unsupported", detail: "this build cannot install a service on linux" }),
+    );
     expect(await screen.findByText(en["settings.service.state.unsupported.title"])).toBeTruthy();
     expect(screen.getByText(en["settings.service.state.unsupported.detail"])).toBeTruthy();
     // **The dead switch this test exists for:** an on/off pair on a machine where neither can work.
@@ -153,29 +173,114 @@ describe("what the row shows", () => {
   });
 
   it("shows the supervisor's own words last when the service failed", async () => {
-    const { container } = show({ state: "failed", enabled: true, detail: "start-limit hit, giving up" });
+    const { container } = show(service({ state: "failed", enabled: true, detail: "start-limit hit, giving up" }));
     expect(await screen.findByText(en["settings.service.state.failed.title"])).toBeTruthy();
-    const detail = await screen.findByTestId("service-detail");
-    expect(detail.textContent).toBe("start-limit hit, giving up");
-    // Try again is the install press; Turn off is still the way out.
+    expect(diagnostics(container)).toBe("start-limit hit, giving up");
+    // Try again is the install press; Turn off is still the way out — and no Stop, because a failed service is
+    // not something to ask to exit.
     expect(allButtons(container).map((node) => node.dataset.serviceAction)).toEqual(["install", "uninstall"]);
     expect(button(container, "install").textContent).toBe(en["settings.service.action.tryAgain"]);
   });
 
   it("offers only a refresh when the state could not be read", async () => {
-    const { container } = show({ state: "unknown", detail: "unrecognised output" });
+    const { container } = show(service({ state: "unknown", detail: "unrecognised output" }));
     expect(await screen.findByText(en["settings.service.state.unknown.title"])).toBeTruthy();
     expect(allButtons(container).map((node) => node.dataset.serviceAction)).toEqual(["refresh"]);
     // An answer we could not read is exactly the case the supervisor's words are for.
-    expect((await screen.findByTestId("service-detail")).textContent).toBe("unrecognised output");
+    expect(diagnostics(container)).toBe("unrecognised output");
+  });
+});
+
+describe("the diagnostic band", () => {
+  it("shows the restart count as evidence, and calls an unexplained restart a crash", async () => {
+    // **The mutation this fails on:** dropping the daemon's own history from the row — the number is the whole
+    // reason a crash loop is visible, and the missing stop record is the sentence that explains it.
+    const { container } = show(service({ state: "running", enabled: true, restartsInLastHour: 3 }));
+    expect(await screen.findByText(en["settings.service.restarts.many"].replace("{count}", "3"))).toBeTruthy();
+    expect(screen.getByText(en["settings.service.lastStop.crash"])).toBeTruthy();
+  });
+
+  it("names a deliberate stop in the daemon's own vocabulary, formatted for the reader", async () => {
+    const { container } = show(
+      service({
+        state: "installed-stopped",
+        enabled: true,
+        restartsInLastHour: 1,
+        lastStop: { at: "2026-09-14T05:23:00.000Z", signal: "requested over the connection" },
+      }),
+    );
+    expect(await screen.findByText(en["settings.service.restarts.one"])).toBeTruthy();
+    // The `{when}` is rendered by `Intl`, so the assertion is on the stable half of the sentence.
+    expect(diagnostics(container)).toContain("Last stop: you asked for it over the connection");
+    // A recorded stop means the crash sentence must not appear.
+    expect(screen.queryByText(en["settings.service.lastStop.crash"])).toBeNull();
+  });
+
+  it("says nothing at all when the history explains nothing", async () => {
+    // 0 restarts and no recorded stop is a healthy daemon: the band is absent rather than a row of zeros.
+    const { container } = show(service({ state: "running", enabled: true }));
+    expect(await screen.findByText(en["settings.service.state.running.title"])).toBeTruthy();
+    expect(diagnostics(container)).toBe("");
+  });
+});
+
+describe("Stop, beside Restart and Turn off", () => {
+  it("is offered on a running service and says how it differs from Turn off", async () => {
+    const { container } = show(service({ state: "running", enabled: true }));
+    await screen.findByText(en["settings.service.state.running.title"]);
+    expect(allButtons(container).map((node) => node.dataset.serviceAction)).toEqual([
+      "restart",
+      "stop",
+      "uninstall",
+    ]);
+    expect(button(container, "stop").textContent).toBe(en["settings.service.action.stop"]);
+    // Both endings are on the row, and the sentence that tells them apart is visible without hovering.
+    expect(screen.getByText(en["settings.service.stopVsOff"])).toBeTruthy();
+    expect(button(container, "stop").title).toBe(en["settings.service.action.stop.title"]);
+    expect(button(container, "uninstall").title).toBe(en["settings.service.action.turnOff.title"]);
+  });
+
+  it("re-reads the status after a stop, and treats a read that cannot arrive as stopped", async () => {
+    // **The mutation this fails on:** rendering the failed read as a refusal. `coder.shutdown` answers and the
+    // daemon exits, so the socket closing is the *expected* next event; a red line there would report the
+    // press's success as a failure.
+    const running = service({ state: "running", enabled: true, pid: 9 });
+    const shutdown = vi.fn(async () => ({ ok: true as const, stopping: true as const }));
+    const getServiceStatus = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true as const, service: running })
+      .mockResolvedValueOnce({ ok: false as const, message: "The daemon closed the connection." });
+    const { container } = show(running, { shutdown, getServiceStatus });
+    await ready(container);
+
+    fireEvent.click(button(container, "stop"));
+    await waitFor(() => expect(shutdown).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getServiceStatus).toHaveBeenCalledTimes(2));
+    // It is installed and will return at the next login — the honest reading of a daemon that has gone.
+    expect(await screen.findByText(en["settings.service.state.installedStopped.title"])).toBeTruthy();
+    expect(screen.getByText(en["settings.service.state.installedStopped.atLogin"])).toBeTruthy();
+    expect(container.querySelector(".setting__failure")).toBeNull();
+  });
+
+  it("keeps the refusal on the row when the daemon will not take the stop", async () => {
+    const shutdown = vi.fn(async () => ({ ok: false as const, message: "envoydev.owner-window-only: refused" }));
+    const getServiceStatus = vi.fn(async () => ({ ok: true as const, service: service({ state: "running" }) }));
+    const { container } = show(service({ state: "running", enabled: true }), { shutdown, getServiceStatus });
+    await ready(container);
+
+    fireEvent.click(button(container, "stop"));
+    await waitFor(() => expect(container.querySelector(".setting__failure")?.textContent).toContain("refused"));
+    // No re-read is attempted when the press itself was refused, and the row is usable again.
+    expect(getServiceStatus).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(button(container, "stop").disabled).toBe(false));
   });
 });
 
 describe("what the presses do", () => {
   it("calls the call the button names, and adopts the status it returns", async () => {
-    const installed: DaemonServiceStatus = { state: "running", enabled: true, pid: 7, detail: "" };
+    const installed = service({ state: "running", enabled: true, pid: 7 });
     const installService = vi.fn(async () => ({ ok: true as const, service: installed }));
-    const { container } = show({ state: "not-installed", detail: "" }, { installService });
+    const { container } = show(service({ state: "not-installed" }), { installService });
     await ready(container);
 
     fireEvent.click(button(container, "install"));
@@ -193,7 +298,7 @@ describe("what the presses do", () => {
           settle = resolve;
         }),
     );
-    const { container } = show({ state: "not-installed", detail: "" }, { installService });
+    const { container } = show(service({ state: "not-installed" }), { installService });
     await ready(container);
 
     fireEvent.click(button(container, "install"));
@@ -204,7 +309,7 @@ describe("what the presses do", () => {
     fireEvent.click(pressed);
     expect(installService).toHaveBeenCalledTimes(1);
 
-    settle({ ok: true, service: { state: "running", enabled: true, detail: "" } });
+    settle({ ok: true, service: service({ state: "running", enabled: true }) });
     await waitFor(() => expect(button(container, "install").disabled).toBe(false));
   });
 
@@ -215,7 +320,7 @@ describe("what the presses do", () => {
       ok: false as const,
       message: "launchctl bootstrap failed (exit 1): Bootstrap failed: 5",
     }));
-    const { container } = show({ state: "not-installed", detail: "" }, { installService });
+    const { container } = show(service({ state: "not-installed" }), { installService });
     await ready(container);
 
     fireEvent.click(button(container, "install"));
@@ -233,7 +338,7 @@ describe("the row as a row", () => {
   it("is the registered section, with the pane's title and the shared two bands", async () => {
     // The section registry, the pane's `switch` and the row component are three places this control has to
     // agree; rendering the scope the bar item opens is what proves they do.
-    const { container } = show({ state: "not-installed", detail: "" });
+    const { container } = show(service({ state: "not-installed" }));
     expect(await screen.findByRole("heading", { name: en["settings.section.service.title"] })).toBeTruthy();
     const row = container.querySelector(".setting");
     if (!(row instanceof HTMLElement)) throw new Error("the service row is not a .setting");

@@ -29,6 +29,7 @@
  */
 
 import { git } from "./git.it.js";
+import { service } from "./service.it.js";
 
 import type { Catalogue } from "../translate.js";
 
@@ -654,32 +655,8 @@ export const it: Catalogue = {
   "settings.machine.paired.forget": "Dimentica",
   "settings.machine.paired.forget.title":
     "Rimuovi questa voce revocata dall'elenco. Il dispositivo resta revocato.",
-  "settings.service.title": "Servizio in background",
-  "settings.service.detail": "Esegue il daemon come servizio, così un telefono raggiunge questa macchina a finestra chiusa.",
-  "settings.service.state.notInstalled.title": "Spento",
-  "settings.service.state.notInstalled.detail": "Il telefono può raggiungere questa macchina solo mentre la finestra di EnvoyDev è aperta.",
-  "settings.service.state.running.title": "Acceso, in esecuzione",
-  "settings.service.state.running.atLogin": "Il servizio è in esecuzione e riparte quando accedi.",
-  "settings.service.state.running.notAtLogin": "Il servizio è in esecuzione, ma non è impostato per partire quando accedi.",
-  "settings.service.state.running.plain": "Il servizio è in esecuzione.",
-  "settings.service.state.installedStopped.title": "Acceso, non in esecuzione",
-  "settings.service.state.installedStopped.atLogin": "È installato e parte quando accedi.",
-  "settings.service.state.installedStopped.notAtLogin": "È installato, ma non è impostato per partire quando accedi.",
-  "settings.service.state.installedStopped.plain": "È installato ma al momento non è in esecuzione.",
-  "settings.service.state.failed.title": "Qualcosa è andato storto",
-  "settings.service.state.failed.detail": "Non è stato possibile avviare il servizio. Qui sotto c'è la risposta del gestore di servizi del sistema.",
-  "settings.service.state.unsupported.title": "Non disponibile qui",
-  "settings.service.state.unsupported.detail": "EnvoyDev non ha trovato un gestore di servizi utilizzabile su questo sistema. L'app funziona comunque mentre la finestra è aperta.",
-  "settings.service.state.unknown.title": "Impossibile determinarlo",
-  "settings.service.state.unknown.detail": "EnvoyDev non ha potuto leggere lo stato del servizio dal gestore di servizi del sistema.",
-  "settings.service.pid": "Processo {pid}.",
-  "settings.service.checking": "Interrogazione del gestore di servizi del sistema…",
-  "settings.service.action.turnOn": "Attiva",
-  "settings.service.action.restart": "Riavvia",
-  "settings.service.action.turnOff": "Disattiva",
-  "settings.service.action.tryAgain": "Riprova",
-  "settings.service.action.refresh": "Aggiorna",
-  "settings.service.busy": "In corso…",
+  // This namespace lives in `service.it.ts` — see that file for why, and `git`.
+  ...service,
   "settings.about.note": "Le due metà sono compilate insieme: le versioni dovrebbero coincidere.",
   "settings.about.window.title": "Questa finestra",
   "settings.about.window.detail": "La versione da cui provengono i file di questa finestra.",

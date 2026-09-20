@@ -90,6 +90,15 @@ class ConnectionsController extends ChangeNotifier {
   /// The rung a host's client is actually using, for the row's detail. Null until a dial wins.
   String? routeOf(String hostId) => _clients[hostId]?.activeRoute;
 
+  /// Whether [hostId]'s daemon has refused the pairing this phone holds for it.
+  ///
+  /// Read live from the client rather than mirrored into a map: the client publishes a state change
+  /// the moment it retires a refused grant (`_onPairingRefused` calls `_publishState`), so a listener
+  /// that rebuilds — this controller's own state listener, and every screen behind it — sees the
+  /// refusal in the same turn it happened. A cached copy would need its own invalidation rule, and
+  /// that is one more fact that can disagree with the client.
+  bool pairingRefusedFor(String hostId) => _clients[hostId]?.pairingRefused ?? false;
+
   /// The host the app is showing, by the rule in the library comment above.
   CoderHost? get activeHost {
     for (final host in _hosts) {

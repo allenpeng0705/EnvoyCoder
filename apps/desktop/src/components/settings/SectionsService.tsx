@@ -7,30 +7,43 @@
  * This row does not store a preference. The value it reports lives in the **operating system's own service
  * manager** — a launchd LaunchAgent, a systemd *user* unit, a per-user Task Scheduler job — and the row asks
  * that supervisor through `coder.getServiceStatus` and changes it through `coder.installService`,
- * `coder.uninstallService` and `coder.restartService` (`docs/daemon-lifecycle.md` §10). That is why the row's
- * words are the supervisor's *answer* rather than a checkbox: turning it on is a request that can be refused,
- * so a boolean here would be a claim about the machine made from our own optimism.
+ * `coder.uninstallService`, `coder.restartService` and `coder.shutdown` (`docs/daemon-lifecycle.md` §10). That
+ * is why the row's words are the supervisor's *answer* rather than a checkbox: turning it on is a request that
+ * can be refused, so a boolean here would be a claim about the machine made from our own optimism.
  *
  * The status is asked when **this page is opened**, not when the window connects: the read runs a supervisor
  * process (`launchctl print`, `systemctl --user show`, `schtasks /Query`), and there is nothing a user can do
  * with the answer until they are looking at the control. `MachineSection`'s paired-device list loads the same
  * way, on mount.
  *
- * ## The six states, and the two things the copy must never do
+ * ## Stop, and why it is not Turn off
+ *
+ * `stop` calls `coder.shutdown`, which ends the daemon now; because the service is installed, the supervisor
+ * brings it back at the next login. `uninstall` removes the service so it does not come back at all. The row
+ * says that difference in words (`settings.service.stopVsOff`) *and* puts it on each button's tooltip, because
+ * the two labels alone are the kind of ambiguity that ends with somebody removing a service they meant to stop.
+ *
+ * **A stop is not a status we can read back yet, and it is not an error either.** `coder.shutdown` answers
+ * `{ stopping: true }` and the process then exits, so the follow-up status read can legitimately fail. That
+ * failure is treated as *stopped* — the service is installed and comes back at the next login — rather than as
+ * a refusal on the row, which is the only reading that does not turn "it did what you asked" into a red line.
+ *
+ * ## The six states, the diagnostic band, and the two things the copy must never do
  *
  * `service-state.ts` owns the projection from the wire's `DaemonServiceStatus` to a headline, one sentence and
- * the presses a state allows; this file only renders it. The two rules it enforces are stated there and held
- * by `test/service-state.test.ts`:
+ * the presses a state allows; this file renders it, plus the diagnostic band the daemon's own history feeds
+ * (restart count, last stop, then the supervisor's raw words last). The rules are stated there and held by
+ * `test/service-state.test.ts`:
  *
  *   * the service starts **at login**, never "at boot", and the sentence that promises it is only used when
  *     the supervisor said `enabled: true`;
- *   * the supervisor's own `detail` is diagnostic text, shown last, and only where it is a diagnosis.
+ *   * the supervisor's `detail` is diagnostic text, shown last, and only where it is a diagnosis.
  *
  * ## Why the buttons are not a `SettingRow.write`
  *
  * `SettingRow`'s write sink exists for a **setting** whose value the row shows: the row clears the refusal when
- * the stored value lands. These four calls are not writes to us — the daemon asks the OS and answers with a
- * fresh status, which the store puts in `state.service` — and the row also has to keep a busy state while a
+ * the stored value lands. These calls are not writes to us — the daemon asks the OS and answers with a fresh
+ * status, which the store puts in `state.service` — and the row also has to keep a busy state while a
  * supervisor call is in flight. So the presses use the same local `busy` + `notice` pair the pairing and fix
  * rows use (`PairingSection.tsx`, `FixRunner.tsx`), and the refusal still renders under the control that
  * produced it rather than in the window's top bar.
@@ -38,17 +51,36 @@
 
 import type { JSX } from "react";
 
+import type { DaemonServiceStatus } from "@envoydev/protocol";
+
 import { useCallback, useEffect, useState } from "react";
 
 import { useI18n } from "../../i18n/context.js";
 import { localize, type Notice } from "../../i18n/notice.js";
+import { formatWhen } from "../../i18n/when.js";
 import { SettingRow } from "../SettingsRows.js";
 import type { SettingsSectionProps } from "./SectionProps.js";
-import { serviceCopy, type ServiceActionId } from "./service-state.js";
+import { serviceCopy, serviceEvidence, type ServiceActionId } from "./service-state.js";
+
+/**
+ * What to show when a successful stop left nothing to ask.
+ *
+ * Only `coder.shutdown` reaches this path, and it is honest for the same reason the button was offered: the
+ * press exists only for a service that is installed, so "installed and not running" is what a daemon that has
+ * gone leaves behind — and the `enabled` it had is the only thing that says whether it comes back.
+ */
+function stoppedFallback(previous: DaemonServiceStatus | undefined): DaemonServiceStatus {
+  return {
+    state: "installed-stopped",
+    detail: "",
+    restartsInLastHour: previous?.restartsInLastHour ?? 0,
+    ...(previous?.enabled !== undefined ? { enabled: previous.enabled } : {}),
+  };
+}
 
 /** The service surface's calls, named on the state's own action bundle — see `service-state.ts`. */
 export function ServiceSection(props: SettingsSectionProps): JSX.Element {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   /**
    * Which press is in flight.
    *
@@ -60,34 +92,61 @@ export function ServiceSection(props: SettingsSectionProps): JSX.Element {
   const [busy, setBusy] = useState<ServiceActionId | undefined>(undefined);
   /** The last refusal from the page's own presses, read under the control that produced it. */
   const [notice, setNotice] = useState<Notice | undefined>(undefined);
+  /**
+   * The status to render after a stop the daemon could no longer answer about.
+   *
+   * `undefined` means "use the store's". A successful re-read clears it; a failed one sets `stoppedFallback`,
+   * so the row shows the machine's real situation rather than the running state the daemon had a moment ago.
+   */
+  const [stopped, setStopped] = useState<DaemonServiceStatus | undefined>(undefined);
 
-  const status = props.state.service;
+  const status = stopped ?? props.state.service;
   const copy = serviceCopy(status);
+  const evidence = serviceEvidence(status, (at) => formatWhen(at, locale));
 
   /**
    * One press, one in-flight slot, one place a refusal lands.
    *
    * The answer is the *returned* status, never an assumption: the store writes it into `state.service` before
    * this promise settles, so the row's words and buttons follow the supervisor's answer rather than the press.
+   * Stop is the one press whose answer is not a status, and it is handled first — see the module doc.
    */
   const run = useCallback(
     (action: ServiceActionId): void => {
       if (busy !== undefined) return;
       setBusy(action);
-      const answer =
-        action === "install"
-          ? props.agents.installService()
-          : action === "restart"
-            ? props.agents.restartService()
-            : action === "uninstall"
-              ? props.agents.uninstallService()
-              : props.agents.getServiceStatus();
-      void answer.then((result) => {
+      void (async () => {
+        if (action === "stop") {
+          const accepted = await props.agents.shutdown();
+          if (!accepted.ok) {
+            setBusy(undefined);
+            setNotice(accepted);
+            return;
+          }
+          // The daemon is on its way out. Ask once more: a read that cannot arrive means it is gone, which is
+          // what Stop asked for — never a refusal on the row.
+          const after = await props.agents.getServiceStatus();
+          setStopped(after.ok ? undefined : stoppedFallback(status));
+          setNotice(undefined);
+          setBusy(undefined);
+          return;
+        }
+        const answer =
+          action === "install"
+            ? props.agents.installService()
+            : action === "restart"
+              ? props.agents.restartService()
+              : action === "uninstall"
+                ? props.agents.uninstallService()
+                : props.agents.getServiceStatus();
+        const result = await answer;
         setBusy(undefined);
         setNotice(result.ok ? undefined : result);
-      });
+        // Any other press answers with a status, so the stop fallback has been superseded.
+        setStopped(undefined);
+      })();
     },
-    [busy, props.agents],
+    [busy, props.agents, status],
   );
 
   /**
@@ -102,6 +161,7 @@ export function ServiceSection(props: SettingsSectionProps): JSX.Element {
     void props.agents.getServiceStatus().then((answer) => {
       setBusy(undefined);
       setNotice(answer.ok ? undefined : answer);
+      setStopped(undefined);
     });
   }, [props.agents]);
 
@@ -109,6 +169,7 @@ export function ServiceSection(props: SettingsSectionProps): JSX.Element {
   // its way**, because "Could not tell" is a claim about the supervisor and we have not heard from it yet.
   // The headline, the sentence and the pid are three elements rather than one run of text: the bands are
   // what a reader scans, and a test can name the sentence rather than the paragraph around it.
+  const stopOffered = copy.actions.some((action) => action.id === "stop");
   const note =
     status === undefined && busy !== undefined ? (
       t("settings.service.checking")
@@ -125,8 +186,23 @@ export function ServiceSection(props: SettingsSectionProps): JSX.Element {
             <span className="setting__state-pid">{t("settings.service.pid", { pid: copy.values.pid })}</span>
           </>
         ) : null}
+        {/* **The one place the two ending presses are told apart in words.** Shown wherever Stop is on the
+            row, because a user who reads "Stop" and "Turn off" side by side has to know which one removes the
+            service. */}
+        {stopOffered ? (
+          <>
+            {" "}
+            <span className="setting__state-sentence">{t("settings.service.stopVsOff")}</span>
+          </>
+        ) : null}
       </>
     );
+
+  // The diagnostic band: the daemon's own history first (evidence a reader can act on), the supervisor's raw
+  // output last. Each line is absent when it has nothing to say, and the band is absent when none of them do.
+  const supervisorDetail = evidence.supervisorDetail && status !== undefined && status.detail !== "";
+  const hasDiagnostics =
+    evidence.restarts !== undefined || evidence.lastStop !== undefined || supervisorDetail;
 
   return (
     <SettingRow
@@ -146,20 +222,27 @@ export function ServiceSection(props: SettingsSectionProps): JSX.Element {
               className="button button--secondary"
               disabled={busy !== undefined}
               data-service-action={action.id}
+              {...(action.titleKey !== undefined ? { title: t(action.titleKey) } : {})}
               onClick={() => run(action.id)}
             >
               {busy === action.id ? t("settings.service.busy") : t(action.labelKey)}
             </button>
           ))}
         </div>
-        {/* **The supervisor's own words, last, and only where they are a diagnosis.** For a running service
+        {/* **The daemon's history, then the supervisor's own words, last and verbatim.** For a running service
             `detail` is the supervisor's whole definition dump, which is not something to put on a row; for a
-            failure or an answer we could not read, it is the most useful thing on the page. It is not a
-            catalogue string — it is the OS's output, kept verbatim. */}
-        {copy.showDetail && status !== undefined && status.detail !== "" ? (
-          <p className="setting__developer" data-testid="service-detail">
-            {status.detail}
-          </p>
+            failure or an answer we could not read, it is the most useful thing on the page. The lines above it
+            are ours — a translated restart count and the one sentence the previous stop deserves. */}
+        {hasDiagnostics ? (
+          <div className="setting__diagnostics" data-testid="service-detail">
+            {evidence.restarts !== undefined ? (
+              <p className="setting__developer">{t(evidence.restarts.key, evidence.restarts.values)}</p>
+            ) : null}
+            {evidence.lastStop !== undefined ? (
+              <p className="setting__developer">{t(evidence.lastStop.key, evidence.lastStop.values)}</p>
+            ) : null}
+            {supervisorDetail ? <p className="setting__developer">{status.detail}</p> : null}
+          </div>
         ) : null}
         {notice !== undefined ? (
           <p className="setting__failure" role="status">
