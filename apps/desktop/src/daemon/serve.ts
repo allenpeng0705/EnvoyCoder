@@ -400,12 +400,19 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
     // The tail of whichever log is live: a supervisor's stdout, or the shell's redirected output.
     daemonLog: () =>
       readLogTail({ candidates: [serviceLogPath(paths), join(paths.logsDir, "daemon.log")] }),
-    serviceFacts: async () => {
-      const facts = await readLifecycle(paths);
-      return {
-        restartsInLastHour: facts.bootsInLastHour,
-        ...(facts.lastStop ? { lastStop: facts.lastStop } : {}),
-      };
+    // **One subject for the whole switch: the daemon's home and the daemon's own history together.** Supplying
+    // `paths` here is what stops the operations from defaulting to `coderPaths()` — the *process's* answer — which
+    // would read one home's ledger while installing, restarting or **uninstalling** another home's service, and
+    // which made a stubbed test reach the real supervisor on the machine running it.
+    service: {
+      paths,
+      facts: async () => {
+        const facts = await readLifecycle(paths);
+        return {
+          restartsInLastHour: facts.bootsInLastHour,
+          ...(facts.lastStop ? { lastStop: facts.lastStop } : {}),
+        };
+      },
     },
     // The user's delivery choices: read by the list (so a row says which route is in force), written by
     // `coder.setAgentDelivery`, and read by every launch (`deliveryOf`, above).

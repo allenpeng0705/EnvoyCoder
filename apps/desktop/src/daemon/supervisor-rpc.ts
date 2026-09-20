@@ -21,6 +21,7 @@
  */
 
 import type { ServiceStatus } from "@envoydev/platform";
+import type { CoderPaths } from "@envoydev/host-bridge";
 import { parseRpcParams, type RpcMethod } from "@envoydev/protocol";
 
 import { requireOwnerWindow } from "./pairing.js";
@@ -49,6 +50,18 @@ export interface SupervisorDeps {
   restart?: Operation;
   /** The daemon's restart history, read from its ledger. Absent means "nothing known", which is not an error. */
   facts?: () => Promise<DaemonFacts>;
+  /**
+   * **Which home these operations are about**, and which OS user's home the unit file belongs to.
+   *
+   * Both must come from the daemon rather than defaulting inside the operations: `installDaemonService()` and its
+   * siblings fall back to `coderPaths()` and `homedir()` — the *process's* answer. A daemon started with `--home`,
+   * or embedded with `{ paths }`, would then read its own ledger from one home while installing, restarting or
+   * **uninstalling** a service belonging to another; and a test that builds this table would run real
+   * `launchctl`/`systemctl`/`schtasks` commands against the developer's machine and delete their actual unit file.
+   * Both of those happened, which is why this is not optional.
+   */
+  paths?: CoderPaths;
+  userHome?: string;
 }
 
 export function createSupervisorHandlers(
@@ -96,10 +109,16 @@ export function createSupervisorHandlers(
       return attempt(act);
     };
 
+  // Built once, so all four operations agree about the subject: the same home, the same user's unit file.
+  const options: ServiceOptions = {
+    ...(deps.paths ? { paths: deps.paths } : {}),
+    ...(deps.userHome ? { userHome: deps.userHome } : {}),
+  };
+
   return {
-    "coder.getServiceStatus": handler("coder.getServiceStatus", () => operations.status(), false),
-    "coder.installService": handler("coder.installService", () => operations.install(), true),
-    "coder.uninstallService": handler("coder.uninstallService", () => operations.uninstall(), true),
-    "coder.restartService": handler("coder.restartService", () => operations.restart(), true),
+    "coder.getServiceStatus": handler("coder.getServiceStatus", () => operations.status(options), false),
+    "coder.installService": handler("coder.installService", () => operations.install(options), true),
+    "coder.uninstallService": handler("coder.uninstallService", () => operations.uninstall(options), true),
+    "coder.restartService": handler("coder.restartService", () => operations.restart(options), true),
   };
 }

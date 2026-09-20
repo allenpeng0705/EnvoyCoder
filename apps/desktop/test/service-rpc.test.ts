@@ -1,6 +1,8 @@
 import type { ServiceStatus } from "@envoydev/platform";
 import { describe, expect, it, vi } from "vitest";
 
+import type { CoderPaths } from "@envoydev/host-bridge";
+
 import { createSupervisorHandlers } from "../src/daemon/supervisor-rpc.js";
 import type { CoderCallContext } from "../src/daemon/service.js";
 
@@ -104,5 +106,28 @@ describe("the service switch on the wire", () => {
   it("complains about a parameter it does not have, rather than ignoring it", async () => {
     const { call } = table();
     await expect(call("coder.getServiceStatus", { surprise: true })).rejects.toThrow();
+  });
+});
+
+describe("which home the switch is about", () => {
+  it("tells the operations the daemon's home instead of letting them default to the process's", async () => {
+    // The defect this pins: the handlers built no options, so every operation fell back to `coderPaths()` — the
+    // *process's* home. A daemon started with `--home` (or embedded with `{ paths }`) would then read its own
+    // ledger from one home while installing, restarting or **uninstalling** a service belonging to another, and a
+    // test that built this table silently ran the real supervisor on the machine hosting it.
+    const paths = { home: "/tmp/daemon-home", stateDir: "/tmp/daemon-home/EnvoyDev" } as unknown as CoderPaths;
+    const seen: unknown[] = [];
+    const handlers = createSupervisorHandlers({
+      paths,
+      userHome: "/tmp/daemon-user",
+      status: async (options) => {
+        seen.push(options);
+        return running;
+      },
+    });
+    const built = handlers["coder.getServiceStatus"];
+    if (!built) throw new Error("coder.getServiceStatus is not served");
+    await built({}, owner);
+    expect(seen[0]).toMatchObject({ paths, userHome: "/tmp/daemon-user" });
   });
 });

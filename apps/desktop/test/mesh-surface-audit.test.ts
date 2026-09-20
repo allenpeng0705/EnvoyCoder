@@ -75,6 +75,26 @@ beforeAll(async () => {
         connectionCount: () => 1,
       },
       mesh: () => ({ kind: "no-node", reason: "not started in this test" }),
+      /**
+       * **No real supervisor is reachable from this test.**
+       *
+       * These are stubs and the homes are temporary, because without them the owner pass below ran the *real*
+       * operations: `launchctl bootout`, a forced `rm` of `~/Library/LaunchAgents/…plist`, and a `kickstart -k`
+       * against whatever daemon was running — every time the suite ran on a machine with the service installed.
+       * `shutdown` and `daemonLog` are stubbed for the same reason and so their owner-window guard is measurable
+       * at all, since an unserved method cannot be measured.
+       */
+      service: {
+        paths,
+        userHome: home,
+        status: async () => ({ state: "not-installed", detail: "audit stub" }),
+        install: async () => ({ state: "not-installed", detail: "audit stub" }),
+        uninstall: async () => ({ state: "not-installed", detail: "audit stub" }),
+        restart: async () => ({ state: "not-installed", detail: "audit stub" }),
+        facts: async () => ({ restartsInLastHour: 0 }),
+      },
+      daemonLog: async () => ({ path: "", lines: [], truncated: false }),
+      shutdown: () => undefined,
       // Nothing on this machine is a directory: a handler that gets this far is doing real work.
       isDirectory: async () => false,
     }),
@@ -181,16 +201,24 @@ describe("the coder.* handler table, measured with and without a session", () =>
         "coder.restartService",
       ]),
     );
-    expect(
-      refusedWithSession.filter((method) => !/Pairing|PairedDevice|Service|shutdown|DaemonLog/.test(method)),
-    ).toEqual(
-      [],
-    );
-
-    // 2. The property the mesh gate is the only guard for: with no session, **no method refuses**.
-    //    Every `coder.*` call that reaches the dispatcher without one runs as the owner's window.
-    const refusedWithoutSession = rows.filter((row) => isSessionRefusal(row.withoutSession)).map((row) => row.method);
-    expect(refusedWithoutSession).toEqual([]);
+    // **Named, not pattern-matched.** A name regex let two real mistakes through: adding the guard to
+    // `coder.getServiceStatus` (which matches "Service", and which a paired phone *should* be able to read) and
+    // dropping it from a method the pattern happened to cover. Every owner-only method is now listed deliberately,
+    // and the one a phone may read is asserted to stay readable.
+    const OWNER_ONLY = [
+      "coder.mintPairing",
+      "coder.listPairedDevices",
+      "coder.revokePairedDevice",
+      "coder.forgetPairedDevice",
+      "coder.installService",
+      "coder.uninstallService",
+      "coder.restartService",
+      "coder.shutdown",
+      "coder.getDaemonLog",
+    ];
+    expect(refusedWithSession.filter((method) => !OWNER_ONLY.includes(method))).toEqual([]);
+    expect(refusedWithSession).toEqual(expect.arrayContaining(OWNER_ONLY));
+    expect(refusedWithSession).not.toContain("coder.getServiceStatus");
 
     // 3. And the surface is not accidentally empty: the table really has handlers behind it. The
     //    count is of methods the dispatcher did not answer with "not implemented".

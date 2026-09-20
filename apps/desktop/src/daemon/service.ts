@@ -87,7 +87,7 @@ import type { CoderStore } from "./store.js";
 import type { LogTail } from "./log-tail.js";
 import { createShutdownHandlers } from "./shutdown.js";
 import { createLogHandlers } from "./log-rpc.js";
-import type { DaemonFacts } from "./supervisor-rpc.js";
+import type { SupervisorDeps } from "./supervisor-rpc.js";
 import { createSupervisorHandlers } from "./supervisor-rpc.js";
 
 /** Identity of the running process — what makes `coder.hello` answer *which* daemon this is. */
@@ -147,10 +147,11 @@ export interface CoderServiceDeps {
    */
   shutdown?: () => void;
   /**
-   * The daemon's restart history for the service row (§5.3): how many starts in the last hour and how the previous
-   * process stopped. Read from the ledger, which is the only thing that knows.
+   * Everything the service switch needs to know *which* service it is talking about, plus the daemon's restart
+   * history for the row (§5.3). Passed as one bag because the two must never disagree: `serviceFacts` reads a
+   * ledger from `paths`, and the operations must act on that same `paths`.
    */
-  serviceFacts?: () => Promise<DaemonFacts>;
+  service?: SupervisorDeps;
   /** The tail of the daemon's log, for the service page's "why did it fail" line. */
   daemonLog?: () => Promise<LogTail>;
   /**
@@ -330,7 +331,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     ...createShutdownHandlers(deps.shutdown ? { shutdown: deps.shutdown } : {}),
     // The service switch: whether this machine runs the daemon under a supervisor, and the three changes to it.
     // The changes are owner-window-only, like minting a pairing code.
-    ...createSupervisorHandlers(deps.serviceFacts ? { facts: deps.serviceFacts } : {}),
+    ...createSupervisorHandlers(deps.service ?? {}),
     // The supervisor's question, answered from the instance facts `coder.hello` already uses.
     ...createHealthHandlers({
       instance: deps.instance,
