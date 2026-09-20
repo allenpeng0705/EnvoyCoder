@@ -339,6 +339,9 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
 
   const handlers = {
     ...createCoderHandlers({
+    // The same store the pairing family uses: the hello path records an identity through it, and two stores over
+    // one file would mean two writers racing on the same rows.
+    paired: pairedDevices,
     store,
     paths,
     runs,

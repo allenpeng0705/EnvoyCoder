@@ -69,6 +69,7 @@ import type { CoderPaths } from "@envoydev/host-bridge";
 
 import { keyed, ref } from "./messages.js";
 import { createHealthHandlers } from "./health.js";
+import type { PairedDeviceStore } from "./paired-devices.js";
 import { createCatalogHandlers } from "./catalog.js";
 import { getEnvoyLlmPublic, setEnvoyLlm, envoyHarnessModels } from "./envoy-llm.js";
 import { harnessSwitchPatch } from "./task-harness-switch.js";
@@ -97,6 +98,15 @@ export interface CoderServiceDeps {
   store: CoderStore;
   paths: CoderPaths;
   instance: CoderInstance;
+  /**
+   * The paired devices, when this daemon has one.
+   *
+   * Here because **the hello path is where a client's identity arrives**: the transport resolves a token into a
+   * session before any method is called, so `coder.hello` is the first and only moment the daemon can learn who
+   * is on the other end. The store is created by `serve.ts` and shared with the pairing family rather than made
+   * twice, so both see the same rows.
+   */
+  paired?: PairedDeviceStore;
   mesh: () => CoderMeshStatus;
   /** Injectable so a test can decide whether a path "exists" without a filesystem. */
   isDirectory?: (path: string) => Promise<boolean>;
@@ -331,8 +341,26 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     ...createSignInHandlers({ ...(deps.signIn ? { signIn: deps.signIn } : {}) }),
 
     /* ────────────────── who am I talking to ────────────────── */
-    "coder.hello": async (params) => {
-      parseRpcParams("coder.hello", params);
+    "coder.hello": async (params, context) => {
+      const input = parseRpcParams("coder.hello", params) as
+        | { client?: { id?: string; name?: string; platform?: string } }
+        | undefined;
+
+      /**
+       * **Record who is calling, once, the first time a paired device says hello.**
+       *
+       * A phone that pairs repeatedly used to leave one row per pairing — each a live token for a year, all
+       * labelled "Phone" — so the list grew and a revoke only disconnected the phone that had stopped using the
+       * revoked token. The identity is what makes "the same phone again" a fact the store can act on.
+       *
+       * Deliberately **not awaited**: hello is a greeting, and a bookkeeping write must never be able to fail it.
+       * The window's own hello (`session === undefined`) has no device to record.
+       */
+      const deviceId = (context.session as { deviceId?: string } | undefined)?.deviceId;
+      if (deviceId !== undefined && input?.client !== undefined) {
+        void deps.paired?.identify(deviceId, input.client).catch(() => undefined);
+      }
+
       const notes = deps.store.notes();
       return {
         product: ENVOYDEV_PRODUCT_NAME,
