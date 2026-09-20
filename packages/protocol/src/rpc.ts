@@ -1932,6 +1932,25 @@ export const ServiceStatusSchema = z
 
 export type DaemonServiceStatus = z.infer<typeof ServiceStatusSchema>;
 
+/**
+ * The tail of the daemon's log, as it travels on the wire.
+ *
+ * Named for the same reason `ServiceStatusSchema` is: a client that wants to *name* this shape should import it
+ * rather than mirror it, because a mirror is a second definition that can drift from the one the daemon actually
+ * sends — and a client that mirrors it has nothing to warn it when it does.
+ */
+export const DaemonLogSchema = z
+  .object({
+    /** The file that was read, or the one wanted first when there is none yet. */
+    path: z.string(),
+    lines: z.array(z.string()),
+    /** True means "there is more than this" — a client must say so rather than imply completeness. */
+    truncated: z.boolean(),
+  })
+  .strict();
+
+export type DaemonLog = z.infer<typeof DaemonLogSchema>;
+
 export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.freeze({
   /* — who am I talking to, and what does this daemon do — */
   "coder.hello": {
@@ -3113,19 +3132,7 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
   },
   "coder.getDaemonLog": {
     params: EmptyParams,
-    result: z
-      .object({
-        log: z
-          .object({
-            /** The file that was read, or the one wanted first when there is none yet. */
-            path: z.string(),
-            lines: z.array(z.string()),
-            /** True means "there is more than this" — the UI must say so rather than imply completeness. */
-            truncated: z.boolean(),
-          })
-          .strict(),
-      })
-      .strict(),
+    result: z.object({ log: DaemonLogSchema }).strict(),
   },
   "coder.shutdown": {
     params: EmptyParams,

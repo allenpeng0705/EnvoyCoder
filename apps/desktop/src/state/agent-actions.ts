@@ -34,14 +34,7 @@
  *     agent, forget one they declared, or run an agent's own sign-in.
  */
 
-import type {
-  AgentDelivery,
-  DaemonServiceStatus,
-  FixRunResult,
-  FixTarget,
-  HarnessId,
-  SignInOutcome,
-} from "@envoydev/protocol";
+import type { AgentDelivery, DaemonServiceStatus, FixRunResult, FixTarget, HarnessId, SignInOutcome, DaemonLog } from "@envoydev/protocol";
 
 import type { Refusal } from "../i18n/notice.js";
 import type { AddProviderInput } from "./coderStore.js";
@@ -91,13 +84,9 @@ export type ShutdownAnswer = { ok: true; stopping: true } | Refusal;
  * not a window that reads `unknown` and casts. `truncated` is the field the UI owes the user: a tail that
  * reads like a complete log is a lie somebody debugs from.
  */
-export interface DaemonLogRead {
-  /** The file that was read — or the one wanted first when there is none yet. */
-  readonly path: string;
-  readonly lines: readonly string[];
-  /** True means "there is more than this", and the panel must say so rather than imply completeness. */
-  readonly truncated: boolean;
-}
+// The wire's own type, imported rather than mirrored: a second definition of a result shape can drift from the
+// one the daemon sends, and a mirror has nothing to warn it when it does (`DaemonLogSchema` in @envoydev/protocol).
+export type DaemonLogRead = DaemonLog;
 
 /** What a log read answers: the bounded tail, or a refusal (a daemon log is owner-window-only). */
 export type DaemonLogAnswer = { ok: true; log: DaemonLogRead } | Refusal;
