@@ -1059,19 +1059,29 @@ export class RunManager {
     live.approval?.settle(null);
 
     live.run = { ...live.run, endedAt: this.now(), status, exitCode };
-    /**
-     * **The status is written before the ending is announced, and the order is the whole point.**
-     *
-     * `record` hands the event to the daemon's subscribers synchronously and only then awaits the
-     * transcript append, so by the time `run.ended` has been said, this line has not necessarily run —
-     * and a client's very next act after hearing that a run ended is to read the task back. It did:
-     * `coder.listTasks` answered `running` for a run whose ending had just been delivered, which is the
-     * rail's spinner outliving its run. `setTaskRun` updates the store's memory *before* it awaits the
-     * disk, so moving it first costs the event nothing and makes the state readable exactly when the
-     * announcement arrives. It is also the order this file already uses to *start* a run — status
-     * recorded, then `run.started` said — which is what an ending should mirror.
-     */
-    await this.deps.store.setTaskRun(live.run.taskId, { status });
+    // **The status is written before the ending is announced, and the order is the whole point.**
+    //
+    // `record` hands the event to the daemon's subscribers synchronously and only then awaits the
+    // transcript append, so by the time `run.ended` has been said, this write has not necessarily run —
+    // and a client's very next act after hearing that a run ended is to read the task back. It did:
+    // `coder.listTasks` answered `running` for a run whose ending had just been delivered, which is the
+    // rail's spinner outliving its run. `setTaskRun` updates the store's memory *before* it awaits the
+    // disk, so writing it first costs the event nothing and makes the state readable exactly when the
+    // announcement arrives. It is also the order this file already uses to *start* a run — status
+    // recorded, then `run.started` said — which is what an ending should mirror.
+    try {
+      await this.deps.store.setTaskRun(live.run.taskId, { status });
+    } catch {
+      // **An unwritable row is not a reason to lose the ending, nor to keep shutdown waiting on it.**
+      //
+      // `writeJsonAtomic` has already retried the rename and cleaned up after itself; what it cannot do
+      // is make a full disk accept a file. Swallowing it is the call `appendTranscript` makes a few
+      // lines up: the run's ending is the record, the row is a convenience — and a disk that cannot
+      // take this write will refuse the next one loudly, so nothing is hidden by not failing here.
+      // Letting it throw would be worse than either: the run is already `settled`, so `finish` cannot
+      // run again, while the tail below (`active`, `finished`, `markDone`) would be skipped — the run
+      // left in `active` with `live.done` never resolved, which is a daemon that hangs on quit.
+    }
     await this.record(live, { kind: "run.ended", exitCode, status });
     this.active.delete(live.run.id);
     // Kept for reading, not for control: `settled` is already true, so every mutating path refuses.

@@ -296,6 +296,40 @@ describe("one run, end to end", () => {
     expect(note && note.kind === "run.status" ? (note.note ?? "") : "").toContain("no API key");
     expect(b.store.findTask(b.taskId)?.status).toBe("failed");
   });
+
+  it("still ends the run when the task row cannot be written", async () => {
+    // The store's `writeJsonAtomic` retries the rename and then throws — a full disk, a read-only state
+    // directory. `finish` must not let that cost the run its ending, nor leave it in `active` (which is
+    // what `stop()` waits on: a task row that cannot be written must not turn into a daemon that hangs
+    // on quit). The terminal write is the only one failed here, so the run itself is untouched.
+    const b = await bench();
+    const write = b.store.setTaskRun.bind(b.store);
+    b.store.setTaskRun = async (id, patch) => {
+      const terminal = patch.status === "done" || patch.status === "failed" || patch.status === "cancelled";
+      if (patch.runId === undefined && terminal) throw new Error("the state file is not writable");
+      return write(id, patch);
+    };
+
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "please think about it" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    // The ending was announced, and the run reached `finished` — the tail that `markDone` is last in.
+    const ended = kinds(b.events, "run.ended")[0];
+    expect(ended && ended.kind === "run.ended" ? ended.status : "").toBe("done");
+    expect(b.manager.get(run.id)?.status).toBe("done");
+    expect(b.manager.isLive(run.id)).toBe(false);
+
+    // `stopAll()` awaits every run still in `active` and gives up after 10s; settled, it returns at once.
+    const before = Date.now();
+    await b.manager.stopAll();
+    expect(Date.now() - before).toBeLessThan(5_000);
+
+    // The honest cost of the write that failed: the row keeps the last status it could store. The
+    // transcript and the events carry the ending, so nothing a user reads is wrong — the rail is one
+    // refresh behind.
+    expect(b.store.findTask(b.taskId)?.status).toBe("running");
+    expect(b.manager.events(run.id).some((event) => event.kind === "run.ended")).toBe(true);
+  });
 });
 
 describe("approvals", () => {
