@@ -98,6 +98,8 @@ function resolvedHome() {
   return looksLikeHome(legacy) ? legacy : preferred;
 }
 
+const DRY_RUN = process.argv.includes("--dry-run");
+
 /** Every home a claim could be sitting in — the one the app resolves, plus both candidates. */
 function candidateHomes() {
   return [...new Set([resolvedHome(), defaultHome(homedir()), path.join(homedir(), LEGACY_HOME_DIRNAME)])];
@@ -204,6 +206,20 @@ const stuck = [];
  * than the machine's state — which is how a leftover daemon holds 4770 through a restart nobody can
  * explain.
  */
+/**
+ * `--dry-run` prints what it would stop and signals nothing.
+ *
+ * Added with the service rule above, because that rule is about *not* killing a process: a developer tool that can
+ * only be checked by running it cannot be checked on the machine where a daemon is running.
+ */
+async function stopOrReport(pid, label) {
+  if (DRY_RUN) {
+    console.log(`  would stop ${label} (pid ${pid})`);
+    return;
+  }
+  return await stopProcess(pid, label);
+}
+
 async function stopProcess(pid, label) {
   if (!isAlive(pid)) return true;
 
@@ -275,7 +291,7 @@ if (isWindows) {
   // running while the daemon underneath it was killed and became a zombie.
   for (const binary of ["target/debug/envoydev", "target/release/envoydev"]) {
     for (const pid of pidsRunningExecutable(path.join(root, "apps/desktop/src-tauri", binary))) {
-      await stopProcess(pid, "the window");
+      await stopOrReport(pid, "the window");
     }
   }
 }
@@ -292,8 +308,22 @@ for (const candidate of candidateHomes()) {
     continue;
   }
   if (!Number.isInteger(claim.pid) || claim.pid <= 0) continue;
+  /**
+   * **A daemon an OS supervisor owns is left alone.**
+   *
+   * This is the shell's rule (`src-tauri/src/main.rs`: stop the pid the claim names, *never* one somebody else
+   * supervises), applied to the tool developers actually run — a restart that killed a service-managed daemon
+   * would take down the host the phone is talking to, which is the whole point of service mode.
+   *
+   * Anything other than exactly `service` reads as ours, including a claim written before the field existed: the
+   * safe direction here is stopping our own daemon, and a stale one is what this script exists to clear.
+   */
+  if (claim.managedBy === "service") {
+    console.log(`  leaving pid ${claim.pid} alone: a service manages it (claim ${file})`);
+    continue;
+  }
   if (isAlive(claim.pid)) {
-    await stopProcess(claim.pid, `the daemon on port ${claim.port ?? "?"} (claim ${file})`);
+    await stopOrReport(claim.pid, `the daemon on port ${claim.port ?? "?"} (claim ${file})`);
   } else {
     console.log(`  the claim at ${file} names pid ${claim.pid}, which is already gone`);
   }
@@ -315,7 +345,7 @@ if (!isWindows) {
     "node_modules/vite/bin/vite.js",
   ]) {
     for (const pid of pidsMatching(path.join(root, entry))) {
-      await stopProcess(pid, `a leftover process (${entry})`);
+      await stopOrReport(pid, `a leftover process (${entry})`);
     }
   }
 }
@@ -340,6 +370,18 @@ for (const candidate of candidateHomes()) {
   }
   rmSync(file, { force: true });
   console.log(`  removed the stale claim ${file}, so the shell starts a fresh daemon`);
+}
+
+/**
+ * `--dry-run` stops here: what it would *stop* has been reported, and the half that **starts** the app is skipped.
+ *
+ * Both halves matter. The flag was added so the service rule above could be checked on the one machine where a
+ * daemon is running — and the first version only covered stopping, so with an app-managed claim the script went on
+ * to launch the dev app and never returned. A dry run that starts something is not a dry run.
+ */
+if (DRY_RUN) {
+  console.log("  --dry-run: nothing signalled, nothing started");
+  process.exit(0);
 }
 
 /* ── 4. the ports, before anything is started on them ───────────────────────────────────────────── */
