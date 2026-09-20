@@ -199,15 +199,17 @@ export async function readStatus(deps: GitRunDeps, dir: string): Promise<GitStat
   if (status.code !== 0) throw gitFailed(status);
   const parsed = parseGitStatus(status.text, { kind: "git" });
   /**
-   * The merge question is asked of a repository that is **not clean**, rather than only of a conflicted one.
+   * **The merge question is asked of every repository, and the earlier "skip it when the tree is clean" was
+   * wrong.** A clean tree can be mid-merge: resolving a conflict by keeping one side entirely
+   * (`git checkout --ours <file> && git add <file>`) leaves `git status` empty while `MERGE_HEAD` is still
+   * there — and that is a state this product's own resolve prompt invites, since it sanctions "keep one side
+   * when the other is covered". With the question skipped, `GitStatus.merge` disappeared exactly then, and
+   * `gitMergeContinue` and `gitMergeAbort` both answered `gitMergeNone`: the user could neither record nor take
+   * back a merge they had just finished resolving.
    *
-   * A merge in progress always has something uncommitted — its conflicts, or the resolutions once they are
-   * staged — and the second state is the one that matters most here: it is when the user (or the panel) is
-   * about to press *Finish*, and a status that stopped saying "a merge is in progress" the moment the last
-   * conflict was staged would refuse the very press it should be offering. A clean tree, meanwhile, cannot be
-   * mid-merge, which is what keeps the answer to this question free for every ordinary status read.
+   * The cost is one `rev-parse --verify --quiet` per status read, which is milliseconds — and the fact is worth
+   * more than the spawn: while a merge is open, a branch change or a stash would silently throw it away.
    */
-  if (!parsed.conflicted && parsed.dirty === 0) return parsed;
   const merge = await mergeInProgress(deps, dir);
   return merge === undefined ? parsed : { ...parsed, merge };
 }
@@ -333,4 +335,35 @@ export async function stashAnswer(deps: GitRunDeps, root: string): Promise<{
     changes: changesOf(root),
     stashes: await stashesOf(deps, root),
   };
+}
+
+/**
+ * The instruction the resolving agent starts with.
+ *
+ * **English, and written for a program rather than for a person.** The window composes the prompts a user
+ * sends; this one is the daemon's because the daemon is what knows which files conflicted and what must be
+ * true when the agent stops. It is deliberately closed about what the agent may *not* do — no `commit`, no
+ * `merge --abort`, no branch change — because the merge has to still be in progress when the user records it,
+ * and an agent that finished the merge itself would leave the two surfaces disagreeing about the repository.
+ *
+ * The last line asks for the short account a person reads before recording the merge, which is the review
+ * step this product exists for: the agent's work is in the working tree, and the diff is there to be read.
+ */
+export function resolvePrompt(input: {
+  branch: string;
+  into?: string;
+  files: readonly string[];
+}): string {
+  return [
+    `A merge of "${input.branch}" into "${input.into ?? "the current branch"}" stopped with conflicts in this repository. Resolve them.`,
+    "",
+    "Conflicted files:",
+    ...input.files.map((file) => `- ${file}`),
+    "",
+    "For each file, read both sides of the conflict and keep the intent of both changes. A resolution that simply keeps one side is only right when the other side is already covered elsewhere — say so if that is what you did. Remove the conflict markers, then stage the file with `git add <file>` so git records the resolution.",
+    "",
+    "Do not run `git commit`, `git merge --abort`, `git checkout`, `git rebase` or `git stash`. The merge must still be in progress when you stop: EnvoyDev records it once every conflicted file is staged.",
+    "",
+    "Finish with a short paragraph: what you changed in each file, and anything a person should read before the merge is recorded.",
+  ].join("\n");
 }

@@ -389,9 +389,16 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
     if (id != null) await _refresh();
   }
 
-  /// Measure a project's repository once, then remember it until something writes.
-  Future<void> _ensureGit(ProjectInfo project) async {
-    if (_git.containsKey(project.id)) return;
+  /// Measure a project's repository, and remember it until something writes.
+  ///
+  /// [again] is what the **branch sheet** passes: the branch and the merge state move under this phone — the
+  /// agent, the desktop, another window — and the sheet is where a user acts on those facts, so it is handed a
+  /// fresh measurement every time it opens. The chip on the row keeps the cached reading, because measuring
+  /// every project on every rebuild is the spawn storm the cache exists to prevent, and a write made from here
+  /// reports its own answer. A failed *forced* read drops what was cached rather than handing the sheet a
+  /// reading the daemon has just failed to confirm.
+  Future<void> _ensureGit(ProjectInfo project, {bool again = false}) async {
+    if (!again && _git.containsKey(project.id)) return;
     if (project.vcsKind != 'git') return;
     try {
       final result = await widget.client.call('coder.gitStatus', {'projectId': project.id});
@@ -415,11 +422,20 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
       // A folder git cannot answer about is a project without a branch chip, not an error on the list: the
       // branch sheet is where the daemon's own sentence belongs, and a project that is not a repository is
       // the normal case this whole surface is optional for.
+      if (again && mounted) {
+        setState(() {
+          _git.remove(project.id);
+          _gitBranches.remove(project.id);
+        });
+      }
     }
   }
 
   Future<void> _openBranches(ProjectInfo project) async {
-    await _ensureGit(project);
+    // **Measured on every open, not once per project.** The desktop does the same (`ProjectBranches.tsx`), for
+    // the same reason: a merge recorded, a branch switched or a conflict resolved somewhere else must not be
+    // invisible in — or worse, actable from — a sheet showing an earlier visit's reading.
+    await _ensureGit(project, again: true);
     final status = _git[project.id];
     if (status == null) {
       // Worth saying rather than doing nothing: the sheet is behind a menu item that was enabled because

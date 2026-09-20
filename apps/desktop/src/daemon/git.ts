@@ -1,3 +1,54 @@
+/**
+ * The git methods a client calls — the daemon side of `coder.git*`.
+ *
+ * ## The property, taken from the one other place this product runs something for a user
+ *
+ * `coder.runFix` states it: **the client sends a name, never a command.** Here the name is a branch, a path,
+ * a project id, a stash number, or nothing at all, and the argv is built from `@envoydev/platform`'s builders.
+ * There is no field in any request that could carry a command line, so a window — or a phone, or a mesh peer,
+ * or a buggy client — cannot turn this into a shell. The parsers are that module's too, pure and pinned against
+ * a real repository; what starts the children and measures a repository is `git-runner.ts` next door, which is
+ * also where the two refusals about *starting* git (`gitMissing`, `gitTimedOut`) come from.
+ *
+ * ## Two rules, and they are not the same rule
+ *
+ * **One writer at a time.** An agent mid-edit and a `checkout` in the same working tree is how a user loses
+ * work, and neither program can see the other: the agent holds file handles the daemon knows nothing about,
+ * and git only knows that the tree is dirty. So **a command that would move the working tree or a branch is
+ * refused while a run is live anywhere in the project** (a run's own folder is inside it), and the refusal
+ * names the task, because "something is running" is not something a user can act on.
+ *
+ *   * refused while a run is live: `gitCheckout`, `gitCreateBranch`, `gitMerge`, `gitMergeResolve`,
+ *     `gitMergeContinue`, `gitMergeAbort`, `gitPull`, `gitStage`, `gitUnstage`, `gitCommit`, `gitStashPush`
+ *     and `gitStashPop`;
+ *   * allowed: `gitStatus`, `gitBranches`, `gitStashList`, `gitFetch`, `gitStashDrop` and the diff read
+ *     (`coder.readWorktreeDiff`, served by `service.ts`) — looking is not the dangerous half, a fetch moves
+ *     only remote-tracking refs, and dropping a stash moves no branch and no file.
+ *
+ * **An unfinished operation is finished or taken back first**, and that rule keys on the *merge*, not on
+ * conflicts: with every conflict staged git allows `checkout`, `checkout -b` and `stash push`, and each of them
+ * deletes `MERGE_HEAD`, so a resolution nobody has recorded disappears. `gitStage`, `gitUnstage`, `gitCommit`,
+ * `gitMergeContinue` (once nothing is unmerged) and `gitMergeAbort` are deliberately exempt: they are how a
+ * person, or an agent, finishes the job.
+ *
+ * ## The one method that leaves a repository mid-operation
+ *
+ * `gitMergeResolve` keeps a conflict on purpose so an agent can resolve it, which is honest only because
+ * `gitMergeContinue` and `gitMergeAbort` are the two ways out, `GitStatus.merge` says so on every surface, and
+ * the method refuses *before* merging when there is no runtime to hand the conflict to. `gitMerge` is its
+ * opposite: the merge a person asked for directly aborts on conflict and refuses, so its refusal is a
+ * statement about an attempt rather than a repository left behind.
+ *
+ * ## What is deliberately absent
+ *
+ * No force-push, no rebase, no `push`, and no `reset --hard` as a *user* action: the first three destroy work
+ * git cannot get back, and each needs a confirmation that names what is about to be lost — which is a
+ * conversation, not a method. The one `reset --hard` the daemon runs is not a user action at all: it is
+ * `gitStashPop` taking back a *pop it just made onto a tree it measured as clean*, and `platform/git.ts`
+ * records why that is exact. Credentials are not this file's business either: a `fetch`/`pull` runs with the
+ * user's own git and helper, which is the whole credential story this product has.
+ */
+
 import {
   GIT_BRANCHES_ARGS,
   GIT_FETCH_ARGS,
@@ -41,6 +92,7 @@ import {
   measureProjectVcs,
   readStatus,
   runGit,
+  resolvePrompt,
   stashAnswer,
   statusOf,
   stashesOf,
@@ -111,52 +163,30 @@ export type GitDeps = Omit<GitHandlerDeps, "store" | "runs">;
  * language instead of git's `you need to resolve your current index first`.
  */
 function refuseWhileConflicted(status: GitStatus, files: readonly string[]): void {
-  if (!status.conflicted) return;
   const list = files.join(", ");
   const shown = listOf(files);
   if (status.merge !== undefined) {
+    /**
+     * **A merge in progress is refused what would throw it away, whether or not its conflicts are resolved.**
+     * With every conflict staged `git status` is clean, and git then *allows* `checkout`, `checkout -b` and
+     * `stash push` — and each of them **deletes `MERGE_HEAD`**, so a resolution nobody has recorded disappears
+     * without a word. It is also the state in which the user is about to press *Finish*, which is why it gets
+     * the sentence the window's own block shows rather than the one about conflicts.
+     */
     throw coderError(
       ENVOYDEV_ERRORS.gitMergeUnresolved,
-      `A merge is not finished: ${list} still has conflicts. Resolve them and finish the merge, or abort it.`,
-      ref("error.gitMergeUnresolved", { files: shown }),
+      files.length === 0
+        ? "All conflicts are resolved. Finish the merge to record it."
+        : `A merge is not finished: ${list} still has conflicts. Resolve them and finish the merge, or abort it.`,
+      files.length === 0 ? ref("git.merge.resolved") : ref("error.gitMergeUnresolved", { files: shown }),
     );
   }
+  if (!status.conflicted) return;
   throw coderError(
     ENVOYDEV_ERRORS.gitConflicted,
     `This repository has unresolved conflicts in ${list}, from an operation EnvoyDev did not start. Finish or undo it there before doing anything else here.`,
     ref("error.gitConflicted", { files: shown }),
   );
-}
-
-/**
- * The instruction the resolving agent starts with.
- *
- * **English, and written for a program rather than for a person.** The window composes the prompts a user
- * sends; this one is the daemon's because the daemon is what knows which files conflicted and what must be
- * true when the agent stops. It is deliberately closed about what the agent may *not* do — no `commit`, no
- * `merge --abort`, no branch change — because the merge has to still be in progress when the user records it,
- * and an agent that finished the merge itself would leave the two surfaces disagreeing about the repository.
- *
- * The last line asks for the short account a person reads before recording the merge, which is the review
- * step this product exists for: the agent's work is in the working tree, and the diff is there to be read.
- */
-function resolvePrompt(input: {
-  branch: string;
-  into?: string;
-  files: readonly string[];
-}): string {
-  return [
-    `A merge of "${input.branch}" into "${input.into ?? "the current branch"}" stopped with conflicts in this repository. Resolve them.`,
-    "",
-    "Conflicted files:",
-    ...input.files.map((file) => `- ${file}`),
-    "",
-    "For each file, read both sides of the conflict and keep the intent of both changes. A resolution that simply keeps one side is only right when the other side is already covered elsewhere — say so if that is what you did. Remove the conflict markers, then stage the file with `git add <file>` so git records the resolution.",
-    "",
-    "Do not run `git commit`, `git merge --abort`, `git checkout`, `git rebase` or `git stash`. The merge must still be in progress when you stop: EnvoyDev records it once every conflicted file is staged.",
-    "",
-    "Finish with a short paragraph: what you changed in each file, and anything a person should read before the merge is recorded.",
-  ].join("\n");
 }
 
 
@@ -195,9 +225,15 @@ export function createGitHandlers(deps: GitHandlerDeps): Partial<Record<RpcMetho
     }
   };
 
-  /** The conflict rule, with the paths measured only when there is a conflict to name. */
+  /**
+   * The unfinished-operation rule, with the paths measured only when there is something to name.
+   *
+   * **The gate is the merge, not the conflicts.** Keying it on `conflicted` was the hole two reviewers measured
+   * independently: with every conflict staged, `conflicted` is false while `MERGE_HEAD` is still there, and git
+   * then allows the three actions that silently delete it.
+   */
   const refuseConflict = (dir: string, status: GitStatus): void => {
-    if (!status.conflicted) return;
+    if (!status.conflicted && status.merge === undefined) return;
     refuseWhileConflicted(status, conflictsOf(dir));
   };
 
@@ -464,9 +500,16 @@ export function createGitHandlers(deps: GitHandlerDeps): Partial<Record<RpcMetho
 
       const files = conflictsOf(root);
       if (files.length === 0) {
-        // Nothing was started — a local change the merge would overwrite, a branch that is not there. Anything
-        // half-done is taken back first, because this answer promises a repository that did not move.
-        await runGit(deps, root, GIT_MERGE_ABORT_ARGS, { read: false });
+        /**
+         * Nothing was started — a local change the merge would overwrite, a branch that is not there. Anything
+         * half-done is taken back first, because this answer promises a repository that did not move — **but
+         * only a merge this call started**: the rule above refuses an open merge, so `before.merge` is
+         * `undefined` here, and the guard keeps that true if the rule is ever relaxed. Aborting a merge
+         * somebody else's work is sitting in would destroy it, which is the one thing an abort must not do.
+         */
+        if (before.merge === undefined) {
+          await runGit(deps, root, GIT_MERGE_ABORT_ARGS, { read: false });
+        }
         throw gitFailed(merged);
       }
 
@@ -551,8 +594,12 @@ export function createGitHandlers(deps: GitHandlerDeps): Partial<Record<RpcMetho
           ref("error.gitMergeNone"),
         );
       }
-      // The same sentence a conflicting write gets, and for the same reason: the files are the work left.
-      refuseConflict(root, before);
+      /**
+       * **Only the unresolved half refuses here.** Finishing a merge whose conflicts are all staged is exactly
+       * what this method is for, so it is exempt from the "a merge is open" rule that guards the actions which
+       * would throw one away — and it still refuses, with the file list, while the index has unmerged entries.
+       */
+      if (before.conflicted) refuseWhileConflicted(before, conflictsOf(root));
 
       const committed = await runGit(deps, root, GIT_MERGE_CONTINUE_ARGS, { read: false });
       // A failing hook, a signing key, a missing identity: git names what to fix.

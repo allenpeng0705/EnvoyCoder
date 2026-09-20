@@ -28,8 +28,14 @@
 ///
 /// It does not invent wording. Every sentence in [daemonRefRenderers] is the window's own, copied
 /// verbatim through `tool/desktop-reuse.json` (see the phone's `l10n/README.md`), so the two surfaces
-/// say one thing. A daemon key the phone has no sentence for — the `error.*` refusals, today — stays
-/// the daemon's English until somebody translates it, which is visible in the UI rather than silent.
+/// say one thing.
+///
+/// A daemon key the phone has no sentence for stays the daemon's English, which is visible in the UI
+/// rather than silent. **Which git refusals are mapped is uneven, and that is outstanding work:** the
+/// branch, merge and stash flows added since S1 are here (`error.gitBranchInvalid` and the staging and
+/// commit refusals are *not*), so a German phone reads German for a conflict and English for a branch
+/// name it will not accept. `test/daemon_text_test.dart` proves every renderer against the ARB and the
+/// provenance record; nothing yet proves the *coverage*, which is why the gap could grow quietly.
 library;
 
 import 'dart:convert';
@@ -156,6 +162,9 @@ const Map<String, DaemonRefRenderer> daemonRefRenderers = {
   'error.gitMergeNone': DaemonRefRenderer('errorGitMergeNone', _mergeNone),
   'error.gitConflicted': DaemonRefRenderer('errorGitConflicted', _conflicted),
   'error.gitMergeResolveFailed': DaemonRefRenderer('errorGitMergeResolveFailed', _mergeResolveFailed),
+  // The same state the sheet's own block reports, sent as a refusal when an action would throw the merge
+  // away: the window's sentence, reused rather than reworded.
+  'git.merge.resolved': DaemonRefRenderer('gitMergeResolved', _mergeResolved),
   'approval.deny': DaemonRefRenderer('approvalDeny', _deny),
 };
 
@@ -202,3 +211,5 @@ String _conflicted(AppLocalizations l10n, Map<String, Object> values) =>
 
 String _mergeResolveFailed(AppLocalizations l10n, Map<String, Object> values) =>
     l10n.errorGitMergeResolveFailed('${values['detail'] ?? ''}');
+
+String _mergeResolved(AppLocalizations l10n, Map<String, Object> _) => l10n.gitMergeResolved;

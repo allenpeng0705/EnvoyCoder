@@ -1009,12 +1009,22 @@ export class CoderStore {
       status: answer as GitStatus,
     }));
     if ("ok" in switched) return switched;
+    /**
+     * **The list's `current` flags move with the branch, or the panel locks the user out of where they were.**
+     * `branch.current` is what marks the row and what disables it (`ProjectBranches.tsx`), so keeping the old
+     * list would leave the branch just left marked and unpressable — no way back except closing the panel —
+     * while the branch just entered stayed pressable. A switch cannot change *which* branches exist, so the
+     * names stand and only the mark is rewritten, exactly as `gitCreateBranch` does for the branch it makes.
+     */
     this.set({
       git: {
         ...(this.state.git ?? {}),
         [projectId]: {
           status: switched.status,
-          branches: this.state.git?.[projectId]?.branches ?? [],
+          branches: (this.state.git?.[projectId]?.branches ?? []).map((branch) => ({
+            ...branch,
+            current: branch.name === switched.status.branch,
+          })),
         },
       },
     });

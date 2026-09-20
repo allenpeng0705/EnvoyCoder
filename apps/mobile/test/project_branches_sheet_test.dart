@@ -395,6 +395,9 @@ void main() {
     expect(find.text('An agent is resolving this merge: Resolve the merge of main.'), findsOneWidget);
     // And the block that goes with it: a merge is in progress, so Finish and Abort are here.
     expect(find.text('The merge of main stopped with conflicts.'), findsOneWidget);
+    // **The offer is gone.** It was about a conflict that is now in an agent's hands; leaving it would offer a
+    // press the daemon can only refuse (a second resolve meets the merge the first one started).
+    expect(find.text('Resolve with an agent'), findsNothing);
 
     await client.dispose();
   });

@@ -157,6 +157,10 @@ class _ProjectBranchesSheetState extends State<_ProjectBranchesSheet> {
     setState(() {
       _busy = true;
       _error = null;
+      // **The offer is consumed by the press.** It was about a conflict that this call is now handing over;
+      // leaving it on screen would offer an action that can only be refused (a second resolve meets the merge
+      // it just started, and `refuseConflict` refuses it).
+      _conflictedBranch = null;
     });
     try {
       final result = await widget.client.call('coder.gitMergeResolve', {
@@ -188,6 +192,8 @@ class _ProjectBranchesSheetState extends State<_ProjectBranchesSheet> {
     setState(() {
       _busy = true;
       _error = null;
+      // A merge that is being recorded or taken back is not one to offer to resolve.
+      _conflictedBranch = null;
     });
     try {
       final result = await widget.client.call(method, {'projectId': widget.project.id});

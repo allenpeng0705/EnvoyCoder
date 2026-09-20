@@ -1159,4 +1159,81 @@ describe("a conflicting merge, resolved by an agent", () => {
     expectRefusal(refusal, "error.gitConflicted");
     expect(coderErrorMessage(refusal)).toContain("a.txt");
   });
+
+  itGit("refuses to throw away a merge whose conflicts are already resolved", async () => {
+    /**
+     * The state an agent leaves behind, and the hole the review measured: with every conflict staged the tree is
+     * **clean**, so git allows `checkout`, `checkout -b` and `stash push` — and every one of them deletes
+     * `MERGE_HEAD`, silently discarding the resolution nobody has recorded yet. It is also the state in which
+     * the panel says "All conflicts are resolved. Finish the merge to record it."
+     */
+    const b = await bench();
+    const repo = withConflict();
+    const projectId = await addProject(b, repo);
+    const handlers = gitOnly(b.store, { start: async () => ({ id: "r-merge" }) });
+    await call(handlers, "coder.gitMergeResolve", { projectId, branch: "work" });
+    // What the agent does: resolve the file and stage it — so there are **no unmerged entries left**, while the
+    // merge itself is still open. (A resolution that keeps ours *entirely* leaves the tree clean as well; that
+    // state is the next test.)
+    writeFileSync(join(repo, "a.txt"), "theirs and ours\n");
+    run(repo, ["add", "a.txt"]);
+    expect(spawnSync("git", ["-C", repo, "status", "--porcelain=v1"], { encoding: "utf8" }).stdout).toBe(
+      "M  a.txt\n",
+    );
+
+    // The status still says a merge is in progress — the fact the whole flow depends on.
+    const status = (await call(handlers, "coder.gitStatus", { projectId })) as {
+      conflicted: boolean;
+      merge?: { branch?: string };
+    };
+    expect(status.conflicted).toBe(false);
+    expect(status.merge).toEqual({ branch: "work" });
+
+    for (const [method, params] of [
+      ["coder.gitCreateBranch", { name: "somewhere-else" }],
+      ["coder.gitCheckout", { branch: "main" }],
+      ["coder.gitMerge", { branch: "work" }],
+      // The second resolve must not abort the merge it did not start (it used to: no unmerged entries meant
+      // "nothing was started", and the abort took the staged resolution with it).
+      ["coder.gitMergeResolve", { branch: "work" }],
+      ["coder.gitPull", {}],
+      ["coder.gitStashPush", {}],
+    ] as const) {
+      const refusal = await refusalOf(handlers, method, { projectId, ...params });
+      // The staged case gets the window's own sentence for the state, not one about conflicts that are gone.
+      expectRefusal(refusal, "git.merge.resolved");
+    }
+
+    // **Nothing moved**: the merge is still open and the resolution is still on disk.
+    expect(spawnSync("git", ["-C", repo, ...["rev-parse", "--verify", "--quiet", "MERGE_HEAD"]], {
+      encoding: "utf8",
+    }).status).toBe(0);
+    expect(readFileSync(join(repo, "a.txt"), "utf8")).toBe("theirs and ours\n");
+
+    // And the way out still works: finish it, which records the agent's resolution.
+    const finished = (await call(handlers, "coder.gitMergeContinue", { projectId })) as { sha: string };
+    expect(finished.sha).toMatch(/^[0-9a-f]{7,}$/);
+    expect(spawnSync("git", ["-C", repo, ...["rev-parse", "--verify", "--quiet", "MERGE_HEAD"]], {
+      encoding: "utf8",
+    }).status).not.toBe(0);
+  });
+
+  itGit("can finish a merge that leaves the tree clean", async () => {
+    // Resolving by keeping one side entirely (`--ours`) leaves `git status` empty with `MERGE_HEAD` present —
+    // a state this product's own prompt invites. The status must still report the merge, or neither Finish nor
+    // Abort is reachable and the user is stuck in a merge EnvoyDev cannot see.
+    const b = await bench();
+    const repo = withConflict();
+    const projectId = await addProject(b, repo);
+    const handlers = gitOnly(b.store, { start: async () => ({ id: "r-merge" }) });
+    await call(handlers, "coder.gitMergeResolve", { projectId, branch: "work" });
+    run(repo, ["checkout", "--ours", "a.txt"]);
+    run(repo, ["add", "a.txt"]);
+    expect(spawnSync("git", ["-C", repo, "status", "--porcelain"], { encoding: "utf8" }).stdout).toBe("");
+
+    const status = (await call(handlers, "coder.gitStatus", { projectId })) as { merge?: unknown };
+    expect(status.merge).toBeDefined();
+    const finished = (await call(handlers, "coder.gitMergeContinue", { projectId })) as { sha: string };
+    expect(finished.sha).toMatch(/^[0-9a-f]{7,}$/);
+  });
 });

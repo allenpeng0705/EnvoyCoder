@@ -145,6 +145,14 @@ export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null
   const label =
     status?.merge !== undefined && status.conflicted ? t("git.branches.conflictsChip") : currentBranch;
 
+  /**
+   * **While a merge is open, the actions that would throw it away are not offered** — the daemon refuses every
+   * one of them (they delete `MERGE_HEAD`, which is how a staged resolution disappears), and a control whose
+   * press can only produce an alert is a control this panel should not draw. Fetch stays live: it moves only
+   * remote-tracking refs, which is the same reason the daemon allows it during a run.
+   */
+  const blocked = busy || status?.merge !== undefined;
+
   const close = (returnFocus = true): void => {
     setOpen(false);
     setNotice(undefined);
@@ -334,7 +342,7 @@ export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null
                     type="button"
                     className="project__branch-item row-menu__item"
                     aria-current={branch.current ? "true" : undefined}
-                    disabled={busy || branch.current}
+                    disabled={blocked || branch.current}
                     onClick={() => void switchTo(branch)}
                   >
                     <span>{branch.name}</span>
@@ -347,7 +355,7 @@ export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null
                       className="project__branch-merge"
                       title={t("git.merge.into", { branch: branch.name, current: currentBranch })}
                       aria-label={t("git.merge.into", { branch: branch.name, current: currentBranch })}
-                      disabled={busy}
+                      disabled={blocked}
                       onClick={() => void merge(branch)}
                     >
                       {t("git.merge.cta")}
@@ -370,7 +378,7 @@ export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null
             <button
               type="button"
               className="button button--ghost"
-              disabled={busy}
+              disabled={blocked}
               onClick={() => void sync(props.onPull, "pull")}
             >
               {t("git.pull.cta")}
@@ -396,7 +404,7 @@ export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null
               <button
                 type="button"
                 className="button button--ghost"
-                disabled={busy || draft.trim() === ""}
+                disabled={blocked || draft.trim() === ""}
                 onClick={() => void create()}
               >
                 {t("git.branches.create")}

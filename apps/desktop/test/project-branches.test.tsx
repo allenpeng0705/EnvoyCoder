@@ -193,6 +193,9 @@ describe("ProjectBranches", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "main" }));
     await waitFor(() => expect(onCheckout).toHaveBeenCalledWith("main"));
+    // The list follows the switch when the window hands back a new snapshot — and the row rule is what makes
+    // that load-bearing: `current` is both the mark and the *disable*, so a stale list is a locked door.
+    expect(screen.getByRole("button", { name: "work" })).toBeTruthy();
     // The panel stays open and says what happened, which is what makes a second switch possible.
     expect(await screen.findByText(en["git.branches.switched"].replace("{branch}", "main"))).toBeTruthy();
   });
@@ -389,6 +392,28 @@ describe("a merge that stops on conflicts", () => {
     fireEvent.click(screen.getByRole("button", { name: en["git.merge.abort"] }));
     await waitFor(() => expect(onAbortMerge).toHaveBeenCalled());
     expect(await screen.findByText(en["git.merge.aborted"])).toBeTruthy();
+  });
+
+  it("offers no branch-moving action while a merge is open, resolved or not", async () => {
+    // Two reviewers measured this independently: with every conflict staged, git allows `checkout -b`,
+    // `checkout` and `stash push` — and each deletes `MERGE_HEAD`, discarding the resolution nobody has
+    // recorded. The daemon refuses them; the panel must not offer them either.
+    renderControl({
+      snapshot: {
+        status: status({ conflicted: false, dirty: 1, merge: { branch: "main" } }),
+        branches: BRANCHES,
+      },
+    });
+    fireEvent.click(trigger());
+
+    expect((screen.getByRole("button", { name: "main" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: en["git.merge.into"].replace("{branch}", "main").replace("{current}", "work") }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: en["git.pull.cta"] }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: en["git.branches.create"] }) as HTMLButtonElement).disabled).toBe(true);
+    // …and Fetch is still live, because it moves nothing in the working tree.
+    expect((screen.getByRole("button", { name: en["git.fetch.cta"] }) as HTMLButtonElement).disabled).toBe(false);
+    // The way out is the one control that is offered.
+    expect((screen.getByRole("button", { name: en["git.merge.finish"] }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("finishes a merge once every conflict is staged", async () => {
