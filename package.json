@@ -24,6 +24,7 @@
     "build": "npm run build -w @envoydev/desktop",
     "dev": "npm run dev -w @envoydev/desktop",
     "daemon": "tsx apps/desktop/src/daemon/main.ts",
+    "service:proof": "node node_modules/tsx/dist/cli.mjs scripts/service-proof.mts",
     "smoke": "npm run peers:check && tsx scripts/smoke.ts",
     "tauri:dev": "npm run tauri:dev -w @envoydev/desktop",
     "tauri:build": "npm run tauri:build -w @envoydev/desktop",
