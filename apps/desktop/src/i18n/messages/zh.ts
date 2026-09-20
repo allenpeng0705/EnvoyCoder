@@ -28,6 +28,8 @@
  * also fails a translation that loses or invents a `{placeholder}`.
  */
 
+import { git } from "./git.zh.js";
+
 import type { Catalogue } from "../translate.js";
 
 export const zh: Catalogue = {
@@ -671,38 +673,8 @@ export const zh: Catalogue = {
   "error.envoyLlmApiKeyRequired":
     "Envoy Harness 需要 {provider} 的 API 密钥。请在 LLM 设置中输入并保存。",
   "error.thinkingUnsupported": "{harness} 无法通过 EnvoyDev 与它交流的协议获得思考档位，因此这次运行没有启动。不设置思考档位，即可让 {harness} 按自己的方式运行。",
-  "error.gitNothingStaged": "没有已暂存的改动，因此没有可提交的内容。请先暂存一个文件——或者全部。",
-  "error.gitMergeConflict": "{branch} 无法自动合并。这些文件有冲突：{files}。没有做任何改动——你的分支和工作区保持原样。",
-  "error.gitPullDiverged": "电脑上的分支和远程的分支都变了，pull 无法把它们合到一起。请合并它们，或者推送你的分支。",
-  "git.merge.into": "把 {branch} 合并到 {current}",
-  "git.merge.cta": "合并",
-  "git.merge.done": "已把 {branch} 合并到 {into}。",
-  "git.fetch.nothing": "\u5df2\u83b7\u53d6\u3002\u6ca1\u6709\u65b0\u5185\u5bb9\u3002",
-  "git.pull.nothing": "\u5df2\u62c9\u53d6\u3002\u5df2\u7ecf\u662f\u6700\u65b0\u3002",
-  "git.fetch.cta": "获取",
-  "git.fetch.done": "已获取。{summary}",
-  "git.pull.cta": "拉取",
-  "git.pull.done": "已拉取。{summary}",
-  "error.gitCommitEmpty": "提交需要一条说明。",
-  "error.gitTimedOut": "git 没有及时完成，EnvoyDev 已将它停止。仓库可能很大，或者 git 在等待什么。",
+  ...git,
   "sidebar.project.branch": "分支：{branch}",
-  "git.branches.title": "分支",
-  "git.branches.aria": "{project} 的分支",
-  "git.branches.detachedChip": "无分支",
-  "git.branches.detached": "这个仓库的 HEAD 处于分离状态，因此没有当前分支。",
-  "git.branches.empty": "这个仓库还没有分支。",
-  "git.branches.new": "新建分支",
-  "git.branches.name": "分支名",
-  "git.branches.create": "创建并切换",
-  "git.branches.switched": "已切换到 {branch}。",
-  "git.branches.created": "已创建 {branch} 并切换过去。",
-  "error.gitMissing": "这台电脑上没有安装 git，EnvoyDev 无法读取这个仓库。请先安装 git 再试。",
-  "error.gitNotARepository": "“{path}”不是 git 仓库。只有 git 跟踪的文件夹才有分支。",
-  "error.gitBusy": "这个项目里“{title}”正在运行。切换分支之前请先结束或停止它——智能体正在工作时 checkout 会丢失工作。",
-  "error.gitFailed": "git 无法完成：{detail}",
-  "error.gitBranchInvalid": "“{name}”不能作为分支名。可以使用字母、数字、点、连字符和斜杠，且不能以连字符开头。",
-  "error.gitBranchTooLong": "分支名最多 {count} 个字符。",
-  "error.gitBranchEmpty": "分支需要一个名字。",
   "error.projectNotFound": "这台机器上没有名为“{id}”的项目。它可能已在另一个窗口中被移除。",
   "error.taskNotFound": "这台机器上没有名为“{id}”的任务。它可能已在另一个窗口中被移除。",
   "error.pairedDeviceMissing":

@@ -28,6 +28,8 @@
  * rule implemented in six places is six chances to be wrong.
  */
 
+import { git } from "./git.en.js";
+
 export const en = {
   /* ── the product, and the machine it is on ── */
   "app.name": "EnvoyDev",
@@ -1076,38 +1078,8 @@ export const en = {
   // The straight quotes are the daemon's own (`service.ts`, `runs.ts` write `${id}` inside `"…"`),
   // and they are kept here deliberately: this entry *is* the sentence an English user already reads,
   // and an equality test in `daemon-errors-i18n.test.ts` fails if the two ever drift.
-  "error.gitNothingStaged": "Nothing is staged, so there is nothing to commit. Stage a file first — or stage everything and commit that.",
-  "error.gitMergeConflict": "{branch} cannot be merged automatically. These files conflict: {files}. Nothing was changed — your branch and your working tree are exactly as they were.",
-  "error.gitPullDiverged": "The branch on the computer and the one on the remote have both changed, so a pull cannot bring them together. Merge them, or push your branch.",
-  "git.merge.into": "Merge {branch} into {current}",
-  "git.merge.cta": "Merge",
-  "git.merge.done": "Merged {branch} into {into}.",
-  "git.fetch.nothing": "Fetched. Nothing new.",
-  "git.pull.nothing": "Pulled. Already up to date.",
-  "git.fetch.cta": "Fetch",
-  "git.fetch.done": "Fetched. {summary}",
-  "git.pull.cta": "Pull",
-  "git.pull.done": "Pulled. {summary}",
-  "error.gitCommitEmpty": "A commit needs a message.",
-  "error.gitTimedOut": "Git did not finish in time, so EnvoyDev stopped it. The repository may be very large, or git may be waiting for something.",
+  ...git,
   "sidebar.project.branch": "Branch: {branch}",
-  "git.branches.title": "Branches",
-  "git.branches.aria": "Branches for {project}",
-  "git.branches.detachedChip": "No branch",
-  "git.branches.detached": "This repository is on a detached HEAD, so no branch is current.",
-  "git.branches.empty": "This repository has no branches yet.",
-  "git.branches.new": "New branch",
-  "git.branches.name": "Branch name",
-  "git.branches.create": "Create and switch",
-  "git.branches.switched": "Switched to {branch}.",
-  "git.branches.created": "Created {branch} and switched to it.",
-  "error.gitMissing": "Git is not installed on this machine, so EnvoyDev cannot read this repository. Install git and try again.",
-  "error.gitNotARepository": "\"{path}\" is not a git repository. Branches exist only for folders git tracks.",
-  "error.gitBusy": "\"{title}\" is running in this project. Finish or stop it before changing branches — a checkout under a working agent loses work.",
-  "error.gitFailed": "Git could not do that: {detail}",
-  "error.gitBranchInvalid": "\"{name}\" cannot be a branch name. Letters, digits, dots, dashes and slashes are allowed, and it cannot start with a dash.",
-  "error.gitBranchTooLong": "A branch name can be at most {count} characters.",
-  "error.gitBranchEmpty": "A branch needs a name.",
   "error.projectNotFound":
     "There is no project called \"{id}\" on this machine. It may have been removed from another window.",
   "error.taskNotFound":

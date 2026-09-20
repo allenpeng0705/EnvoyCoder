@@ -4,27 +4,34 @@
  * ## The property, taken from the one other place this product runs something for a user
  *
  * `coder.runFix` states it: **the client sends a name, never a command.** Here the name is a branch, a
- * project id, or nothing at all, and the argv is built in this file from `@envoydev/platform`'s builders.
- * There is no field in any request that could carry a command line, so a window — or a phone, or a mesh
- * peer, or a buggy client — cannot turn this into a shell. Reads are `../packages/platform/src/git.ts`'s
- * parsers, pure and pinned against a real repository.
+ * project id, a stash number, or nothing at all, and the argv is built in this file from
+ * `@envoydev/platform`'s builders. There is no field in any request that could carry a command line, so a
+ * window — or a phone, or a mesh peer, or a buggy client — cannot turn this into a shell. Reads are
+ * `../packages/platform/src/git.ts`'s parsers, pure and pinned against a real repository.
  *
- * ## Why a live run refuses a write, and never a read
+ * ## What refuses while a run is live, and the criterion behind it
  *
- * An agent mid-edit and a `checkout` in the same working tree is how a user loses work, and neither
- * program can see the other: the agent is holding file handles the daemon knows nothing about, and git
- * only knows that the tree is dirty. So `coder.gitCheckout` and `coder.gitCreateBranch` refuse while a run
- * is live **anywhere in the project** — a run's own folder is inside it — and the refusal names the task,
- * because "something is running" is not something a user can act on. Reads are never refused: looking at a
- * repository is not the dangerous half, and a picker that cannot be opened during a run is a picker nobody
- * trusts.
+ * An agent mid-edit and a `checkout` in the same working tree is how a user loses work, and neither program
+ * can see the other: the agent is holding file handles the daemon knows nothing about, and git only knows
+ * that the tree is dirty. The rule is therefore **a command that would move the working tree or a branch is
+ * refused while a run is live anywhere in the project** (a run's own folder is inside it), and the refusal
+ * names the task, because "something is running" is not something a user can act on.
+ *
+ *   * refused: `gitCheckout`, `gitCreateBranch`, `gitMerge`, `gitPull`, `gitStage`, `gitUnstage`,
+ *     `gitCommit`, `gitStashPush`, `gitStashPop` — every one of them rewrites a file in the tree;
+ *   * allowed: `gitStatus`, `gitBranches`, `gitStashList`, `gitWorktreeDiff`, `gitFetch` and
+ *     `gitStashDrop` — looking is not the dangerous half, a fetch moves only remote-tracking refs, and
+ *     dropping a stash moves no branch and no file. A picker nobody can open during a run is a picker
+ *     nobody trusts.
  *
  * ## What is deliberately absent
  *
- * No `reset --hard`, no `clean -fd`, no force-push, no rebase: each of them destroys work that git cannot
- * get back, and each of them needs a confirmation that names what is about to be lost — which is a
- * conversation, not a method. No `fetch`/`pull`/`push` either: those need credentials, and a credential
- * story that is honest about ssh and the user's own helper is the next slice rather than this one.
+ * No force-push, no rebase, no `reset --hard` as a *user* action, and no `push`: each of the first three
+ * destroys work that git cannot get back, and each needs a confirmation that names what is about to be lost
+ * — which is a conversation, not a method. The one `reset --hard` in here is not a user action at all: it
+ * is `gitStashPop` taking back a *pop it just made onto a tree it measured as clean*, and `platform/git.ts`
+ * records why that is exact. Credentials are not this file's business either: a `fetch`/`pull` runs with the
+ * user's own git and helper, which is the whole credential story this product has.
  */
 
 import { spawn as nodeSpawn } from "node:child_process";
@@ -36,6 +43,10 @@ import {
   GIT_HAS_STAGED_ARGS,
   GIT_MERGE_ABORT_ARGS,
   GIT_PULL_ARGS,
+  GIT_STASH_LIST_ARGS,
+  GIT_STASH_PUSH_ARGS,
+  GIT_STASH_POP_UNDO_ARGS,
+  GIT_STASH_POP_UNDO_CLEAN_ARGS,
   GIT_STATUS_ARGS,
   branchNameRefusal,
   currentSearchPath,
@@ -46,11 +57,15 @@ import {
   gitEnv,
   gitMergeArgs,
   gitStageArgs,
+  gitStashDropArgs,
+  gitStashPopArgs,
   gitUnstageArgs,
   listWorktreeChanges,
   parseGitBranches,
+  parseGitStashList,
   parseGitStatus,
   type BranchNameRefusal,
+  type GitStash,
   type VcsKind,
   type WorktreeChange,
 } from "@envoydev/platform";
@@ -96,6 +111,10 @@ const NOTHING_STAGED_SENTENCE =
 const COMMIT_EMPTY_SENTENCE = "A commit needs a message.";
 const PULL_DIVERGED_SENTENCE =
   "The branch on the computer and the one on the remote have both changed, so a pull cannot bring them together. Merge them, or push your branch.";
+const NOTHING_TO_STASH_SENTENCE =
+  "There is nothing to stash — no file in this folder has uncommitted changes.";
+const STASH_DIRTY_SENTENCE =
+  "Putting a stash back needs a clean working tree. Commit or stash the changes in this folder first.";
 
 export interface GitHandlerDeps {
   store: CoderStore;
@@ -299,6 +318,31 @@ async function hasStaged(deps: GitDeps, dir: string): Promise<boolean> {
   if (staged.code === 0) return false;
   if (staged.code === 1) return true;
   throw gitFailed(staged);
+}
+
+/** The stashes this repository is holding — a read, and the answer every stash write ends with. */
+async function stashesOf(deps: GitDeps, dir: string): Promise<GitStash[]> {
+  const listed = await runGit(deps, dir, GIT_STASH_LIST_ARGS, { read: true });
+  if (listed.code !== 0) throw gitFailed(listed);
+  return parseGitStashList(listed.text);
+}
+
+/**
+ * Everything a stash write answers with: what the repository is now, and what is still set aside.
+ *
+ * One shape for the three writes, because each of them leaves both a tree and a list a caller has to render
+ * — and a client that had to re-read the list after a push would show the old one until it did.
+ */
+async function stashAnswer(deps: GitDeps, root: string): Promise<{
+  status: GitStatus;
+  changes: WorktreeChange[];
+  stashes: GitStash[];
+}> {
+  return {
+    status: await statusOf(deps, root),
+    changes: changesOf(root),
+    stashes: await stashesOf(deps, root),
+  };
 }
 
 /** One handler table, ready to spread into the daemon's. */
@@ -571,6 +615,102 @@ export function createGitHandlers(deps: GitHandlerDeps): Partial<Record<RpcMetho
         changes: changesOf(root),
         summary: summaryOf(pulled),
       };
+    },
+
+    "coder.gitStashList": async (params) => {
+      const input = parseRpcParams("coder.gitStashList", params) as { projectId: string };
+      const project = projectFor(input.projectId);
+      await repositoryFor(project.path);
+      // A read: allowed while a run is live, like every other listing here.
+      return { stashes: await stashesOf(deps, project.path) };
+    },
+
+    "coder.gitStashPush": async (params) => {
+      const input = parseRpcParams("coder.gitStashPush", params) as { projectId: string };
+      const project = projectFor(input.projectId);
+      await repositoryFor(project.path);
+      refuseWhileRunning(project.id);
+      const root = await gitRoot(deps, project.path);
+
+      /**
+       * **Set nothing aside is a state, not a success.**
+       *
+       * `git stash push` on a clean tree exits *0* and prints `No local changes to save`, so a caller that
+       * trusted the exit code would tell a user their work was safe when nothing had happened. Asked here of
+       * our own status read rather than of git's output, which is localised and versioned.
+       */
+      const before = await statusOf(deps, root);
+      if (before.dirty === 0 && !before.conflicted) {
+        throw coderError(
+          ENVOYDEV_ERRORS.gitNothingToStash,
+          NOTHING_TO_STASH_SENTENCE,
+          ref("error.gitNothingToStash"),
+        );
+      }
+
+      // The whole tree, untracked files included; git's own refusal is the detail if it will not go.
+      const pushed = await runGit(deps, root, GIT_STASH_PUSH_ARGS, { read: false });
+      if (pushed.code !== 0) throw gitFailed(pushed);
+      return await stashAnswer(deps, root);
+    },
+
+    "coder.gitStashPop": async (params) => {
+      const input = parseRpcParams("coder.gitStashPop", params) as { projectId: string; index: number };
+      const project = projectFor(input.projectId);
+      await repositoryFor(project.path);
+      refuseWhileRunning(project.id);
+      const root = await gitRoot(deps, project.path);
+
+      /**
+       * **A pop is only attempted onto a tree measured as clean**, and that precondition is what makes the
+       * undo below exact rather than destructive: with nothing else in the tree, everything a conflicted pop
+       * wrote came from the pop. It is also the honest answer in its own right — a user with unsaved work and
+       * a stash to put back has to decide which of the two matters, and this code cannot decide for them.
+       */
+      const before = await statusOf(deps, root);
+      if (before.dirty > 0 || before.conflicted) {
+        throw coderError(ENVOYDEV_ERRORS.gitStashDirty, STASH_DIRTY_SENTENCE, ref("error.gitStashDirty"));
+      }
+
+      const popped = await runGit(deps, root, gitStashPopArgs(input.index), { read: false });
+      if (popped.code !== 0) {
+        /**
+         * A conflicted pop is **taken back and refused with the files**, exactly as a conflicted merge is —
+         * and the stash survives it, because git does not drop one whose application conflicted. Measured
+         * rather than read out of git's message, which is localised: our own parser calls an unmerged entry
+         * `conflict`.
+         */
+        const conflicted = changesOf(root).filter((change) => change.kind === "conflict");
+        if (conflicted.length > 0) {
+          const files = conflicted.map((change) => change.path);
+          // The tracked half, then the untracked files `-u` restores. Both are no-ops on a tree that was
+          // clean a moment ago, which is the whole reason the precondition above exists.
+          await runGit(deps, root, GIT_STASH_POP_UNDO_ARGS, { read: false });
+          await runGit(deps, root, GIT_STASH_POP_UNDO_CLEAN_ARGS, { read: false });
+          throw coderError(
+            ENVOYDEV_ERRORS.gitStashConflict,
+            `This stash cannot be put back cleanly. These files conflict: ${files.join(", ")}. Nothing was changed, and the stash is still there.`,
+            ref("error.gitStashConflict", { files: listOf(files) }),
+          );
+        }
+        // A number no stash has, most likely: git names the ref it could not resolve.
+        throw gitFailed(popped);
+      }
+      return await stashAnswer(deps, root);
+    },
+
+    "coder.gitStashDrop": async (params) => {
+      const input = parseRpcParams("coder.gitStashDrop", params) as { projectId: string; index: number };
+      const project = projectFor(input.projectId);
+      await repositoryFor(project.path);
+      // **Allowed while a run is live**, by the same criterion that allows a fetch: this moves no branch and
+      // no file, only the stash's own ref and reflog. A user tidying up does not have to stop their agent.
+      const root = await gitRoot(deps, project.path);
+
+      const dropped = await runGit(deps, root, gitStashDropArgs(input.index), { read: false });
+      // Git's own sentence names the ref when there is no such stash, which is more use than a guess here.
+      if (dropped.code !== 0) throw gitFailed(dropped);
+      return await stashAnswer(deps, root);
     },
   };
 }

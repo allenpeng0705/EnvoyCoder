@@ -1858,6 +1858,26 @@ export const WorktreeChangeSchema = z
 
 export const WorktreeChangeListSchema = z.array(WorktreeChangeSchema).readonly();
 
+/**
+ * One stash, as the list shows it.
+ *
+ * `index` is the only part a client may send back: a stash is named by a number, and the daemon builds
+ * `stash@{n}` itself, so no client can name a revision for git to put back.
+ */
+export const GitStashSchema = z
+  .object({
+    index: z.number().int().nonnegative(),
+    /** `stash@{n}` as git writes it — shown, never sent. */
+    ref: z.string().min(1),
+    /** Git's own subject for the entry, untranslated because it is not our sentence. */
+    message: z.string(),
+    /** When it was made, ISO 8601. Absent when git's answer could not be read. */
+    at: z.string().min(1).optional(),
+  })
+  .strict();
+
+export type GitStash = z.infer<typeof GitStashSchema>;
+
 export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.freeze({
   /* — who am I talking to, and what does this daemon do — */
   "coder.hello": {
@@ -2197,6 +2217,69 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
   "coder.gitCreateBranch": {
     params: z.object({ projectId: z.string().min(1), name: z.string().min(1) }).strict(),
     result: GitStatusSchema,
+  },
+  /**
+   * The stashes this repository is holding. A read, so a run does not refuse it.
+   *
+   * Its own method rather than a field on `coder.gitStatus`: the list is asked for where it is shown (the
+   * Changes tab), and folding a second spawn into every status read would make the branch chip slower for
+   * a fact it never displays.
+   */
+  "coder.gitStashList": {
+    params: z.object({ projectId: z.string().min(1) }).strict(),
+    result: z.object({ stashes: z.array(GitStashSchema).readonly() }).strict(),
+  },
+  /**
+   * Set the working tree aside, untracked files included.
+   *
+   * The whole tree, and nothing else: "stash my work" is one decision, and a stash that left a file behind
+   * would answer a status read with work still in the tree. **Git labels the entry itself** — its subject
+   * names the branch and the commit the work sat on — so there is no message here to send. Nothing is
+   * stashed when there is nothing to stash: that is `gitNothingToStash`, not an empty success.
+   */
+  "coder.gitStashPush": {
+    params: z.object({ projectId: z.string().min(1) }).strict(),
+    result: z
+      .object({
+        status: GitStatusSchema,
+        changes: WorktreeChangeListSchema,
+        stashes: z.array(GitStashSchema).readonly(),
+      })
+      .strict(),
+  },
+  /**
+   * Put one stash back — and **only onto a working tree this daemon has just measured as clean**.
+   *
+   * A pop is a merge of the stash into the tree, so it can conflict; the daemon requires a clean tree, so
+   * that everything a conflicted pop wrote came from the pop, and it is undone before the refusal is raised.
+   * The stash itself survives a conflict (git keeps it), which is what `gitStashConflict` promises.
+   */
+  "coder.gitStashPop": {
+    params: z.object({ projectId: z.string().min(1), index: z.number().int().nonnegative() }).strict(),
+    result: z
+      .object({
+        status: GitStatusSchema,
+        changes: WorktreeChangeListSchema,
+        stashes: z.array(GitStashSchema).readonly(),
+      })
+      .strict(),
+  },
+  /**
+   * Discard one stash, leaving the working tree alone.
+   *
+   * The one stash action that destroys something git cannot recover, so a client is expected to ask first —
+   * the answer carries the list as it is afterwards, because a list the user is looking at must not keep a
+   * row that is gone.
+   */
+  "coder.gitStashDrop": {
+    params: z.object({ projectId: z.string().min(1), index: z.number().int().nonnegative() }).strict(),
+    result: z
+      .object({
+        status: GitStatusSchema,
+        changes: WorktreeChangeListSchema,
+        stashes: z.array(GitStashSchema).readonly(),
+      })
+      .strict(),
   },
 
   "coder.listTasks": {

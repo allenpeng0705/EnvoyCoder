@@ -28,6 +28,8 @@
  * also fails a translation that loses or invents a `{placeholder}`.
  */
 
+import { git } from "./git.fr.js";
+
 import type { Catalogue } from "../translate.js";
 
 export const fr: Catalogue = {
@@ -679,38 +681,8 @@ export const fr: Catalogue = {
   "error.envoyLlmApiKeyRequired":
     "Envoy Harness a besoin d’une clé API pour {provider}. Saisissez-en une dans les réglages LLM, puis enregistrez.",
   "error.thinkingUnsupported": "{harness} ne peut pas recevoir de niveau de réflexion via le protocole qu'EnvoyDev parle avec lui, cette exécution n'a donc pas été lancée. Laissez le niveau de réflexion vide pour que {harness} décide lui-même.",
-  "error.gitNothingStaged": "Rien n'est indexé, il n'y a donc rien à committer. Indexez d'abord un fichier — ou tout.",
-  "error.gitMergeConflict": "{branch} ne peut pas être fusionnée automatiquement. Ces fichiers sont en conflit : {files}. Rien n'a été modifié — votre branche et votre arbre de travail sont exactement comme avant.",
-  "error.gitPullDiverged": "La branche sur l'ordinateur et celle du dépôt distant ont toutes deux changé : un pull ne peut pas les réunir. Fusionnez-les, ou poussez votre branche.",
-  "git.merge.into": "Fusionner {branch} dans {current}",
-  "git.merge.cta": "Fusionner",
-  "git.merge.done": "{branch} fusionnée dans {into}.",
-  "git.fetch.nothing": "R\u00e9cup\u00e9r\u00e9. Rien de nouveau.",
-  "git.pull.nothing": "Tir\u00e9. D\u00e9j\u00e0 \u00e0 jour.",
-  "git.fetch.cta": "Récupérer",
-  "git.fetch.done": "Récupéré. {summary}",
-  "git.pull.cta": "Tirer",
-  "git.pull.done": "Tiré. {summary}",
-  "error.gitCommitEmpty": "Un commit a besoin d'un message.",
-  "error.gitTimedOut": "Git n'a pas terminé à temps, donc EnvoyDev l'a arrêté. Le dépôt est peut-être très volumineux, ou git attend quelque chose.",
+  ...git,
   "sidebar.project.branch": "Branche : {branch}",
-  "git.branches.title": "Branches",
-  "git.branches.aria": "Branches de {project}",
-  "git.branches.detachedChip": "Aucune branche",
-  "git.branches.detached": "Ce dépôt a un HEAD détaché, donc aucune branche n'est active.",
-  "git.branches.empty": "Ce dépôt n'a pas encore de branche.",
-  "git.branches.new": "Nouvelle branche",
-  "git.branches.name": "Nom de branche",
-  "git.branches.create": "Créer et basculer",
-  "git.branches.switched": "Basculé sur {branch}.",
-  "git.branches.created": "{branch} créée, et basculé dessus.",
-  "error.gitMissing": "Git n'est pas installé sur cette machine, donc EnvoyDev ne peut pas lire ce dépôt. Installez git et réessayez.",
-  "error.gitNotARepository": "« {path} » n'est pas un dépôt git. Les branches n'existent que pour les dossiers suivis par git.",
-  "error.gitBusy": "« {title} » est en cours dans ce projet. Terminez-la ou arrêtez-la avant de changer de branche — un checkout sous un agent au travail fait perdre du travail.",
-  "error.gitFailed": "Git n'a pas pu le faire : {detail}",
-  "error.gitBranchInvalid": "« {name} » ne peut pas être un nom de branche. Les lettres, chiffres, points, tirets et barres obliques sont acceptés, et il ne peut pas commencer par un tiret.",
-  "error.gitBranchTooLong": "Un nom de branche peut faire au plus {count} caractères.",
-  "error.gitBranchEmpty": "Une branche a besoin d'un nom.",
   "error.projectNotFound": "Il n'y a pas de projet nommé « {id} » sur cet ordinateur. Il a peut-être été supprimé depuis une autre fenêtre.",
   "error.taskNotFound": "Il n'y a pas de tâche nommée « {id} » sur cet ordinateur. Elle a peut-être été supprimée depuis une autre fenêtre.",
   "error.pairedDeviceMissing":

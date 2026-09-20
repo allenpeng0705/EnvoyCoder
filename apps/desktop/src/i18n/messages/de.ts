@@ -28,6 +28,8 @@
  * also fails a translation that loses or invents a `{placeholder}`.
  */
 
+import { git } from "./git.de.js";
+
 import type { Catalogue } from "../translate.js";
 
 export const de: Catalogue = {
@@ -679,38 +681,8 @@ export const de: Catalogue = {
   "error.envoyLlmApiKeyRequired":
     "Envoy Harness braucht einen API-Schlüssel für {provider}. Gib einen in den LLM-Einstellungen ein und speichere.",
   "error.thinkingUnsupported": "{harness} kann über das Protokoll, das EnvoyDev mit ihm spricht, keine Denkstufe erhalten, deshalb wurde der Lauf nicht gestartet. Lass die Denkstufe ungesetzt, damit {harness} selbst entscheidet.",
-  "error.gitNothingStaged": "Es ist nichts bereitgestellt, also gibt es nichts zu committen. Stelle zuerst eine Datei bereit — oder alles.",
-  "error.gitMergeConflict": "{branch} kann nicht automatisch gemergt werden. Diese Dateien stehen im Konflikt: {files}. Es wurde nichts geändert — dein Branch und dein Arbeitsverzeichnis sind genau wie vorher.",
-  "error.gitPullDiverged": "Der Branch auf dem Rechner und der auf dem Remote haben sich beide geändert, ein Pull kann sie also nicht zusammenbringen. Merge sie, oder pushe deinen Branch.",
-  "git.merge.into": "{branch} in {current} mergen",
-  "git.merge.cta": "Merge",
-  "git.merge.done": "{branch} in {into} gemergt.",
-  "git.fetch.nothing": "Gefetcht. Nichts Neues.",
-  "git.pull.nothing": "Gepullt. Schon aktuell.",
-  "git.fetch.cta": "Fetch",
-  "git.fetch.done": "Gefetcht. {summary}",
-  "git.pull.cta": "Pull",
-  "git.pull.done": "Gepullt. {summary}",
-  "error.gitCommitEmpty": "Ein Commit braucht eine Nachricht.",
-  "error.gitTimedOut": "Git wurde nicht rechtzeitig fertig, deshalb hat EnvoyDev es gestoppt. Das Repository ist vielleicht sehr groß, oder git wartet auf etwas.",
+  ...git,
   "sidebar.project.branch": "Branch: {branch}",
-  "git.branches.title": "Branches",
-  "git.branches.aria": "Branches für {project}",
-  "git.branches.detachedChip": "Kein Branch",
-  "git.branches.detached": "Dieses Repository hat einen losgelösten HEAD, deshalb ist kein Branch aktuell.",
-  "git.branches.empty": "Dieses Repository hat noch keine Branches.",
-  "git.branches.new": "Neuer Branch",
-  "git.branches.name": "Branch-Name",
-  "git.branches.create": "Anlegen und wechseln",
-  "git.branches.switched": "Zu {branch} gewechselt.",
-  "git.branches.created": "{branch} angelegt und dorthin gewechselt.",
-  "error.gitMissing": "Git ist auf diesem Rechner nicht installiert, deshalb kann EnvoyDev dieses Repository nicht lesen. Installiere git und versuche es erneut.",
-  "error.gitNotARepository": "„{path}“ ist kein Git-Repository. Branches gibt es nur für Ordner, die git verfolgt.",
-  "error.gitBusy": "„{title}“ läuft gerade in diesem Projekt. Beende oder stoppe sie, bevor du den Branch wechselst — ein Checkout unter einem arbeitenden Agenten kostet Arbeit.",
-  "error.gitFailed": "Git konnte das nicht ausführen: {detail}",
-  "error.gitBranchInvalid": "„{name}“ kann kein Branch-Name sein. Erlaubt sind Buchstaben, Ziffern, Punkte, Bindestriche und Schrägstriche, und er darf nicht mit einem Bindestrich beginnen.",
-  "error.gitBranchTooLong": "Ein Branch-Name darf höchstens {count} Zeichen lang sein.",
-  "error.gitBranchEmpty": "Ein Branch braucht einen Namen.",
   "error.projectNotFound": "Es gibt auf diesem Computer kein Projekt namens „{id}“. Vielleicht wurde es in einem anderen Fenster entfernt.",
   "error.taskNotFound": "Es gibt auf diesem Computer keine Aufgabe namens „{id}“. Vielleicht wurde sie in einem anderen Fenster entfernt.",
   "error.pairedDeviceMissing":

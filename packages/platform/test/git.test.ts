@@ -18,6 +18,10 @@ import {
   GIT_BRANCHES_ARGS,
   GIT_HAS_HEAD_ARGS,
   GIT_HAS_STAGED_ARGS,
+  GIT_STASH_LIST_ARGS,
+  GIT_STASH_PUSH_ARGS,
+  GIT_STASH_POP_UNDO_ARGS,
+  GIT_STASH_POP_UNDO_CLEAN_ARGS,
   GIT_STATUS_ARGS,
   branchNameRefusal,
   detectVcsKind,
@@ -26,9 +30,13 @@ import {
   gitCommitArgs,
   gitEnv,
   gitStageArgs,
+  gitStashDropArgs,
+  gitStashPopArgs,
   gitUnstageArgs,
   parseGitBranches,
+  parseGitStashList,
   parseGitStatus,
+  stashRef,
 } from "../src/git.js";
 
 const git = spawnSync("git", ["--version"], { encoding: "utf8" });
@@ -285,5 +293,86 @@ describe("detectVcsKind", () => {
     expect(detectVcsKind(root, { gitRepository: false })).toBe("jj");
     // A colocated repository answers git: that is the interface this product drives.
     expect(detectVcsKind(root, { gitRepository: true })).toBe("git");
+  });
+});
+
+describe("stash", () => {
+  it("names a stash by a number, and refuses what is not one", () => {
+    expect(stashRef(0)).toBe("stash@{0}");
+    expect(stashRef(12)).toBe("stash@{12}");
+    expect(gitStashPopArgs(3)).toEqual(["stash", "pop", "stash@{3}"]);
+    expect(gitStashDropArgs(3)).toEqual(["stash", "drop", "stash@{3}"]);
+    // A caller free to name a revision could put back a commit or a tag; a number can only be a stash.
+    expect(() => stashRef(-1)).toThrow();
+    expect(() => stashRef(1.5)).toThrow();
+    expect(() => stashRef(Number.NaN)).toThrow();
+  });
+
+  it("takes the untracked files with the tracked ones", () => {
+    // `-u` and not `-a`: an untracked file is work, a build directory git was told to ignore is not.
+    expect(GIT_STASH_PUSH_ARGS).toEqual(["stash", "push", "-u"]);
+  });
+
+  itGit("reads back what a real repository stashed, newest first, whoever stashed it", () => {
+    const root = repository();
+    writeFileSync(join(root, "a.txt"), "work\n");
+    writeFileSync(join(root, "new.txt"), "untracked\n");
+    run(root, GIT_STASH_PUSH_ARGS);
+    writeFileSync(join(root, "a.txt"), "more\n");
+    // The second one is stashed the way a user's own terminal does it, message and all: the list is read the
+    // same either way, which is the point — a stash this product made and one it did not are one kind of thing.
+    run(root, ["stash", "push", "-u", "-m", "from my terminal"]);
+
+    const listed = spawnSync("git", ["-C", root, ...GIT_STASH_LIST_ARGS], { encoding: "utf8" });
+    expect(listed.status).toBe(0);
+    const stashes = parseGitStashList(listed.stdout);
+
+    expect(stashes.map((stash) => stash.index)).toEqual([0, 1]);
+    expect(stashes[0]?.message).toBe("On work: from my terminal");
+    // Ours carries git's own subject, which names the branch and the commit it sat on.
+    expect(stashes[1]?.message).toMatch(/^WIP on work: /);
+    expect(stashes.map((stash) => stash.ref)).toEqual(["stash@{0}", "stash@{1}"]);
+    // Both halves of `-u` are in there: the tracked edit *and* the file git did not know about.
+    expect(gitOut(root, ["status", "--porcelain"])).toBe("");
+    expect(stashes[0]?.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  itGit("keeps one record whole when a stash message spans lines", () => {
+    // A stash made elsewhere may carry a multi-line message, and a newline-separated parse would read one
+    // stash as two. Git's `%s` is the subject, so the record holds the folded first paragraph.
+    const root = repository();
+    writeFileSync(join(root, "a.txt"), "work\n");
+    run(root, ["stash", "push", "-u", "-m", "first line\nsecond line"]);
+    const listed = spawnSync("git", ["-C", root, ...GIT_STASH_LIST_ARGS], { encoding: "utf8" });
+    const stashes = parseGitStashList(listed.stdout);
+    expect(stashes).toHaveLength(1);
+    expect(stashes[0]?.message).toBe("On work: first line second line");
+  });
+
+  itGit("answers an empty list with an empty list, not a failure", () => {
+    const listed = spawnSync("git", ["-C", repository(), ...GIT_STASH_LIST_ARGS], { encoding: "utf8" });
+    expect(listed.status).toBe(0);
+    expect(parseGitStashList(listed.stdout)).toEqual([]);
+  });
+
+  itGit("puts an untracked file back, and undoes a pop that conflicts", () => {
+    const root = repository();
+    writeFileSync(join(root, "a.txt"), "stashed\n");
+    writeFileSync(join(root, "new.txt"), "untracked\n");
+    run(root, GIT_STASH_PUSH_ARGS);
+    // The branch moves on, so putting the stash back cannot be clean.
+    writeFileSync(join(root, "a.txt"), "moved on\n");
+    run(root, ["commit", "-qam", "moved on"]);
+
+    const popped = spawnSync("git", ["-C", root, ...gitStashPopArgs(0)], { encoding: "utf8" });
+    expect(popped.status).not.toBe(0);
+    // Git keeps the stash when the application conflicts — which is what makes the undo honest.
+    expect(gitOut(root, ["status", "--porcelain"])).toContain("UU a.txt");
+
+    run(root, GIT_STASH_POP_UNDO_ARGS);
+    run(root, GIT_STASH_POP_UNDO_CLEAN_ARGS);
+    expect(gitOut(root, ["status", "--porcelain"])).toBe("");
+    expect(parseGitStashList(spawnSync("git", ["-C", root, ...GIT_STASH_LIST_ARGS], { encoding: "utf8" }).stdout))
+      .toHaveLength(1);
   });
 });

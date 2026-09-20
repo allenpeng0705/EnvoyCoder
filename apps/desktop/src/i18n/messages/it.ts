@@ -28,6 +28,8 @@
  * also fails a translation that loses or invents a `{placeholder}`.
  */
 
+import { git } from "./git.it.js";
+
 import type { Catalogue } from "../translate.js";
 
 export const it: Catalogue = {
@@ -679,38 +681,8 @@ export const it: Catalogue = {
   "error.envoyLlmApiKeyRequired":
     "Envoy Harness richiede una chiave API per {provider}. Inseriscine una nelle impostazioni LLM e salva.",
   "error.thinkingUnsupported": "{harness} non può ricevere un livello di ragionamento tramite il protocollo che EnvoyDev parla con lui, quindi l'esecuzione non è partita. Lascia il livello di ragionamento non impostato per far decidere {harness} da sé.",
-  "error.gitNothingStaged": "Non c'è nulla in stage, quindi non c'è niente da committare. Metti prima un file in stage — o tutto.",
-  "error.gitMergeConflict": "{branch} non può essere unito automaticamente. Questi file sono in conflitto: {files}. Non è stato cambiato nulla — il branch e il working tree sono esattamente come prima.",
-  "error.gitPullDiverged": "Il branch sul computer e quello sul remoto sono cambiati entrambi, quindi un pull non può unirli. Uniscili, oppure pusha il tuo branch.",
-  "git.merge.into": "Unisci {branch} in {current}",
-  "git.merge.cta": "Unisci",
-  "git.merge.done": "{branch} unito in {into}.",
-  "git.fetch.nothing": "Scaricato. Niente di nuovo.",
-  "git.pull.nothing": "Aggiornato. Gi\u00e0 tutto aggiornato.",
-  "git.fetch.cta": "Fetch",
-  "git.fetch.done": "Scaricato. {summary}",
-  "git.pull.cta": "Pull",
-  "git.pull.done": "Aggiornato. {summary}",
-  "error.gitCommitEmpty": "Un commit ha bisogno di un messaggio.",
-  "error.gitTimedOut": "Git non ha finito in tempo, quindi EnvoyDev lo ha fermato. Il repository è forse molto grande, oppure git sta aspettando qualcosa.",
+  ...git,
   "sidebar.project.branch": "Branch: {branch}",
-  "git.branches.title": "Branch",
-  "git.branches.aria": "Branch di {project}",
-  "git.branches.detachedChip": "Nessun branch",
-  "git.branches.detached": "Questo repository ha un HEAD staccato, quindi nessun branch è attivo.",
-  "git.branches.empty": "Questo repository non ha ancora branch.",
-  "git.branches.new": "Nuovo branch",
-  "git.branches.name": "Nome del branch",
-  "git.branches.create": "Crea e passa",
-  "git.branches.switched": "Passato a {branch}.",
-  "git.branches.created": "{branch} creato, e passato lì.",
-  "error.gitMissing": "Git non è installato su questa macchina, quindi EnvoyDev non può leggere questo repository. Installa git e riprova.",
-  "error.gitNotARepository": "«{path}» non è un repository git. I branch esistono solo per le cartelle che git segue.",
-  "error.gitBusy": "«{title}» è in esecuzione in questo progetto. Finiscila o fermala prima di cambiare branch — un checkout sotto un agente al lavoro fa perdere lavoro.",
-  "error.gitFailed": "Git non ha potuto farlo: {detail}",
-  "error.gitBranchInvalid": "«{name}» non può essere un nome di branch. Sono ammessi lettere, cifre, punti, trattini e barre, e non può iniziare con un trattino.",
-  "error.gitBranchTooLong": "Un nome di branch può avere al massimo {count} caratteri.",
-  "error.gitBranchEmpty": "Un branch ha bisogno di un nome.",
   "error.projectNotFound": "Non esiste un progetto chiamato «{id}» su questo computer. Potrebbe essere stato rimosso da un'altra finestra.",
   "error.taskNotFound": "Non esiste un'attività chiamata «{id}» su questo computer. Potrebbe essere stata rimossa da un'altra finestra.",
   "error.pairedDeviceMissing":

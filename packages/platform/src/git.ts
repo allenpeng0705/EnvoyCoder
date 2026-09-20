@@ -183,6 +183,114 @@ export function parseGitBranches(raw: string): GitBranch[] {
   return branches;
 }
 
+/** One stash, as a list shows it. */
+export interface GitStash {
+  /** The number a client sends back to put this stash back or discard it — never a ref it made up. */
+  index: number;
+  /** `stash@{n}`, as git wrote it. Shown rather than sent: a client names a stash by its number. */
+  ref: string;
+  /**
+   * Git's own subject for the entry — `On <branch>: <what the user typed>`, or `WIP on <branch>: …`.
+   *
+   * **Not a sentence of ours, and not translated**: git writes it when the stash is made, and a reworded
+   * copy here would be a claim about someone else's words. The time next to it is what makes it readable.
+   */
+  message: string;
+  /** When the stash was made, as ISO 8601. Absent when git's answer could not be read. */
+  at?: string;
+}
+
+/**
+ * `git stash list -z --format=…`, records separated by NUL and fields by US (`\x1f`).
+ *
+ * Two separators because the first field git writes is the *reflog selector* and the last is a bare
+ * timestamp: with `-z` alone a record would be a run of fields with nothing to count them by, and a
+ * newline-separated parse would split on a message that contained one. `%s` is the subject, so a
+ * multi-line message arrives as its first line rather than as two records.
+ */
+export const GIT_STASH_LIST_ARGS: readonly string[] = [
+  "stash",
+  "list",
+  "-z",
+  "--format=%gd%x1f%s%x1f%ct",
+];
+
+/**
+ * Parse `GIT_STASH_LIST_ARGS`' output.
+ *
+ * A record whose selector is not `stash@{n}` is skipped rather than guessed at: that is the shape only a
+ * stash has, and a line that lacks it is not one this build knows how to name.
+ */
+export function parseGitStashList(raw: string): GitStash[] {
+  const stashes: GitStash[] = [];
+  for (const record of raw.split("\0")) {
+    if (record === "") continue;
+    const [ref = "", message = "", seconds = ""] = record.split("\u001f");
+    const selector = /^stash@\{(\d+)\}$/.exec(ref);
+    if (selector === null) continue;
+    const at = Number.parseInt(seconds, 10);
+    stashes.push({
+      index: Number.parseInt(selector[1] ?? "", 10),
+      ref,
+      message,
+      ...(Number.isFinite(at) ? { at: new Date(at * 1000).toISOString() } : {}),
+    });
+  }
+  return stashes;
+}
+
+/**
+ * `stash@{n}`, built from a **number**.
+ *
+ * The client sends an index, never a ref: `git stash pop` takes any commit-ish, so a caller free to name the
+ * revision could put back a commit, a tag, or another repository's object. A number can only be a stash, and
+ * a number that is not a whole one is a programming error rather than something a user could type.
+ */
+export function stashRef(index: number): string {
+  if (!Number.isSafeInteger(index) || index < 0) {
+    throw new Error(`a stash index is a whole number that is not negative, not ${String(index)}`);
+  }
+  return `stash@{${index}}`;
+}
+
+/**
+ * Set the working tree aside.
+ *
+ * **`-u` is not optional here.** "Stash my work" from a phone means the new file too, and a stash that
+ * silently left untracked files behind would answer the next status read with a tree that still had work in
+ * it — which is the one thing a user asked it not to. Ignored files are still left alone (`-u`, not `-a`): a
+ * build directory is not work.
+ *
+ * **No `-m`**, and that is a decision rather than an omission: git's own subject names the branch and the
+ * commit the work sat on (`WIP on work: 3c3a2b9 one`), which is what the list needs to tell two stashes
+ * apart, and it costs a text field that no surface here has room for. A user who wants their own words has
+ * a commit message for that.
+ */
+export const GIT_STASH_PUSH_ARGS: readonly string[] = ["stash", "push", "-u"];
+
+/** Put one stash back. Which one is a number, and `stashRef` is what turns it into a ref. */
+export function gitStashPopArgs(index: number): string[] {
+  return ["stash", "pop", stashRef(index)];
+}
+
+/** Discard one stash, without touching the working tree. */
+export function gitStashDropArgs(index: number): string[] {
+  return ["stash", "drop", stashRef(index)];
+}
+
+/**
+ * Taking back a stash that would not go on cleanly — the two commands that undo an attempted pop.
+ *
+ * **These are the only destructive commands this product runs, and the guard is elsewhere: a pop is only
+ * attempted on a working tree the daemon has just measured as clean.** Given that, everything a conflicted
+ * pop left behind came from the pop itself, so `reset --hard` (the tracked half) followed by `clean -qfd`
+ * (the untracked files `-u` restores) puts the tree back exactly as it was — and the stash is *kept*, because
+ * git does not drop one whose application conflicted. The alternative is a half-applied stash in a
+ * repository this window cannot finish, which is the state the merge code refuses to leave too.
+ */
+export const GIT_STASH_POP_UNDO_ARGS: readonly string[] = ["reset", "--hard"];
+export const GIT_STASH_POP_UNDO_CLEAN_ARGS: readonly string[] = ["clean", "-qfd"];
+
 /** Why a name cannot be a branch, as a code the daemon words in the user's language. */
 export type BranchNameRefusal = "empty" | "too-long" | "looks-like-an-option" | "not-a-ref";
 

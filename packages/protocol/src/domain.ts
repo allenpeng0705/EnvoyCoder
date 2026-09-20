@@ -995,6 +995,28 @@ export const ENVOYDEV_ERRORS = {
    * push, or rebase — which a user can only make if the sentence says the histories diverged.
    */
   gitPullDiverged: "envoydev.git-pull-diverged",
+  /**
+   * A stash was asked for on a working tree that has nothing to set aside.
+   *
+   * Its own code rather than an empty success because it is a *state*, like `gitNothingStaged`: git exits 0
+   * with `No local changes to save` and creates nothing, so a caller that trusted the exit code would tell
+   * a user their work was safe when nothing had happened.
+   */
+  gitNothingToStash: "envoydev.git-nothing-to-stash",
+  /**
+   * A stash cannot be put back onto this working tree.
+   *
+   * The rule is the daemon's, not git's: a pop is only attempted on a tree measured as clean, because that
+   * is what makes undoing a conflicted pop exact. The sentence names the advice — commit or stash first.
+   */
+  gitStashDirty: "envoydev.git-stash-dirty",
+  /**
+   * A stash could not be put back cleanly, and the attempt was **undone**.
+   *
+   * The values carry the conflicting files. The stash is still in the list, which is the part a user needs
+   * to know: nothing was lost, and nothing was applied.
+   */
+  gitStashConflict: "envoydev.git-stash-conflict",
 } as const;
 
 export type EnvoyDevErrorCode = (typeof ENVOYDEV_ERRORS)[keyof typeof ENVOYDEV_ERRORS];
@@ -1108,6 +1130,17 @@ export const RPC_METHODS = [
   "coder.gitMerge",
   "coder.gitFetch",
   "coder.gitPull", 
+  /**
+   * Setting work aside, and putting it back.
+   *
+   * `gitStashPush` takes the whole working tree including untracked files; `gitStashPop` puts one back and
+   * refuses a tree that is not clean, because that is the condition under which a conflicted pop can be
+   * undone exactly; `gitStashDrop` is the only destructive one, and `gitStashList` is a read.
+   */
+  "coder.gitStashList",
+  "coder.gitStashPush",
+  "coder.gitStashPop",
+  "coder.gitStashDrop",
   "coder.listTasks",
   "coder.createTask",
   "coder.updateTask",

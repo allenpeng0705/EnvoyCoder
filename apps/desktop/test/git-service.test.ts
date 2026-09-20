@@ -641,6 +641,131 @@ describe("fetch and pull", () => {
   });
 });
 
+describe("stash", () => {
+  itGit("sets the whole tree aside — untracked files included — and puts it back", async () => {
+    const b = await bench();
+    const repo = repository();
+    const projectId = await addProject(b, repo);
+    writeFileSync(join(repo, "a.txt"), "half a fix\n");
+    writeFileSync(join(repo, "notes.txt"), "an untracked file\n");
+
+    const pushed = (await call(b.handlers, "coder.gitStashPush", { projectId })) as {
+      status: { dirty: number };
+      changes: unknown[];
+      stashes: { message: string; ref: string }[];
+    };
+
+    // Nothing is left in the tree, and the untracked file went with it: "stash my work" means the new file
+    // too, which is the whole reason the argv carries `-u`.
+    expect(pushed.status.dirty).toBe(0);
+    expect(pushed.changes).toEqual([]);
+    expect(existsSync(join(repo, "notes.txt"))).toBe(false);
+    expect(pushed.stashes).toHaveLength(1);
+    // Git labels it, and the label names the branch the work sat on — no message crossed the wire.
+    expect(pushed.stashes[0]?.message).toMatch(/^WIP on work: /);
+    expect(pushed.stashes[0]?.ref).toBe("stash@{0}");
+
+    const popped = (await call(b.handlers, "coder.gitStashPop", { projectId, index: 0 })) as {
+      status: { dirty: number };
+      stashes: unknown[];
+    };
+    expect(readFileSync(join(repo, "a.txt"), "utf8")).toBe("half a fix\n");
+    expect(readFileSync(join(repo, "notes.txt"), "utf8")).toBe("an untracked file\n");
+    expect(popped.stashes).toEqual([]);
+    expect(popped.status.dirty).toBe(2);
+  });
+
+  itGit("calls a clean tree nothing to stash, rather than a success", async () => {
+    // `git stash push` on a clean tree exits **0** and creates nothing. A caller that trusted the exit code
+    // would tell a user their work was safe when nothing had happened.
+    const b = await bench();
+    const projectId = await addProject(b, repository());
+    const message = await refusalOf(b.handlers, "coder.gitStashPush", { projectId });
+    expectRefusal(message, "error.gitNothingToStash");
+  });
+
+  itGit("refuses to put a stash back onto a tree with changes, and keeps it", async () => {
+    const b = await bench();
+    const repo = repository();
+    const projectId = await addProject(b, repo);
+    writeFileSync(join(repo, "a.txt"), "set aside\n");
+    run(repo, ["stash", "push", "-u", "-m", "set aside"]);
+    writeFileSync(join(repo, "b.txt"), "unsaved work\n");
+
+    const message = await refusalOf(b.handlers, "coder.gitStashPop", { projectId, index: 0 });
+    expectRefusal(message, "error.gitStashDirty");
+    // The refusal is a statement about *this* attempt: the unsaved work is untouched and the stash is there.
+    expect(readFileSync(join(repo, "b.txt"), "utf8")).toBe("unsaved work\n");
+    const listed = (await call(b.handlers, "coder.gitStashList", { projectId })) as { stashes: unknown[] };
+    expect(listed.stashes).toHaveLength(1);
+  });
+
+  itGit("takes back a pop that conflicts: the tree is as it was, and the stash is kept", async () => {
+    const b = await bench();
+    const repo = repository();
+    const projectId = await addProject(b, repo);
+    writeFileSync(join(repo, "a.txt"), "set aside\n");
+    writeFileSync(join(repo, "notes.txt"), "an untracked file\n");
+    run(repo, ["stash", "push", "-u", "-m", "set aside"]);
+    // The branch moves on, so putting the stash back cannot be clean.
+    writeFileSync(join(repo, "a.txt"), "moved on\n");
+    run(repo, ["commit", "-qam", "moved on"]);
+
+    const message = await refusalOf(b.handlers, "coder.gitStashPop", { projectId, index: 0 });
+    expectRefusal(message, "error.gitStashConflict");
+    expect(coderErrorMessage(message)).toContain("a.txt");
+
+    // **The part that is easy to get wrong**: the conflicted attempt is undone — including the untracked
+    // file the pop had already written — and the stash is still there to try again with.
+    const status = (await call(b.handlers, "coder.gitStatus", { projectId })) as {
+      dirty: number;
+      conflicted: boolean;
+    };
+    expect(status).toMatchObject({ dirty: 0, conflicted: false });
+    expect(readFileSync(join(repo, "a.txt"), "utf8")).toBe("moved on\n");
+    expect(existsSync(join(repo, "notes.txt"))).toBe(false);
+    const listed = (await call(b.handlers, "coder.gitStashList", { projectId })) as {
+      stashes: { message: string }[];
+    };
+    expect(listed.stashes).toHaveLength(1);
+  });
+
+  itGit("discards one stash and leaves the working tree alone", async () => {
+    const b = await bench();
+    const repo = repository();
+    const projectId = await addProject(b, repo);
+    writeFileSync(join(repo, "a.txt"), "set aside\n");
+    run(repo, ["stash", "push", "-u", "-m", "set aside"]);
+    writeFileSync(join(repo, "b.txt"), "work in progress\n");
+
+    const dropped = (await call(b.handlers, "coder.gitStashDrop", { projectId, index: 0 })) as {
+      stashes: unknown[];
+      changes: { path: string }[];
+    };
+    expect(dropped.stashes).toEqual([]);
+    // Discarding a stash is not discarding the tree: the file the user had open is still there.
+    expect(dropped.changes.map((change) => change.path)).toEqual(["b.txt"]);
+    expect(readFileSync(join(repo, "b.txt"), "utf8")).toBe("work in progress\n");
+  });
+
+  itGit("lets git refuse a stash number that does not exist", async () => {
+    // The client sends a number, never a ref, so the worst case is a number no stash has — and git names the
+    // ref it could not resolve, which is more use than anything this layer could invent.
+    const b = await bench();
+    const projectId = await addProject(b, repository());
+    const message = await refusalOf(b.handlers, "coder.gitStashDrop", { projectId, index: 9 });
+    expectRefusal(message, "error.gitFailed");
+    expect(coderErrorMessage(message)).toMatch(/stash@\{9\}/);
+  });
+
+  itGit("calls a folder git does not track a state, for every stash action", async () => {
+    const b = await bench();
+    const projectId = await addProject(b, plainDirectory());
+    const message = await refusalOf(b.handlers, "coder.gitStashList", { projectId });
+    expectRefusal(message, "error.gitNotARepository");
+  });
+});
+
 describe("one writer at a time", () => {
   itGit("refuses a write while a run is live in the project, and allows every read", async () => {
     // The repo's own scenario: an agent mid-edit and a checkout in the same working tree. The run is stubbed
@@ -670,6 +795,10 @@ describe("one writer at a time", () => {
       ["coder.gitCommit", { message: "from the phone" }],
       ["coder.gitMerge", { branch: "work" }],
       ["coder.gitPull", {}],
+      // The stash actions that rewrite the tree are writes too — and the *order* matters: a push is refused
+      // as "busy" rather than as "nothing to stash", and a pop as "busy" rather than as "your tree is dirty".
+      ["coder.gitStashPush", {}],
+      ["coder.gitStashPop", { index: 0 }],
     ] as const) {
       const refusal = await Promise.resolve(
         call(handlers, method, { projectId: project.project.id, ...params }),
@@ -686,6 +815,32 @@ describe("one writer at a time", () => {
     live = false;
     expect(await call(handlers, "coder.gitCheckout", { projectId: project.project.id, branch: "main" }))
       .toMatchObject({ branch: "main" });
+  });
+
+  itGit("allows the stash actions that move no file or branch while a run is live", async () => {
+    /**
+     * The criterion, in one test: a command that would move the working tree or a branch waits for the run,
+     * and one that moves neither does not. A fetch is the original case; listing stashes and discarding one
+     * are the same shape — `refs/stash` and its reflog, no file, no branch — so a user tidying up does not
+     * have to stop their agent to do it.
+     */
+    const home = await mkdtemp(join(tmpdir(), "envoydev-gitsvc-stashbusy-"));
+    roots.push(home);
+    const store = await CoderStore.open({ paths: coderPaths(home) });
+    const repo = repository();
+    writeFileSync(join(repo, "a.txt"), "set aside\n");
+    run(repo, ["stash", "push", "-u", "-m", "set aside"]);
+    const project = await store.addProject({ path: repo, vcs: { kind: "git" } });
+    const task = await store.createTask({ projectId: project.project.id, title: "editing" });
+
+    const handlers = createGitHandlers({
+      store,
+      runs: { liveFor: (taskId: string) => (taskId === task?.id ? ({ id: "r3", taskId } as never) : undefined) },
+    }) as Record<string, CoderHandler>;
+
+    await expect(call(handlers, "coder.gitStashList", { projectId: project.project.id })).resolves.toBeDefined();
+    expect(await call(handlers, "coder.gitStashDrop", { projectId: project.project.id, index: 0 }))
+      .toMatchObject({ stashes: [] });
   });
 
   itGit("does not refuse a write for a run in another project", async () => {
