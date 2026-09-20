@@ -1022,6 +1022,50 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
+  String gitMergeInto(String branch, String current) {
+    return 'Unisci $branch in $current';
+  }
+
+  @override
+  String get gitMergeCta => 'Unisci';
+
+  @override
+  String gitMergeDone(String branch, String into) {
+    return '$branch unito in $into.';
+  }
+
+  @override
+  String get gitFetchCta => 'Fetch';
+
+  @override
+  String gitFetchDone(String summary) {
+    return 'Scaricato. $summary';
+  }
+
+  @override
+  String get gitFetchNothing => 'Scaricato. Niente di nuovo.';
+
+  @override
+  String get gitPullCta => 'Pull';
+
+  @override
+  String gitPullDone(String summary) {
+    return 'Aggiornato. $summary';
+  }
+
+  @override
+  String get gitPullNothing => 'Aggiornato. Già tutto aggiornato.';
+
+  @override
+  String errorGitMergeConflict(String branch, String files) {
+    return '$branch non può essere unito automaticamente. Questi file sono in conflitto: $files. Non è stato cambiato nulla — il branch e il working tree sono esattamente come prima.';
+  }
+
+  @override
+  String get errorGitPullDiverged =>
+      'Il branch sul computer e quello sul remoto sono cambiati entrambi, quindi un pull non può unirli. Uniscili, oppure pusha il tuo branch.';
+
+  @override
   String get newTaskNoProjects =>
       'Aggiungi prima un progetto sul computer, poi riprova.';
 

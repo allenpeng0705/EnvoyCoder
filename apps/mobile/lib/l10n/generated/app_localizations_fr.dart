@@ -1026,6 +1026,50 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String gitMergeInto(String branch, String current) {
+    return 'Fusionner $branch dans $current';
+  }
+
+  @override
+  String get gitMergeCta => 'Fusionner';
+
+  @override
+  String gitMergeDone(String branch, String into) {
+    return '$branch fusionnée dans $into.';
+  }
+
+  @override
+  String get gitFetchCta => 'Récupérer';
+
+  @override
+  String gitFetchDone(String summary) {
+    return 'Récupéré. $summary';
+  }
+
+  @override
+  String get gitFetchNothing => 'Récupéré. Rien de nouveau.';
+
+  @override
+  String get gitPullCta => 'Tirer';
+
+  @override
+  String gitPullDone(String summary) {
+    return 'Tiré. $summary';
+  }
+
+  @override
+  String get gitPullNothing => 'Tiré. Déjà à jour.';
+
+  @override
+  String errorGitMergeConflict(String branch, String files) {
+    return '$branch ne peut pas être fusionnée automatiquement. Ces fichiers sont en conflit : $files. Rien n\'a été modifié — votre branche et votre arbre de travail sont exactement comme avant.';
+  }
+
+  @override
+  String get errorGitPullDiverged =>
+      'La branche sur l\'ordinateur et celle du dépôt distant ont toutes deux changé : un pull ne peut pas les réunir. Fusionnez-les, ou poussez votre branche.';
+
+  @override
   String get newTaskNoProjects =>
       'Ajoutez d\'abord un projet sur l\'ordinateur, puis réessayez.';
 

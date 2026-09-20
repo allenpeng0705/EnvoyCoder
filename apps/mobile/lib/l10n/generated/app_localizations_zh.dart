@@ -976,6 +976,50 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String gitMergeInto(String branch, String current) {
+    return '把 $branch 合并到 $current';
+  }
+
+  @override
+  String get gitMergeCta => '合并';
+
+  @override
+  String gitMergeDone(String branch, String into) {
+    return '已把 $branch 合并到 $into。';
+  }
+
+  @override
+  String get gitFetchCta => '获取';
+
+  @override
+  String gitFetchDone(String summary) {
+    return '已获取。$summary';
+  }
+
+  @override
+  String get gitFetchNothing => '已获取。没有新内容。';
+
+  @override
+  String get gitPullCta => '拉取';
+
+  @override
+  String gitPullDone(String summary) {
+    return '已拉取。$summary';
+  }
+
+  @override
+  String get gitPullNothing => '已拉取。已经是最新。';
+
+  @override
+  String errorGitMergeConflict(String branch, String files) {
+    return '$branch 无法自动合并。这些文件有冲突：$files。没有做任何改动——你的分支和工作区保持原样。';
+  }
+
+  @override
+  String get errorGitPullDiverged =>
+      '电脑上的分支和远程的分支都变了，pull 无法把它们合到一起。请合并它们，或者推送你的分支。';
+
+  @override
   String get newTaskNoProjects => '请先在电脑上添加项目，然后重试。';
 
   @override

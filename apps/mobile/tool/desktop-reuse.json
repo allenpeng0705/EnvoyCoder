@@ -103,5 +103,16 @@
   "explorerCommitStageAll": "explorer.commit.stageAll",
   "explorerCommitDone": "explorer.commit.done",
   "explorerStage": "explorer.stage",
-  "explorerUnstage": "explorer.unstage"
+  "explorerUnstage": "explorer.unstage",
+  "gitMergeInto": "git.merge.into",
+  "gitMergeCta": "git.merge.cta",
+  "gitMergeDone": "git.merge.done",
+  "gitFetchCta": "git.fetch.cta",
+  "gitFetchDone": "git.fetch.done",
+  "gitFetchNothing": "git.fetch.nothing",
+  "gitPullCta": "git.pull.cta",
+  "gitPullDone": "git.pull.done",
+  "gitPullNothing": "git.pull.nothing",
+  "errorGitMergeConflict": "error.gitMergeConflict",
+  "errorGitPullDiverged": "error.gitPullDiverged"
 }

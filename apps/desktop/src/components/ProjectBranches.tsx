@@ -44,6 +44,12 @@ export interface ProjectBranchesProps {
   onRead: () => Promise<{ ok: true } | Refusal>;
   onCheckout: (branch: string) => Promise<{ ok: true } | Refusal>;
   onCreate: (name: string) => Promise<{ ok: true } | Refusal>;
+  /** Merge a branch **into the current one** — git's own direction, and the workflow's last step. */
+  onMerge: (branch: string) => Promise<{ ok: true; into?: string } | Refusal>;
+  /** Fetch: the safe half of talking to a remote, and allowed while a run is live. */
+  onFetch: () => Promise<{ ok: true; summary: string } | Refusal>;
+  /** Pull: a fast-forward, or a refusal saying the histories have diverged. */
+  onPull: () => Promise<{ ok: true; summary: string } | Refusal>;
 }
 
 export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null {
@@ -125,6 +131,41 @@ export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null
     setNotice(t("git.branches.switched", { branch: branch.name }));
   };
 
+  const merge = async (branch: GitBranch): Promise<void> => {
+    if (branch.current || busy) return;
+    setBusy(true);
+    setRefusal(undefined);
+    setNotice(undefined);
+    const result = await props.onMerge(branch.name);
+    setBusy(false);
+    if (!result.ok) {
+      setRefusal(localize(t, result));
+      return;
+    }
+    setNotice(t("git.merge.done", { branch: branch.name, into: result.into ?? label }));
+  };
+
+  /** A fetch or a pull, which differ only in which call they make and what they say afterwards. */
+  const sync = async (run: () => Promise<{ ok: true; summary: string } | Refusal>, key: "fetch" | "pull"): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    setRefusal(undefined);
+    setNotice(undefined);
+    const result = await run();
+    setBusy(false);
+    if (!result.ok) {
+      setRefusal(localize(t, result));
+      return;
+    }
+    // **An empty summary is git saying nothing changed**, which is a fact and not an empty sentence: the
+    // wording for it is this window's, in the user's language, and never a value the daemon filled in.
+    setNotice(
+      result.summary === ""
+        ? t(key === "fetch" ? "git.fetch.nothing" : "git.pull.nothing")
+        : t(key === "fetch" ? "git.fetch.done" : "git.pull.done", { summary: result.summary }),
+    );
+  };
+
   const create = async (): Promise<void> => {
     const name = draft.trim();
     if (name === "" || busy) return;
@@ -168,7 +209,7 @@ export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null
           ) : (
             <ul className="project__branch-list">
               {branches.map((branch, index) => (
-                <li key={branch.name}>
+                <li key={branch.name} className="project__branch-row">
                   <button
                     ref={(element) => {
                       itemRefs.current[index] = element;
@@ -181,11 +222,43 @@ export function ProjectBranches(props: ProjectBranchesProps): JSX.Element | null
                   >
                     <span>{branch.name}</span>
                   </button>
+                  {/* **Merge is offered on the branch you would merge *from*** — chosen while looking at the
+                      list, and always into the branch HEAD is on, which is git's own direction. */}
+                  {branch.current ? null : (
+                    <button
+                      type="button"
+                      className="project__branch-merge"
+                      title={t("git.merge.into", { branch: branch.name, current: label })}
+                      aria-label={t("git.merge.into", { branch: branch.name, current: label })}
+                      disabled={busy}
+                      onClick={() => void merge(branch)}
+                    >
+                      {t("git.merge.cta")}
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
           )}
 
+          <div className="project__branch-sync">
+            <button
+              type="button"
+              className="button button--ghost"
+              disabled={busy}
+              onClick={() => void sync(props.onFetch, "fetch")}
+            >
+              {t("git.fetch.cta")}
+            </button>
+            <button
+              type="button"
+              className="button button--ghost"
+              disabled={busy}
+              onClick={() => void sync(props.onPull, "pull")}
+            >
+              {t("git.pull.cta")}
+            </button>
+          </div>
           <div className="project__branch-new">
             <label className="project__branch-label" htmlFor={`new-branch-${props.project.id}`}>
               {t("git.branches.new")}

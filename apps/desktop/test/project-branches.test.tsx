@@ -57,10 +57,16 @@ function renderControl(options: {
   onCheckout?: (branch: string) => Promise<{ ok: true } | Refusal>;
   onCreate?: (name: string) => Promise<{ ok: true } | Refusal>;
   onRead?: () => Promise<{ ok: true }>;
+  onMerge?: (branch: string) => Promise<{ ok: true; into?: string } | Refusal>;
+  onFetch?: () => Promise<{ ok: true; summary: string } | Refusal>;
+  onPull?: () => Promise<{ ok: true; summary: string } | Refusal>;
 } = {}) {
   const onRead = options.onRead ?? vi.fn(async () => ({ ok: true as const }));
   const onCheckout = options.onCheckout ?? vi.fn(async () => ({ ok: true as const }));
   const onCreate = options.onCreate ?? vi.fn(async () => ({ ok: true as const }));
+  const onMerge = options.onMerge ?? vi.fn(async () => ({ ok: true as const }));
+  const onFetch = options.onFetch ?? vi.fn(async () => ({ ok: true as const, summary: "" }));
+  const onPull = options.onPull ?? vi.fn(async () => ({ ok: true as const, summary: "" }));
   const view = render(
     <I18nProvider preference="en">
       <ProjectBranches
@@ -69,10 +75,13 @@ function renderControl(options: {
         onRead={onRead}
         onCheckout={onCheckout}
         onCreate={onCreate}
+        onMerge={onMerge}
+        onFetch={onFetch}
+        onPull={onPull}
       />
     </I18nProvider>,
   );
-  return { ...view, onRead, onCheckout, onCreate };
+  return { ...view, onRead, onCheckout, onCreate, onMerge, onFetch, onPull };
 }
 
 const trigger = (): HTMLElement =>
@@ -96,6 +105,9 @@ describe("ProjectBranches", () => {
           onRead={vi.fn(async () => ({ ok: true as const }))}
           onCheckout={vi.fn(async () => ({ ok: true as const }))}
           onCreate={vi.fn(async () => ({ ok: true as const }))}
+          onMerge={vi.fn(async () => ({ ok: true as const }))}
+          onFetch={vi.fn(async () => ({ ok: true as const, summary: "" }))}
+          onPull={vi.fn(async () => ({ ok: true as const, summary: "" }))}
         />
       </I18nProvider>,
     );
@@ -178,5 +190,70 @@ describe("ProjectBranches", () => {
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
     await waitFor(() => expect(document.activeElement).toBe(trigger()));
+  });
+
+  it("merges a branch into the one the project is on", async () => {
+    const onMerge = vi.fn(async () => ({ ok: true as const, into: "work" }));
+    renderControl({ onMerge });
+
+    fireEvent.click(trigger());
+    // The merge is offered on the branch you would merge *from*, and names where it lands.
+    fireEvent.click(screen.getByRole("button", { name: "Merge main into work" }));
+
+    await waitFor(() => expect(onMerge).toHaveBeenCalledWith("main"));
+    expect(await screen.findByText("Merged main into work.")).toBeTruthy();
+  });
+
+  it("renders a conflicted merge in place, with the files", async () => {
+    // A merge that cannot be finished happens *here*, next to the list it was started from — and says the
+    // repository was left alone, because that is the promise the daemon keeps.
+    renderControl({
+      onMerge: async () => ({
+        ok: false,
+        message: "work cannot be merged automatically. These files conflict: a.txt.",
+        key: "error.gitMergeConflict",
+        values: { branch: "work", files: "a.txt" },
+      }),
+    });
+
+    fireEvent.click(trigger());
+    fireEvent.click(screen.getByRole("button", { name: "Merge main into work" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("a.txt");
+    expect(alert.textContent).not.toContain("envoydev.");
+  });
+
+  it("fetches and pulls, and says when there was nothing to bring", async () => {
+    const onFetch = vi.fn(async () => ({ ok: true as const, summary: "" }));
+    const onPull = vi.fn(async () => ({ ok: true as const, summary: "Fast-forward  a.txt | 1 +" }));
+    renderControl({ onFetch, onPull });
+
+    fireEvent.click(trigger());
+    fireEvent.click(screen.getByRole("button", { name: "Fetch" }));
+    await waitFor(() => expect(onFetch).toHaveBeenCalled());
+    // **An empty summary is git saying nothing changed** — a fact, said in the user's language rather than
+    // left as an empty sentence after "Fetched.".
+    expect(await screen.findByText(en["git.fetch.nothing"])).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Pull" }));
+    await waitFor(() => expect(onPull).toHaveBeenCalled());
+    // A regex, because git's own summary is column-aligned and its whitespace is not the assertion.
+    expect(await screen.findByText(/Pulled\. Fast-forward\s+a\.txt/)).toBeTruthy();
+  });
+
+  it("shows a diverged pull as a choice rather than a failure", async () => {
+    renderControl({
+      onPull: async () => ({
+        ok: false,
+        message: "The branch on the computer and the one on the remote have both changed.",
+        key: "error.gitPullDiverged",
+      }),
+    });
+
+    fireEvent.click(trigger());
+    fireEvent.click(screen.getByRole("button", { name: "Pull" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("both changed");
   });
 });

@@ -1824,6 +1824,72 @@ abstract class AppLocalizations {
   /// **'Created {branch} and switched to it.'**
   String gitBranchesCreated(String branch);
 
+  /// gitmergeinto — Merges a branch into the one the project is on, naming both.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge {branch} into {current}'**
+  String gitMergeInto(String branch, String current);
+
+  /// gitmergecta — The merge button in the branch sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge'**
+  String get gitMergeCta;
+
+  /// gitmergedone — After a merge, naming the branch and where it landed.
+  ///
+  /// In en, this message translates to:
+  /// **'Merged {branch} into {into}.'**
+  String gitMergeDone(String branch, String into);
+
+  /// gitfetchcta — Fetches the remote.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch'**
+  String get gitFetchCta;
+
+  /// gitfetchdone — After a fetch, with git's own summary.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetched. {summary}'**
+  String gitFetchDone(String summary);
+
+  /// gitfetchnothing — A fetch that brought nothing new.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetched. Nothing new.'**
+  String get gitFetchNothing;
+
+  /// gitpullcta — Pulls the current branch.
+  ///
+  /// In en, this message translates to:
+  /// **'Pull'**
+  String get gitPullCta;
+
+  /// gitpulldone — After a pull, with git's own summary.
+  ///
+  /// In en, this message translates to:
+  /// **'Pulled. {summary}'**
+  String gitPullDone(String summary);
+
+  /// gitpullnothing — A pull that was already up to date.
+  ///
+  /// In en, this message translates to:
+  /// **'Pulled. Already up to date.'**
+  String get gitPullNothing;
+
+  /// errorgitmergeconflict — A merge stopped on conflicts and was undone.
+  ///
+  /// In en, this message translates to:
+  /// **'{branch} cannot be merged automatically. These files conflict: {files}. Nothing was changed — your branch and your working tree are exactly as they were.'**
+  String errorGitMergeConflict(String branch, String files);
+
+  /// errorgitpulldiverged — A pull could not fast-forward.
+  ///
+  /// In en, this message translates to:
+  /// **'The branch on the computer and the one on the remote have both changed, so a pull cannot bring them together. Merge them, or push your branch.'**
+  String get errorGitPullDiverged;
+
   /// newtasknoprojects — The new-task sheet with no project to add to.
   ///
   /// In en, this message translates to:

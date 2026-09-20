@@ -1010,6 +1010,50 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String gitMergeInto(String branch, String current) {
+    return 'Merge $branch into $current';
+  }
+
+  @override
+  String get gitMergeCta => 'Merge';
+
+  @override
+  String gitMergeDone(String branch, String into) {
+    return 'Merged $branch into $into.';
+  }
+
+  @override
+  String get gitFetchCta => 'Fetch';
+
+  @override
+  String gitFetchDone(String summary) {
+    return 'Fetched. $summary';
+  }
+
+  @override
+  String get gitFetchNothing => 'Fetched. Nothing new.';
+
+  @override
+  String get gitPullCta => 'Pull';
+
+  @override
+  String gitPullDone(String summary) {
+    return 'Pulled. $summary';
+  }
+
+  @override
+  String get gitPullNothing => 'Pulled. Already up to date.';
+
+  @override
+  String errorGitMergeConflict(String branch, String files) {
+    return '$branch cannot be merged automatically. These files conflict: $files. Nothing was changed — your branch and your working tree are exactly as they were.';
+  }
+
+  @override
+  String get errorGitPullDiverged =>
+      'The branch on the computer and the one on the remote have both changed, so a pull cannot bring them together. Merge them, or push your branch.';
+
+  @override
   String get newTaskNoProjects =>
       'Add a project on the computer first, then try again.';
 

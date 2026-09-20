@@ -27,6 +27,9 @@ class _StubClient extends HostClient {
   /// When set, the next write fails with this message instead of answering a status.
   String? refuseWith;
 
+  /// What a fetch or a pull brought, as git's own summary. Empty is "nothing new".
+  String summary = '';
+
   @override
   HostConnectionState get state => HostConnectionState.connected;
 
@@ -62,6 +65,12 @@ class _StubClient extends HostClient {
         return status(params['branch'] as String);
       case 'coder.gitCreateBranch':
         return status(params['name'] as String);
+      case 'coder.gitMerge':
+        return status('work');
+      case 'coder.gitFetch':
+        return {...status('work'), 'summary': summary};
+      case 'coder.gitPull':
+        return {...status('work'), 'summary': summary};
       default:
         throw StateError('the sheet called $method, which this test does not expect');
     }
@@ -243,6 +252,101 @@ void main() {
     // "Branches" as the heading, which is correct and would make the obvious check vacuous.
     expect(de.gitBranchesCreate, isNot('Create and switch'));
     expect(de.gitBranchesDetachedChip, isNot('No branch'));
+
+    await client.dispose();
+  });
+
+  testWidgets('merges a branch into the one the project is on', (tester) async {
+    final client = _StubClient(_host);
+    await _openSheet(tester, client, status: _status(branch: 'work'), branches: _branches);
+
+    // Offered on the branch you merge *from*, and never on the current one.
+    expect(find.byTooltip('Merge work into work'), findsNothing);
+    await tester.tap(find.byTooltip('Merge main into work'));
+    await tester.pumpAndSettle();
+
+    expect(client.calls.single.method, 'coder.gitMerge');
+    expect(client.calls.single.params, {'projectId': 'p-1', 'branch': 'main'});
+    expect(find.text('Merged main into work.'), findsOneWidget);
+
+    await client.dispose();
+  });
+
+  testWidgets('shows a conflicted merge in the user\'s language, with the files', (tester) async {
+    // The daemon undoes the merge before it answers, so the sentence can promise the repository is untouched.
+    // **The fixture has to agree with itself.** `status.branch` and the branch list's `current` flag are two
+    // readings of one fact, and a test where they disagree is a test of a state git cannot produce — the sheet
+    // offered the merge on one row and refused it, correctly, because the row it was offered on was current.
+    final de = lookupAppLocalizations(const Locale('de'));
+    final tooltip = de.gitMergeInto('main', 'work');
+    final client = _StubClient(_host)
+      ..refuseWith =
+          'envoydev.git-merge-conflict: main cannot be merged automatically. These files conflict: a.txt. '
+          '[envoydev.key] {"key":"error.gitMergeConflict","values":{"branch":"main","files":"a.txt"}}';
+    await _openSheet(
+      tester,
+      client,
+      status: _status(branch: 'work'),
+      branches: _branches,
+      locale: const Locale('de'),
+    );
+
+    // The sheet is in German here, so the *tooltip* is German too: found by its glyph, asserted by its words.
+    expect(find.byTooltip(tooltip), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.merge_outlined));
+    await tester.pumpAndSettle();
+
+    expect(client.calls.single.method, 'coder.gitMerge');
+    expect(find.text(de.errorGitMergeConflict('main', 'a.txt')), findsOneWidget);
+    expect(de.errorGitMergeConflict('main', 'a.txt'), contains('a.txt'));
+    // Never the wire format, and never the English fallback for a key this build has.
+    expect(find.textContaining('envoydev.'), findsNothing);
+    expect(find.textContaining('cannot be merged automatically'), findsNothing);
+
+    await client.dispose();
+  });
+
+  testWidgets('fetches and pulls, and says when there was nothing to bring', (tester) async {
+    final client = _StubClient(_host);
+    final opened = await _openSheet(tester, client, status: _status(branch: 'work'), branches: _branches);
+
+    // Nothing new: git says nothing, and the phone says so in its own words rather than leaving the sentence
+    // hanging after "Fetched.".
+    await tester.tap(find.text('Fetch'));
+    await tester.pumpAndSettle();
+    expect(find.text('Fetched. Nothing new.'), findsOneWidget);
+    expect(opened.status?.branch, 'work');
+    // **Snackbars queue**, so the fetch's has to be gone before the pull's can be read.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+
+    client.summary = 'Fast-forward src/a.txt | 2 +-';
+    await tester.tap(find.text('Pull'));
+    await tester.pumpAndSettle();
+    expect(find.text('Pulled. Fast-forward src/a.txt | 2 +-'), findsOneWidget);
+
+    await client.dispose();
+  });
+
+  testWidgets('shows a diverged pull as a choice rather than a failure', (tester) async {
+    final client = _StubClient(_host)
+      ..refuseWith =
+          'envoydev.git-pull-diverged: The branch on the computer and the one on the remote have both '
+          'changed. [envoydev.key] {"key":"error.gitPullDiverged"}';
+    await _openSheet(
+      tester,
+      client,
+      status: _status(branch: 'main'),
+      branches: _branches,
+      locale: const Locale('de'),
+    );
+
+    await tester.tap(find.text('Pull'));
+    await tester.pumpAndSettle();
+
+    final de = lookupAppLocalizations(const Locale('de'));
+    expect(find.text(de.errorGitPullDiverged), findsOneWidget);
+    expect(find.textContaining('envoydev.'), findsNothing);
 
     await client.dispose();
   });

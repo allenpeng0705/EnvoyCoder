@@ -86,6 +86,12 @@ export interface CoderSidebarProps {
   onGitCheckout?: (projectId: string, branch: string) => Promise<{ ok: true } | Refusal>;
   /** Create a branch in a project's repository and switch to it. */
   onGitCreateBranch?: (projectId: string, name: string) => Promise<{ ok: true } | Refusal>;
+  /** Merge a branch into the one a project is on. A conflict comes back as a refusal naming the files. */
+  onGitMerge?: (projectId: string, branch: string) => Promise<{ ok: true; into?: string } | Refusal>;
+  /** Fetch a project's remote. Allowed while a run is live: it touches no working tree. */
+  onGitFetch?: (projectId: string) => Promise<{ ok: true; summary: string } | Refusal>;
+  /** Pull a project's branch — a fast-forward, or a refusal saying the histories diverged. */
+  onGitPull?: (projectId: string) => Promise<{ ok: true; summary: string } | Refusal>;
   /** Agents this daemon lists — for the project agent menu. */
   harnesses?: readonly HarnessSummary[];
   /** App-wide default agent when a project has not set its own. */
@@ -344,13 +350,19 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                   )}
                   {props.onReadGit !== undefined &&
                   props.onGitCheckout !== undefined &&
-                  props.onGitCreateBranch !== undefined ? (
+                  props.onGitCreateBranch !== undefined &&
+                  props.onGitMerge !== undefined &&
+                  props.onGitFetch !== undefined &&
+                  props.onGitPull !== undefined ? (
                     <ProjectBranches
                       project={group.project}
                       snapshot={props.git?.[group.project.id]}
                       onRead={() => props.onReadGit!(group.project.id)}
                       onCheckout={(branch) => props.onGitCheckout!(group.project.id, branch)}
                       onCreate={(name) => props.onGitCreateBranch!(group.project.id, name)}
+                      onMerge={(branch) => props.onGitMerge!(group.project.id, branch)}
+                      onFetch={() => props.onGitFetch!(group.project.id)}
+                      onPull={() => props.onGitPull!(group.project.id)}
                     />
                   ) : null}
                   {/* The row's `…`, which used to be a bare `⋯` that opened project settings and nothing

@@ -141,6 +141,10 @@ const Map<String, DaemonRefRenderer> daemonRefRenderers = {
   'approval.detail.multiple': DaemonRefRenderer('approvalDetailMultiple', _detailMultiple),
   'approval.detail.text': DaemonRefRenderer('approvalDetailText', _detailText),
   'approval.allow': DaemonRefRenderer('approvalAllow', _allow),
+  // The refusals a phone user meets while working with branches: a conflicted merge, and a pull whose
+  // histories have diverged. Both are read in the user's language rather than through the English fallback.
+  'error.gitMergeConflict': DaemonRefRenderer('errorGitMergeConflict', _mergeConflict),
+  'error.gitPullDiverged': DaemonRefRenderer('errorGitPullDiverged', _pullDiverged),
   'approval.deny': DaemonRefRenderer('approvalDeny', _deny),
 };
 
@@ -164,3 +168,8 @@ String _detailText(AppLocalizations l10n, Map<String, Object> _) => l10n.approva
 String _allow(AppLocalizations l10n, Map<String, Object> _) => l10n.approvalAllow;
 
 String _deny(AppLocalizations l10n, Map<String, Object> _) => l10n.approvalDeny;
+
+String _mergeConflict(AppLocalizations l10n, Map<String, Object> values) =>
+    l10n.errorGitMergeConflict('${values['branch'] ?? ''}', '${values['files'] ?? ''}');
+
+String _pullDiverged(AppLocalizations l10n, Map<String, Object> _) => l10n.errorGitPullDiverged;

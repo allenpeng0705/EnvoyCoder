@@ -1340,6 +1340,84 @@
       }
     }
   },
+  "gitMergeInto": "Merge {branch} into {current}",
+  "@gitMergeInto": {
+    "description": "gitmergeinto — Merges a branch into the one the project is on, naming both.",
+    "placeholders": {
+      "branch": {
+        "type": "String"
+      },
+      "current": {
+        "type": "String"
+      }
+    }
+  },
+  "gitMergeCta": "Merge",
+  "@gitMergeCta": {
+    "description": "gitmergecta — The merge button in the branch sheet."
+  },
+  "gitMergeDone": "Merged {branch} into {into}.",
+  "@gitMergeDone": {
+    "description": "gitmergedone — After a merge, naming the branch and where it landed.",
+    "placeholders": {
+      "branch": {
+        "type": "String"
+      },
+      "into": {
+        "type": "String"
+      }
+    }
+  },
+  "gitFetchCta": "Fetch",
+  "@gitFetchCta": {
+    "description": "gitfetchcta — Fetches the remote."
+  },
+  "gitFetchDone": "Fetched. {summary}",
+  "@gitFetchDone": {
+    "description": "gitfetchdone — After a fetch, with git's own summary.",
+    "placeholders": {
+      "summary": {
+        "type": "String"
+      }
+    }
+  },
+  "gitFetchNothing": "Fetched. Nothing new.",
+  "@gitFetchNothing": {
+    "description": "gitfetchnothing — A fetch that brought nothing new."
+  },
+  "gitPullCta": "Pull",
+  "@gitPullCta": {
+    "description": "gitpullcta — Pulls the current branch."
+  },
+  "gitPullDone": "Pulled. {summary}",
+  "@gitPullDone": {
+    "description": "gitpulldone — After a pull, with git's own summary.",
+    "placeholders": {
+      "summary": {
+        "type": "String"
+      }
+    }
+  },
+  "gitPullNothing": "Pulled. Already up to date.",
+  "@gitPullNothing": {
+    "description": "gitpullnothing — A pull that was already up to date."
+  },
+  "errorGitMergeConflict": "{branch} cannot be merged automatically. These files conflict: {files}. Nothing was changed — your branch and your working tree are exactly as they were.",
+  "@errorGitMergeConflict": {
+    "description": "errorgitmergeconflict — A merge stopped on conflicts and was undone.",
+    "placeholders": {
+      "branch": {
+        "type": "String"
+      },
+      "files": {
+        "type": "String"
+      }
+    }
+  },
+  "errorGitPullDiverged": "The branch on the computer and the one on the remote have both changed, so a pull cannot bring them together. Merge them, or push your branch.",
+  "@errorGitPullDiverged": {
+    "description": "errorgitpulldiverged — A pull could not fast-forward."
+  },
   "newTaskNoProjects": "Add a project on the computer first, then try again.",
   "@newTaskNoProjects": {
     "description": "newtasknoprojects — The new-task sheet with no project to add to."

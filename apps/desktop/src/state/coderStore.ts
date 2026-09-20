@@ -1087,6 +1087,74 @@ export class CoderStore {
     return { ok: true, sha: committed.sha, changes: committed.changes };
   }
 
+  /**
+   * Merge a branch into the one this project is on.
+   *
+   * A conflict comes back as a refusal with the files in it — the daemon undoes the merge before it answers,
+   * so nothing here has to remember a half-finished operation.
+   */
+  async gitMerge(
+    projectId: string,
+    branch: string,
+    message?: string,
+  ): Promise<{ ok: true; into?: string } | Refusal> {
+    const merged = await this.mutate(
+      "coder.gitMerge",
+      { projectId, branch, ...(message !== undefined ? { message } : {}) },
+      (answer) => {
+        const result = answer as { status: GitStatus; into?: string };
+        return { status: result.status, ...(result.into !== undefined ? { into: result.into } : {}) };
+      },
+    );
+    if ("ok" in merged) return merged;
+    this.set({
+      git: {
+        ...(this.state.git ?? {}),
+        [projectId]: {
+          status: merged.status,
+          branches: this.state.git?.[projectId]?.branches ?? [],
+        },
+      },
+    });
+    return { ok: true, ...(merged.into !== undefined ? { into: merged.into } : {}) };
+  }
+
+  /** Fetch: remote-tracking refs move, the working tree does not. */
+  async gitFetch(projectId: string): Promise<{ ok: true; summary: string } | Refusal> {
+    const fetched = await this.mutate("coder.gitFetch", { projectId }, (answer) => {
+      const result = answer as { status: GitStatus; summary: string };
+      this.set({
+        git: {
+          ...(this.state.git ?? {}),
+          [projectId]: {
+            status: result.status,
+            branches: this.state.git?.[projectId]?.branches ?? [],
+          },
+        },
+      });
+      return { summary: result.summary };
+    });
+    return "ok" in fetched ? fetched : { ok: true, ...fetched };
+  }
+
+  /** Pull: a fast-forward, or a refusal saying the histories have diverged. */
+  async gitPull(projectId: string): Promise<{ ok: true; summary: string } | Refusal> {
+    const pulled = await this.mutate("coder.gitPull", { projectId }, (answer) => {
+      const result = answer as { status: GitStatus; summary: string };
+      this.set({
+        git: {
+          ...(this.state.git ?? {}),
+          [projectId]: {
+            status: result.status,
+            branches: this.state.git?.[projectId]?.branches ?? [],
+          },
+        },
+      });
+      return { summary: result.summary };
+    });
+    return "ok" in pulled ? pulled : { ok: true, ...pulled };
+  }
+
   /** The difference for one file in Changes. A refusal stays with the tab. */
   async readWorktreeDiff(
     directory: string,

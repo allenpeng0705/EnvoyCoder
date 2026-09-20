@@ -18,6 +18,8 @@
 /// The wording is the window's, verbatim (`tool/desktop-reuse.json`), so the two surfaces say one thing.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../l10n/daemon_text.dart';
@@ -109,8 +111,66 @@ class _ProjectBranchesSheetState extends State<_ProjectBranchesSheet> {
     widget.onChanged(status, next);
   }
 
+  /// Merge a branch into the one the project is on, and say where it landed.
+  Future<void> _merge(GitBranchInfo branch) async {
+    // **"Which branch am I on" is answered once, by the status.** The branch list carries a `current` flag of
+    // its own, and the two are readings of one fact: deciding the row's *look* from the status and this guard
+    // from the flag is how a button ends up offered on the wrong row and doing nothing when pressed.
+    if (branch.name == _status.branch || _busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final result = await widget.client.call('coder.gitMerge', {
+        'projectId': widget.project.id,
+        'branch': branch.name,
+      });
+      final status = GitStatusInfo.fromJson(result);
+      _apply(status, created: false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.gitMergeDone(branch.name, status.branch ?? _status.branch ?? ''))),
+        );
+      }
+    } catch (error) {
+      // **A conflicted merge is undone by the daemon before it answers**, so the sentence names the files and
+      // the repository is exactly as it was — which is the promise this shows.
+      if (mounted) setState(() => _error = daemonErrorText(context.l10n, '$error'));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Fetch and pull, which differ only in the call and in what they say afterwards.
+  Future<void> _sync(String method, {required bool fetch}) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final result = await widget.client.call(method, {'projectId': widget.project.id});
+      final status = GitStatusInfo.fromJson(result);
+      final summary = result['summary']?.toString() ?? '';
+      _apply(status, created: false);
+      if (mounted) {
+        final l10n = context.l10n;
+        // **An empty summary is git saying nothing changed** — a fact, and the wording for it is the phone's.
+        final said = summary.isEmpty
+            ? (fetch ? l10n.gitFetchNothing : l10n.gitPullNothing)
+            : (fetch ? l10n.gitFetchDone(summary) : l10n.gitPullDone(summary));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(said)));
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = daemonErrorText(context.l10n, '$error'));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _switchTo(GitBranchInfo branch) async {
-    if (branch.current || _busy) return;
+    if (branch.name == _status.branch || _busy) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -201,14 +261,41 @@ class _ProjectBranchesSheetState extends State<_ProjectBranchesSheet> {
                         enabled: !_busy,
                         title: Text(branch.name),
                         subtitle: branch.upstream == null ? null : Text(branch.upstream!),
-                        trailing: branch.name == current ? Icon(Icons.check, color: colors.statusSuccess) : null,
-                        onTap: _busy || branch.current ? null : () => _switchTo(branch),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (branch.name == current)
+                              Icon(Icons.check, color: colors.statusSuccess)
+                            else
+                              // **Merge is offered on the branch you would merge *from***, and always into the
+                              // one HEAD is on: that is git's own direction, and the workflow's last step.
+                              IconButton(
+                                tooltip: l10n.gitMergeInto(branch.name, current ?? ''),
+                                icon: const Icon(Icons.merge_outlined),
+                                onPressed: _busy ? null : () => unawaited(_merge(branch)),
+                              ),
+                          ],
+                        ),
+                        onTap: _busy || branch.name == current ? null : () => unawaited(_switchTo(branch)),
                       ),
                   ],
                 ),
               ),
 
-            const SizedBox(height: CoderSpace.md),
+            const SizedBox(height: CoderSpace.sm),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: _busy ? null : () => unawaited(_sync('coder.gitFetch', fetch: true)),
+                  child: Text(l10n.gitFetchCta),
+                ),
+                TextButton(
+                  onPressed: _busy ? null : () => unawaited(_sync('coder.gitPull', fetch: false)),
+                  child: Text(l10n.gitPullCta),
+                ),
+              ],
+            ),
+            const SizedBox(height: CoderSpace.sm),
             TextField(
               controller: _name,
               enabled: !_busy,

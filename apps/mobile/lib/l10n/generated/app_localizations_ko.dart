@@ -985,6 +985,50 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String gitMergeInto(String branch, String current) {
+    return '$branch을(를) $current에 병합';
+  }
+
+  @override
+  String get gitMergeCta => '병합';
+
+  @override
+  String gitMergeDone(String branch, String into) {
+    return '$branch을(를) $into에 병합했습니다.';
+  }
+
+  @override
+  String get gitFetchCta => '가져오기';
+
+  @override
+  String gitFetchDone(String summary) {
+    return '가져왔습니다. $summary';
+  }
+
+  @override
+  String get gitFetchNothing => '가져왔습니다. 새로운 것은 없습니다.';
+
+  @override
+  String get gitPullCta => '풀';
+
+  @override
+  String gitPullDone(String summary) {
+    return '풀했습니다. $summary';
+  }
+
+  @override
+  String get gitPullNothing => '풀했습니다. 이미 최신입니다.';
+
+  @override
+  String errorGitMergeConflict(String branch, String files) {
+    return '$branch을(를) 자동으로 병합할 수 없습니다. 다음 파일이 충돌합니다: $files. 아무것도 바뀌지 않았습니다 — 브랜치와 작업 트리는 그대로입니다.';
+  }
+
+  @override
+  String get errorGitPullDiverged =>
+      '컴퓨터의 브랜치와 원격의 브랜치가 모두 바뀌어 pull로 합칠 수 없습니다. 병합하거나 브랜치를 push하세요.';
+
+  @override
   String get newTaskNoProjects => '이 컴퓨터에 프로젝트를 먼저 추가한 뒤 다시 시도하세요.';
 
   @override

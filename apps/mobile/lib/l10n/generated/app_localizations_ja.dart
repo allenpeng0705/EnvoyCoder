@@ -987,6 +987,50 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String gitMergeInto(String branch, String current) {
+    return '$branch を $current にマージ';
+  }
+
+  @override
+  String get gitMergeCta => 'マージ';
+
+  @override
+  String gitMergeDone(String branch, String into) {
+    return '$branch を $into にマージしました。';
+  }
+
+  @override
+  String get gitFetchCta => 'フェッチ';
+
+  @override
+  String gitFetchDone(String summary) {
+    return '取得しました。$summary';
+  }
+
+  @override
+  String get gitFetchNothing => '取得しました。新しいものはありません。';
+
+  @override
+  String get gitPullCta => 'プル';
+
+  @override
+  String gitPullDone(String summary) {
+    return '取り込みました。$summary';
+  }
+
+  @override
+  String get gitPullNothing => '取り込みました。すでに最新です。';
+
+  @override
+  String errorGitMergeConflict(String branch, String files) {
+    return '$branch は自動でマージできません。次のファイルが競合しています: $files。何も変更していません — ブランチと作業ツリーは元のままです。';
+  }
+
+  @override
+  String get errorGitPullDiverged =>
+      '手元のブランチとリモートのブランチが両方変わっているため、pull では統合できません。マージするか、自分のブランチを push してください。';
+
+  @override
   String get newTaskNoProjects => '先にコンピューターでプロジェクトを追加してから、もう一度お試しください。';
 
   @override
