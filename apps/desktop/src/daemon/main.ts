@@ -114,6 +114,9 @@ async function installPayloadAndExit(): Promise<never> {
   const readCurrentText = readCurrent;
   const paths = coderPaths();
   const harnessFlag = process.argv.indexOf("--harness");
+  // The version that was current *before* this install: the one a live daemon may still be running from, and the
+  // rollback the design promises. Captured here because installing flips `current`.
+  const previousVersion = await readCurrentText(paths);
   const installed = await installPayload(paths, {
     version: VERSION,
     node: process.execPath,
@@ -123,7 +126,12 @@ async function installPayloadAndExit(): Promise<never> {
       : {}),
   });
   // The version just installed is `current`, and one previous version is kept for rollback; anything older goes.
-  const removed = await pruneVersions(paths, { protect: [] });
+  // **`protect` is not decoration.** A real update runs while the old daemon is still serving out of its own
+  // directory, so pruning it here deletes the program a live process is executing (`docs/daemon-lifecycle.md` §7;
+  // on Windows the delete fails outright). One previous version is kept for rollback; older ones are dropped.
+  const removed = await pruneVersions(paths, {
+    protect: previousVersion !== undefined ? [previousVersion] : [],
+  });
   // Written directly rather than through `say`: this runs before the boot report's own machinery is set up,
   // and it must not depend on anything below it in this file.
   process.stdout.write(

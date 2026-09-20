@@ -71,6 +71,9 @@ export function createHealthHandlers(deps: HealthDeps): Partial<Record<RpcMethod
       const memory = process.memoryUsage();
       // `endedAt` is the fact that says a run is over; `status` is what the *task* row shows and can lag it.
       const active = (deps.runs?.list() ?? []).filter((run) => run.endedAt === undefined);
+      // Asked once: two calls could disagree — an event landing between them would decide presence from one
+      // answer and report the other — and the value is a timestamp with nothing to gain from being re-read.
+      const lastEventAt = deps.runs?.lastEventAt?.();
 
       return {
         version: deps.instance.version,
@@ -85,7 +88,7 @@ export function createHealthHandlers(deps: HealthDeps): Partial<Record<RpcMethod
         // an hour is the failure a supervisor exists to catch, and it is invisible in a count.
         runs: {
           active: active.length,
-          ...(deps.runs?.lastEventAt?.() !== undefined ? { lastEventAt: deps.runs.lastEventAt() } : {}),
+          ...(lastEventAt !== undefined ? { lastEventAt } : {}),
         },
         memory: { rssBytes: memory.rss, heapUsedBytes: memory.heapUsed },
         eventLoop: { probeMs: HEALTH_PROBE_MS, lagMs },
