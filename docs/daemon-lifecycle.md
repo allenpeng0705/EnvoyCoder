@@ -118,6 +118,22 @@ Most of it is **one portable path**; only the parts that must tell the *supervis
 `scripts/restart-app.mjs` is the development seed of the portable half — it already stops a daemon by its
 claim, in any home the family's rule can choose, and prints the home the app resolves.
 
+**Landed** (`@envoydev/platform`'s `service.ts` and `service-install.ts`, wired by `apps/desktop/src/daemon/supervisor.ts`):
+the unit text, the plans and the reading of each supervisor's answer are pure functions tested on whichever OS runs
+the suite; only `execFile`/`fs` lives in the daemon. Two things the first *executed* proof changed, and both are now
+comments at the code they correct:
+
+* **`launchctl bootout gui/501 <label>` — the domain and the label as two arguments — boots nothing out** and
+  answers nothing. The service target (`gui/501/<label>`, one argument) is the form that works; with the wrong one
+  the step meant to make install idempotent never ran, and uninstall reported success while leaving the service
+  **running**. The unit test had encoded the wrong form; the proof found it by leaving a job behind.
+* **An accepted job is not yet a running one.** A status read immediately after `bootstrap` legitimately says
+  "installed, stopped", so the install call reports that instant and the caller polls for the rest. Treating that
+  instant as failure would show a failure for something that was starting.
+
+The `status` row above stays the *portable* answer where there is one — the claim plus `coder.hello` says which
+version is serving, while a supervisor only says whether something is loaded.
+
 ## 7. Upgrade
 
 * **Never in place.** The payload is copied to `<home>/EnvoyDev/runtime/<version>` with a `current` pointer,
@@ -173,8 +189,18 @@ A checklist, in build order:
 6. boot-time run reconciliation;
 7. drain-on-restart;
 8. a portable graceful stop for Windows;
-9. the service module with per-platform unit text as a pure function in `@envoydev/platform` — testable on
-   whichever OS runs the suite, the same way the launch-shell probe is;
+9. ~~the service module with per-platform unit text as a pure function in `@envoydev/platform`~~ **landed**:
+   `service.ts` writes the launchd plist, the systemd user unit and the Task Scheduler definition — at login and
+   not at boot, restarting on failure and never on a deliberate stop (`SuccessfulExit=false`,
+   `RestartPreventExitStatus=0 4`), carrying `--managed-by service` and `--home <path>`; `service-install.ts`
+   holds the plans, the parsers and the four operations with their I/O injected, so Linux's and Windows' branches
+   are tested on this machine; `supervisor.ts` supplies the *installed* payload's paths, the log path and the real
+   `execFile`/`fs`. `npm run service:proof` installs a genuine launchd agent from a **temporary** user home (never
+   the owner's `~/Library/LaunchAgents`), proves the daemon's claim reads `managedBy=service`, kills the daemon to
+   watch `KeepAlive` restore it, and boots the job out in a `finally` whatever happens. **Owed still:** a CLI
+   entry point (`…/runtime/current/main.mjs service …`, which §8 needs on macOS, where deleting the app runs no
+   code) and the Settings control — item 10. Linux and Windows stay unit-text and plan tests plus the owner's
+   checks: nothing here can execute systemd or the Task Scheduler;
 10. the Settings page (states, restart count, log tail, stop/restart/uninstall) and one row in
     `docs/settings-parity.md`.
 
