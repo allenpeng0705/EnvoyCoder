@@ -1054,6 +1054,37 @@ class AppLocalizationsEn extends AppLocalizations {
       'The branch on the computer and the one on the remote have both changed, so a pull cannot bring them together. Merge them, or push your branch.';
 
   @override
+  String get gitStashTitle => 'Stashes';
+
+  @override
+  String get gitStashCta => 'Stash';
+
+  @override
+  String get gitStashDone => 'Stashed.';
+
+  @override
+  String get gitStashPop => 'Put back';
+
+  @override
+  String get gitStashDrop => 'Discard';
+
+  @override
+  String get gitStashConfirm => 'Discard this stash?';
+
+  @override
+  String get errorGitNothingToStash =>
+      'There is nothing to stash — no file in this folder has uncommitted changes.';
+
+  @override
+  String get errorGitStashDirty =>
+      'Putting a stash back needs a clean working tree. Commit or stash the changes in this folder first.';
+
+  @override
+  String errorGitStashConflict(String files) {
+    return 'This stash cannot be put back cleanly. These files conflict: $files. Nothing was changed, and the stash is still there.';
+  }
+
+  @override
   String get newTaskNoProjects =>
       'Add a project on the computer first, then try again.';
 

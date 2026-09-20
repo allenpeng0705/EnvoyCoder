@@ -1681,6 +1681,76 @@ button.explorer__change:hover {
   color: var(--status-danger, #d8847b);
 }
 
+/* The stashes, under the commit box. A row is what git wrote plus how long ago, then two quiet controls:
+   nothing here should compete with the changed files below it. */
+.explorer__stash {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2) var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.explorer__stash-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+}
+
+.explorer__stash-title {
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.explorer__stash-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.explorer__stash-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.explorer__stash-what {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.explorer__stash-message {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.explorer__stash-when {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+/* The question, in the message's place — so the row is the same width whether it is asking or not. */
+.explorer__stash-ask {
+  flex: 1 1 auto;
+  overflow: hidden;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .explorer__kind {
   flex: 0 0 auto;
   color: var(--text-muted);

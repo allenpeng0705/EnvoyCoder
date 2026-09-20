@@ -1020,6 +1020,35 @@ class AppLocalizationsZh extends AppLocalizations {
       '电脑上的分支和远程的分支都变了，pull 无法把它们合到一起。请合并它们，或者推送你的分支。';
 
   @override
+  String get gitStashTitle => '放到一边的工作';
+
+  @override
+  String get gitStashCta => '放到一边';
+
+  @override
+  String get gitStashDone => '已放到一边。';
+
+  @override
+  String get gitStashPop => '放回来';
+
+  @override
+  String get gitStashDrop => '丢弃';
+
+  @override
+  String get gitStashConfirm => '丢弃这份放到一边的工作？';
+
+  @override
+  String get errorGitNothingToStash => '没有可以把放到一边的内容——这个文件夹里没有文件有未提交的改动。';
+
+  @override
+  String get errorGitStashDirty => '把放到一边的工作放回来，工作区必须是干净的。请先提交或暂存这个文件夹里的改动。';
+
+  @override
+  String errorGitStashConflict(String files) {
+    return '这份放到一边的工作无法干净地放回来。这些文件有冲突：$files。没有任何改动发生，放到一边的工作还在。';
+  }
+
+  @override
   String get newTaskNoProjects => '请先在电脑上添加项目，然后重试。';
 
   @override

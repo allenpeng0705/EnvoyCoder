@@ -2,6 +2,8 @@ import 'package:envoydev_mobile/screens/explorer_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/l10n.dart';
+
 Future<Map<String, dynamic>> _rpc(String method, [Map<String, dynamic> params = const {}]) async {
   if (method == 'coder.listHomeFsEntries') {
     final path = params['path'] as String? ?? '/repo';
@@ -34,6 +36,9 @@ Future<Map<String, dynamic>> _rpc(String method, [Map<String, dynamic> params = 
         {'path': 'src/main.ts', 'kind': 'modified', 'staged': false, 'unstaged': true},
       ],
     };
+  }
+  if (method == 'coder.gitStashList') {
+    return {'stashes': <Map<String, dynamic>>[]};
   }
   if (method == 'coder.gitStage' || method == 'coder.gitUnstage') {
     final staging = method == 'coder.gitStage';
@@ -154,5 +159,169 @@ void main() {
     expect(find.text('src/main.ts'), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
     expect(find.byTooltip('Stage src/main.ts'), findsNothing);
+    expect(find.text('Stash'), findsNothing);
+  });
+
+  testWidgets('sets the tree aside, and lists what is set aside', (tester) async {
+    // The phone sends the method and the project; the desktop builds `git stash push -u` and measures the
+    // repository afterwards. What is pinned here is that the answer *is* the screen's new state.
+    final stashed = {
+      'index': 0,
+      'ref': 'stash@{0}',
+      'message': 'WIP on work: 3c3a2b9 one',
+      'at': DateTime.now().toUtc().toIso8601String(),
+    };
+    await tester.pumpWidget(
+      localizedApp(
+        ExplorerScreen(
+          root: '/repo',
+          projectId: 'p-1',
+          rpc: (method, [params = const {}]) async {
+            if (method == 'coder.gitStashPush') {
+              return {
+                'status': {'kind': 'git', 'branch': 'work', 'detached': false, 'ahead': 0, 'behind': 0, 'dirty': 0, 'conflicted': false},
+                'changes': <Map<String, dynamic>>[],
+                'stashes': [stashed],
+              };
+            }
+            return _rpc(method, params);
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Changes'));
+    await tester.pumpAndSettle();
+    expect(find.text('src/main.ts'), findsOneWidget);
+
+    await tester.tap(find.text('Stash'));
+    await tester.pumpAndSettle();
+
+    // The tree is empty, the confirmation says where the work went, and git's own subject is the row.
+    expect(find.text('No changes in this folder.'), findsOneWidget);
+    expect(find.text('Stashed.'), findsOneWidget);
+    expect(find.text('Stashes'), findsOneWidget);
+    expect(find.text('WIP on work: 3c3a2b9 one'), findsOneWidget);
+  });
+
+  testWidgets('puts a stash back, and asks before discarding one', (tester) async {
+    const first = {'index': 0, 'ref': 'stash@{0}', 'message': 'WIP on work: 3c3a2b9 one'};
+    const second = {'index': 1, 'ref': 'stash@{1}', 'message': 'WIP on work: 3c3a2b9 two'};
+    final calls = <String>[];
+    await tester.pumpWidget(
+      localizedApp(
+        ExplorerScreen(
+          root: '/repo',
+          projectId: 'p-1',
+          rpc: (method, [params = const {}]) async {
+            calls.add('$method ${params['index'] ?? ''}'.trim());
+            if (method == 'coder.gitStashList') {
+              return {'stashes': [first, second]};
+            }
+            if (method == 'coder.gitStashPop') {
+              return {
+                'status': {'kind': 'git', 'branch': 'work', 'detached': false, 'ahead': 0, 'behind': 0, 'dirty': 1, 'conflicted': false},
+                'changes': [
+                  {'path': 'src/main.ts', 'kind': 'modified', 'staged': false, 'unstaged': true},
+                ],
+                // **Renumbered**, exactly as git does: the stash that was second is now `stash@{0}`. The
+                // screen must act on the list the daemon just answered with, never on a stale index.
+                'stashes': [
+                  {'index': 0, 'ref': 'stash@{0}', 'message': 'WIP on work: 3c3a2b9 two'},
+                ],
+              };
+            }
+            if (method == 'coder.gitStashDrop') {
+              return {
+                'status': {'kind': 'git', 'branch': 'work', 'detached': false, 'ahead': 0, 'behind': 0, 'dirty': 1, 'conflicted': false},
+                'changes': <Map<String, dynamic>>[],
+                'stashes': <Map<String, dynamic>>[],
+              };
+            }
+            return _rpc(method, params);
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Changes'));
+    await tester.pumpAndSettle();
+
+    /// One control of one row: two stashes are on screen, and each has its own Put back and Discard.
+    Finder action(String message, String label) => find.descendant(
+          of: find.ancestor(of: find.text(message), matching: find.byType(ListTile)),
+          matching: find.text(label),
+        );
+
+    // Putting the newest one back is one press; the daemon answers with both lists, and the row it was
+    // about is gone while the older stash stays.
+    await tester.tap(action('WIP on work: 3c3a2b9 one', 'Put back'));
+    await tester.pumpAndSettle();
+    expect(calls, contains('coder.gitStashPop 0'));
+    expect(find.text('WIP on work: 3c3a2b9 one'), findsNothing);
+    expect(find.text('WIP on work: 3c3a2b9 two'), findsOneWidget);
+
+    // Discarding asks first — the question names the stash it is about, with that stash still on screen.
+    await tester.tap(action('WIP on work: 3c3a2b9 two', 'Discard'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard this stash?'), findsOneWidget);
+    expect(find.text('WIP on work: 3c3a2b9 two'), findsWidgets);
+    expect(calls.where((call) => call.startsWith('coder.gitStashDrop')), isEmpty);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(calls.where((call) => call.startsWith('coder.gitStashDrop')), isEmpty);
+
+    // And the second time, confirming destroys it.
+    await tester.tap(action('WIP on work: 3c3a2b9 two', 'Discard'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Discard'));
+    await tester.pumpAndSettle();
+    expect(calls, contains('coder.gitStashDrop 0'));
+    expect(find.text('WIP on work: 3c3a2b9 two'), findsNothing);
+  });
+
+  testWidgets('a stash refusal arrives in the phone\'s own language', (tester) async {
+    // The daemon's English travels with its key; a German phone must read German. Before the renderer
+    // existed this line was the daemon's English sentence on a German screen.
+    await pumpLocalized(
+      tester,
+      ExplorerScreen(
+        root: '/repo',
+        projectId: 'p-1',
+        rpc: (method, [params = const {}]) async {
+          if (method == 'coder.gitStashList') {
+            return {
+              'stashes': [
+                {'index': 0, 'ref': 'stash@{0}', 'message': 'WIP on work: 3c3a2b9 one'},
+              ],
+            };
+          }
+          if (method == 'coder.gitStashPop') {
+            // Exactly what the daemon puts on the wire: the English sentence, the marker, the key.
+            throw StateError(
+              'envoydev.git-stash-dirty: Putting a stash back needs a clean working tree. '
+              'Commit or stash the changes in this folder first.'
+              ' [envoydev.key] {"key":"error.gitStashDirty"}',
+            );
+          }
+          return _rpc(method, params);
+        },
+      ),
+      locale: const Locale('de'),
+    );
+    await tester.tap(find.text('Änderungen'));
+    await tester.pumpAndSettle();
+
+    final de = catalogue('de');
+    await tester.tap(find.text(de.gitStashPop));
+    await tester.pumpAndSettle();
+
+    expect(find.text(de.errorGitStashDirty), findsOneWidget);
+    // Not the daemon's English, and not the marker: the key was resolved, not passed through.
+    expect(find.textContaining('Putting a stash back needs'), findsNothing);
+    expect(find.textContaining('envoydev.key'), findsNothing);
+    // The stash is still listed: the refusal is about an attempt, not about the stash being gone.
+    expect(find.text('WIP on work: 3c3a2b9 one'), findsOneWidget);
   });
 }

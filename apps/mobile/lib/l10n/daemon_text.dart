@@ -145,6 +145,11 @@ const Map<String, DaemonRefRenderer> daemonRefRenderers = {
   // histories have diverged. Both are read in the user's language rather than through the English fallback.
   'error.gitMergeConflict': DaemonRefRenderer('errorGitMergeConflict', _mergeConflict),
   'error.gitPullDiverged': DaemonRefRenderer('errorGitPullDiverged', _pullDiverged),
+  // The three the stash adds: nothing to set aside, a tree that is not clean enough to put one back onto,
+  // and a stash that would not go on cleanly. The last one names the files, which is the part that is work.
+  'error.gitNothingToStash': DaemonRefRenderer('errorGitNothingToStash', _nothingToStash),
+  'error.gitStashDirty': DaemonRefRenderer('errorGitStashDirty', _stashDirty),
+  'error.gitStashConflict': DaemonRefRenderer('errorGitStashConflict', _stashConflict),
   'approval.deny': DaemonRefRenderer('approvalDeny', _deny),
 };
 
@@ -173,3 +178,10 @@ String _mergeConflict(AppLocalizations l10n, Map<String, Object> values) =>
     l10n.errorGitMergeConflict('${values['branch'] ?? ''}', '${values['files'] ?? ''}');
 
 String _pullDiverged(AppLocalizations l10n, Map<String, Object> _) => l10n.errorGitPullDiverged;
+
+String _nothingToStash(AppLocalizations l10n, Map<String, Object> _) => l10n.errorGitNothingToStash;
+
+String _stashDirty(AppLocalizations l10n, Map<String, Object> _) => l10n.errorGitStashDirty;
+
+String _stashConflict(AppLocalizations l10n, Map<String, Object> values) =>
+    l10n.errorGitStashConflict('${values['files'] ?? ''}');

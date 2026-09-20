@@ -1070,6 +1070,37 @@ class AppLocalizationsDe extends AppLocalizations {
       'Der Branch auf dem Rechner und der auf dem Remote haben sich beide geändert, ein Pull kann sie also nicht zusammenbringen. Merge sie, oder pushe deinen Branch.';
 
   @override
+  String get gitStashTitle => 'Stashes';
+
+  @override
+  String get gitStashCta => 'Beiseitelegen';
+
+  @override
+  String get gitStashDone => 'Beiseitegelegt.';
+
+  @override
+  String get gitStashPop => 'Zurücklegen';
+
+  @override
+  String get gitStashDrop => 'Verwerfen';
+
+  @override
+  String get gitStashConfirm => 'Diesen Stash verwerfen?';
+
+  @override
+  String get errorGitNothingToStash =>
+      'Es gibt nichts beiseitezulegen — in diesem Ordner hat keine Datei unversionierte Änderungen.';
+
+  @override
+  String get errorGitStashDirty =>
+      'Ein Stash lässt sich nur auf einen sauberen Arbeitsbaum zurücklegen. Committe oder stashe zuerst die Änderungen in diesem Ordner.';
+
+  @override
+  String errorGitStashConflict(String files) {
+    return 'Dieser Stash lässt sich nicht sauber zurücklegen. Diese Dateien stehen im Konflikt: $files. Es wurde nichts geändert, und der Stash ist noch da.';
+  }
+
+  @override
   String get newTaskNoProjects =>
       'Füge zuerst auf dem Rechner ein Projekt hinzu und versuche es dann erneut.';
 

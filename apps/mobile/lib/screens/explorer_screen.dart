@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/daemon_text.dart';
 import '../l10n/l10n.dart';
+import '../models/git.dart';
 import '../theme/tokens.dart';
 
 typedef ExplorerRpc = Future<Map<String, dynamic>> Function(
@@ -57,6 +58,10 @@ class _ExplorerScreenState extends State<ExplorerScreen> with SingleTickerProvid
   String? _writeNotice;
   String? _writeError;
 
+  /// What this project has set aside, newest first. Read once when the screen opens, then from every
+  /// write's own answer — the daemon measures the list after the write, so no second round trip is needed.
+  List<GitStashInfo> _stashes = const [];
+
   static const _hidden = {'node_modules', '.git'};
 
   @override
@@ -66,6 +71,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> with SingleTickerProvid
     _path = widget.root;
     _loadFiles(_path);
     _loadChanges();
+    _loadStashes();
   }
 
   @override
@@ -222,6 +228,24 @@ class _ExplorerScreenState extends State<ExplorerScreen> with SingleTickerProvid
     return changes;
   }
 
+  /// The stashes, read once — a read, so a live run never refuses it.
+  ///
+  /// A failure here is dropped rather than shown: the list is a convenience on a screen whose job is the
+  /// working tree, and a phone that cannot list stashes can still commit. The writes below are where a
+  /// refusal is worth a sentence.
+  Future<void> _loadStashes() async {
+    final projectId = widget.projectId;
+    if (projectId == null) return;
+    try {
+      final result = await widget.rpc('coder.gitStashList', {'projectId': projectId});
+      if (!mounted) return;
+      setState(() => _stashes = GitStashInfo.listFrom(result['stashes']));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _stashes = const []);
+    }
+  }
+
   /// One of the three git writes — and its answer **is** the refreshed list.
   ///
   /// The daemon measures the repository after the write, so this tab and the rail agree without a second round
@@ -241,9 +265,11 @@ class _ExplorerScreenState extends State<ExplorerScreen> with SingleTickerProvid
     try {
       final result = await widget.rpc(method, {'projectId': projectId, ...params});
       final changes = _parseChanges(result['changes']);
+      final stashes = result.containsKey('stashes') ? GitStashInfo.listFrom(result['stashes']) : null;
       if (!mounted) return null;
       setState(() {
         _changes = changes;
+        if (stashes != null) _stashes = stashes;
         _writing = false;
       });
       return (changes: changes, sha: result['sha']?.toString());
@@ -277,6 +303,59 @@ class _ExplorerScreenState extends State<ExplorerScreen> with SingleTickerProvid
     final sha = result.sha;
     // The sentence names the short sha, which is what a person reads back in `git log`.
     setState(() => _writeNotice = l10n.explorerCommitDone(sha == null || sha.length < 7 ? (sha ?? "") : sha.substring(0, 7)));
+  }
+
+  /// Set the whole working tree aside — untracked files included, which is what a user means by it.
+  ///
+  /// The button is off when the list is empty, because the daemon refuses that state; its
+  /// `error.gitNothingToStash` is the backstop for a screen whose list is a moment out of date.
+  Future<void> _stash() async {
+    final l10n = context.l10n;
+    final result = await _write('coder.gitStashPush', const {});
+    if (result == null || !mounted) return;
+    setState(() => _writeNotice = l10n.gitStashDone);
+  }
+
+  /// Put one stash back. A tree that already has changes is refused by the daemon, in its own sentence.
+  Future<void> _popStash(int index) async {
+    await _write('coder.gitStashPop', {'index': index});
+  }
+
+  /// Discard one stash — **after asking**, because this is the only stash action git cannot undo.
+  ///
+  /// The question names the stash it is about rather than being a generic "are you sure", and the dialog is
+  /// the platform's own, so its shape is the one the rest of this phone uses.
+  Future<void> _confirmDropStash(GitStashInfo stash) async {
+    final l10n = context.l10n;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.gitStashConfirm),
+        content: Text(stash.message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l10n.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(l10n.gitStashDrop),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await _write('coder.gitStashDrop', {'index': stash.index});
+  }
+
+  /// When a stash was made, in the user's language and calendar.
+  ///
+  /// Through `MaterialLocalizations` rather than a fixed format: the phone already carries the platform's
+  /// date and clock for six languages, and a hand-rolled `YYYY-MM-DD` would be the shape a *developer* reads.
+  String _stashWhen(DateTime at) {
+    final local = at.toLocal();
+    final material = MaterialLocalizations.of(context);
+    return '${material.formatCompactDate(local)} ${material.formatTimeOfDay(TimeOfDay.fromDateTime(local))}';
   }
 
   Widget _changesBody(CoderColors colors) {
@@ -332,6 +411,18 @@ class _ExplorerScreenState extends State<ExplorerScreen> with SingleTickerProvid
                     ),
                   ],
                 ),
+                // Setting the whole tree aside is the other thing a user does with a pile of changes, and it
+                // gets its own line: a third labelled button in the row above is one long word away from
+                // overflowing a narrow phone ("Beiseitelegen" next to "Alle bereitstellen" does not fit). Off
+                // on a clean tree, which is the state the daemon refuses anyway.
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: TextButton.icon(
+                    onPressed: _writing || _changes.isEmpty ? null : () => unawaited(_stash()),
+                    icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                    label: Text(l10n.gitStashCta),
+                  ),
+                ),
                 if (_writeNotice != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
@@ -374,6 +465,39 @@ class _ExplorerScreenState extends State<ExplorerScreen> with SingleTickerProvid
                       ],
                     ),
             ),
+        // What is set aside, at the foot of the tab that shows what is not. Only drawn when there is
+        // something in it: an empty section would be a heading about nothing.
+        if (canWrite && _stashes.isNotEmpty) ...[
+          const Divider(height: 24),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: Text(
+              l10n.gitStashTitle,
+              style: TextStyle(color: colors.foregroundMuted, fontSize: 12),
+            ),
+          ),
+          for (final stash in _stashes)
+            ListTile(
+              leading: const Icon(Icons.inventory_2_outlined),
+              // Git's own subject, verbatim: it names the branch and the commit the work sat on, and the
+              // reading beside it is the one part of this row this product writes.
+              title: Text(stash.message),
+              subtitle: stash.at == null ? null : Text(_stashWhen(stash.at!)),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    onPressed: _writing ? null : () => unawaited(_popStash(stash.index)),
+                    child: Text(l10n.gitStashPop),
+                  ),
+                  TextButton(
+                    onPressed: _writing ? null : () => unawaited(_confirmDropStash(stash)),
+                    child: Text(l10n.gitStashDrop),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ],
     );
   }

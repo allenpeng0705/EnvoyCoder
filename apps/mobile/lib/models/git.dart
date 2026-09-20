@@ -66,3 +66,38 @@ class GitBranchInfo {
     );
   }
 }
+
+/// One stash, as `coder.gitStashList` and every stash write reports it.
+///
+/// [index] is the only part the phone ever sends back: a stash is named by a number, so the daemon is what
+/// turns it into `stash@{n}` — a client that could name a revision could name a commit instead of a stash.
+/// [message] is git's own subject, left exactly as git wrote it because it is not a sentence of ours.
+class GitStashInfo {
+  const GitStashInfo({required this.index, required this.ref, required this.message, this.at});
+
+  final int index;
+  final String ref;
+  final String message;
+
+  /// When it was made. Absent when the daemon could not read git's answer.
+  final DateTime? at;
+
+  /// The stashes in one answer, whoever measured them.
+  static List<GitStashInfo> listFrom(Object? raw) {
+    final stashes = <GitStashInfo>[];
+    if (raw is! List) return stashes;
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final index = item['index'];
+      final ref = item['ref']?.toString() ?? '';
+      if (index is! num || ref.isEmpty) continue;
+      stashes.add(GitStashInfo(
+        index: index.toInt(),
+        ref: ref,
+        message: item['message']?.toString() ?? '',
+        at: DateTime.tryParse(item['at']?.toString() ?? ''),
+      ));
+    }
+    return stashes;
+  }
+}

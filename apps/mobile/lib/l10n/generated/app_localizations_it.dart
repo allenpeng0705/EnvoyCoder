@@ -1066,6 +1066,37 @@ class AppLocalizationsIt extends AppLocalizations {
       'Il branch sul computer e quello sul remoto sono cambiati entrambi, quindi un pull non può unirli. Uniscili, oppure pusha il tuo branch.';
 
   @override
+  String get gitStashTitle => 'Stash';
+
+  @override
+  String get gitStashCta => 'Metti da parte';
+
+  @override
+  String get gitStashDone => 'Messo da parte.';
+
+  @override
+  String get gitStashPop => 'Rimetti a posto';
+
+  @override
+  String get gitStashDrop => 'Elimina';
+
+  @override
+  String get gitStashConfirm => 'Eliminare questo stash?';
+
+  @override
+  String get errorGitNothingToStash =>
+      'Non c\'è niente da mettere da parte — nessun file in questa cartella ha modifiche non committate.';
+
+  @override
+  String get errorGitStashDirty =>
+      'Per rimettere a posto uno stash serve un albero di lavoro pulito. Committa o metti da parte prima le modifiche in questa cartella.';
+
+  @override
+  String errorGitStashConflict(String files) {
+    return 'Questo stash non può essere rimesso a posto in modo pulito. Questi file sono in conflitto: $files. Non è stato cambiato nulla e lo stash è ancora lì.';
+  }
+
+  @override
   String get newTaskNoProjects =>
       'Aggiungi prima un progetto sul computer, poi riprova.';
 

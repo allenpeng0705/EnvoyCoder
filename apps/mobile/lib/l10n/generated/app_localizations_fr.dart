@@ -1070,6 +1070,37 @@ class AppLocalizationsFr extends AppLocalizations {
       'La branche sur l\'ordinateur et celle du dépôt distant ont toutes deux changé : un pull ne peut pas les réunir. Fusionnez-les, ou poussez votre branche.';
 
   @override
+  String get gitStashTitle => 'Remisages';
+
+  @override
+  String get gitStashCta => 'Remiser';
+
+  @override
+  String get gitStashDone => 'Remisé.';
+
+  @override
+  String get gitStashPop => 'Remettre en place';
+
+  @override
+  String get gitStashDrop => 'Supprimer';
+
+  @override
+  String get gitStashConfirm => 'Supprimer ce stash ?';
+
+  @override
+  String get errorGitNothingToStash =>
+      'Il n\'y a rien à remiser — aucun fichier de ce dossier n\'a de modification non validée.';
+
+  @override
+  String get errorGitStashDirty =>
+      'Remettre un stash en place exige une copie de travail propre. Validez ou remisez d\'abord les modifications de ce dossier.';
+
+  @override
+  String errorGitStashConflict(String files) {
+    return 'Ce stash ne peut pas être remis en place proprement. Ces fichiers sont en conflit : $files. Rien n\'a été modifié, et le stash est toujours là.';
+  }
+
+  @override
   String get newTaskNoProjects =>
       'Ajoutez d\'abord un projet sur l\'ordinateur, puis réessayez.';
 

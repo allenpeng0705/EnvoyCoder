@@ -86,6 +86,7 @@ import {
 } from "./ExplorerSidebar.js";
 import type { OpenedFile } from "./FileView.js";
 import { SlashCommandList } from "./SlashCommandList.js";
+import type { StashActions } from "./StashPanel.js";
 import { WorkArea, type FileOpenRequest, type OpenedDiff } from "./WorkArea.js";
 import { FolderIcon } from "./icons.js";
 import { MessageMarkdown } from "./markdown/MessageMarkdown.js";
@@ -204,6 +205,8 @@ export interface TaskPaneProps {
   onStage?: (paths: readonly string[]) => Promise<{ ok: true; changes: readonly ExplorerChange[] } | Refusal>;
   onUnstage?: (paths: readonly string[]) => Promise<{ ok: true; changes: readonly ExplorerChange[] } | Refusal>;
   onCommit?: (message: string) => Promise<{ ok: true; sha: string; changes: readonly ExplorerChange[] } | Refusal>;
+  /** The stash operations, handed straight to the sidebar: the pane decides nothing about them. */
+  stash?: StashActions;
   /** Open one file from the explorer into a tab. */
   onReadFile?: (path: string) => Promise<{ ok: true; file: OpenedFile } | Refusal>;
   /** Open one change as a diff tab. `directory` is the task folder. */
@@ -720,6 +723,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
           {...(props.onStage !== undefined ? { onStage: props.onStage } : {})}
           {...(props.onUnstage !== undefined ? { onUnstage: props.onUnstage } : {})}
           {...(props.onCommit !== undefined ? { onCommit: props.onCommit } : {})}
+          {...(props.stash !== undefined ? { stash: props.stash } : {})}
           cwd={task.cwd}
           onListDirectory={props.onListDirectory}
           onListChanges={props.onListChanges}

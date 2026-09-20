@@ -27,6 +27,7 @@ import {
   IndexRemoveIcon,
   RefreshIcon,
 } from "./icons.js";
+import { StashPanel, type StashActions } from "./StashPanel.js";
 
 export interface ExplorerEntry {
   name: string;
@@ -113,6 +114,13 @@ export function ExplorerSidebar(props: {
   onStage?: (paths: readonly string[]) => Promise<{ ok: true; changes: readonly ExplorerChange[] } | Refusal>;
   onUnstage?: (paths: readonly string[]) => Promise<{ ok: true; changes: readonly ExplorerChange[] } | Refusal>;
   onCommit?: (message: string) => Promise<{ ok: true; sha: string; changes: readonly ExplorerChange[] } | Refusal>;
+  /**
+   * The four stash operations, under the commit box.
+   *
+   * One object, and absent when the daemon does not serve them: a sidebar without them shows the changes and
+   * offers no stash control, rather than a button whose press comes back "method not found".
+   */
+  stash?: StashActions;
 }): JSX.Element {
   const t = useT();
   const listDir = useRef(props.onListDirectory);
@@ -476,6 +484,16 @@ export function ExplorerSidebar(props: {
                 ) : null}
               </div>
             ) : null}
+            {/* The stashes, under the box that made them relevant: a press here empties the list below, so
+                the panel reports the refreshed changes back up rather than keeping its own copy. */}
+            {props.stash === undefined ? null : (
+              <StashPanel
+                actions={props.stash}
+                canStash={changeState.changes.length > 0}
+                disabled={writing}
+                onChanges={(changes) => setChangeState({ status: "ready", repo: true, changes })}
+              />
+            )}
             {changeState.changes.length === 0 ? (
               <p className="explorer__status">{t("explorer.changes.empty")}</p>
             ) : null}

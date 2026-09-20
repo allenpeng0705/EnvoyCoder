@@ -1890,6 +1890,60 @@ abstract class AppLocalizations {
   /// **'The branch on the computer and the one on the remote have both changed, so a pull cannot bring them together. Merge them, or push your branch.'**
   String get errorGitPullDiverged;
 
+  /// gitstashtitle — The heading of the list of work this project has set aside.
+  ///
+  /// In en, this message translates to:
+  /// **'Stashes'**
+  String get gitStashTitle;
+
+  /// gitstashcta — Sets the whole working tree aside, untracked files included.
+  ///
+  /// In en, this message translates to:
+  /// **'Stash'**
+  String get gitStashCta;
+
+  /// gitstashdone — Confirms that the working tree was set aside.
+  ///
+  /// In en, this message translates to:
+  /// **'Stashed.'**
+  String get gitStashDone;
+
+  /// git.stash.pop — Puts one stash back into the working tree.
+  ///
+  /// In en, this message translates to:
+  /// **'Put back'**
+  String get gitStashPop;
+
+  /// git.stash.drop — Discards one stash for good; the only stash action that destroys work.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get gitStashDrop;
+
+  /// git.stash.confirm — The question shown before a stash is discarded.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard this stash?'**
+  String get gitStashConfirm;
+
+  /// errorgitnothingtostash — A stash was asked for on a working tree that has nothing to set aside.
+  ///
+  /// In en, this message translates to:
+  /// **'There is nothing to stash — no file in this folder has uncommitted changes.'**
+  String get errorGitNothingToStash;
+
+  /// errorgitstashdirty — A stash cannot be put back onto a working tree that has changes.
+  ///
+  /// In en, this message translates to:
+  /// **'Putting a stash back needs a clean working tree. Commit or stash the changes in this folder first.'**
+  String get errorGitStashDirty;
+
+  /// errorgitstashconflict — A stash could not be put back cleanly, and the attempt was undone.
+  ///
+  /// In en, this message translates to:
+  /// **'This stash cannot be put back cleanly. These files conflict: {files}. Nothing was changed, and the stash is still there.'**
+  String errorGitStashConflict(String files);
+
   /// newtasknoprojects — The new-task sheet with no project to add to.
   ///
   /// In en, this message translates to:

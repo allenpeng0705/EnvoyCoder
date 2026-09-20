@@ -1029,6 +1029,37 @@ class AppLocalizationsKo extends AppLocalizations {
       '컴퓨터의 브랜치와 원격의 브랜치가 모두 바뀌어 pull로 합칠 수 없습니다. 병합하거나 브랜치를 push하세요.';
 
   @override
+  String get gitStashTitle => '스태시';
+
+  @override
+  String get gitStashCta => '스태시';
+
+  @override
+  String get gitStashDone => '치워 두었습니다.';
+
+  @override
+  String get gitStashPop => '되돌리기';
+
+  @override
+  String get gitStashDrop => '버리기';
+
+  @override
+  String get gitStashConfirm => '이 스태시를 버릴까요?';
+
+  @override
+  String get errorGitNothingToStash =>
+      '치워 둘 변경이 없습니다. 이 폴더에서 커밋되지 않은 변경이 있는 파일이 없습니다.';
+
+  @override
+  String get errorGitStashDirty =>
+      '스태시를 되돌리려면 작업 트리가 깨끗해야 합니다. 먼저 이 폴더의 변경을 커밋하거나 스태시하세요.';
+
+  @override
+  String errorGitStashConflict(String files) {
+    return '이 스태시는 깨끗하게 되돌릴 수 없습니다. 다음 파일이 충돌합니다: $files. 아무것도 변경되지 않았고 스태시는 그대로 있습니다.';
+  }
+
+  @override
   String get newTaskNoProjects => '이 컴퓨터에 프로젝트를 먼저 추가한 뒤 다시 시도하세요.';
 
   @override

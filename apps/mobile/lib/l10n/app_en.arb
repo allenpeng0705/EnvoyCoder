@@ -1418,6 +1418,47 @@
   "@errorGitPullDiverged": {
     "description": "errorgitpulldiverged — A pull could not fast-forward."
   },
+  "gitStashTitle": "Stashes",
+  "@gitStashTitle": {
+    "description": "gitstashtitle — The heading of the list of work this project has set aside."
+  },
+  "gitStashCta": "Stash",
+  "@gitStashCta": {
+    "description": "gitstashcta — Sets the whole working tree aside, untracked files included."
+  },
+  "gitStashDone": "Stashed.",
+  "@gitStashDone": {
+    "description": "gitstashdone — Confirms that the working tree was set aside."
+  },
+  "gitStashPop": "Put back",
+  "@gitStashPop": {
+    "description": "git.stash.pop — Puts one stash back into the working tree."
+  },
+  "gitStashDrop": "Discard",
+  "@gitStashDrop": {
+    "description": "git.stash.drop — Discards one stash for good; the only stash action that destroys work."
+  },
+  "gitStashConfirm": "Discard this stash?",
+  "@gitStashConfirm": {
+    "description": "git.stash.confirm — The question shown before a stash is discarded."
+  },
+  "errorGitNothingToStash": "There is nothing to stash — no file in this folder has uncommitted changes.",
+  "@errorGitNothingToStash": {
+    "description": "errorgitnothingtostash — A stash was asked for on a working tree that has nothing to set aside."
+  },
+  "errorGitStashDirty": "Putting a stash back needs a clean working tree. Commit or stash the changes in this folder first.",
+  "@errorGitStashDirty": {
+    "description": "errorgitstashdirty — A stash cannot be put back onto a working tree that has changes."
+  },
+  "errorGitStashConflict": "This stash cannot be put back cleanly. These files conflict: {files}. Nothing was changed, and the stash is still there.",
+  "@errorGitStashConflict": {
+    "description": "errorgitstashconflict — A stash could not be put back cleanly, and the attempt was undone.",
+    "placeholders": {
+      "files": {
+        "type": "String"
+      }
+    }
+  },
   "newTaskNoProjects": "Add a project on the computer first, then try again.",
   "@newTaskNoProjects": {
     "description": "newtasknoprojects — The new-task sheet with no project to add to."

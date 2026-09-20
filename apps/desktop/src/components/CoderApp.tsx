@@ -756,6 +756,14 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               onStage={(paths) => props.actions.gitStage(active.projectId, paths)}
               onUnstage={(paths) => props.actions.gitUnstage(active.projectId, paths)}
               onCommit={(message) => props.actions.gitCommit(active.projectId, message)}
+              // All four or none: the daemon serves them together, and a sidebar with half of them would
+              // offer a stash it cannot list.
+              stash={{
+                list: () => props.actions.gitStashList(active.projectId),
+                push: () => props.actions.gitStashPush(active.projectId),
+                pop: (index) => props.actions.gitStashPop(active.projectId, index),
+                drop: (index) => props.actions.gitStashDrop(active.projectId, index),
+              }}
               onReadFile={(path) => props.actions.readFile(path)}
               onReadDiff={(directory, path, from) => props.actions.readWorktreeDiff(directory, path, from)}
               onCreateEntry={(directory, name, kind) => props.actions.createEntry(directory, name, kind)}

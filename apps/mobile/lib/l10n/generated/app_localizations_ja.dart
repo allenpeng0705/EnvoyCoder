@@ -1031,6 +1031,37 @@ class AppLocalizationsJa extends AppLocalizations {
       '手元のブランチとリモートのブランチが両方変わっているため、pull では統合できません。マージするか、自分のブランチを push してください。';
 
   @override
+  String get gitStashTitle => 'スタッシュ';
+
+  @override
+  String get gitStashCta => 'スタッシュ';
+
+  @override
+  String get gitStashDone => 'しまっておきました。';
+
+  @override
+  String get gitStashPop => '戻す';
+
+  @override
+  String get gitStashDrop => '破棄';
+
+  @override
+  String get gitStashConfirm => 'このスタッシュを破棄しますか？';
+
+  @override
+  String get errorGitNothingToStash =>
+      'しまっておく変更がありません。このフォルダに未コミットの変更があるファイルはありません。';
+
+  @override
+  String get errorGitStashDirty =>
+      'スタッシュを戻すには作業ツリーがきれいである必要があります。先にこのフォルダの変更をコミットするかスタッシュしてください。';
+
+  @override
+  String errorGitStashConflict(String files) {
+    return 'このスタッシュはきれいに戻せません。次のファイルが競合しています: $files。何も変更されておらず、スタッシュはそのまま残っています。';
+  }
+
+  @override
   String get newTaskNoProjects => '先にコンピューターでプロジェクトを追加してから、もう一度お試しください。';
 
   @override

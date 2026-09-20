@@ -79,6 +79,15 @@ export interface ExplorerChangeResult {
   unstaged: boolean;
 }
 
+/** One stash, as the Changes tab lists it. `index` is the only part this window sends back. */
+export interface ExplorerStashResult {
+  index: number;
+  ref: string;
+  /** Git's own subject, untranslated because it is not our sentence. */
+  message: string;
+  at?: string;
+}
+
 /** One project's repository, as this window last measured it. */
 export interface GitSnapshot {
   status: GitStatus;
@@ -1075,15 +1084,7 @@ export class CoderStore {
       return { sha: result.sha, status: result.status, changes: result.changes };
     });
     if ("ok" in committed) return committed;
-    this.set({
-      git: {
-        ...(this.state.git ?? {}),
-        [projectId]: {
-          status: committed.status,
-          branches: this.state.git?.[projectId]?.branches ?? [],
-        },
-      },
-    });
+    this.rememberStatus(projectId, committed.status);
     return { ok: true, sha: committed.sha, changes: committed.changes };
   }
 
@@ -1107,15 +1108,7 @@ export class CoderStore {
       },
     );
     if ("ok" in merged) return merged;
-    this.set({
-      git: {
-        ...(this.state.git ?? {}),
-        [projectId]: {
-          status: merged.status,
-          branches: this.state.git?.[projectId]?.branches ?? [],
-        },
-      },
-    });
+    this.rememberStatus(projectId, merged.status);
     return { ok: true, ...(merged.into !== undefined ? { into: merged.into } : {}) };
   }
 
@@ -1123,15 +1116,7 @@ export class CoderStore {
   async gitFetch(projectId: string): Promise<{ ok: true; summary: string } | Refusal> {
     const fetched = await this.mutate("coder.gitFetch", { projectId }, (answer) => {
       const result = answer as { status: GitStatus; summary: string };
-      this.set({
-        git: {
-          ...(this.state.git ?? {}),
-          [projectId]: {
-            status: result.status,
-            branches: this.state.git?.[projectId]?.branches ?? [],
-          },
-        },
-      });
+      this.rememberStatus(projectId, result.status);
       return { summary: result.summary };
     });
     return "ok" in fetched ? fetched : { ok: true, ...fetched };
@@ -1141,18 +1126,99 @@ export class CoderStore {
   async gitPull(projectId: string): Promise<{ ok: true; summary: string } | Refusal> {
     const pulled = await this.mutate("coder.gitPull", { projectId }, (answer) => {
       const result = answer as { status: GitStatus; summary: string };
-      this.set({
-        git: {
-          ...(this.state.git ?? {}),
-          [projectId]: {
-            status: result.status,
-            branches: this.state.git?.[projectId]?.branches ?? [],
-          },
-        },
-      });
+      this.rememberStatus(projectId, result.status);
       return { summary: result.summary };
     });
     return "ok" in pulled ? pulled : { ok: true, ...pulled };
+  }
+
+  /**
+   * The stashes this project's repository is holding.
+   *
+   * Read where it is shown rather than kept in `state.git`: the branch chip never displays a stash, and
+   * folding a second spawn into every status read would make the chip slower for a fact it does not use.
+   * A read, so a run does not refuse it.
+   */
+  async gitStashList(
+    projectId: string,
+  ): Promise<{ ok: true; stashes: ExplorerStashResult[] } | Refusal> {
+    const listed = await this.mutate("coder.gitStashList", { projectId }, (answer) => ({
+      stashes: (answer as { stashes: ExplorerStashResult[] }).stashes,
+    }));
+    return "ok" in listed ? listed : { ok: true, ...listed };
+  }
+
+  /**
+   * Set this project's working tree aside, and answer with the three things that changed.
+   *
+   * The status goes into `state.git` because the branch chip's dirty count is now wrong — the tree it
+   * counted is empty — and the list is returned rather than stored, because the panel showing it is the
+   * only thing that wants it.
+   */
+  async gitStashPush(
+    projectId: string,
+  ): Promise<
+    { ok: true; status: GitStatus; changes: ExplorerChangeResult[]; stashes: ExplorerStashResult[] } | Refusal
+  > {
+    const pushed = await this.mutate("coder.gitStashPush", { projectId }, (answer) => {
+      const result = answer as {
+        status: GitStatus;
+        changes: ExplorerChangeResult[];
+        stashes: ExplorerStashResult[];
+      };
+      return { status: result.status, changes: result.changes, stashes: result.stashes };
+    });
+    if ("ok" in pushed) return pushed;
+    this.rememberStatus(projectId, pushed.status);
+    return { ok: true, status: pushed.status, changes: pushed.changes, stashes: pushed.stashes };
+  }
+
+  /** Put one stash back. A tree with changes is refused by the daemon, with the rule in the sentence. */
+  async gitStashPop(
+    projectId: string,
+    index: number,
+  ): Promise<
+    { ok: true; status: GitStatus; changes: ExplorerChangeResult[]; stashes: ExplorerStashResult[] } | Refusal
+  > {
+    const popped = await this.mutate("coder.gitStashPop", { projectId, index }, (answer) => {
+      const result = answer as {
+        status: GitStatus;
+        changes: ExplorerChangeResult[];
+        stashes: ExplorerStashResult[];
+      };
+      return { status: result.status, changes: result.changes, stashes: result.stashes };
+    });
+    if ("ok" in popped) return popped;
+    this.rememberStatus(projectId, popped.status);
+    return { ok: true, status: popped.status, changes: popped.changes, stashes: popped.stashes };
+  }
+
+  /** Discard one stash. It leaves the working tree alone, and the daemon says so by answering with it. */
+  async gitStashDrop(
+    projectId: string,
+    index: number,
+  ): Promise<{ ok: true; stashes: ExplorerStashResult[] } | Refusal> {
+    const dropped = await this.mutate("coder.gitStashDrop", { projectId, index }, (answer) => {
+      const result = answer as {
+        status: GitStatus;
+        changes: ExplorerChangeResult[];
+        stashes: ExplorerStashResult[];
+      };
+      return { status: result.status, changes: result.changes, stashes: result.stashes };
+    });
+    if ("ok" in dropped) return dropped;
+    this.rememberStatus(projectId, dropped.status);
+    return { ok: true, stashes: dropped.stashes };
+  }
+
+  /** A git answer's status, into the one place the branch chip reads. The branch list cannot change here. */
+  private rememberStatus(projectId: string, status: GitStatus): void {
+    this.set({
+      git: {
+        ...(this.state.git ?? {}),
+        [projectId]: { status, branches: this.state.git?.[projectId]?.branches ?? [] },
+      },
+    });
   }
 
   /** The difference for one file in Changes. A refusal stays with the tab. */

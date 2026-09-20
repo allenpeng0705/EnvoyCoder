@@ -114,5 +114,14 @@
   "gitPullDone": "git.pull.done",
   "gitPullNothing": "git.pull.nothing",
   "errorGitMergeConflict": "error.gitMergeConflict",
-  "errorGitPullDiverged": "error.gitPullDiverged"
+  "errorGitPullDiverged": "error.gitPullDiverged",
+  "gitStashTitle": "git.stash.title",
+  "gitStashCta": "git.stash.cta",
+  "gitStashDone": "git.stash.done",
+  "gitStashPop": "git.stash.pop",
+  "gitStashDrop": "git.stash.drop",
+  "gitStashConfirm": "git.stash.confirm",
+  "errorGitNothingToStash": "error.gitNothingToStash",
+  "errorGitStashDirty": "error.gitStashDirty",
+  "errorGitStashConflict": "error.gitStashConflict"
 }
