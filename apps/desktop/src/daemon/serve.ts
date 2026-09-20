@@ -87,6 +87,13 @@ export interface StartCoderDaemonOptions {
   paths?: CoderPaths;
   version?: string;
   instanceId?: string;
+  /**
+   * Who supervises this process, for the claim every launcher reads.
+   *
+   * `app` by default — the Tauri shell spawns the daemon and stops it when the last window quits. A service
+   * supervisor passes `service`, and then that shell leaves it alone (`docs/daemon-lifecycle.md` §3).
+   */
+  managedBy?: "app" | "service";
   /** Skip the mesh attach. Used by tests, which have no node and should not wait for one. */
   skipMeshAttach?: boolean;
   /** Injected so a test does not depend on which agents happen to be installed. */
@@ -439,6 +446,9 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
 
   // Only now is the port answering, so only now is the claim worth anything.
   await writeDaemonClaim(paths, {
+    // Passed in by whoever started this process; `main.ts` reads it from argv, and the service unit is what
+    // passes `--managed-by service`. The default keeps every existing launcher's daemon exactly as it was.
+    managedBy: options.managedBy ?? "app",
     product: ENVOYDEV_PRODUCT_NAME,
     instanceId,
     pid: process.pid,

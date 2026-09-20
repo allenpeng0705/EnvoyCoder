@@ -146,7 +146,9 @@ fails visibly (and throttled) rather than silently.
 
 A checklist, in build order:
 
-1. the claim's `managedBy`, and the shell attaching instead of killing (§3);
+1. ~~the claim's `managedBy`, and the shell attaching instead of killing (§3)~~ **landed**: the daemon writes
+   `managedBy` (from `--managed-by`, default `app`) and the shell stops the claim's pid only when the claim is
+   `app` — while still reaping a child it spawned itself;
 2. the payload copy under the runtime directory, versioned (§7);
 3. ~~`coder.health` — uptime, pid, version, active runs, event-loop lag, heap~~ **landed** (`daemon/health.ts`;
    last-event age comes with the heartbeat below, because a per-event stamp belongs with the recorder);

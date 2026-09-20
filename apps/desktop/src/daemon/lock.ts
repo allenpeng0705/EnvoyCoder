@@ -52,6 +52,15 @@ export interface DaemonDescriptor {
   stateDir: string;
   startedAt: string;
   version: string;
+  /**
+   * Who supervises this daemon: the app that spawned it, or an operating system service.
+   *
+   * **The one fact that lets a launcher tell "mine to stop" from "not mine to touch".** The shell's rule is to
+   * stop the pid in the claim when the user quits, which is right for a daemon it started and wrong for one a
+   * supervisor owns — quitting the window must not take down a host the phone is still talking to. Absent means
+   * `app`, which is what every daemon written before this field was, so an older claim is read as ours.
+   */
+  managedBy?: "app" | "service";
   /** Where the shell installed the daemon's entry point, for diagnostics. */
   entry?: string;
 }
@@ -171,6 +180,9 @@ export async function readDaemonClaim(
     stateDir: descriptor.stateDir ?? paths.stateDir,
     startedAt: descriptor.startedAt ?? new Date(0).toISOString(),
     version: descriptor.version ?? "unknown",
+    // Resolved on read rather than left absent: a reader that has to remember the default is a reader that
+    // will forget it, and "who manages this" is the fact a stop decision turns on.
+    managedBy: descriptor.managedBy === "service" ? "service" : "app",
     ...(descriptor.entry ? { entry: descriptor.entry } : {}),
   } satisfies DaemonDescriptor;
 

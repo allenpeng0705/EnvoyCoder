@@ -199,6 +199,13 @@ pub struct DaemonClaim {
     pub started_at: String,
     #[serde(default)]
     pub version: String,
+    /// Who supervises the daemon: `app` (this shell) or `service` (an OS supervisor).
+    ///
+    /// Defaulted, so a claim written by a daemon older than this field reads as `app` — the behaviour that
+    /// shipped — and `#[serde(default)]` rather than an `Option` because an unknown value must also fall back
+    /// to the safe reading rather than fail the parse and strand a healthy daemon with a claim nobody honours.
+    #[serde(default)]
+    pub managed_by: String,
 }
 
 /// What the window is told to dial.
@@ -742,16 +749,21 @@ static DAEMON_STOP_STARTED: AtomicBool = AtomicBool::new(false);
 ///
 /// The child this process spawned, and the daemon the claim names when this window only attached.
 /// The same pid is listed once. Pid 0 is never a process.
-fn daemon_pids_to_stop(managed: Option<u32>, claim_pid: Option<u32>) -> Vec<u32> {
+fn daemon_pids_to_stop(managed: Option<u32>, claim: Option<&DaemonClaim>) -> Vec<u32> {
     let mut pids = Vec::new();
     if let Some(pid) = managed {
         if pid != 0 {
             pids.push(pid);
         }
     }
-    if let Some(pid) = claim_pid {
-        if pid != 0 && !pids.contains(&pid) {
-            pids.push(pid);
+    // **The claim's pid is stopped only when the claim is ours to stop.**
+    //
+    // A daemon an OS supervisor owns must survive this window quitting: that is the whole point of running it as
+    // a service, and the phone may be talking to it at the time. Our own *child* above is still stopped even
+    // then, because that process is one we spawned and it is not serving anybody.
+    if let Some(claim) = claim {
+        if claim.managed_by != "service" && claim.pid != 0 && !pids.contains(&claim.pid) {
+            pids.push(claim.pid);
         }
     }
     pids
@@ -778,8 +790,8 @@ fn stop_daemon_for_exit(app: &tauri::AppHandle) {
             Err(_) => None,
         }
     };
-    let claim_pid = live_claim().map(|claim| claim.pid);
-    for pid in daemon_pids_to_stop(managed, claim_pid) {
+    let claim = live_claim();
+    for pid in daemon_pids_to_stop(managed, claim.as_ref()) {
         stop_child(pid);
     }
 }
@@ -1268,15 +1280,52 @@ mod tests {
         let _ = std::fs::remove_file(&file);
     }
 
+    /// A claim as the daemon writes it, with the fields this test turns on.
+    fn claim(pid: u32, managed_by: &str) -> DaemonClaim {
+        DaemonClaim {
+            product: PRODUCT_NAME.to_string(),
+            instance_id: "i-1".to_string(),
+            pid,
+            host: "127.0.0.1".to_string(),
+            port: 4770,
+            path: "/ws".to_string(),
+            started_at: String::new(),
+            version: String::new(),
+            managed_by: managed_by.to_string(),
+        }
+    }
+
     #[test]
     fn quitting_stops_the_daemon_we_started_and_the_one_we_only_attached_to() {
         // The same pid is one stop. An attached daemon is still ours to stop. Pid 0 is not a process.
-        assert_eq!(daemon_pids_to_stop(Some(10), Some(10)), vec![10]);
-        assert_eq!(daemon_pids_to_stop(None, Some(10)), vec![10]);
+        let ours = claim(10, "app");
+        assert_eq!(daemon_pids_to_stop(Some(10), Some(&ours)), vec![10]);
+        assert_eq!(daemon_pids_to_stop(None, Some(&ours)), vec![10]);
         assert_eq!(daemon_pids_to_stop(Some(10), None), vec![10]);
-        assert_eq!(daemon_pids_to_stop(Some(10), Some(11)), vec![10, 11]);
-        assert!(daemon_pids_to_stop(Some(0), Some(0)).is_empty());
+        assert_eq!(daemon_pids_to_stop(Some(10), Some(&claim(11, "app"))), vec![10, 11]);
+        assert!(daemon_pids_to_stop(Some(0), Some(&claim(0, "app"))).is_empty());
         assert!(daemon_pids_to_stop(None, None).is_empty());
+    }
+
+    /**
+     * **A daemon a supervisor owns is not ours to stop.**
+     *
+     * This is the whole reason the claim carries `managedBy`: service mode exists so the host keeps answering
+     * when no window is open, and a shell that quit and killed it would take the phone's host down with it. The
+     * child *we* spawned is still stopped — that process is ours and serves nobody — and a claim written before
+     * the field existed (or with a value from a future version) reads as ours, because the safe reading is the
+     * behaviour that shipped.
+     */
+    #[test]
+    fn a_service_managed_daemon_survives_the_window_quitting() {
+        let supervised = claim(42, "service");
+        assert!(daemon_pids_to_stop(None, Some(&supervised)).is_empty());
+        assert!(daemon_pids_to_stop(Some(0), Some(&supervised)).is_empty());
+        // …but a child this app actually spawned is still reaped.
+        assert_eq!(daemon_pids_to_stop(Some(7), Some(&supervised)), vec![7]);
+        // An unknown value is a claim from a version we do not know: read it as ours.
+        assert_eq!(daemon_pids_to_stop(None, Some(&claim(42, ""))), vec![42]);
+        assert_eq!(daemon_pids_to_stop(None, Some(&claim(42, "something-new"))), vec![42]);
     }
 
     #[test]

@@ -73,6 +73,21 @@ function warmAgents(env: NodeJS.ProcessEnv = process.env): boolean {
 /** Kept in step with `apps/desktop/package.json`: a process cannot read its own version. */
 const VERSION = "0.1.0";
 
+/**
+ * Who manages this process, from `--managed-by app|service`.
+ *
+ * An argv flag rather than an environment variable because it is a *promise about supervision* that belongs in
+ * the service unit's own text, where a reader can see it, rather than in an environment that anything in the
+ * user's shell profile could set. Anything unrecognised means `app`: the safe reading is "the shell may stop
+ * me", which is the behaviour that shipped before this flag existed.
+ */
+function managedByFrom(argv: readonly string[]): "app" | "service" {
+  const flag = argv.findIndex((value) => value === "--managed-by");
+  const found = flag >= 0 ? argv[flag + 1] : undefined;
+  const inline = argv.find((value) => value.startsWith("--managed-by="))?.slice("--managed-by=".length);
+  return (found ?? inline) === "service" ? "service" : "app";
+}
+
 /** The configured port, or the product default. `0` is honoured: the OS then chooses one. */
 function readPort(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env[ENVOYDEV_DAEMON_PORT_ENV]?.trim();
@@ -137,7 +152,13 @@ try {
    * that makes a machine unusable, and this slice's own headline property is that *loading the agents page
    * spawns nothing*, which a warming daemon would quietly falsify.
    */
-  daemon = await startCoderDaemon({ port, paths, version: VERSION, warm: warmAgents(process.env) });
+  daemon = await startCoderDaemon({
+    port,
+    paths,
+    version: VERSION,
+    warm: warmAgents(process.env),
+    managedBy: managedByFrom(process.argv),
+  });
 } catch (error) {
   const outcome = serveFailureOutcome(port, error);
   say([`\n${outcome.headline}`, ...outcome.detail.map((line) => `  ${line}`)]);
