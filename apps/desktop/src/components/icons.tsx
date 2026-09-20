@@ -162,6 +162,24 @@ export function FolderIcon({ size = 16 }: IconProps): JSX.Element {
 }
 
 /** How much the agent may do — a pair of sliders, which is what a mode is. */
+/**
+ * A branch — one line that forks, which is what "branch" means before any word is read.
+ *
+ * The glyph is the rail's, not a task's: the chip that wears it names the branch the **project folder** is
+ * on, and the two circles with the fork between them are the shape every git user already reads.
+ */
+export function BranchIcon({ size = 16 }: IconProps): JSX.Element {
+  return (
+    <svg {...frame(size)}>
+      <circle cx="7" cy="6" r="2.2" />
+      <circle cx="7" cy="18" r="2.2" />
+      <circle cx="17" cy="10" r="2.2" />
+      <path d="M7 8.2v7.6" />
+      <path d="M9.2 6h3.6a2.2 2.2 0 0 1 2.2 2.2v.6" />
+    </svg>
+  );
+}
+
 export function ModeIcon({ size = 16 }: IconProps): JSX.Element {
   return (
     <svg {...frame(size)}>

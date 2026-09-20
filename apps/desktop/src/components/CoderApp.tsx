@@ -652,6 +652,10 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               if (!result.ok) return result;
               return { ok: true as const };
             }}
+            git={state.git}
+            onReadGit={(projectId) => props.actions.readGit(projectId)}
+            onGitCheckout={(projectId, branch) => props.actions.gitCheckout(projectId, branch)}
+            onGitCreateBranch={(projectId, name) => props.actions.gitCreateBranch(projectId, name)}
             harnesses={state.harnesses}
             appHarness={state.settings.defaults.harness ?? "envoy-harness"}
             onOpenProjectInNewWindow={canOpenProjectInNewWindow() ? openProjectWindow : undefined}

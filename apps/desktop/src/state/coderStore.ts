@@ -38,6 +38,8 @@ import type {
   CatalogEntry,
   CoderSettings,
   FixTarget,
+  GitBranch,
+  GitStatus,
   HarnessId,
   HarnessSummary,
   ProbeOutcome,
@@ -68,6 +70,12 @@ export type MeshStatus =
   | { kind: "no-node"; reason: string }
   | { kind: "refused"; code: string; reason: string };
 
+/** One project's repository, as this window last measured it. */
+export interface GitSnapshot {
+  status: GitStatus;
+  branches: readonly GitBranch[];
+}
+
 export interface CoderState {
   connection: ConnectionStatus;
   /** How the endpoint was decided — the shell, or a development fallback. */
@@ -84,6 +92,15 @@ export interface CoderState {
    * no work when it may have plenty. `false` until `coder.listTasks` answers.
    */
   tasksKnown: boolean;
+  /**
+   * What this window knows about each **project's** repository: the state it last measured, and the
+   * branches that came with it.
+   *
+   * Per project rather than per task: branches belong to the folder, and a task's `cwd` may be a worktree
+   * (`Task.worktree`) — a later slice. Measured on demand and never written to disk: a branch moves under
+   * us, and `Project.vcs` deliberately keeps only *what kind* of folder this is.
+   */
+  git: Readonly<Record<string, GitSnapshot>>;
   settings: CoderSettings;
   harnesses: readonly HarnessSummary[];
   /**
@@ -151,6 +168,15 @@ const initialState: CoderState = {
   projects: [],
   tasks: [],
   tasksKnown: false,
+  /**
+   * What this window knows about each **project's** repository: the state it last measured, and the
+   * branches that came with it.
+   *
+   * Per project rather than per task: a project folder is where branches belong, and a task's `cwd` may be
+   * a worktree (`Task.worktree`), which is a later slice. Measured on demand and never stored on disk — a
+   * branch moves under us, and `Project.vcs` deliberately keeps only *what kind* of folder this is.
+   */
+  git: {},
   settings: DEFAULT_CODER_SETTINGS,
   harnesses: [],
   providers: [],
@@ -920,6 +946,82 @@ export class CoderStore {
       };
       return { ok: true as const, repo: result.repo, changes: result.changes };
     });
+  }
+
+  /**
+   * Read a project's repository: the state, then its branches.
+   *
+   * Two calls, in that order, and the second only when the first says `git` — `coder.gitBranches` refuses a
+   * folder git does not track, and asking anyway would turn "this project is not tracked" into an error the
+   * first call had already answered as a state.
+   *
+   * A read is never refused while a run is live (the daemon's rule), so this can fill in a chip mid-run.
+   */
+  async readGit(projectId: string): Promise<{ ok: true } | Refusal> {
+    const measured = await this.mutate("coder.gitStatus", { projectId }, (answer) => ({
+      status: answer as GitStatus,
+    }));
+    if ("ok" in measured) return measured;
+
+    const listed =
+      measured.status.kind !== "git"
+        ? { branches: [] as GitBranch[] }
+        : await this.mutate("coder.gitBranches", { projectId }, (answer) => ({
+            branches: (answer as { branches: GitBranch[] }).branches,
+          }));
+    if ("ok" in listed) return listed;
+
+    this.set({
+      git: {
+        ...this.state.git,
+        [projectId]: { status: measured.status, branches: listed.branches },
+      },
+    });
+    return { ok: true };
+  }
+
+  /**
+   * Switch the project's repository to an existing branch.
+   *
+   * The answer carries the state the switch left behind, so the chip is right without a second read; the
+   * branch *list* cannot change by switching, so the one already held stands.
+   */
+  async gitCheckout(projectId: string, branch: string): Promise<{ ok: true } | Refusal> {
+    const switched = await this.mutate("coder.gitCheckout", { projectId, branch }, (answer) => ({
+      status: answer as GitStatus,
+    }));
+    if ("ok" in switched) return switched;
+    this.set({
+      git: {
+        ...this.state.git,
+        [projectId]: {
+          status: switched.status,
+          branches: this.state.git[projectId]?.branches ?? [],
+        },
+      },
+    });
+    return { ok: true };
+  }
+
+  /** Create a branch at HEAD and switch to it — the first half of the workflow this exists for. */
+  async gitCreateBranch(projectId: string, name: string): Promise<{ ok: true } | Refusal> {
+    const created = await this.mutate("coder.gitCreateBranch", { projectId, name }, (answer) => ({
+      status: answer as GitStatus,
+    }));
+    if ("ok" in created) return created;
+
+    // The list gains exactly the branch git just made, so it is updated rather than re-read; everything
+    // else about the list is git's answer from the last read and is still true.
+    const known = this.state.git[projectId]?.branches ?? [];
+    const branch = created.status.branch;
+    const branches =
+      branch === undefined
+        ? known
+        : known.some((candidate) => candidate.name === branch)
+          ? known.map((candidate) => ({ ...candidate, current: candidate.name === branch }))
+          : [...known.map((candidate) => ({ ...candidate, current: false })), { name: branch, current: true }];
+    this.set({ git: { ...this.state.git, [projectId]: { status: created.status, branches } } });
+    return { ok: true };
   }
 
   /** The difference for one file in Changes. A refusal stays with the tab. */

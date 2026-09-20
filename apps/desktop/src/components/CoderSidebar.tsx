@@ -56,7 +56,10 @@ import {
 import { useT } from "../i18n/context.js";
 import { localize, statusKey, type Notice, type Refusal } from "../i18n/notice.js";
 import { harnessBadge } from "../composer/harness-label.js";
+import type { GitSnapshot } from "../state/coderStore.js";
+
 import { ProjectAgentPicker } from "./ProjectAgentPicker.js";
+import { ProjectBranches } from "./ProjectBranches.js";
 
 export interface CoderSidebarProps {
   projects: readonly Project[];
@@ -75,6 +78,14 @@ export interface CoderSidebarProps {
     project: Project,
     defaults: TaskDefaults,
   ) => Promise<{ ok: true } | Refusal>;
+  /** Per project: the repository this window last measured, when it has measured one. */
+  git?: Readonly<Record<string, GitSnapshot>>;
+  /** Measure a project's repository — a read, so it is never refused while a run is live. */
+  onReadGit?: (projectId: string) => Promise<{ ok: true } | Refusal>;
+  /** Switch a project's repository to an existing branch. */
+  onGitCheckout?: (projectId: string, branch: string) => Promise<{ ok: true } | Refusal>;
+  /** Create a branch in a project's repository and switch to it. */
+  onGitCreateBranch?: (projectId: string, name: string) => Promise<{ ok: true } | Refusal>;
   /** Agents this daemon lists — for the project agent menu. */
   harnesses?: readonly HarnessSummary[];
   /** App-wide default agent when a project has not set its own. */
@@ -331,6 +342,17 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                       {harnessBadge(group.defaultHarness)}
                     </span>
                   )}
+                  {props.onReadGit !== undefined &&
+                  props.onGitCheckout !== undefined &&
+                  props.onGitCreateBranch !== undefined ? (
+                    <ProjectBranches
+                      project={group.project}
+                      snapshot={props.git?.[group.project.id]}
+                      onRead={() => props.onReadGit!(group.project.id)}
+                      onCheckout={(branch) => props.onGitCheckout!(group.project.id, branch)}
+                      onCreate={(name) => props.onGitCreateBranch!(group.project.id, name)}
+                    />
+                  ) : null}
                   {/* The row's `…`, which used to be a bare `⋯` that opened project settings and nothing
                       else — a button whose only item had to be its whole accessible name. It is a menu
                       now, and project settings is one item in it rather than the button's identity.
