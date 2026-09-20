@@ -32,7 +32,7 @@
     "tauri:build:linux": "npm run tauri:build:linux -w @envoydev/desktop",
     "mobile:check": "node scripts/check-mobile.mjs",
     "module-size:check": "node scripts/check-module-size.mjs",
-    "gates": "npm run peers:check && npm run wiring:check && npm run docs:check && npm run settings:check && npm run l10n:check && node scripts/check-scripts.mjs && node scripts/check-src-clean.mjs && node scripts/check-mobile.mjs && npm run module-size:check && npx tsc -b && npx tsc -b tsconfig.unchecked.json && vitest run && npm run rust:test",
+    "gates": "npm run peers:check && npm run wiring:check && npm run docs:check && npm run settings:check && npm run l10n:check && node scripts/check-scripts.mjs && node scripts/check-src-clean.mjs && node scripts/check-mobile.mjs && npm run module-size:check && npx tsc -b && npx tsc -b tsconfig.unchecked.json && vitest run && npm run rust:test && node scripts/check-daemon-payload.mjs",
     "wiring:check": "node scripts/check-wiring.mjs",
     "i18n:gap": "tsx scripts/i18n-gap.ts",
     "l10n:check": "tsx scripts/check-l10n-provenance.ts",
