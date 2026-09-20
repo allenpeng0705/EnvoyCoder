@@ -216,6 +216,29 @@ try {
   // The other half of `KeepAlive { SuccessfulExit: false }`, and the half the stop button relies on: a deliberate
   // stop must *stay* stopped. SIGTERM is the daemon's clean path — it drains and exits 0 — so launchd must not bring
   // it back, or the switch's "stop" and the app's own quit would be undone by the supervisor.
+  /**
+   * **Wait until the restarted daemon is *serving*, not merely running.**
+   *
+   * launchd reports `state = running` the instant the process exists — seconds before the daemon has installed its
+   * signal handlers, because it opens the store, reconciles interrupted runs, starts the mesh and binds the socket
+   * first. A `SIGTERM` in that window kills it *by signal*, which is an unsuccessful exit, so launchd restarts it —
+   * correctly. The check below then blames the restart policy for a race in this script, which is exactly what
+   * happened: the job had run three times and the failure was reported as "it came back". The claim is the daemon's
+   * own statement that it is serving, so it is the honest thing to wait for.
+   */
+  const serving = await waitFor("the restarted daemon to publish its claim", 30_000, async () => {
+    const claim = await readFile(join(paths.stateDir, "daemon.json"), "utf8").then(
+      (text) => JSON.parse(text) as { pid?: number },
+      () => undefined,
+    );
+    return claim?.pid === restartedPid ? claim : undefined;
+  }).catch(() => undefined);
+  check(
+    "the restarted daemon is serving before it is asked to stop",
+    serving !== undefined,
+    `pid ${restartedPid}`,
+  );
+
   process.kill(restartedPid, "SIGTERM");
   const stopped = await waitFor("the daemon to exit on SIGTERM", 20_000, async () => {
     try {
@@ -236,6 +259,30 @@ try {
     relaunched === undefined,
     relaunched?.pid === undefined ? "" : `it came back as pid ${relaunched.pid}`,
   );
+  if (relaunched !== undefined) {
+    /**
+     * **Launchd's own view, printed only when the policy looks broken.**
+     *
+     * This is the datum that decides where the fault is, and without it the failure is undiagnosable: a non-zero
+     * `last exit code` means the daemon did not exit cleanly (so the "deliberate stop" never happened), while a
+     * zero one means it did and launchd restarted it anyway — and those two need opposite fixes. A probe job that
+     * merely exits 0 under the identical `KeepAlive` dict stays down (runs = 1, last exit code = 0), so the plist's
+     * policy is right in isolation and only the real job can say what differs.
+     */
+    try {
+      const printed = await realServiceIo.run({
+        command: "launchctl",
+        args: ["print", `gui/${input.uid}/${input.label}`],
+      });
+      const interesting = printed.stdout
+        .split("\n")
+        .filter((line) => /last exit code|state = |pid = |runs = |successive crashes/.test(line))
+        .map((line) => line.trim());
+      console.log(`  launchd's view: ${interesting.join(" | ") || "nothing interesting printed"}`);
+    } catch (error) {
+      console.log(`  launchd's view: unavailable (${String(error).slice(0, 80)})`);
+    }
+  }
 
   const removed = await uninstallService(io, input);
   check("the plist is gone", await readFile(plist, "utf8").then(() => false, () => true));
