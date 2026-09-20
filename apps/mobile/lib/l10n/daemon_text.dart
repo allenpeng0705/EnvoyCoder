@@ -150,6 +150,12 @@ const Map<String, DaemonRefRenderer> daemonRefRenderers = {
   'error.gitNothingToStash': DaemonRefRenderer('errorGitNothingToStash', _nothingToStash),
   'error.gitStashDirty': DaemonRefRenderer('errorGitStashDirty', _stashDirty),
   'error.gitStashConflict': DaemonRefRenderer('errorGitStashConflict', _stashConflict),
+  // The four the conflict flow adds: a merge that is not finished, one that is not there at all, conflicts
+  // from an operation this product did not start, and an agent that could not be started.
+  'error.gitMergeUnresolved': DaemonRefRenderer('errorGitMergeUnresolved', _mergeUnresolved),
+  'error.gitMergeNone': DaemonRefRenderer('errorGitMergeNone', _mergeNone),
+  'error.gitConflicted': DaemonRefRenderer('errorGitConflicted', _conflicted),
+  'error.gitMergeResolveFailed': DaemonRefRenderer('errorGitMergeResolveFailed', _mergeResolveFailed),
   'approval.deny': DaemonRefRenderer('approvalDeny', _deny),
 };
 
@@ -185,3 +191,14 @@ String _stashDirty(AppLocalizations l10n, Map<String, Object> _) => l10n.errorGi
 
 String _stashConflict(AppLocalizations l10n, Map<String, Object> values) =>
     l10n.errorGitStashConflict('${values['files'] ?? ''}');
+
+String _mergeUnresolved(AppLocalizations l10n, Map<String, Object> values) =>
+    l10n.errorGitMergeUnresolved('${values['files'] ?? ''}');
+
+String _mergeNone(AppLocalizations l10n, Map<String, Object> _) => l10n.errorGitMergeNone;
+
+String _conflicted(AppLocalizations l10n, Map<String, Object> values) =>
+    l10n.errorGitConflicted('${values['files'] ?? ''}');
+
+String _mergeResolveFailed(AppLocalizations l10n, Map<String, Object> values) =>
+    l10n.errorGitMergeResolveFailed('${values['detail'] ?? ''}');

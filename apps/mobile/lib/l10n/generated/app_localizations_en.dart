@@ -1085,6 +1085,61 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String errorGitMergeUnresolved(String files) {
+    return 'A merge is not finished: $files still has conflicts. Resolve them and finish the merge, or abort it.';
+  }
+
+  @override
+  String get errorGitMergeNone =>
+      'No merge is in progress, so there is nothing to finish or abort.';
+
+  @override
+  String errorGitConflicted(String files) {
+    return 'This repository has unresolved conflicts in $files, from an operation EnvoyDev did not start. Finish or undo it there before doing anything else here.';
+  }
+
+  @override
+  String errorGitMergeResolveFailed(String detail) {
+    return 'The agent could not be started, so the merge was taken back and nothing changed: $detail';
+  }
+
+  @override
+  String get gitMergeStopped => 'A merge stopped with conflicts.';
+
+  @override
+  String gitMergeStoppedFrom(String branch) {
+    return 'The merge of $branch stopped with conflicts.';
+  }
+
+  @override
+  String get gitMergeResolved =>
+      'All conflicts are resolved. Finish the merge to record it.';
+
+  @override
+  String get gitMergeResolve => 'Resolve with an agent';
+
+  @override
+  String get gitMergeFinish => 'Finish the merge';
+
+  @override
+  String get gitMergeAbort => 'Abort the merge';
+
+  @override
+  String gitMergeResolving(String task) {
+    return 'An agent is resolving this merge: $task.';
+  }
+
+  @override
+  String get gitMergeAborted =>
+      'The merge was aborted, and nothing was merged.';
+
+  @override
+  String get gitMergeRecorded => 'The merge was recorded.';
+
+  @override
+  String get gitBranchesConflictsChip => 'Conflicts';
+
+  @override
   String get newTaskNoProjects =>
       'Add a project on the computer first, then try again.';
 

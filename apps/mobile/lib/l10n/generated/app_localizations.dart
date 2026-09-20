@@ -1944,6 +1944,90 @@ abstract class AppLocalizations {
   /// **'This stash cannot be put back cleanly. These files conflict: {files}. Nothing was changed, and the stash is still there.'**
   String errorGitStashConflict(String files);
 
+  /// errorgitmergeunresolved — A merge is in progress and its conflicts are not all resolved.
+  ///
+  /// In en, this message translates to:
+  /// **'A merge is not finished: {files} still has conflicts. Resolve them and finish the merge, or abort it.'**
+  String errorGitMergeUnresolved(String files);
+
+  /// errorgitmergenone — A merge was to be finished or aborted, and none is in progress.
+  ///
+  /// In en, this message translates to:
+  /// **'No merge is in progress, so there is nothing to finish or abort.'**
+  String get errorGitMergeNone;
+
+  /// errorgitconflicted — Unresolved conflicts from an operation EnvoyDev did not start.
+  ///
+  /// In en, this message translates to:
+  /// **'This repository has unresolved conflicts in {files}, from an operation EnvoyDev did not start. Finish or undo it there before doing anything else here.'**
+  String errorGitConflicted(String files);
+
+  /// errorgitmergeresolvefailed — The agent that was to resolve a merge could not be started, so the merge was taken back.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent could not be started, so the merge was taken back and nothing changed: {detail}'**
+  String errorGitMergeResolveFailed(String detail);
+
+  /// gitmergestopped — A merge stopped with conflicts, and git could not name the branch.
+  ///
+  /// In en, this message translates to:
+  /// **'A merge stopped with conflicts.'**
+  String get gitMergeStopped;
+
+  /// gitmergestoppedfrom — A merge of this branch stopped with conflicts.
+  ///
+  /// In en, this message translates to:
+  /// **'The merge of {branch} stopped with conflicts.'**
+  String gitMergeStoppedFrom(String branch);
+
+  /// gitmergeresolved — Every conflict is resolved and the merge can be recorded.
+  ///
+  /// In en, this message translates to:
+  /// **'All conflicts are resolved. Finish the merge to record it.'**
+  String get gitMergeResolved;
+
+  /// gitmergeresolve — Merges again, keeping the conflict, and lets an agent resolve it.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolve with an agent'**
+  String get gitMergeResolve;
+
+  /// gitmergefinish — Records a merge whose conflicts are resolved.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish the merge'**
+  String get gitMergeFinish;
+
+  /// gitmergeabort — Takes a merge in progress back.
+  ///
+  /// In en, this message translates to:
+  /// **'Abort the merge'**
+  String get gitMergeAbort;
+
+  /// gitmergeresolving — Names the task an agent is resolving the merge in.
+  ///
+  /// In en, this message translates to:
+  /// **'An agent is resolving this merge: {task}.'**
+  String gitMergeResolving(String task);
+
+  /// gitmergeaborted — Confirms that a merge in progress was taken back.
+  ///
+  /// In en, this message translates to:
+  /// **'The merge was aborted, and nothing was merged.'**
+  String get gitMergeAborted;
+
+  /// gitmergerecorded — Confirms that a resolved merge was committed.
+  ///
+  /// In en, this message translates to:
+  /// **'The merge was recorded.'**
+  String get gitMergeRecorded;
+
+  /// gitbranchesconflictschip — The branch chip while a merge has unresolved conflicts.
+  ///
+  /// In en, this message translates to:
+  /// **'Conflicts'**
+  String get gitBranchesConflictsChip;
+
   /// newtasknoprojects — The new-task sheet with no project to add to.
   ///
   /// In en, this message translates to:

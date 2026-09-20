@@ -1101,6 +1101,62 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
+  String errorGitMergeUnresolved(String files) {
+    return 'Ein Merge ist nicht abgeschlossen: In $files gibt es noch Konflikte. Löse sie und schließe den Merge ab, oder brich ihn ab.';
+  }
+
+  @override
+  String get errorGitMergeNone =>
+      'Es läuft kein Merge, also gibt es nichts abzuschließen oder abzubrechen.';
+
+  @override
+  String errorGitConflicted(String files) {
+    return 'In diesem Repository gibt es ungelöste Konflikte in $files, aus einem Vorgang, den EnvoyDev nicht gestartet hat. Schließe ihn dort ab oder mache ihn dort rückgängig, bevor du hier etwas anderes tust.';
+  }
+
+  @override
+  String errorGitMergeResolveFailed(String detail) {
+    return 'Der Agent konnte nicht gestartet werden, deshalb wurde der Merge zurückgenommen und nichts hat sich geändert: $detail';
+  }
+
+  @override
+  String get gitMergeStopped =>
+      'Ein Merge ist mit Konflikten stehen geblieben.';
+
+  @override
+  String gitMergeStoppedFrom(String branch) {
+    return 'Der Merge von $branch ist mit Konflikten stehen geblieben.';
+  }
+
+  @override
+  String get gitMergeResolved =>
+      'Alle Konflikte sind gelöst. Schließe den Merge ab, um ihn festzuhalten.';
+
+  @override
+  String get gitMergeResolve => 'Mit einem Agenten lösen';
+
+  @override
+  String get gitMergeFinish => 'Merge abschließen';
+
+  @override
+  String get gitMergeAbort => 'Merge abbrechen';
+
+  @override
+  String gitMergeResolving(String task) {
+    return 'Ein Agent löst diesen Merge: $task.';
+  }
+
+  @override
+  String get gitMergeAborted =>
+      'Der Merge wurde abgebrochen, es wurde nichts gemergt.';
+
+  @override
+  String get gitMergeRecorded => 'Der Merge wurde festgehalten.';
+
+  @override
+  String get gitBranchesConflictsChip => 'Konflikte';
+
+  @override
   String get newTaskNoProjects =>
       'Füge zuerst auf dem Rechner ein Projekt hinzu und versuche es dann erneut.';
 

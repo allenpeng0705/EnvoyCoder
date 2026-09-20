@@ -1049,6 +1049,58 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String errorGitMergeUnresolved(String files) {
+    return '有一个合并还没有完成：$files 仍有冲突。请解决冲突并完成合并，或者放弃它。';
+  }
+
+  @override
+  String get errorGitMergeNone => '当前没有进行中的合并，因此没有可完成或放弃的操作。';
+
+  @override
+  String errorGitConflicted(String files) {
+    return '这个仓库里有未解决的冲突：$files，来自一个不是 EnvoyDev 启动的操作。请到那里完成或撤销它，然后再在这里做别的事。';
+  }
+
+  @override
+  String errorGitMergeResolveFailed(String detail) {
+    return '无法启动 agent，因此这次合并已被撤回，什么也没有改变：$detail';
+  }
+
+  @override
+  String get gitMergeStopped => '有一个合并因冲突停住了。';
+
+  @override
+  String gitMergeStoppedFrom(String branch) {
+    return '合并 $branch 因冲突停住了。';
+  }
+
+  @override
+  String get gitMergeResolved => '冲突都解决了。完成合并即可把它记下来。';
+
+  @override
+  String get gitMergeResolve => '让 agent 解决';
+
+  @override
+  String get gitMergeFinish => '完成合并';
+
+  @override
+  String get gitMergeAbort => '放弃合并';
+
+  @override
+  String gitMergeResolving(String task) {
+    return '有 agent 正在解决这次合并：$task。';
+  }
+
+  @override
+  String get gitMergeAborted => '合并已放弃，没有任何内容被合并。';
+
+  @override
+  String get gitMergeRecorded => '合并已被记录。';
+
+  @override
+  String get gitBranchesConflictsChip => '冲突';
+
+  @override
   String get newTaskNoProjects => '请先在电脑上添加项目，然后重试。';
 
   @override

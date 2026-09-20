@@ -1062,6 +1062,58 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String errorGitMergeUnresolved(String files) {
+    return 'マージが完了していません: $files にまだ競合があります。解決してマージを完了するか、中止してください。';
+  }
+
+  @override
+  String get errorGitMergeNone => '進行中のマージがないため、完了または中止するものはありません。';
+
+  @override
+  String errorGitConflicted(String files) {
+    return 'このリポジトリには未解決の競合があります: $files。EnvoyDev が開始したものではない操作によるものです。ここで別のことをする前に、そちらで完了するか取り消してください。';
+  }
+
+  @override
+  String errorGitMergeResolveFailed(String detail) {
+    return 'エージェントを起動できなかったため、マージは取り消され、何も変更されていません: $detail';
+  }
+
+  @override
+  String get gitMergeStopped => 'マージが競合で止まりました。';
+
+  @override
+  String gitMergeStoppedFrom(String branch) {
+    return '$branch のマージが競合で止まりました。';
+  }
+
+  @override
+  String get gitMergeResolved => '競合はすべて解決しました。マージを完了すると記録されます。';
+
+  @override
+  String get gitMergeResolve => 'エージェントに解決させる';
+
+  @override
+  String get gitMergeFinish => 'マージを完了';
+
+  @override
+  String get gitMergeAbort => 'マージを中止';
+
+  @override
+  String gitMergeResolving(String task) {
+    return 'エージェントがこのマージを解決しています: $task。';
+  }
+
+  @override
+  String get gitMergeAborted => 'マージを中止しました。何もマージされていません。';
+
+  @override
+  String get gitMergeRecorded => 'マージを記録しました。';
+
+  @override
+  String get gitBranchesConflictsChip => '競合';
+
+  @override
   String get newTaskNoProjects => '先にコンピューターでプロジェクトを追加してから、もう一度お試しください。';
 
   @override

@@ -123,5 +123,19 @@
   "gitStashConfirm": "git.stash.confirm",
   "errorGitNothingToStash": "error.gitNothingToStash",
   "errorGitStashDirty": "error.gitStashDirty",
-  "errorGitStashConflict": "error.gitStashConflict"
+  "errorGitStashConflict": "error.gitStashConflict",
+  "errorGitMergeUnresolved": "error.gitMergeUnresolved",
+  "errorGitMergeNone": "error.gitMergeNone",
+  "errorGitConflicted": "error.gitConflicted",
+  "errorGitMergeResolveFailed": "error.gitMergeResolveFailed",
+  "gitMergeStopped": "git.merge.stopped",
+  "gitMergeStoppedFrom": "git.merge.stoppedFrom",
+  "gitMergeResolved": "git.merge.resolved",
+  "gitMergeResolve": "git.merge.resolve",
+  "gitMergeFinish": "git.merge.finish",
+  "gitMergeAbort": "git.merge.abort",
+  "gitMergeResolving": "git.merge.resolving",
+  "gitMergeAborted": "git.merge.aborted",
+  "gitMergeRecorded": "git.merge.recorded",
+  "gitBranchesConflictsChip": "git.branches.conflictsChip"
 }

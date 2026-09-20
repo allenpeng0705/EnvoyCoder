@@ -1097,6 +1097,61 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
+  String errorGitMergeUnresolved(String files) {
+    return 'Un merge non è concluso: in $files ci sono ancora conflitti. Risolvili e concludi il merge, oppure annullalo.';
+  }
+
+  @override
+  String get errorGitMergeNone =>
+      'Non c\'è nessun merge in corso, quindi non c\'è nulla da concludere o annullare.';
+
+  @override
+  String errorGitConflicted(String files) {
+    return 'Questo repository ha conflitti non risolti in $files, da un\'operazione che EnvoyDev non ha avviato. Concludila o annullala lì prima di fare altro qui.';
+  }
+
+  @override
+  String errorGitMergeResolveFailed(String detail) {
+    return 'L\'agente non è potuto partire, quindi il merge è stato annullato e nulla è cambiato: $detail';
+  }
+
+  @override
+  String get gitMergeStopped => 'Un merge si è fermato con dei conflitti.';
+
+  @override
+  String gitMergeStoppedFrom(String branch) {
+    return 'Il merge di $branch si è fermato con dei conflitti.';
+  }
+
+  @override
+  String get gitMergeResolved =>
+      'Tutti i conflitti sono risolti. Concludi il merge per registrarlo.';
+
+  @override
+  String get gitMergeResolve => 'Risolvi con un agente';
+
+  @override
+  String get gitMergeFinish => 'Concludi il merge';
+
+  @override
+  String get gitMergeAbort => 'Annulla il merge';
+
+  @override
+  String gitMergeResolving(String task) {
+    return 'Un agente sta risolvendo questo merge: $task.';
+  }
+
+  @override
+  String get gitMergeAborted =>
+      'Il merge è stato annullato e non è stato unito nulla.';
+
+  @override
+  String get gitMergeRecorded => 'Il merge è stato registrato.';
+
+  @override
+  String get gitBranchesConflictsChip => 'Conflitti';
+
+  @override
   String get newTaskNoProjects =>
       'Aggiungi prima un progetto sul computer, poi riprova.';
 

@@ -940,11 +940,17 @@ class _ProjectSection extends StatelessWidget {
                         const SizedBox(width: 4),
                         Flexible(
                           child: Text(
-                            gitStatus!.branch ?? l10n.gitBranchesDetachedChip,
+                            // **A conflict outranks the branch name here**, because it is the one state on this
+                            // row a user has to act on; the sheet it opens names the branch and the files.
+                            gitStatus!.merge != null && gitStatus!.conflicted
+                                ? l10n.gitBranchesConflictsChip
+                                : gitStatus!.branch ?? l10n.gitBranchesDetachedChip,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: gitStatus!.detached ? colors.statusWarning : colors.foreground,
+                              color: gitStatus!.detached || (gitStatus!.merge != null && gitStatus!.conflicted)
+                                  ? colors.statusWarning
+                                  : colors.foreground,
                               fontSize: 12,
                             ),
                           ),

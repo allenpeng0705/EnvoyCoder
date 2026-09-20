@@ -1459,6 +1459,87 @@
       }
     }
   },
+  "errorGitMergeUnresolved": "A merge is not finished: {files} still has conflicts. Resolve them and finish the merge, or abort it.",
+  "@errorGitMergeUnresolved": {
+    "description": "errorgitmergeunresolved — A merge is in progress and its conflicts are not all resolved.",
+    "placeholders": {
+      "files": {
+        "type": "String"
+      }
+    }
+  },
+  "errorGitMergeNone": "No merge is in progress, so there is nothing to finish or abort.",
+  "@errorGitMergeNone": {
+    "description": "errorgitmergenone — A merge was to be finished or aborted, and none is in progress."
+  },
+  "errorGitConflicted": "This repository has unresolved conflicts in {files}, from an operation EnvoyDev did not start. Finish or undo it there before doing anything else here.",
+  "@errorGitConflicted": {
+    "description": "errorgitconflicted — Unresolved conflicts from an operation EnvoyDev did not start.",
+    "placeholders": {
+      "files": {
+        "type": "String"
+      }
+    }
+  },
+  "errorGitMergeResolveFailed": "The agent could not be started, so the merge was taken back and nothing changed: {detail}",
+  "@errorGitMergeResolveFailed": {
+    "description": "errorgitmergeresolvefailed — The agent that was to resolve a merge could not be started, so the merge was taken back.",
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "gitMergeStopped": "A merge stopped with conflicts.",
+  "@gitMergeStopped": {
+    "description": "gitmergestopped — A merge stopped with conflicts, and git could not name the branch."
+  },
+  "gitMergeStoppedFrom": "The merge of {branch} stopped with conflicts.",
+  "@gitMergeStoppedFrom": {
+    "description": "gitmergestoppedfrom — A merge of this branch stopped with conflicts.",
+    "placeholders": {
+      "branch": {
+        "type": "String"
+      }
+    }
+  },
+  "gitMergeResolved": "All conflicts are resolved. Finish the merge to record it.",
+  "@gitMergeResolved": {
+    "description": "gitmergeresolved — Every conflict is resolved and the merge can be recorded."
+  },
+  "gitMergeResolve": "Resolve with an agent",
+  "@gitMergeResolve": {
+    "description": "gitmergeresolve — Merges again, keeping the conflict, and lets an agent resolve it."
+  },
+  "gitMergeFinish": "Finish the merge",
+  "@gitMergeFinish": {
+    "description": "gitmergefinish — Records a merge whose conflicts are resolved."
+  },
+  "gitMergeAbort": "Abort the merge",
+  "@gitMergeAbort": {
+    "description": "gitmergeabort — Takes a merge in progress back."
+  },
+  "gitMergeResolving": "An agent is resolving this merge: {task}.",
+  "@gitMergeResolving": {
+    "description": "gitmergeresolving — Names the task an agent is resolving the merge in.",
+    "placeholders": {
+      "task": {
+        "type": "String"
+      }
+    }
+  },
+  "gitMergeAborted": "The merge was aborted, and nothing was merged.",
+  "@gitMergeAborted": {
+    "description": "gitmergeaborted — Confirms that a merge in progress was taken back."
+  },
+  "gitMergeRecorded": "The merge was recorded.",
+  "@gitMergeRecorded": {
+    "description": "gitmergerecorded — Confirms that a resolved merge was committed."
+  },
+  "gitBranchesConflictsChip": "Conflicts",
+  "@gitBranchesConflictsChip": {
+    "description": "gitbranchesconflictschip — The branch chip while a merge has unresolved conflicts."
+  },
   "newTaskNoProjects": "Add a project on the computer first, then try again.",
   "@newTaskNoProjects": {
     "description": "newtasknoprojects — The new-task sheet with no project to add to."

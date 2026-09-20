@@ -1101,6 +1101,61 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String errorGitMergeUnresolved(String files) {
+    return 'Une fusion n\'est pas terminée : $files a encore des conflits. Résolvez-les et terminez la fusion, ou annulez-la.';
+  }
+
+  @override
+  String get errorGitMergeNone =>
+      'Aucune fusion n\'est en cours : il n\'y a rien à terminer ni à annuler.';
+
+  @override
+  String errorGitConflicted(String files) {
+    return 'Ce dépôt a des conflits non résolus dans $files, venant d\'une opération qu\'EnvoyDev n\'a pas lancée. Terminez-la ou annulez-la là-bas avant de faire autre chose ici.';
+  }
+
+  @override
+  String errorGitMergeResolveFailed(String detail) {
+    return 'L\'agent n\'a pas pu démarrer : la fusion a donc été annulée et rien n\'a changé : $detail';
+  }
+
+  @override
+  String get gitMergeStopped => 'Une fusion s\'est arrêtée sur des conflits.';
+
+  @override
+  String gitMergeStoppedFrom(String branch) {
+    return 'La fusion de $branch s\'est arrêtée sur des conflits.';
+  }
+
+  @override
+  String get gitMergeResolved =>
+      'Tous les conflits sont résolus. Terminez la fusion pour l\'enregistrer.';
+
+  @override
+  String get gitMergeResolve => 'Résoudre avec un agent';
+
+  @override
+  String get gitMergeFinish => 'Terminer la fusion';
+
+  @override
+  String get gitMergeAbort => 'Annuler la fusion';
+
+  @override
+  String gitMergeResolving(String task) {
+    return 'Un agent résout cette fusion : $task.';
+  }
+
+  @override
+  String get gitMergeAborted =>
+      'La fusion a été annulée, et rien n\'a été fusionné.';
+
+  @override
+  String get gitMergeRecorded => 'La fusion a été enregistrée.';
+
+  @override
+  String get gitBranchesConflictsChip => 'Conflits';
+
+  @override
   String get newTaskNoProjects =>
       'Ajoutez d\'abord un projet sur l\'ordinateur, puis réessayez.';
 

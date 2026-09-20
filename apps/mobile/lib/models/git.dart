@@ -15,6 +15,7 @@ class GitStatusInfo {
     required this.behind,
     required this.dirty,
     required this.conflicted,
+    this.merge,
   });
 
   /// `git` | `jj` | `none`. Only `git` has branches this build can drive.
@@ -33,6 +34,13 @@ class GitStatusInfo {
   /// An unmerged entry exists — a merge stopped here, and a person is needed.
   final bool conflicted;
 
+  /// A **merge** is in progress, when the daemon said so.
+  ///
+  /// Its own fact rather than a second meaning for [conflicted]: conflicts can come from a rebase or a
+  /// cherry-pick, and only a merge is something the sheet can finish or abort. Absent both when no merge is in
+  /// progress and when a daemon older than this field answered.
+  final GitMergeInfo? merge;
+
   bool get isRepository => kind == 'git';
 
   static int _count(Object? value) => value is num ? value.toInt() : 0;
@@ -47,8 +55,25 @@ class GitStatusInfo {
       behind: _count(json['behind']),
       dirty: _count(json['dirty']),
       conflicted: json['conflicted'] == true,
+      merge: json['merge'] is Map
+          ? GitMergeInfo.fromJson(Map<String, dynamic>.from(json['merge'] as Map))
+          : null,
     );
   }
+}
+
+/// A merge in progress, as `GitStatus.merge` reports it.
+///
+/// [branch] is the branch being merged in, when git could name one: `name-rev` answers nothing for a commit
+/// no ref reaches, and a sentence with an empty name in it is worse than one without a name.
+class GitMergeInfo {
+  const GitMergeInfo({this.branch});
+
+  final String? branch;
+
+  factory GitMergeInfo.fromJson(Map<String, dynamic> json) => GitMergeInfo(
+        branch: (json['branch'] as String?)?.trim().isEmpty ?? true ? null : json['branch'] as String,
+      );
 }
 
 class GitBranchInfo {

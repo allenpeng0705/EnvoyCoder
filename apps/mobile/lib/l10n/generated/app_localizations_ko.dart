@@ -1060,6 +1060,58 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String errorGitMergeUnresolved(String files) {
+    return '머지가 끝나지 않았습니다: $files에 아직 충돌이 있습니다. 해결하고 머지를 끝내거나 취소하세요.';
+  }
+
+  @override
+  String get errorGitMergeNone => '진행 중인 머지가 없어 끝내거나 취소할 것이 없습니다.';
+
+  @override
+  String errorGitConflicted(String files) {
+    return '이 저장소에는 해결되지 않은 충돌이 있습니다: $files. EnvoyDev가 시작한 작업이 아닙니다. 여기서 다른 일을 하기 전에 그쪽에서 끝내거나 되돌리세요.';
+  }
+
+  @override
+  String errorGitMergeResolveFailed(String detail) {
+    return '에이전트를 시작할 수 없어 머지를 되돌렸고 아무것도 바뀌지 않았습니다: $detail';
+  }
+
+  @override
+  String get gitMergeStopped => '머지가 충돌로 멈췄습니다.';
+
+  @override
+  String gitMergeStoppedFrom(String branch) {
+    return '$branch 머지가 충돌로 멈췄습니다.';
+  }
+
+  @override
+  String get gitMergeResolved => '모든 충돌이 해결되었습니다. 머지를 끝내면 기록됩니다.';
+
+  @override
+  String get gitMergeResolve => '에이전트로 해결';
+
+  @override
+  String get gitMergeFinish => '머지 끝내기';
+
+  @override
+  String get gitMergeAbort => '머지 취소';
+
+  @override
+  String gitMergeResolving(String task) {
+    return '에이전트가 이 머지를 해결하고 있습니다: $task.';
+  }
+
+  @override
+  String get gitMergeAborted => '머지를 취소했습니다. 아무것도 병합되지 않았습니다.';
+
+  @override
+  String get gitMergeRecorded => '머지를 기록했습니다.';
+
+  @override
+  String get gitBranchesConflictsChip => '충돌';
+
+  @override
   String get newTaskNoProjects => '이 컴퓨터에 프로젝트를 먼저 추가한 뒤 다시 시도하세요.';
 
   @override

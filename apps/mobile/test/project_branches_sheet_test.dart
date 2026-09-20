@@ -52,6 +52,14 @@ class _StubClient extends HostClient {
         'conflicted': false,
       };
 
+  /// A repository with a merge stopped in it, conflicts and all.
+  static Map<String, dynamic> merging(String branch, {required bool resolved}) => {
+        ...status(branch),
+        'dirty': 1,
+        'conflicted': !resolved,
+        'merge': {'branch': 'main'},
+      };
+
   @override
   Future<Map<String, dynamic>> call(
     String method, [
@@ -71,6 +79,18 @@ class _StubClient extends HostClient {
         return {...status('work'), 'summary': summary};
       case 'coder.gitPull':
         return {...status('work'), 'summary': summary};
+      case 'coder.gitMergeResolve':
+        return {
+          ...merging('work', resolved: false),
+          'outcome': 'resolving',
+          'files': ['a.txt'],
+          'task': {'title': 'Resolve the merge of ${params['branch']}'},
+          'run': {'id': 'r-1'},
+        };
+      case 'coder.gitMergeContinue':
+        return status('work');
+      case 'coder.gitMergeAbort':
+        return status('work');
       default:
         throw StateError('the sheet called $method, which this test does not expect');
     }
@@ -134,6 +154,9 @@ Future<_Opened> _openSheet(
   await tester.pumpAndSettle();
   return opened;
 }
+
+GitStatusInfo _merging({required bool resolved, String? branch = 'work'}) =>
+    GitStatusInfo.fromJson(_StubClient.merging(branch ?? 'work', resolved: resolved));
 
 GitStatusInfo _status({String? branch, bool detached = false}) => GitStatusInfo.fromJson({
       'kind': 'git',
@@ -346,6 +369,96 @@ void main() {
 
     final de = lookupAppLocalizations(const Locale('de'));
     expect(find.text(de.errorGitPullDiverged), findsOneWidget);
+    expect(find.textContaining('envoydev.'), findsNothing);
+
+    await client.dispose();
+  });
+
+  testWidgets('offers to resolve a conflict with an agent, naming the branch that conflicted', (tester) async {
+    // The refusal that names the files now has one more act under it. The *key* on the wire is how the sheet
+    // knows this is that refusal — reading the prose would be parsing a sentence a translator owns.
+    final client = _StubClient(_host)
+      ..refuseWith =
+          'envoydev.git-merge-conflict: main cannot be merged automatically. These files conflict: a.txt. '
+          '[envoydev.key] {"key":"error.gitMergeConflict","values":{"branch":"main","files":"a.txt"}}';
+    await _openSheet(tester, client, status: _status(branch: 'work'), branches: _branches);
+
+    await tester.tap(find.byTooltip('Merge main into work'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('cannot be merged automatically'), findsOneWidget);
+
+    // The conflict refusal was a *one-off*: the resolve call is the one that now has to get through.
+    client.refuseWith = null;
+    await tester.tap(find.text('Resolve with an agent'));
+    await tester.pumpAndSettle();
+    expect(client.calls.any((call) => call.method == 'coder.gitMergeResolve'), isTrue);
+    expect(find.text('An agent is resolving this merge: Resolve the merge of main.'), findsOneWidget);
+    // And the block that goes with it: a merge is in progress, so Finish and Abort are here.
+    expect(find.text('The merge of main stopped with conflicts.'), findsOneWidget);
+
+    await client.dispose();
+  });
+
+  testWidgets('keeps the merge state on screen, with Finish off until it is resolved', (tester) async {
+    final client = _StubClient(_host);
+    await _openSheet(
+      tester,
+      client,
+      status: _merging(resolved: false),
+      branches: _branches,
+    );
+
+    expect(find.text('The merge of main stopped with conflicts.'), findsOneWidget);
+    expect(find.text('All conflicts are resolved. Finish the merge to record it.'), findsNothing);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Finish the merge')).onPressed, isNull);
+
+    await tester.tap(find.text('Abort the merge'));
+    await tester.pumpAndSettle();
+    expect(client.calls.any((call) => call.method == 'coder.gitMergeAbort'), isTrue);
+    expect(find.text('The merge was aborted, and nothing was merged.'), findsOneWidget);
+
+    await client.dispose();
+  });
+
+  testWidgets('records a resolved merge, and says so', (tester) async {
+    final client = _StubClient(_host);
+    await _openSheet(
+      tester,
+      client,
+      // What the agent's work leaves behind: every conflict staged, and `MERGE_HEAD` still there.
+      status: _merging(resolved: true),
+      branches: _branches,
+    );
+
+    expect(find.text('All conflicts are resolved. Finish the merge to record it.'), findsOneWidget);
+    await tester.tap(find.text('Finish the merge'));
+    await tester.pumpAndSettle();
+    expect(client.calls.any((call) => call.method == 'coder.gitMergeContinue'), isTrue);
+    expect(find.text('The merge was recorded.'), findsOneWidget);
+
+    await client.dispose();
+  });
+
+  testWidgets('a German phone reads the conflict refusal in German', (tester) async {
+    final client = _StubClient(_host)
+      ..refuseWith =
+          'envoydev.git-merge-unresolved: A merge is not finished: a.txt still has conflicts. '
+          '[envoydev.key] {"key":"error.gitMergeUnresolved","values":{"files":"a.txt"}}';
+    await _openSheet(
+      tester,
+      client,
+      status: _merging(resolved: false),
+      branches: _branches,
+      locale: const Locale('de'),
+    );
+
+    // Abort is refused — the daemon will not take back a merge whose conflicts are still there — and the
+    // sentence the user reads is the German one the phone renders from the key, not the daemon's English.
+    final de = lookupAppLocalizations(const Locale('de'));
+    await tester.tap(find.text(de.gitMergeAbort));
+    await tester.pumpAndSettle();
+
+    expect(find.text(de.errorGitMergeUnresolved('a.txt')), findsOneWidget);
     expect(find.textContaining('envoydev.'), findsNothing);
 
     await client.dispose();
