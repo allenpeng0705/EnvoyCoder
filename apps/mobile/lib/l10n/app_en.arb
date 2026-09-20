@@ -1258,10 +1258,6 @@
       }
     }
   },
-  "composerOptionsHeader": "Options for this task",
-  "@composerOptionsHeader": {
-    "description": "composeroptionsheader — Header above the composer's option chips."
-  },
   "composerAgentDefault": "Agent default",
   "@composerAgentDefault": {
     "description": "composeragentdefault — The picker's item for 'the agent's own default'."

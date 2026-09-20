@@ -273,7 +273,6 @@
   "newTaskProjectLabel": "Projekt",
   "newTaskPromptHint": "Beschreibe die Aufgabe",
   "newTaskCouldNotStart": "Die Aufgabe konnte nicht gestartet werden. {detail}",
-  "composerOptionsHeader": "Optionen für diese Aufgabe",
   "composerAgentDefault": "Standard des Agenten",
   "composerUse": "Verwenden",
   "composerAgentBare": "Agent",

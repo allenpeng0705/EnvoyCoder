@@ -936,9 +936,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get composerOptionsHeader => 'このタスクのオプション';
-
-  @override
   String get composerAgentDefault => 'エージェントの既定値';
 
   @override

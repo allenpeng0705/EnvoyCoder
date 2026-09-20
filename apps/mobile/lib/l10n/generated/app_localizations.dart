@@ -1746,12 +1746,6 @@ abstract class AppLocalizations {
   /// **'Could not start that task. {detail}'**
   String newTaskCouldNotStart(String detail);
 
-  /// composeroptionsheader — Header above the composer's option chips.
-  ///
-  /// In en, this message translates to:
-  /// **'Options for this task'**
-  String get composerOptionsHeader;
-
   /// composeragentdefault — The picker's item for 'the agent's own default'.
   ///
   /// In en, this message translates to:

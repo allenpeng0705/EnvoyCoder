@@ -971,9 +971,6 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
-  String get composerOptionsHeader => 'Opzioni per questa attività';
-
-  @override
   String get composerAgentDefault => 'Predefinito dell\'agente';
 
   @override

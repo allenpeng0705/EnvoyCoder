@@ -959,9 +959,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get composerOptionsHeader => 'Options for this task';
-
-  @override
   String get composerAgentDefault => 'Agent default';
 
   @override

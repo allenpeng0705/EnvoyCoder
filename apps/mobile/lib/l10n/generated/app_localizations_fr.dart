@@ -975,9 +975,6 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get composerOptionsHeader => 'Options pour cette tâche';
-
-  @override
   String get composerAgentDefault => 'Défaut de l\'agent';
 
   @override

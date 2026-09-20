@@ -273,7 +273,6 @@
   "newTaskProjectLabel": "プロジェクト",
   "newTaskPromptHint": "タスクを説明",
   "newTaskCouldNotStart": "そのタスクを開始できませんでした。{detail}",
-  "composerOptionsHeader": "このタスクのオプション",
   "composerAgentDefault": "エージェントの既定値",
   "composerUse": "使用",
   "composerAgentBare": "エージェント",

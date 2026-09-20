@@ -273,7 +273,6 @@
   "newTaskProjectLabel": "项目",
   "newTaskPromptHint": "描述这个任务",
   "newTaskCouldNotStart": "无法启动那个任务。{detail}",
-  "composerOptionsHeader": "此任务的选项",
   "composerAgentDefault": "智能体自己的默认值",
   "composerUse": "使用",
   "composerAgentBare": "智能体",

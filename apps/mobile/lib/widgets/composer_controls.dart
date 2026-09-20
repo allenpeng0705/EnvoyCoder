@@ -11,16 +11,27 @@
 /// [ComposerSelection.harnessId] remains only as the **context** that decides which model / mode /
 /// thinking options the other three chips offer.
 ///
-/// ## What each chip says, and why
+/// ## What each chip says, and why it changed twice
 ///
-/// The remaining chips are the task-scoped choices, and the owner's report was that they were *"not
-/// informative"*: Mode and Thinking showed a category with no value. Every chip reads **`Category:
-/// value`** — `Model: Default`, `Mode: Default`, `Thinking: Default` — under a header, with the
-/// desktop's own title sentence as the tooltip. The categories are the desktop's words for the same
-/// concepts (`task.composer.model.label`, `.agentMode.label`, `.thinking.label`), and the unset value
-/// is its `task.composer.value.default` ("Default"), so this surface does not invent a second
-/// vocabulary. There is deliberately **no glyph**: at 320pt an icon per chip crowded the row, and the
-/// words are the part that informs.
+/// The owner's first report was that these pills were *"not informative"* — Mode and Thinking showed a
+/// category with no value — and the answer was a header plus `Category: value` on every chip. The second
+/// report was the cost of that answer: *"the buttons above the inputting field occupied too much space.
+/// Can we use icon buttons and just use one line for them including the texts. Maybe we don't need the
+/// title."* At 320pt the header plus a 2×2 grid was ~106pt above the field, for three controls.
+///
+/// So the row is **one line of glyph + value** now:
+///
+///   * the **icon** carries the category, using the window's own glyph per concept
+///     (`apps/desktop/src/components/icons.tsx`), so nothing has to be spelled out on screen twice;
+///   * the **value** stays visible, which is the half the first report was about;
+///   * the **title** is gone — the chips are the options, and a label saying so was a line of height
+///     for words no user needed;
+///   * and the category is not lost for anyone who cannot see a glyph: it heads the chip's
+///     screen-reader label (`Model: Default`, the desktop's own string) and the tooltip is still the
+///     desktop's whole sentence for the concept.
+///
+/// The unset value is the desktop's `task.composer.value.default` ("Default"), so this surface does not
+/// invent a second vocabulary.
 library;
 
 import 'package:flutter/material.dart';
@@ -87,19 +98,19 @@ class ComposerControls extends StatelessWidget {
     // the project's agent (see the library doc), and an unknown one simply offers no chips.
     final current = harnessById(harnesses, selection.harnessId);
 
-    // **Every chip reads "category: value", and the categories are the desktop's words.** Mode and
-    // Thinking used to show a category with no value at all. The tooltip is the desktop's title
-    // sentence for the same concept, so the two surfaces explain it in one voice — in particular Mode
-    // keeps the word "Mode", not a private synonym for it.
-    //
-    // **No glyph, and that is a 320pt decision.** The first cut carried the desktop's icons
-    // (`icons.tsx:165-193`), but an avatar plus its gap widens each chip by ~24pt and at 320pt that
-    // only made the stacking below worse. The desktop can afford glyphs because it has hover for the
-    // label and a wide rail; a phone has neither, so the words are what stays on screen.
+    // **One line, glyphs instead of category words.** The owner's report on the previous shape — a
+    // header, then four half-width chips in a 2×2 grid — was that it "occupied too much space", and it
+    // did: `Options for this task` plus two rows of `Model: Default` cost ~106pt above the field on a
+    // 320pt phone. The icon carries the category now (the desktop's own glyph per concept:
+    // `icons.tsx` — sliders for Mode, a chip for Model, a bulb for Thinking), the chip shows the
+    // **value**, and the category is not lost: it is the first half of the chip's screen-reader label
+    // (`Model: Default`) and the tooltip is still the desktop's whole sentence.
     final chips = <Widget>[
       if (current != null && current.modelApplicable && current.modelsKind != 'none')
         _ChipButton(
-          label: l10n.composerModelValue(_modelLabel(l10n, current, selection.model)),
+          icon: Icons.memory,
+          label: _modelLabel(l10n, current, selection.model),
+          semanticsLabel: l10n.composerModelValue(_modelLabel(l10n, current, selection.model)),
           tooltip: l10n.composerModelTooltip,
           enabled: enabled,
           colors: colors,
@@ -107,7 +118,9 @@ class ComposerControls extends StatelessWidget {
         ),
       if (current != null && current.agentModeApplicable && current.modes.isNotEmpty)
         _ChipButton(
-          label: l10n.composerModeValue(_modeLabel(l10n, current, selection.agentModeId)),
+          icon: Icons.tune,
+          label: _modeLabel(l10n, current, selection.agentModeId),
+          semanticsLabel: l10n.composerModeValue(_modeLabel(l10n, current, selection.agentModeId)),
           tooltip: l10n.composerModeTooltip,
           enabled: enabled,
           colors: colors,
@@ -118,7 +131,10 @@ class ComposerControls extends StatelessWidget {
           current.thinkingKind == 'listed' &&
           current.thinkingOptions.isNotEmpty)
         _ChipButton(
-          label: l10n.composerThinkingValue(_thinkingLabel(l10n, current, selection.thinkingLevel)),
+          icon: Icons.lightbulb_outline,
+          label: _thinkingLabel(l10n, current, selection.thinkingLevel),
+          semanticsLabel:
+              l10n.composerThinkingValue(_thinkingLabel(l10n, current, selection.thinkingLevel)),
           tooltip: l10n.composerThinkingTooltip,
           enabled: enabled,
           colors: colors,
@@ -127,43 +143,19 @@ class ComposerControls extends StatelessWidget {
     ];
 
     // An agent that takes no model, mode or thinking — or a harness list that has not arrived — leaves
-    // nothing to set up, and a header over an empty row would spend the sheet on a label. The caller
-    // already gates on `harnesses.isNotEmpty`, so this is the "this agent has no options" case.
+    // nothing to set up, and a row of nothing would spend the composer on a gap.
     if (chips.isEmpty) return const SizedBox.shrink();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    // **`Flexible`, so it is one line by construction.** Each chip takes what its own text needs and no
+    // more, and a value too long for its share ellipsizes inside the chip instead of pushing the row
+    // onto a second line — which is what the `Wrap` did, and what the owner asked to stop. Three chips
+    // share the width at 320pt with room for a chip glyph and a readable value each.
+    return Row(
       children: [
-        // **The header is what makes the row an options block rather than decoration.** The owner's
-        // report was that these pills were "not informative"; an unlabelled row of chips gives no clue
-        // that it *sets up* the task, so the header says it once and the chips below each carry their
-        // own category and current value.
-        Text(
-          l10n.composerOptionsHeader,
-          style: Theme.of(context)
-              .textTheme
-              .labelMedium
-              ?.copyWith(color: colors.foregroundMuted),
-        ),
-        const SizedBox(height: CoderSpace.sm2),
-        // **Two per row, explicitly.** An intrinsic `Wrap` was the first shape, and at 320pt it stacked
-        // all four chips one per row — a 216pt block, most of a phone sheet, and the owner's "too
-        // crowded" made worse. A half-width column turns them into a 2×2 grid: four options, two rows,
-        // ~104pt. The width is forced rather than intrinsic so the grid holds whatever the label font
-        // measures; a long value fades inside its chip (`Chip` labels are one line, `TextOverflow.fade`)
-        // instead of pushing the grid back apart.
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final column = (constraints.maxWidth - CoderSpace.md) / 2;
-            return Wrap(
-              spacing: CoderSpace.md,
-              runSpacing: CoderSpace.md,
-              children: [
-                for (final chip in chips) SizedBox(width: column, child: chip),
-              ],
-            );
-          },
-        ),
+        for (var index = 0; index < chips.length; index += 1) ...[
+          if (index > 0) const SizedBox(width: CoderSpace.sm2),
+          Flexible(child: chips[index]),
+        ],
       ],
     );
   }
@@ -314,16 +306,30 @@ class ComposerControls extends StatelessWidget {
 
 class _ChipButton extends StatelessWidget {
   const _ChipButton({
+    required this.icon,
     required this.label,
+    required this.semanticsLabel,
     required this.tooltip,
     required this.enabled,
     required this.colors,
     required this.onTap,
   });
 
-  /// `Category: value`, both visible: a phone cannot hover, so the category cannot live only in the
-  /// tooltip the way the desktop's `aria-label` lets it.
+  /// The concept this chip sets, in the window's own glyph (`apps/desktop/src/components/icons.tsx`:
+  /// sliders for Mode, a chip for Model, a bulb for Thinking). It is what replaced the category words
+  /// the owner asked to drop, so the icon is load-bearing rather than decoration — and it is why a chip
+  /// stays readable at a third of a 320pt screen.
+  final IconData icon;
+
+  /// The **value**, alone: `Default`, `Plan`, `sonnet-4-6`. The category is not part of the visible
+  /// text any more; a phone shows three of these side by side, and `Model: Default` three times over was
+  /// the width the owner was paying for.
   final String label;
+
+  /// `Category: value`, for a screen reader — the desktop's own string for the pair, so the category
+  /// that left the screen is still announced. The visible text and this label must be kept apart: a
+  /// chip that showed the category *and* announced it would spend the width twice.
+  final String semanticsLabel;
 
   /// The desktop's title sentence for this concept, on long-press **and** in the semantics tree
   /// (`Chip.tooltip` wraps the chip in a `Tooltip`, which carries `Semantics.tooltip`).
@@ -335,12 +341,51 @@ class _ChipButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ActionChip(
-      label: Text(label, style: TextStyle(fontSize: 12, color: colors.foreground)),
+    final chip = ActionChip(
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: colors.foregroundMuted),
+          const SizedBox(width: 5),
+          // The value is the part that may not fit; the glyph never shrinks.
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: colors.foreground),
+            ),
+          ),
+        ],
+      ),
+      // Tighter than the default: the owner's complaint was the space this row costs, and a chip's
+      // stock padding is sized for a wide window with a pointer.
+      labelPadding: const EdgeInsets.symmetric(horizontal: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       tooltip: tooltip,
       onPressed: enabled ? onTap : null,
       backgroundColor: colors.surface2,
       side: BorderSide(color: colors.border),
+    );
+
+    /**
+     * **One accessible node per chip, owning the whole of it.**
+     *
+     * `excludeSemantics` drops the chip's own nodes, so a screen reader hears `Model: Default` once
+     * rather than `Default` followed by the tooltip's sentence fragment — and `onTap` here is not
+     * decoration: with the child's nodes gone, this is the only thing that lets an assistive tap open
+     * the picker.
+     */
+    return Semantics(
+      label: semanticsLabel,
+      tooltip: tooltip,
+      button: true,
+      enabled: enabled,
+      onTap: enabled ? onTap : null,
+      excludeSemantics: true,
+      child: chip,
     );
   }
 }

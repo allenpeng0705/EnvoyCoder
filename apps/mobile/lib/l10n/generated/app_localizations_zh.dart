@@ -925,9 +925,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get composerOptionsHeader => '此任务的选项';
-
-  @override
   String get composerAgentDefault => '智能体自己的默认值';
 
   @override

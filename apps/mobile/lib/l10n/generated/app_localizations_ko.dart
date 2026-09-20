@@ -934,9 +934,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get composerOptionsHeader => '이 작업의 옵션';
-
-  @override
   String get composerAgentDefault => '에이전트 자체 기본값';
 
   @override

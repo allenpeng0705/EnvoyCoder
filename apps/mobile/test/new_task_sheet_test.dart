@@ -16,8 +16,10 @@
 //
 //   * opened from a project — the only path the app has — the picker is **not** there; the latent
 //     no-project path still gets it;
-//   * the three task chips read `Category: value` (the desktop's words, the desktop's "Default") under
-//     an `Options for this task` header, and the **agent is not among them**;
+//   * the three task chips are **one line** of glyph + value (no header, no `Category:` prefix — the
+//     owner's follow-up: *"the buttons above the inputting field occupied too much space. Can we use
+//     icon buttons and just use one line for them including the texts. Maybe we don't need the title."*),
+//     the category is still the chip's screen-reader label, and the **agent is not among them**;
 //   * the agent the chips render against is the **project's**, not the first offered;
 //   * `coder.createTask` carries **no** `harness`, so the daemon resolves the project's agent;
 //   * the input is one line, the paperclip is gone, and the primary button reads **Add**;
@@ -257,7 +259,8 @@ void main() {
     await client.dispose();
   });
 
-  testWidgets('the task chips say what they are, and the agent is not one of them', (tester) async {
+  testWidgets('the task chips are one line of glyph + value, and the agent is not one of them',
+      (tester) async {
     final client = _StubClient(_host);
     await _openSheet(
       tester,
@@ -269,18 +272,39 @@ void main() {
       ),
     );
 
-    // A header turns the row from decoration into an options block.
-    expect(find.text('Options for this task'), findsOneWidget);
-    // Category + value for the three *task* choices. The agent is a property of the project, so it
-    // is not offered here at all — that is the whole point of this change.
-    expect(find.text('Model: Default'), findsOneWidget);
-    expect(find.text('Mode: Default'), findsOneWidget);
-    expect(find.text('Thinking: Default'), findsOneWidget);
+    // No title: the chips are the options, and the header was a line of height for words nobody needed.
+    expect(find.text('Options for this task'), findsNothing);
+    // One line, glyph per concept (the window's own: a chip for Model, sliders for Mode, a bulb for
+    // Thinking) and the **value** beside it — the category is not repeated on screen.
+    expect(find.byIcon(Icons.memory), findsOneWidget);
+    expect(find.byIcon(Icons.tune), findsOneWidget);
+    expect(find.byIcon(Icons.lightbulb_outline), findsOneWidget);
+    expect(find.text('Default'), findsNWidgets(3));
+    expect(find.text('Model: Default'), findsNothing);
+    // The agent is a property of the project, so it is not offered here at all.
     expect(find.text('Agent: Envoy'), findsNothing);
-    // The desktop's own sentence for the concept is the chip's tooltip.
+    // The desktop's own sentence for the concept is the chip's tooltip…
     expect(
-      tester.widget<ActionChip>(find.widgetWithText(ActionChip, 'Mode: Default')).tooltip,
+      tester
+          .widget<ActionChip>(find.ancestor(
+            of: find.byIcon(Icons.tune),
+            matching: find.byType(ActionChip),
+          ))
+          .tooltip,
       'What the agent is allowed to do in this task',
+    );
+    // …and the category it no longer shows is still what a screen reader hears, once.
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Semantics && widget.properties.label == 'Mode: Default',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Semantics && widget.properties.label == 'Thinking: Default',
+      ),
+      findsOneWidget,
     );
 
     await client.dispose();
@@ -301,11 +325,11 @@ void main() {
 
     // DeepSeek publishes a model but no modes, so the Mode chip is absent — offered-first Envoy would
     // have shown one. This is the chip set of the project's agent, resolved through the project.
-    expect(find.text('Model: Default'), findsOneWidget);
-    expect(find.text('Mode: Default'), findsNothing);
+    expect(find.byIcon(Icons.memory), findsOneWidget);
+    expect(find.byIcon(Icons.tune), findsNothing);
 
     // And the picker offers DeepSeek's model, not the first offered agent's.
-    await tester.tap(find.text('Model: Default'));
+    await tester.tap(find.byIcon(Icons.memory));
     await tester.pumpAndSettle();
     expect(find.text('DeepSeek Chat'), findsOneWidget);
     expect(find.text('GPT-5'), findsNothing);
@@ -364,9 +388,9 @@ void main() {
     await client.dispose();
   });
 
-  testWidgets('the sheet lays out at 320pt without overflow', (tester) async {
-    // 320pt is the narrowest phone the app claims. The picker left and the field shrank; the chips
-    // grew a category word and lost the agent one. This is the measurement that says the trade holds.
+  testWidgets('the chip row is one line at 320pt, and the sheet shrank', (tester) async {
+    // 320pt is the narrowest phone the app claims, and the row the owner asked to compact is the one
+    // that has to hold three glyphs and three values in a single line here.
     tester.view.physicalSize = const Size(320, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -389,9 +413,9 @@ void main() {
     );
 
     // Everything asked for is still there at this width, and nothing overflowed.
-    expect(find.text('Options for this task'), findsOneWidget);
-    expect(find.text('Model: Default'), findsOneWidget);
-    expect(find.text('Thinking: Default'), findsOneWidget);
+    expect(find.byIcon(Icons.memory), findsOneWidget);
+    expect(find.byIcon(Icons.tune), findsOneWidget);
+    expect(find.byIcon(Icons.lightbulb_outline), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Add'), findsOneWidget);
 
     final overflows = [
@@ -400,20 +424,29 @@ void main() {
     ];
     expect(overflows, isEmpty, reason: overflows.join('\n'));
 
-    // The measurement the report needs: the sheet's own height at 320pt. It has to fit a 640pt screen
-    // with the keyboard up, and with the chips wrapping at this width it is the tightest case.
+    // The measurement the report needs: the sheet's own height at 320pt, and the height of the row the
+    // owner asked to shrink. It has to fit a 640pt screen with the keyboard up.
     final sheet = tester.getSize(find.descendant(
       of: find.byType(BottomSheet),
       matching: find.byType(SafeArea),
     ));
-    final options = tester.getSize(find.byType(Wrap));
+    final boxes = [
+      for (var index = 0; index < tester.widgetList(find.byType(ActionChip)).length; index += 1)
+        tester.getRect(find.byType(ActionChip).at(index)),
+    ];
     final input = tester.getSize(find.byType(TextField));
     expect(sheet.width, 320);
     // ignore: avoid_print
-    print('MEASURE sheet=${sheet.height} options=${options.height} input=${input.height}');
-    // The options block is the thing that must not stack: three chips is two rows at this width. The
-    // whole sheet has to leave room for a keyboard.
-    expect(options.height, lessThan(140), reason: 'the chips stacked instead of gridding');
+    print('MEASURE sheet=${sheet.height} chips=${boxes.length} chipHeight=${boxes.first.height} '
+        'right=${boxes.last.right} input=${input.height}');
+    // **One line, and that is an assertion rather than an impression.** Three chips share a horizontal
+    // centre, and the last one ends inside the sheet's own padding — a `Row` with flexible chips cannot
+    // wrap, and a value that does not fit ellipsizes rather than pushing the next chip down.
+    for (final box in boxes.skip(1)) {
+      expect(box.center.dy, boxes.first.center.dy, reason: 'the chips are on more than one line');
+    }
+    expect(boxes.last.right, lessThanOrEqualTo(320 - 16), reason: 'the chips ran past the padding');
+    expect(boxes.first.height, lessThan(48), reason: 'a chip is more than one line tall');
     expect(sheet.height, lessThan(380), reason: 'the sheet grew instead of shrinking');
 
     await client.dispose();

@@ -273,7 +273,6 @@
   "newTaskProjectLabel": "Progetto",
   "newTaskPromptHint": "Descrivi l'attività",
   "newTaskCouldNotStart": "Impossibile avviare l'attività. {detail}",
-  "composerOptionsHeader": "Opzioni per questa attività",
   "composerAgentDefault": "Predefinito dell'agente",
   "composerUse": "Usa",
   "composerAgentBare": "Agente",

@@ -273,7 +273,6 @@
   "newTaskProjectLabel": "프로젝트",
   "newTaskPromptHint": "작업 설명",
   "newTaskCouldNotStart": "그 작업을 시작할 수 없습니다. {detail}",
-  "composerOptionsHeader": "이 작업의 옵션",
   "composerAgentDefault": "에이전트 자체 기본값",
   "composerUse": "사용",
   "composerAgentBare": "에이전트",
