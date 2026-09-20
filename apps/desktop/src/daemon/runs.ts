@@ -1059,8 +1059,20 @@ export class RunManager {
     live.approval?.settle(null);
 
     live.run = { ...live.run, endedAt: this.now(), status, exitCode };
-    await this.record(live, { kind: "run.ended", exitCode, status });
+    /**
+     * **The status is written before the ending is announced, and the order is the whole point.**
+     *
+     * `record` hands the event to the daemon's subscribers synchronously and only then awaits the
+     * transcript append, so by the time `run.ended` has been said, this line has not necessarily run —
+     * and a client's very next act after hearing that a run ended is to read the task back. It did:
+     * `coder.listTasks` answered `running` for a run whose ending had just been delivered, which is the
+     * rail's spinner outliving its run. `setTaskRun` updates the store's memory *before* it awaits the
+     * disk, so moving it first costs the event nothing and makes the state readable exactly when the
+     * announcement arrives. It is also the order this file already uses to *start* a run — status
+     * recorded, then `run.started` said — which is what an ending should mirror.
+     */
     await this.deps.store.setTaskRun(live.run.taskId, { status });
+    await this.record(live, { kind: "run.ended", exitCode, status });
     this.active.delete(live.run.id);
     // Kept for reading, not for control: `settled` is already true, so every mutating path refuses.
     this.finished.set(live.run.id, live);
