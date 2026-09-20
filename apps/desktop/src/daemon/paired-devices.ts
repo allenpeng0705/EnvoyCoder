@@ -339,6 +339,71 @@ export class PairedDeviceStore {
   }
 
   /**
+   * Record who a paired device is, given its **device id** rather than a token.
+   *
+   * The token path learns this when a device first authenticates; this is the other door, for a client that says
+   * hello with an identity after the transport has already resolved it. Both go through [applyIdentity], so the
+   * two can never disagree about which rows are superseded.
+   */
+  async identify(
+    deviceId: string,
+    client: { id?: string; name?: string; platform?: string },
+  ): Promise<void> {
+    await this.enqueue(async () => {
+      await this.ensureLoaded();
+      const match = this.devices.find((d) => d.id === deviceId);
+      if (!match || match.revokedAt !== undefined) return;
+      if (this.applyIdentity(match, client, this.now())) await this.persist();
+    });
+  }
+
+  /**
+   * The identity rule, in one place: record it once, then retire every other row for the same device.
+   *
+   * Returns whether anything changed, so a caller persists only when there is something to write.
+   */
+  private applyIdentity(
+    match: PairedDeviceRecord,
+    client: { id?: string; name?: string; platform?: string } | undefined,
+    now: Date,
+  ): boolean {
+    let changed = false;
+    // Recorded once, on first sight: a client that identifies itself later is still the same row.
+    if (client?.id !== undefined && match.clientId === undefined) {
+      match.clientId = client.id;
+      changed = true;
+    }
+    if (client?.name !== undefined && match.clientName === undefined) {
+      match.clientName = client.name;
+      // The label the owner reads. "Phone" for every row is what made the list useless.
+      match.deviceLabel = client.name.slice(0, 80);
+      changed = true;
+    }
+    if (client?.platform !== undefined && match.clientPlatform === undefined) {
+      match.clientPlatform = client.platform;
+      changed = true;
+    }
+
+    /**
+     * **One live row per device.**
+     *
+     * A phone that pairs again carries a *new* token, and the row it used before stays active — a working
+     * credential nobody is watching, which is why revoking "the phone" appeared to work while it stayed
+     * connected. The older row is **revoked, never deleted**: the phone may still be holding that token, and a
+     * refusal it can see beats a token that behaves strangely.
+     *
+     * Only rows that share a `clientId` are touched. Guessing from a label would revoke somebody else's phone,
+     * and this is the one list in the product where a wrong guess is a security failure.
+     */
+    // **The newest row wins**, decided by the same rule `list()` uses — one implementation, so the two doors
+    // cannot disagree. The first version of this revoked *every* sibling, which quietly made "who identified
+    // itself last" the winner: a phone that identified an older row would have revoked the newer one it is
+    // actually using. Found by a test written to expect one live row and getting two.
+    if (match.clientId !== undefined && this.collapseSameDevice()) changed = true;
+    return changed;
+  }
+
+  /**
    * Revoke every active row but the newest for each `clientId`.
    *
    * Runs on `list()` as well as on a re-pair, so a list that accumulated before this store recorded identities
@@ -350,7 +415,10 @@ export class PairedDeviceStore {
     for (const device of this.devices) {
       if (device.clientId === undefined || device.revokedAt !== undefined) continue;
       const seen = newest.get(device.clientId);
-      if (seen === undefined || device.createdAt > seen.createdAt) newest.set(device.clientId, device);
+      // `>=`, not `>`: two pairings can land in the same millisecond (a script, or a phone retrying), and a
+      // strict comparison then keeps whichever the file happened to list first — an accident, not a rule. The
+      // later row in the store is the more recent pairing, so a tie goes to it.
+      if (seen === undefined || device.createdAt >= seen.createdAt) newest.set(device.clientId, device);
     }
     let collapsed = false;
     for (const device of this.devices) {
@@ -446,42 +514,7 @@ export class PairedDeviceStore {
     const match = this.devices.find((d) => d.token === token);
     if (!match || !isActive(match, now)) return null;
 
-    let changed = false;
-    // Recorded once, on first sight: a client that identifies itself later is still the same row.
-    if (client?.id !== undefined && match.clientId === undefined) {
-      match.clientId = client.id;
-      changed = true;
-    }
-    if (client?.name !== undefined && match.clientName === undefined) {
-      match.clientName = client.name;
-      // The label the owner reads. "Phone" for every row is what made the list useless.
-      match.deviceLabel = client.name.slice(0, 80);
-      changed = true;
-    }
-    if (client?.platform !== undefined && match.clientPlatform === undefined) {
-      match.clientPlatform = client.platform;
-      changed = true;
-    }
-
-    /**
-     * **One live row per device.**
-     *
-     * A phone that pairs again carries a *new* token, and the row it used before stays active — a working
-     * credential nobody is watching, which is why revoking "the phone" appeared to work while it stayed
-     * connected. The older row is **revoked, never deleted**: the phone may still be holding that token, and a
-     * refusal it can see beats a token that behaves strangely.
-     *
-     * Only rows that share a `clientId` are touched. Guessing from a label would revoke somebody else's phone,
-     * and this is the one list in the product where a wrong guess is a security failure.
-     */
-    if (match.clientId !== undefined) {
-      for (const other of this.devices) {
-        if (other.id === match.id || other.revokedAt !== undefined) continue;
-        if (other.clientId !== match.clientId) continue;
-        other.revokedAt = now.toISOString();
-        changed = true;
-      }
-    }
+    let changed = this.applyIdentity(match, client, now);
 
     const seen = now.toISOString();
     if (match.lastSeenAt !== seen) {

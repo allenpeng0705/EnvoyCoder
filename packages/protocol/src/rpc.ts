@@ -1901,6 +1901,19 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
             name: z.string().min(1),
             version: z.string().optional(),
             platform: z.string().optional(),
+            /**
+             * An **install-stable id** for this client, minted once and kept (the phone keeps it in its
+             * keychain).
+             *
+             * This is what lets the daemon tell "the same phone pairing again" from "another phone", and it is
+             * the difference between one paired-device row per device and one per pairing: without it, a phone
+             * that pairs five times leaves five rows — each with its own *live* token for a year, so revoking
+             * "the phone" left it authenticated by the next row along.
+             *
+             * Optional, and absent from clients that do not send it: a row that cannot be attributed is left
+             * alone rather than merged with a guess, because guessing here revokes somebody else's device.
+             */
+            id: z.string().min(1).optional(),
           })
           .strict()
           .optional(),

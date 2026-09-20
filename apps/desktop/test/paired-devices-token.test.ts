@@ -166,3 +166,69 @@ describe("the same device pairing again", () => {
     expect(live).toHaveLength(2);
   });
 });
+
+describe("identifying a device by id", () => {
+  const cleanups: (() => Promise<void>)[] = [];
+  afterEach(async () => {
+    for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
+  });
+
+  async function store(): Promise<PairedDeviceStore> {
+    const home = await mkdtemp(join(tmpdir(), "envoydev-identify-"));
+    cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+    return new PairedDeviceStore(pairedDevicesFile(coderPaths(home)), {
+      ownerId: async () => "envoy:owner:test",
+    });
+  }
+
+  it("records the identity and retires the rows it supersedes, without a token resolve", async () => {
+    // Two pairings that never identified themselves at resolve time — the state the old clients leave behind.
+    const devices = await store();
+    const first = await devices.mint({});
+    await devices.resolveSession(first.record.token);
+    const second = await devices.mint({ fresh: true });
+    await devices.resolveSession(second.record.token);
+    expect((await devices.list()).filter((row) => row.revokedAt === undefined)).toHaveLength(2);
+
+    // Now the phone says who it is, on both rows — the state after a hello on each. **The older row identifies
+    // itself last on purpose**: the row that is *current* must win, not the one that spoke most recently.
+    await devices.identify(second.record.id, { id: "install-abc", name: "Shi's iPhone", platform: "ios" });
+    await devices.identify(first.record.id, { id: "install-abc", name: "Shi's iPhone", platform: "ios" });
+
+    const live = (await devices.list()).filter((row) => row.revokedAt === undefined);
+    expect(live).toHaveLength(1);
+    expect(live[0]?.id).toBe(second.record.id);
+    expect(live[0]?.clientName).toBe("Shi's iPhone");
+    // The superseded row is revoked, so its token is refused rather than quietly working — and the live one is
+    // still accepted, which is the half a wrong collapse would break.
+    expect(await devices.resolveSession(first.record.token)).toBeNull();
+    expect(await devices.resolveSession(second.record.token)).not.toBeNull();
+  });
+
+  it("does nothing for an unknown or already-revoked device", async () => {
+    const devices = await store();
+    const only = await devices.mint({});
+    await devices.resolveSession(only.record.token);
+    await devices.identify("pad_nope", { id: "install-abc", name: "iPhone" });
+    await devices.identify(only.record.id, { id: "install-abc", name: "iPhone" });
+    await devices.identify(only.record.id, { id: "install-other", name: "iPhone" });
+    // The first identity wins: a device does not change who it is, and re-identifying must not revoke it.
+    const live = (await devices.list()).filter((row) => row.revokedAt === undefined);
+    expect(live).toHaveLength(1);
+    expect(live[0]?.clientName).toBe("iPhone");
+  });
+
+  it("leaves an unattributed row alone, because a guess here revokes somebody else's phone", async () => {
+    const devices = await store();
+    const attributed = await devices.mint({});
+    await devices.resolveSession(attributed.record.token);
+    const stranger = await devices.mint({ fresh: true });
+    await devices.resolveSession(stranger.record.token);
+
+    // Only one of the two ever says who it is: the other cannot be attributed, so it is not touched.
+    await devices.identify(attributed.record.id, { id: "install-abc", name: "Shi's iPhone" });
+    const live = (await devices.list()).filter((row) => row.revokedAt === undefined);
+    expect(live).toHaveLength(2);
+    expect(await devices.resolveSession(stranger.record.token)).not.toBeNull();
+  });
+});
