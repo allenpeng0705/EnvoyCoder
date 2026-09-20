@@ -189,4 +189,25 @@ describe("the service calls, as the store records them", () => {
     expect(connection.calls.length).toBe(before);
     expect(store.getSnapshot().service).toBeUndefined();
   });
+
+  it("returns the log tail without putting it in the window's snapshot", async () => {
+    // **The mutation this fails on:** storing the log in `CoderState`. Every consumer of the store takes the whole
+    // object, so a log in the snapshot re-renders every surface in the window for a block one disclosure owns.
+    const { store, connection } = await bench();
+    const log = { path: "/home/you/logs/daemon.log", lines: ["one", "two"], truncated: true };
+    connection.answers.set("coder.getDaemonLog", { log });
+    const before = store.getSnapshot();
+
+    await expect(store.getDaemonLog()).resolves.toEqual({ ok: true, log });
+    // The same snapshot object: nothing was `set`, so nothing re-rendered.
+    expect(store.getSnapshot()).toBe(before);
+  });
+
+  it("answers a refused log read with the refusal rather than an empty tail", async () => {
+    // A daemon log is owner-window-only; "refused" and "this file is empty" must not look alike.
+    const { store, connection } = await bench();
+    connection.refusals.set("coder.getDaemonLog", "envoydev.owner-window-only: refused");
+    const answer = await store.getDaemonLog();
+    expect(answer.ok).toBe(false);
+  });
 });

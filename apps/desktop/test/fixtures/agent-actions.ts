@@ -64,6 +64,9 @@ export function stubAgentActions(overrides: Partial<AgentActions> = {}): AgentAc
     uninstallService: vi.fn(async () => REFUSAL),
     restartService: vi.fn(async () => REFUSAL),
     shutdown: vi.fn(async () => REFUSAL),
+    // The log tail: refused by default like the rest. A test that opens the disclosure stages its own answer,
+    // so an unwired read is a refusal rendered on the panel rather than an undefined call at open time.
+    getDaemonLog: vi.fn(async () => REFUSAL),
   };
   return { ...base, ...overrides };
 }

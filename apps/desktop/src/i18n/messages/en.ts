@@ -1084,6 +1084,18 @@ export const en = {
   "settings.service.action.tryAgain": "Try again",
   "settings.service.action.refresh": "Refresh",
   "settings.service.busy": "Working…",
+  /* ── the log tail, behind a disclosure ──
+     Fetched when the disclosure opens, not on mount: reading it is a file read on the daemon. `truncated` is the
+     one thing the panel owes the reader out loud — the daemon returns at most the last 64 KB / 200 lines, and a
+     tail that reads like the whole log is a lie somebody debugs from. An empty `lines` with a path is the normal
+     state of a machine that has never run the daemon, so it is an empty state and not an error. */
+  "settings.service.log.show": "Show the log",
+  "settings.service.log.hide": "Hide the log",
+  "settings.service.log.title": "Daemon log",
+  "settings.service.log.reading": "Reading the log…",
+  "settings.service.log.refresh": "Refresh",
+  "settings.service.log.truncated": "Showing the last 200 lines. The log is longer.",
+  "settings.service.log.empty": "No log file yet — nothing has written one on this machine.",
 
   /* ── the one comparison a control plane needs ──
      Both halves of EnvoyDev are built together, so a difference means one of them is a build behind —

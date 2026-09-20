@@ -57,4 +57,11 @@ export const service: Catalogue = {
   "settings.service.action.tryAgain": "Riprova",
   "settings.service.action.refresh": "Aggiorna",
   "settings.service.busy": "In corso…",
+  "settings.service.log.show": "Mostra il registro",
+  "settings.service.log.hide": "Nascondi il registro",
+  "settings.service.log.title": "Registro del demone",
+  "settings.service.log.reading": "Lettura del registro…",
+  "settings.service.log.refresh": "Aggiorna",
+  "settings.service.log.truncated": "Sono mostrate le ultime 200 righe. Il registro è più lungo.",
+  "settings.service.log.empty": "Nessun file di registro — su questa macchina non ne è ancora stato scritto uno.",
 };

@@ -57,4 +57,11 @@ export const service: Catalogue = {
   "settings.service.action.tryAgain": "再試行",
   "settings.service.action.refresh": "更新",
   "settings.service.busy": "処理中…",
+  "settings.service.log.show": "ログを表示",
+  "settings.service.log.hide": "ログを隠す",
+  "settings.service.log.title": "デーモンのログ",
+  "settings.service.log.reading": "ログを読み込んでいます…",
+  "settings.service.log.refresh": "更新",
+  "settings.service.log.truncated": "最後の 200 行のみ表示しています。ログはさらに長いです。",
+  "settings.service.log.empty": "ログファイルはまだありません — このマシンではまだ何も書き込んでいません。",
 };

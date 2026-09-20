@@ -2824,6 +2824,67 @@ button.explorer__change:hover {
   margin-top: 0;
 }
 
+/* **The log panel, under the row that opened it.** A sibling of the row rather than a child of its control
+   column, because log lines are long, monospaced and scanned downward — they want the full width, and the
+   control column is sized to a button. The block is height-capped and scrolls: 200 lines is more than a page,
+   and a panel that grew to 200 lines would push the rest of the settings page off screen. */
+.settings__log {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.settings__log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.settings__log-path {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  color: var(--text-dim, #8b8f98);
+  overflow-wrap: anywhere;
+}
+
+/* **"There is more than this", said rather than implied.** The same warm band as a row's note, because it is a
+   caveat about what the reader is looking at. */
+.settings__log-note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  color: var(--warn, #c09664);
+}
+
+.settings__log-empty {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-dim, #8b8f98);
+}
+
+.settings__log-lines {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2);
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-0);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-code, 11px);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.settings__log-toggle {
+  margin-top: 6px;
+}
+
 /* A text field with the system's folder chooser beside it: the field takes the width, the button stays
    its own size. Without this the button drops to its own line, which reads as a second step rather than
    the same one — and the chooser is an alternative to typing, not a follow-up to it. */

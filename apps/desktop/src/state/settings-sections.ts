@@ -273,6 +273,14 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
           "the projection from the wire's closed state vocabulary to a headline, one sentence and its buttons, " +
           "held total against `DaemonServiceStatus` so a state cannot exist on the wire without words here",
       },
+      {
+        file: "apps/desktop/src/components/settings/ServiceLog.tsx",
+        needle: 't("settings.service.log.truncated")',
+        because:
+          "the log disclosure's panel, which says out loud when the tail is a tail — the daemon bounds the read " +
+          "at the last 200 lines / 64 KB, and a truncated log that read as complete would be a lie somebody " +
+          "debugs from",
+      },
     ],
   },
   {

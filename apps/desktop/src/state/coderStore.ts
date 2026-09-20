@@ -57,7 +57,14 @@ import type { AgentDelivery as AgentDeliveryWire, FixRunResult as FixRunResultWi
 
 import { localNotice, noticeFromError, type Notice, type Refusal } from "../i18n/notice.js";
 import { buildTranscript, type Transcript } from "./transcript.js";
-import type { EnvoyLlmPublic, EnvoyLlmSetInput, ServiceAnswer, ShutdownAnswer } from "./agent-actions.js";
+import type {
+  DaemonLogAnswer,
+  DaemonLogRead,
+  EnvoyLlmPublic,
+  EnvoyLlmSetInput,
+  ServiceAnswer,
+  ShutdownAnswer,
+} from "./agent-actions.js";
 
 import { CoderConnection, type ConnectionStatus, type HelloResult } from "../client/connection.js";
 import { resolveDaemonEndpoint, type ResolvedEndpoint } from "../client/endpoint.js";
@@ -1773,6 +1780,24 @@ export class CoderStore {
    */
   async shutdown(): Promise<ShutdownAnswer> {
     return this.mutate("coder.shutdown", {}, () => ({ ok: true as const, stopping: true as const }));
+  }
+
+  /**
+   * **Read the end of the live daemon log**, for the service row's disclosure.
+   *
+   * Deliberately **not** stored in `CoderState`: the log is one disclosure's contents, not a fact every surface
+   * reads, and putting it in the snapshot would re-render the whole window (every consumer takes the whole
+   * object — see the module doc) for a block most visits never open. The caller holds the answer and asks again
+   * with its own Refresh.
+   *
+   * `read` rather than `mutate`, for the same reason as `getServiceStatus`: this is the version-skew-aware
+   * path, so an older daemon that does not serve `coder.getDaemonLog` is not called at all and the refusal it
+   * would have earned is the same "restart so both come from one build" sentence.
+   */
+  async getDaemonLog(): Promise<DaemonLogAnswer> {
+    const answer = await this.read<{ log: DaemonLogRead }>("coder.getDaemonLog", {});
+    if (!answer.ok) return { ok: false, ...noticeFromError(answer.error) };
+    return { ok: true, log: answer.value.log };
   }
 
   /**

@@ -57,4 +57,11 @@ export const service: Catalogue = {
   "settings.service.action.tryAgain": "Erneut versuchen",
   "settings.service.action.refresh": "Aktualisieren",
   "settings.service.busy": "Arbeitet…",
+  "settings.service.log.show": "Protokoll anzeigen",
+  "settings.service.log.hide": "Protokoll ausblenden",
+  "settings.service.log.title": "Daemon-Protokoll",
+  "settings.service.log.reading": "Protokoll wird gelesen…",
+  "settings.service.log.refresh": "Aktualisieren",
+  "settings.service.log.truncated": "Es werden die letzten 200 Zeilen gezeigt. Das Protokoll ist länger.",
+  "settings.service.log.empty": "Noch keine Protokolldatei — auf dieser Maschine hat noch nichts eine geschrieben.",
 };

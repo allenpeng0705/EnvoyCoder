@@ -28,6 +28,13 @@
  * failure is treated as *stopped* — the service is installed and comes back at the next login — rather than as
  * a refusal on the row, which is the only reading that does not turn "it did what you asked" into a red line.
  *
+ * ## The log, which is read when asked and not before
+ *
+ * The row's last control is a disclosure onto `coder.getDaemonLog` (`ServiceLog.tsx` renders the panel). It is
+ * **not a row and not on mount**: reading the tail is a file read on the daemon, and most visits to this page
+ * do not want it, so the first open asks and the panel's Refresh is the only other ask. Nothing in this component
+ * watches `logOpen` in an effect, which is what keeps a re-render from becoming a second read.
+ *
  * ## The six states, the diagnostic band, and the two things the copy must never do
  *
  * `service-state.ts` owns the projection from the wire's `DaemonServiceStatus` to a headline, one sentence and
@@ -58,9 +65,14 @@ import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "../../i18n/context.js";
 import { localize, type Notice } from "../../i18n/notice.js";
 import { formatWhen } from "../../i18n/when.js";
+import type { DaemonLogAnswer } from "../../state/agent-actions.js";
 import { SettingRow } from "../SettingsRows.js";
 import type { SettingsSectionProps } from "./SectionProps.js";
+import { ServiceLogPanel } from "./ServiceLog.js";
 import { serviceCopy, serviceEvidence, type ServiceActionId } from "./service-state.js";
+
+/** The one disclosure on this row, named so its toggle can point at the panel it opens. */
+const LOG_PANEL_ID = "service-log";
 
 /**
  * What to show when a successful stop left nothing to ask.
@@ -99,10 +111,41 @@ export function ServiceSection(props: SettingsSectionProps): JSX.Element {
    * so the row shows the machine's real situation rather than the running state the daemon had a moment ago.
    */
   const [stopped, setStopped] = useState<DaemonServiceStatus | undefined>(undefined);
+  /**
+   * The log disclosure: whether it is open, the last read, and whether one is in flight.
+   *
+   * All three are here rather than in `CoderState` because the log belongs to this one block — putting it in the
+   * store's snapshot would re-render every surface in the window for a panel most visits never open.
+   */
+  const [logOpen, setLogOpen] = useState(false);
+  const [log, setLog] = useState<DaemonLogAnswer | undefined>(undefined);
+  const [logBusy, setLogBusy] = useState(false);
 
   const status = stopped ?? props.state.service;
   const copy = serviceCopy(status);
   const evidence = serviceEvidence(status, (at) => formatWhen(at, locale));
+
+  /**
+   * Read the log tail. Called when the disclosure opens and by its Refresh press, and by nothing else — there is
+   * no effect watching `logOpen`, so a re-render cannot turn into a second file read on the daemon.
+   */
+  const readLog = useCallback((): void => {
+    if (logBusy) return;
+    setLogBusy(true);
+    void props.agents.getDaemonLog().then((answer) => {
+      setLog(answer);
+      setLogBusy(false);
+    });
+  }, [logBusy, props.agents]);
+
+  const toggleLog = (): void => {
+    const next = !logOpen;
+    setLogOpen(next);
+    // **Fetched when opened, not on mount.** The first open asks; Refresh is the only other ask. `log === undefined`
+    // keeps a close-and-reopen from reading the file again, which is what "the disclosure fetches on open" means
+    // for a panel whose contents do not change on their own.
+    if (next && log === undefined) readLog();
+  };
 
   /**
    * One press, one in-flight slot, one place a refusal lands.
@@ -205,51 +248,69 @@ export function ServiceSection(props: SettingsSectionProps): JSX.Element {
     evidence.restarts !== undefined || evidence.lastStop !== undefined || supervisorDetail;
 
   return (
-    <SettingRow
-      title={t("settings.service.title")}
-      detail={t("settings.service.detail")}
-      // The developer fact is the call this value comes from, not a settings field: there is no field.
-      developerNote="coder.getServiceStatus"
-      titleId="setting-service"
-      note={note}
-    >
-      <>
-        <div className="setting__field-group" aria-busy={busy !== undefined}>
-          {copy.actions.map((action) => (
-            <button
-              key={action.id}
-              type="button"
-              className="button button--secondary"
-              disabled={busy !== undefined}
-              data-service-action={action.id}
-              {...(action.titleKey !== undefined ? { title: t(action.titleKey) } : {})}
-              onClick={() => run(action.id)}
-            >
-              {busy === action.id ? t("settings.service.busy") : t(action.labelKey)}
-            </button>
-          ))}
-        </div>
-        {/* **The daemon's history, then the supervisor's own words, last and verbatim.** For a running service
-            `detail` is the supervisor's whole definition dump, which is not something to put on a row; for a
-            failure or an answer we could not read, it is the most useful thing on the page. The lines above it
-            are ours — a translated restart count and the one sentence the previous stop deserves. */}
-        {hasDiagnostics ? (
-          <div className="setting__diagnostics" data-testid="service-detail">
-            {evidence.restarts !== undefined ? (
-              <p className="setting__developer">{t(evidence.restarts.key, evidence.restarts.values)}</p>
-            ) : null}
-            {evidence.lastStop !== undefined ? (
-              <p className="setting__developer">{t(evidence.lastStop.key, evidence.lastStop.values)}</p>
-            ) : null}
-            {supervisorDetail ? <p className="setting__developer">{status.detail}</p> : null}
+    <>
+      <SettingRow
+        title={t("settings.service.title")}
+        detail={t("settings.service.detail")}
+        // The developer fact is the call this value comes from, not a settings field: there is no field.
+        developerNote="coder.getServiceStatus"
+        titleId="setting-service"
+        note={note}
+      >
+        <>
+          <div className="setting__field-group" aria-busy={busy !== undefined}>
+            {copy.actions.map((action) => (
+              <button
+                key={action.id}
+                type="button"
+                className="button button--secondary"
+                disabled={busy !== undefined}
+                data-service-action={action.id}
+                {...(action.titleKey !== undefined ? { title: t(action.titleKey) } : {})}
+                onClick={() => run(action.id)}
+              >
+                {busy === action.id ? t("settings.service.busy") : t(action.labelKey)}
+              </button>
+            ))}
           </div>
-        ) : null}
-        {notice !== undefined ? (
-          <p className="setting__failure" role="status">
-            {localize(t, notice)}
-          </p>
-        ) : null}
-      </>
-    </SettingRow>
+          {/* **The daemon's history, then the supervisor's own words, last and verbatim.** For a running service
+              `detail` is the supervisor's whole definition dump, which is not something to put on a row; for a
+              failure or an answer we could not read, it is the most useful thing on the page. The lines above it
+              are ours — a translated restart count and the one sentence the previous stop deserves. */}
+          {hasDiagnostics ? (
+            <div className="setting__diagnostics" data-testid="service-detail">
+              {evidence.restarts !== undefined ? (
+                <p className="setting__developer">{t(evidence.restarts.key, evidence.restarts.values)}</p>
+              ) : null}
+              {evidence.lastStop !== undefined ? (
+                <p className="setting__developer">{t(evidence.lastStop.key, evidence.lastStop.values)}</p>
+              ) : null}
+              {supervisorDetail ? <p className="setting__developer">{status.detail}</p> : null}
+            </div>
+          ) : null}
+          {/* A disclosure, not a row: the log is where a user goes when something is wrong, and the press is what
+              reads it. The panel is a sibling below the row so its monospace block gets the full width rather
+              than the control column. */}
+          <button
+            type="button"
+            className="button button--secondary settings__log-toggle"
+            aria-expanded={logOpen}
+            aria-controls={LOG_PANEL_ID}
+            data-service-log-toggle=""
+            onClick={toggleLog}
+          >
+            {logOpen ? t("settings.service.log.hide") : t("settings.service.log.show")}
+          </button>
+          {notice !== undefined ? (
+            <p className="setting__failure" role="status">
+              {localize(t, notice)}
+            </p>
+          ) : null}
+        </>
+      </SettingRow>
+      {logOpen ? (
+        <ServiceLogPanel id={LOG_PANEL_ID} answer={log} busy={logBusy} onRefresh={readLog} />
+      ) : null}
+    </>
   );
 }

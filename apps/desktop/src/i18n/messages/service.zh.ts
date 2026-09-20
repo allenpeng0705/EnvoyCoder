@@ -57,4 +57,11 @@ export const service: Catalogue = {
   "settings.service.action.tryAgain": "重试",
   "settings.service.action.refresh": "刷新",
   "settings.service.busy": "处理中…",
+  "settings.service.log.show": "查看日志",
+  "settings.service.log.hide": "隐藏日志",
+  "settings.service.log.title": "守护进程日志",
+  "settings.service.log.reading": "正在读取日志…",
+  "settings.service.log.refresh": "刷新",
+  "settings.service.log.truncated": "仅显示最后 200 行。日志更长。",
+  "settings.service.log.empty": "还没有日志文件 — 这台机器上还没有写入过。",
 };

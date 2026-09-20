@@ -57,4 +57,11 @@ export const service: Catalogue = {
   "settings.service.action.tryAgain": "Réessayer",
   "settings.service.action.refresh": "Actualiser",
   "settings.service.busy": "En cours…",
+  "settings.service.log.show": "Afficher le journal",
+  "settings.service.log.hide": "Masquer le journal",
+  "settings.service.log.title": "Journal du démon",
+  "settings.service.log.reading": "Lecture du journal…",
+  "settings.service.log.refresh": "Actualiser",
+  "settings.service.log.truncated": "Seules les 200 dernières lignes sont affichées. Le journal est plus long.",
+  "settings.service.log.empty": "Pas encore de journal — rien n'en a écrit sur cette machine.",
 };
