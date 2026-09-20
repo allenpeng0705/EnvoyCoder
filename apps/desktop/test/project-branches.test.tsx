@@ -15,6 +15,7 @@ import type { GitBranch, GitStatus, Project } from "@envoydev/protocol";
 
 import { ProjectBranches } from "../src/components/ProjectBranches.js";
 import { I18nProvider } from "../src/i18n/context.js";
+import type { Refusal } from "../src/i18n/notice.js";
 import { en } from "../src/i18n/messages/en.js";
 import type { GitSnapshot } from "../src/state/coderStore.js";
 
@@ -53,15 +54,15 @@ function renderControl(options: {
   project?: Project;
   /** Omit to get a measured `git` snapshot; pass `undefined` explicitly for "nothing measured yet". */
   snapshot?: GitSnapshot | undefined;
-  onCheckout?: (branch: string) => Promise<{ ok: true } | { ok: false; key: string; values?: Record<string, unknown> }>;
-  onCreate?: (name: string) => Promise<{ ok: true } | { ok: false; key: string; values?: Record<string, unknown> }>;
+  onCheckout?: (branch: string) => Promise<{ ok: true } | Refusal>;
+  onCreate?: (name: string) => Promise<{ ok: true } | Refusal>;
   onRead?: () => Promise<{ ok: true }>;
 } = {}) {
   const onRead = options.onRead ?? vi.fn(async () => ({ ok: true as const }));
   const onCheckout = options.onCheckout ?? vi.fn(async () => ({ ok: true as const }));
   const onCreate = options.onCreate ?? vi.fn(async () => ({ ok: true as const }));
   const view = render(
-    <I18nProvider locale="en">
+    <I18nProvider preference="en">
       <ProjectBranches
         project={options.project ?? project({ kind: "git" })}
         snapshot={"snapshot" in options ? options.snapshot : { status: status(), branches: BRANCHES }}
@@ -88,7 +89,7 @@ describe("ProjectBranches", () => {
 
   it("does not draw for a repository the daemon says is jj", () => {
     render(
-      <I18nProvider locale="en">
+      <I18nProvider preference="en">
         <ProjectBranches
           project={project()}
           snapshot={{ status: status({ kind: "jj", branch: undefined }), branches: [] }}
@@ -142,7 +143,12 @@ describe("ProjectBranches", () => {
 
   it("renders a refusal in place rather than swallowing it", async () => {
     renderControl({
-      onCreate: async () => ({ ok: false, key: "error.gitBranchInvalid", values: { name: "a..b" } }),
+      onCreate: async () => ({
+        ok: false,
+        message: '"a..b" cannot be a branch name.',
+        key: "error.gitBranchInvalid",
+        values: { name: "a..b" },
+      }),
     });
 
     fireEvent.click(trigger());

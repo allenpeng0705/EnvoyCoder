@@ -99,8 +99,11 @@ export interface CoderState {
    * Per project rather than per task: branches belong to the folder, and a task's `cwd` may be a worktree
    * (`Task.worktree`) — a later slice. Measured on demand and never written to disk: a branch moves under
    * us, and `Project.vcs` deliberately keeps only *what kind* of folder this is.
+   *
+   * Optional because **"nothing measured yet" is a real state of this window** — the store starts it empty,
+   * and a value built by hand (a test, a snapshot) should not have to spell an empty map to say so.
    */
-  git: Readonly<Record<string, GitSnapshot>>;
+  git?: Readonly<Record<string, GitSnapshot>>;
   settings: CoderSettings;
   harnesses: readonly HarnessSummary[];
   /**
@@ -973,7 +976,7 @@ export class CoderStore {
 
     this.set({
       git: {
-        ...this.state.git,
+        ...(this.state.git ?? {}),
         [projectId]: { status: measured.status, branches: listed.branches },
       },
     });
@@ -993,10 +996,10 @@ export class CoderStore {
     if ("ok" in switched) return switched;
     this.set({
       git: {
-        ...this.state.git,
+        ...(this.state.git ?? {}),
         [projectId]: {
           status: switched.status,
-          branches: this.state.git[projectId]?.branches ?? [],
+          branches: this.state.git?.[projectId]?.branches ?? [],
         },
       },
     });
@@ -1012,7 +1015,7 @@ export class CoderStore {
 
     // The list gains exactly the branch git just made, so it is updated rather than re-read; everything
     // else about the list is git's answer from the last read and is still true.
-    const known = this.state.git[projectId]?.branches ?? [];
+    const known = this.state.git?.[projectId]?.branches ?? [];
     const branch = created.status.branch;
     const branches =
       branch === undefined
@@ -1020,7 +1023,7 @@ export class CoderStore {
         : known.some((candidate) => candidate.name === branch)
           ? known.map((candidate) => ({ ...candidate, current: candidate.name === branch }))
           : [...known.map((candidate) => ({ ...candidate, current: false })), { name: branch, current: true }];
-    this.set({ git: { ...this.state.git, [projectId]: { status: created.status, branches } } });
+    this.set({ git: { ...(this.state.git ?? {}), [projectId]: { status: created.status, branches } } });
     return { ok: true };
   }
 
