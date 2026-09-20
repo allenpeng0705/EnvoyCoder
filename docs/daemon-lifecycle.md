@@ -109,7 +109,7 @@ Most of it is **one portable path**; only the parts that must tell the *supervis
 
 | operation | portable | platform adapter |
 |---|---|---|
-| stop | read the claim, verify `instanceId`, signal that pid — or a loopback `coder.shutdown` where signals do not exist (Windows) | — |
+| stop | read the claim (port + socket path, both published), then `coder.shutdown` over that socket — `main.mjs stop` | — (one path on every platform: Windows has no signal an unrelated process can send) |
 | start / restart | — | launchd `kickstart -k`; systemd `--user restart`; `schtasks /end` + `/run`, or the service manager |
 | status | claim + `coder.hello` (instanceId, version) | launchd `print`; systemd `--user status`; `schtasks /query` |
 | install / uninstall | — | `bootstrap`/`bootout`; `daemon-reload` + `enable --now`/`disable --now`; `schtasks /create`/`/delete` |
@@ -218,8 +218,13 @@ A checklist, in build order:
    entry point (`…/runtime/current/main.mjs service …`, which §8 needs on macOS, where deleting the app runs no
    code) and the Settings control — item 10. Linux and Windows stay unit-text and plan tests plus the owner's
    checks: nothing here can execute systemd or the Task Scheduler;
-10. the Settings page (states, restart count, log tail, stop/restart/uninstall) and one row in
-    `docs/settings-parity.md`.
+10. **partly landed** — the Settings page exists (`components/settings/SectionsService.tsx`): one row with the
+    six states the supervisor can report, and one press per state — *Turn on*, *Restart*, *Turn off*, *Try again*,
+    *Refresh* — with the supervisor's own words shown only when something is wrong, and the verdict row in
+    `docs/settings-parity.md` (§5.1). **Still owed from this item**: the *restart count* (the ledger already knows
+    it — `lifecycle.ts`'s `bootsInLastHour` — but nothing puts it on the page yet), the **log tail**, and a plain
+    *stop* that leaves the service installed — `main.mjs stop` asks the running daemon over the wire now, but no
+    **UI button** sends it yet;
 
 ## 10. What this does not decide yet
 

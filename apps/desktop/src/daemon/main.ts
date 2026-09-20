@@ -169,6 +169,28 @@ async function installPayloadAndExit(): Promise<never> {
  * unit will run — the app's installer runs this before any daemon exists, and a unit naming a version that was
  * never copied would restart forever against nothing.
  */
+/**
+ * `stop`: ask the daemon in **this home** to stop gracefully.
+ *
+ * The command exists because the alternative on Windows is `taskkill` (a kill, not a stop) and because stopping a
+ * daemon you deliberately run as a service otherwise means *uninstalling* it. It reads the claim rather than a pid
+ * somebody wrote down: the claim is what the daemon published about itself, including the port and the socket path,
+ * so there is nothing to guess. A home with no daemon is not an error — the command already has what it wanted.
+ */
+async function stopCommandAndExit(): Promise<never> {
+  const { askToStop, describeStop } = await import("./service-cli.js");
+  const paths = coderPaths();
+  const claim = await readDaemonClaim(paths);
+  if (claim.state !== "running") {
+    say(["No EnvoyDev daemon is running for this home; nothing to stop."]);
+    process.exit(EXIT_OK);
+  }
+  const { port, path: socketPath, managedBy } = claim.descriptor;
+  const result = await askToStop({ port, path: socketPath });
+  say(describeStop(result, managedBy === "service"));
+  process.exit(result.stopped ? EXIT_OK : EXIT_FAILED);
+}
+
 async function serviceCommandAndExit(): Promise<never> {
   const { describeService, serviceActionFrom } = await import("./service-cli.js");
   const action = serviceActionFrom(process.argv);
@@ -215,6 +237,7 @@ if (homeOverride !== undefined) process.env.ENVOYMESH_HOME = homeOverride;
 
 if (process.argv.includes("--install-payload")) await installPayloadAndExit();
 if (process.argv[2] === "service") await serviceCommandAndExit();
+if (process.argv[2] === "stop") await stopCommandAndExit();
 
 const port = readPort();
 const paths = coderPaths();

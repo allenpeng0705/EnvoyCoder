@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import type { ServiceStatus } from "@envoydev/platform";
 
-import { describeService, serviceActionFrom } from "../src/daemon/service-cli.js";
+import {
+  askToStop,
+  describeService,
+  describeStop,
+  serviceActionFrom,
+  type StopSocket,
+} from "../src/daemon/service-cli.js";
 
 const status = (state: ServiceStatus["state"], extra: Partial<ServiceStatus> = {}): ServiceStatus => ({
   state,
@@ -79,5 +85,60 @@ describe("what a person is not told", () => {
     // But when something is genuinely wrong, the supervisor's own words are the most useful line there is.
     const broken = describeService("status", status("failed", { detail: "exit status 4" }));
     expect(broken.lines).toContain("exit status 4");
+  });
+});
+
+describe("asking a daemon to stop", () => {
+  /** A socket that answers synchronously, so the test needs no timing. */
+  const answering = (frame: unknown, sent: string[] = []): StopSocket =>
+    ({
+      send: (data: string) => void sent.push(data),
+      close: () => undefined,
+      addEventListener: (type: string, listener: (event?: unknown) => void) => {
+        if (type === "open") listener();
+        if (type === "message") listener({ data: JSON.stringify(frame) });
+      },
+    }) as unknown as StopSocket;
+
+  it("sends coder.shutdown over the claim's own port and path, and reports acceptance", async () => {
+    const sent: string[] = [];
+    const result = await askToStop({
+      port: 4770,
+      path: "/ws",
+      connect: () => answering({ id: "stop", result: { stopping: true } }, sent),
+    });
+    expect(result.stopped).toBe(true);
+    // The method is the one the daemon answers *before* it drains, which is what makes this a stop rather than a kill.
+    expect(JSON.parse(sent[0] ?? "null")).toEqual({ id: "stop", method: "coder.shutdown", params: {} });
+  });
+
+  it("says nobody answered instead of hanging on a wedged daemon", async () => {
+    const result = await askToStop({
+      port: 4770,
+      path: "/ws",
+      timeoutMs: 5,
+      connect: () => ({ send: () => undefined, close: () => undefined, addEventListener: () => undefined }) as unknown as StopSocket,
+    });
+    expect(result.stopped).toBe(false);
+    expect(result.detail).toContain("did not answer within 5 ms");
+    // The advice matters more than the diagnosis: there is a way out of a wedged daemon.
+    expect(describeStop(result, false).join(" ")).toContain("service uninstall");
+  });
+
+  it("treats an error frame as a refusal, not as a stop", async () => {
+    const result = await askToStop({
+      port: 4770,
+      path: "/ws",
+      connect: () => answering({ id: "stop", error: { code: "envoydev.unauthorized" } }),
+    });
+    expect(result.stopped).toBe(false);
+    expect(result.detail).toContain("error");
+  });
+
+  it("tells the owner of a service-managed daemon that it will come back", async () => {
+    const line = describeStop({ stopped: true, detail: "" }, true).join(" ");
+    expect(line).toContain("start again at your next login");
+    // …and a daemon the app started will not, which is the difference the person needs to know.
+    expect(describeStop({ stopped: true, detail: "" }, false).join(" ")).toContain("next time you open EnvoyDev");
   });
 });
