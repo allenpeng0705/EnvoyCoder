@@ -7,6 +7,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../l10n/l10n.dart';
+
 class QrScanScreen extends StatefulWidget {
   const QrScanScreen({super.key});
 
@@ -30,8 +32,9 @@ class _QrScanScreenState extends State<QrScanScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
-      appBar: AppBar(title: const Text('Scan pairing code')),
+      appBar: AppBar(title: Text(l10n.hostScanTitle)),
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -41,7 +44,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: Text(
-                'Point the camera at the QR on your computer.',
+                l10n.hostScanHint,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Colors.white,
                       shadows: const [Shadow(blurRadius: 8, color: Colors.black)],

@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../l10n/l10n.dart';
 import '../models/composer_attachment.dart';
 import '../models/harness.dart';
 import '../models/text_reveal.dart';
@@ -189,8 +190,8 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
       setState(() {
         _loading = false;
         _error = _taskId == null
-            ? 'Could not open this run.'
-            : 'The earlier conversation is not on this computer. A new message still starts here.';
+            ? context.l10n.runCouldNotOpen
+            : context.l10n.runEarlierNotHere;
       });
     }
   }
@@ -330,7 +331,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not send that answer. Try again.')),
+        SnackBar(content: Text(context.l10n.runCouldNotAnswer)),
       );
     }
   }
@@ -340,9 +341,12 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     final taskId = _taskId;
     if (taskId == null) return;
     try {
+      // **No `harness`.** The agent belongs to the project, so this composer only writes the
+      // task-scoped choices. `selection.harnessId` is the context the chips render against (the task's
+      // stored agent, which the daemon keeps in step with the project on `updateProject`); sending it
+      // back would make a per-task override out of a project setting.
       await widget.client.call('coder.updateTask', {
         'id': taskId,
-        if (next.harnessId != null) 'harness': next.harnessId,
         if (next.model != null) 'model': next.model,
         if (next.agentModeId != null) 'agentModeId': next.agentModeId,
         if (next.thinkingLevel != null) 'thinkingLevel': next.thinkingLevel ?? '',
@@ -350,7 +354,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not update the task on the computer.')),
+        SnackBar(content: Text(context.l10n.runCouldNotUpdateTask)),
       );
     }
   }
@@ -361,7 +365,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   }
 
   Future<void> _send() async {
-    final turn = composeTurn(_composer.text, _attachments);
+    final turn = composeTurn(_composer.text, _attachments, context.l10n);
     if (turn.prompt.isEmpty || !_canSend) return;
     final previousText = _composer.text;
     final previousAttachments = List<ComposerAttachment>.of(_attachments);
@@ -418,7 +422,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
       _composer.text = previousText;
       setState(() => _attachments = previousAttachments);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not send. Try again.')),
+        SnackBar(content: Text(context.l10n.runCouldNotSend)),
       );
     }
   }
@@ -428,6 +432,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
       current: _attachments,
       pick: pick,
       stillMounted: () => mounted,
+      l10n: context.l10n,
       apply: (attachments, notice) {
         setState(() {
           _attachments = attachments;
@@ -441,7 +446,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     final cwd = _cwd;
     if (cwd == null || cwd.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('This task has no folder yet.')),
+        SnackBar(content: Text(context.l10n.runNoFolder)),
       );
       return;
     }
@@ -463,7 +468,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not stop the run. Try again.')),
+        SnackBar(content: Text(context.l10n.runCouldNotStop)),
       );
     } finally {
       if (mounted) setState(() => _cancelling = false);
@@ -487,12 +492,12 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     final taskId = _taskId;
     if (taskId == null || taskId.isEmpty || _archiving) return;
 
+    final l10n = context.l10n;
     final confirmed = await showConfirmDialog(
       context,
-      title: 'Archive ${widget.title}?',
-      message: 'It leaves the task list. The folder, its files and the transcript stay on this '
-          'computer — archiving is not deletion.',
-      confirmLabel: 'Archive',
+      title: l10n.taskRemoveTitle(widget.title),
+      message: l10n.taskRemoveMessage,
+      confirmLabel: l10n.commonRemove,
       destructive: false,
     );
     if (!confirmed || !mounted) return;
@@ -504,7 +509,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
       if (!mounted) return;
       setState(() => _archiving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not archive this task. It is still here.')),
+        SnackBar(content: Text(l10n.runCouldNotRemove)),
       );
       return;
     }
@@ -523,6 +528,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final colors = CoderTheme.of(context);
     final approvalOpen = _transcript.pendingApproval != null;
     final lastAssistantIndex = _transcript.entries.lastIndexWhere((e) => e.kind == 'assistant');
@@ -534,17 +540,17 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
           if (_live)
             TextButton(
               onPressed: _cancelling ? null : () => unawaited(_cancel()),
-              child: Text(_cancelling ? 'Stopping…' : 'Stop'),
+              child: Text(_cancelling ? l10n.runStopping : l10n.runStop),
             ),
           if (_live)
             Padding(
               padding: const EdgeInsets.only(right: 12),
               child: Center(
-                child: Text('Live', style: TextStyle(color: colors.statusDotRunning, fontSize: 12)),
+                child: Text(l10n.runLive, style: TextStyle(color: colors.statusDotRunning, fontSize: 12)),
               ),
             ),
           IconButton(
-            tooltip: 'Toggle Explorer sidebar',
+            tooltip: l10n.runToggleExplorer,
             onPressed: () => unawaited(_openExplorer()),
             icon: const Icon(Icons.view_sidebar_outlined),
           ),
@@ -553,10 +559,10 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
           // would offer an action that cannot be carried out.
           if (_taskId != null && _taskId!.isNotEmpty)
             Semantics(
-              label: 'Archive task',
+              label: l10n.runRemoveTask,
               button: true,
               child: IconButton(
-                tooltip: 'Archive task',
+                tooltip: l10n.runRemoveTask,
                 onPressed: _archiving ? null : () => unawaited(_archiveTask()),
                 icon: const Icon(Icons.archive_outlined),
               ),
@@ -574,7 +580,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
               child: Text(
-                'Some of this task\u2019s history did not arrive. What is here is in order.',
+                l10n.runHistoryGap,
                 style: TextStyle(color: colors.foregroundMuted, fontSize: 12),
               ),
             ),
@@ -638,13 +644,13 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                       Row(
                         children: [
                           ChoiceChip(
-                            label: const Text('Queue'),
+                            label: Text(l10n.runQueue),
                             selected: _sendMode == 'queue',
                             onSelected: approvalOpen ? null : (_) => setState(() => _sendMode = 'queue'),
                           ),
                           const SizedBox(width: 8),
                           ChoiceChip(
-                            label: const Text('Steer'),
+                            label: Text(l10n.runSteer),
                             selected: _sendMode == 'steer',
                             onSelected: approvalOpen ? null : (_) => setState(() => _sendMode = 'steer'),
                           ),
@@ -652,8 +658,8 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                           Expanded(
                             child: Text(
                               _sendMode == 'steer'
-                                  ? 'Joins the turn now'
-                                  : 'Waits for this turn to finish',
+                                  ? l10n.runJoinsTurn
+                                  : l10n.runWaitsTurn,
                               style: TextStyle(color: colors.foregroundMuted, fontSize: 11),
                             ),
                           ),
@@ -708,10 +714,10 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                                 maxLines: 4,
                                 decoration: InputDecoration(
                                   hintText: approvalOpen && _live
-                                      ? 'Answer the request above first'
+                                      ? l10n.runPlaceholderAnswer
                                       : _live
-                                          ? 'Send a follow-up…'
-                                          : 'Send a message to continue',
+                                          ? l10n.runPlaceholderFollowUp
+                                          : l10n.runPlaceholderContinue,
                                   border: const OutlineInputBorder(),
                                   isDense: true,
                                 ),

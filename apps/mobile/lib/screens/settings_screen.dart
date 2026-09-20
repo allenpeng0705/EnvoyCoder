@@ -5,6 +5,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
+import '../l10n/locale_controller.dart';
 import '../models/harness.dart';
 import '../services/host_client.dart';
 import '../theme/tokens.dart';
@@ -14,10 +16,14 @@ class SettingsScreen extends StatefulWidget {
     super.key,
     required this.client,
     required this.harnesses,
+    this.localeController,
   });
 
   final HostClient client;
   final List<HarnessInfo> harnesses;
+
+  /// The phone's own language preference. Null only in tests that are not exercising the picker.
+  final LocaleController? localeController;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -30,7 +36,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   bool _requireApproval = true;
   bool _keepTranscripts = true;
-  String _language = 'system';
+  String _language = kSystemLanguagePreference;
   String? _defaultHarness;
   bool _apiKeySet = false;
   bool _clearApiKey = false;
@@ -41,6 +47,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    // The phone's own preference owns the picker's value; the daemon's `language` is only the
+    // fallback for a build with no `LocaleController` injected (a widget test).
+    _language = widget.localeController?.preference ?? kSystemLanguagePreference;
     unawaited(_load());
   }
 
@@ -67,7 +76,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (settings is Map) {
           _requireApproval = settings['requireApprovalForDestructive'] != false;
           _keepTranscripts = settings['keepTranscripts'] != false;
-          _language = (settings['language'] as String?) ?? 'system';
+          if (widget.localeController == null) {
+            _language = (settings['language'] as String?) ?? kSystemLanguagePreference;
+          }
           final defaults = settings['defaults'];
           if (defaults is Map) {
             _defaultHarness = defaults['harness'] as String?;
@@ -89,7 +100,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Could not load settings.';
+        _error = context.l10n.settingsLoadFailed;
       });
     }
   }
@@ -111,7 +122,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not save settings.')),
+        SnackBar(content: Text(context.l10n.settingsSaveFailed)),
       );
       return;
     }
@@ -121,7 +132,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Settings saved. Enter a model to save LLM settings.')),
+        SnackBar(content: Text(context.l10n.settingsSaveNoModel)),
       );
       return;
     }
@@ -137,30 +148,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Settings saved on the computer.')),
+        SnackBar(content: Text(context.l10n.settingsSavedOnComputer)),
       );
       await _load();
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Settings saved, but the LLM settings were not.')),
+        SnackBar(content: Text(context.l10n.settingsSavedLlmFailed)),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
+  /// Change the phone's language **now**, and tell the daemon so the desktop follows.
+  ///
+  /// The order is the point. The local write is what the user sees, and it happens first and alone
+  /// decides the UI; the daemon patch is a second, best-effort step (`coder.updateSettings` merges a
+  /// patch, so sending only `language` cannot disturb the other settings). If the daemon refuses —
+  /// offline, an older build — the phone keeps the language the user picked and says which half did
+  /// not save, rather than silently splitting the two surfaces or rolling the UI back.
+  Future<void> _changeLanguage(String value) async {
+    setState(() => _language = value);
+    await widget.localeController?.setPreference(value);
+    try {
+      await widget.client.call('coder.updateSettings', {
+        'settings': {'language': value},
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.settingsLanguageDaemonFailed)),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final colors = CoderTheme.of(context);
     final offered = offeredHarnesses(widget.harnesses);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: Text(l10n.settingsTitle),
         actions: [
           TextButton(
             onPressed: _saving || _loading ? null : () => unawaited(_save()),
-            child: Text(_saving ? 'Saving…' : 'Save'),
+            child: Text(_saving ? l10n.commonSaving : l10n.commonSave),
           ),
         ],
       ),
@@ -173,46 +207,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     padding: const EdgeInsets.all(16),
                     child: Text(_error!, style: TextStyle(color: colors.statusDanger)),
                   ),
-                const ListTile(
-                  title: Text('On the computer'),
-                  subtitle: Text(
-                    'These settings live on the paired machine. The phone only changes them.',
-                  ),
+                ListTile(
+                  title: Text(l10n.settingsComputerHeading),
+                  subtitle: Text(l10n.settingsComputerDetail),
                 ),
                 SwitchListTile(
-                  title: const Text('Ask before anything destructive'),
+                  title: Text(l10n.settingsApprovals),
                   value: _requireApproval,
                   onChanged: (v) => setState(() => _requireApproval = v),
                 ),
                 SwitchListTile(
-                  title: const Text('Keep transcripts after a task ends'),
+                  title: Text(l10n.settingsTranscripts),
                   value: _keepTranscripts,
                   onChanged: (v) => setState(() => _keepTranscripts = v),
                 ),
                 ListTile(
-                  title: const Text('Language'),
+                  title: Text(l10n.settingsLanguage),
                   trailing: DropdownButton<String>(
                     value: _language,
-                    items: const [
-                      DropdownMenuItem(value: 'system', child: Text('System')),
-                      DropdownMenuItem(value: 'en', child: Text('English')),
-                      DropdownMenuItem(value: 'zh', child: Text('中文')),
-                      DropdownMenuItem(value: 'ja', child: Text('日本語')),
-                      DropdownMenuItem(value: 'ko', child: Text('한국어')),
-                      DropdownMenuItem(value: 'de', child: Text('Deutsch')),
-                      DropdownMenuItem(value: 'fr', child: Text('Français')),
-                      DropdownMenuItem(value: 'it', child: Text('Italiano')),
+                    items: [
+                      DropdownMenuItem(
+                        value: kSystemLanguagePreference,
+                        child: Text(l10n.settingsLanguageSystem),
+                      ),
+                      for (final locale in AppLocalizations.supportedLocales)
+                        DropdownMenuItem(
+                          value: locale.languageCode,
+                          child: Text(kLocaleEndonyms[locale.languageCode] ?? locale.languageCode),
+                        ),
                     ],
                     onChanged: (v) {
-                      if (v != null) setState(() => _language = v);
+                      if (v != null) unawaited(_changeLanguage(v));
                     },
                   ),
                 ),
                 ListTile(
-                  title: const Text('Default coding agent'),
+                  title: Text(l10n.settingsDefaultAgent),
                   trailing: DropdownButton<String>(
                     value: offered.any((h) => h.id == _defaultHarness) ? _defaultHarness : null,
-                    hint: const Text('Not set'),
+                    hint: Text(l10n.commonNotSet),
                     items: [
                       for (final h in offered)
                         DropdownMenuItem(value: h.id, child: Text(h.label)),
@@ -221,20 +254,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const Divider(),
-                const ListTile(
-                  title: Text('LLM'),
-                  subtitle: Text(
-                    'Base URL, model and API key for Envoy Harness. Other agents keep their own sign-in.',
-                  ),
+                ListTile(
+                  title: Text(l10n.settingsLlmHeading),
+                  subtitle: Text(l10n.settingsLlmDetail),
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   child: TextField(
                     controller: _baseUrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Base URL',
-                      hintText: 'Optional — leave empty for the provider default',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l10n.settingsBaseUrl,
+                      hintText: l10n.settingsBaseUrlHint,
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                   ),
@@ -243,10 +274,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   child: TextField(
                     controller: _model,
-                    decoration: const InputDecoration(
-                      labelText: 'Model',
-                      hintText: 'gpt-4o or anthropic/claude-sonnet-4-5',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l10n.settingsModel,
+                      hintText: l10n.settingsModelHint,
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                   ),
@@ -256,7 +287,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     child: Row(
                       children: [
-                        const Expanded(child: Text('API key saved on this computer.')),
+                        Expanded(child: Text(l10n.settingsApiKeySaved)),
                         TextButton(
                           onPressed: _saving
                               ? null
@@ -264,7 +295,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     _clearApiKey = true;
                                     _apiKey.clear();
                                   }),
-                          child: const Text('Clear'),
+                          child: Text(l10n.commonClear),
                         ),
                       ],
                     ),
@@ -275,10 +306,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: TextField(
                       controller: _apiKey,
                       obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'API key',
-                        hintText: 'Paste a new key to replace the saved one',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: l10n.settingsApiKey,
+                        hintText: l10n.settingsApiKeyHint,
+                        border: const OutlineInputBorder(),
                         isDense: true,
                       ),
                     ),

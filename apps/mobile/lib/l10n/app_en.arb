@@ -1,0 +1,1367 @@
+{
+  "@@locale": "en",
+  "appName": "EnvoyDev",
+  "@appName": {
+    "description": "appName — The product name. A brand, never translated."
+  },
+  "commonAdd": "Add",
+  "@commonAdd": {
+    "description": "common.add — Generic add button."
+  },
+  "commonBrowse": "Browse",
+  "@commonBrowse": {
+    "description": "common.browse — Opens the folder picker."
+  },
+  "commonCancel": "Cancel",
+  "@commonCancel": {
+    "description": "common.cancel — Dismisses a dialog without acting."
+  },
+  "commonClear": "Clear",
+  "@commonClear": {
+    "description": "common.clear — Forgets a stored secret."
+  },
+  "commonConfirm": "Confirm",
+  "@commonConfirm": {
+    "description": "common.confirm — Confirms an approval answer."
+  },
+  "commonContinue": "Continue",
+  "@commonContinue": {
+    "description": "common.continue — Accepts a typed value and closes the dialog."
+  },
+  "commonDelete": "Delete",
+  "@commonDelete": {
+    "description": "common.delete — Destructive verb, used only where something is really deleted."
+  },
+  "commonNone": "none",
+  "@commonNone": {
+    "description": "common.none — Stands in for a value that is absent, not zero."
+  },
+  "commonNotSet": "Not set",
+  "@commonNotSet": {
+    "description": "common.notSet — A preference with no value chosen."
+  },
+  "commonOk": "OK",
+  "@commonOk": {
+    "description": "common.ok — Acknowledges a refusal."
+  },
+  "commonRemove": "Remove",
+  "@commonRemove": {
+    "description": "common.remove — Takes something out of a list without deleting it on disk."
+  },
+  "commonRename": "Rename",
+  "@commonRename": {
+    "description": "common.rename — Gives something a new name."
+  },
+  "commonSave": "Save",
+  "@commonSave": {
+    "description": "common.save — Writes the settings."
+  },
+  "commonSaving": "Saving…",
+  "@commonSaving": {
+    "description": "common.saving — In-flight state of Save."
+  },
+  "connectionStateConnected": "Connected",
+  "@connectionStateConnected": {
+    "description": "connectionState.connected — The daemon is reachable now."
+  },
+  "connectionStateConnecting": "Connecting",
+  "@connectionStateConnecting": {
+    "description": "connectionState.connecting — A dial is in flight."
+  },
+  "connectionStateReconnecting": "Reconnecting — your tasks are still running",
+  "@connectionStateReconnecting": {
+    "description": "connectionState.reconnecting — The link dropped; the consequence matters more than the state."
+  },
+  "connectionStateFailed": "Unreachable",
+  "@connectionStateFailed": {
+    "description": "connectionState.failed — The dial failed."
+  },
+  "connectionStateIdle": "Not connected yet",
+  "@connectionStateIdle": {
+    "description": "connectionState.idle — Nothing has been tried."
+  },
+  "connectionsTitle": "Connections",
+  "@connectionsTitle": {
+    "description": "connections.title — Sheet title: the machines this phone can reach."
+  },
+  "connectionsCount": "{count, plural, =1{1 computer} other{{count} computers}}",
+  "@connectionsCount": {
+    "description": "connections.count — How many machines are paired.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "connectionsAddHost": "Add host",
+  "@connectionsAddHost": {
+    "description": "connections.addHost — The sheet's one action."
+  },
+  "connectionsAddHostSubtitle": "Scan a code, or enter an address",
+  "@connectionsAddHostSubtitle": {
+    "description": "connections.addHost.subtitle — What Add host leads to."
+  },
+  "connectionsEmpty": "No desktop paired yet.",
+  "@connectionsEmpty": {
+    "description": "connections.empty — Empty connections list."
+  },
+  "connectionsCurrent": "{name} · current",
+  "@connectionsCurrent": {
+    "description": "connections.current — Marks the active machine in the list.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionsRowDetail": "{endpoint} · {state}",
+  "@connectionsRowDetail": {
+    "description": "connections.rowDetail — A row's second line: address and health.",
+    "placeholders": {
+      "endpoint": {
+        "type": "String"
+      },
+      "state": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionsRowDetailVia": "{endpoint} · {state} · via {route}",
+  "@connectionsRowDetailVia": {
+    "description": "connections.rowDetailVia — A row's second line when a route is in use.",
+    "placeholders": {
+      "endpoint": {
+        "type": "String"
+      },
+      "state": {
+        "type": "String"
+      },
+      "route": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionsRenameTitle": "Rename connection",
+  "@connectionsRenameTitle": {
+    "description": "connections.renameTitle — Dialog title for renaming a machine."
+  },
+  "connectionsRenameField": "Connection name",
+  "@connectionsRenameField": {
+    "description": "connections.renameField — Field label for the machine's name."
+  },
+  "connectionsRenameEmpty": "Enter a name for this connection.",
+  "@connectionsRenameEmpty": {
+    "description": "connections.renameEmpty — Refusal when the name field is blank."
+  },
+  "connectionsForgetTitle": "Forget {name}?",
+  "@connectionsForgetTitle": {
+    "description": "connections.forgetTitle — Confirmation title for forgetting a machine.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionsForgetMessage": "This phone will stop connecting to that computer and forget its pairing. Tasks already running there keep running.",
+  "connectionsForgetConfirm": "Forget",
+  "@connectionsForgetConfirm": {
+    "description": "connections.forget.confirm — The confirm button that forgets a machine."
+  },
+  "@connectionsForgetMessage": {
+    "description": "connections.forgetMessage — What forgetting costs and what it does not."
+  },
+  "connectionsMenuAria": "More actions for {name}",
+  "@connectionsMenuAria": {
+    "description": "connections.menuAria — Accessible name of a row's overflow menu.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionsMenuForget": "Forget host",
+  "@connectionsMenuForget": {
+    "description": "connections.menuForget — Menu item that forgets a machine."
+  },
+  "hostScanQr": "Scan QR",
+  "@hostScanQr": {
+    "description": "host.scanQr — Add-host row: scan the pairing code."
+  },
+  "hostScanQrSubtitle": "Pair with the code on your computer",
+  "@hostScanQrSubtitle": {
+    "description": "host.scanQrSubtitle — What Scan QR does."
+  },
+  "hostPasteLink": "Paste link",
+  "@hostPasteLink": {
+    "description": "host.pasteLink — Add-host row: paste a pairing link."
+  },
+  "hostPasteLinkSubtitle": "Paste the pairing link from EnvoyDev",
+  "@hostPasteLinkSubtitle": {
+    "description": "host.pasteLinkSubtitle — What Paste link does."
+  },
+  "hostPasteLinkTitle": "Paste pairing link",
+  "@hostPasteLinkTitle": {
+    "description": "host.pasteLinkTitle — Dialog title for pasting a link."
+  },
+  "hostPasteLinkHint": "envoy://pair?…",
+  "@hostPasteLinkHint": {
+    "description": "host.pasteLinkHint — Example of the link shape. Not translated."
+  },
+  "hostDirectTcp": "Direct TCP",
+  "@hostDirectTcp": {
+    "description": "host.directTcp — Add-host row: dial an address directly."
+  },
+  "hostDirectTcpSubtitle": "Host, port, and optional token",
+  "@hostDirectTcpSubtitle": {
+    "description": "host.directTcpSubtitle — What Direct TCP needs."
+  },
+  "hostRemoteSsh": "Remote SSH",
+  "@hostRemoteSsh": {
+    "description": "host.remoteSsh — Add-host row: reach the daemon through SSH."
+  },
+  "hostRemoteSshSubtitle": "Reach the daemon through an SSH hop",
+  "@hostRemoteSshSubtitle": {
+    "description": "host.remoteSshSubtitle — What Remote SSH does."
+  },
+  "hostFieldHostPort": "Host:port",
+  "@hostFieldHostPort": {
+    "description": "host.fieldHostPort — Address field label."
+  },
+  "hostFieldToken": "Token (optional if already paired)",
+  "@hostFieldToken": {
+    "description": "host.fieldToken — Optional credential field label."
+  },
+  "hostFieldTokenHelper": "Kept only on this phone — never shown in the list.",
+  "@hostFieldTokenHelper": {
+    "description": "host.fieldTokenHelper — Where the token lives."
+  },
+  "hostFieldLabel": "Label (optional)",
+  "@hostFieldLabel": {
+    "description": "host.fieldLabel — Optional name field label."
+  },
+  "hostFieldSshHost": "SSH host",
+  "@hostFieldSshHost": {
+    "description": "host.fieldSshHost — SSH host field label."
+  },
+  "hostFieldUser": "User",
+  "@hostFieldUser": {
+    "description": "host.fieldUser — SSH user field label."
+  },
+  "hostFieldSshPort": "SSH port",
+  "@hostFieldSshPort": {
+    "description": "host.fieldSshPort — SSH port field label."
+  },
+  "hostFieldPassword": "Password",
+  "@hostFieldPassword": {
+    "description": "host.fieldPassword — SSH password field label."
+  },
+  "hostFieldDaemon": "Daemon on remote (host:port)",
+  "@hostFieldDaemon": {
+    "description": "host.fieldDaemon — Remote daemon address field label."
+  },
+  "hostFieldDaemonHelper": "Usually 127.0.0.1:4770 on that machine",
+  "@hostFieldDaemonHelper": {
+    "description": "host.fieldDaemonHelper — Typical remote daemon address."
+  },
+  "hostFieldPairingToken": "Pairing token (optional over SSH)",
+  "@hostFieldPairingToken": {
+    "description": "host.fieldPairingToken — Optional pairing token over SSH."
+  },
+  "hostFieldPairingTokenHelper": "The tunnel arrives as the machine itself, so it is trusted",
+  "@hostFieldPairingTokenHelper": {
+    "description": "host.fieldPairingTokenHelper — Why the token is optional here."
+  },
+  "hostRefusedTitle": "That did not add a machine",
+  "@hostRefusedTitle": {
+    "description": "host.refusedTitle — Title of a refusal dialog."
+  },
+  "hostScanTitle": "Scan pairing code",
+  "@hostScanTitle": {
+    "description": "host.scanTitle — App bar of the camera screen."
+  },
+  "hostScanHint": "Point the camera at the QR on your computer.",
+  "@hostScanHint": {
+    "description": "host.scanHint — Camera instruction."
+  },
+  "hostNoHostsTitle": "No desktop paired yet",
+  "@hostNoHostsTitle": {
+    "description": "host.noHostsTitle — The zero-host screen's headline."
+  },
+  "hostNoHostsBody": "On your computer, open EnvoyDev → Pair a phone, then scan the code. Your agents keep running whether or not the phone is connected.",
+  "@hostNoHostsBody": {
+    "description": "host.noHostsBody — The zero-host screen's explanation."
+  },
+  "errorPairingEmpty": "That pairing code is empty.",
+  "@errorPairingEmpty": {
+    "description": "error.pairingEmpty — A blank code was pasted."
+  },
+  "errorPairingMalformed": "That does not look like a pairing code.",
+  "@errorPairingMalformed": {
+    "description": "error.pairingMalformed — The code does not parse."
+  },
+  "errorPairingUnreadable": "That pairing code could not be read. Ask the desktop to show it again.",
+  "@errorPairingUnreadable": {
+    "description": "error.pairingUnreadable — The code is the right shape but unreadable."
+  },
+  "errorPairingAddress": "That pairing code has an address this app cannot read.",
+  "@errorPairingAddress": {
+    "description": "error.pairingAddress — The address inside the code is unusable."
+  },
+  "errorPairingOtherApp": "That code is for another app",
+  "@errorPairingOtherApp": {
+    "description": "error.pairingOtherApp — The code's app claim names another product."
+  },
+  "errorAddHostNotHostPort": "That is not a host and port. Write it as “machine:4770” — the address and the port the daemon listens on.",
+  "@errorAddHostNotHostPort": {
+    "description": "error.addHostNotHostPort — Direct TCP: the endpoint is malformed."
+  },
+  "errorAddHostNeedsToken": "EnvoyDev refuses anyone who is not on the machine itself, so this route needs the token from a pairing link. Use Scan QR or Paste link, or paste the token here as well.",
+  "@errorAddHostNeedsToken": {
+    "description": "error.addHostNeedsToken — Direct TCP without a token."
+  },
+  "errorAddHostSshHost": "Which machine should the tunnel go through? Enter its SSH host.",
+  "@errorAddHostSshHost": {
+    "description": "error.addHostSshHost — SSH: no host given."
+  },
+  "errorAddHostSshPort": "The SSH port has to be a number between 1 and 65535. It is 22 by default.",
+  "@errorAddHostSshPort": {
+    "description": "error.addHostSshPort — SSH: the port is not a port."
+  },
+  "errorAddHostDaemon": "The daemon on that machine is named as “host:port”. Write it as “127.0.0.1:4770” — that is what it is for almost every machine, and it is the address as seen *from* the machine.",
+  "@errorAddHostDaemon": {
+    "description": "error.addHostDaemon — SSH: the remote daemon address is malformed."
+  },
+  "pairingNameTitle": "Name this connection",
+  "@pairingNameTitle": {
+    "description": "pairing.nameTitle — Dialog title while pairing."
+  },
+  "pairingNameField": "Connection name",
+  "@pairingNameField": {
+    "description": "pairing.nameField — Field label while pairing."
+  },
+  "pairingNameHelper": "Shown in the Connections list — the address is kept as well.",
+  "nameTooLong": "Keep it to {count} characters or fewer.",
+  "@nameTooLong": {
+    "description": "name.tooLong — The name field's validator refusal.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@pairingNameHelper": {
+    "description": "pairing.nameHelper — What the name is for."
+  },
+  "settingsTitle": "Settings",
+  "@settingsTitle": {
+    "description": "settings.title — Screen title."
+  },
+  "settingsLoadFailed": "Could not load settings.",
+  "@settingsLoadFailed": {
+    "description": "settings.loadFailed — The daemon refused coder.getSettings."
+  },
+  "settingsSaveFailed": "Could not save settings.",
+  "@settingsSaveFailed": {
+    "description": "settings.saveFailed — The daemon refused coder.updateSettings."
+  },
+  "settingsSaveNoModel": "Settings saved. Enter a model to save LLM settings.",
+  "@settingsSaveNoModel": {
+    "description": "settings.saveNoModel — Settings landed but the LLM half had no model."
+  },
+  "settingsSavedOnComputer": "Settings saved on the computer.",
+  "@settingsSavedOnComputer": {
+    "description": "settings.savedOnComputer — Both halves landed."
+  },
+  "settingsSavedLlmFailed": "Settings saved, but the LLM settings were not.",
+  "@settingsSavedLlmFailed": {
+    "description": "settings.savedLlmFailed — Settings landed, the LLM call failed."
+  },
+  "settingsComputerHeading": "On the computer",
+  "@settingsComputerHeading": {
+    "description": "settings.computerHeading — Section heading: these settings live on the paired daemon."
+  },
+  "settingsComputerDetail": "These settings live on the paired machine. The phone only changes them.",
+  "@settingsComputerDetail": {
+    "description": "settings.computerDetail — What the section means."
+  },
+  "settingsApprovals": "Ask before anything destructive",
+  "@settingsApprovals": {
+    "description": "settings.approvals — The approval switch."
+  },
+  "settingsTranscripts": "Keep transcripts after a task ends",
+  "@settingsTranscripts": {
+    "description": "settings.transcripts — The transcript switch."
+  },
+  "settingsLanguage": "Language",
+  "@settingsLanguage": {
+    "description": "settings.language — The language picker's label."
+  },
+  "settingsLanguageSystem": "System",
+  "@settingsLanguageSystem": {
+    "description": "settings.languageSystem — Language preference that follows the phone."
+  },
+  "settingsDefaultAgent": "Default coding agent",
+  "@settingsDefaultAgent": {
+    "description": "settings.defaultAgent — The default-agent picker's label."
+  },
+  "settingsLlmHeading": "LLM",
+  "@settingsLlmHeading": {
+    "description": "settings.llmHeading — Section heading."
+  },
+  "settingsLlmDetail": "Base URL, model and API key for Envoy Harness. Other agents keep their own sign-in.",
+  "@settingsLlmDetail": {
+    "description": "settings.llmDetail — What this section configures."
+  },
+  "settingsBaseUrl": "Base URL",
+  "@settingsBaseUrl": {
+    "description": "settings.baseUrl — Field label."
+  },
+  "settingsBaseUrlHint": "Optional — leave empty for the provider default",
+  "@settingsBaseUrlHint": {
+    "description": "settings.baseUrlHint — Empty base URL means the provider's own address."
+  },
+  "settingsModel": "Model",
+  "@settingsModel": {
+    "description": "settings.model — Field label."
+  },
+  "settingsModelHint": "gpt-4o or anthropic/claude-sonnet-4-5",
+  "@settingsModelHint": {
+    "description": "settings.modelHint — Example model ids. Not translated."
+  },
+  "settingsApiKeySaved": "API key saved on this computer.",
+  "@settingsApiKeySaved": {
+    "description": "settings.apiKeySaved — A key exists on the daemon."
+  },
+  "settingsApiKey": "API key",
+  "@settingsApiKey": {
+    "description": "settings.apiKey — Field label."
+  },
+  "settingsApiKeyHint": "Paste a new key to replace the saved one",
+  "@settingsApiKeyHint": {
+    "description": "settings.apiKeyHint — Field hint."
+  },
+  "settingsLanguageChangedLocal": "Language changed on this phone.",
+  "@settingsLanguageChangedLocal": {
+    "description": "settings.languageChangedLocal — The phone's UI changed; the daemon write failed."
+  },
+  "settingsLanguageDaemonFailed": "The phone is now in this language, but the computer could not be updated.",
+  "@settingsLanguageDaemonFailed": {
+    "description": "settings.languageDaemonFailed — Says which half did not save."
+  },
+  "networkTitle": "Network status",
+  "@networkTitle": {
+    "description": "network.title — Screen title."
+  },
+  "networkCheckAgain": "Check again",
+  "@networkCheckAgain": {
+    "description": "network.checkAgain — Asks the desktop what it sees."
+  },
+  "networkCopyReport": "Copy report",
+  "@networkCopyReport": {
+    "description": "network.copyReport — Icon control's tooltip and accessible name."
+  },
+  "networkCopied": "Network report copied — paste it into the bug report.",
+  "@networkCopied": {
+    "description": "network.copied — Confirms what was copied."
+  },
+  "networkTokenNote": "The pairing token is never shown here — it is a credential.",
+  "@networkTokenNote": {
+    "description": "network.tokenNote — Why no token is displayed."
+  },
+  "networkComputer": "Computer",
+  "@networkComputer": {
+    "description": "network.computer — Row label: which machine this panel is about."
+  },
+  "networkActiveRoute": "Active route",
+  "@networkActiveRoute": {
+    "description": "network.activeRoute — Row label: the rung in use."
+  },
+  "networkApp": "App",
+  "@networkApp": {
+    "description": "network.app — Row label: which app paired."
+  },
+  "networkPairingHeading": "What the pairing gave us",
+  "@networkPairingHeading": {
+    "description": "network.pairingHeading — Section heading."
+  },
+  "networkDesktopPeerId": "Desktop peer id",
+  "@networkDesktopPeerId": {
+    "description": "network.desktopPeerId — Row label."
+  },
+  "networkDialablePeers": "Dialable peer addresses",
+  "@networkDialablePeers": {
+    "description": "network.dialablePeers — Row label."
+  },
+  "networkPairingMissing": "Both are needed for the peer-to-peer route, so this host has none. A pairing made before the desktop carried these fields has neither — the phone is left with the direct address and the relay.",
+  "@networkPairingMissing": {
+    "description": "network.pairingMissing — Why the peer rung is absent."
+  },
+  "networkLadderHeading": "How this computer was tried",
+  "@networkLadderHeading": {
+    "description": "network.ladderHeading — Section heading."
+  },
+  "networkLadderNoCandidatesYet": "No candidates yet — nothing has been dialled for this computer.",
+  "@networkLadderNoCandidatesYet": {
+    "description": "network.ladderNoCandidatesYet — Empty ladder before any walk."
+  },
+  "networkLadderNoCandidates": "This pass produced no candidates: the walk is held back under dial pressure, or the pairing names no address at all.",
+  "@networkLadderNoCandidates": {
+    "description": "network.ladderNoCandidates — Empty ladder after a walk."
+  },
+  "networkLadderLimit": "This pass dials at most {limit}: {waiting} of {total} wait for the next pass.",
+  "@networkLadderLimit": {
+    "description": "network.ladderLimit — Explains the per-pass cap.",
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      },
+      "waiting": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "networkAttemptConnected": "connected",
+  "@networkAttemptConnected": {
+    "description": "network.attemptConnected — Rung outcome."
+  },
+  "networkAttemptFailed": "failed",
+  "@networkAttemptFailed": {
+    "description": "network.attemptFailed — Rung outcome."
+  },
+  "networkAttemptNoAnswer": "no answer",
+  "@networkAttemptNoAnswer": {
+    "description": "network.attemptNoAnswer — Rung outcome: transport opened, no reply."
+  },
+  "networkAttemptDialling": "dialling",
+  "@networkAttemptDialling": {
+    "description": "network.attemptDialling — Rung outcome: in flight."
+  },
+  "networkAttemptNotTried": "not tried",
+  "@networkAttemptNotTried": {
+    "description": "network.attemptNotTried — Rung outcome: skipped."
+  },
+  "networkAttemptPlanned": "planned",
+  "@networkAttemptPlanned": {
+    "description": "network.attemptPlanned — Rung outcome: not started."
+  },
+  "networkLastRequestHeading": "Last request to the desktop",
+  "@networkLastRequestHeading": {
+    "description": "network.lastRequestHeading — Section heading."
+  },
+  "networkNothingAsked": "Nothing has been asked yet since the app started.",
+  "@networkNothingAsked": {
+    "description": "network.nothingAsked — No RPC yet."
+  },
+  "networkMethod": "Method",
+  "@networkMethod": {
+    "description": "network.method — Row label."
+  },
+  "networkOutcome": "Outcome",
+  "@networkOutcome": {
+    "description": "network.outcome — Row label."
+  },
+  "networkAnswered": "answered",
+  "@networkAnswered": {
+    "description": "network.answered — RPC outcome."
+  },
+  "networkTook": "Took",
+  "@networkTook": {
+    "description": "network.took — Row label: elapsed time."
+  },
+  "networkLastWalk": "Last walk",
+  "@networkLastWalk": {
+    "description": "network.lastWalk — Row label."
+  },
+  "networkPhoneNodeHeading": "This phone's libp2p node",
+  "@networkPhoneNodeHeading": {
+    "description": "network.phoneNodeHeading — Section heading."
+  },
+  "networkNodeNotStarted": "Not started — no peer-to-peer route has been dialled in this launch. It starts on the first such dial, and looking at this screen does not start it.",
+  "@networkNodeNotStarted": {
+    "description": "network.nodeNotStarted — The phone node is lazy."
+  },
+  "networkPeerId": "Peer id",
+  "@networkPeerId": {
+    "description": "network.peerId — Row label."
+  },
+  "networkStarting": "starting",
+  "@networkStarting": {
+    "description": "network.starting — A value that has not arrived."
+  },
+  "networkRelayDialling": "Relay dialling",
+  "@networkRelayDialling": {
+    "description": "network.relayDialling — Row label."
+  },
+  "networkEnabled": "enabled",
+  "@networkEnabled": {
+    "description": "network.enabled — Boolean value."
+  },
+  "networkDisabled": "disabled",
+  "@networkDisabled": {
+    "description": "network.disabled — Boolean value."
+  },
+  "networkRelayReservation": "Relay reservation",
+  "@networkRelayReservation": {
+    "description": "network.relayReservation — Row label."
+  },
+  "networkConnectedPeers": "Connected peers",
+  "@networkConnectedPeers": {
+    "description": "network.connectedPeers — Row label."
+  },
+  "networkConnectedPeersUnavailable": "unavailable — the shared node exposes no connection view",
+  "@networkConnectedPeersUnavailable": {
+    "description": "network.connectedPeersUnavailable — The honest unknown."
+  },
+  "networkLanPeers": "LAN peers seen",
+  "@networkLanPeers": {
+    "description": "network.lanPeers — Row label."
+  },
+  "networkMdns": "mDNS",
+  "@networkMdns": {
+    "description": "network.mdns — Row label. A protocol name."
+  },
+  "networkActive": "active",
+  "@networkActive": {
+    "description": "network.active — Boolean value."
+  },
+  "networkInactive": "inactive",
+  "@networkInactive": {
+    "description": "network.inactive — Boolean value."
+  },
+  "networkRegisteredProtocols": "Registered protocols",
+  "@networkRegisteredProtocols": {
+    "description": "network.registeredProtocols — Row label."
+  },
+  "networkHostGeneration": "Host generation",
+  "@networkHostGeneration": {
+    "description": "network.hostGeneration — Row label."
+  },
+  "networkDesktopMeshHeading": "What the desktop says about itself",
+  "@networkDesktopMeshHeading": {
+    "description": "network.desktopMeshHeading — Section heading."
+  },
+  "networkNotAsked": "Not asked yet. “Check again” asks the desktop for its own mesh status — the difference between “this phone cannot reach it” and “it has nothing to reach”.",
+  "@networkNotAsked": {
+    "description": "network.notAsked — The mesh section before a probe."
+  },
+  "networkNoUsableAnswer": "No usable answer: {reason}",
+  "@networkNoUsableAnswer": {
+    "description": "network.noUsableAnswer — The probe failed.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "networkUnreadable": "unreadable",
+  "@networkUnreadable": {
+    "description": "network.unreadable — Fallback reason."
+  },
+  "networkState": "State",
+  "@networkState": {
+    "description": "network.state — Row label."
+  },
+  "networkItsPeerId": "Its peer id",
+  "@networkItsPeerId": {
+    "description": "network.itsPeerId — Row label."
+  },
+  "networkItsDialable": "Its dialable addresses",
+  "@networkItsDialable": {
+    "description": "network.itsDialable — Row label."
+  },
+  "networkItsRelayHints": "Its relay hints",
+  "@networkItsRelayHints": {
+    "description": "network.itsRelayHints — Row label."
+  },
+  "networkPeersConnected": "Peers it is connected to",
+  "@networkPeersConnected": {
+    "description": "network.peersConnected — Row label; the desktop's own count."
+  },
+  "networkItsReason": "Its reason",
+  "@networkItsReason": {
+    "description": "network.itsReason — Row label."
+  },
+  "explorerTitle": "Explorer",
+  "@explorerTitle": {
+    "description": "explorer.title — Screen title."
+  },
+  "explorerFiles": "Files",
+  "@explorerFiles": {
+    "description": "explorer.files — Tab label."
+  },
+  "explorerChanges": "Changes",
+  "@explorerChanges": {
+    "description": "explorer.changes — Tab label."
+  },
+  "explorerFolderEmpty": "This folder is empty.",
+  "@explorerFolderEmpty": {
+    "description": "explorer.folderEmpty — Empty file list."
+  },
+  "explorerCouldNotList": "Could not list this folder.",
+  "@explorerCouldNotList": {
+    "description": "explorer.couldNotList — The listing RPC failed."
+  },
+  "explorerNotRepo": "This folder is not a git repository.",
+  "@explorerNotRepo": {
+    "description": "explorer.notRepo — No worktree to diff."
+  },
+  "explorerNoChanges": "No changes in this folder.",
+  "@explorerNoChanges": {
+    "description": "explorer.noChanges — Clean worktree."
+  },
+  "explorerCouldNotRead": "Could not read the changes.",
+  "@explorerCouldNotRead": {
+    "description": "explorer.couldNotRead — The changes RPC failed."
+  },
+  "explorerKindAdded": "Added",
+  "@explorerKindAdded": {
+    "description": "explorer.kindAdded — Change kind."
+  },
+  "explorerKindModified": "Modified",
+  "@explorerKindModified": {
+    "description": "explorer.kindModified — Change kind."
+  },
+  "explorerKindDeleted": "Deleted",
+  "@explorerKindDeleted": {
+    "description": "explorer.kindDeleted — Change kind."
+  },
+  "explorerKindRenamed": "Renamed",
+  "@explorerKindRenamed": {
+    "description": "explorer.kindRenamed — Change kind."
+  },
+  "explorerKindNew": "New",
+  "@explorerKindNew": {
+    "description": "explorer.kindNew — Change kind: untracked."
+  },
+  "explorerKindConflict": "Conflict",
+  "@explorerKindConflict": {
+    "description": "explorer.kindConflict — Change kind."
+  },
+  "folderTitle": "Choose project folder",
+  "@folderTitle": {
+    "description": "folder.title — The browser's app bar."
+  },
+  "folderUseThisFolder": "Use this folder",
+  "@folderUseThisFolder": {
+    "description": "folder.useThisFolder — Picks the folder shown."
+  },
+  "folderComputer": "Computer",
+  "@folderComputer": {
+    "description": "folder.computer — Jump to the filesystem root."
+  },
+  "folderDrives": "Drives",
+  "@folderDrives": {
+    "description": "folder.drives — Jump to the drive list (Windows)."
+  },
+  "folderHome": "Home",
+  "@folderHome": {
+    "description": "folder.home — Jump to the home folder."
+  },
+  "folderParent": "Parent folder",
+  "@folderParent": {
+    "description": "folder.parent — Go up one level."
+  },
+  "folderEmpty": "No subfolders here",
+  "@folderEmpty": {
+    "description": "folder.empty — Empty folder listing."
+  },
+  "runStop": "Stop",
+  "@runStop": {
+    "description": "run.stop — Cancels the live run."
+  },
+  "runStopping": "Stopping…",
+  "@runStopping": {
+    "description": "run.stopping — In-flight state of Stop."
+  },
+  "runLive": "Live",
+  "@runLive": {
+    "description": "run.live — Marks a run that is still going."
+  },
+  "runToggleExplorer": "Toggle Explorer sidebar",
+  "@runToggleExplorer": {
+    "description": "run.toggleExplorer — Icon control's tooltip and accessible name."
+  },
+  "runCouldNotAnswer": "Could not send that answer. Try again.",
+  "@runCouldNotAnswer": {
+    "description": "run.couldNotAnswer — The approval RPC failed."
+  },
+  "runCouldNotUpdateTask": "Could not update the task on the computer.",
+  "@runCouldNotUpdateTask": {
+    "description": "run.couldNotUpdateTask — Persisting the composer selection failed."
+  },
+  "runCouldNotSend": "Could not send. Try again.",
+  "@runCouldNotSend": {
+    "description": "run.couldNotSend — Sending a turn failed."
+  },
+  "runCouldNotStop": "Could not stop the run. Try again.",
+  "@runCouldNotStop": {
+    "description": "run.couldNotStop — Cancelling the run failed."
+  },
+  "runNoFolder": "This task has no folder yet.",
+  "@runNoFolder": {
+    "description": "run.noFolder — Explorer needs a working directory."
+  },
+  "runCouldNotOpen": "Could not open this run.",
+  "@runCouldNotOpen": {
+    "description": "run.couldNotOpen — The tail RPC failed and no task id was known."
+  },
+  "runEarlierNotHere": "The earlier conversation is not on this computer. A new message still starts here.",
+  "@runEarlierNotHere": {
+    "description": "run.earlierNotHere — History is gone but the task is not."
+  },
+  "runHistoryGap": "Some of this task's history did not arrive. What is here is in order.",
+  "@runHistoryGap": {
+    "description": "run.historyGap — A sequence number was missed."
+  },
+  "runQueue": "Queue",
+  "@runQueue": {
+    "description": "run.queue — Send mode: wait for the turn."
+  },
+  "runSteer": "Steer",
+  "@runSteer": {
+    "description": "run.steer — Send mode: join the turn now."
+  },
+  "runJoinsTurn": "Joins the turn now",
+  "@runJoinsTurn": {
+    "description": "run.joinsTurn — What Steer means."
+  },
+  "runWaitsTurn": "Waits for this turn to finish",
+  "@runWaitsTurn": {
+    "description": "run.waitsTurn — What Queue means."
+  },
+  "runPlaceholderAnswer": "Answer the request above first",
+  "@runPlaceholderAnswer": {
+    "description": "run.placeholderAnswer — The composer is blocked on an approval."
+  },
+  "runPlaceholderFollowUp": "Send a follow-up…",
+  "@runPlaceholderFollowUp": {
+    "description": "run.placeholderFollowUp — Composer hint while live."
+  },
+  "runPlaceholderContinue": "Send a message to continue",
+  "@runPlaceholderContinue": {
+    "description": "run.placeholderContinue — Composer hint when the run has ended."
+  },
+  "runYou": "You",
+  "@runYou": {
+    "description": "run.you — Marks the user's own message."
+  },
+  "runYouSteered": "You · joined the turn",
+  "@runYouSteered": {
+    "description": "run.youSteered — A message that joined the live turn."
+  },
+  "runYouQueued": "You · waited for the turn",
+  "@runYouQueued": {
+    "description": "run.youQueued — A message that waited for the turn."
+  },
+  "runThoughtTitle": "How it thought about this",
+  "@runThoughtTitle": {
+    "description": "run.thoughtTitle — Collapsed reasoning row."
+  },
+  "runAnswered": "Answered",
+  "@runAnswered": {
+    "description": "run.answered — An approval that has an answer."
+  },
+  "runAnsweredWith": "Answered: {option}",
+  "@runAnsweredWith": {
+    "description": "run.answeredWith — Which option was chosen.",
+    "placeholders": {
+      "option": {
+        "type": "String"
+      }
+    }
+  },
+  "runNeedsAnswer": "The agent needs your answer",
+  "@runNeedsAnswer": {
+    "description": "run.needsAnswer — An approval that is still open."
+  },
+  "runNoLongerWaiting": "No longer waiting.",
+  "@runNoLongerWaiting": {
+    "description": "run.noLongerWaiting — The run ended while the card was open."
+  },
+  "runYourAnswer": "Your answer",
+  "@runYourAnswer": {
+    "description": "run.yourAnswer — Text-answer field hint."
+  },
+  "runToolFallback": "tool",
+  "@runToolFallback": {
+    "description": "run.toolFallback — A tool call with no name from the agent."
+  },
+  "runNoteDiff": "{count, plural, =1{1 file changed.} other{{count} files changed.}}",
+  "@runNoteDiff": {
+    "description": "run.noteDiff — A run.diff note.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "runNoteContext": "Context {percent}% full.",
+  "@runNoteContext": {
+    "description": "run.noteContext — A run.usage note.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "runNoteFinished": "Finished.",
+  "@runNoteFinished": {
+    "description": "run.noteFinished — The run ended cleanly."
+  },
+  "runNoteStopped": "Stopped.",
+  "@runNoteStopped": {
+    "description": "run.noteStopped — The run was cancelled."
+  },
+  "runNoteStoppedBefore": "Stopped before it finished.",
+  "@runNoteStoppedBefore": {
+    "description": "run.noteStoppedBefore — The run failed."
+  },
+  "runNoteEnded": "Ended.",
+  "@runNoteEnded": {
+    "description": "run.noteEnded — The run ended without a known status."
+  },
+  "attachAdd": "Add image",
+  "attachTooltip": "Attach",
+  "@attachTooltip": {
+    "description": "attach.tooltip — Tooltip of the composer's attach button."
+  },
+  "@attachAdd": {
+    "description": "attach.add — Attach menu item."
+  },
+  "attachPaste": "Paste image",
+  "@attachPaste": {
+    "description": "attach.paste — Attach menu item."
+  },
+  "attachFile": "Add file",
+  "@attachFile": {
+    "description": "attach.file — Attach menu item."
+  },
+  "attachRemove": "Remove {name}",
+  "@attachRemove": {
+    "description": "attach.remove — Delete-button tooltip on an attachment chip.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "attachTooBig": "That file is too large to attach.",
+  "@attachTooBig": {
+    "description": "attach.tooBig — Attachment refusal."
+  },
+  "attachBinary": "Only images and text files can be attached.",
+  "@attachBinary": {
+    "description": "attach.binary — Attachment refusal."
+  },
+  "attachUnreadable": "That file could not be read.",
+  "@attachUnreadable": {
+    "description": "attach.unreadable — Attachment refusal."
+  },
+  "attachEmpty": "That file is empty.",
+  "@attachEmpty": {
+    "description": "attach.empty — Attachment refusal."
+  },
+  "attachLimit": "{count, plural, =1{You can attach 1 file.} other{You can attach up to {count} files.}}",
+  "attachClipboardMissing": "No image was on the clipboard.",
+  "attachFailed": "Could not attach that file.",
+  "@attachClipboardMissing": {
+    "description": "attach.clipboardMissing — The clipboard held no image."
+  },
+  "@attachFailed": {
+    "description": "attach.failed — Reading the chosen file failed."
+  },
+  "@attachLimit": {
+    "description": "attach.limit — Attachment limit reached.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "attachImagesOnly": "Look at the attached image.",
+  "@attachImagesOnly": {
+    "description": "attach.imagesOnly — The prompt sent when only a picture is attached."
+  },
+  "attachImagesOnlyMany": "Look at the attached images.",
+  "@attachImagesOnlyMany": {
+    "description": "attach.imagesOnlyMany — The prompt sent when several pictures are attached."
+  },
+  "attachNamed": "Attached: {names}",
+  "@attachNamed": {
+    "description": "attach.named — The prompt sent with named attachments.",
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "addProjectTitle": "Add project",
+  "@addProjectTitle": {
+    "description": "addProject.title — Sheet title."
+  },
+  "addProjectDetail": "Pick a folder on this computer. Agents will run inside it.",
+  "@addProjectDetail": {
+    "description": "addProject.detail — What a project is."
+  },
+  "addProjectFolder": "Folder",
+  "@addProjectFolder": {
+    "description": "addProject.folder — Folder field label."
+  },
+  "addProjectFolderHint": "/Users/you/work/repo",
+  "@addProjectFolderHint": {
+    "description": "addProject.folderHint — Example path. Not translated."
+  },
+  "addProjectBrowse": "Browse",
+  "@addProjectBrowse": {
+    "description": "addProject.browse — Opens the folder picker."
+  },
+  "addProjectDefaultAgent": "Default agent",
+  "@addProjectDefaultAgent": {
+    "description": "addProject.defaultAgent — The agent picker's label."
+  },
+  "addProjectChooseFolder": "Choose a folder on this computer.",
+  "@addProjectChooseFolder": {
+    "description": "addProject.chooseFolder — Refusal when no folder was chosen."
+  },
+  "addProjectSubmit": "Add project",
+  "@addProjectSubmit": {
+    "description": "addProject.submit — Submit button."
+  },
+  "markdownMermaid": "Mermaid diagram — source shown here; the computer renders the chart in the desktop app.",
+  "markdownCopy": "Copy",
+  "markdownCopied": "Copied",
+  "@markdownCopy": {
+    "description": "markdown.copy — Copy button on a code block."
+  },
+  "@markdownCopied": {
+    "description": "markdown.copied — Confirmation after copying."
+  },
+  "@markdownMermaid": {
+    "description": "markdown.mermaid — Why a diagram is shown as source on the phone."
+  },
+  "projectListAttention": "{count, plural, =1{1 needs you} other{{count} need you}}",
+  "@projectListAttention": {
+    "description": "projectlistattention — The top-bar attention badge.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "projectListNoProjects": "No projects yet — add a folder on this computer.",
+  "@projectListNoProjects": {
+    "description": "projectlistnoprojects — Empty project list, no search active."
+  },
+  "projectListNoMatch": "Nothing matches that search.",
+  "@projectListNoMatch": {
+    "description": "projectlistnomatch — Empty project list while searching."
+  },
+  "projectListCouldNotLoad": "Could not load work from this computer. {detail}",
+  "@projectListCouldNotLoad": {
+    "description": "projectlistcouldnotload — The project/task list RPC failed.",
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "commonConnectionFailed": "The connection failed.",
+  "@commonConnectionFailed": {
+    "description": "commonconnectionfailed — A refusal whose detail named a credential; the detail is hidden."
+  },
+  "projectListCouldNotChangeAgent": "Could not change the project agent.",
+  "@projectListCouldNotChangeAgent": {
+    "description": "projectlistcouldnotchangeagent — coder.updateProject failed."
+  },
+  "projectListRemoveTitle": "Remove {project}?",
+  "@projectListRemoveTitle": {
+    "description": "projectlistremovetitle — Confirmation title for removing a project.",
+    "placeholders": {
+      "project": {
+        "type": "String"
+      }
+    }
+  },
+  "projectListRemoveMessage": "The project leaves EnvoyDev and its tasks leave the list — they are archived, not deleted, and nothing in that folder is touched. Removing the project cannot be undone.",
+  "@projectListRemoveMessage": {
+    "description": "projectlistremovemessage — What removing a project costs and what it does not."
+  },
+  "projectListRemoveFailed": "Could not remove {project}. It is still in the list.",
+  "@projectListRemoveFailed": {
+    "description": "projectlistremovefailed — coder.removeProject failed.",
+    "placeholders": {
+      "project": {
+        "type": "String"
+      }
+    }
+  },
+  "projectListRemoved": "Removed {project}.",
+  "@projectListRemoved": {
+    "description": "projectlistremoved — The project left the list; no tasks were archived.",
+    "placeholders": {
+      "project": {
+        "type": "String"
+      }
+    }
+  },
+  "projectListRemovedArchived": "Removed {project}. {count, plural, =1{1 task was archived.} other{{count} tasks were archived.}}",
+  "@projectListRemovedArchived": {
+    "description": "projectlistremovedarchived — The project left the list and its tasks were archived.",
+    "placeholders": {
+      "project": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "taskRemoveTitle": "Remove {title}?",
+  "@taskRemoveTitle": {
+    "description": "taskremovetitle — Confirmation title for removing a task from the list.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "taskRemoveMessage": "It leaves the task list. The folder, its files and the transcript stay on this computer — archiving is not deletion.",
+  "@taskRemoveMessage": {
+    "description": "taskremovemessage — What removing a task costs and what it does not."
+  },
+  "projectListRemoveTaskFailed": "Could not remove {title}. It is still in the list.",
+  "@projectListRemoveTaskFailed": {
+    "description": "projectlistremovetaskfailed — coder.archiveTask failed from the project row.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "runCouldNotRemove": "Could not remove this task. It is still here.",
+  "@runCouldNotRemove": {
+    "description": "runcouldnotremove — coder.archiveTask failed from the run screen."
+  },
+  "projectListRenameTaskTitle": "Rename task",
+  "@projectListRenameTaskTitle": {
+    "description": "projectlistrenametasktitle — Dialog title for renaming a task."
+  },
+  "projectListRenameTaskField": "Task name",
+  "@projectListRenameTaskField": {
+    "description": "projectlistrenametaskfield — The task-name field's label."
+  },
+  "projectListRenameTaskEmpty": "Enter a name for this task.",
+  "@projectListRenameTaskEmpty": {
+    "description": "projectlistrenametaskempty — Refusal when the task-name field is blank."
+  },
+  "projectListRenameTaskFailed": "Could not rename {title}. The name is unchanged.",
+  "@projectListRenameTaskFailed": {
+    "description": "projectlistrenametaskfailed — coder.updateTask failed.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "projectListNetworkStatusFor": "Network status for {host} — {state}",
+  "@projectListNetworkStatusFor": {
+    "description": "projectlistnetworkstatusfor — Accessible name and tooltip of the top bar's cell tower.",
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "state": {
+        "type": "String"
+      }
+    }
+  },
+  "projectListSwitchConnection": "Switch connection — current: {host}",
+  "@projectListSwitchConnection": {
+    "description": "projectlistswitchconnection — Accessible name of the top bar's connection name.",
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "projectListNoTasks": "No tasks in this project yet",
+  "@projectListNoTasks": {
+    "description": "projectlistnotasks — A project with an empty task list."
+  },
+  "projectListAgentFor": "Agent for {project}",
+  "@projectListAgentFor": {
+    "description": "projectlistagentfor — Sheet title when picking a project's agent.",
+    "placeholders": {
+      "project": {
+        "type": "String"
+      }
+    }
+  },
+  "projectListChangeAgent": "Change agent",
+  "@projectListChangeAgent": {
+    "description": "projectlistchangeagent — Menu item that opens the project's agent picker."
+  },
+  "newTaskNoProjects": "Add a project on the computer first, then try again.",
+  "@newTaskNoProjects": {
+    "description": "newtasknoprojects — The new-task sheet with no project to add to."
+  },
+  "newTaskProjectLabel": "Project",
+  "@newTaskProjectLabel": {
+    "description": "newtaskprojectlabel — The project picker's label on the latent no-project path."
+  },
+  "newTaskPromptHint": "Describe the task",
+  "@newTaskPromptHint": {
+    "description": "newtaskprompthint — The new-task field's hint."
+  },
+  "newTaskCouldNotStart": "Could not start that task. {detail}",
+  "@newTaskCouldNotStart": {
+    "description": "newtaskcouldnotstart — Creating or starting the task failed.",
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "composerOptionsHeader": "Options for this task",
+  "@composerOptionsHeader": {
+    "description": "composeroptionsheader — Header above the composer's option chips."
+  },
+  "composerAgentDefault": "Agent default",
+  "@composerAgentDefault": {
+    "description": "composeragentdefault — The picker's item for 'the agent's own default'."
+  },
+  "composerUse": "Use",
+  "@composerUse": {
+    "description": "composeruse — Accepts the typed model in the free-text picker."
+  },
+  "composerAgentBare": "Agent",
+  "@composerAgentBare": {
+    "description": "composeragentbare — The Agent chip before the harness list arrives."
+  },
+  "composerModelValue": "Model: {value}",
+  "@composerModelValue": {
+    "description": "composermodelvalue — The Model chip: category and current value.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "composerModeValue": "Mode: {value}",
+  "@composerModeValue": {
+    "description": "composermodevalue — The Mode chip: category and current value.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "composerThinkingValue": "Thinking: {value}",
+  "@composerThinkingValue": {
+    "description": "composerthinkingvalue — The Thinking chip: category and current value.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "projectListSearchHint": "Search tasks, repos, paths",
+  "@projectListSearchHint": {
+    "description": "projectlistsearchhint — Reused from desktop sidebar.search.placeholder"
+  },
+  "projectListRemoveConfirm": "Remove project",
+  "@projectListRemoveConfirm": {
+    "description": "projectlistremoveconfirm — Reused from desktop sidebar.project.remove.cta"
+  },
+  "projectListNewTaskIn": "New task in {project}",
+  "@projectListNewTaskIn": {
+    "description": "projectlistnewtaskin — Reused from desktop palette.newTask.title"
+  },
+  "newTaskTitle": "New task",
+  "@newTaskTitle": {
+    "description": "newtasktitle — Reused from desktop sidebar.project.menu.newTask"
+  },
+  "newTaskSubmitting": "Adding…",
+  "@newTaskSubmitting": {
+    "description": "newtasksubmitting — Reused from desktop settings.agents.row.adding"
+  },
+  "runRemoveTask": "Remove task",
+  "@runRemoveTask": {
+    "description": "runremovetask — Reused from desktop task.remove"
+  },
+  "composerDefault": "Default",
+  "@composerDefault": {
+    "description": "composerdefault — Reused from desktop task.composer.value.default"
+  },
+  "composerModeSheet": "Mode",
+  "@composerModeSheet": {
+    "description": "composermodesheet — Reused from desktop task.composer.agentMode.label"
+  },
+  "composerModeTooltip": "What the agent is allowed to do in this task",
+  "@composerModeTooltip": {
+    "description": "composermodetooltip — Reused from desktop task.composer.agentMode.title"
+  },
+  "composerModelSheet": "Model",
+  "@composerModelSheet": {
+    "description": "composermodelsheet — Reused from desktop task.composer.model.label"
+  },
+  "composerModelTooltip": "Which model the agent uses for this task",
+  "@composerModelTooltip": {
+    "description": "composermodeltooltip — Reused from desktop task.composer.model.title"
+  },
+  "composerModelHint": "provider/model",
+  "@composerModelHint": {
+    "description": "composermodelhint — Reused from desktop task.composer.model.placeholder"
+  },
+  "composerThinkingSheet": "Thinking",
+  "@composerThinkingSheet": {
+    "description": "composerthinkingsheet — Reused from desktop task.composer.thinking.label"
+  },
+  "composerThinkingTooltip": "How much the agent thinks before it answers",
+  "@composerThinkingTooltip": {
+    "description": "composerthinkingtooltip — Reused from desktop task.composer.thinking.title"
+  },
+  "taskUntitled": "Untitled task",
+  "@taskUntitled": {
+    "description": "taskuntitled — A task the daemon gave no title."
+  },
+  "projectUnknown": "Unknown project",
+  "@projectUnknown": {
+    "description": "projectunknown — Tasks whose project is not in the project list."
+  },
+  "statusQueued": "Queued",
+  "@statusQueued": {
+    "description": "statusqueued — Task status: waiting to start."
+  },
+  "statusDone": "Done",
+  "@statusDone": {
+    "description": "statusdone — Task status: finished successfully."
+  },
+  "statusFailed": "Failed",
+  "@statusFailed": {
+    "description": "statusfailed — Task status: stopped with an error."
+  },
+  "statusUnknown": "Unknown",
+  "@statusUnknown": {
+    "description": "statusunknown — Task status that is empty or unrecognised."
+  },
+  "statusNeedsAnswer": "Needs your answer",
+  "@statusNeedsAnswer": {
+    "description": "statusneedsanswer — Reused from desktop status.needsAttention"
+  },
+  "statusWorking": "Working",
+  "@statusWorking": {
+    "description": "statusworking — Reused from desktop status.running"
+  },
+  "statusIdle": "Idle",
+  "@statusIdle": {
+    "description": "statusidle — Reused from desktop status.idle"
+  },
+  "statusStopped": "Stopped",
+  "@statusStopped": {
+    "description": "statusstopped — Reused from desktop status.cancelled"
+  }
+}

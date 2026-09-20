@@ -13,6 +13,14 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # The seven languages the desktop ships are a Flutter `LocalizationsDelegate` here, not a hand-rolled
+  # table: `GlobalMaterialLocalizations`/`GlobalWidgetsLocalizations`/`GlobalCupertinoLocalizations`
+  # translate the *framework's* own strings (date pickers, the text-selection menu, "Back"), which a
+  # custom table cannot reach. `intl` is the message/plural runtime `gen-l10n` emits against, pinned to
+  # what `flutter_localizations` requires rather than a second guess at the version.
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.20.3
   http: ^1.2.2
   flutter_secure_storage: ^9.2.2
   shared_preferences: ^2.3.3
@@ -80,3 +88,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Runs `flutter gen-l10n` from `l10n.yaml` during `flutter pub get`. Without this the generated
+  # `lib/l10n/generated/app_localizations.dart` is absent on a clean checkout (the directory is
+  # gitignored) and `flutter analyze`/`flutter test` fail on a missing import — see `l10n.yaml` and
+  # `lib/l10n/README.md`.
+  generate: true

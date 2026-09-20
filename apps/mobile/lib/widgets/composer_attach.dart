@@ -5,6 +5,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../models/composer_attachment.dart';
 import '../theme/tokens.dart';
 
@@ -22,6 +23,7 @@ class AttachmentTray extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final colors = CoderTheme.of(context);
     if (attachments.isEmpty && (notice == null || notice!.isEmpty)) {
       return const SizedBox.shrink();
@@ -56,7 +58,7 @@ class AttachmentTray extends StatelessWidget {
                           )
                         : const Icon(Icons.insert_drive_file_outlined, size: 16),
                     onDeleted: () => onRemove(attachment.id),
-                    deleteButtonTooltipMessage: 'Remove ${attachment.name}',
+                    deleteButtonTooltipMessage: l10n.attachRemove(attachment.name),
                   ),
               ],
             ),
@@ -86,9 +88,10 @@ class AttachMenuButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return PopupMenuButton<String>(
       enabled: enabled,
-      tooltip: 'Attach',
+      tooltip: l10n.attachTooltip,
       icon: const Icon(Icons.attach_file),
       onSelected: (value) {
         switch (value) {
@@ -100,10 +103,10 @@ class AttachMenuButton extends StatelessWidget {
             onFile();
         }
       },
-      itemBuilder: (context) => const [
-        PopupMenuItem(value: 'image', child: Text('Add image')),
-        PopupMenuItem(value: 'paste', child: Text('Paste image')),
-        PopupMenuItem(value: 'file', child: Text('Add file')),
+      itemBuilder: (context) => [
+        PopupMenuItem(value: 'image', child: Text(l10n.attachAdd)),
+        PopupMenuItem(value: 'paste', child: Text(l10n.attachPaste)),
+        PopupMenuItem(value: 'file', child: Text(l10n.attachFile)),
       ],
     );
   }

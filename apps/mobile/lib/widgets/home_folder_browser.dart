@@ -5,6 +5,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
+
 /// JSON-RPC call used by the folder browser (`coder.getHomeFsInfo` / `coder.listHomeFsEntries`).
 typedef HomeFsRpc = Future<Map<String, dynamic>> Function(
   String method, [
@@ -16,19 +18,22 @@ class HomeFolderBrowser extends StatefulWidget {
     super.key,
     required this.rpc,
     this.initialPath,
-    this.title = 'Choose project folder',
+    this.title,
   });
 
   final HomeFsRpc rpc;
   final String? initialPath;
-  final String title;
+
+  /// Shown in the app bar. Null means the caller has no better title than the default, which is
+  /// resolved from the catalogue in [build] — a default parameter cannot reach `context.l10n`.
+  final String? title;
 
   /// Opens a full-screen browser; returns absolute path or null if cancelled.
   static Future<String?> open(
     BuildContext context, {
     required HomeFsRpc rpc,
     String? initialPath,
-    String title = 'Choose project folder',
+    String? title,
   }) {
     return Navigator.of(context).push<String>(
       MaterialPageRoute(
@@ -153,20 +158,21 @@ class _HomeFolderBrowserState extends State<HomeFolderBrowser> {
 
   @override
   Widget build(BuildContext context) {
-    final rootsLabel = _platform == 'win32' ? 'Drives' : 'Computer';
+    final l10n = context.l10n;
+    final rootsLabel = _platform == 'win32' ? l10n.folderDrives : l10n.folderComputer;
     final atRoot = !_showingRoots && _roots.isNotEmpty && _roots.contains(_currentPath);
     final showRootsJump = !_showingRoots && (_platform == 'win32' || !atRoot);
     final showHomeJump = !_showingRoots && _homeDir.isNotEmpty && _currentPath != _homeDir;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title),
+        title: Text(widget.title ?? l10n.folderTitle),
         actions: [
           TextButton(
             onPressed: _currentPath.isEmpty || _showingRoots
                 ? null
                 : () => Navigator.of(context).pop(_currentPath),
-            child: const Text('Use this folder'),
+            child: Text(l10n.folderUseThisFolder),
           ),
         ],
       ),
@@ -204,13 +210,13 @@ class _HomeFolderBrowserState extends State<HomeFolderBrowser> {
                       if (showHomeJump)
                         ListTile(
                           leading: const Icon(Icons.home_outlined),
-                          title: const Text('Home'),
+                          title: Text(l10n.folderHome),
                           onTap: () => _loadPath(_homeDir),
                         ),
                       if (_parent != null && !_showingRoots)
                         ListTile(
                           leading: const Icon(Icons.arrow_upward),
-                          title: const Text('Parent folder'),
+                          title: Text(l10n.folderParent),
                           onTap: () => _loadPath(_parent),
                         ),
                       for (final entry in _entries)
@@ -220,8 +226,8 @@ class _HomeFolderBrowserState extends State<HomeFolderBrowser> {
                           onTap: () => _loadPath(entry['path']?.toString()),
                         ),
                       if (!_loading && _entries.isEmpty)
-                        const ListTile(
-                          title: Text('No subfolders here'),
+                        ListTile(
+                          title: Text(l10n.folderEmpty),
                         ),
                     ],
                   ),

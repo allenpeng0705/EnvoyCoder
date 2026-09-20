@@ -32,6 +32,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../l10n/l10n.dart';
 import '../services/host_client.dart';
 import '../services/libp2p_transport.dart';
 import '../services/net_diagnostics.dart';
@@ -99,18 +100,19 @@ class _NetworkStatusScreenState extends State<NetworkStatusScreen> {
     // Says what was copied and where it goes, because "Copied" alone leaves the user wondering
     // whether it was the address, the token, or the report.
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Network report copied — paste it into the bug report.')),
+      SnackBar(content: Text(context.l10n.networkCopied)),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final colors = CoderTheme.of(context);
     final diagnostics = _diagnostics();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Network status'),
+        title: Text(l10n.networkTitle),
         actions: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: CoderSpace.sm),
@@ -123,17 +125,17 @@ class _NetworkStatusScreenState extends State<NetworkStatusScreen> {
                     )
                   : TextButton(
                       onPressed: _check,
-                      child: const Text('Check again'),
+                      child: Text(l10n.networkCheckAgain),
                     ),
             ),
           ),
           // Icon-only, so it carries a tooltip **and** a Semantics label — the repo's rule for a
           // control whose whole meaning is a glyph.
           Semantics(
-            label: 'Copy report',
+            label: l10n.networkCopyReport,
             button: true,
             child: IconButton(
-              tooltip: 'Copy report',
+              tooltip: l10n.networkCopyReport,
               onPressed: _copy,
               icon: const Icon(Icons.copy_all_outlined),
             ),
@@ -158,7 +160,7 @@ class _NetworkStatusScreenState extends State<NetworkStatusScreen> {
             ..._desktopMesh(diagnostics, colors),
             const SizedBox(height: CoderSpace.lg),
             Text(
-              'The pairing token is never shown here — it is a credential.',
+              l10n.networkTokenNote,
               style: TextStyle(color: colors.foregroundExtraMuted, fontSize: 12),
             ),
           ],
@@ -175,6 +177,7 @@ class _NetworkStatusScreenState extends State<NetworkStatusScreen> {
   // -- Sections -----------------------------------------------------------------
 
   Widget _headline(NetDiagnostics d, CoderColors colors) {
+    final l10n = context.l10n;
     return _Panel(
       colors: colors,
       children: [
@@ -191,41 +194,42 @@ class _NetworkStatusScreenState extends State<NetworkStatusScreen> {
             const SizedBox(width: CoderSpace.md),
             Expanded(
               child: Text(
-                d.stateLabel,
+                // The live state in the user's language; `d.stateLabel` is the English the copyable
+                // diagnostics report carries, not what a screen shows.
+                widget.client.state.labelFor(l10n),
                 style: TextStyle(color: colors.foreground, fontWeight: FontWeight.w600),
               ),
             ),
           ],
         ),
         const SizedBox(height: CoderSpace.sm),
-        _line('Computer', '${d.host.label} (${d.host.endpoint})', colors),
+        _line(l10n.networkComputer, '${d.host.label} (${d.host.endpoint})', colors),
         // "none" rather than a dash: no rung is in play, and naming the last one would be a guess.
-        _line('Active route', d.activeRoute ?? 'none', colors),
-        _line('App', d.host.app, colors),
+        _line(l10n.networkActiveRoute, d.activeRoute ?? l10n.commonNone, colors),
+        _line(l10n.networkApp, d.host.app, colors),
       ],
     );
   }
 
   List<Widget> _pairingFields(NetDiagnostics d, CoderColors colors) {
+    final l10n = context.l10n;
     return [
-      _SectionTitle('What the pairing gave us', colors),
+      _SectionTitle(l10n.networkPairingHeading, colors),
       _Panel(
         colors: colors,
         children: [
           // Both fields or neither: `route_plan.dart` gates the peer-to-peer rung on the pair, so a
           // host that has one and not the other has no peer route either way.
-          _line('Desktop peer id', d.homePeerId.isEmpty ? 'none' : d.homePeerId, colors),
+          _line(l10n.networkDesktopPeerId, d.homePeerId.isEmpty ? l10n.commonNone : d.homePeerId, colors),
           _line(
-            'Dialable peer addresses',
+            l10n.networkDialablePeers,
             '${d.bootstrapPeers.length}',
             colors,
           ),
           if (!d.hasP2pRoute) ...[
             const SizedBox(height: CoderSpace.sm),
             Text(
-              'Both are needed for the peer-to-peer route, so this host has none. A pairing made '
-              'before the desktop carried these fields has neither — the phone is left with the '
-              'direct address and the relay.',
+              l10n.networkPairingMissing,
               style: TextStyle(color: colors.statusWarning, fontSize: 12, height: 1.4),
             ),
           ],
@@ -235,17 +239,17 @@ class _NetworkStatusScreenState extends State<NetworkStatusScreen> {
   }
 
   List<Widget> _ladder(NetDiagnostics d, CoderColors colors) {
+    final l10n = context.l10n;
     return [
-      _SectionTitle('How this computer was tried', colors),
+      _SectionTitle(l10n.networkLadderHeading, colors),
       if (d.ladder.isEmpty)
         _Panel(
           colors: colors,
           children: [
             Text(
               d.planLimit == 0
-                  ? 'No candidates yet — nothing has been dialled for this computer.'
-                  : 'This pass produced no candidates: the walk is held back under dial pressure, '
-                      'or the pairing names no address at all.',
+                  ? l10n.networkLadderNoCandidatesYet
+                  : l10n.networkLadderNoCandidates,
               style: TextStyle(color: colors.foregroundMuted, fontSize: 13, height: 1.4),
             ),
           ],
@@ -261,8 +265,7 @@ class _NetworkStatusScreenState extends State<NetworkStatusScreen> {
             if (d.attemptedRungs < d.ladder.length) ...[
               const SizedBox(height: CoderSpace.md2),
               Text(
-                'This pass dials at most ${d.planLimit}: '
-                '${d.ladder.length - d.attemptedRungs} of ${d.ladder.length} wait for the next pass.',
+                l10n.networkLadderLimit(d.planLimit, d.ladder.length - d.attemptedRungs, d.ladder.length),
                 style: TextStyle(color: colors.foregroundExtraMuted, fontSize: 12, height: 1.4),
               ),
             ],
@@ -272,13 +275,14 @@ class _NetworkStatusScreenState extends State<NetworkStatusScreen> {
   }
 
   Widget _attemptRow(int index, RouteAttempt attempt, CoderColors colors) {
+    final l10n = context.l10n;
     final (label, color) = switch (attempt.status) {
-      RouteAttemptStatus.connected => ('connected', colors.statusDotSuccess),
-      RouteAttemptStatus.failed => ('failed', colors.statusDotDanger),
-      RouteAttemptStatus.opened => ('no answer', colors.statusDotWarning),
-      RouteAttemptStatus.trying => ('dialling', colors.statusDotRunning),
-      RouteAttemptStatus.skipped => ('not tried', colors.foregroundExtraMuted),
-      RouteAttemptStatus.planned => ('planned', colors.foregroundExtraMuted),
+      RouteAttemptStatus.connected => (l10n.networkAttemptConnected, colors.statusDotSuccess),
+      RouteAttemptStatus.failed => (l10n.networkAttemptFailed, colors.statusDotDanger),
+      RouteAttemptStatus.opened => (l10n.networkAttemptNoAnswer, colors.statusDotWarning),
+      RouteAttemptStatus.trying => (l10n.networkAttemptDialling, colors.statusDotRunning),
+      RouteAttemptStatus.skipped => (l10n.networkAttemptNotTried, colors.foregroundExtraMuted),
+      RouteAttemptStatus.planned => (l10n.networkAttemptPlanned, colors.foregroundExtraMuted),
     };
     final ms = attempt.elapsedMs == null ? '' : ' · ${attempt.elapsedMs} ms';
     return Column(
@@ -320,22 +324,23 @@ class _NetworkStatusScreenState extends State<NetworkStatusScreen> {
   }
 
   List<Widget> _lastRequest(NetDiagnostics d, CoderColors colors) {
+    final l10n = context.l10n;
     final rpc = d.lastRpc;
     return [
-      _SectionTitle('Last request to the desktop', colors),
+      _SectionTitle(l10n.networkLastRequestHeading, colors),
       _Panel(
         colors: colors,
         children: [
           if (rpc == null)
             Text(
-              'Nothing has been asked yet since the app started.',
+              l10n.networkNothingAsked,
               style: TextStyle(color: colors.foregroundMuted, fontSize: 13),
             )
           else ...[
-            _line('Method', rpc.method, colors),
-            _line('Outcome', rpc.ok ? 'answered' : 'failed', colors,
+            _line(l10n.networkMethod, rpc.method, colors),
+            _line(l10n.networkOutcome, rpc.ok ? l10n.networkAnswered : l10n.networkAttemptFailed, colors,
                 valueColor: rpc.ok ? colors.statusSuccess : colors.statusDanger),
-            _line('Took', '${rpc.elapsedMs} ms', colors),
+            _line(l10n.networkTook, '${rpc.elapsedMs} ms', colors),
             if (rpc.error != null) ...[
               const SizedBox(height: CoderSpace.sm),
               SelectableText(
@@ -346,7 +351,7 @@ class _NetworkStatusScreenState extends State<NetworkStatusScreen> {
           ],
           if (d.lastWalkError != null) ...[
             const SizedBox(height: CoderSpace.md2),
-            Text('Last walk', style: TextStyle(color: colors.foregroundMuted, fontSize: 12)),
+            Text(l10n.networkLastWalk, style: TextStyle(color: colors.foregroundMuted, fontSize: 12)),
             const SizedBox(height: CoderSpace.xs),
             SelectableText(
               d.lastWalkError!,
@@ -359,29 +364,28 @@ class _NetworkStatusScreenState extends State<NetworkStatusScreen> {
   }
 
   List<Widget> _phoneNode(NetDiagnostics d, CoderColors colors) {
+    final l10n = context.l10n;
     final node = d.node;
     return [
-      _SectionTitle('This phone\'s libp2p node', colors),
+      _SectionTitle(l10n.networkPhoneNodeHeading, colors),
       _Panel(
         colors: colors,
         children: [
           if (!node.started)
             Text(
-              'Not started — no peer-to-peer route has been dialled in this launch. It starts on '
-              'the first such dial, and looking at this screen does not start it.',
+              l10n.networkNodeNotStarted,
               style: TextStyle(color: colors.foregroundMuted, fontSize: 13, height: 1.4),
             )
           else ...[
-            _line('Peer id', node.peerId ?? 'starting', colors),
-            _line('Relay dialling', node.relayEnabled ? 'enabled' : 'disabled', colors),
-            _line('Relay reservation', node.reservationLine, colors),
+            _line(l10n.networkPeerId, node.peerId ?? l10n.networkStarting, colors),
+            _line(l10n.networkRelayDialling, node.relayEnabled ? l10n.networkEnabled : l10n.networkDisabled, colors),
+            _line(l10n.networkRelayReservation, node.reservationLine, colors),
             // The honest one. See the library comment in `net_diagnostics.dart`.
-            _line('Connected peers', 'unavailable — the shared node exposes no connection view',
-                colors),
-            _line('LAN peers seen', '${node.lanPeerCount}', colors),
-            _line('mDNS', node.mdnsActive ? 'active' : 'inactive', colors),
-            _line('Registered protocols', '${node.protocolCount}', colors),
-            _line('Host generation', '${node.hostEpoch}', colors),
+            _line(l10n.networkConnectedPeers, l10n.networkConnectedPeersUnavailable, colors),
+            _line(l10n.networkLanPeers, '${node.lanPeerCount}', colors),
+            _line(l10n.networkMdns, node.mdnsActive ? l10n.networkActive : l10n.networkInactive, colors),
+            _line(l10n.networkRegisteredProtocols, '${node.protocolCount}', colors),
+            _line(l10n.networkHostGeneration, '${node.hostEpoch}', colors),
           ],
         ],
       ),
@@ -389,35 +393,35 @@ class _NetworkStatusScreenState extends State<NetworkStatusScreen> {
   }
 
   List<Widget> _desktopMesh(NetDiagnostics d, CoderColors colors) {
+    final l10n = context.l10n;
     final mesh = d.homeMesh;
     return [
-      _SectionTitle('What the desktop says about itself', colors),
+      _SectionTitle(l10n.networkDesktopMeshHeading, colors),
       _Panel(
         colors: colors,
         children: [
           if (d.homeMeshAt == null)
             Text(
-              'Not asked yet. "Check again" asks the desktop for its own mesh status — the '
-              'difference between "this phone cannot reach it" and "it has nothing to reach".',
+              l10n.networkNotAsked,
               style: TextStyle(color: colors.foregroundMuted, fontSize: 13, height: 1.4),
             )
           else if (mesh == null)
             Text(
-              'No usable answer: ${d.homeMeshError ?? 'unreadable'}',
+              l10n.networkNoUsableAnswer(d.homeMeshError ?? l10n.networkUnreadable),
               style: TextStyle(color: colors.statusDanger, fontSize: 13, height: 1.4),
             )
           else ...[
-            _line('State', mesh.kind, colors),
-            if (mesh.peerId != null) _line('Its peer id', mesh.peerId!, colors),
+            _line(l10n.networkState, mesh.kind, colors),
+            if (mesh.peerId != null) _line(l10n.networkItsPeerId, mesh.peerId!, colors),
             if (mesh.multiaddrCount != null)
-              _line('Its dialable addresses', '${mesh.multiaddrCount}', colors),
+              _line(l10n.networkItsDialable, '${mesh.multiaddrCount}', colors),
             if (mesh.relayHintCount != null)
-              _line('Its relay hints', '${mesh.relayHintCount}', colors),
+              _line(l10n.networkItsRelayHints, '${mesh.relayHintCount}', colors),
             // Labelled with whose count it is: "peers" alone would read as this phone's, which this
             // app cannot read at all.
             if (mesh.peerCount != null)
-              _line('Peers it is connected to', '${mesh.peerCount}', colors),
-            if (mesh.reason != null) _line('Its reason', mesh.reason!, colors),
+              _line(l10n.networkPeersConnected, '${mesh.peerCount}', colors),
+            if (mesh.reason != null) _line(l10n.networkItsReason, mesh.reason!, colors),
           ],
         ],
       ),

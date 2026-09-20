@@ -1,0 +1,32 @@
+# Flutter's own l10n tooling — the ARB files are the source of truth, `app_localizations*.dart` is
+# generated, not hand-edited.
+#
+# Why generation into `lib/l10n/generated` rather than the old synthetic `package:flutter_gen`:
+# Flutter removed synthetic packages (this SDK rejects `synthetic-package: true` outright), so the
+# generated class is an ordinary library the app imports by path.
+#
+# Why the generated files are **committed** rather than gitignored:
+#   * `flutter pub get` regenerates them (`flutter: generate: true` in pubspec.yaml), which is where
+#     the build gets them from after an ARB edit;
+#   * but `flutter analyze` does **not** run the generator — verified on Flutter 3.47.2: with
+#     `lib/l10n/generated/` deleted, `flutter test` runs an implicit `pub get` and regenerates,
+#     while `flutter analyze` creates `.dart_tool/` and then fails with "Undefined name
+#     'AppLocalizations'". A clean checkout that gitignores the output therefore cannot be analysed
+#     without a command the developer has to know about.
+# Committing them makes the raw commands the task asks for work on a clean checkout, and the ARB
+# parity test (`test/arb_parity_test.dart`) keeps a forgotten translation from shipping. After an
+# ARB edit, run `flutter pub get` (or `flutter gen-l10n`) and commit the regenerated diff.
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+output-dir: lib/l10n/generated
+output-class: AppLocalizations
+# English is the source of truth and every other catalogue is complete, so there is nothing to warn
+# about; a missing key should be a hard build failure, not a runtime fallback. `nullable-getter:
+# false` makes `AppLocalizations.of(context)` non-null, which removes a `!` from every call site.
+nullable-getter: false
+# `en` first: gen-l10n otherwise emits `supportedLocales` alphabetically, and `en` is the fallback
+# the resolver leans on, so its position is worth making explicit.
+preferred-supported-locales:
+  - en
+use-deferred-loading: false

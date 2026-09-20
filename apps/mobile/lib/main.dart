@@ -34,6 +34,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'l10n/l10n.dart';
+import 'l10n/locale_controller.dart';
 import 'screens/connections_sheet.dart';
 import 'screens/network_status_screen.dart';
 import 'screens/no_hosts_screen.dart';
@@ -51,20 +53,58 @@ void main() {
   runApp(const EnvoyDevApp());
 }
 
-class EnvoyDevApp extends StatelessWidget {
-  const EnvoyDevApp({super.key, this.store});
+class EnvoyDevApp extends StatefulWidget {
+  const EnvoyDevApp({super.key, this.store, this.localeController});
 
   /// Injected by tests; production builds the store themselves.
   final HostStore? store;
 
+  /// The phone's language preference. Injected by tests so a locale can be pinned without touching
+  /// `SharedPreferences`; production builds one and loads what was stored.
+  final LocaleController? localeController;
+
+  @override
+  State<EnvoyDevApp> createState() => _EnvoyDevAppState();
+}
+
+class _EnvoyDevAppState extends State<EnvoyDevApp> {
+  late final LocaleController _locales = widget.localeController ?? LocaleController();
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_locales.load());
+  }
+
+  @override
+  void dispose() {
+    // An injected controller belongs to whoever injected it (a test that asserts on it afterwards),
+    // so only the one this state created is disposed here.
+    if (widget.localeController == null) _locales.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'EnvoyDev',
-      theme: const CoderTheme(CoderColors.light).toThemeData(),
-      darkTheme: const CoderTheme(CoderColors.dark).toThemeData(),
-      themeMode: ThemeMode.system,
-      home: AppShell(store: store),
+    // Rebuilds the whole app when the language changes, which is the one setting that must take
+    // effect without a restart.
+    return AnimatedBuilder(
+      animation: _locales,
+      builder: (context, _) => MaterialApp(
+        // Not `title:` — that is fixed at construction and would keep the English brand string in
+        // the task switcher after a language change. `onGenerateTitle` asks the live catalogue.
+        onGenerateTitle: (context) => context.l10n.appName,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        // `null` = follow the phone; a code = the language Settings picked.
+        locale: _locales.locale,
+        // The explicit English fallback for a system language we do not ship (see `l10n.dart`).
+        localeResolutionCallback: resolveAppLocale,
+        theme: const CoderTheme(CoderColors.light).toThemeData(),
+        darkTheme: const CoderTheme(CoderColors.dark).toThemeData(),
+        themeMode: ThemeMode.system,
+        home: AppShell(store: widget.store, localeController: _locales),
+      ),
     );
   }
 }
@@ -76,9 +116,12 @@ class EnvoyDevApp extends StatelessWidget {
 /// Connections view would be a set of spinners. What changed is who reads them — now it is the shell
 /// handing one of them to the project list.
 class AppShell extends StatefulWidget {
-  const AppShell({super.key, this.store});
+  const AppShell({super.key, this.store, required this.localeController});
 
   final HostStore? store;
+
+  /// Handed to [SettingsScreen], which is the only surface that changes the language.
+  final LocaleController localeController;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -143,7 +186,11 @@ class _AppShellState extends State<AppShell> {
   void _openSettings(HostClient client, List<HarnessInfo> harnesses) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => SettingsScreen(client: client, harnesses: harnesses),
+        builder: (_) => SettingsScreen(
+          client: client,
+          harnesses: harnesses,
+          localeController: widget.localeController,
+        ),
       ),
     );
   }

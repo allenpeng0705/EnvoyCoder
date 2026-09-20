@@ -23,6 +23,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../models/host.dart';
 import '../services/connections_controller.dart';
 import '../services/host_client.dart';
@@ -70,13 +71,14 @@ class _ConnectionsSheetState extends State<ConnectionsSheet> {
   /// dialog refuses a blank name outright: this is the *rename* path, where the field already holds a
   /// real name, and clearing it would be a way to make the list anonymous.
   Future<void> _rename(CoderHost host) async {
+    final l10n = context.l10n;
     final name = await showNameDialog(
       context,
-      title: 'Rename connection',
-      fieldLabel: 'Connection name',
+      title: l10n.connectionsRenameTitle,
+      fieldLabel: l10n.connectionsRenameField,
       initialValue: host.label,
-      confirmLabel: 'Rename',
-      emptyError: 'Enter a name for this connection.',
+      confirmLabel: l10n.commonRename,
+      emptyError: l10n.connectionsRenameEmpty,
       // The same bound the pairing step uses, from the one constant that defines it.
       maxLength: kConnectionNameMaxLength,
     );
@@ -90,12 +92,12 @@ class _ConnectionsSheetState extends State<ConnectionsSheet> {
     // Named in user language and in that order: what is lost (the pairing), then what is not
     // (the work). "Revoke token" would be the log's word, not the user's. The dialog itself is the
     // app's one shared confirmation — see `widgets/confirm_dialog.dart`.
+    final l10n = context.l10n;
     final confirmed = await showConfirmDialog(
       context,
-      title: 'Forget ${host.label}?',
-      message: 'This phone will stop connecting to that computer and forget its pairing. '
-          'Tasks already running there keep running.',
-      confirmLabel: 'Forget',
+      title: l10n.connectionsForgetTitle(host.label),
+      message: l10n.connectionsForgetMessage,
+      confirmLabel: l10n.connectionsForgetConfirm,
     );
     if (!confirmed || !mounted) return;
     await widget.controller.forget(host);
@@ -104,6 +106,7 @@ class _ConnectionsSheetState extends State<ConnectionsSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final colors = CoderTheme.of(context);
     final controller = widget.controller;
     final hosts = controller.hosts;
@@ -117,10 +120,20 @@ class _ConnectionsSheetState extends State<ConnectionsSheet> {
             padding: const EdgeInsets.fromLTRB(CoderSpace.lg, 0, CoderSpace.md, CoderSpace.sm),
             child: Row(
               children: [
-                Text('Connections', style: Theme.of(context).textTheme.titleMedium),
-                const Spacer(),
+                // `Expanded` rather than a `Spacer`: the title is a translated word, and German's
+                // "Verbindungen" overflowed this Row by 8.1pt at 320pt when it sized naturally. The
+                // count keeps its width; the title yields.
+                Expanded(
+                  child: Text(
+                    l10n.connectionsTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                const SizedBox(width: CoderSpace.sm),
                 Text(
-                  hosts.length == 1 ? '1 computer' : '${hosts.length} computers',
+                  l10n.connectionsCount(hosts.length),
                   style: TextStyle(color: colors.foregroundMuted, fontSize: 12),
                 ),
               ],
@@ -134,8 +147,8 @@ class _ConnectionsSheetState extends State<ConnectionsSheet> {
           // the sheet's one *action* and not as another connection.
           ListTile(
             leading: const Icon(Icons.add),
-            title: const Text('Add host'),
-            subtitle: const Text('Scan a code, or enter an address'),
+            title: Text(l10n.connectionsAddHost),
+            subtitle: Text(l10n.connectionsAddHostSubtitle),
             onTap: () => unawaited(_addHost()),
           ),
           const Divider(),
@@ -143,7 +156,7 @@ class _ConnectionsSheetState extends State<ConnectionsSheet> {
             Padding(
               padding: const EdgeInsets.fromLTRB(CoderSpace.lg, CoderSpace.md, CoderSpace.lg, CoderSpace.lg),
               child: Text(
-                'No desktop paired yet.',
+                l10n.connectionsEmpty,
                 style: TextStyle(color: colors.foregroundMuted),
               ),
             )
@@ -205,6 +218,7 @@ class _HostRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     // The active host is marked, not decorated: a user opening this sheet to answer "which one am I
     // on?" should not have to compare two lists.
     //
@@ -214,7 +228,7 @@ class _HostRow extends StatelessWidget {
     // pairing (or renamed here) is the title, and the address keeps its place on the detail line:
     // still visible because it is the diagnostic fact the networking panel keys off, but no longer
     // the thing a user has to tell two computers apart by.
-    final title = active ? '${host.label} · current' : host.label;
+    final title = active ? l10n.connectionsCurrent(host.label) : host.label;
     return ListTile(
       leading: _stateDot(state, colors),
       // Single line and ellipsized, like the top bar: a connection name is user-set and the sheet is
@@ -238,7 +252,9 @@ class _HostRow extends StatelessWidget {
       // would be a guess. The whole ladder lives on the **active** host's cell tower in the top bar,
       // not on these rows — the dot and this line are what the row has to say about health.
       subtitle: Text(
-        '${host.endpoint} · ${state.label}${route == null ? '' : ' · via $route'}',
+        route == null
+            ? l10n.connectionsRowDetail(host.endpoint, state.labelFor(l10n))
+            : l10n.connectionsRowDetailVia(host.endpoint, state.labelFor(l10n), route!),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -302,22 +318,23 @@ class _HostOverflowMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Semantics(
-      label: 'More actions for $hostLabel',
+      label: l10n.connectionsMenuAria(hostLabel),
       button: true,
       child: PopupMenuButton<_HostMenuAction>(
-        tooltip: 'More actions for $hostLabel',
+        tooltip: l10n.connectionsMenuAria(hostLabel),
         onSelected: (action) => switch (action) {
           _HostMenuAction.rename => onRename(),
           _HostMenuAction.forget => onForget(),
         },
         itemBuilder: (context) => [
-          const PopupMenuItem(
+          PopupMenuItem(
             value: _HostMenuAction.rename,
             child: ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.edit_outlined),
-              title: Text('Rename connection'),
+              leading: const Icon(Icons.edit_outlined),
+              title: Text(l10n.connectionsRenameTitle),
             ),
           ),
           const PopupMenuDivider(),
@@ -326,7 +343,7 @@ class _HostOverflowMenu extends StatelessWidget {
             child: ListTile(
               contentPadding: EdgeInsets.zero,
               leading: Icon(Icons.link_off, color: destructive),
-              title: const Text('Forget host'),
+              title: Text(l10n.connectionsMenuForget),
             ),
           ),
         ],

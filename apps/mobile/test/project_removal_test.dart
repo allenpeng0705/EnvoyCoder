@@ -1,15 +1,16 @@
-// Removal on the project list: Remove a project, Archive a task.
+// Removal on the project list: Remove a project, and Remove a task.
 //
 // This is the owner's ask — "allow user to remove project or task on mobile" — and the two halves are
-// deliberately *not* the same verb, because the protocol gives them different powers:
+// deliberately *not* the same operation, because the protocol gives them different powers:
 //
 //   * `coder.removeProject` drops EnvoyDev's project row for good and archives that project's tasks
 //     (`packages/protocol/src/rpc.ts:1899`, `apps/desktop/src/daemon/store.ts:487-504`). Nothing in the
 //     user's folder is touched, but the project itself cannot be brought back — so it is "Remove", it
 //     is the danger colour, and it is the one destructive action here.
 //   * There is no task delete. The only task operation is `coder.archiveTask` (`rpc.ts:2086`), which
-//     stamps `archivedAt` and can be reversed with `archived: false` — so the button says "Archive"
-//     and its confirm is not coloured as danger.
+//     stamps `archivedAt` and can be reversed with `archived: false`. The menu item reads "Remove" (the
+//     short list verb, the same word the desktop uses) and its confirm is not coloured as danger; the
+//     *dialog* is what stays honest — it says the task leaves the list and its files are not touched.
 //
 // What this file pins, beyond the wording: a confirmation stands between the press and the write, a
 // refusal leaves the row that still exists server-side exactly where it was (no optimistic drop), and
@@ -17,6 +18,7 @@
 
 import 'package:envoydev_mobile/models/host.dart';
 import 'package:envoydev_mobile/screens/project_list_screen.dart';
+import 'package:envoydev_mobile/screens/run_screen.dart';
 import 'package:envoydev_mobile/services/host_client.dart';
 import 'package:envoydev_mobile/theme/tokens.dart';
 import 'package:flutter/material.dart';
@@ -152,7 +154,7 @@ Finder _projectMenuButton(String project) => find.byWidgetPredicate(
       (widget) => widget is PopupMenuButton && widget.tooltip == 'More actions for $project',
     );
 
-/// A task row's `…`. The standalone Archive the row used to carry lives in here now, beside Rename.
+/// A task row's `…`, which carries Rename and the removal that used to be a standalone button.
 Finder _taskMenuButton(String task) => find.byWidgetPredicate(
       (widget) => widget is PopupMenuButton && widget.tooltip == 'More actions for $task',
     );
@@ -211,13 +213,13 @@ void main() {
     await tester.tap(_projectMenuButton('Repo A'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Remove project'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Remove project'), findsOneWidget);
+    expect(find.text('Remove'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Remove'), findsOneWidget);
     // The menu item wears the destructive glyph in the danger colour, and the item's own line names
     // the action — never a bare glyph.
     final leading = tester.widget<Icon>(
       find.descendant(
-        of: find.widgetWithText(ListTile, 'Remove project'),
+        of: find.widgetWithText(ListTile, 'Remove'),
         matching: find.byIcon(Icons.remove_circle_outline),
       ),
     );
@@ -225,25 +227,47 @@ void main() {
     await _finish(client);
   });
 
-  testWidgets('the task row\'s … menu offers Rename and a labelled Archive, not Delete',
-      (tester) async {
+  testWidgets('the task row\'s … menu offers Rename and Remove, never Delete', (tester) async {
     final client = await _pumpScreen(tester);
 
-    // The row keeps one secondary control (the `…`) beside the chevron that says "tap to open",
-    // and it is named for the row it acts on.
+    // The row keeps exactly one trailing control (the `…`); the `>` chevron the owner asked to be
+    // rid of is gone, and nothing took its place.
     expect(_taskMenuButton('Fix the tests'), findsOneWidget);
     expect(find.bySemanticsLabel('More actions for Fix the tests'), findsOneWidget);
+    expect(find.byIcon(Icons.chevron_right), findsNothing);
     // The standalone Archive the row used to carry is gone; it is a menu item now.
     expect(_iconButtonWithTooltip('Archive task Fix the tests'), findsNothing);
 
     await tester.tap(_taskMenuButton('Fix the tests'));
     await tester.pumpAndSettle();
 
-    // The parity the owner asked for: two actions, the same two the desktop task row offers.
-    expect(find.widgetWithText(ListTile, 'Rename task'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Archive task'), findsOneWidget);
-    // The protocol has no task delete; no screen may claim one.
+    // The parity the owner asked for: two actions, the same two the desktop task row offers — and the
+    // short labels, because the row is already the task.
+    expect(find.widgetWithText(ListTile, 'Rename'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Remove'), findsOneWidget);
+    // The operation is archive; the menu says Remove, and the *dialog* behind it is what stays honest
+    // (see the task-removal test below). No screen may claim a delete the protocol does not have.
     expect(find.textContaining('Delete'), findsNothing);
+    await _finish(client);
+  });
+
+  testWidgets('a task row still opens its run screen by tapping the row', (tester) async {
+    // The chevron was decorative, so removing it must not strand the run screen: the row's own tap is
+    // the control that reaches it. This pins the replacement affordance rather than assuming it.
+    final client = await _pumpScreen(
+      tester,
+      projects: [_projectA],
+      tasks: [
+        {..._taskA, 'runId': 'r-1'},
+      ],
+    );
+
+    await tester.tap(find.text('Fix the tests'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RunScreen), findsOneWidget);
+    // The `…` was not what opened it.
+    expect(client.writesTo('coder.archiveTask'), 0);
     await _finish(client);
   });
 
@@ -251,7 +275,7 @@ void main() {
       (tester) async {
     final client = await _pumpScreen(tester);
 
-    await _pressRowMenuItem(tester, 'Repo A', 'Remove project');
+    await _pressRowMenuItem(tester, 'Repo A', 'Remove');
 
     expect(find.text('Remove Repo A?'), findsOneWidget);
     // The consequence, in the user's language: the tasks are archived, the folder is untouched, and
@@ -271,7 +295,7 @@ void main() {
   testWidgets('confirming removal calls coder.removeProject and drops the row', (tester) async {
     final client = await _pumpScreen(tester);
 
-    await _pressRowMenuItem(tester, 'Repo A', 'Remove project');
+    await _pressRowMenuItem(tester, 'Repo A', 'Remove');
     await tester.tap(find.widgetWithText(TextButton, 'Remove project'));
     await tester.pumpAndSettle();
 
@@ -294,7 +318,7 @@ void main() {
     final client = await _pumpScreen(tester);
     client.failWrites = true;
 
-    await _pressRowMenuItem(tester, 'Repo A', 'Remove project');
+    await _pressRowMenuItem(tester, 'Repo A', 'Remove');
     await tester.tap(find.widgetWithText(TextButton, 'Remove project'));
     await tester.pumpAndSettle();
 
@@ -311,7 +335,7 @@ void main() {
       (tester) async {
     final client = await _pumpScreen(tester, projects: [_projectA], tasks: const []);
 
-    await _pressRowMenuItem(tester, 'Repo A', 'Remove project');
+    await _pressRowMenuItem(tester, 'Repo A', 'Remove');
     await tester.tap(find.widgetWithText(TextButton, 'Remove project'));
     await tester.pumpAndSettle();
 
@@ -325,16 +349,18 @@ void main() {
     await _finish(client);
   });
 
-  testWidgets('archiving a task calls coder.archiveTask with archived: true and drops the row',
+  testWidgets('Remove confirms truthfully, then calls coder.archiveTask and drops the row',
       (tester) async {
     final client = await _pumpScreen(tester);
 
-    await _pressTaskMenuItem(tester, 'Fix the tests', 'Archive task');
+    await _pressTaskMenuItem(tester, 'Fix the tests', 'Remove');
 
-    expect(find.text('Archive Fix the tests?'), findsOneWidget);
+    // The label is a list verb; the sentence behind it is the operation's truth, and it is what
+    // stops "Remove" from reading as a delete.
+    expect(find.text('Remove Fix the tests?'), findsOneWidget);
     expect(find.textContaining('archiving is not deletion'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(TextButton, 'Archive'));
+    await tester.tap(find.widgetWithText(TextButton, 'Remove'));
     await tester.pumpAndSettle();
 
     expect(client.writesTo('coder.archiveTask'), 1);
@@ -347,10 +373,10 @@ void main() {
     await _finish(client);
   });
 
-  testWidgets('cancelling the archive dialog changes nothing', (tester) async {
+  testWidgets('cancelling the task removal dialog changes nothing', (tester) async {
     final client = await _pumpScreen(tester);
 
-    await _pressTaskMenuItem(tester, 'Fix the tests', 'Archive task');
+    await _pressTaskMenuItem(tester, 'Fix the tests', 'Remove');
     await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
     await tester.pumpAndSettle();
 
@@ -359,26 +385,26 @@ void main() {
     await _finish(client);
   });
 
-  testWidgets('a failed archive leaves the task in place', (tester) async {
+  testWidgets('a failed task removal leaves the task in place', (tester) async {
     final client = await _pumpScreen(tester);
     client.failWrites = true;
 
-    await _pressTaskMenuItem(tester, 'Fix the tests', 'Archive task');
-    await tester.tap(find.widgetWithText(TextButton, 'Archive'));
+    await _pressTaskMenuItem(tester, 'Fix the tests', 'Remove');
+    await tester.tap(find.widgetWithText(TextButton, 'Remove'));
     await tester.pumpAndSettle();
 
     expect(client.writesTo('coder.archiveTask'), 1);
     expect(find.text('Fix the tests'), findsOneWidget);
-    expect(find.text('Could not archive Fix the tests. It is still in the list.'), findsOneWidget);
+    expect(find.text('Could not remove Fix the tests. It is still in the list.'), findsOneWidget);
     await _drainSnackBar(tester);
     await _finish(client);
   });
 
   testWidgets('the project and task rows lay out at 320pt without overflow', (tester) async {
     // 320pt is the narrowest phone this app claims to support, and the width the row was reported to
-    // overflow at back when three trailing controls shared it. The project row shares two now (`+`
-    // and `…`), and the task row trades its 48pt Archive button for the narrower `…` trigger, so the
-    // question this test answers is whether either *row* overflows here.
+    // overflow at back when three trailing controls shared it. The project row shares two (`+` and
+    // `…`) and the task row is down to **one** (`…`, with the `>` chevron removed), so the question this
+    // test answers is whether either *row* overflows here — a reduction should only help.
     //
     // It cannot simply assert "no exception": the **top bar** overflows at 320pt regardless, a
     // pre-existing bug in a region this change does not touch — its title Row (status dot + host
@@ -396,10 +422,12 @@ void main() {
 
     final client = await _pumpScreen(tester, projects: [_projectA, _projectB], tasks: [_taskA]);
 
-    // Both rows' controls are still present and still laid out at this width.
+    // Both rows' controls are still present and still laid out at this width, and the task row's
+    // trailing area is now the `…` alone.
     expect(_iconButtonWithTooltip('New task in Repo A'), findsOneWidget);
     expect(_projectMenuButton('Repo A'), findsOneWidget);
     expect(_taskMenuButton('Fix the tests'), findsOneWidget);
+    expect(find.byIcon(Icons.chevron_right), findsNothing);
 
     final creators = [
       for (final details in reported)

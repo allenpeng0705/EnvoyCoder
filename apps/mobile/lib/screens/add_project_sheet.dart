@@ -7,6 +7,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../models/harness.dart';
 import '../services/host_client.dart';
 import '../widgets/home_folder_browser.dart';
@@ -58,7 +59,7 @@ class _AddProjectSheetState extends State<_AddProjectSheet> {
       context,
       rpc: (method, [params = const {}]) => widget.client.call(method, params),
       initialPath: _pathController.text.trim().isEmpty ? null : _pathController.text.trim(),
-      title: 'Choose project folder',
+      title: context.l10n.folderTitle,
     );
     if (picked == null || !mounted) return;
     setState(() => _pathController.text = picked);
@@ -68,7 +69,7 @@ class _AddProjectSheetState extends State<_AddProjectSheet> {
     final path = _pathController.text.trim();
     if (path.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Choose a folder on this computer.')),
+        SnackBar(content: Text(context.l10n.addProjectChooseFolder)),
       );
       return;
     }
@@ -101,6 +102,7 @@ class _AddProjectSheetState extends State<_AddProjectSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final offered = offeredHarnesses(widget.harnesses);
 
     return Padding(
@@ -116,12 +118,12 @@ class _AddProjectSheetState extends State<_AddProjectSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Add project',
+                l10n.addProjectTitle,
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 8),
               Text(
-                'Pick a folder on this computer. Agents will run inside it.',
+                l10n.addProjectDetail,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -131,11 +133,11 @@ class _AddProjectSheetState extends State<_AddProjectSheet> {
                 controller: _pathController,
                 enabled: !_busy,
                 decoration: InputDecoration(
-                  labelText: 'Folder',
-                  hintText: '/Users/you/work/repo',
+                  labelText: l10n.addProjectFolder,
+                  hintText: l10n.addProjectFolderHint,
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
-                    tooltip: 'Browse',
+                    tooltip: l10n.addProjectBrowse,
                     onPressed: _busy ? null : () => unawaited(_browse()),
                     icon: const Icon(Icons.folder_open),
                   ),
@@ -145,9 +147,9 @@ class _AddProjectSheetState extends State<_AddProjectSheet> {
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: _harnessId,
-                  decoration: const InputDecoration(
-                    labelText: 'Default agent',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: l10n.addProjectDefaultAgent,
+                    border: const OutlineInputBorder(),
                   ),
                   items: [
                     for (final h in offered)
@@ -169,7 +171,7 @@ class _AddProjectSheetState extends State<_AddProjectSheet> {
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Add project'),
+                    : Text(l10n.addProjectSubmit),
               ),
             ],
           ),

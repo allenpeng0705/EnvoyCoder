@@ -413,6 +413,118 @@ void main() {
     await _finish(screen.client);
   });
 
+  testWidgets('the status icon pulses only while the link is still being worked on', (tester) async {
+    // The owner's UX complaint, pinned as motion: during the "5G takes some time" window the icon
+    // must visibly *work*, and once the link settles it must be completely still — a completed
+    // connection that keeps pulsing reads as still-working, which is a worse lie than a still icon.
+    final screen = await _pumpScreen(tester);
+
+    FadeTransition pulse() => tester.widget<FadeTransition>(find.byKey(connectionStatusPulseKey));
+    double opacity() => pulse().opacity.value;
+    // Three samples 300ms apart cover a quarter, half and three quarters of the 1.2s period.
+    Future<List<double>> sample() async {
+      final values = <double>[];
+      for (var i = 0; i < 3; i++) {
+        await tester.pump(const Duration(milliseconds: 300));
+        values.add(opacity());
+      }
+      return values;
+    }
+
+    // Connected is a finished fact: no ticker, no dimming, no matter how much time passes.
+    expect(opacity(), 1.0);
+    expect(await sample(), everyElement(1.0), reason: 'connected must not pulse');
+    expect(tester.binding.hasScheduledFrame, isFalse,
+        reason: 'a settled connection must not keep a ticker running');
+
+    // `connecting` and `reconnecting` are the two states the app is still working toward, so they
+    // breathe between the state's own token and a dimmed variant of it — never a second hue.
+    for (final state in [HostConnectionState.connecting, HostConnectionState.reconnecting]) {
+      screen.client.emit(state);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(tester.binding.hasScheduledFrame, isTrue,
+          reason: '${state.name} must run the pulse ticker');
+
+      final values = await sample();
+      expect(values.toSet().length, greaterThan(1), reason: '${state.name} must pulse');
+      expect(values.any((v) => v < 1.0), isTrue, reason: '${state.name} must actually dim');
+      expect(values.every((v) => v > 0.0 && v <= 1.0), isTrue,
+          reason: '${state.name} stays a dimmed variant of its own token, never invisible');
+    }
+
+    // `failed` and `idle` are outcomes, not progress: motion there would promise work that is not
+    // happening, which is exactly the "alarm vs working" confusion the brief warns about.
+    for (final state in [HostConnectionState.failed, HostConnectionState.idle]) {
+      screen.client.emit(state);
+      await tester.pump();
+      expect(await sample(), everyElement(1.0), reason: '${state.name} must not pulse');
+      expect(tester.binding.hasScheduledFrame, isFalse, reason: '${state.name} must stop the ticker');
+    }
+
+    // Return to a settled state before teardown: a repeating ticker left alive is itself a failure.
+    screen.client.emit(HostConnectionState.connected);
+    await tester.pump();
+    expect(opacity(), 1.0);
+
+    await screen.client.closeStates();
+    await _finish(screen.client);
+  });
+
+  testWidgets('reduced motion paints the status colour statically and still names the state',
+      (tester) async {
+    // `MediaQuery.disableAnimations` is the accessibility "reduce motion" flag. A continuously
+    // animated indicator is a genuine accessibility problem, so the pulse must not merely slow
+    // down — it must not run at all, and the meaning must stay in words and the colour.
+    final client = _StubClient(_host, initial: HostConnectionState.connecting);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: ProjectListScreen(
+            host: _host,
+            client: client,
+            onOpenConnections: () {},
+            onOpenNetworkStatus: () {},
+            onShowSettings: (_, __) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // The screen reader still gets "Connecting" and the icon still carries the running token.
+    _expectStatusIcon(tester, CoderColors.light, HostConnectionState.connecting);
+
+    FadeTransition pulse() => tester.widget<FadeTransition>(find.byKey(connectionStatusPulseKey));
+    expect(pulse().opacity.value, 1.0);
+    for (var i = 0; i < 3; i++) {
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(pulse().opacity.value, 1.0, reason: 'reduced motion must not pulse');
+    }
+    expect(tester.binding.hasScheduledFrame, isFalse,
+        reason: 'reduced motion must not leave a ticker running');
+
+    await client.closeStates();
+    await _finish(client);
+  });
+
+  testWidgets('a settled status leaves nothing animating, so pumpAndSettle still returns',
+      (tester) async {
+    // The trap this guards: a repeating animation makes `pumpAndSettle` time out rather than fail,
+    // so any test that settles this bar has to be able to rely on a settled state scheduling no
+    // frame. `_pumpScreen` already settles a connected bar; this pins the fact explicitly, and the
+    // pulse test above never calls `pumpAndSettle` while a transitional state is on screen.
+    final screen = await _pumpScreen(tester);
+    screen.client.emit(HostConnectionState.connected);
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(_statusButton(), findsOneWidget);
+
+    await screen.client.closeStates();
+    await _finish(screen.client);
+  });
+
   testWidgets('a long but legal connection name ellipsizes, full value in tooltip and Semantics',
       (tester) async {
     // 38 characters — inside the 40 the dialog allows, and far wider than a 320pt top bar title.
@@ -508,6 +620,9 @@ void main() {
     expect(find.text(longName), findsOneWidget);
     expect(_iconButtonWithTooltip('Add project'), findsOneWidget);
     expect(_iconButtonWithTooltip('Settings'), findsOneWidget);
+    // The motion polish must not resize the glyph: the fade wraps the icon without changing its
+    // 24pt box, so the width this test made fit is the width it still fits.
+    expect(tester.getSize(find.byIcon(Icons.cell_tower)), const Size(24, 24));
 
     final overflows = [
       for (final details in reported)
@@ -557,18 +672,17 @@ void main() {
     await _finish(screen.client);
   });
 
-  testWidgets('the + opens the create sheet for that project', (tester) async {
+  testWidgets('the + opens the create sheet for that project, and the sheet does not ask again',
+      (tester) async {
     final screen = await _pumpScreen(tester);
 
     // Tapping the project's own `+` opens the create sheet already on that project — the answer to
-    // "which project?" is the row, so the sheet does not ask again.
+    // "which project?" is the row, so the sheet does not ask again: the dropdown is **not** in the
+    // sheet at all on this path (owner's ask), and the project shown by the row is the one it uses.
     await tester.tap(_iconButtonWithTooltip('New task in Repo B'));
     await tester.pumpAndSettle();
     expect(find.text('New task'), findsOneWidget);
-    final dropdown = tester.widget<DropdownButtonFormField<String>>(
-      find.byType(DropdownButtonFormField<String>),
-    );
-    expect(dropdown.initialValue, 'local::/repo-b');
+    expect(find.byType(DropdownButtonFormField<String>), findsNothing);
     await _finish(screen.client);
   });
 
@@ -582,8 +696,9 @@ void main() {
     // asked. `HarnessInfo.badge` shortens "Envoy Harness" to "Envoy" on both surfaces.
     expect(find.text('Envoy'), findsOneWidget);
     expect(find.text('Change agent'), findsOneWidget);
-    // Remove came along, and it is the same action the row used to offer, not a second wording.
-    expect(find.text('Remove project'), findsOneWidget);
+    // Remove came along, and it is the same action the row used to offer, not a second wording. The
+    // label is the short one: the row is already the project, so it does not say "project" again.
+    expect(find.text('Remove'), findsOneWidget);
 
     // No other row's menu is open with it: Repo B has no project agent, so its `Agent` placeholder
     // would be on screen if this menu were not the one that was opened.

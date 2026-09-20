@@ -42,6 +42,10 @@ class TranscriptEntry {
     this.toolInput,
     this.toolOutput,
     this.approval,
+    this.noteKind,
+    this.noteCount,
+    this.notePercent,
+    this.noteStatus,
   });
 
   /// `user` | `assistant` | `thought` | `tool` | `approval` | `note`.
@@ -54,6 +58,16 @@ class TranscriptEntry {
 
   /// For notes only: `quiet` | `warn` | `error`.
   String tone;
+
+  /// For a note the **app** generated rather than one the daemon sent — `diff`, `usage` or `ended`.
+  ///
+  /// This model has no `BuildContext` and must not grow one, so a generated note travels as its
+  /// kind plus its numbers and `transcript_row.dart` words it. That is also what makes the note
+  /// translate when the phone's language changes mid-run.
+  final String? noteKind;
+  final int? noteCount;
+  final int? notePercent;
+  final String? noteStatus;
 
   final String? callId;
   String? status;
@@ -235,7 +249,10 @@ class Transcript {
           TranscriptEntry(
             kind: 'note',
             id: 'e${seq ?? entries.length}',
-            text: _endNote(event['status'] as String?),
+            // The sentence is chosen at render time from the status, so it speaks the user's
+            // language and no English lives in the model.
+            noteKind: 'ended',
+            noteStatus: event['status'] as String?,
             tone: event['status'] == 'failed'
                 ? 'error'
                 : event['status'] == 'cancelled'
@@ -254,7 +271,10 @@ class Transcript {
             kind: 'note',
             id: 'd${seq ?? entries.length}',
             // A headline about files, not a list of paths: "3 files changed" is what a user reads.
-            text: '$count ${count == 1 ? 'file' : 'files'} changed.',
+            // The sentence is built at render time from `noteKind` so it is pluralised and
+            // translated by that language's rules.
+            noteKind: 'diff',
+            noteCount: count,
           ),
         );
         return;
@@ -269,7 +289,8 @@ class Transcript {
             TranscriptEntry(
               kind: 'note',
               id: 'h${seq ?? entries.length}',
-              text: 'Context $percent% full.',
+              noteKind: 'usage',
+              notePercent: percent,
               tone: percent >= 90 ? 'warn' : 'quiet',
             ),
           );
@@ -318,7 +339,9 @@ class Transcript {
       TranscriptEntry(
         kind: 'tool',
         id: callId.isEmpty ? 't${seq ?? entries.length}' : callId,
-        text: name.isEmpty ? 'tool' : name,
+        // Empty when the agent named no tool; the row renders its own fallback word rather than
+        // storing English here.
+        text: name,
         callId: callId,
         status: status,
         toolInput: input,
@@ -362,7 +385,9 @@ class Transcript {
       id: requestId.isEmpty ? 'a${seq ?? entries.length}' : requestId,
       approval: TranscriptApproval(
         requestId: requestId,
-        question: (event['question'] as String?) ?? 'The agent needs a decision',
+        // Empty when the daemon sent no question; the card renders only a non-empty question and
+        // keeps its own localized title, rather than storing an English fallback sentence here.
+        question: (event['question'] as String?) ?? '',
         detail: event['detail'] as String?,
         options: options,
         selection: event['selection'] as String?,
@@ -390,19 +415,5 @@ class Transcript {
       _anonymousKey = 'anon-$_anonymousCount';
     }
     return _anonymousKey;
-  }
-
-  /// The last line, in the user's words rather than the status bucket's.
-  static String _endNote(String? status) {
-    switch (status) {
-      case 'done':
-        return 'Finished.';
-      case 'cancelled':
-        return 'Stopped.';
-      case 'failed':
-        return 'Stopped before it finished.';
-      default:
-        return 'Ended.';
-    }
   }
 }

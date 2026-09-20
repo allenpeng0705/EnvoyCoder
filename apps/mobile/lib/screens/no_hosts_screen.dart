@@ -9,6 +9,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../theme/tokens.dart';
 
 class NoHostsScreen extends StatelessWidget {
@@ -18,9 +19,10 @@ class NoHostsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final colors = CoderTheme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('EnvoyDev')),
+      appBar: AppBar(title: Text(l10n.appName)),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(CoderSpace.xl2),
@@ -29,11 +31,10 @@ class NoHostsScreen extends StatelessWidget {
             children: [
               Icon(Icons.computer, size: 48, color: colors.foregroundMuted),
               const SizedBox(height: CoderSpace.md2),
-              Text('No desktop paired yet', style: Theme.of(context).textTheme.titleMedium),
+              Text(l10n.hostNoHostsTitle, style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: CoderSpace.sm2),
-              const Text(
-                'On your computer, open EnvoyDev → Pair a phone, then scan the code. '
-                'Your agents keep running whether or not the phone is connected.',
+              Text(
+                l10n.hostNoHostsBody,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: CoderSpace.xl),
@@ -43,7 +44,7 @@ class NoHostsScreen extends StatelessWidget {
               FilledButton.icon(
                 onPressed: onAddHost,
                 icon: const Icon(Icons.add_link),
-                label: const Text('Add host'),
+                label: Text(l10n.connectionsAddHost),
               ),
             ],
           ),

@@ -7,6 +7,8 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../l10n/l10n.dart';
+
 const int maxAttachments = 8;
 const int imageMaxBytes = 4 * 1024 * 1024;
 const int textMaxBytes = 256 * 1024;
@@ -87,18 +89,23 @@ const _textNames = <String>{
   'dockerfile', 'makefile', 'license', 'readme', 'gemfile', 'rakefile',
 };
 
-String attachmentNotice(AttachNotice notice) {
+/// The refusal in the user's language.
+///
+/// [l10n] is optional only so a unit test can call this without a widget tree; the English it then
+/// falls back to is the generated catalogue, not a second copy.
+String attachmentNotice(AttachNotice notice, [AppLocalizations? l10n]) {
+  final t = l10n ?? lookupAppLocalizations(kFallbackLocale);
   switch (notice) {
     case AttachNotice.tooBig:
-      return 'That file is too large to attach.';
+      return t.attachTooBig;
     case AttachNotice.binary:
-      return 'Only images and text files can be attached.';
+      return t.attachBinary;
     case AttachNotice.unreadable:
-      return 'That file could not be read.';
+      return t.attachUnreadable;
     case AttachNotice.empty:
-      return 'That file is empty.';
+      return t.attachEmpty;
     case AttachNotice.limit:
-      return 'You can attach up to $maxAttachments files.';
+      return t.attachLimit(maxAttachments);
   }
 }
 
@@ -189,7 +196,12 @@ IngestResult ingestAttachments(List<ComposerAttachment> current, List<IncomingFi
 ///
 /// The first line stays the user's own sentence when they typed one, because that line is also the
 /// task's name. A turn that is only pictures still has a sentence, so the prompt is never empty.
-ComposerTurn composeTurn(String text, List<ComposerAttachment> attachments) {
+/// That generated sentence is translated, exactly as the desktop translates it — the agent is told
+/// what the user meant in the language the user is working in.
+///
+/// [l10n] is optional only so a unit test can call this without a widget tree.
+ComposerTurn composeTurn(String text, List<ComposerAttachment> attachments, [AppLocalizations? l10n]) {
+  final t = l10n ?? lookupAppLocalizations(kFallbackLocale);
   final images = <Map<String, String>>[];
   final files = <ComposerAttachment>[];
   for (final attachment in attachments) {
@@ -204,11 +216,11 @@ ComposerTurn composeTurn(String text, List<ComposerAttachment> attachments) {
   final lead = trimmed.isNotEmpty
       ? trimmed
       : files.isEmpty && images.length == 1
-          ? 'Look at the attached image.'
+          ? t.attachImagesOnly
           : files.isEmpty && images.length > 1
-              ? 'Look at the attached images.'
+              ? t.attachImagesOnlyMany
               : attachments.isNotEmpty
-                  ? 'Attached: $names'
+                  ? t.attachNamed(names)
                   : '';
   final notes = attachments
       .where((attachment) => attachment.kind == AttachmentKind.image)

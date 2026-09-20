@@ -15,17 +15,34 @@ import 'package:envoy_thin_client/envoy_thin_client.dart' as thin;
 
 import 'dart:convert';
 
+import '../l10n/l10n.dart';
 import '../models/host.dart';
 
 /// The name this app claims in every code it mints or accepts.
 const String kAppName = 'EnvoyDev';
 
+/// Why a code was refused, so a screen can word it in the user's own language.
+///
+/// The parser runs without a `BuildContext` — it is a pure function a test can hold — so it cannot
+/// call `context.l10n`. It carries the reason instead, and the screen that shows the dialog resolves
+/// it. [PairingResult.refusal] stays for tests and logs; it is the generated English.
+enum PairingRefusal { empty, malformed, unreadable, address, otherApp }
+
 class PairingResult {
-  const PairingResult.accepted(this.host) : refusal = null;
-  const PairingResult.refused(this.refusal) : host = null;
+  const PairingResult.accepted(this.host)
+      : refusal = null,
+        kind = null;
+  const PairingResult.refused(this.refusal, this.kind) : host = null;
 
   final CoderHost? host;
+
+  /// The English sentence. The UI never renders it — it resolves [kind] through `context.l10n`,
+  /// except for [PairingRefusal.otherApp], whose sentence is the family's shared wording (see
+  /// [pairingAppMismatch]) and has no catalogue entry on this side of the contract.
   final String? refusal;
+
+  /// Which sentence the UI should show.
+  final PairingRefusal? kind;
 
   bool get ok => host != null;
 }
@@ -45,29 +62,32 @@ String? pairingAppMismatch(String? codeApp, [String nodeApp = kAppName]) =>
 /// `app` — the field step 1 of the guide's flow (§5.2) turns on. Refusals are returned rather than
 /// thrown, because "that code is for another app" is a normal outcome a screen renders.
 PairingResult parsePairingCode(String input) {
+  final en = lookupAppLocalizations(kFallbackLocale);
   final trimmed = input.trim();
-  if (trimmed.isEmpty) return const PairingResult.refused('That pairing code is empty.');
+  if (trimmed.isEmpty) {
+    return PairingResult.refused(en.errorPairingEmpty, PairingRefusal.empty);
+  }
 
   final thin.PairingData? data;
   try {
     data = thin.parsePairingUri(trimmed);
   } on FormatException {
-    return const PairingResult.refused('That does not look like a pairing code.');
+    return PairingResult.refused(en.errorPairingMalformed, PairingRefusal.malformed);
   }
   if (data == null) {
-    return const PairingResult.refused(
-      'That pairing code could not be read. Ask the desktop to show it again.',
-    );
+    return PairingResult.refused(en.errorPairingUnreadable, PairingRefusal.unreadable);
   }
 
   // Step 1 of the guide's flow, and the phone's job alone: the node cannot refuse a cross-app code,
   // because the token inside it is opaque and app-local.
   final mismatch = pairingAppMismatch(data.app, kAppName);
-  if (mismatch != null) return PairingResult.refused(mismatch);
+  if (mismatch != null) {
+    return PairingResult.refused(mismatch, PairingRefusal.otherApp);
+  }
 
   final parsed = Uri.tryParse(data.wsUrl);
   if (parsed == null || parsed.host.isEmpty) {
-    return const PairingResult.refused('That pairing code has an address this app cannot read.');
+    return PairingResult.refused(en.errorPairingAddress, PairingRefusal.address);
   }
   final endpoint = parsed.hasPort ? '${parsed.host}:${parsed.port}' : parsed.host;
 

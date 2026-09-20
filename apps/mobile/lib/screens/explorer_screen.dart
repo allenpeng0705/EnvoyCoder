@@ -7,6 +7,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../theme/tokens.dart';
 
 typedef ExplorerRpc = Future<Map<String, dynamic>> Function(
@@ -85,7 +86,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> with SingleTickerProvid
       if (!mounted) return;
       setState(() {
         _filesLoading = false;
-        _filesError = 'Could not list this folder.';
+        _filesError = context.l10n.explorerCouldNotList;
       });
     }
   }
@@ -121,23 +122,24 @@ class _ExplorerScreenState extends State<ExplorerScreen> with SingleTickerProvid
       if (!mounted) return;
       setState(() {
         _changesLoading = false;
-        _changesError = 'Could not read the changes.';
+        _changesError = context.l10n.explorerCouldNotRead;
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final colors = CoderTheme.of(context);
     final atRoot = _path == widget.root;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Explorer'),
+        title: Text(l10n.explorerTitle),
         bottom: TabBar(
           controller: _tabs,
-          tabs: const [
-            Tab(text: 'Files'),
-            Tab(text: 'Changes'),
+          tabs: [
+            Tab(text: l10n.explorerFiles),
+            Tab(text: l10n.explorerChanges),
           ],
         ),
       ),
@@ -152,6 +154,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> with SingleTickerProvid
   }
 
   Widget _filesBody(CoderColors colors, bool atRoot) {
+    final l10n = context.l10n;
     if (_filesLoading) return const Center(child: CircularProgressIndicator());
     if (_filesError != null) {
       return _message(_filesError!, colors);
@@ -172,14 +175,14 @@ class _ExplorerScreenState extends State<ExplorerScreen> with SingleTickerProvid
               if (!atRoot)
                 ListTile(
                   leading: const Icon(Icons.arrow_upward),
-                  title: const Text('Parent folder'),
+                  title: Text(l10n.folderParent),
                   onTap: () {
                     final slash = _path.lastIndexOf(RegExp(r'[/\\]'));
                     if (slash > 0) _loadFiles(_path.substring(0, slash));
                   },
                 ),
               if (_entries.isEmpty)
-                const ListTile(title: Text('This folder is empty.')),
+                ListTile(title: Text(l10n.explorerFolderEmpty)),
               for (final entry in _entries)
                 ListTile(
                   leading: Icon(entry.kind == 'dir' ? Icons.folder_outlined : Icons.insert_drive_file_outlined),
@@ -194,16 +197,17 @@ class _ExplorerScreenState extends State<ExplorerScreen> with SingleTickerProvid
   }
 
   Widget _changesBody(CoderColors colors) {
+    final l10n = context.l10n;
     if (_changesLoading) return const Center(child: CircularProgressIndicator());
     if (_changesError != null) return _message(_changesError!, colors);
-    if (!_repo) return _message('This folder is not a git repository.', colors);
-    if (_changes.isEmpty) return _message('No changes in this folder.', colors);
+    if (!_repo) return _message(l10n.explorerNotRepo, colors);
+    if (_changes.isEmpty) return _message(l10n.explorerNoChanges, colors);
     return ListView(
       children: [
         for (final change in _changes)
           ListTile(
             title: Text(change.from == null || change.from!.isEmpty ? change.path : '${change.from} → ${change.path}'),
-            subtitle: Text(_kindLabel(change.kind)),
+            subtitle: Text(_kindLabel(change.kind, l10n)),
           ),
       ],
     );
@@ -216,13 +220,13 @@ class _ExplorerScreenState extends State<ExplorerScreen> with SingleTickerProvid
     );
   }
 
-  static String _kindLabel(String kind) => switch (kind) {
-        'added' => 'Added',
-        'deleted' => 'Deleted',
-        'renamed' => 'Renamed',
-        'untracked' => 'New',
-        'conflict' => 'Conflict',
-        _ => 'Modified',
+  static String _kindLabel(String kind, AppLocalizations l10n) => switch (kind) {
+        'added' => l10n.explorerKindAdded,
+        'deleted' => l10n.explorerKindDeleted,
+        'renamed' => l10n.explorerKindRenamed,
+        'untracked' => l10n.explorerKindNew,
+        'conflict' => l10n.explorerKindConflict,
+        _ => l10n.explorerKindModified,
       };
 }
 

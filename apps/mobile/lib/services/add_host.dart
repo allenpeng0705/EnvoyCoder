@@ -29,6 +29,7 @@
 /// produce a host row that can never connect.
 library;
 
+import '../l10n/l10n.dart';
 import '../models/host.dart';
 import 'pairing_service.dart';
 
@@ -42,9 +43,25 @@ class HostDraftBuilt extends HostDraft {
   final CoderHost host;
 }
 
+/// Why a typed host cannot be built. The parsing below has no `BuildContext`, so it names the reason
+/// and the dialog words it: `add_host_sheet.dart` calls [messageFor].
+enum HostRefusal { notHostPort, needsToken, sshHost, sshPort, daemonAddress }
+
 class HostDraftRefused extends HostDraft {
-  const HostDraftRefused(this.message);
-  final String message;
+  const HostDraftRefused(this.refusal);
+  final HostRefusal refusal;
+
+  /// The refusal in the user's language.
+  String messageFor(AppLocalizations l10n) => switch (refusal) {
+        HostRefusal.notHostPort => l10n.errorAddHostNotHostPort,
+        HostRefusal.needsToken => l10n.errorAddHostNeedsToken,
+        HostRefusal.sshHost => l10n.errorAddHostSshHost,
+        HostRefusal.sshPort => l10n.errorAddHostSshPort,
+        HostRefusal.daemonAddress => l10n.errorAddHostDaemon,
+      };
+
+  /// English, from the generated catalogue: tests and logs read this, the UI never renders it.
+  String get message => messageFor(lookupAppLocalizations(kFallbackLocale));
 }
 
 /// Host and port, exactly as a user types them: `devbox.local:4770`, `10.0.0.4:4770`, `[::1]:4770`.
@@ -79,18 +96,12 @@ HostDraft buildDirectHost({
 }) {
   final parsed = parseEndpoint(endpoint);
   if (parsed == null) {
-    return const HostDraftRefused(
-      'That is not a host and port. Write it as “machine:4770” — the address and the port the '
-      'daemon listens on.',
-    );
+    return const HostDraftRefused(HostRefusal.notHostPort);
   }
   final trimmedToken = token.trim();
   if (trimmedToken.isEmpty) {
     // Not "the token is required" — that tells a user nothing about where to get one.
-    return const HostDraftRefused(
-      'EnvoyDev refuses anyone who is not on the machine itself, so this route needs the token from '
-      'a pairing link. Use Scan QR or Paste link, or paste the token here as well.',
-    );
+    return const HostDraftRefused(HostRefusal.needsToken);
   }
   final where = '${parsed.host}:${parsed.port}';
   return HostDraftBuilt(
@@ -121,18 +132,15 @@ HostDraft buildSshHost({
 }) {
   final hop = sshHost.trim();
   if (hop.isEmpty) {
-    return const HostDraftRefused('Which machine should the tunnel go through? Enter its SSH host.');
+    return const HostDraftRefused(HostRefusal.sshHost);
   }
   final parsedPort = int.tryParse(port.trim());
   if (parsedPort == null || parsedPort < 1 || parsedPort > 65535) {
-    return const HostDraftRefused('The SSH port has to be a number between 1 and 65535. It is 22 by default.');
+    return const HostDraftRefused(HostRefusal.sshPort);
   }
   final daemon = parseEndpoint(daemonEndpoint);
   if (daemon == null) {
-    return const HostDraftRefused(
-      'The daemon on that machine is named as “host:port”. Write it as “127.0.0.1:4770” — that is '
-      'what it is for almost every machine, and it is the address as seen *from* the machine.',
-    );
+    return const HostDraftRefused(HostRefusal.daemonAddress);
   }
 
   return HostDraftBuilt(

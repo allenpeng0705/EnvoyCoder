@@ -9,6 +9,7 @@ import 'package:flutter_highlight/themes/atom-one-light.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 
+import '../l10n/l10n.dart';
 import '../theme/tokens.dart';
 
 class AssistantMarkdown extends StatelessWidget {
@@ -158,11 +159,11 @@ class _FenceBlock extends StatelessWidget {
                     await Clipboard.setData(ClipboardData(text: code));
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Copied'), duration: Duration(seconds: 1)),
+                        SnackBar(content: Text(context.l10n.markdownCopied), duration: const Duration(seconds: 1)),
                       );
                     }
                   },
-                  child: Text('Copy', style: TextStyle(fontSize: 11, color: colors.foregroundMuted)),
+                  child: Text(context.l10n.markdownCopy, style: TextStyle(fontSize: 11, color: colors.foregroundMuted)),
                 ),
               ],
             ),
@@ -171,7 +172,7 @@ class _FenceBlock extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
               child: Text(
-                'Mermaid diagram — source shown here; the computer renders the chart in the desktop app.',
+                context.l10n.markdownMermaid,
                 style: TextStyle(fontSize: 11, color: colors.foregroundMuted),
               ),
             ),

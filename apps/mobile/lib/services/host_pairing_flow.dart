@@ -14,19 +14,37 @@ import 'package:flutter/material.dart';
 
 import 'host_store.dart';
 import 'pairing_service.dart';
+import '../l10n/l10n.dart';
 import '../models/host.dart';
 import '../screens/add_host_sheet.dart';
 import '../widgets/name_dialog.dart';
 
-/// Shown when a scanned code is refused — wording from `pairingAppMismatch`.
-void showPairingRefusal(BuildContext context, String message) {
+/// Shown when a scanned code is refused.
+///
+/// The parser hands back a [PairingRefusal] rather than only a sentence, so the dialog can word the
+/// refusal in the user's language. The one exception is a code minted by another app: that sentence
+/// belongs to the family contract (`pairingAppMismatch`) and is shown as the contract wrote it.
+void showPairingRefusal(BuildContext context, PairingResult result) {
+  final l10n = context.l10n;
+  final message = switch (result.kind) {
+    PairingRefusal.otherApp => result.refusal ?? l10n.errorPairingOtherApp,
+    PairingRefusal.empty => l10n.errorPairingEmpty,
+    PairingRefusal.malformed => l10n.errorPairingMalformed,
+    PairingRefusal.address => l10n.errorPairingAddress,
+    PairingRefusal.unreadable || null => l10n.errorPairingUnreadable,
+  };
+  // "That code is for another app" is only true for the mismatch case; every other refusal is a
+  // malformed code, and the generic title is the honest one.
+  final title = result.kind == PairingRefusal.otherApp
+      ? l10n.errorPairingOtherApp
+      : l10n.hostRefusedTitle;
   showDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('That code is for another app'),
+      title: Text(title),
       content: Text(message),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(l10n.commonOk)),
       ],
     ),
   );
@@ -64,17 +82,18 @@ Future<CoderHost?> addHostFlow(BuildContext context, HostStore store) async {
     final parsed = parsePairingCode(result.code!);
     if (!parsed.ok) {
       if (!context.mounted) return null;
-      showPairingRefusal(context, parsed.refusal!);
+      showPairingRefusal(context, parsed);
       return null;
     }
     if (!context.mounted) return null;
+    final l10n = context.l10n;
     final name = await showNameDialog(
       context,
-      title: 'Name this connection',
-      fieldLabel: 'Connection name',
+      title: l10n.pairingNameTitle,
+      fieldLabel: l10n.pairingNameField,
       initialValue: parsed.host!.label,
-      confirmLabel: 'Add',
-      helperText: 'Shown in the Connections list — the address is kept as well.',
+      confirmLabel: l10n.commonAdd,
+      helperText: l10n.pairingNameHelper,
       // The connection-name bound, from the one place that defines it (`name_dialog.dart`). The
       // prefilled default is the address, whose host part is at most 39 characters, so a user who
       // simply taps Add is never stopped by it.

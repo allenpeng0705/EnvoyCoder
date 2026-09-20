@@ -119,6 +119,53 @@ describe("updateProject migrates idle tasks onto the new agent", () => {
     expect(migrated.model).toBe("openai/gpt-4o");
   });
 
+  it("moves a task that had chosen its own agent, and leaves another project's tasks alone", async () => {
+    const b = await bench();
+    // A task created through the old mobile Agent chip carried its own harness. The owner's rule is
+    // that the agent is the project's, so the project's change must reach it too — this is the half
+    // that "copy the project's value at creation" would silently miss.
+    const legacy = await b.store.createTask({
+      projectId: b.projectId,
+      title: "picked-its-own-agent",
+      harness: "claudecode",
+    });
+    expect(legacy?.harness).toBe("claudecode");
+
+    const alreadyMoved = await b.store.createTask({
+      projectId: b.projectId,
+      title: "already-on-the-new-agent",
+      harness: "deepseek-harness",
+    });
+
+    // The scope is the project: a task registered elsewhere keeps its agent.
+    const otherProject = (await b.store.addProject({ path: "/some/other/repo" })).project;
+    const elsewhere = await b.store.createTask({
+      projectId: otherProject.id,
+      title: "other-project",
+      harness: "envoy-harness",
+    });
+
+    await b.store.updateProject(b.projectId, { defaults: { harness: "deepseek-harness" } });
+
+    expect(b.store.findTask(legacy!.id)?.harness).toBe("deepseek-harness");
+    expect(b.store.findTask(alreadyMoved!.id)?.harness).toBe("deepseek-harness");
+    expect(b.store.findTask(elsewhere!.id)?.harness).toBe("envoy-harness");
+  });
+
+  it("a task created with no explicit agent resolves the project's, and later follows a change", async () => {
+    const b = await bench();
+    await b.store.updateProject(b.projectId, { defaults: { harness: "deepseek-harness" } });
+
+    // This is exactly what the mobile new-task sheet now sends: `projectId` and `title`, no `harness`.
+    // The agent comes from the project, which is the only place it is chosen.
+    const task = await b.store.createTask({ projectId: b.projectId, title: "inherits-the-project-agent" });
+    expect(task?.harness).toBe("deepseek-harness");
+
+    // And a later project change reaches the task that already exists.
+    await b.store.updateProject(b.projectId, { defaults: { harness: "envoy-harness" } });
+    expect(b.store.findTask(task!.id)?.harness).toBe("envoy-harness");
+  });
+
   it("applyHarnessSwitch clears mode and applies preferred model when needed", () => {
     const task = {
       id: "t",

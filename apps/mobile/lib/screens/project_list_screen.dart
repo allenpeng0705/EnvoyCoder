@@ -16,6 +16,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../models/harness.dart';
 import '../models/host.dart';
 import '../models/project_rail.dart';
@@ -114,9 +115,13 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
       try {
         settingsResult = await widget.client.call('coder.getSettings', {});
       } catch (_) {}
+      // `context.l10n` only after an await: this runs from `initState`, and an inherited lookup
+      // before the first build would assert.
+      if (!mounted) return;
+      final l10n = context.l10n;
       final projects = _asMapList(projectsResult['projects']).map(ProjectInfo.fromJson).toList();
-      final tasks = _asMapList(tasksResult['tasks']).map(TaskInfo.fromJson).toList();
-      final groups = groupByProject(projects: projects, tasks: tasks);
+      final tasks = _asMapList(tasksResult['tasks']).map((e) => TaskInfo.fromJson(e, l10n: l10n)).toList();
+      final groups = groupByProject(projects: projects, tasks: tasks, l10n: l10n);
       final harnesses = _asMapList(harnessesResult?['harnesses']).map(HarnessInfo.fromJson).toList();
       String? appHarness;
       final settings = settingsResult?['settings'];
@@ -136,15 +141,16 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
       });
     } catch (error) {
       if (!mounted) return;
+      final l10n = context.l10n;
       setState(() {
         _loading = false;
-        _error = 'Could not load work from this computer. ${_friendly("$error")}';
+        _error = l10n.projectListCouldNotLoad(_friendly(l10n, "$error"));
       });
     }
   }
 
-  static String _friendly(String raw) {
-    if (raw.contains('token=')) return 'The connection failed.';
+  static String _friendly(AppLocalizations l10n, String raw) {
+    if (raw.contains('token=')) return l10n.commonConnectionFailed;
     return raw.length > 160 ? '${raw.substring(0, 160)}…' : raw;
   }
 
@@ -174,12 +180,17 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
       projects: _projects,
       harnesses: _harnesses,
       initialProjectId: project.id,
+      // The app's own default agent, so the sheet resolves the same agent the daemon will use when the
+      // project has not set one. It is only context for the model / mode / thinking chips: the sheet
+      // never sends a task-level harness (see `showNewTaskSheet`).
+      appHarness: _appHarness,
     );
     await _refresh();
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final colors = CoderTheme.of(context);
     final state = widget.client.state;
     final badge = attentionBadge(_tasks);
@@ -220,26 +231,26 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
-                    '$badge need${badge == 1 ? 's' : ''} you',
+                    l10n.projectListAttention(badge),
                     style: TextStyle(color: colors.statusWarning, fontSize: 12),
                   ),
                 ),
               ),
             ),
           Semantics(
-            label: 'Add project',
+            label: l10n.addProjectTitle,
             button: true,
             child: IconButton(
-              tooltip: 'Add project',
+              tooltip: l10n.addProjectTitle,
               onPressed: () => unawaited(_addProject()),
               icon: const Icon(Icons.add),
             ),
           ),
           Semantics(
-            label: 'Settings',
+            label: l10n.settingsTitle,
             button: true,
             child: IconButton(
-              tooltip: 'Settings',
+              tooltip: l10n.settingsTitle,
               onPressed: () => widget.onShowSettings(widget.client, _harnesses),
               icon: const Icon(Icons.settings),
             ),
@@ -257,10 +268,10 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
             ),
             child: TextField(
               onChanged: (value) => setState(() => _query = value),
-              decoration: const InputDecoration(
-                hintText: 'Search tasks, repos, paths',
-                prefixIcon: Icon(Icons.search, size: 20),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: l10n.projectListSearchHint,
+                prefixIcon: const Icon(Icons.search, size: 20),
+                border: const OutlineInputBorder(),
                 isDense: true,
               ),
             ),
@@ -284,8 +295,8 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
                                   children: [
                                     Text(
                                       _query.trim().isEmpty
-                                          ? 'No projects yet — add a folder on this computer.'
-                                          : 'Nothing matches that search.',
+                                          ? l10n.projectListNoProjects
+                                          : l10n.projectListNoMatch,
                                       style: TextStyle(color: colors.foregroundMuted),
                                       textAlign: TextAlign.center,
                                     ),
@@ -295,7 +306,7 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
                                       FilledButton.tonalIcon(
                                         onPressed: () => unawaited(_addProject()),
                                         icon: const Icon(Icons.create_new_folder_outlined),
-                                        label: const Text('Add project'),
+                                        label: Text(l10n.addProjectTitle),
                                       ),
                                     ],
                                   ],
@@ -373,7 +384,7 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not change the project agent.')),
+        SnackBar(content: Text(context.l10n.projectListCouldNotChangeAgent)),
       );
     }
   }
@@ -392,12 +403,12 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
   /// showing the project that still exists server-side instead of a screen that lied and will
   /// silently disagree with the next refresh.
   Future<void> _removeProject(ProjectInfo project) async {
+    final l10n = context.l10n;
     final confirmed = await showConfirmDialog(
       context,
-      title: 'Remove ${project.label}?',
-      message: 'The project leaves EnvoyDev and its tasks leave the list — they are archived, not '
-          'deleted, and nothing in that folder is touched. Removing the project cannot be undone.',
-      confirmLabel: 'Remove project',
+      title: l10n.projectListRemoveTitle(project.label),
+      message: l10n.projectListRemoveMessage,
+      confirmLabel: l10n.projectListRemoveConfirm,
     );
     if (!confirmed || !mounted) return;
 
@@ -409,7 +420,7 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not remove ${project.label}. It is still in the list.')),
+        SnackBar(content: Text(l10n.projectListRemoveFailed(project.label))),
       );
       return;
     }
@@ -421,36 +432,36 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
       SnackBar(
         content: Text(
           archived == 0
-              ? 'Removed ${project.label}.'
-              : 'Removed ${project.label}. ${archived == 1 ? '1 task was' : '$archived tasks were'} '
-                  'archived.',
+              ? l10n.projectListRemoved(project.label)
+              : l10n.projectListRemovedArchived(project.label, archived),
         ),
       ),
     );
   }
 
-  /// Archive one task out of the list.
+  /// Take one task out of the list.
   ///
-  /// **Why "Archive" and not "Remove"/"Delete".** There is no task delete in the protocol: the only
-  /// operation is `coder.archiveTask` (`packages/protocol/src/rpc.ts:2086`), which stamps
-  /// `archivedAt` (`apps/desktop/src/daemon/store.ts:582-594`) and can be reversed with
+  /// **The operation is archive; the menu item says "Remove".** There is no task delete in the
+  /// protocol: the only operation is `coder.archiveTask` (`packages/protocol/src/rpc.ts:2086`), which
+  /// stamps `archivedAt` (`apps/desktop/src/daemon/store.ts:582-594`) and can be reversed with
   /// `archived: false`. It is not destructive — the folder, its files and the transcript stay on the
-  /// computer — so the menu item says Archive and the confirm is not coloured as danger. (The desktop
-  /// sidebar labels the same RPC "Remove task"; the confirmation there says "it leaves the rail and
-  /// is archived". This app says Archive outright, because that is the verb the protocol implements —
-  /// AGENTS.md non-negotiable #4. The desktop's own "Remove task" is the inaccurate label; it is
-  /// flagged for a follow-up rather than edited from here.)
+  /// computer. The owner asked for the short verb here, and the desktop already labels the same RPC
+  /// "Remove" (`apps/desktop/src/i18n/messages/en.ts:169`, `task.remove`), so the window and the phone
+  /// now say the same word for the same call. **The sentence behind it is what stays honest**: the
+  /// confirm names what leaves (the list) and what does not (the folder, files, transcript), so
+  /// "Remove" is never read as "Delete". Nothing here claims a capability the protocol lacks
+  /// (AGENTS.md non-negotiable #4) — the button is a list verb, the dialog is the daemon's truth.
   ///
   /// Deliberately **not** promised in the dialog: an in-app undo. The daemon can un-archive, but no
   /// screen in either app offers it yet, and "you can bring it back" would be a capability this UI
   /// does not provide.
   Future<void> _archiveTask(TaskInfo task) async {
+    final l10n = context.l10n;
     final confirmed = await showConfirmDialog(
       context,
-      title: 'Archive ${task.title}?',
-      message: 'It leaves the task list. The folder, its files and the transcript stay on this '
-          'computer — archiving is not deletion.',
-      confirmLabel: 'Archive',
+      title: l10n.taskRemoveTitle(task.title),
+      message: l10n.taskRemoveMessage,
+      confirmLabel: l10n.commonRemove,
       destructive: false,
     );
     if (!confirmed || !mounted) return;
@@ -459,8 +470,10 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
       await widget.client.call('coder.archiveTask', {'id': task.id, 'archived': true});
     } catch (_) {
       if (!mounted) return;
+      // "Remove", not "archive": the error names the action the user took, and the second sentence
+      // still says where the task ended up (still listed), so it cannot be read as a lost delete.
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not archive ${task.title}. It is still in the list.')),
+        SnackBar(content: Text(l10n.projectListRemoveTaskFailed(task.title))),
       );
       return;
     }
@@ -479,13 +492,14 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
   /// The dialog refuses a blank name itself (a task always has a title; clearing it is not a rename),
   /// and Enter submits, so the common case is: open, edit, Enter.
   Future<void> _renameTask(TaskInfo task) async {
+    final l10n = context.l10n;
     final next = await showNameDialog(
       context,
-      title: 'Rename task',
-      fieldLabel: 'Task name',
+      title: l10n.projectListRenameTaskTitle,
+      fieldLabel: l10n.projectListRenameTaskField,
       initialValue: task.title,
-      confirmLabel: 'Rename',
-      emptyError: 'Enter a name for this task.',
+      confirmLabel: l10n.commonRename,
+      emptyError: l10n.projectListRenameTaskEmpty,
     );
     if (next == null || !mounted) return;
     // The daemon answers with the task it stored; writing the same name back is a no-op, not an
@@ -497,7 +511,7 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not rename ${task.title}. The name is unchanged.')),
+        SnackBar(content: Text(l10n.projectListRenameTaskFailed(task.title))),
       );
       return;
     }
@@ -513,6 +527,8 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
         projects: _projects,
         harnesses: _harnesses,
         initialProjectId: task.projectId,
+        // Same resolution as `_newTaskFor`: the project's agent, else the app default.
+        appHarness: _appHarness,
       );
       await _refresh();
       return;
@@ -565,7 +581,7 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
 /// already means `reconnecting` here** — collapsing the two would erase the distinction this change
 /// is about. (The band-1 `status*` tokens are the documented "icons" band, but they carry no running
 /// colour at all; the only way to use them would be to give connecting and reconnecting one hue.)
-class _ConnectionStatusButton extends StatelessWidget {
+class _ConnectionStatusButton extends StatefulWidget {
   const _ConnectionStatusButton({
     required this.hostLabel,
     required this.state,
@@ -579,26 +595,128 @@ class _ConnectionStatusButton extends StatelessWidget {
   final VoidCallback onPressed;
 
   @override
+  State<_ConnectionStatusButton> createState() => _ConnectionStatusButtonState();
+}
+
+/// Test seam: the pulse, by key, so a widget test can read the painted opacity directly instead of
+/// inferring "is it animating?" from wall-clock timing. Public because the test imports this screen.
+const Key connectionStatusPulseKey = ValueKey<String>('connectionStatusPulse');
+
+class _ConnectionStatusButtonState extends State<_ConnectionStatusButton>
+    with SingleTickerProviderStateMixin {
+  /// One full bright → dim → bright breath.
+  ///
+  /// ~1.2s is the calm end of the brief: fast enough that a two- or three-second relay handshake
+  /// shows visible motion, slow enough that it reads as "working" rather than as an alarm. A blink
+  /// was rejected — this is a status glyph, and a blink is what a failure looks like.
+  static const Duration _pulsePeriod = Duration(milliseconds: 1200);
+
+  /// The dim end of the breath: the state's **own** token at reduced opacity, never a second hue.
+  /// 0.35 keeps the hue legible at the dim end, so "which state is it?" is still readable mid-pulse.
+  static const double _dimOpacity = 0.35;
+
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: _pulsePeriod,
+  );
+
+  /// Full token → dimmed token → full token, eased so the turnarounds are not abrupt. `repeat()`
+  /// (not `reverse: true`) makes this sequence the whole period, so `_pulsePeriod` is the period.
+  late final Animation<double> _opacity = TweenSequence<double>([
+    TweenSequenceItem(
+      tween: Tween<double>(begin: 1.0, end: _dimOpacity)
+          .chain(CurveTween(curve: Curves.easeInOut)),
+      weight: 1,
+    ),
+    TweenSequenceItem(
+      tween: Tween<double>(begin: _dimOpacity, end: 1.0)
+          .chain(CurveTween(curve: Curves.easeInOut)),
+      weight: 1,
+    ),
+  ]).animate(_controller);
+
+  bool _reduceMotion = false;
+
+  /// The two states the app is still *working toward* — the only ones that may animate.
+  ///
+  /// `connected`, `failed` and `idle` are settled facts. A pulse on a completed connection says
+  /// "still working" about something that is done, which is a worse lie than a still icon; on
+  /// `failed`/`idle` it would promise progress that is not happening. `connecting` and
+  /// `reconnecting` are exactly the owner's "5G takes some time" window, where nothing moving made
+  /// a working connection indistinguishable from a hung one.
+  static bool _isInProgress(HostConnectionState state) =>
+      state == HostConnectionState.connecting ||
+      state == HostConnectionState.reconnecting;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // `disableAnimations` is the platform/accessibility "reduce motion" flag, and it is read here
+    // rather than in `initState` because it comes from an inherited widget. A continuous pulse is
+    // exactly the decoration that flag exists to suppress, so honour it: stop the ticker and paint
+    // the full-strength token. This runs before the first build, so the static branch is the first
+    // frame — a reduced-motion user never sees a single pulse.
+    _reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    _syncPulse();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ConnectionStatusButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state != widget.state) _syncPulse();
+  }
+
+  /// Run the breath only for a transitional state when motion is allowed; stop it otherwise.
+  ///
+  /// Leaving a settled state also resets `value` to 0, which is the full-strength token: a pulse
+  /// caught mid-dim must not linger on a `connected`/`failed`/`idle` glyph, or the still icon would
+  /// depend on *when* the state changed.
+  void _syncPulse() {
+    if (!_reduceMotion && _isInProgress(widget.state)) {
+      if (!_controller.isAnimating) _controller.repeat();
+    } else {
+      _controller.stop();
+      _controller.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    // The ticker is owned here and must not outlive the widget: a repeating controller left running
+    // is both a leak and the thing that makes a `pumpAndSettle` on this screen never settle.
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final color = switch (state) {
-      HostConnectionState.connected => colors.statusDotSuccess,
-      HostConnectionState.reconnecting => colors.statusDotWarning,
-      HostConnectionState.failed => colors.statusDotDanger,
-      HostConnectionState.connecting => colors.statusDotRunning,
-      HostConnectionState.idle => colors.foregroundExtraMuted,
+    final color = switch (widget.state) {
+      HostConnectionState.connected => widget.colors.statusDotSuccess,
+      HostConnectionState.reconnecting => widget.colors.statusDotWarning,
+      HostConnectionState.failed => widget.colors.statusDotDanger,
+      HostConnectionState.connecting => widget.colors.statusDotRunning,
+      HostConnectionState.idle => widget.colors.foregroundExtraMuted,
     };
     // The tooltip and the accessibility label are the same sentence, and both name the status: a
     // bare glyph is not a status. It leads with "Network status for <host>" so it cannot be mistaken
     // for the name's "switch" control an inch to its right, and it names the computer because that
-    // is what a screen reader lands on first.
-    final label = 'Network status for $hostLabel — ${state.label}';
+    // is what a screen reader lands on first. Motion never carries the meaning on its own: the
+    // label keeps saying "Connecting" whether or not the pulse is running.
+    final l10n = context.l10n;
+    final label = l10n.projectListNetworkStatusFor(widget.hostLabel, widget.state.labelFor(l10n));
     return Semantics(
       label: label,
       button: true,
       child: IconButton(
         tooltip: label,
-        onPressed: onPressed,
-        icon: Icon(Icons.cell_tower, color: color),
+        onPressed: widget.onPressed,
+        // The fade wraps only the glyph, so neither the tap target nor the icon's 24pt size moves.
+        // With reduced motion, `AlwaysStoppedAnimation(1)` pins the token at full strength.
+        icon: FadeTransition(
+          key: connectionStatusPulseKey,
+          opacity: _reduceMotion ? const AlwaysStoppedAnimation<double>(1) : _opacity,
+          child: Icon(Icons.cell_tower, color: color),
+        ),
       ),
     );
   }
@@ -632,7 +750,7 @@ class _ConnectionTitle extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(CoderRadius.md),
         child: Semantics(
-          label: 'Switch connection — current: $hostLabel',
+          label: context.l10n.projectListSwitchConnection(hostLabel),
           button: true,
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -691,6 +809,7 @@ class _ProjectSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final currentId = group.project.defaultHarness ?? appHarness;
     final current = harnessById(harnesses, currentId);
     return Column(
@@ -737,10 +856,10 @@ class _ProjectSection extends StatelessWidget {
               // agent — the answer to "which project?" is the row itself, so the sheet opens already
               // knowing it.
               Semantics(
-                label: 'New task in ${group.project.label}',
+                label: l10n.projectListNewTaskIn(group.project.label),
                 button: true,
                 child: IconButton(
-                  tooltip: 'New task in ${group.project.label}',
+                  tooltip: l10n.projectListNewTaskIn(group.project.label),
                   onPressed: onNewTask,
                   icon: const Icon(Icons.add),
                 ),
@@ -764,26 +883,27 @@ class _ProjectSection extends StatelessWidget {
             return ListTile(
               contentPadding: const EdgeInsets.only(left: 48, right: 16),
               title: Text(task.title),
-              subtitle: Text(statusLabel(task.status)),
+              subtitle: Text(statusLabelFor(l10n, task.status)),
               leading: Icon(
                 Icons.circle,
                 size: 8,
                 color: _dotFor(task.status, colors),
               ),
-              // What the row can *do* besides open, behind the `…`: Rename and Archive — the same two
+              // What the row can *do* besides open, behind the `…`: Rename and Remove — the same two
               // actions the desktop task row offers (`CoderSidebar.tsx:557-583`), reached the same way
-              // the project row reaches its own secondary actions. The chevron stays beside it, so the
-              // row still reads as "tap me to open" without a word of explanation.
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _TaskOverflowMenu(
-                    taskTitle: task.title,
-                    onRename: () => onRenameTask(task),
-                    onArchive: () => onArchiveTask(task),
-                  ),
-                  const Icon(Icons.chevron_right),
-                ],
+              // the project row reaches its own secondary actions.
+              //
+              // **No trailing `>`.** The owner asked for it gone, and the row does not need it: the
+              // subtitle already says the status in words, and the `…` announces itself as the row's
+              // actions. The glyph was never a tap target of its own — the whole `ListTile`'s `onTap`
+              // below is — so removing it strands nothing. The tap is the one control that reaches the
+              // run screen; the `…` deliberately does not open it, so a mis-tap on a destructive item
+              // can never swallow a transcript. (A previous consolidation already cut this trailing
+              // area from three controls to two for 320pt; two is what fits, and this makes it one.)
+              trailing: _TaskOverflowMenu(
+                taskTitle: task.title,
+                onRename: () => onRenameTask(task),
+                onArchive: () => onArchiveTask(task),
               ),
               onTap: () => onOpenTask(task),
             );
@@ -792,7 +912,7 @@ class _ProjectSection extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(48, 0, 16, 8),
             child: Text(
-              'No tasks in this project yet',
+              l10n.projectListNoTasks,
               style: TextStyle(color: colors.foregroundMuted, fontSize: 12),
             ),
           ),
@@ -802,13 +922,14 @@ class _ProjectSection extends StatelessWidget {
 
   Future<void> _pickAgent(BuildContext context) async {
     final offered = offeredHarnesses(harnesses);
+    final l10n = context.l10n;
     final chosen = await showModalBottomSheet<String>(
       context: context,
       builder: (context) => SafeArea(
         child: ListView(
           shrinkWrap: true,
           children: [
-            ListTile(title: Text('Agent for ${group.project.label}')),
+            ListTile(title: Text(l10n.projectListAgentFor(group.project.label))),
             for (final h in offered)
               ListTile(
                 title: Text(h.label),
@@ -834,7 +955,7 @@ class _ProjectSection extends StatelessWidget {
 /// Which item of a project row's `…` was chosen.
 enum _ProjectMenuAction { agent, remove }
 
-/// The project row's `…`: the agent new tasks inherit, and Remove project.
+/// The project row's `…`: the agent new tasks inherit, and Remove.
 ///
 /// **Why these two, and not two more buttons on the row.** A row has room for one verb — starting
 /// work — and the desktop rail makes the same split (`CoderSidebar.tsx:339-370`): the agent and the
@@ -871,11 +992,12 @@ class _ProjectOverflowMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Semantics(
-      label: 'More actions for $projectLabel',
+      label: l10n.connectionsMenuAria(projectLabel),
       button: true,
       child: PopupMenuButton<_ProjectMenuAction>(
-        tooltip: 'More actions for $projectLabel',
+        tooltip: l10n.connectionsMenuAria(projectLabel),
         onSelected: (action) => switch (action) {
           _ProjectMenuAction.agent => onPickAgent(),
           _ProjectMenuAction.remove => onRemove(),
@@ -891,20 +1013,22 @@ class _ProjectOverflowMenu extends StatelessWidget {
               // The name the old chip carried. Note for the report: the row has always shown the
               // *agent* badge (`HarnessInfo.badge`), not `project.defaults.model` — this app never
               // parsed a per-project model at all.
-              title: Text(agentBadge ?? 'Agent'),
-              subtitle: canPickAgent ? const Text('Change agent') : null,
+              title: Text(agentBadge ?? l10n.composerAgentBare),
+              subtitle: canPickAgent ? Text(l10n.projectListChangeAgent) : null,
             ),
           ),
           // The destructive one is last and wears the danger colour, and the confirmation behind it is
           // the screen's own `_removeProject` — the wording and the no-optimistic-removal rule are
-          // unchanged, only the control they hang off moved.
+          // unchanged, only the control they hang off moved. The label is the short "Remove": the row
+          // is already the project, and the dialog repeats the name anyway, so "project" here was said
+          // twice. The confirmation keeps the full consequence (row gone for good, tasks archived).
           const PopupMenuDivider(),
           PopupMenuItem(
             value: _ProjectMenuAction.remove,
             child: ListTile(
               contentPadding: EdgeInsets.zero,
               leading: Icon(Icons.remove_circle_outline, color: destructive),
-              title: const Text('Remove project'),
+              title: Text(l10n.commonRemove),
             ),
           ),
         ],
@@ -916,7 +1040,7 @@ class _ProjectOverflowMenu extends StatelessWidget {
 /// Which item of a task row's `…` was chosen.
 enum _TaskMenuAction { rename, archive }
 
-/// The task row's `…`: Rename, and the archive that takes the task out of the list.
+/// The task row's `…`: Rename, and the removal that takes the task out of the list.
 ///
 /// **Why `…` and not a second button on the row.** This is the shape the project row above already
 /// settled on (`_ProjectOverflowMenu`), and the desktop's task row uses it too
@@ -925,14 +1049,12 @@ enum _TaskMenuAction { rename, archive }
 /// what keeps the 320pt layout honest — a `PopupMenuButton` is narrower than the 48pt `IconButton` it
 /// replaced, so the change spends no width, it gives some back.
 ///
-/// **Why the removal item still says "Archive".** The owner's ask is parity with the desktop, and the
-/// desktop does offer two actions here — Rename and a removal. But the *word* the desktop prints,
-/// "Remove task", is the one thing not worth copying: the RPC behind it is `coder.archiveTask`
-/// (`packages/protocol/src/rpc.ts:2086`), which stamps `archivedAt` and can be reversed with
-/// `archived: false`. The desktop's own confirmation admits as much ("it leaves the rail and is
-/// archived"). There is no task delete anywhere in the protocol, so "Remove task" is the inaccurate
-/// label, and this app keeps saying Archive — AGENTS.md non-negotiable #4. Desktop is flagged for a
-/// follow-up; nothing under `apps/desktop/**` was touched here.
+/// **Short labels, no repeated object.** The owner's ask: the row is already the task, so "Rename
+/// task" and "Archive task" twice say a noun the menu already sits on. They read "Rename" and
+/// "Remove" now — the same two words the desktop's menu uses. "Remove" is the *list* verb; the call
+/// behind it and the dialog in front of it both still say what actually happens (archive, files
+/// untouched — see `_archiveTask`), so the short label costs no truth. The `archive` enum member and
+/// the `onArchive` callback keep the operation's name in code, where the accurate word belongs.
 ///
 /// Icon-only, so it carries a tooltip **and** a `Semantics` label, and the label names the row it acts
 /// on so a screen reader facing many of these can tell them apart.
@@ -949,35 +1071,36 @@ class _TaskOverflowMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Semantics(
-      label: 'More actions for $taskTitle',
+      label: l10n.connectionsMenuAria(taskTitle),
       button: true,
       child: PopupMenuButton<_TaskMenuAction>(
-        tooltip: 'More actions for $taskTitle',
+        tooltip: l10n.connectionsMenuAria(taskTitle),
         onSelected: (action) => switch (action) {
           _TaskMenuAction.rename => onRename(),
           _TaskMenuAction.archive => onArchive(),
         },
-        itemBuilder: (context) => const [
+        itemBuilder: (context) => [
           PopupMenuItem(
             value: _TaskMenuAction.rename,
             child: ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.edit_outlined),
-              title: Text('Rename task'),
+              leading: const Icon(Icons.edit_outlined),
+              title: Text(l10n.commonRename),
             ),
           ),
-          PopupMenuDivider(),
+          const PopupMenuDivider(),
           // Same order as the project row: the thing that changes the row first, the thing that
-          // takes it away last. Archive is deliberately not painted in the danger colour — it is
+          // takes it away last. The removal is deliberately not painted in the danger colour — it is
           // reversible and leaves every file on disk, and red here would teach a user to fear a safe
           // action (`confirm_dialog.dart` makes the same call for the same reason).
           PopupMenuItem(
             value: _TaskMenuAction.archive,
             child: ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.archive_outlined),
-              title: Text('Archive task'),
+              leading: const Icon(Icons.archive_outlined),
+              title: Text(l10n.commonRemove),
             ),
           ),
         ],

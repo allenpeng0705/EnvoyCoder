@@ -153,10 +153,13 @@ Future<_StubClient> _pumpScreen(WidgetTester tester) async {
 }
 
 /// Open the row's `…`, choose Rename, and leave the dialog on screen.
+///
+/// The menu item is the short `Rename` (the row is already the task); the dialog it opens is titled
+/// `Rename task`, because that is where the object has to be named.
 Future<void> _openRenameDialog(WidgetTester tester) async {
   await tester.tap(_taskMenuButton('Fix the tests'));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Rename task'));
+  await tester.tap(find.text('Rename'));
   await tester.pumpAndSettle();
 }
 

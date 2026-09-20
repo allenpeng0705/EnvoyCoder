@@ -46,3 +46,7 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# `lib/l10n/generated/` is deliberately NOT ignored: `flutter analyze` does not run `gen-l10n`, so
+# a checkout without the generated files fails on a missing import. They are committed and refreshed
+# by `flutter pub get` (`flutter: generate: true`); see `lib/l10n/README.md`.

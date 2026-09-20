@@ -11,14 +11,14 @@ import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:pasteboard/pasteboard.dart';
 
+import '../l10n/l10n.dart';
 import '../models/composer_attachment.dart';
 
+/// A refusal raised by a picker itself, before a file ever reaches [ingestAttachments]. The message
+/// is built from the catalogue when it is shown, so no English travels in the exception.
 class AttachPick implements Exception {
-  const AttachPick(this.message);
-  final String message;
+  const AttachPick();
 }
-
-const clipboardImageMissing = 'No image was on the clipboard.';
 
 Future<List<IncomingFile>?> pickGalleryImages() async {
   final files = await ImagePicker().pickMultiImage(imageQuality: 80);
@@ -48,7 +48,7 @@ Future<List<IncomingFile>?> pickDocuments() async {
 
 Future<List<IncomingFile>?> pasteClipboardImage() async {
   final bytes = await Pasteboard.image;
-  if (bytes == null || bytes.isEmpty) throw const AttachPick(clipboardImageMissing);
+  if (bytes == null || bytes.isEmpty) throw const AttachPick();
   final mime = _sniff(bytes) ?? 'image/png';
   final ext = mime == 'image/jpeg' ? 'jpg' : mime.split('/').last;
   return [
@@ -61,21 +61,23 @@ Future<void> takeAttachments({
   required Future<List<IncomingFile>?> Function() pick,
   required bool Function() stillMounted,
   required void Function(List<ComposerAttachment> attachments, String? notice) apply,
+  AppLocalizations? l10n,
 }) async {
+  final t = l10n ?? lookupAppLocalizations(kFallbackLocale);
   try {
     final files = await pick();
     if (!stillMounted() || files == null) return;
     final result = ingestAttachments(current, files);
     apply(
       result.attachments,
-      result.notice == null ? null : attachmentNotice(result.notice!),
+      result.notice == null ? null : attachmentNotice(result.notice!, l10n),
     );
-  } on AttachPick catch (error) {
+  } on AttachPick {
     if (!stillMounted()) return;
-    apply(current, error.message);
+    apply(current, t.attachClipboardMissing);
   } catch (_) {
     if (!stillMounted()) return;
-    apply(current, 'Could not attach that file.');
+    apply(current, t.attachFailed);
   }
 }
 

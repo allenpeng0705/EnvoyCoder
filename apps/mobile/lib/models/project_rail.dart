@@ -4,6 +4,11 @@
 /// recency inside a project; search matches title, cwd, project label and path.
 library;
 
+import '../l10n/l10n.dart';
+
+/// The English every context-free projection falls back to, so the model never holds a catalogue.
+AppLocalizations get _en => lookupAppLocalizations(kFallbackLocale);
+
 class ProjectInfo {
   const ProjectInfo({
     required this.id,
@@ -61,12 +66,14 @@ class TaskInfo {
   final String? archivedAt;
   final String? hostId;
 
-  factory TaskInfo.fromJson(Map<String, dynamic> json) {
+  /// [l10n] is the caller's catalogue; a unit test omits it and gets the generated English.
+  factory TaskInfo.fromJson(Map<String, dynamic> json, {AppLocalizations? l10n}) {
+    final t = l10n ?? _en;
     return TaskInfo(
       id: (json['id'] as String?) ?? '',
       projectId: (json['projectId'] as String?) ?? '',
       title: ((json['title'] as String?) ?? '').trim().isEmpty
-          ? 'Untitled task'
+          ? t.taskUntitled
           : (json['title'] as String).trim(),
       status: (json['status'] as String?) ?? '',
       updatedAt: (json['updatedAt'] as String?) ?? '',
@@ -97,7 +104,9 @@ List<ProjectGroup> groupByProject({
   required List<ProjectInfo> projects,
   required List<TaskInfo> tasks,
   bool includeArchived = false,
+  AppLocalizations? l10n,
 }) {
+  final t = l10n ?? _en;
   final visible = tasks.where((t) => includeArchived || t.archivedAt == null).toList();
   final byProject = <String, List<TaskInfo>>{};
   for (final task in visible) {
@@ -126,7 +135,7 @@ List<ProjectGroup> groupByProject({
         project: ProjectInfo(
           id: entry.key,
           path: first?.cwd ?? entry.key,
-          label: 'Unknown project',
+          label: t.projectUnknown,
           hostId: first?.hostId ?? 'local',
           addedAt: DateTime.fromMillisecondsSinceEpoch(0).toIso8601String(),
         ),
@@ -176,6 +185,11 @@ List<ProjectGroup> filterProjectGroups(List<ProjectGroup> groups, String query) 
 int attentionBadge(List<TaskInfo> tasks) =>
     tasks.where((t) => t.status == 'needs-attention' || t.status == 'failed').length;
 
+/// The English source for a task status, kept in step with the desktop's `statusLabel`.
+///
+/// The UI renders [statusLabelFor]; this stays as the source of truth a test can assert against, the
+/// same split the desktop uses (`@envoydev/task-model`'s `statusLabel` is the English the catalogue
+/// must agree with).
 String statusLabel(String status) => switch (status) {
       'needs-attention' => 'Needs your answer',
       'running' => 'Working',
@@ -185,6 +199,19 @@ String statusLabel(String status) => switch (status) {
       'cancelled' => 'Stopped',
       'idle' => 'Idle',
       _ => status.isEmpty ? 'Unknown' : status,
+    };
+
+/// A task status in the user's language. An unrecognised status is shown verbatim rather than
+/// hidden — it is the daemon's own word, and guessing a translation for it would be invention.
+String statusLabelFor(AppLocalizations l10n, String status) => switch (status) {
+      'needs-attention' => l10n.statusNeedsAnswer,
+      'running' => l10n.statusWorking,
+      'queued' => l10n.statusQueued,
+      'done' => l10n.statusDone,
+      'failed' => l10n.statusFailed,
+      'cancelled' => l10n.statusStopped,
+      'idle' => l10n.statusIdle,
+      _ => status.isEmpty ? l10n.statusUnknown : status,
     };
 
 bool _needsHuman(String status) => status == 'needs-attention';

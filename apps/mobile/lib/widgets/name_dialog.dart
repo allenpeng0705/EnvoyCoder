@@ -36,6 +36,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
+
 /// The most characters a connection name may hold. See the library comment for why 40.
 const int kConnectionNameMaxLength = 40;
 
@@ -124,7 +126,7 @@ class _NameDialogState extends State<_NameDialog> {
     // checked (a blank field means "keep the default", which is an address, not a typed name).
     final maxLength = widget.maxLength;
     if (value.isNotEmpty && maxLength != null && value.length > maxLength) {
-      setState(() => _error = 'Keep it to $maxLength characters or fewer.');
+      setState(() => _error = context.l10n.nameTooLong(maxLength));
       return;
     }
     // Blank with no `emptyError` is "keep the default", not "name it nothing".
@@ -154,7 +156,7 @@ class _NameDialogState extends State<_NameDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.commonCancel),
         ),
         FilledButton(onPressed: _submit, child: Text(widget.confirmLabel)),
       ],

@@ -6,9 +6,12 @@
 // screen. The screen owns the action, and pops `true` so the list behind it drops the row; a refusal
 // keeps the screen and the work exactly where they were.
 //
-// The verb is Archive because `coder.archiveTask` (`packages/protocol/src/rpc.ts:2086`) is the only
-// task operation the protocol implements — it stamps `archivedAt` and leaves the folder, its files
-// and the transcript on the computer (`apps/desktop/src/daemon/store.ts:582-594`).
+// The verb is Remove because that is what the user's list does, and it is the word the desktop's own
+// task menu uses for the same call (`apps/desktop/src/i18n/messages/en.ts`, `task.remove`). The call
+// underneath is still `coder.archiveTask` (`packages/protocol/src/rpc.ts:2086`) — the only task
+// operation the protocol implements — which stamps `archivedAt` and leaves the folder, its files and
+// the transcript on the computer (`apps/desktop/src/daemon/store.ts:582-594`). The confirmation
+// behind the verb is what keeps it honest: it says the files stay.
 
 import 'dart:async';
 
@@ -24,7 +27,7 @@ class _StubClient extends HostClient {
   bool failWrites = false;
 
   /// Whether `coder.tailRun` reports the run as live — the app bar is at its widest then (Stop +
-  /// Live + Explorer + Archive), which is the case a narrow phone has to survive.
+  /// Live + Explorer + Remove), which is the case a narrow phone has to survive.
   bool live = false;
 
   final List<({String method, Map<String, dynamic> params})> calls = [];
@@ -132,13 +135,13 @@ void main() {
     final opened = await _openRun(tester, client, taskId: 't-1');
 
     expect(find.byType(RunScreen), findsOneWidget);
-    await tester.tap(_iconButtonWithTooltip('Archive task'));
+    await tester.tap(_iconButtonWithTooltip('Remove task'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Archive Fix the tests?'), findsOneWidget);
+    expect(find.text('Remove Fix the tests?'), findsOneWidget);
     expect(find.textContaining('archiving is not deletion'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(TextButton, 'Archive'));
+    await tester.tap(find.widgetWithText(TextButton, 'Remove'));
     await tester.pumpAndSettle();
 
     expect(client.calls.where((c) => c.method == 'coder.archiveTask').single.params,
@@ -154,7 +157,7 @@ void main() {
     final client = _StubClient(_host);
     final opened = await _openRun(tester, client, taskId: 't-1');
 
-    await tester.tap(_iconButtonWithTooltip('Archive task'));
+    await tester.tap(_iconButtonWithTooltip('Remove task'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
     await tester.pumpAndSettle();
@@ -169,15 +172,15 @@ void main() {
     final client = _StubClient(_host)..failWrites = true;
     await _openRun(tester, client, taskId: 't-1');
 
-    await tester.tap(_iconButtonWithTooltip('Archive task'));
+    await tester.tap(_iconButtonWithTooltip('Remove task'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(TextButton, 'Archive'));
+    await tester.tap(find.widgetWithText(TextButton, 'Remove'));
     await tester.pumpAndSettle();
 
     expect(client.calls.where((c) => c.method == 'coder.archiveTask'), hasLength(1));
     // Navigating away from work that still exists would be the lie.
     expect(find.byType(RunScreen), findsOneWidget);
-    expect(find.text('Could not archive this task. It is still here.'), findsOneWidget);
+    expect(find.text('Could not remove this task. It is still here.'), findsOneWidget);
     await _drainSnackBar(tester);
     await client.dispose();
   });
@@ -187,7 +190,7 @@ void main() {
     await _openRun(tester, client, taskId: null);
 
     // Nothing to archive, so the button would be an action that cannot be carried out.
-    expect(_iconButtonWithTooltip('Archive task'), findsNothing);
+    expect(_iconButtonWithTooltip('Remove task'), findsNothing);
     await client.dispose();
   });
 
@@ -200,10 +203,10 @@ void main() {
     final client = _StubClient(_host)..live = true;
     await _openRun(tester, client, taskId: 't-1');
 
-    // The widest the bar gets: Stop, Live, Explorer and Archive all present at once.
+    // The widest the bar gets: Stop, Live, Explorer and Remove all present at once.
     expect(find.text('Stop'), findsOneWidget);
     expect(_iconButtonWithTooltip('Toggle Explorer sidebar'), findsOneWidget);
-    expect(_iconButtonWithTooltip('Archive task'), findsOneWidget);
+    expect(_iconButtonWithTooltip('Remove task'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await client.dispose();
   });

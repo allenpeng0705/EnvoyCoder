@@ -17,6 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/memory_secure_storage.dart';
+import 'support/l10n.dart' as l10n_support;
 
 CoderHost _host(String id, String label) => CoderHost(
       id: id,
@@ -283,6 +284,53 @@ void main() {
     );
     // At most the header's own Row; nothing else in the sheet may overflow.
     expect(creators.length, lessThanOrEqualTo(1), reason: creators.join('\n'));
+    await _finish(tester, controller);
+  });
+
+  testWidgets('the translated host row still lays out at 320pt in German', (tester) async {
+    // German is usually the longest catalogue, and this row's text is one the localization pass
+    // changed (a translated `{state} · {endpoint}` template rather than Dart concatenation). Rather
+    // than hijacking `FlutterError.onError` — which hides the real failure behind the binding's
+    // "onError was overridden" assert — this asserts the structural reason the row cannot overflow:
+    // its detail line is a single ellipsized line, so a longer translation truncates instead.
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final controller = await _controllerWith([_host('a', 'alpha')], active: 'a');
+    await tester.pumpWidget(
+      l10n_support.localizedApp(
+        Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showConnectionsSheet(context, controller),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+        locale: const Locale('de'),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // The catalogue really is German, and the row's detail line is the translated template.
+    expect(find.text('Verbindungen'), findsOneWidget);
+    final detail = find.textContaining('alpha:4770');
+    expect(detail, findsOneWidget);
+
+    // The measured line at 320pt: German puts the state first (`{state} · {endpoint}`), and the line
+    // truncated rather than overflowing. The state is idle or connecting depending on whether the
+    // controller dialled the active host, so both German forms are accepted.
+    final line = tester.widget<Text>(detail);
+    expect(
+      line.data,
+      anyOf('Noch nicht verbunden · alpha:4770', 'Verbindet… · alpha:4770'),
+    );
+    expect(line.maxLines, 1);
+    expect(line.overflow, TextOverflow.ellipsis);
     await _finish(tester, controller);
   });
 

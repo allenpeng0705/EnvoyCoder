@@ -7,6 +7,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../models/host.dart';
 import '../services/add_host.dart';
 import 'qr_scan_screen.dart';
@@ -33,6 +34,7 @@ class _AddHostSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     // Scrollable, not a bare `Column`: four two-line rows are taller than the sheet's 9/16-of-screen
     // cap on a short phone, and the naming dialog that now follows a code opens a keyboard **over this
     // sheet**, shrinking it further. A plain column overflowed by 6.5pt at 600pt of height; a scroll
@@ -44,8 +46,8 @@ class _AddHostSheet extends StatelessWidget {
           children: [
             ListTile(
               leading: const Icon(Icons.qr_code_scanner),
-              title: const Text('Scan QR'),
-              subtitle: const Text('Pair with the code on your computer'),
+              title: Text(l10n.hostScanQr),
+              subtitle: Text(l10n.hostScanQrSubtitle),
               onTap: () async {
                 final code = await Navigator.of(context).push<String>(
                   MaterialPageRoute(builder: (_) => const QrScanScreen()),
@@ -60,13 +62,13 @@ class _AddHostSheet extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.content_paste),
-              title: const Text('Paste link'),
-              subtitle: const Text('Paste the pairing link from EnvoyDev'),
+              title: Text(l10n.hostPasteLink),
+              subtitle: Text(l10n.hostPasteLinkSubtitle),
               onTap: () async {
                 final code = await _promptText(
                   context,
-                  title: 'Paste pairing link',
-                  hint: 'envoy://pair?…',
+                  title: l10n.hostPasteLinkTitle,
+                  hint: l10n.hostPasteLinkHint,
                 );
                 if (!context.mounted) return;
                 if (code == null || code.isEmpty) return;
@@ -75,8 +77,8 @@ class _AddHostSheet extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.lan_outlined),
-              title: const Text('Direct TCP'),
-              subtitle: const Text('Host, port, and optional token'),
+              title: Text(l10n.hostDirectTcp),
+              subtitle: Text(l10n.hostDirectTcpSubtitle),
               onTap: () async {
                 final host = await _promptDirectTcp(context);
                 if (!context.mounted) return;
@@ -86,8 +88,8 @@ class _AddHostSheet extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.terminal),
-              title: const Text('Remote SSH'),
-              subtitle: const Text('Reach the daemon through an SSH hop'),
+              title: Text(l10n.hostRemoteSsh),
+              subtitle: Text(l10n.hostRemoteSshSubtitle),
               onTap: () async {
                 final host = await _promptSsh(context);
                 if (!context.mounted) return;
@@ -110,6 +112,7 @@ Future<String?> _promptText(
   bool obscure = false,
 }) async {
   final controller = TextEditingController();
+  final l10n = context.l10n;
   return showDialog<String>(
     context: context,
     builder: (context) => AlertDialog(
@@ -121,10 +124,10 @@ Future<String?> _promptText(
         decoration: InputDecoration(hintText: hint),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(l10n.commonCancel)),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-          child: const Text('Continue'),
+          child: Text(l10n.commonContinue),
         ),
       ],
     ),
@@ -132,37 +135,38 @@ Future<String?> _promptText(
 }
 
 Future<CoderHost?> _promptDirectTcp(BuildContext context) async {
+  final l10n = context.l10n;
   final endpointController = TextEditingController(text: '192.168.1.1:4770');
   final tokenController = TextEditingController();
   final labelController = TextEditingController();
   final ok = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Direct TCP'),
+      title: Text(l10n.hostDirectTcp),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
             controller: endpointController,
-            decoration: const InputDecoration(labelText: 'Host:port'),
+            decoration: InputDecoration(labelText: l10n.hostFieldHostPort),
           ),
           TextField(
             controller: tokenController,
-            decoration: const InputDecoration(
-              labelText: 'Token (optional if already paired)',
-              helperText: 'Kept only on this phone — never shown in the list.',
+            decoration: InputDecoration(
+              labelText: l10n.hostFieldToken,
+              helperText: l10n.hostFieldTokenHelper,
             ),
             obscureText: true,
           ),
           TextField(
             controller: labelController,
-            decoration: const InputDecoration(labelText: 'Label (optional)'),
+            decoration: InputDecoration(labelText: l10n.hostFieldLabel),
           ),
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Add')),
+        TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(l10n.commonCancel)),
+        FilledButton(onPressed: () => Navigator.of(context).pop(true), child: Text(l10n.commonAdd)),
       ],
     ),
   );
@@ -185,14 +189,15 @@ Future<CoderHost?> _orExplain(BuildContext context, HostDraft result) async {
   switch (result) {
     case HostDraftBuilt(:final host):
       return host;
-    case HostDraftRefused(:final message):
+    case HostDraftRefused():
+      final l10n = context.l10n;
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('That did not add a machine'),
-          content: Text(message),
+          title: Text(l10n.hostRefusedTitle),
+          content: Text(result.messageFor(l10n)),
           actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(l10n.commonOk)),
           ],
         ),
       );
@@ -201,6 +206,7 @@ Future<CoderHost?> _orExplain(BuildContext context, HostDraft result) async {
 }
 
 Future<CoderHost?> _promptSsh(BuildContext context) async {
+  final l10n = context.l10n;
   final sshHostController = TextEditingController();
   final userController = TextEditingController();
   final portController = TextEditingController(text: '22');
@@ -210,45 +216,45 @@ Future<CoderHost?> _promptSsh(BuildContext context) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Remote SSH'),
+      title: Text(l10n.hostRemoteSsh),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: sshHostController,
-              decoration: const InputDecoration(labelText: 'SSH host'),
+              decoration: InputDecoration(labelText: l10n.hostFieldSshHost),
             ),
             TextField(
               controller: userController,
-              decoration: const InputDecoration(labelText: 'User'),
+              decoration: InputDecoration(labelText: l10n.hostFieldUser),
             ),
             TextField(
               controller: portController,
-              decoration: const InputDecoration(labelText: 'SSH port'),
+              decoration: InputDecoration(labelText: l10n.hostFieldSshPort),
               keyboardType: TextInputType.number,
             ),
             TextField(
               controller: passwordController,
-              decoration: const InputDecoration(labelText: 'Password'),
+              decoration: InputDecoration(labelText: l10n.hostFieldPassword),
               obscureText: true,
             ),
             TextField(
               controller: daemonController,
-              decoration: const InputDecoration(
-                labelText: 'Daemon on remote (host:port)',
-                helperText: 'Usually 127.0.0.1:4770 on that machine',
+              decoration: InputDecoration(
+                labelText: l10n.hostFieldDaemon,
+                helperText: l10n.hostFieldDaemonHelper,
               ),
             ),
             TextField(
               controller: tokenController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 // Optional *here*, and that is a fact about the route rather than leniency: the
                 // tunnel arrives on the remote machine's own loopback, which the daemon trusts. A
                 // token is still kept when given, because it is what the same host would need if the
                 // hop were ever dropped for a direct address.
-                labelText: 'Pairing token (optional over SSH)',
-                helperText: 'The tunnel arrives as the machine itself, so it is trusted',
+                labelText: l10n.hostFieldPairingToken,
+                helperText: l10n.hostFieldPairingTokenHelper,
               ),
               obscureText: true,
             ),
@@ -256,8 +262,8 @@ Future<CoderHost?> _promptSsh(BuildContext context) async {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Add')),
+        TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(l10n.commonCancel)),
+        FilledButton(onPressed: () => Navigator.of(context).pop(true), child: Text(l10n.commonAdd)),
       ],
     ),
   );

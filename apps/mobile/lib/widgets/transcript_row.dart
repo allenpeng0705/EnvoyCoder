@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../models/transcript.dart';
 import '../theme/tokens.dart';
 import 'assistant_markdown.dart';
@@ -43,7 +44,7 @@ class TranscriptRow extends StatelessWidget {
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
           child: Text(
-            entry.text,
+            _noteText(context.l10n, entry),
             style: TextStyle(
               color: entry.tone == 'error'
                   ? colors.statusDanger
@@ -68,12 +69,13 @@ class _UserBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final delivered = entry.delivered;
     final meta = delivered == 'steered'
-        ? 'You · joined the turn'
+        ? l10n.runYouSteered
         : delivered == 'queued'
-            ? 'You · waited for the turn'
-            : 'You';
+            ? l10n.runYouQueued
+            : l10n.runYou;
     return Align(
       alignment: Alignment.centerRight,
       child: ConstrainedBox(
@@ -119,7 +121,7 @@ class _ThoughtTile extends StatelessWidget {
         tilePadding: EdgeInsets.zero,
         childrenPadding: const EdgeInsets.only(bottom: 4),
         title: Text(
-          'How it thought about this',
+          context.l10n.runThoughtTitle,
           style: TextStyle(color: colors.foregroundMuted, fontSize: 13),
         ),
         children: [
@@ -155,6 +157,7 @@ class _ToolCard extends StatelessWidget {
         : status == 'failed'
             ? colors.statusDotDanger
             : colors.foregroundMuted;
+    final title = entry.text.isEmpty ? context.l10n.runToolFallback : entry.text;
 
     return Container(
       width: double.infinity,
@@ -173,7 +176,7 @@ class _ToolCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  entry.text,
+                  title,
                   style: TextStyle(
                     fontFamily: 'monospace',
                     fontSize: 12,
@@ -241,6 +244,7 @@ class ApprovalCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final answered = approval.resolvedWith;
     final closed = approval.closed;
 
@@ -261,11 +265,12 @@ class ApprovalCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            answered != null || closed ? 'Answered' : 'The agent needs your answer',
+            answered != null || closed ? l10n.runAnswered : l10n.runNeedsAnswer,
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 6),
-          Text(approval.question, style: TextStyle(color: colors.foreground, fontWeight: FontWeight.w600)),
+          if (approval.question.isNotEmpty)
+            Text(approval.question, style: TextStyle(color: colors.foreground, fontWeight: FontWeight.w600)),
           if (approval.detail != null && approval.detail!.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(approval.detail!, style: TextStyle(color: colors.foregroundMuted, fontSize: 13)),
@@ -273,11 +278,11 @@ class ApprovalCard extends StatelessWidget {
           const SizedBox(height: 12),
           if (answered != null)
             Text(
-              'Answered: ${_answeredLabel(approval)}',
+              l10n.runAnsweredWith(_answeredLabel(approval)),
               style: TextStyle(color: colors.foregroundMuted, fontSize: 12),
             )
           else if (closed)
-            Text('No longer waiting.', style: TextStyle(color: colors.foregroundMuted, fontSize: 12))
+            Text(l10n.runNoLongerWaiting, style: TextStyle(color: colors.foregroundMuted, fontSize: 12))
           else if (approval.selection == 'many')
             _ManyChoices(approval: approval, colors: colors, onAnswer: onAnswer)
           else if (approval.selection == 'text')
@@ -302,6 +307,29 @@ class ApprovalCard extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// The sentence for a note row.
+///
+/// A note the daemon sent already carries its text and is rendered verbatim (the daemon owns that
+/// wording). A note the app generated carries a kind and its numbers instead, and is worded here —
+/// which is what keeps plural rules correct and the sentence in the phone's language.
+String _noteText(AppLocalizations l10n, TranscriptEntry entry) {
+  switch (entry.noteKind) {
+    case 'diff':
+      return l10n.runNoteDiff(entry.noteCount ?? 0);
+    case 'usage':
+      return l10n.runNoteContext(entry.notePercent ?? 0);
+    case 'ended':
+      return switch (entry.noteStatus) {
+        'done' => l10n.runNoteFinished,
+        'cancelled' => l10n.runNoteStopped,
+        'failed' => l10n.runNoteStoppedBefore,
+        _ => l10n.runNoteEnded,
+      };
+    default:
+      return entry.text;
   }
 }
 
@@ -360,7 +388,7 @@ class _ManyChoicesState extends State<_ManyChoices> {
           onPressed: widget.onAnswer == null || _picked.isEmpty
               ? null
               : () => widget.onAnswer!(widget.approval.requestId, optionIds: _picked.toList()),
-          child: const Text('Confirm'),
+          child: Text(context.l10n.commonConfirm),
         ),
       ],
     );
@@ -398,7 +426,7 @@ class _TextAnswerState extends State<_TextAnswer> {
           minLines: 2,
           maxLines: 6,
           style: TextStyle(color: widget.colors.foreground),
-          decoration: const InputDecoration(hintText: 'Your answer'),
+          decoration: InputDecoration(hintText: context.l10n.runYourAnswer),
           onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: 8),
@@ -406,7 +434,7 @@ class _TextAnswerState extends State<_TextAnswer> {
           onPressed: widget.onAnswer == null || !ready
               ? null
               : () => widget.onAnswer!(widget.approval.requestId, text: _controller.text),
-          child: const Text('Confirm'),
+          child: Text(context.l10n.commonConfirm),
         ),
       ],
     );

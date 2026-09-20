@@ -32,6 +32,7 @@ import 'dart:io';
 import 'package:envoy_thin_client/envoy_thin_client.dart';
 import 'package:envoy_thin_client/services/platform_web_socket.dart';
 
+import '../l10n/l10n.dart';
 import '../models/host.dart';
 import 'libp2p_transport.dart';
 import 'net_diagnostics.dart';
@@ -53,6 +54,18 @@ extension HostConnectionStateText on HostConnectionState {
         HostConnectionState.reconnecting => 'Reconnecting — your tasks are still running',
         HostConnectionState.failed => 'Unreachable',
         HostConnectionState.idle => 'Not connected yet',
+      };
+
+  /// The same five states in the user's language.
+  ///
+  /// [label] stays because the diagnostics report (a developer artifact that is copied into a bug
+  /// report, not read on screen) and the tests read it; every screen renders [labelFor].
+  String labelFor(AppLocalizations l10n) => switch (this) {
+        HostConnectionState.connected => l10n.connectionStateConnected,
+        HostConnectionState.connecting => l10n.connectionStateConnecting,
+        HostConnectionState.reconnecting => l10n.connectionStateReconnecting,
+        HostConnectionState.failed => l10n.connectionStateFailed,
+        HostConnectionState.idle => l10n.connectionStateIdle,
       };
 }
 
