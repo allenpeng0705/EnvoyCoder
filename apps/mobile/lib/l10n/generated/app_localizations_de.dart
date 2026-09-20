@@ -960,6 +960,48 @@ class AppLocalizationsDe extends AppLocalizations {
   String get projectListChangeAgent => 'Agent ändern';
 
   @override
+  String gitBranchesAria(String project) {
+    return 'Branches für $project';
+  }
+
+  @override
+  String get gitBranchesTitle => 'Branches';
+
+  @override
+  String gitBranchesChip(String branch) {
+    return 'Branch: $branch';
+  }
+
+  @override
+  String get gitBranchesDetachedChip => 'Kein Branch';
+
+  @override
+  String get gitBranchesDetached =>
+      'Dieses Repository hat einen losgelösten HEAD, deshalb ist kein Branch aktuell.';
+
+  @override
+  String get gitBranchesEmpty => 'Dieses Repository hat noch keine Branches.';
+
+  @override
+  String get gitBranchesNew => 'Neuer Branch';
+
+  @override
+  String get gitBranchesName => 'Branch-Name';
+
+  @override
+  String get gitBranchesCreate => 'Anlegen und wechseln';
+
+  @override
+  String gitBranchesSwitched(String branch) {
+    return 'Zu $branch gewechselt.';
+  }
+
+  @override
+  String gitBranchesCreated(String branch) {
+    return '$branch angelegt und dorthin gewechselt.';
+  }
+
+  @override
   String get newTaskNoProjects =>
       'Füge zuerst auf dem Rechner ein Projekt hinzu und versuche es dann erneut.';
 

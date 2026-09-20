@@ -17,6 +17,7 @@ class ProjectInfo {
     required this.hostId,
     required this.addedAt,
     this.defaultHarness,
+    this.vcsKind,
   });
 
   final String id;
@@ -25,6 +26,10 @@ class ProjectInfo {
   final String hostId;
   final String addedAt;
   final String? defaultHarness;
+
+  /// What kind of version control the desktop measured this folder as: `git`, `jj`, `none`, or absent for
+  /// a project added before the daemon started recording it. Only `git` has branches this build drives.
+  final String? vcsKind;
 
   factory ProjectInfo.fromJson(Map<String, dynamic> json) {
     final defaults = json['defaults'];
@@ -35,6 +40,7 @@ class ProjectInfo {
       hostId: (json['hostId'] as String?) ?? 'local',
       addedAt: (json['addedAt'] as String?) ?? DateTime.fromMillisecondsSinceEpoch(0).toIso8601String(),
       defaultHarness: defaults is Map ? defaults['harness'] as String? : null,
+      vcsKind: json['vcs'] is Map ? (json['vcs'] as Map)['kind'] as String? : null,
     );
   }
 }

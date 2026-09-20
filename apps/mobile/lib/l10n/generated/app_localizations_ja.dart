@@ -922,6 +922,47 @@ class AppLocalizationsJa extends AppLocalizations {
   String get projectListChangeAgent => 'エージェントを変更';
 
   @override
+  String gitBranchesAria(String project) {
+    return '$project のブランチ';
+  }
+
+  @override
+  String get gitBranchesTitle => 'ブランチ';
+
+  @override
+  String gitBranchesChip(String branch) {
+    return 'ブランチ: $branch';
+  }
+
+  @override
+  String get gitBranchesDetachedChip => 'ブランチなし';
+
+  @override
+  String get gitBranchesDetached => 'このリポジトリは HEAD が切り離されているため、現在のブランチはありません。';
+
+  @override
+  String get gitBranchesEmpty => 'このリポジトリにはまだブランチがありません。';
+
+  @override
+  String get gitBranchesNew => '新しいブランチ';
+
+  @override
+  String get gitBranchesName => 'ブランチ名';
+
+  @override
+  String get gitBranchesCreate => '作成して切り替え';
+
+  @override
+  String gitBranchesSwitched(String branch) {
+    return '$branch に切り替えました。';
+  }
+
+  @override
+  String gitBranchesCreated(String branch) {
+    return '$branch を作成し、切り替えました。';
+  }
+
+  @override
   String get newTaskNoProjects => '先にコンピューターでプロジェクトを追加してから、もう一度お試しください。';
 
   @override

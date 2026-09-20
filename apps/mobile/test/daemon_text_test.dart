@@ -84,6 +84,13 @@ void main() {
     );
     // A colon that is not one of ours is not treated as a code — the parser refuses to guess.
     expect(daemonErrorText(en, 'Note: the folder is gone.'), 'Note: the folder is gone.');
+    // **A wrapped message still loses its code.** Dart stringifies a thrown error with its class name in
+    // front (`StateError: …`), and the wrapper is developer text: the sentence starts where the code does.
+    expect(
+      daemonErrorText(en, 'StateError: envoydev.git-branch-invalid: "a..b" cannot be a branch name.'),
+      '"a..b" cannot be a branch name.',
+    );
+
     // And an unmapped key still gets the sentence, not the wire format.
     final text = daemonErrorText(
       en,

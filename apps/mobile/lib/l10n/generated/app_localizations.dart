@@ -1722,6 +1722,72 @@ abstract class AppLocalizations {
   /// **'Change agent'**
   String get projectListChangeAgent;
 
+  /// gitbranchesaria — The branch control's accessible name, naming the project.
+  ///
+  /// In en, this message translates to:
+  /// **'Branches for {project}'**
+  String gitBranchesAria(String project);
+
+  /// gitbranchestitle — Heading of the branch sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Branches'**
+  String get gitBranchesTitle;
+
+  /// gitbrancheschip — The rail chip: the word Branch and the branch it is on.
+  ///
+  /// In en, this message translates to:
+  /// **'Branch: {branch}'**
+  String gitBranchesChip(String branch);
+
+  /// gitbranchesdetachedchip — The rail chip when HEAD is detached.
+  ///
+  /// In en, this message translates to:
+  /// **'No branch'**
+  String get gitBranchesDetachedChip;
+
+  /// gitbranchesdetached — Says out loud that no branch is current.
+  ///
+  /// In en, this message translates to:
+  /// **'This repository is on a detached HEAD, so no branch is current.'**
+  String get gitBranchesDetached;
+
+  /// gitbranchesempty — A repository with no branches yet.
+  ///
+  /// In en, this message translates to:
+  /// **'This repository has no branches yet.'**
+  String get gitBranchesEmpty;
+
+  /// gitbranchesnew — Label of the new-branch field.
+  ///
+  /// In en, this message translates to:
+  /// **'New branch'**
+  String get gitBranchesNew;
+
+  /// gitbranchesname — Placeholder of the new-branch field.
+  ///
+  /// In en, this message translates to:
+  /// **'Branch name'**
+  String get gitBranchesName;
+
+  /// gitbranchescreate — The button that creates a branch and switches to it.
+  ///
+  /// In en, this message translates to:
+  /// **'Create and switch'**
+  String get gitBranchesCreate;
+
+  /// gitbranchesswitched — After switching, naming the branch.
+  ///
+  /// In en, this message translates to:
+  /// **'Switched to {branch}.'**
+  String gitBranchesSwitched(String branch);
+
+  /// gitbranchescreated — After creating, naming the branch.
+  ///
+  /// In en, this message translates to:
+  /// **'Created {branch} and switched to it.'**
+  String gitBranchesCreated(String branch);
+
   /// newtasknoprojects — The new-task sheet with no project to add to.
   ///
   /// In en, this message translates to:

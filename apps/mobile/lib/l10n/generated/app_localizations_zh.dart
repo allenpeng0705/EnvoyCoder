@@ -911,6 +911,47 @@ class AppLocalizationsZh extends AppLocalizations {
   String get projectListChangeAgent => '更改智能体';
 
   @override
+  String gitBranchesAria(String project) {
+    return '$project 的分支';
+  }
+
+  @override
+  String get gitBranchesTitle => '分支';
+
+  @override
+  String gitBranchesChip(String branch) {
+    return '分支：$branch';
+  }
+
+  @override
+  String get gitBranchesDetachedChip => '无分支';
+
+  @override
+  String get gitBranchesDetached => '这个仓库的 HEAD 处于分离状态，因此没有当前分支。';
+
+  @override
+  String get gitBranchesEmpty => '这个仓库还没有分支。';
+
+  @override
+  String get gitBranchesNew => '新建分支';
+
+  @override
+  String get gitBranchesName => '分支名';
+
+  @override
+  String get gitBranchesCreate => '创建并切换';
+
+  @override
+  String gitBranchesSwitched(String branch) {
+    return '已切换到 $branch。';
+  }
+
+  @override
+  String gitBranchesCreated(String branch) {
+    return '已创建 $branch 并切换过去。';
+  }
+
+  @override
   String get newTaskNoProjects => '请先在电脑上添加项目，然后重试。';
 
   @override

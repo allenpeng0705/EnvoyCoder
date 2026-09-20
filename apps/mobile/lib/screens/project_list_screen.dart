@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/daemon_text.dart';
 import '../l10n/l10n.dart';
+import '../models/git.dart';
 import '../models/harness.dart';
 import '../models/host.dart';
 import '../models/project_rail.dart';
@@ -26,6 +27,7 @@ import '../theme/project_mark.dart';
 import '../theme/tokens.dart';
 import '../widgets/confirm_dialog.dart';
 import '../widgets/name_dialog.dart';
+import '../widgets/project_branches_sheet.dart';
 import 'new_task_sheet.dart';
 import 'add_project_sheet.dart';
 import 'run_screen.dart';
@@ -71,6 +73,14 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
   List<ProjectInfo> _projects = [];
   List<TaskInfo> _tasks = [];
   List<HarnessInfo> _harnesses = [];
+
+  /// What the desktop last answered about each project's repository, and its branches.
+  ///
+  /// Measured **once per project, when its section is opened**, and never on a list refresh: a refresh
+  /// happens on every run event, and a `git status` per project per event is a spawn storm on the desk for
+  /// a fact nobody is looking at.
+  final Map<String, GitStatusInfo> _git = {};
+  final Map<String, List<GitBranchInfo>> _gitBranches = {};
   String? _appHarness;
   String _query = '';
   String? _error;
@@ -339,7 +349,10 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
                                     collapsed: collapsed,
                                     harnesses: _harnesses,
                                     appHarness: _appHarness,
+                                    gitStatus: _git[group.project.id],
+                                    onBranches: () => unawaited(_openBranches(group.project)),
                                     onToggle: () {
+                                      if (collapsed) unawaited(_ensureGit(group.project));
                                       setState(() {
                                         if (collapsed) {
                                           _collapsed.remove(group.project.id);
@@ -374,6 +387,64 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
       harnesses: _harnesses,
     );
     if (id != null) await _refresh();
+  }
+
+  /// Measure a project's repository once, then remember it until something writes.
+  Future<void> _ensureGit(ProjectInfo project) async {
+    if (_git.containsKey(project.id)) return;
+    if (project.vcsKind != 'git') return;
+    try {
+      final result = await widget.client.call('coder.gitStatus', {'projectId': project.id});
+      final status = GitStatusInfo.fromJson(result);
+      if (!status.isRepository) return;
+      final listed = await widget.client.call('coder.gitBranches', {'projectId': project.id});
+      final raw = listed['branches'];
+      final branches = raw is List
+          ? [
+              for (final item in raw)
+                if (item is Map) GitBranchInfo.fromJson(Map<String, dynamic>.from(item)),
+            ]
+          : <GitBranchInfo>[];
+      if (mounted) {
+        setState(() {
+          _git[project.id] = status;
+          _gitBranches[project.id] = branches;
+        });
+      }
+    } catch (_) {
+      // A folder git cannot answer about is a project without a branch chip, not an error on the list: the
+      // branch sheet is where the daemon's own sentence belongs, and a project that is not a repository is
+      // the normal case this whole surface is optional for.
+    }
+  }
+
+  Future<void> _openBranches(ProjectInfo project) async {
+    await _ensureGit(project);
+    final status = _git[project.id];
+    if (status == null) {
+      // Worth saying rather than doing nothing: the sheet is behind a menu item that was enabled because
+      // this project *is* a repository.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.commonConnectionFailed)),
+      );
+      return;
+    }
+    if (!mounted) return;
+    await showProjectBranchesSheet(
+      context: context,
+      client: widget.client,
+      project: project,
+      status: status,
+      branches: _gitBranches[project.id] ?? const [],
+      onChanged: (next, branches) {
+        if (!mounted) return;
+        setState(() {
+          _git[project.id] = next;
+          _gitBranches[project.id] = branches;
+        });
+      },
+    );
   }
 
   Future<void> _setProjectAgent(ProjectInfo project, String harnessId) async {
@@ -794,6 +865,8 @@ class _ProjectSection extends StatelessWidget {
     required this.onArchiveTask,
     required this.onRenameTask,
     required this.onPickAgent,
+    required this.gitStatus,
+    required this.onBranches,
   });
 
   final ProjectGroup group;
@@ -808,6 +881,10 @@ class _ProjectSection extends StatelessWidget {
   final void Function(TaskInfo task) onArchiveTask;
   final void Function(TaskInfo task) onRenameTask;
   final void Function(ProjectInfo project, String harnessId) onPickAgent;
+
+  /// What the desktop answered about this project's repository, if it has been asked.
+  final GitStatusInfo? gitStatus;
+  final VoidCallback onBranches;
 
   @override
   Widget build(BuildContext context) {
@@ -838,11 +915,45 @@ class _ProjectSection extends StatelessWidget {
             group.project.label,
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
-          subtitle: Text(
-            group.project.path,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: colors.foregroundMuted, fontSize: 12),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                group.project.path,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: colors.foregroundMuted, fontSize: 12),
+              ),
+              // **The branch, once the desktop has been asked.** Measured when the section is opened rather
+              // than with the project list, so a rail of ten projects does not spawn twenty gits on every
+              // refresh — and it is where a user looks after a checkout: the same row, one line down.
+              if (gitStatus != null)
+                InkWell(
+                  onTap: onBranches,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.account_tree_outlined, size: 13, color: colors.foregroundMuted),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            gitStatus!.branch ?? l10n.gitBranchesDetachedChip,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: gitStatus!.detached ? colors.statusWarning : colors.foreground,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
           ),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
@@ -874,6 +985,10 @@ class _ProjectSection extends StatelessWidget {
                 agentBadge: current?.badge,
                 canPickAgent: harnesses.isNotEmpty,
                 onPickAgent: () => unawaited(_pickAgent(context)),
+                // Branches are only offered for a folder the desktop measured as a git repository: the menu
+                // item is the one place a user can reach them before the branch line exists.
+                canPickBranch: group.project.vcsKind == 'git',
+                onPickBranches: onBranches,
                 onRemove: onRemove,
                 destructive: colors.destructive,
               ),
@@ -955,7 +1070,7 @@ class _ProjectSection extends StatelessWidget {
 }
 
 /// Which item of a project row's `…` was chosen.
-enum _ProjectMenuAction { agent, remove }
+enum _ProjectMenuAction { agent, branches, remove }
 
 /// The project row's `…`: the agent new tasks inherit, and Remove.
 ///
@@ -978,6 +1093,8 @@ class _ProjectOverflowMenu extends StatelessWidget {
     required this.agentBadge,
     required this.canPickAgent,
     required this.onPickAgent,
+    required this.canPickBranch,
+    required this.onPickBranches,
     required this.onRemove,
     required this.destructive,
   });
@@ -989,6 +1106,8 @@ class _ProjectOverflowMenu extends StatelessWidget {
 
   final bool canPickAgent;
   final VoidCallback onPickAgent;
+  final bool canPickBranch;
+  final VoidCallback onPickBranches;
   final VoidCallback onRemove;
   final Color destructive;
 
@@ -1002,6 +1121,7 @@ class _ProjectOverflowMenu extends StatelessWidget {
         tooltip: l10n.connectionsMenuAria(projectLabel),
         onSelected: (action) => switch (action) {
           _ProjectMenuAction.agent => onPickAgent(),
+          _ProjectMenuAction.branches => onPickBranches(),
           _ProjectMenuAction.remove => onRemove(),
         },
         itemBuilder: (context) => [
@@ -1019,6 +1139,18 @@ class _ProjectOverflowMenu extends StatelessWidget {
               subtitle: canPickAgent ? Text(l10n.projectListChangeAgent) : null,
             ),
           ),
+          // **Branches, immediately after the agent.** The two are the project's own settings — which agent
+          // new tasks inherit, and which branch its folder is on — and a repository that is not a git folder
+          // gets no item at all rather than one that cannot work.
+          if (canPickBranch)
+            PopupMenuItem(
+              value: _ProjectMenuAction.branches,
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.account_tree_outlined),
+                title: Text(l10n.gitBranchesTitle),
+              ),
+            ),
           // The destructive one is last and wears the danger colour, and the confirmation behind it is
           // the screen's own `_removeProject` — the wording and the no-optimistic-removal rule are
           // unchanged, only the control they hang off moved. The label is the short "Remove": the row

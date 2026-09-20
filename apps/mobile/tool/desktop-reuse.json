@@ -86,5 +86,16 @@
   "statusNeedsAnswer": "status.needsAttention",
   "statusWorking": "status.running",
   "statusIdle": "status.idle",
-  "statusStopped": "status.cancelled"
+  "statusStopped": "status.cancelled",
+  "gitBranchesAria": "git.branches.aria",
+  "gitBranchesTitle": "git.branches.title",
+  "gitBranchesChip": "sidebar.project.branch",
+  "gitBranchesDetachedChip": "git.branches.detachedChip",
+  "gitBranchesDetached": "git.branches.detached",
+  "gitBranchesEmpty": "git.branches.empty",
+  "gitBranchesNew": "git.branches.new",
+  "gitBranchesName": "git.branches.name",
+  "gitBranchesCreate": "git.branches.create",
+  "gitBranchesSwitched": "git.branches.switched",
+  "gitBranchesCreated": "git.branches.created"
 }

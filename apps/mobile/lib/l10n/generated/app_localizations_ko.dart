@@ -920,6 +920,47 @@ class AppLocalizationsKo extends AppLocalizations {
   String get projectListChangeAgent => '에이전트 변경';
 
   @override
+  String gitBranchesAria(String project) {
+    return '$project의 브랜치';
+  }
+
+  @override
+  String get gitBranchesTitle => '브랜치';
+
+  @override
+  String gitBranchesChip(String branch) {
+    return '브랜치: $branch';
+  }
+
+  @override
+  String get gitBranchesDetachedChip => '브랜치 없음';
+
+  @override
+  String get gitBranchesDetached => '이 저장소는 HEAD가 분리되어 있어 현재 브랜치가 없습니다.';
+
+  @override
+  String get gitBranchesEmpty => '이 저장소에는 아직 브랜치가 없습니다.';
+
+  @override
+  String get gitBranchesNew => '새 브랜치';
+
+  @override
+  String get gitBranchesName => '브랜치 이름';
+
+  @override
+  String get gitBranchesCreate => '만들고 전환';
+
+  @override
+  String gitBranchesSwitched(String branch) {
+    return '$branch(으)로 전환했습니다.';
+  }
+
+  @override
+  String gitBranchesCreated(String branch) {
+    return '$branch을(를) 만들고 전환했습니다.';
+  }
+
+  @override
   String get newTaskNoProjects => '이 컴퓨터에 프로젝트를 먼저 추가한 뒤 다시 시도하세요.';
 
   @override

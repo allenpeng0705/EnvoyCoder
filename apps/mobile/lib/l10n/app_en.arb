@@ -1237,6 +1237,70 @@
   "@projectListChangeAgent": {
     "description": "projectlistchangeagent — Menu item that opens the project's agent picker."
   },
+  "gitBranchesAria": "Branches for {project}",
+  "@gitBranchesAria": {
+    "description": "gitbranchesaria — The branch control's accessible name, naming the project.",
+    "placeholders": {
+      "project": {
+        "type": "String"
+      }
+    }
+  },
+  "gitBranchesTitle": "Branches",
+  "@gitBranchesTitle": {
+    "description": "gitbranchestitle — Heading of the branch sheet."
+  },
+  "gitBranchesChip": "Branch: {branch}",
+  "@gitBranchesChip": {
+    "description": "gitbrancheschip — The rail chip: the word Branch and the branch it is on.",
+    "placeholders": {
+      "branch": {
+        "type": "String"
+      }
+    }
+  },
+  "gitBranchesDetachedChip": "No branch",
+  "@gitBranchesDetachedChip": {
+    "description": "gitbranchesdetachedchip — The rail chip when HEAD is detached."
+  },
+  "gitBranchesDetached": "This repository is on a detached HEAD, so no branch is current.",
+  "@gitBranchesDetached": {
+    "description": "gitbranchesdetached — Says out loud that no branch is current."
+  },
+  "gitBranchesEmpty": "This repository has no branches yet.",
+  "@gitBranchesEmpty": {
+    "description": "gitbranchesempty — A repository with no branches yet."
+  },
+  "gitBranchesNew": "New branch",
+  "@gitBranchesNew": {
+    "description": "gitbranchesnew — Label of the new-branch field."
+  },
+  "gitBranchesName": "Branch name",
+  "@gitBranchesName": {
+    "description": "gitbranchesname — Placeholder of the new-branch field."
+  },
+  "gitBranchesCreate": "Create and switch",
+  "@gitBranchesCreate": {
+    "description": "gitbranchescreate — The button that creates a branch and switches to it."
+  },
+  "gitBranchesSwitched": "Switched to {branch}.",
+  "@gitBranchesSwitched": {
+    "description": "gitbranchesswitched — After switching, naming the branch.",
+    "placeholders": {
+      "branch": {
+        "type": "String"
+      }
+    }
+  },
+  "gitBranchesCreated": "Created {branch} and switched to it.",
+  "@gitBranchesCreated": {
+    "description": "gitbranchescreated — After creating, naming the branch.",
+    "placeholders": {
+      "branch": {
+        "type": "String"
+      }
+    }
+  },
   "newTaskNoProjects": "Add a project on the computer first, then try again.",
   "@newTaskNoProjects": {
     "description": "newtasknoprojects — The new-task sheet with no project to add to."

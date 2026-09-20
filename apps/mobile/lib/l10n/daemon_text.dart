@@ -113,11 +113,16 @@ String daemonText(AppLocalizations l10n, String raw) {
 /// snackbar a user reads. This mirrors `parseCoderError`, including its refusal to treat a colon that
 /// is not one of ours as a code (`a sentence: with a colon` stays whole).
 String daemonErrorText(AppLocalizations l10n, String raw) {
-  final colon = raw.indexOf(':');
-  final head = colon > 0 ? raw.substring(0, colon).trim() : '';
-  if (colon > 0 && head.startsWith('envoydev.')) {
-    return daemonText(l10n, raw.substring(colon + 1).trim());
+  // **The code can be preceded by a wrapper**, and in practice is: Dart stringifies a thrown error as
+  // `StateError: …`, and a transport that re-wraps the daemon's message leaves its class name in front of
+  // it. The rule is therefore "wherever `envoydev.<code>:` starts, that is where the sentence starts" — the
+  // wrapper is developer text and a user should never read it in a snackbar.
+  final code = RegExp(r'envoydev\.[a-z][a-z0-9-]*:').firstMatch(raw);
+  if (code != null) {
+    return daemonText(l10n, raw.substring(code.end).trim());
   }
+  // A message with no code at all is the daemon's prose (a keyed sentence) or an exception we did not
+  // produce; either way the marker comes off and the sentence stands.
   return daemonText(l10n, raw);
 }
 
