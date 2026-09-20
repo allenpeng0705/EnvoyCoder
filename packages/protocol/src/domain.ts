@@ -1375,6 +1375,12 @@ export const RPC_METHODS = [
    * process can send — and the one an installer or a person at a terminal can use without knowing a pid.
    */
   "coder.shutdown",
+  /**
+   * The tail of the daemon's own log — the last couple of hundred lines, from the file a supervisor or the shell
+   * is writing. Bounded at both ends (bytes read, lines returned) and honest about being a tail, because a log that
+   * looks complete is a lie somebody debugs from.
+   */
+  "coder.getDaemonLog",
 ] as const;
 
 export type RpcMethod = (typeof RPC_METHODS)[number];

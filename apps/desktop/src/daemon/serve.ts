@@ -64,6 +64,8 @@ import {
 
 import type { AcpLaunch } from "./acp/client.js";
 import { AcpClient } from "./acp/client.js";
+import { join } from "node:path";
+
 import { createCoderEventBus, createCoderSocketMethods, createNodeService } from "./events.js";
 import { clearDaemonClaim, writeDaemonClaim } from "./lock.js";
 import { RunManager } from "./runs.js";
@@ -79,6 +81,8 @@ import { readLifecycle } from "./lifecycle.js";
 import { reconcileInterruptedRuns } from "./reconcile.js";
 import { readTranscript, transcriptFile } from "./transcript-log.js";
 import { DAEMON_VERSION } from "./version.js";
+import { readLogTail } from "./log-tail.js";
+import { serviceLogPath } from "./supervisor.js";
 import type { CoderDaemonHost } from "@envoydev/host-bridge";
 
 export interface StartCoderDaemonOptions {
@@ -393,6 +397,9 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
     ...(options.onShutdown ? { shutdown: options.onShutdown } : {}),
     // The daemon's own restart history, beside the supervisor's answer: a unit restarted for ever still reports
     // "running", so the count is what tells a person their daemon is in a crash loop.
+    // The tail of whichever log is live: a supervisor's stdout, or the shell's redirected output.
+    daemonLog: () =>
+      readLogTail({ candidates: [serviceLogPath(paths), join(paths.logsDir, "daemon.log")] }),
     serviceFacts: async () => {
       const facts = await readLifecycle(paths);
       return {

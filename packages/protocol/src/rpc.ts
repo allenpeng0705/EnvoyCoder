@@ -3111,6 +3111,22 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
     params: EmptyParams,
     result: z.object({ service: ServiceStatusSchema }).strict(),
   },
+  "coder.getDaemonLog": {
+    params: EmptyParams,
+    result: z
+      .object({
+        log: z
+          .object({
+            /** The file that was read, or the one wanted first when there is none yet. */
+            path: z.string(),
+            lines: z.array(z.string()),
+            /** True means "there is more than this" — the UI must say so rather than imply completeness. */
+            truncated: z.boolean(),
+          })
+          .strict(),
+      })
+      .strict(),
+  },
   "coder.shutdown": {
     params: EmptyParams,
     // `true` rather than an empty object: the client is told the request was *accepted*, not that the process is

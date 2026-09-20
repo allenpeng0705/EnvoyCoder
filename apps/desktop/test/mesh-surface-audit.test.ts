@@ -181,7 +181,9 @@ describe("the coder.* handler table, measured with and without a session", () =>
         "coder.restartService",
       ]),
     );
-    expect(refusedWithSession.filter((method) => !/Pairing|PairedDevice|Service|shutdown/.test(method))).toEqual(
+    expect(
+      refusedWithSession.filter((method) => !/Pairing|PairedDevice|Service|shutdown|DaemonLog/.test(method)),
+    ).toEqual(
       [],
     );
 

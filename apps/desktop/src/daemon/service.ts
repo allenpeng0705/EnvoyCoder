@@ -84,7 +84,9 @@ import { summarize } from "./summaries.js";
 import type { RunManager } from "./runs.js";
 import type { SessionProbe } from "./session-probe.js";
 import type { CoderStore } from "./store.js";
+import type { LogTail } from "./log-tail.js";
 import { createShutdownHandlers } from "./shutdown.js";
+import { createLogHandlers } from "./log-rpc.js";
 import type { DaemonFacts } from "./supervisor-rpc.js";
 import { createSupervisorHandlers } from "./supervisor-rpc.js";
 
@@ -149,6 +151,8 @@ export interface CoderServiceDeps {
    * process stopped. Read from the ledger, which is the only thing that knows.
    */
   serviceFacts?: () => Promise<DaemonFacts>;
+  /** The tail of the daemon's log, for the service page's "why did it fail" line. */
+  daemonLog?: () => Promise<LogTail>;
   /**
    * **How each agent's connector is delivered** — the user's stored choice.
    *
@@ -321,6 +325,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     // behalf. The window sends an id; the commands come from the same probes that drew the row, at the moment of
     // the press, so a command the user read is the command that runs and a window cannot name one. `fixes.ts`
     // carries the four outcomes, the deadline and the group kill.
+    ...createLogHandlers(deps.daemonLog ? { read: deps.daemonLog } : {}),
     // The graceful stop a client can ask for, which is the only one Windows has.
     ...createShutdownHandlers(deps.shutdown ? { shutdown: deps.shutdown } : {}),
     // The service switch: whether this machine runs the daemon under a supervisor, and the three changes to it.

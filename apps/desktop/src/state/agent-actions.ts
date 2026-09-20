@@ -81,6 +81,27 @@ export type ServiceAnswer = { ok: true; service: DaemonServiceStatus } | Refusal
  */
 export type ShutdownAnswer = { ok: true; stopping: true } | Refusal;
 
+/**
+ * The daemon's log tail, as `coder.getDaemonLog` serves it.
+ *
+ * **There is no exported protocol type to import for this one.** `coder.getDaemonLog`'s result is an inline
+ * `z.object({ log: … })` in `packages/protocol/src/rpc.ts`, the same shape the daemon's own `LogTail` carries;
+ * every other service answer has a named schema (`ServiceStatusSchema`) and this one does not. So this is a
+ * deliberate mirror rather than a second source of truth, and the honest fix is one named export upstream —
+ * not a window that reads `unknown` and casts. `truncated` is the field the UI owes the user: a tail that
+ * reads like a complete log is a lie somebody debugs from.
+ */
+export interface DaemonLogRead {
+  /** The file that was read — or the one wanted first when there is none yet. */
+  readonly path: string;
+  readonly lines: readonly string[];
+  /** True means "there is more than this", and the panel must say so rather than imply completeness. */
+  readonly truncated: boolean;
+}
+
+/** What a log read answers: the bounded tail, or a refusal (a daemon log is owner-window-only). */
+export type DaemonLogAnswer = { ok: true; log: DaemonLogRead } | Refusal;
+
 export interface AgentActions {
   /**
    * Declare an agent — a catalogue entry, or one nobody catalogued.
@@ -225,4 +246,15 @@ export interface AgentActions {
    * cannot arrive as "stopped" rather than as a failure.
    */
   shutdown(): Promise<ShutdownAnswer>;
+
+  /**
+   * **Read the end of the live daemon log** — the last 200 lines out of at most the last 64 KB, whichever of
+   * the supervisor's log or the shell's is live. Both bounds are the daemon's; a caller reads nothing itself.
+   *
+   * Owner-window-only, like the mutations: a log carries absolute paths, prompts and command lines. It is also
+   * the one service call fetched **on demand** — the row's disclosure asks when it is opened, and its Refresh
+   * asks again — because most visits to the row do not want a file read, and an empty `lines` with a non-empty
+   * `path` is the ordinary "nothing has written one yet" rather than a failure.
+   */
+  getDaemonLog(): Promise<DaemonLogAnswer>;
 }
