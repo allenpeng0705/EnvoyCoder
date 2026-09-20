@@ -48,7 +48,7 @@ import { coderPaths, inspectCoderHome } from "@envoydev/host-bridge";
 
 import { alreadyRunningOutcome, decideBoot, serveFailureOutcome } from "./boot.js";
 import { readDaemonClaim } from "./lock.js";
-import { recordBoot, recordStop } from "./lifecycle.js";
+import { readLifecycle, recordBoot, recordStop } from "./lifecycle.js";
 import { startCoderDaemon } from "./serve.js";
 
 /**
@@ -145,13 +145,15 @@ const paths = coderPaths();
 const facts = await inspectCoderHome(paths.home);
 
 /**
- * Record this start **before serving**, so a kill that lands during startup is still counted by the next boot.
+ * **Read the history here; record the start later, and only when this process is going to serve.**
  *
- * The number printed is of *previous* starts: this one is not evidence of a restart, and counting it would make
- * every healthy boot claim one. `docs/daemon-lifecycle.md` §5 asks for restarts to be visible — a supervisor
- * brings the daemon back in a second, which is exactly what makes a crash loop look like a slow morning.
+ * The first version of this recorded the boot at this point — before `decideBoot` and before the claim was read —
+ * and a real boot caught what reading had not: a launch that immediately learned *"another daemon already serves
+ * this machine"* and exited **still counted as a start**, so the very number a supervisor is meant to trust was
+ * inflated by every colliding launch (a second window, or `npm run daemon` beside a running app). A restart is a
+ * daemon *taking over serving*, so the record belongs where that happens, not where the file is first read.
  */
-const restart = await recordBoot(paths);
+const restart = await readLifecycle(paths);
 
 say([
   `EnvoyDev daemon — ${facts.headline}`,
@@ -191,7 +193,11 @@ if (existing.state === "unreadable") {
   say([`  note:     ${paths.daemonFile} could not be read (${existing.reason}); it will be replaced.`]);
 }
 
-// Step 3 — start.
+// Step 3 — start. **This is the moment a restart becomes real**, so the ledger records it here: everything above
+// can still decide this process is not needed, and a start that never serves is not a restart. A failure *after*
+// this point is counted, deliberately — that is a boot that may be looping.
+await recordBoot(paths);
+
 let daemon;
 try {
   /**

@@ -159,7 +159,9 @@ A checklist, in build order:
    *signals* a heartbeat would poll are in (`coder.health`'s `runs.lastEventAt`, and a restart ledger in
    `daemon/lifecycle.ts` recording every start plus every deliberate stop, printed at boot so a crash loop cannot
    hide). The heartbeat itself and `daemon.log` rotation are still owed; both are platform-specific and belong
-   with the unit text (item 9);
+   with the unit text (item 9). A boot is recorded only when the process actually **serves** — a launch that
+   finds another daemon already running is not a restart, which a real-boot check caught after reading had
+   missed it;
 5. bounds on the live run-event buffer and on transcripts;
 6. boot-time run reconciliation;
 7. drain-on-restart;
