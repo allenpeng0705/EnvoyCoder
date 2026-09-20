@@ -30,6 +30,7 @@
  * supervisor calls are the next slice (`docs/daemon-lifecycle.md` §6, checklist item 9).
  */
 
+import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -50,9 +51,18 @@ export function currentPointer(paths: CoderPaths): string {
   return join(runtimeRoot(paths), "current");
 }
 
-/** The program and entry point inside an installed version, as a unit would name them. */
+/**
+ * The program and entry point inside an installed version, as a unit would name them.
+ *
+ * **The entry is inside the bundle when there is one**, and that is not tidiness: Node resolves a bare import
+ * (`@envoydev/protocol`, `zod`) by walking up from the *importing file's* own directory, so an entry copied to the
+ * version root sits beside no `node_modules` and cannot resolve anything — measured, after a payload that had all
+ * 69 dependency packages copied next to it still failed with `Cannot find package 'zod' imported from
+ * …/runtime/0.1.0/main.mjs`. The root form is kept for a bundle-less payload (a self-contained file, if the build
+ * ever produces one). */
 export function payloadPaths(dir: string): { node: string; entry: string } {
-  return { node: join(dir, "node"), entry: join(dir, "main.mjs") };
+  const inBundle = join(dir, "app", "main.mjs");
+  return { node: join(dir, "node"), entry: existsSync(inBundle) ? inBundle : join(dir, "main.mjs") };
 }
 
 export interface PayloadSource {
@@ -61,6 +71,16 @@ export interface PayloadSource {
   node: string;
   /** The daemon's entry point (`main.mjs`). */
   entry: string;
+  /**
+   * The daemon's **built directory**, copied whole into `<version>/app/`.
+   *
+   * Not optional in practice, and its absence was a real bug: a daemon bundle imports its workspace packages by
+   * name, so `main.mjs` alone cannot start outside the checkout — the first version of this copied just the entry
+   * and the node runtime, and running the result failed with `ERR_MODULE_NOT_FOUND: @envoydev/protocol`. This is
+   * the same directory the packaging script stages beside the app (`stage-desktop-bundle.mjs` copies
+   * `dist-daemon/**`, including its own `node_modules`, and refuses to build without them).
+   */
+  bundle?: string;
   /** The staged agent binaries (`Envoy Harness`, and whatever the build put beside it), when there are any. */
   harness?: string;
 }
@@ -75,7 +95,10 @@ export interface InstalledPayload {
 /** Is this a usable payload directory? The entry point is the thing a unit needs to exist. */
 async function isPayload(dir: string): Promise<boolean> {
   try {
-    return (await stat(join(dir, "main.mjs"))).isFile();
+    // Either shape counts: inside the bundle beside its dependencies, or the entry on its own (see
+    // `payloadPaths`). `existsSync` rather than `stat`, because two `await`s inside one `try` meant a missing root
+    // entry threw before the bundle path was ever looked at — a check that failed for the shape it was written for.
+    return existsSync(join(dir, "main.mjs")) || existsSync(join(dir, "app", "main.mjs"));
   } catch {
     return false;
   }
@@ -103,7 +126,13 @@ export async function installPayload(paths: CoderPaths, source: PayloadSource): 
   await mkdir(temp, { recursive: true });
   try {
     await cp(source.node, join(temp, "node"));
-    await cp(source.entry, join(temp, "main.mjs"));
+    // The bundle first, so the entry copied below is a file that exists (it lives inside it).
+    if (source.bundle !== undefined) {
+      await cp(source.bundle, join(temp, "app"), { recursive: true, dereference: true });
+    } else {
+      // Only when there is no bundle: with one, the entry stays where its imports resolve.
+      await cp(source.entry, join(temp, "main.mjs"));
+    }
     if (source.harness !== undefined) await cp(source.harness, join(temp, "harness"), { recursive: true });
     // Fail here rather than leaving a directory that looks installed but cannot start.
     if (!(await isPayload(temp))) throw new Error(`the payload has no main.mjs: ${source.entry}`);

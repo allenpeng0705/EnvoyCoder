@@ -41,6 +41,7 @@
  * The daemon's *refusals* are a different matter and are all translated: see `messages.ts`.
  */
 
+import { dirname } from "node:path";
 import process from "node:process";
 
 import { DEFAULT_DAEMON_PORT, ENVOYDEV_DAEMON_PORT_ENV } from "@envoydev/protocol";
@@ -118,10 +119,14 @@ async function installPayloadAndExit(): Promise<never> {
   // The version that was current *before* this install: the one a live daemon may still be running from, and the
   // rollback the design promises. Captured here because installing flips `current`.
   const previousVersion = await readCurrentText(paths);
+  // The bundle is the directory this entry lives in — `dist-daemon/`, with the `node_modules` the packaging
+  // script insists on beside it. Copying the entry alone produced a payload that could not start.
+  const entry = process.argv[1] ?? "main.mjs";
   const installed = await installPayload(paths, {
     version: VERSION,
     node: process.execPath,
-    entry: process.argv[1] ?? "main.mjs",
+    entry,
+    bundle: dirname(entry),
     ...(harnessFlag >= 0 && process.argv[harnessFlag + 1] !== undefined
       ? { harness: process.argv[harnessFlag + 1] as string }
       : {}),
