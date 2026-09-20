@@ -58,6 +58,16 @@ and resumed. *Acceptance:* the same run driven twice — once through the UI, on
 > `acp-transport.test.ts` asserts `stopReason: "end_turn"`). `RUN_LIVE_ACP=1 npx vitest run` covers
 > the `dsh` turn on a machine that has a key.
 >
+> *Amended again, later:* **the `dsh` turn has now been reached**, on 2026-09-20, with the key in the
+> launching environment (`DEEPSEEK_API_KEY=… RUN_LIVE_ACP=1 npx vitest run` — the harness's own
+> refusal names the variable, and the test's header carries the command). The credential gap is a
+> *machine's* state rather than a limitation of the adapter; the sentence above stays because it is
+> still what a fresh install meets. That turn also showed the shape of `dsh`'s ACP surface: a plain
+> turn publishes `agent_message_chunk` and `usage_update`, and **no `available_commands_update`** — so
+> its `/` list is empty in the window and on the phone, while `envoy-harness` publishes its REPL set
+> (`../envoy-harness/packages/envoy-harness/src/protocol/slash-dispatch.ts`). Neither is a defect on
+> our side: the list belongs to the agent.
+>
 > **"One adapter covers them" has a precise meaning now** — and it is narrower than it sounded. The
 > catalogue records what each agent speaks (`AgentLaunch.transport`): two entries are ACP, and the other
 > seven are command lines whose output we would have to parse ourselves. `isDrivableByAcpAdapter()`

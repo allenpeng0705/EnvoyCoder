@@ -17,11 +17,18 @@
  *   * **It skips when `dsh` is not installed**, because an agent is the *user's* install
  *     (`docs/envoydev-harness.md`), not something this repository vendors. The skip is loud in the
  *     output; a skipped test that looks like a pass is worse than no test.
- *   * **A successful model turn is not asserted**, because it needs credentials this machine does
- *     not have. What *is* asserted is the failure path — and that path is not a consolation prize:
- *     "the agent answered with a JSON-RPC error, and we surfaced it" is the first thing a real user
- *     meets on a fresh machine, and the text they get is the difference between fixing it and giving
- *     up. `RUN_LIVE_ACP=1` asserts the successful turn for a machine that does have a key.
+ *   * **A successful model turn needs a key, and says so when it has none.** What is asserted by
+ *     default is the failure path — and that path is not a consolation prize: "the agent answered with
+ *     a JSON-RPC error, and we surfaced it" is the first thing a real user meets on a fresh machine,
+ *     and the text they get is the difference between fixing it and giving up. `RUN_LIVE_ACP=1`
+ *     asserts the successful turn, and the key goes in the **launching environment** — the harness's
+ *     own refusal names the variable:
+ *
+ *     ```bash
+ *     DEEPSEEK_API_KEY=… RUN_LIVE_ACP=1 npx vitest run apps/desktop/test/acp-transport.test.ts
+ *     ```
+ *
+ *     (Verified against the real `dsh` on 2026-09-20: one turn, `stopReason` not `unknown`.)
  */
 
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
