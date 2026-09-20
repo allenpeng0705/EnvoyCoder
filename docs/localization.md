@@ -114,17 +114,21 @@ renders a hole and an invented `{name}` renders the braces, and neither is visib
 
 **A language:** add it to `CODER_LANGUAGES` in the protocol (an upstream contract change first, per the
 family guide), then `LOCALES` and `LOCALE_LABELS` pick it up — with the endonym, since "German" is no
-help to a German user — then add the catalogue and its `TRANSLATION_REVIEW` entry. Flutter has a second
-step: `apps/desktop`'s Flutter counterpart generates its own Dart bindings from ARB files
-(`flutter gen-l10n`), the way EnvoyGo does.
+help to a German user — then add the catalogue and its `TRANSLATION_REVIEW` entry. The phone is a second
+surface with its own second step: `apps/mobile/lib/l10n/app_*.arb` is read by `flutter gen-l10n` (see
+`apps/mobile/lib/l10n/README.md`), and a language or key added there is measured against the phone's own
+English by `apps/mobile/test/arb_parity_test.dart`.
 
 ## What is not done yet
 
 - **The review above has not happened.** Six languages ship complete and unchecked; the caveat is
   recorded here and in `TRANSLATION_REVIEW` rather than in a commit message, so it survives the next
   session.
-- **The Flutter mobile app has no i18n yet.** The desktop Settings pane offers a language row; the
-  mobile app is English-only until its ARB set lands with the same seven locales.
+- **The phone carries the same caveat, from the same pass.** `apps/mobile/lib/l10n/app_*.arb` is complete
+  in the same seven languages against its own English, with the window's wording reused where a concept
+  is shared (`apps/mobile/tool/`, checked by `npm run l10n:check`), and no native speaker has read any of
+  the six — the sentence above is about the language, not about a file, so one reader settles both
+  surfaces.
 - **EnvoyMesh's own backlog is separate and larger:** EnvoyGo is missing 30 keys per language for the
   Coding tab and Pi panel (150 strings) and Social carries 5 German strings past its recorded backlog.
   Those are EnvoyMesh's to fix; the shared vocabulary above is the part that must not diverge.
