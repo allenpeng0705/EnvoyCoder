@@ -74,6 +74,17 @@ export interface PairedDeviceRecord {
   expiresAt: string;
   revokedAt?: string;
   lastSeenAt?: string;
+  /**
+   * Who paired: an **install-stable id the client sends**, with the name and platform it reports.
+   *
+   * Without these, one phone pairing five times is five identical rows labelled "Phone" — which is not only a
+   * useless list, it is five *live tokens* for one device, so revoking "the phone" left it authenticated by the
+   * next row along. The id is the only thing that can tell "the same phone again" from "another phone", which is
+   * why nothing here collapses rows that lack one.
+   */
+  clientId?: string;
+  clientName?: string;
+  clientPlatform?: string;
 }
 
 /** What Settings and `coder.listPairedDevices` may show — never the token. */
@@ -84,6 +95,9 @@ export interface PairedDevicePublic {
   expiresAt: string;
   revokedAt?: string;
   lastSeenAt?: string;
+  /** The device's own name and platform, once it has identified itself. */
+  clientName?: string;
+  clientPlatform?: string;
 }
 
 export interface PairingIdentity {
@@ -119,6 +133,9 @@ function publicOf(record: PairedDeviceRecord): PairedDevicePublic {
     expiresAt: record.expiresAt,
     ...(record.revokedAt ? { revokedAt: record.revokedAt } : {}),
     ...(record.lastSeenAt ? { lastSeenAt: record.lastSeenAt } : {}),
+    // The name the phone reports, so a Settings row says which device it is rather than "Phone".
+    ...(record.clientName ? { clientName: record.clientName } : {}),
+    ...(record.clientPlatform ? { clientPlatform: record.clientPlatform } : {}),
   };
 }
 
@@ -257,7 +274,13 @@ export class PairedDeviceStore {
       await this.ensureLoaded();
       // Opening *This machine* should not show a graveyard of codes minted every time Pairing opened
       // and never scanned — keep at most one unused QR, drop the rest (and expired unused QR).
-      if (this.pruneUnusedQrCodes({ keepNewest: true })) await this.persist();
+      // Two cleanups before the owner sees the list: unused QR codes (a graveyard of codes minted every time
+      // Pairing opened), and **rows that are the same device** — a phone paired repeatedly before this store
+      // recorded identities. The newest row is kept; the older ones are revoked, not deleted, so a phone still
+      // holding one of those tokens is refused rather than quietly working.
+      const prunedCodes = this.pruneUnusedQrCodes({ keepNewest: true });
+      const collapsed = this.collapseSameDevice();
+      if (prunedCodes || collapsed) await this.persist();
       return this.devices.map(publicOf);
     });
   }
@@ -313,6 +336,31 @@ export class PairedDeviceStore {
       await this.persist();
       return { record, public: publicOf(record) };
     });
+  }
+
+  /**
+   * Revoke every active row but the newest for each `clientId`.
+   *
+   * Runs on `list()` as well as on a re-pair, so a list that accumulated before this store recorded identities
+   * heals the next time the owner looks at it. Rows without a `clientId` are left exactly as they are: they
+   * cannot be attributed, and a wrong collapse here revokes somebody else's device.
+   */
+  private collapseSameDevice(): boolean {
+    const newest = new Map<string, PairedDeviceRecord>();
+    for (const device of this.devices) {
+      if (device.clientId === undefined || device.revokedAt !== undefined) continue;
+      const seen = newest.get(device.clientId);
+      if (seen === undefined || device.createdAt > seen.createdAt) newest.set(device.clientId, device);
+    }
+    let collapsed = false;
+    for (const device of this.devices) {
+      if (device.clientId === undefined || device.revokedAt !== undefined) continue;
+      const keep = newest.get(device.clientId);
+      if (keep === undefined || keep.id === device.id) continue;
+      device.revokedAt = this.now().toISOString();
+      collapsed = true;
+    }
+    return collapsed;
   }
 
   /**
@@ -389,14 +437,58 @@ export class PairedDeviceStore {
    *
    * Side effect: updates `lastSeenAt` for an active match (best-effort; failure does not refuse).
    */
-  async resolveSession(token: string): Promise<PairedSession | null> {
+  async resolveSession(
+    token: string,
+    client?: { id?: string; name?: string; platform?: string },
+  ): Promise<PairedSession | null> {
     await this.ensureLoaded();
     const now = this.now();
     const match = this.devices.find((d) => d.token === token);
     if (!match || !isActive(match, now)) return null;
+
+    let changed = false;
+    // Recorded once, on first sight: a client that identifies itself later is still the same row.
+    if (client?.id !== undefined && match.clientId === undefined) {
+      match.clientId = client.id;
+      changed = true;
+    }
+    if (client?.name !== undefined && match.clientName === undefined) {
+      match.clientName = client.name;
+      // The label the owner reads. "Phone" for every row is what made the list useless.
+      match.deviceLabel = client.name.slice(0, 80);
+      changed = true;
+    }
+    if (client?.platform !== undefined && match.clientPlatform === undefined) {
+      match.clientPlatform = client.platform;
+      changed = true;
+    }
+
+    /**
+     * **One live row per device.**
+     *
+     * A phone that pairs again carries a *new* token, and the row it used before stays active — a working
+     * credential nobody is watching, which is why revoking "the phone" appeared to work while it stayed
+     * connected. The older row is **revoked, never deleted**: the phone may still be holding that token, and a
+     * refusal it can see beats a token that behaves strangely.
+     *
+     * Only rows that share a `clientId` are touched. Guessing from a label would revoke somebody else's phone,
+     * and this is the one list in the product where a wrong guess is a security failure.
+     */
+    if (match.clientId !== undefined) {
+      for (const other of this.devices) {
+        if (other.id === match.id || other.revokedAt !== undefined) continue;
+        if (other.clientId !== match.clientId) continue;
+        other.revokedAt = now.toISOString();
+        changed = true;
+      }
+    }
+
     const seen = now.toISOString();
     if (match.lastSeenAt !== seen) {
       match.lastSeenAt = seen;
+      changed = true;
+    }
+    if (changed) {
       void this.enqueue(async () => {
         await this.persist();
       });
