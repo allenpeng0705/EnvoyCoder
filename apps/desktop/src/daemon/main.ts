@@ -100,6 +100,45 @@ function say(lines: string[]): void {
   for (const line of lines) console.log(line);
 }
 
+/**
+ * Install this payload where a supervisor can point at it, then exit.
+ *
+ * This is the whole of what `--install-payload` does, and it is deliberately **before** any boot decision: it
+ * must not read a claim, touch a running daemon, or bind a port. A headless install (and, later, the service
+ * installer) runs the *bundled* node with the *bundled* `main.mjs` and this flag; the app passes `--harness`
+ * because it is the half that knows where it staged the agent binaries.
+ */
+async function installPayloadAndExit(): Promise<never> {
+  const { installPayload, pruneVersions, readCurrent } = await import("./payload.js");
+  const readCurrentText = readCurrent;
+  const paths = coderPaths();
+  const harnessFlag = process.argv.indexOf("--harness");
+  const installed = await installPayload(paths, {
+    version: VERSION,
+    node: process.execPath,
+    entry: process.argv[1] ?? "main.mjs",
+    ...(harnessFlag >= 0 && process.argv[harnessFlag + 1] !== undefined
+      ? { harness: process.argv[harnessFlag + 1] as string }
+      : {}),
+  });
+  // The version just installed is `current`, and one previous version is kept for rollback; anything older goes.
+  const removed = await pruneVersions(paths, { protect: [] });
+  // Written directly rather than through `say`: this runs before the boot report's own machinery is set up,
+  // and it must not depend on anything below it in this file.
+  process.stdout.write(
+    [
+      installed.installed
+        ? `installed the daemon payload ${installed.version} at ${installed.dir}`
+        : `the daemon payload ${installed.version} was already installed at ${installed.dir}`,
+      ...(removed.length > 0 ? [`removed ${removed.join(", ")}`] : []),
+      `current: ${(await readCurrentText(paths)) ?? "?"}`,
+    ].join("\n") + "\n",
+  );
+  process.exit(0);
+}
+
+if (process.argv.includes("--install-payload")) await installPayloadAndExit();
+
 const port = readPort();
 const paths = coderPaths();
 const facts = await inspectCoderHome(paths.home);
