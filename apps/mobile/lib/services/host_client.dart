@@ -499,6 +499,10 @@ class HostClient {
         relayWsUrl: candidate.url.substring(0, target),
         homePeerId: homePeerId,
         sessionToken: candidate.sessionToken ?? '',
+        // The transport closes its own socket when this fires. The family client's per-candidate
+        // `.timeout` already ends the *walk*, but it cannot reach the channel, so without this the
+        // socket the walk abandoned stays open — and one of the relay's capped slots with it.
+        handshakeTimeout: budget.perCandidateTimeout,
       );
     }
 

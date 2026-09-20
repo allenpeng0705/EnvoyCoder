@@ -39,6 +39,22 @@ Future<Libp2pNode> _sharedLibp2pNode() async {
   if (!node.isStarted) {
     // `enableRelay: true` is what makes the `/p2p-circuit/` candidates dialable at all. No TCP
     // listen: the phone only dials out.
+    //
+    // **No `bootstrapAddrs`, deliberately.** EnvoyGo starts its node with the stored node's
+    // `bootstrapPeers`, and the obvious move here is to copy that so a short-form circuit resolves
+    // from the peerstore. Measured, it makes this app *worse*: the seeded relay is dialled by the
+    // node's background bootstrap task at the same time as the circuit's HOP dial, and the relay
+    // resets the duplicate —
+    // `FormatException: Multistream operation failed: SocketException: Connection reset by peer`
+    // on `/ip4/47.93.11.212/tcp/4001/p2p/<relay>` — so an off-LAN connect that succeeded in 0.9 s
+    // without the seeding failed after 0.2 s with it (reproduced 1-of-2 runs; the race is
+    // intermittent, which is worse for a user than a deterministic failure).
+    //
+    // The capability the seeding was meant to buy already exists one layer up: `libp2pDialTarget`
+    // puts the relay's real address into the multiaddr handed to `Libp2pNode.dial`, so the dial's own
+    // circuit branch seeds the relay peerstore entry synchronously, on the connection it is about to
+    // use. That is the load-bearing fix for the owner's hint-only QR, and the second mechanism is
+    // rejected rather than left in place.
     await node.start(enableRelay: true);
   }
   return node;

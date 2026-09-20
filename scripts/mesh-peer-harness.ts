@@ -124,6 +124,38 @@ async function main(): Promise<void> {
             circuitPeerIds: node?.getConnectedRelayPeerIds() ?? [],
           },
         }),
+        // The handshake a real phone sends first. Answered so the client reaches `coder.subscribe`
+        // and the run exercises the walk *and* the session the way the app does; a refusal here
+        // would be swallowed by `HostClient._announceOnline` and make a partial run look complete.
+        "coder.hello": async () => ({
+          product: "EnvoyDev",
+          version: "harness",
+          instanceId: "mesh-peer-harness",
+          home: HOME,
+          stateDir: paths.stateDir,
+          startedAt: new Date().toISOString(),
+          windowCount: 1,
+          methods: [],
+          mesh: peer.status(),
+          notes: [],
+        }),
+        // The project list an off-LAN phone actually opens on. Not read from a store: this harness
+        // has none, and the claim under test is that the *client's own walk* carries a real
+        // `coder.listProjects` over whichever rung won — not that a particular directory exists.
+        // The shape is `ProjectSchema` (`packages/protocol/src/rpc.ts:347`), minus the optional
+        // fields, so the phone's decoder sees exactly what a real daemon would send.
+        "coder.listProjects": async () => ({
+          projects: [
+            {
+              id: "harness-project",
+              path: "/tmp/envoydev-mesh-harness-project",
+              label: "Relay-proof project",
+              hostId: "harness-host",
+              addedAt: "2026-01-01T00:00:00.000Z",
+              vcs: { kind: "none" },
+            },
+          ],
+        }),
       },
     }),
     createNode: (options: EnvoyMeshOptions) => {
