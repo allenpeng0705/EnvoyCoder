@@ -204,8 +204,13 @@ A checklist, in build order:
 8. ~~a portable graceful stop for Windows~~ **landed, with the shell's half owed**: `coder.shutdown` is on the
    wire — answered *before* the drain begins, owner-window-only (a lost phone must not be able to end the
    desktop's daemon), and it records why the process stopped. It is the only stop Windows has, because there is
-   no signal an unrelated process can send; the remaining half is the Tauri shell calling it before it resorts to
-   `taskkill`;
+   no signal an unrelated process can send. The remaining half is the Tauri shell calling it before it resorts to
+   `taskkill`, and it is **deliberately not written blind**: a `#[cfg(windows)]` branch is excluded on this machine
+   and CI compiled no Rust at all, so the change would have shipped without a compiler ever seeing it. That gap is
+   closed first — `.github/workflows/ci.yml` now runs `npm run rust:test` on the macOS and Windows lanes — and the
+   shell change is a small edit to `stop_child` (`apps/desktop/src-tauri/src/main.rs`): spawn
+   `<node> <resolve_daemon_entry()> stop`, wait for the pid with a bounded deadline, and fall back to `taskkill`
+   only if the daemon did not go;
 9. ~~the service module with per-platform unit text as a pure function in `@envoydev/platform`~~ **landed**:
    `service.ts` writes the launchd plist, the systemd user unit and the Task Scheduler definition — at login and
    not at boot, restarting on failure and never on a deliberate stop (`SuccessfulExit=false`,

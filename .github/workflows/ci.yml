@@ -80,6 +80,16 @@ jobs:
       - name: Smoke (real host, real pairing code, real ports)
         run: npm run smoke
 
+      # **The Tauri shell is Rust, and nothing else in this file compiles it.** A `#[cfg(windows)]` branch is
+      # invisible on macOS and Linux, so without this step the app's own process handling could rot with every lane
+      # green — which is exactly why the shell's Windows stop path is still unwritten (docs/daemon-lifecycle.md §9,
+      # item 8). Linux is left out deliberately: compiling the shell there wants the webkit2gtk development
+      # packages, which is a packaging decision rather than a code one, and the two lanes that carry the shell's
+      # platform branches are macOS and Windows.
+      - name: Rust shell (the app's own process handling, compiled and tested)
+        if: runner.os != 'Linux'
+        run: npm run rust:test
+
   mobile:
     runs-on: ubuntu-latest
     steps:
