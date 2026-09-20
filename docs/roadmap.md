@@ -139,6 +139,12 @@ Paseo ships unsigned Windows builds and its Windows CI never launches the packag
 AppImage/deb/rpm for Linux. *Proves:* the app installs and starts on all three, with a smoke test in
 CI per platform rather than unit tests only.
 
+> **A second half of M6, designed and not yet built:** the daemon's *lifetime* — app-managed by default, an
+> opt-in OS service for a host that must answer the phone with no window open, the watchdog layers that keep
+> it up, and upgrade/stop/restart/uninstall on all three platforms. `docs/daemon-lifecycle.md` records the
+> decision, the facts it rests on (including the family's reserved exit code `2` for `exitForNodeSupervisor`),
+> the gap list, and what it deliberately does not decide.
+
 ## Explicitly not planned
 
 * An account system, telemetry, or a hosted service.
