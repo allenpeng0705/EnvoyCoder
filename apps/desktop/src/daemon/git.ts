@@ -31,8 +31,11 @@ import { spawn as nodeSpawn } from "node:child_process";
 
 import {
   GIT_BRANCHES_ARGS,
+  GIT_FETCH_ARGS,
   GIT_HAS_HEAD_ARGS,
   GIT_HAS_STAGED_ARGS,
+  GIT_MERGE_ABORT_ARGS,
+  GIT_PULL_ARGS,
   GIT_STATUS_ARGS,
   branchNameRefusal,
   currentSearchPath,
@@ -41,6 +44,7 @@ import {
   gitCommitArgs,
   gitCreateBranchArgs,
   gitEnv,
+  gitMergeArgs,
   gitStageArgs,
   gitUnstageArgs,
   listWorktreeChanges,
@@ -90,6 +94,8 @@ const TIMED_OUT_SENTENCE =
 const NOTHING_STAGED_SENTENCE =
   "Nothing is staged, so there is nothing to commit. Stage a file first — or stage everything and commit that.";
 const COMMIT_EMPTY_SENTENCE = "A commit needs a message.";
+const PULL_DIVERGED_SENTENCE =
+  "The branch on the computer and the one on the remote have both changed, so a pull cannot bring them together. Merge them, or push your branch.";
 
 export interface GitHandlerDeps {
   store: CoderStore;
@@ -253,6 +259,27 @@ async function gitRoot(deps: GitDeps, dir: string): Promise<string> {
   const root = await runGit(deps, dir, ["rev-parse", "--show-toplevel"], { read: true });
   const named = root.text.trim();
   return root.code === 0 && named !== "" ? named : dir;
+}
+
+/**
+ * A list of names as a sentence value.
+ *
+ * The template is localised, so the *joining* rule has to be ours and language-neutral: a comma and a space is
+ * what every one of the seven catalogues expects, and a list longer than a few names is truncated because a
+ * refusal is read on a phone.
+ */
+function listOf(names: readonly string[]): string {
+  const shown = names.slice(0, 5);
+  return names.length > shown.length ? `${shown.join(", ")} …` : shown.join(", ");
+}
+
+/** Git's own one-line summary, tailed: what a fetch or a pull actually brought. */
+function summaryOf(output: BoundedOutput): string {
+  const lines = output.text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("From "));
+  return tailText(lines.slice(-3).join(" · "), 300);
 }
 
 /** The changed files, as every staging answer reports them. */
@@ -441,6 +468,109 @@ export function createGitHandlers(deps: GitHandlerDeps): Partial<Record<RpcMetho
       });
       if (created.code !== 0) throw gitFailed(created);
       return await statusOf(deps, project.path);
+    },
+    "coder.gitMerge": async (params) => {
+      const input = parseRpcParams("coder.gitMerge", params) as {
+        projectId: string;
+        branch: string;
+        message?: string;
+      };
+      const project = projectFor(input.projectId);
+
+      const refusal = branchNameRefusal(input.branch);
+      if (refusal !== undefined) throw invalidBranch(input.branch, refusal);
+      await repositoryFor(project.path);
+      refuseWhileRunning(project.id);
+      const root = await gitRoot(deps, project.path);
+
+      // The branch being merged *into*, measured before the merge for the sentence that names it.
+      const into = (await statusOf(deps, root)).branch;
+
+      const merged = await runGit(
+        deps,
+        root,
+        gitMergeArgs(input.branch, input.message !== undefined ? { message: input.message } : {}),
+        { read: false },
+      );
+
+      if (merged.code !== 0) {
+        /**
+         * **A conflict is undone, and then refused with the files.**
+         *
+         * This window cannot resolve a conflict, so leaving one behind would leave a repository the user has
+         * to finish somewhere else — `MERGE_HEAD` in the folder, a half-applied merge, and no surface here
+         * that could finish or abandon it. Undoing it means the refusal is a *statement about an attempt*:
+         * nothing moved, and here is what would have to be resolved.
+         *
+         * Whether it was a conflict at all is measured rather than read out of git's message (which is
+         * localised and versioned): `git status` reports unmerged entries as `conflict`, and that is our own
+         * parser.
+         */
+        const conflicted = changesOf(root).filter((change) => change.kind === "conflict");
+        if (conflicted.length > 0) {
+          const files = conflicted.map((change) => change.path);
+          await runGit(deps, root, GIT_MERGE_ABORT_ARGS, { read: false });
+          throw coderError(
+            ENVOYDEV_ERRORS.gitMergeConflict,
+            `${input.branch} cannot be merged automatically. These files conflict: ${files.join(", ")}. Nothing was changed — your branch and your working tree are exactly as they were.`,
+            ref("error.gitMergeConflict", { branch: input.branch, files: listOf(files) }),
+          );
+        }
+        // Nothing was started — a local change the merge would overwrite, a branch that is not there. Git's
+        // own sentence names the file or the ref.
+        throw gitFailed(merged);
+      }
+
+      const sha = await runGit(deps, root, ["rev-parse", "HEAD"], { read: true });
+      return {
+        sha: sha.text.trim(),
+        ...(into !== undefined ? { into } : {}),
+        status: await statusOf(deps, root),
+        changes: changesOf(root),
+      };
+    },
+
+    "coder.gitFetch": async (params) => {
+      const input = parseRpcParams("coder.gitFetch", params) as { projectId: string };
+      const project = projectFor(input.projectId);
+      await repositoryFor(project.path);
+      // **A read, as far as this project is concerned**: a fetch moves remote-tracking refs and leaves the
+      // working tree alone, so it is allowed while a run is live — asking "is there anything new" is not a
+      // reason to force a user to stop their agent.
+      const root = await gitRoot(deps, project.path);
+
+      const fetched = await runGit(deps, root, GIT_FETCH_ARGS, { read: false });
+      // No credentials, no remote, no network: git says which, and its sentence names the remote. This is the
+      // first action here that can need a credential at all, which is why it is the first that can fail for a
+      // reason about the *user's* machine rather than about the repository.
+      if (fetched.code !== 0) throw gitFailed(fetched);
+      return { status: await statusOf(deps, root), summary: summaryOf(fetched) };
+    },
+
+    "coder.gitPull": async (params) => {
+      const input = parseRpcParams("coder.gitPull", params) as { projectId: string };
+      const project = projectFor(input.projectId);
+      await repositoryFor(project.path);
+      // A write: a fast-forward *moves the branch* and rewrites the working tree.
+      refuseWhileRunning(project.id);
+      const root = await gitRoot(deps, project.path);
+
+      const pulled = await runGit(deps, root, GIT_PULL_ARGS, { read: false });
+      if (pulled.code !== 0) {
+        // **`--ff-only` refusing is not a failure**, it is the two histories having diverged — and the choice
+        // that follows (merge, or push) belongs to the user, so the sentence says which situation this is
+        // rather than relaying git's `Not possible to fast-forward, aborting.`
+        const status = await statusOf(deps, root);
+        if (status.behind > 0 && status.ahead > 0) {
+          throw coderError(ENVOYDEV_ERRORS.gitPullDiverged, PULL_DIVERGED_SENTENCE, ref("error.gitPullDiverged"));
+        }
+        throw gitFailed(pulled);
+      }
+      return {
+        status: await statusOf(deps, root),
+        changes: changesOf(root),
+        summary: summaryOf(pulled),
+      };
     },
   };
 }

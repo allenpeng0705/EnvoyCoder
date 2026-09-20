@@ -2120,6 +2120,57 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
     result: z.object({ changes: WorktreeChangeListSchema }).strict(),
   },
   /**
+   * Merge `branch` into the branch the project is on.
+   *
+   * A conflict is **undone and refused**, naming the files: this window is not where a merge conflict is
+   * resolved, and a repository left half-merged would be one the user cannot finish from here.
+   */
+  "coder.gitMerge": {
+    params: z
+      .object({
+        projectId: z.string().min(1),
+        branch: z.string().min(1),
+        message: z.string().min(1).max(10_000).optional(),
+      })
+      .strict(),
+    result: z
+      .object({
+        sha: z.string().min(1),
+        /** The branch it was merged *into* — what the sentence naming the merge needs. */
+        into: z.string().optional(),
+        status: GitStatusSchema,
+        changes: WorktreeChangeListSchema,
+      })
+      .strict(),
+  },
+  /**
+   * Fetch: bring the remote branches up to date, and change **nothing** in the working tree.
+   *
+   * Separate from pull because it is the safe half, and because a phone asking "is there anything new" should
+   * not be able to disturb a working tree.
+   */
+  "coder.gitFetch": {
+    params: z.object({ projectId: z.string().min(1) }).strict(),
+    result: z
+      .object({
+        status: GitStatusSchema,
+        /** What the fetch brought, as one line per ref: git's own summary, tailed. */
+        summary: z.string(),
+      })
+      .strict(),
+  },
+  /** Pull: fetch, then fast-forward. A diverged branch is refused rather than merged. */
+  "coder.gitPull": {
+    params: z.object({ projectId: z.string().min(1) }).strict(),
+    result: z
+      .object({
+        status: GitStatusSchema,
+        changes: WorktreeChangeListSchema,
+        summary: z.string(),
+      })
+      .strict(),
+  },
+  /**
    * Commit **what is staged**, with the message the user typed.
    *
    * Staged rather than "everything", because that is what a commit is; the window's composer offers "stage

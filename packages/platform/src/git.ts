@@ -236,6 +236,45 @@ export function gitUnstageArgs(paths: readonly string[], options: { hasHead: boo
     : ["rm", "--cached", "-q", "--", ...paths];
 }
 
+/**
+ * Merge `branch` into the branch HEAD is on.
+ *
+ * Two flags, and both are about never waiting for a person:
+ *
+ *   * **`--no-edit`** — a merge commit wants a message, and git's default behaviour is to open an *editor*
+ *     for it. An editor no one is sitting in front of is a process that hangs until the deadline, so the
+ *     message is git's own default (`Merge branch 'x' into y`) unless a caller supplies one.
+ *   * **no `--ff-only`** — a merge that can fast-forward does, and one that cannot gets a merge commit,
+ *     which is what "merge back to main" means. A caller that wants only the fast-forward case has
+ *     `gitPullArgs`, where that is the point.
+ */
+export function gitMergeArgs(branch: string, options: { message?: string } = {}): string[] {
+  return options.message !== undefined && options.message.trim() !== ""
+    ? ["merge", "--no-edit", "-m", options.message, branch]
+    : ["merge", "--no-edit", branch];
+}
+
+/**
+ * Take the merge back — what a *conflicted* merge is undone with.
+ *
+ * This product never leaves a half-merged tree behind: a conflict is answered with a refusal that names the
+ * files and a repository exactly as it was, because the alternative is a user who closed the window with
+ * `MERGE_HEAD` in their repository and no surface here that could finish or undo it.
+ */
+export const GIT_MERGE_ABORT_ARGS: readonly string[] = ["merge", "--abort"];
+
+/**
+ * Fetch, and pull.
+ *
+ * **`pull` is `--ff-only`, and that is a decision rather than a default.** "Bring me up to date" and "combine
+ * two histories" are different operations with different failure modes: a fast-forward cannot conflict, so a
+ * pull either succeeds or says the histories have diverged and leaves the branch alone — and combining them
+ * is `coder.gitMerge`, which refuses *with the file list* and undoes itself. A pull that silently merged
+ * would be the one place a user could be surprised by a conflict they cannot see from the phone.
+ */
+export const GIT_FETCH_ARGS: readonly string[] = ["fetch", "--prune"];
+export const GIT_PULL_ARGS: readonly string[] = ["pull", "--ff-only"];
+
 /** Commit what is staged, with this message. Nothing else is inferred: no `--all`, no `--amend`, no hooks off. */
 export function gitCommitArgs(message: string): string[] {
   return ["commit", "-m", message];

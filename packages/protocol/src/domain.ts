@@ -980,6 +980,21 @@ export const ENVOYDEV_ERRORS = {
   gitNothingStaged: "envoydev.git-nothing-staged",
   /** A commit was asked for with a message that is empty (or only whitespace). */
   gitCommitEmpty: "envoydev.git-commit-empty",
+  /**
+   * A merge stopped on conflicts, and was **undone** before the refusal was raised.
+   *
+   * The values carry the files, because that is what a person needs: resolving them is work on their
+   * machine, and this window cannot do it — the honest answer is the list and a repository left exactly as
+   * it was.
+   */
+  gitMergeConflict: "envoydev.git-merge-conflict",
+  /**
+   * A pull could not fast-forward, so the histories have diverged.
+   *
+   * Its own code rather than `gitFailed`: nothing failed, and the action that helps is a *choice* — merge, or
+   * push, or rebase — which a user can only make if the sentence says the histories diverged.
+   */
+  gitPullDiverged: "envoydev.git-pull-diverged",
 } as const;
 
 export type EnvoyDevErrorCode = (typeof ENVOYDEV_ERRORS)[keyof typeof ENVOYDEV_ERRORS];
@@ -1083,6 +1098,16 @@ export const RPC_METHODS = [
   "coder.gitStage",
   "coder.gitUnstage",
   "coder.gitCommit", 
+  /**
+   * Combining two histories, and the safe half of talking to a remote.
+   *
+   * `gitMerge` acts on the branch the project is on; `gitFetch` changes nothing in the working tree;
+   * `gitPull` is fetch plus a **fast-forward only** step, so it cannot conflict — combining divergent
+   * histories is `gitMerge`, which names the files and undoes itself.
+   */
+  "coder.gitMerge",
+  "coder.gitFetch",
+  "coder.gitPull", 
   "coder.listTasks",
   "coder.createTask",
   "coder.updateTask",

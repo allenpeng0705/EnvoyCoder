@@ -14,7 +14,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync,mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -68,6 +68,33 @@ function repository(): string {
  * automatically…") and the commit succeeds. Only a repository that forbids the guess refuses — which is the
  * configuration a user who cares about their history sets, and the one whose refusal names the fix.
  */
+/**
+ * A repository with a **real remote**: a bare repository and two clones, so fetch and pull are measured
+ * against a remote rather than stubbed. A `file://` remote needs no credentials, which is the point — the
+ * network half of the story is about the user's own git, and this proves the plumbing without inventing one.
+ */
+function withRemote(): { desktop: string; other: string } {
+  const base = mkdtempSync(join(tmpdir(), "envoydev-gitsvc-remote-"));
+  roots.push(base);
+  const bare = join(base, "origin.git");
+  spawnSync("git", ["init", "--bare", "-q", bare], { encoding: "utf8" });
+
+  const desktop = join(base, "desktop");
+  spawnSync("git", ["clone", "-q", bare, desktop], { encoding: "utf8" });
+  run(desktop, ["config", "user.email", "t@t"]);
+  run(desktop, ["config", "user.name", "T"]);
+  writeFileSync(join(desktop, "a.txt"), "one\n");
+  run(desktop, ["add", "."]);
+  run(desktop, ["commit", "-qm", "one"]);
+  run(desktop, ["push", "-q", "-u", "origin", "HEAD"]);
+
+  const other = join(base, "other");
+  spawnSync("git", ["clone", "-q", bare, other], { encoding: "utf8" });
+  run(other, ["config", "user.email", "t@t"]);
+  run(other, ["config", "user.name", "T"]);
+  return { desktop, other };
+}
+
 function repositoryWithoutIdentity(): string {
   const root = mkdtempSync(join(tmpdir(), "envoydev-gitsvc-noid-"));
   roots.push(root);
@@ -435,6 +462,185 @@ describe("staging and committing", () => {
   });
 });
 
+describe("merging", () => {
+  itGit("merges a branch into the one the project is on, and says which", async () => {
+    const b = await bench();
+    const repo = repository();
+    const projectId = await addProject(b, repo);
+
+    // Work on `work`, then go back to `main` and merge it in — the workflow this exists for.
+    writeFileSync(join(repo, "feature.txt"), "from the branch\n");
+    run(repo, ["add", "."]);
+    run(repo, ["commit", "-qm", "the work"]);
+    await call(b.handlers, "coder.gitCheckout", { projectId, branch: "main" });
+
+    const merged = (await call(b.handlers, "coder.gitMerge", { projectId, branch: "work" })) as {
+      sha: string;
+      into?: string;
+      status: { branch?: string; dirty: number };
+      changes: unknown[];
+    };
+    expect(merged.into).toBe("main");
+    expect(merged.status.branch).toBe("main");
+    expect(merged.status.dirty).toBe(0);
+    expect(merged.changes).toEqual([]);
+    // A fast-forward moved the branch, so the file is on disk in `main` without a merge commit.
+    expect(readFileSync(join(repo, "feature.txt"), "utf8")).toBe("from the branch\n");
+    expect(spawnSync("git", ["-C", repo, "log", "-1", "--format=%s"], { encoding: "utf8" }).stdout.trim()).toBe(
+      "the work",
+    );
+  });
+
+  itGit("makes a merge commit when both sides moved", async () => {
+    const b = await bench();
+    const repo = repository();
+    const projectId = await addProject(b, repo);
+    // One commit on each side, or the merge is a fast-forward and proves nothing about a merge commit.
+    await call(b.handlers, "coder.gitCheckout", { projectId, branch: "main" });
+    writeFileSync(join(repo, "mine.txt"), "main side\n");
+    run(repo, ["add", "."]);
+    run(repo, ["commit", "-qm", "main side"]);
+
+    await call(b.handlers, "coder.gitCheckout", { projectId, branch: "work" });
+    writeFileSync(join(repo, "theirs.txt"), "work side\n");
+    run(repo, ["add", "."]);
+    run(repo, ["commit", "-qm", "work side"]);
+    await call(b.handlers, "coder.gitCheckout", { projectId, branch: "main" });
+
+    await call(b.handlers, "coder.gitMerge", { projectId, branch: "work" });
+    // Git's own default message, because `--no-edit` is what keeps an editor from opening: the exact wording
+    // varies by git version ("Merge branch 'work'" here, "…into main" elsewhere), so the assertion is about
+    // *a merge commit having been made* rather than about git's phrasing.
+    expect(
+      spawnSync("git", ["-C", repo, "log", "-1", "--format=%s"], { encoding: "utf8" }).stdout.trim(),
+    ).toMatch(/^Merge branch 'work'/);
+  });
+
+  itGit("**undoes** a conflicted merge, refuses with the files, and leaves no trace of it", async () => {
+    // The assertion this whole design is built around. A window that cannot resolve a conflict must not leave
+    // one behind: `MERGE_HEAD` in the folder, a half-applied merge, and no surface here to finish it.
+    const b = await bench();
+    const repo = repository();
+    const projectId = await addProject(b, repo);
+
+    writeFileSync(join(repo, "a.txt"), "work side\n");
+    run(repo, ["commit", "-qam", "work side"]);
+    await call(b.handlers, "coder.gitCheckout", { projectId, branch: "main" });
+    writeFileSync(join(repo, "a.txt"), "main side\n");
+    run(repo, ["commit", "-qam", "main side"]);
+
+    const before = spawnSync("git", ["-C", repo, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
+    const message = await refusalOf(b.handlers, "coder.gitMerge", { projectId, branch: "work" });
+    expectRefusal(message, "error.gitMergeConflict");
+    expect(coderErrorMessage(message)).toContain("a.txt");
+
+    // Nothing moved: the same HEAD, the same file on disk, and no unmerged entry left in the index.
+    expect(spawnSync("git", ["-C", repo, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim()).toBe(before);
+    expect(readFileSync(join(repo, "a.txt"), "utf8")).toBe("main side\n");
+    expect(spawnSync("git", ["-C", repo, "status", "--porcelain"], { encoding: "utf8" }).stdout.trim()).toBe("");
+    expect(existsSync(join(repo, ".git", "MERGE_HEAD"))).toBe(false);
+  });
+
+  itGit("relays git's refusal when a local change would be overwritten", async () => {
+    // Not a conflict: git refuses before starting, and its sentence names the file. Aborting something that
+    // never started would fail in turn, so the two cases are told apart by the *measurement* (unmerged
+    // entries), never by reading git's localised message.
+    const b = await bench();
+    const repo = repository();
+    const projectId = await addProject(b, repo);
+    writeFileSync(join(repo, "feature.txt"), "committed\n");
+    run(repo, ["add", "."]);
+    run(repo, ["commit", "-qm", "theirs"]);
+    await call(b.handlers, "coder.gitCheckout", { projectId, branch: "main" });
+    // An uncommitted change in the very file the merge would bring.
+    writeFileSync(join(repo, "feature.txt"), "local edit\n");
+
+    const message = await refusalOf(b.handlers, "coder.gitMerge", { projectId, branch: "work" });
+    expectRefusal(message, "error.gitFailed");
+  });
+});
+
+describe("fetch and pull", () => {
+  itGit("fetches what another machine pushed, and leaves the working tree alone", async () => {
+    const b = await bench();
+    const { desktop, other } = withRemote();
+    const projectId = await addProject(b, desktop);
+
+    writeFileSync(join(other, "b.txt"), "from the other machine\n");
+    run(other, ["add", "."]);
+    run(other, ["commit", "-qm", "other"]);
+    run(other, ["push", "-q"]);
+
+    const fetched = (await call(b.handlers, "coder.gitFetch", { projectId })) as {
+      status: { behind: number };
+      summary: string;
+    };
+    expect(fetched.status.behind).toBe(1);
+    expect(fetched.summary).not.toBe("");
+    // A fetch changes nothing in the working tree: the file is not here yet.
+    expect(existsSync(join(desktop, "b.txt"))).toBe(false);
+  });
+
+  itGit("pulls a branch that is only behind, fast-forwarding the working tree", async () => {
+    const b = await bench();
+    const { desktop, other } = withRemote();
+    const projectId = await addProject(b, desktop);
+    writeFileSync(join(other, "b.txt"), "from the other machine\n");
+    run(other, ["add", "."]);
+    run(other, ["commit", "-qm", "other"]);
+    run(other, ["push", "-q"]);
+
+    const pulled = (await call(b.handlers, "coder.gitPull", { projectId })) as {
+      status: { behind: number; ahead: number };
+      changes: unknown[];
+    };
+    expect(pulled.status.behind).toBe(0);
+    expect(pulled.status.ahead).toBe(0);
+    expect(readFileSync(join(desktop, "b.txt"), "utf8")).toBe("from the other machine\n");
+  });
+
+  itGit("refuses a pull when the histories have diverged, and names the choice", async () => {
+    const b = await bench();
+    const { desktop, other } = withRemote();
+    const projectId = await addProject(b, desktop);
+    // The other machine pushes one commit; this one makes another, without fetching.
+    writeFileSync(join(other, "theirs.txt"), "theirs\n");
+    run(other, ["add", "."]);
+    run(other, ["commit", "-qm", "theirs"]);
+    run(other, ["push", "-q"]);
+    writeFileSync(join(desktop, "mine.txt"), "mine\n");
+    run(desktop, ["add", "."]);
+    run(desktop, ["commit", "-qm", "mine"]);
+
+    const message = await refusalOf(b.handlers, "coder.gitPull", { projectId });
+    expectRefusal(message, "error.gitPullDiverged");
+    // And the branch is exactly where it was: `--ff-only` refusing is not a half-done pull.
+    expect(spawnSync("git", ["-C", desktop, "log", "-1", "--format=%s"], { encoding: "utf8" }).stdout.trim()).toBe(
+      "mine",
+    );
+  });
+
+  itGit("fetches a repository with no remote at all: nothing to bring, and not a failure", async () => {
+    // **Measured rather than assumed:** `git fetch --prune` in a repository with no remotes exits 0 and says
+    // nothing. A refusal here would be a lie about the user's machine, so the honest answer is an empty
+    // summary — and the *UI* is what says "nothing new" in the user's language.
+    const b = await bench();
+    const projectId = await addProject(b, repository());
+    const fetched = (await call(b.handlers, "coder.gitFetch", { projectId })) as { summary: string };
+    expect(fetched.summary).toBe("");
+  });
+
+  itGit("relays git's own refusal when there is nothing to pull from", async () => {
+    // A branch with no upstream: git names the two ways to fix it (`git pull <remote> <branch>`, or
+    // `--set-upstream-to`), which is why its sentence is the detail rather than a paraphrase.
+    const b = await bench();
+    const projectId = await addProject(b, repository());
+    const message = await refusalOf(b.handlers, "coder.gitPull", { projectId });
+    expectRefusal(message, "error.gitFailed");
+    expect(coderErrorMessage(message)).toMatch(/tracking information|upstream/i);
+  });
+});
+
 describe("one writer at a time", () => {
   itGit("refuses a write while a run is live in the project, and allows every read", async () => {
     // The repo's own scenario: an agent mid-edit and a checkout in the same working tree. The run is stubbed
@@ -462,6 +668,8 @@ describe("one writer at a time", () => {
       ["coder.gitStage", { paths: ["a.txt"] }],
       ["coder.gitUnstage", { paths: ["a.txt"] }],
       ["coder.gitCommit", { message: "from the phone" }],
+      ["coder.gitMerge", { branch: "work" }],
+      ["coder.gitPull", {}],
     ] as const) {
       const refusal = await Promise.resolve(
         call(handlers, method, { projectId: project.project.id, ...params }),
