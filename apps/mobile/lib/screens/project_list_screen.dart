@@ -1,10 +1,12 @@
 /// Work on the active machine: projects → tasks, stable order, searchable.
 ///
 /// This is the app's first screen. It is a *host* screen only in that it happens to show one host at
-/// a time — the top bar names which one, and the Connections button changes it. The former host-list
-/// page did the naming by being the page before this one; a phone paired to a single desktop paid a
-/// whole screen's worth of taps on every launch for that, and the owner's ask is that the work be
-/// the first thing on screen.
+/// a time — the top bar is the host control now, split in two: the **name** (tappable) is "which
+/// machine am I on?" and opens the Connections sheet to switch or manage, and the **cell tower**
+/// beside it is "what state is it in?" and opens that host's network-status ladder. The former
+/// host-list page did the naming by being the page before this one; a phone paired to a single
+/// desktop paid a whole screen's worth of taps on every launch for that, and the owner's ask is that
+/// the work be the first thing on screen.
 ///
 /// Mirrors the desktop sidebar: `coder.listProjects` + `coder.listTasks`, grouped by
 /// `addedAt` (newest first), with a search field that hits title / path / label.
@@ -32,7 +34,7 @@ class ProjectListScreen extends StatefulWidget {
     required this.host,
     required this.client,
     required this.onOpenConnections,
-    required this.onAddHost,
+    required this.onOpenNetworkStatus,
     required this.onShowSettings,
   });
 
@@ -40,11 +42,19 @@ class ProjectListScreen extends StatefulWidget {
   final HostClient client;
 
   /// Opens the Connections view: switch host, add one, forget one.
+  ///
+  /// Reached by tapping the **name** in the top bar. The name is the door because the control it
+  /// replaced was the only way to a two-desktop setup; a status glyph is read as an indicator, not as
+  /// a picker, so the *name* keeps that job and the glyph is free to mean diagnostics. **Add host now
+  /// lives in that sheet too**, at the top of its list — the owner's call: one surface for
+  /// connections, not a shortcut in the bar as well.
   final VoidCallback onOpenConnections;
 
-  /// The top bar's **Add host** button. The shell owns it because pairing writes to the store and
-  /// spawns a client, neither of which belongs to a screen that is only showing one host's work.
-  final VoidCallback onAddHost;
+  /// Opens the network-status ladder for [client]'s host — the top bar's cell tower.
+  ///
+  /// A callback rather than a push from here, for the same reason as [onShowSettings]: the screen
+  /// names no route, and the shell keeps owning where one comes from.
+  final VoidCallback onOpenNetworkStatus;
 
   /// Settings for *this* host's daemon. A callback rather than a push from here, so the screen needs
   /// no `SettingsScreen` import and the shell keeps owning where a route comes from.
@@ -177,17 +187,27 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        // The machine the work belongs to, with its health as a dot beside it. The old "Connected
-        // <address>" tile took a whole row under the bar to say the same thing; the dot keeps the
-        // fact and gives the row back to the list.
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _StatusDot(state: state, colors: colors),
-            const SizedBox(width: CoderSpace.md),
-            Flexible(child: Text(widget.host.label, overflow: TextOverflow.ellipsis)),
-          ],
+        // The status **icon** on the left, the connection **name** in the middle, the two facts the
+        // old labelled button and dot carried between them — split so neither is hidden. The name is
+        // the switcher (tapping it opens the Connections sheet) and the icon is the diagnostic (its
+        // colour is the state, and tapping it opens the ladder). See `_ConnectionStatusButton` and
+        // `_ConnectionTitle` for why each control is the shape it is.
+        leading: _ConnectionStatusButton(
+          hostLabel: widget.host.label,
+          state: state,
+          colors: colors,
+          onPressed: widget.onOpenNetworkStatus,
         ),
+        title: _ConnectionTitle(
+          hostLabel: widget.host.label,
+          onTap: widget.onOpenConnections,
+        ),
+        // **Two direct controls, no overflow menu.** The owner asked for Add project and Settings to
+        // be visible rather than hidden behind a `…`, and for Add host to leave the bar entirely (it
+        // is the first row of the Connections sheet now). The overflow held exactly those two items
+        // and nothing else — checked against the file before it was deleted, so no action lost its
+        // home. Removing the trigger also means an icon-only control no longer needs a second tap to
+        // say what it does: each `+` and gear carries its own tooltip and Semantics label.
         actions: [
           if (badge > 0)
             Padding(
@@ -206,41 +226,23 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
                 ),
               ),
             ),
-          // A labelled button rather than a bare icon: "Connections" is the answer to "which machine
-          // am I on?", and an icon alone does not say that.
-          TextButton(
-            onPressed: widget.onOpenConnections,
-            child: const Text('Connections'),
+          Semantics(
+            label: 'Add project',
+            button: true,
+            child: IconButton(
+              tooltip: 'Add project',
+              onPressed: () => unawaited(_addProject()),
+              icon: const Icon(Icons.add),
+            ),
           ),
-          IconButton(
-            tooltip: 'Add host',
-            onPressed: widget.onAddHost,
-            icon: const Icon(Icons.add_link),
-          ),
-          PopupMenuButton<_HostMenuAction>(
-            tooltip: 'More',
-            onSelected: (action) => switch (action) {
-              _HostMenuAction.addProject => unawaited(_addProject()),
-              _HostMenuAction.settings => widget.onShowSettings(widget.client, _harnesses),
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: _HostMenuAction.addProject,
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.create_new_folder_outlined),
-                  title: Text('Add project'),
-                ),
-              ),
-              const PopupMenuItem(
-                value: _HostMenuAction.settings,
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.settings),
-                  title: Text('Settings'),
-                ),
-              ),
-            ],
+          Semantics(
+            label: 'Settings',
+            button: true,
+            child: IconButton(
+              tooltip: 'Settings',
+              onPressed: () => widget.onShowSettings(widget.client, _harnesses),
+              icon: const Icon(Icons.settings),
+            ),
           ),
         ],
       ),
@@ -534,18 +536,47 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
   }
 }
 
-enum _HostMenuAction { addProject, settings }
-
-/// The connection's health, as a dot beside the host's name.
+/// The active connection's health, as the top bar's leading cell tower.
 ///
-/// A dot and not a sentence: the address and the route live one tap away in the Connections sheet,
-/// and the project list is not the place to read a status page. What it must do is make "unreachable"
-/// visible without opening anything — a list of tasks that is silently stale is worse than no list.
-class _StatusDot extends StatelessWidget {
-  const _StatusDot({required this.state, required this.colors});
+/// **One indicator, where there used to be two controls.** The labelled `Connections` button said
+/// what the surface *was*; the dot beside the name said how the link was doing; the host rows each
+/// carried their own cell-tower button for the ladder. The owner asked for the cell tower itself on
+/// the top bar and out of the popup, and this is it: the status is on the edge a user scans first,
+/// and it is the *only* place a glyph reports it, so the host rows are back to their dot and
+/// `· via <route>` line.
+///
+/// **The convention is EnvoyGo's**, not an invention: `EnvoyGo/lib/widgets/phone_mesh_indicator.dart`
+/// renders `Icons.cell_tower` as an `IconButton` whose colour is the state, whose tooltip is the
+/// state, and whose tap opens a status sheet (`:40-64`). Same glyph, same colour-as-status, same
+/// tap-for-detail — this app's own host-row cell tower already followed it.
+///
+/// **The intermediate states are the reason it exists.** The owner reported that 5G works but
+/// "takes some time" — the LAN rung fails, the relay is dialled, the circuit handshake completes —
+/// and nothing on screen explains the gap. So `connecting` and `reconnecting` each get their own
+/// colour and their own written status rather than one grey "not connected": a status that cannot
+/// say "still trying" hides exactly the seconds the owner noticed.
+///
+/// **Colour mapping.** EnvoyGo maps connected→green, connecting→orange, error→red, offline→grey.
+/// This app has one state EnvoyGo does not (`reconnecting`) and already paints all five from the
+/// status *indicator* band (`statusDot*`) in three surfaces — the host row's dot, the Connections
+/// sheet's dot, and the network panel's headline. The icon is that same indicator, so it reuses the
+/// same mapping rather than becoming a fourth opinion: connected / failed / idle agree with EnvoyGo,
+/// and `connecting` is the blue `statusDotRunning` instead of EnvoyGo's orange **because orange
+/// already means `reconnecting` here** — collapsing the two would erase the distinction this change
+/// is about. (The band-1 `status*` tokens are the documented "icons" band, but they carry no running
+/// colour at all; the only way to use them would be to give connecting and reconnecting one hue.)
+class _ConnectionStatusButton extends StatelessWidget {
+  const _ConnectionStatusButton({
+    required this.hostLabel,
+    required this.state,
+    required this.colors,
+    required this.onPressed,
+  });
 
+  final String hostLabel;
   final HostConnectionState state;
   final CoderColors colors;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -556,19 +587,74 @@ class _StatusDot extends StatelessWidget {
       HostConnectionState.connecting => colors.statusDotRunning,
       HostConnectionState.idle => colors.foregroundExtraMuted,
     };
-    final label = switch (state) {
-      HostConnectionState.connected => 'Connected',
-      HostConnectionState.connecting => 'Connecting',
-      HostConnectionState.reconnecting => 'Reconnecting — your tasks are still running',
-      HostConnectionState.failed => 'Unreachable',
-      HostConnectionState.idle => 'Not connected',
-    };
-    // Semantics + tooltip, the repo's rule for anything whose whole meaning is a colour.
+    // The tooltip and the accessibility label are the same sentence, and both name the status: a
+    // bare glyph is not a status. It leads with "Network status for <host>" so it cannot be mistaken
+    // for the name's "switch" control an inch to its right, and it names the computer because that
+    // is what a screen reader lands on first.
+    final label = 'Network status for $hostLabel — ${state.label}';
+    return Semantics(
+      label: label,
+      button: true,
+      child: IconButton(
+        tooltip: label,
+        onPressed: onPressed,
+        icon: Icon(Icons.cell_tower, color: color),
+      ),
+    );
+  }
+}
+
+/// The active connection's name, and the door to switching it.
+///
+/// The name answers "which machine am I on?" and the tap answers "how do I reach the other one?",
+/// which keeps the door the removed `Connections` button used to be. The owner's refinement is the
+/// reason the two facts are split: a status glyph is read as an indicator, not a picker, so the
+/// *name* opens the Connections sheet (all machines, their dots, the current one marked) and the
+/// glyph is free to mean diagnostics. With the overflow menu gone this is the **only** door to
+/// switching, so the caret is load-bearing: a bare title does not read as a menu trigger, and the
+/// owner accepted the trade deliberately.
+///
+/// **Single line, ellipsized, full name in the tooltip and the Semantics label.** The name is
+/// user-set — "Shileipeng's MacBook Pro (work)" is a realistic value — so it must be able to shrink
+/// without ever pushing Add project or Settings off the bar.
+class _ConnectionTitle extends StatelessWidget {
+  const _ConnectionTitle({required this.hostLabel, required this.onTap});
+
+  final String hostLabel;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = CoderTheme.of(context);
     return Tooltip(
-      message: label,
-      child: Semantics(
-        label: label,
-        child: Icon(Icons.circle, size: 10, color: color),
+      message: hostLabel,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(CoderRadius.md),
+        child: Semantics(
+          label: 'Switch connection — current: $hostLabel',
+          button: true,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  hostLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: CoderSpace.xs),
+              // The affordance: a bare title does not read as a menu trigger. It is the dropdown
+              // caret, not the project rows' expand chevron, so the two are not confused.
+              Icon(
+                Icons.arrow_drop_down,
+                size: 20,
+                color: colors.foregroundMuted,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

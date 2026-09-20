@@ -14,13 +14,17 @@ const _kHostsKey = 'envoydev.hosts.v1';
 const _kTokenPrefix = 'envoydev.host.token.';
 const _kSshPasswordPrefix = 'envoydev.host.ssh-password.';
 
-/// Which host the app opens on when more than one is paired.
+/// Which host the app opens on when more than one is paired — the "last used" choice.
 ///
-/// This is the one piece of *choice* the store owns, and it is deliberately a plain id rather than,
-/// say, "the first host" or "the last one to connect". Both of those are silent defaults that change
-/// under the user: a reconnect reordering the list, or a fresh pairing arriving first, would move the
-/// app to a different machine between launches. A stored id only ever changes when the user switches
-/// host — which is the Connections button — so the screen is never a surprise.
+/// Deliberately a plain id rather than, say, "the first host" or "the most recently connected one".
+/// Either of those is a silent default that changes under the user: a reconnect reordering the list,
+/// or a fresh pairing arriving first, would move the app to a different machine between launches.
+///
+/// The id is written by exactly two moments, both in `ConnectionsController`: an explicit selection
+/// (a switch, or the pairing that lands on the just-added machine) and a **successful connection by
+/// the host already on screen**. The second is what makes "last used" mean *used* rather than merely
+/// tapped, and it is still only a fact about the next launch — never a reason for the screen to move
+/// now. A failed connect writes nothing, so one flaky dial cannot change what the app opens with.
 const _kActiveHostKey = 'envoydev.active-host.v1';
 
 class HostStore {
@@ -107,8 +111,13 @@ class HostStore {
     return id == null || id.isEmpty ? null : id;
   }
 
-  /// Remember [hostId] as the host to open on. Called on every explicit switch, and once on a fresh
-  /// pairing so the just-added machine is the one the user lands on.
+  /// Remember [hostId] as the host to open on.
+  ///
+  /// Called when the user selects a host (a switch, or the pairing that lands on the just-added
+  /// machine) and when the host already on screen connects
+  /// (`ConnectionsController._persistUsed`). The second call is what keeps the stored id equal to the
+  /// machine actually in use rather than only the one last tapped; both describe the *next* launch,
+  /// so neither can move the screen the user is looking at.
   Future<void> saveActiveHostId(String hostId) async {
     final prefs = await _preferences();
     await prefs.setString(_kActiveHostKey, hostId);

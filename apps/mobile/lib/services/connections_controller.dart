@@ -13,9 +13,31 @@
 ///   3. If the stored id names a host that is gone, the same fallback applies, and the stale id is
 ///      not trusted: an id that matches nothing is treated exactly like no id at all.
 ///
-/// Every path that changes which host is active goes through here, and each one persists. The screen
-/// therefore never changes under the user because a connect finished, a list reordered, or a run
-/// event arrived — only because the user chose, or because the chosen host was forgotten.
+/// ## Selected vs used — two reasons to write one field
+///
+/// The stored id answers exactly one question: *which machine does the next launch open on?* It is
+/// written for two reasons, and keeping them apart is the whole point:
+///
+///   * **Selected.** [setActive] (the Connections sheet) and [upsertHost] (a fresh pairing) write it
+///     when the user makes the host on screen change. Nothing may write it as a side effect of a
+///     reconnect, a list reorder or a run event — the screen must not move under the user, and an id
+///     that moved on its own would move it between launches instead.
+///   * **Used.** [_persistUsed] writes it when the host **already on screen** reaches
+///     [HostConnectionState.connected]. "Last used" is a fact about a successful link, not about a
+///     tap: a pairing that is never reached, or one flaky attempt that fails, must not become the
+///     machine the app opens with. This write is about the *next* launch only — it never notifies,
+///     never reorders [_hosts] and never touches [_activeId] — so it cannot move the current screen.
+///
+/// The two share one field deliberately: the app opens on the machine the user last chose or last
+/// actually reached, and there is no tension to resolve at launch. A background host is not
+/// remembered by [_persistUsed] even when it connects, so an unreachable active host is still what
+/// the next launch selects — its status icon shows it failing rather than the app silently opening a
+/// different desktop.
+///
+/// Every path that changes which host is active goes through here, and each one persists *that*
+/// change. The screen therefore never changes under the user because a connect finished, a list
+/// reordered, or a run event arrived — only because the user chose, or because the chosen host was
+/// forgotten.
 library;
 
 import 'dart:async';
@@ -37,6 +59,11 @@ class ConnectionsController extends ChangeNotifier {
   final Map<String, StreamSubscription<HostConnectionState>> _subs = {};
 
   String? _activeId;
+
+  /// What this controller last read or wrote as the stored id, so a host that reconnects on every
+  /// heartbeat does not rewrite the same string to disk. Mirrors `HostStore.loadActiveHostId` at
+  /// [load], and every writer below keeps it in step.
+  String? _persistedUsedId;
   bool _loading = true;
   bool _disposed = false;
 
@@ -87,6 +114,9 @@ class ConnectionsController extends ChangeNotifier {
       ..clear()
       ..addAll(hosts);
     _activeId = stored;
+    // The store is the truth this controller starts from; `_persistUsed` only writes when a connect
+    // makes the *used* host differ from what is already stored (the stale-id and no-id fallbacks).
+    _persistedUsedId = stored;
     _loading = false;
     notifyListeners();
     for (final host in hosts) {
@@ -102,15 +132,40 @@ class ConnectionsController extends ChangeNotifier {
     _subs[host.id] = client.states.listen((state) {
       if (_disposed) return;
       _states[host.id] = state;
+      // A link that is up is the "used" half of the stored choice. Persisting here is safe for the
+      // screen precisely because `_persistUsed` writes only the *next* launch's host: it does not
+      // notify, reorder or reassign `_activeId`, so the machine on screen cannot move.
+      if (state == HostConnectionState.connected) _persistUsed(host.id);
       notifyListeners();
     });
     _states[host.id] = HostConnectionState.connecting;
     unawaited(client.connectBest());
   }
 
+  /// Remember [hostId] as the machine the app actually reached — the *used* half of "last used".
+  ///
+  /// Called only for [HostConnectionState.connected], so a refused dial, a walk still reconnecting or
+  /// an unanswered handshake leaves the stored id exactly as it was: one flaky attempt must not change
+  /// what the app opens with. Called only for the **active** host, so the background dials [load]
+  /// starts for every paired host cannot steal the choice from the machine on screen — if the active
+  /// host is unreachable and a background one answers, the unreachable host stays the stored one and
+  /// its status icon shows it failing, rather than the app silently jumping desktops next launch.
+  ///
+  /// The write is about the *next* launch, never this frame: no `notifyListeners`, no change to
+  /// [_activeId] and no reordering of [_hosts]. Persisting a fact the screen already shows must not
+  /// cost a rebuild (the project list's search field would lose focus on every heartbeat) and must
+  /// never be able to move the user to a different machine.
+  void _persistUsed(String hostId) {
+    if (_disposed || !isActive(hostId)) return;
+    if (_persistedUsedId == hostId) return;
+    _persistedUsedId = hostId;
+    unawaited(store.saveActiveHostId(hostId));
+  }
+
   /// Make [host] the active host, and remember it. Called only from an explicit user choice.
   Future<void> setActive(CoderHost host) async {
     _activeId = host.id;
+    _persistedUsedId = host.id;
     notifyListeners();
     await store.saveActiveHostId(host.id);
   }
@@ -127,6 +182,7 @@ class ConnectionsController extends ChangeNotifier {
       _hosts.add(host);
     }
     _activeId = host.id;
+    _persistedUsedId = host.id;
     notifyListeners();
     await store.saveActiveHostId(host.id);
     _ensureClient(host);
@@ -170,6 +226,7 @@ class ConnectionsController extends ChangeNotifier {
     unawaited(_dropClient(host.id));
     if (_activeId == host.id) {
       _activeId = _hosts.isEmpty ? null : _hosts.first.id;
+      _persistedUsedId = _activeId;
       if (_activeId != null) await store.saveActiveHostId(_activeId!);
     }
     notifyListeners();

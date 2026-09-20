@@ -13,6 +13,7 @@ import 'dart:async';
 import 'package:envoydev_mobile/services/host_pairing_flow.dart';
 import 'package:envoydev_mobile/services/host_store.dart';
 import 'package:envoydev_mobile/services/pairing_service.dart';
+import 'package:envoydev_mobile/widgets/name_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -110,5 +111,90 @@ void main() {
 
     expect(await store.load(), isEmpty);
     expect(await store.loadActiveHostId(), isNull);
+  });
+
+  testWidgets('a name at exactly the limit is accepted and saved whole', (tester) async {
+    final store = await _emptyStore();
+    await _pumpFlow(tester, store);
+    await _pairByPasting(tester, _code());
+
+    final name = List.filled(kConnectionNameMaxLength, 'n').join();
+    await tester.enterText(find.byType(TextField), name);
+    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.pumpAndSettle();
+
+    final saved = await store.load();
+    expect(saved.single.label, name);
+    expect(saved.single.label.length, kConnectionNameMaxLength);
+  });
+
+  testWidgets('typing past the limit is clamped at the field, so the stored name cannot exceed it',
+      (tester) async {
+    final store = await _emptyStore();
+    await _pumpFlow(tester, store);
+    await _pairByPasting(tester, _code());
+
+    // The bound is visible while typing — `maxLength` renders the counter — and it limits the input,
+    // so the user is never surprised on submit. Clamped, not truncated-on-save: what is submitted is
+    // exactly what the field holds.
+    expect(tester.widget<TextField>(find.byType(TextField)).maxLength, kConnectionNameMaxLength);
+
+    await tester.enterText(
+      find.byType(TextField),
+      List.filled(kConnectionNameMaxLength + 1, 'x').join(),
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.pumpAndSettle();
+
+    final saved = await store.load();
+    expect(saved.single.label.length, kConnectionNameMaxLength);
+  });
+
+  testWidgets('a value past the limit is refused, not shortened, and nothing is saved',
+      (tester) async {
+    final store = await _emptyStore();
+    await _pumpFlow(tester, store);
+    await _pairByPasting(tester, _code());
+
+    // The programmatic path the field's formatter does not see. The validator is the backstop, and it
+    // must refuse rather than quietly write a shorter name than the one the caller supplied.
+    final field = tester.widget<TextField>(find.byType(TextField));
+    field.controller!.text = List.filled(kConnectionNameMaxLength + 1, 'x').join();
+    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Keep it to $kConnectionNameMaxLength characters or fewer.'), findsOneWidget);
+    // The dialog is still up and nothing was stored.
+    expect(find.text('Name this connection'), findsOneWidget);
+    expect(await store.load(), isEmpty);
+  });
+
+  testWidgets('an unnamed host keeps its full IPv6 address, which fits inside the limit',
+      (tester) async {
+    // The fallback name is derived, not typed: `pairing_service.dart` uses the code's host. A
+    // full-length IPv6 host is 39 characters — one under the 40 cap — so the one-tap "keep the
+    // address" path is never blocked by the bound, and the long value is ellipsized on screen (the
+    // top bar and the host row both test that separately).
+    const ipv6 = '2001:0db8:85a3:0000:0000:8a2e:0370:7334';
+    expect(ipv6.length, lessThanOrEqualTo(kConnectionNameMaxLength));
+
+    final store = await _emptyStore();
+    await _pumpFlow(tester, store);
+    await _pairByPasting(
+      tester,
+      buildPairingCode(
+        wsUrl: 'ws://[$ipv6]:4770/ws',
+        token: 't0ken-secret',
+        ownerId: 'envoy:owner:abc',
+        lanWsUrl: 'ws://[$ipv6]:4770/ws',
+      ),
+    );
+
+    expect(tester.widget<TextField>(find.byType(TextField)).controller?.text, ipv6);
+    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.pumpAndSettle();
+
+    final saved = await store.load();
+    expect(saved.single.label, ipv6);
   });
 }

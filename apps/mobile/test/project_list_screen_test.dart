@@ -1,6 +1,8 @@
-// The restructured entry screen, pinned: the two top-bar controls, the project row's two-control
-// trailing area (a `+` and a `…`), the letter mark the desktop rail leads with, and the two things
-// the owner asked to be gone — the "Connected <address>" row and the floating New-task button.
+// The restructured entry screen, pinned: the top bar's three controls (a cell-tower status icon on
+// the left, the connection name in the middle, Add host and the overflow on the right), how each of
+// them is reached, the project row's two-control trailing area (a `+` and a `…`), the letter mark the
+// desktop rail leads with, and the two things the owner asked to be gone — the "Connected <address>"
+// row and the floating New-task button.
 //
 // A widget test cannot prove a task starts (that needs a daemon, and `new_task_sheet`'s own flow is
 // not under test here); what it can prove is that the screen offers the *right* entry points, offers
@@ -11,12 +13,16 @@ import 'dart:async';
 
 import 'package:envoydev_mobile/models/host.dart';
 import 'package:envoydev_mobile/screens/connections_sheet.dart';
+import 'package:envoydev_mobile/screens/network_status_screen.dart';
 import 'package:envoydev_mobile/screens/project_list_screen.dart';
 import 'package:envoydev_mobile/services/connections_controller.dart';
 import 'package:envoydev_mobile/services/host_client.dart';
 import 'package:envoydev_mobile/services/host_store.dart';
 import 'package:envoydev_mobile/theme/project_mark.dart';
+import 'package:envoydev_mobile/theme/tokens.dart';
+import 'package:envoydev_mobile/widgets/name_dialog.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -30,7 +36,17 @@ import 'support/memory_secure_storage.dart';
 /// owns proving the *screen* offers the right controls, and the stub throws on anything the screen
 /// does not legitimately call — so it cannot pass by serving a fixture the real daemon would not.
 class _StubClient extends HostClient {
-  _StubClient(super.host);
+  _StubClient(super.host, {HostConnectionState initial = HostConnectionState.connected})
+      : _state = initial;
+
+  HostConnectionState _state;
+
+  /// A real broadcast stream rather than `Stream.empty`. The top bar's status icon is now the one
+  /// thing on this screen whose whole meaning is a transition (`connecting` is not `connected` is
+  /// not `failed`), so the stream has to be a seam a test can drive. It is `sync` so a test's `emit`
+  /// is reflected in the very next `pump`, with no microtask race between the two.
+  final StreamController<HostConnectionState> _stateController =
+      StreamController<HostConnectionState>.broadcast(sync: true);
 
   static const _projects = [
     {
@@ -77,13 +93,23 @@ class _StubClient extends HostClient {
   ];
 
   @override
-  HostConnectionState get state => HostConnectionState.connected;
+  HostConnectionState get state => _state;
 
   @override
-  Stream<HostConnectionState> get states => const Stream<HostConnectionState>.empty();
+  Stream<HostConnectionState> get states => _stateController.stream;
 
   @override
   Stream<Map<String, dynamic>> get events => const Stream<Map<String, dynamic>>.empty();
+
+  /// Move the link to [next] the way a real client's state stream would, so the top bar can be
+  /// watched changing between the states rather than only observed in one of them.
+  void emit(HostConnectionState next) {
+    _state = next;
+    _stateController.add(next);
+  }
+
+  /// Close the seam. `dispose` is deliberately NOT overridden (see below), so the test owns this.
+  Future<void> closeStates() => _stateController.close();
 
   @override
   Future<Map<String, dynamic>> call(
@@ -133,10 +159,10 @@ const _host = CoderHost(
   token: 'tok',
 );
 
-/// The screen, with the two top-bar callbacks counted and the client handed back for disposal.
-Future<({int connections, int addHost, HostClient client})> _pumpScreen(WidgetTester tester) async {
+/// The screen, with the top bar's host-switching callback counted and the client handed back for
+/// disposal.
+Future<({int connections, _StubClient client})> _pumpScreen(WidgetTester tester) async {
   var connections = 0;
-  var addHost = 0;
   final client = _StubClient(_host);
   await tester.pumpWidget(
     MaterialApp(
@@ -144,13 +170,13 @@ Future<({int connections, int addHost, HostClient client})> _pumpScreen(WidgetTe
         host: _host,
         client: client,
         onOpenConnections: () => connections += 1,
-        onAddHost: () => addHost += 1,
+        onOpenNetworkStatus: () {},
         onShowSettings: (_, __) {},
       ),
     ),
   );
   await tester.pumpAndSettle();
-  return (connections: connections, addHost: addHost, client: client);
+  return (connections: connections, client: client);
 }
 
 /// The one IconButton carrying this tooltip. `find.byTooltip` also matches the Semantics wrapper, so
@@ -158,6 +184,33 @@ Future<({int connections, int addHost, HostClient client})> _pumpScreen(WidgetTe
 Finder _iconButtonWithTooltip(String tooltip) => find.byWidgetPredicate(
       (widget) => widget is IconButton && widget.tooltip == tooltip,
     );
+
+/// The top bar's cell-tower status button, found by its tooltip shape rather than by one state's
+/// exact wording, so the same finder works while the state changes.
+Finder _statusButton() => find.byWidgetPredicate(
+      (widget) =>
+          widget is IconButton && (widget.tooltip?.startsWith('Network status for ') ?? false),
+    );
+
+/// What the top bar must say about [state]: the shared status-indicator colour from `CoderColors`,
+/// the one cell-tower glyph EnvoyGo uses, and a tooltip and Semantics label that name the status.
+void _expectStatusIcon(WidgetTester tester, CoderColors colors, HostConnectionState state) {
+  final expected = switch (state) {
+    HostConnectionState.connected => colors.statusDotSuccess,
+    HostConnectionState.connecting => colors.statusDotRunning,
+    HostConnectionState.reconnecting => colors.statusDotWarning,
+    HostConnectionState.failed => colors.statusDotDanger,
+    HostConnectionState.idle => colors.foregroundExtraMuted,
+  };
+  final label = 'Network status for ${_host.label} — ${state.label}';
+  expect(find.byTooltip(label), findsOneWidget, reason: state.name);
+  expect(find.bySemanticsLabel(label), findsOneWidget, reason: state.name);
+  final icon = tester.widget<Icon>(
+    find.descendant(of: _statusButton(), matching: find.byType(Icon)),
+  );
+  expect(icon.icon, Icons.cell_tower, reason: state.name);
+  expect(icon.color, expected, reason: state.name);
+}
 
 /// A project row's `…`. `PopupMenuButton` is generic, so the check is on the raw type plus the tooltip
 /// that names the row — the button and its accessibility name are the same fact, as on the desktop.
@@ -171,8 +224,10 @@ Finder _projectMark(String projectId) => find.byWidgetPredicate(
     );
 
 void main() {
-  testWidgets('the top bar offers Connections and Add host, and leads to host management', (tester) async {
+  testWidgets('the top bar is status icon, name, + and Settings — no Connections label, no Add host',
+      (tester) async {
     var connections = 0;
+    var settings = 0;
     final client = _StubClient(_host);
     await tester.pumpWidget(
       MaterialApp(
@@ -180,29 +235,36 @@ void main() {
           host: _host,
           client: client,
           onOpenConnections: () => connections += 1,
-          onAddHost: () {},
-          onShowSettings: (_, __) {},
+          onOpenNetworkStatus: () {},
+          onShowSettings: (_, __) => settings += 1,
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    // Both controls exist...
-    expect(find.widgetWithText(TextButton, 'Connections'), findsOneWidget);
-    expect(_iconButtonWithTooltip('Add host'), findsOneWidget);
-    expect(find.descendant(of: _iconButtonWithTooltip('Add host'), matching: find.byIcon(Icons.add_link)),
-        findsOneWidget);
-    // ...and the labelled one is the one that opens host management.
-    await tester.tap(find.text('Connections'));
+    // The cell tower leads, the name is the middle, and the two direct actions trail.
+    expect(_statusButton(), findsOneWidget);
+    expect(find.text(_host.label), findsOneWidget);
+    expect(_iconButtonWithTooltip('Add project'), findsOneWidget);
+    expect(_iconButtonWithTooltip('Settings'), findsOneWidget);
+    // The owner's removals: the labelled button, the Add-host shortcut and the overflow are all gone.
+    expect(find.widgetWithText(TextButton, 'Connections'), findsNothing);
+    expect(_iconButtonWithTooltip('Add host'), findsNothing);
+    expect(find.byIcon(Icons.add_link), findsNothing);
+    expect(find.byTooltip('More'), findsNothing);
+
+    // Each trailing control is the real action, not a decoration.
+    await tester.tap(_iconButtonWithTooltip('Settings'));
     await tester.pump();
-    expect(connections, 1);
+    expect(settings, 1);
     await _finish(client);
   });
 
-  testWidgets('the Connections button opens the host-management sheet', (tester) async {
+  testWidgets('the name opens the host-management sheet — the door the Connections button was',
+      (tester) async {
     // The sheet's own behaviour — switching, forgetting — is pinned in `connections_sheet_test.dart`.
-    // What this pins is the join: the button the owner asked for is wired to the repurposed list, not
-    // to a callback that does nothing.
+    // What this pins is the join: the name the owner substituted for the labelled button is wired to
+    // the repurposed list, not to a callback that does nothing.
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     final store = HostStore(prefs: prefs, secure: MemorySecureStorage());
@@ -223,7 +285,7 @@ void main() {
               client: client,
               onOpenConnections: () =>
                   unawaited(showConnectionsSheet(screenContext, controller)),
-              onAddHost: () {},
+              onOpenNetworkStatus: () {},
               onShowSettings: (_, __) {},
             );
           },
@@ -232,7 +294,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Connections'));
+    await tester.tap(find.text(_host.label));
     await tester.pumpAndSettle();
 
     expect(find.byType(ConnectionsSheet), findsOneWidget);
@@ -243,6 +305,215 @@ void main() {
     // and disposing the client underneath it would wait on that listener.
     await tester.pumpWidget(const SizedBox());
     controller.dispose();
+    await _finish(client);
+  });
+
+  testWidgets('the name is the switcher and the icon is the diagnostic: two callbacks, kept apart',
+      (tester) async {
+    var connections = 0;
+    var status = 0;
+    final client = _StubClient(_host);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProjectListScreen(
+          host: _host,
+          client: client,
+          onOpenConnections: () => connections += 1,
+          onOpenNetworkStatus: () => status += 1,
+          onShowSettings: (_, __) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Tapping the name switches hosts and does not open diagnostics...
+    await tester.tap(find.text(_host.label));
+    await tester.pump();
+    expect(connections, 1);
+    expect(status, 0);
+
+    // ...and tapping the cell tower diagnoses and does not switch.
+    await tester.tap(_statusButton());
+    await tester.pump();
+    expect(status, 1);
+    expect(connections, 1);
+    await _finish(client);
+  });
+
+  testWidgets('the status icon opens the network-status panel for the active host', (tester) async {
+    final client = _StubClient(_host);
+    late BuildContext screenContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: const CoderTheme(CoderColors.light).toThemeData(),
+        home: Builder(
+          builder: (context) {
+            screenContext = context;
+            return ProjectListScreen(
+              host: _host,
+              client: client,
+              onOpenConnections: () {},
+              onOpenNetworkStatus: () => unawaited(showNetworkStatus(screenContext, client)),
+              onShowSettings: (_, __) {},
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(_statusButton());
+    await tester.pumpAndSettle();
+
+    // The panel is up — and it is the active host's, which is the only host the icon could mean.
+    expect(find.byType(NetworkStatusScreen), findsOneWidget);
+    expect(find.text('Network status'), findsOneWidget);
+    expect(find.text('Computer'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await client.closeStates();
+    await _finish(client);
+  });
+
+  testWidgets('the status icon follows the real state: colour, tooltip and label per state',
+      (tester) async {
+    final screen = await _pumpScreen(tester);
+    const colors = CoderColors.light;
+
+    // The stub starts connected.
+    _expectStatusIcon(tester, colors, HostConnectionState.connected);
+
+    // The owner's "5G takes some time" case: connecting, reconnecting and failed are three different
+    // colours and three different sentences — never collapsed into one grey.
+    for (final state in [
+      HostConnectionState.connecting,
+      HostConnectionState.reconnecting,
+      HostConnectionState.failed,
+      HostConnectionState.idle,
+    ]) {
+      screen.client.emit(state);
+      await tester.pump();
+      _expectStatusIcon(tester, colors, state);
+    }
+
+    // Five states, five visibly different colours, so "at a glance" can actually tell them apart.
+    final distinct = {
+      for (final state in HostConnectionState.values)
+        switch (state) {
+          HostConnectionState.connected => colors.statusDotSuccess,
+          HostConnectionState.connecting => colors.statusDotRunning,
+          HostConnectionState.reconnecting => colors.statusDotWarning,
+          HostConnectionState.failed => colors.statusDotDanger,
+          HostConnectionState.idle => colors.foregroundExtraMuted,
+        },
+    };
+    expect(distinct, hasLength(HostConnectionState.values.length));
+
+    await screen.client.closeStates();
+    await _finish(screen.client);
+  });
+
+  testWidgets('a long but legal connection name ellipsizes, full value in tooltip and Semantics',
+      (tester) async {
+    // 38 characters — inside the 40 the dialog allows, and far wider than a 320pt top bar title.
+    const longName = "Shileipeng's MacBook Pro 16-inch (work)";
+    expect(longName.length, lessThanOrEqualTo(kConnectionNameMaxLength));
+    const host = CoderHost(
+      id: 'h',
+      label: longName,
+      endpoint: '192.168.1.9:4770',
+      ownerId: 'o',
+      app: 'EnvoyDev',
+      token: 'tok',
+    );
+    final client = _StubClient(host);
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProjectListScreen(
+          host: host,
+          client: client,
+          onOpenConnections: () {},
+          onOpenNetworkStatus: () {},
+          onShowSettings: (_, __) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The name is drawn, on one line, and actually truncated — `didExceedMaxLines` is the rendering
+    // fact, not the widget's configuration, so removing the ellipsis fails this test.
+    final paragraph = tester.renderObject<RenderParagraph>(
+      find.descendant(of: find.byType(AppBar), matching: find.text(longName)),
+    );
+    expect(paragraph.maxLines, 1);
+    expect(paragraph.didExceedMaxLines, isTrue);
+    // Nothing is lost to a long-press or a screen reader: both carry the whole name.
+    expect(find.byTooltip(longName), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('Switch connection — current: ')), findsOneWidget);
+    // And the trailing actions are still on the bar.
+    expect(_iconButtonWithTooltip('Add project'), findsOneWidget);
+    expect(_iconButtonWithTooltip('Settings'), findsOneWidget);
+
+    await _finish(client);
+  });
+
+  testWidgets('the top bar fits 320pt with a long name and the needs-you badge', (tester) async {
+    // The tightest this bar gets: the cell tower, a user-set name, `+`, the gear, and the badge that
+    // appears when a task needs an answer. The test font is square (Ahem), so the badge is wider here
+    // than it is on a device — a pessimistic case, deliberately.
+    //
+    // Before this change the same width produced two overflows: the title Row by **5.1pt** and the
+    // trailing actions Row by **110pt** when the badge was present. Neither may come back, and the
+    // user-set name may not push the two trailing controls off the bar.
+    const longName = "Shileipeng's MacBook Pro 16-inch (work)";
+    const host = CoderHost(
+      id: 'h',
+      label: longName,
+      endpoint: '192.168.1.9:4770',
+      ownerId: 'o',
+      app: 'EnvoyDev',
+      token: 'tok',
+    );
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final reported = <FlutterErrorDetails>[];
+    final original = FlutterError.onError;
+    FlutterError.onError = reported.add;
+    addTearDown(() => FlutterError.onError = original);
+
+    final client = _StubClient(host);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProjectListScreen(
+          host: host,
+          client: client,
+          onOpenConnections: () {},
+          onOpenNetworkStatus: () {},
+          onShowSettings: (_, __) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The badge is present — this is the worst case, not the calm one.
+    expect(find.text('1 needs you'), findsOneWidget);
+    // All four elements survive: nothing was pushed off the bar.
+    expect(_statusButton(), findsOneWidget);
+    expect(find.text(longName), findsOneWidget);
+    expect(_iconButtonWithTooltip('Add project'), findsOneWidget);
+    expect(_iconButtonWithTooltip('Settings'), findsOneWidget);
+
+    final overflows = [
+      for (final details in reported)
+        if (details.exceptionAsString().contains('overflowed')) details.exceptionAsString().trim(),
+    ];
+    expect(overflows, isEmpty, reason: overflows.join('\n'));
     await _finish(client);
   });
 
@@ -378,25 +649,19 @@ void main() {
     await _finish(screen.client);
   });
 
-  testWidgets('Add host is reachable from the top bar without opening Connections', (tester) async {
-    var addHostCalls = 0;
-    final client = _StubClient(_host);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: ProjectListScreen(
-          host: _host,
-          client: client,
-          onOpenConnections: () {},
-          onAddHost: () => addHostCalls += 1,
-          onShowSettings: (_, __) {},
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets('the top bar has no Add host any more; pairing lives in the Connections sheet',
+      (tester) async {
+    // The owner's refinement: Add host is the Connections sheet's first row now, so the bar has no
+    // Add-host control at all. What the `+` on the bar does is Add project — a different action that
+    // is pinned by the sheet it opens, not by the callback shape.
+    final screen = await _pumpScreen(tester);
 
-    await tester.tap(_iconButtonWithTooltip('Add host'));
-    await tester.pump();
-    expect(addHostCalls, 1);
-    await _finish(client);
+    expect(_iconButtonWithTooltip('Add host'), findsNothing);
+    expect(find.byIcon(Icons.add_link), findsNothing);
+
+    await tester.tap(_iconButtonWithTooltip('Add project'));
+    await tester.pumpAndSettle();
+    expect(find.text('Add project'), findsWidgets);
+    await _finish(screen.client);
   });
 }

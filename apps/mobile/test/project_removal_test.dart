@@ -189,7 +189,7 @@ Future<_StubClient> _pumpScreen(
         host: _host,
         client: client,
         onOpenConnections: () {},
-        onAddHost: () {},
+        onOpenNetworkStatus: () {},
         onShowSettings: (_, __) {},
       ),
     ),

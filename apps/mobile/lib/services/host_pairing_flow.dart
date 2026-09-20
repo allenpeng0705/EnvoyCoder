@@ -1,10 +1,10 @@
 /// Adding a host, from the sheet to the save — one implementation for every caller.
 ///
 /// This lived inside `HostListScreen` while that screen was the entry point. It cannot stay there
-/// now: the add-host button in the project list's top bar, the empty state for a phone with no hosts,
-/// and the Connections view all have to add a host, and three copies of "show the sheet, parse the
-/// code, refuse in the family's words, save" is how one of them quietly stops refusing the wrong
-/// app's code.
+/// now: the Connections sheet's first row and the empty state for a phone with no hosts both have to
+/// add a host, and two copies of "show the sheet, parse the code, refuse in the family's words,
+/// save" is how one of them quietly stops refusing the wrong app's code. (The project list's top bar
+/// used to carry a third door; the owner removed it so pairing has one home.)
 ///
 /// The refusal dialog lives here too, for the same reason: a refusal is shown *once*, at the press
 /// that caused it, rather than reconstructed by whichever screen was open.
@@ -75,6 +75,10 @@ Future<CoderHost?> addHostFlow(BuildContext context, HostStore store) async {
       initialValue: parsed.host!.label,
       confirmLabel: 'Add',
       helperText: 'Shown in the Connections list — the address is kept as well.',
+      // The connection-name bound, from the one place that defines it (`name_dialog.dart`). The
+      // prefilled default is the address, whose host part is at most 39 characters, so a user who
+      // simply taps Add is never stopped by it.
+      maxLength: kConnectionNameMaxLength,
     );
     // Cancel (or the barrier) at the naming step aborts the whole pairing: nothing has been written
     // yet, so there is no host to leave behind.

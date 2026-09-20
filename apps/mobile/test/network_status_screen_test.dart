@@ -5,22 +5,21 @@
 // one value this app cannot read said as `unavailable` rather than as a zero. The stub supplies the
 // records a real walk would have made, so the assertions are about what the screen renders and not
 // about how a walk happens to order itself (that is `net_diagnostics_test.dart`'s job).
+//
+// The *entry point* is not tested here any more. This panel used to be reached from each host row's
+// cell-tower button; the owner moved that glyph to the top bar to report the active host's health,
+// so `project_list_screen_test.dart` owns "the status icon opens this panel" and
+// `connections_sheet_test.dart` owns "the rows no longer carry a cell tower".
 
 import 'package:envoydev_mobile/models/host.dart';
-import 'package:envoydev_mobile/screens/connections_sheet.dart';
 import 'package:envoydev_mobile/screens/network_status_screen.dart';
-import 'package:envoydev_mobile/services/connections_controller.dart';
 import 'package:envoydev_mobile/services/host_client.dart';
-import 'package:envoydev_mobile/services/host_store.dart';
 import 'package:envoydev_mobile/services/libp2p_transport.dart';
 import 'package:envoydev_mobile/services/net_diagnostics.dart';
 import 'package:envoydev_mobile/theme/tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import 'support/memory_secure_storage.dart';
 
 const home = '12D3KooWhome';
 const directAddr = '/ip4/192.168.1.9/tcp/4001/p2p/$home';
@@ -339,63 +338,9 @@ void main() {
     await _finish(client);
   });
 
-  testWidgets('the Connections sheet reaches it, from the row of the computer it is about',
-      (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    final prefs = await SharedPreferences.getInstance();
-    final store = HostStore(prefs: prefs, secure: MemorySecureStorage());
-    await store.upsert(host(homePeerId: home, bootstrapPeers: const [directAddr]));
-    final controller = ConnectionsController(store);
-    controller.clientFactory = (h) => _StubClient(h)..ladder = const [
-          RouteAttempt(
-            name: 'lan',
-            redactedUrl: 'ws://192.168.1.9:4770/ws?token=<redacted>',
-            status: RouteAttemptStatus.failed,
-            error: 'SocketException: Connection refused',
-          ),
-        ];
-    await controller.load();
-
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: const CoderTheme(CoderColors.light).toThemeData(),
-        home: Scaffold(
-          body: Builder(
-            builder: (context) => TextButton(
-              onPressed: () => showConnectionsSheet(context, controller),
-              child: const Text('open'),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
-
-    // Icon-only, so both a tooltip and a Semantics label, and both name the computer: two rows sit
-    // inches apart and "Network status" alone would not say whose.
-    expect(find.byTooltip('Network status for desk'), findsOneWidget);
-    expect(find.bySemanticsLabel('Network status for desk'), findsOneWidget);
-
-    await tester.tap(find.byTooltip('Network status for desk'));
-    await tester.pumpAndSettle();
-
-    // The panel is up, and it is about the host the row was about.
-    expect(find.text('Network status'), findsOneWidget);
-    expect(find.text('Desktop peer id'), findsOneWidget);
-    expect(rowValue(tester, 'Desktop peer id'), home);
-    expect(find.text('SocketException: Connection refused'), findsOneWidget);
-
-    // The panel stacks above the sheet, so backing out of it returns to the list of computers
-    // rather than dropping the user out of the detour entirely.
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    expect(find.text('Connections'), findsOneWidget);
-    expect(find.text('1 computer'), findsOneWidget);
-
-    // Take the sheet and the panel down before the controller, or its client disposal waits on a
-    // listener that is still in the tree (`HostClient.dispose` closes broadcast controllers).
-    await tester.pumpWidget(const SizedBox());
-    controller.dispose();
-  });
+  // The entry point moved: this panel used to hang off each host row's cell-tower button, and the
+  // owner asked for that glyph to report the *active* host's health from the top bar instead. The
+  // route is now pinned where it lives — `project_list_screen_test.dart` proves the top-bar icon
+  // opens this panel, and `connections_sheet_test.dart` proves the sheet's rows no longer carry a
+  // cell tower at all. Nothing about the panel itself changed, which is why the tests above stand.
 }

@@ -3,8 +3,10 @@
 /// The app opens on the **project list for the active host**. That is a change of shape from what it
 /// was — a list of hosts, then the work on the selected one — and the owner asked for it: a phone
 /// paired to one desktop should not pay a whole screen's worth of taps on every launch to reach the
-/// work it was paired for. The host list is not gone; it is the **Connections** button in the top
-/// bar, where it still answers "which machines can I reach, and how are they doing?".
+/// work it was paired for. The host list is not gone; it is what the top bar's **connection name**
+/// opens when tapped, where it still answers "which machines can I reach, and how are they doing?".
+/// The cell tower beside the name is the *other* half: its colour is the active connection's health,
+/// and tapping it opens the network-status ladder.
 ///
 /// What is *not* Paseo's is the transport: this app pairs with an EnvoyDev desktop the same way every
 /// app in the EnvoyMesh family does (a shared pairing code, with the `app` claim keeping the family
@@ -15,8 +17,10 @@
 /// The rule is in `ConnectionsController.activeHost` and it is deliberately explicit, because a
 /// silent default that moves between launches is worse than one the user chose:
 ///
-///   * a stored "last used" id wins, and is only written when the user switches host or pairs a new
-///     one — never as a side effect of reconnecting or of list order;
+///   * a stored "last used" id wins. It is written when the user switches host, when a fresh pairing
+///     lands, and when the host already on screen **connects** — so "last used" means the last
+///     machine actually reached, while a failed dial leaves the id alone. None of those writes moves
+///     the current screen; they only decide what the next launch opens;
 ///   * otherwise the first host in the order it was paired;
 ///   * if the stored id names a host that has been forgotten, the first-host fallback applies and the
 ///     stale id is not trusted.
@@ -31,6 +35,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'screens/connections_sheet.dart';
+import 'screens/network_status_screen.dart';
 import 'screens/no_hosts_screen.dart';
 import 'screens/project_list_screen.dart';
 import 'screens/settings_screen.dart';
@@ -166,7 +171,13 @@ class _AppShellState extends State<AppShell> {
       host: host,
       client: client,
       onOpenConnections: () => unawaited(showConnectionsSheet(context, _connections)),
-      onAddHost: () => unawaited(_addHost()),
+      // The ladder for the host the app is on. It is the *active* client's panel because the top
+      // bar's icon reports the active host's state — a diagnostics surface for a machine the user is
+      // not on would be about a different fact than the colour they just tapped.
+      onOpenNetworkStatus: () => unawaited(showNetworkStatus(context, client)),
+      // `onAddHost` no longer travels to this screen: the top bar's Add-host shortcut is gone, and
+      // pairing is reached from the Connections sheet the name opens. `_addHost` itself stays — the
+      // zero-host screen still needs it.
       onShowSettings: _openSettings,
     );
   }

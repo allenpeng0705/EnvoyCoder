@@ -37,8 +37,9 @@ class NoHostsScreen extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: CoderSpace.xl),
-              // The one thing to do here, and it is the same flow the top bar's Add-host button
-              // runs — not a second, parallel way to pair.
+              // The one thing to do here, and it is the same flow the Connections sheet's first row
+              // runs — not a second, parallel way to pair. (The top bar's Add-host shortcut is gone
+              // by design: with a host on screen, pairing lives in the sheet the name opens.)
               FilledButton.icon(
                 onPressed: onAddHost,
                 icon: const Icon(Icons.add_link),

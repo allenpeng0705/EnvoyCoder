@@ -10,7 +10,9 @@ import 'package:envoydev_mobile/screens/connections_sheet.dart';
 import 'package:envoydev_mobile/services/connections_controller.dart';
 import 'package:envoydev_mobile/services/host_client.dart';
 import 'package:envoydev_mobile/services/host_store.dart';
+import 'package:envoydev_mobile/widgets/name_dialog.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -173,8 +175,18 @@ void main() {
     final controller = await _controllerWith([studio]);
     await _pumpSheet(tester, controller);
 
-    final tile = tester.widget<ListTile>(find.byType(ListTile).first);
-    expect((tile.title! as Text).data, 'Studio · current');
+    // Anchored on the name, not `ListTile.first`: the sheet's first row is the Add-host action now.
+    final tile = tester.widget<ListTile>(
+      find.ancestor(of: find.text('Studio · current'), matching: find.byType(ListTile)),
+    );
+    // The name is the title, and it is wrapped in a tooltip that carries it whole (the title may be
+    // ellipsized, so the tooltip is where the untruncated value lives).
+    expect((tile.title! as Tooltip).message, 'Studio');
+    expect((tile.title! as Tooltip).child, isA<Text>());
+    expect(
+      ((tile.title! as Tooltip).child as Text).data,
+      'Studio · current',
+    );
     // The address is still on the row — it is the diagnostic fact the network panel keys off — but
     // it is on the detail line, not the title.
     final detail = tester.widget<Text>(find.textContaining('192.168.1.5:4770'));
@@ -233,10 +245,10 @@ void main() {
     await _finish(tester, controller);
   });
 
-  testWidgets('the host row lays out at 320pt with its two controls', (tester) async {
-    // 320pt is the narrowest width this app claims to support. The host row carries two trailing
-    // controls now — the read-only status button and the `…` that holds Rename and Forget — where
-    // three icon buttons overflowed it by 16pt.
+  testWidgets('the host row lays out at 320pt with its one remaining control', (tester) async {
+    // 320pt is the narrowest width this app claims to support. The row used to carry two trailing
+    // controls — the read-only status button and the `…` — where three icon buttons overflowed it by
+    // 16pt; the status button has since moved to the top bar, so one `…` is all that is left.
     //
     // It cannot simply assert "no exception": the **sheet header** (`Connections` + `N computers`)
     // overflows at this width under the test's square glyphs, a pre-existing line this change does
@@ -255,10 +267,10 @@ void main() {
     final controller = await _controllerWith([_host('a', 'alpha'), _host('b', 'beta')]);
     await _pumpSheet(tester, controller);
 
-    // Two trailing controls only: the read-only status button, and the `…` that now carries
-    // Rename and Forget.
-    expect(find.byTooltip('Network status for alpha'), findsOneWidget);
+    // The `…` is the row's only trailing control, and the cell tower is not on the row at all.
     expect(find.byTooltip('More actions for alpha'), findsOneWidget);
+    expect(find.byTooltip('Network status for alpha'), findsNothing);
+    expect(find.byIcon(Icons.cell_tower), findsNothing);
 
     final creators = [
       for (final details in reported)
@@ -271,6 +283,78 @@ void main() {
     );
     // At most the header's own Row; nothing else in the sheet may overflow.
     expect(creators.length, lessThanOrEqualTo(1), reason: creators.join('\n'));
+    await _finish(tester, controller);
+  });
+
+  testWidgets('Add host leads the list, above the machines it pairs', (tester) async {
+    // The owner's refinement: with the top bar's Add-host shortcut gone, this is the one home for
+    // pairing, and it is the first thing in the sheet rather than the last.
+    final controller = await _controllerWith([_host('a', 'alpha')]);
+    await _pumpSheet(tester, controller);
+
+    final tiles = tester.widgetList<ListTile>(find.byType(ListTile)).toList();
+    // First the action, then the machine — and only one pairing door in the sheet.
+    expect((tiles.first.title! as Text).data, 'Add host');
+    expect(find.widgetWithText(ListTile, 'Add host'), findsOneWidget);
+    // The action is distinguishable from a host row: it has no state dot and no `…`.
+    expect(
+      find.descendant(of: find.widgetWithText(ListTile, 'Add host'), matching: find.byIcon(Icons.add)),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('More actions for Add host'), findsNothing);
+
+    await tester.tap(find.widgetWithText(ListTile, 'Add host'));
+    await tester.pumpAndSettle();
+    // The sheet's own add-host flow is the sheet's, not a second pairing path.
+    expect(find.text('Add host'), findsWidgets);
+    await tester.pumpWidget(const SizedBox());
+    controller.dispose();
+  });
+
+  testWidgets('a long connection name ellipsizes in the row; the tooltip keeps it whole',
+      (tester) async {
+    // A legal connection name still does not fit a host row on a narrow phone, so the title truncates
+    // rather than wrapping or overflowing — and the long-press tooltip carries the full value.
+    //
+    // 360pt rather than 320pt: the sheet *header* Row already overflows at 320pt (its own
+    // pre-existing line, pinned separately above), and this test is about the row's title, not about
+    // re-finding that header bug.
+    const longName = "Shileipeng's MacBook Pro (work)";
+    expect(longName.length, lessThanOrEqualTo(kConnectionNameMaxLength));
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final controller = await _controllerWith([_host('a', longName)]);
+    await _pumpSheet(tester, controller);
+
+    // The active row renders `name · current`; the raw name is the tooltip.
+    final paragraph = tester.renderObject<RenderParagraph>(find.text('$longName · current'));
+    expect(paragraph.maxLines, 1);
+    expect(paragraph.didExceedMaxLines, isTrue);
+    expect(find.byTooltip(longName), findsOneWidget);
+    await _finish(tester, controller);
+  });
+
+  testWidgets('the rename dialog enforces the shared connection-name limit', (tester) async {
+    // The same 40 the pairing step uses, from `kConnectionNameMaxLength` — one rule, not two.
+    final controller = await _controllerWith([_host('a', 'alpha')]);
+    await _pumpSheet(tester, controller);
+
+    await _pressHostMenuItem(tester, 'alpha', 'Rename connection');
+
+    // The field shows the bound while typing...
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.maxLength, kConnectionNameMaxLength);
+    expect(field.controller?.text, 'alpha');
+
+    // ...and a pasted programmatic overflow is refused, not silently truncated.
+    final tooLong = List.filled(kConnectionNameMaxLength + 1, 'x').join();
+    field.controller!.text = tooLong;
+    await tester.tap(find.widgetWithText(FilledButton, 'Rename'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Keep it to $kConnectionNameMaxLength characters or fewer.'), findsOneWidget);
+    expect(controller.hosts.single.label, 'alpha');
     await _finish(tester, controller);
   });
 }
