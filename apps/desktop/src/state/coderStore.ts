@@ -70,6 +70,15 @@ export type MeshStatus =
   | { kind: "no-node"; reason: string }
   | { kind: "refused"; code: string; reason: string };
 
+/** A changed file, as every git answer reports it — stagedness included, because they are two facts. */
+export interface ExplorerChangeResult {
+  path: string;
+  kind: "added" | "modified" | "deleted" | "renamed" | "untracked" | "conflict";
+  from?: string;
+  staged: boolean;
+  unstaged: boolean;
+}
+
 /** One project's repository, as this window last measured it. */
 export interface GitSnapshot {
   status: GitStatus;
@@ -938,15 +947,12 @@ export class CoderStore {
     | {
         ok: true;
         repo: boolean;
-        changes: { path: string; kind: "added" | "modified" | "deleted" | "renamed" | "untracked" | "conflict"; from?: string }[];
+        changes: ExplorerChangeResult[];
       }
     | Refusal
   > {
     return this.mutate("coder.listWorktreeChanges", { path }, (answer) => {
-      const result = answer as {
-        repo: boolean;
-        changes: { path: string; kind: "added" | "modified" | "deleted" | "renamed" | "untracked" | "conflict"; from?: string }[];
-      };
+      const result = answer as { repo: boolean; changes: ExplorerChangeResult[] };
       return { ok: true as const, repo: result.repo, changes: result.changes };
     });
   }
@@ -1025,6 +1031,60 @@ export class CoderStore {
           : [...known.map((candidate) => ({ ...candidate, current: false })), { name: branch, current: true }];
     this.set({ git: { ...(this.state.git ?? {}), [projectId]: { status: created.status, branches } } });
     return { ok: true };
+  }
+
+  /**
+   * Stage paths — one file, or everything the Changes list shows.
+   *
+   * A write like any other: it answers with the refreshed list, so the tab that asked is right without a
+   * second round trip, and it is refused while a run is live in the project (the daemon's rule).
+   */
+  async gitStage(
+    projectId: string,
+    paths: readonly string[],
+  ): Promise<{ ok: true; changes: ExplorerChangeResult[] } | Refusal> {
+    const staged = await this.mutate("coder.gitStage", { projectId, paths }, (answer) => ({
+      changes: (answer as { changes: ExplorerChangeResult[] }).changes,
+    }));
+    return "ok" in staged ? staged : { ok: true, changes: staged.changes };
+  }
+
+  /** Unstage paths: the index goes back to what HEAD has, or to empty in a repository with no commits. */
+  async gitUnstage(
+    projectId: string,
+    paths: readonly string[],
+  ): Promise<{ ok: true; changes: ExplorerChangeResult[] } | Refusal> {
+    const unstaged = await this.mutate("coder.gitUnstage", { projectId, paths }, (answer) => ({
+      changes: (answer as { changes: ExplorerChangeResult[] }).changes,
+    }));
+    return "ok" in unstaged ? unstaged : { ok: true, changes: unstaged.changes };
+  }
+
+  /**
+   * Commit what is staged, with the message the user typed.
+   *
+   * The answer carries the repository as it is *after* the commit, so the branch chip's `dirty` count and the
+   * Changes list both follow in one call — the two places a user looks next.
+   */
+  async gitCommit(
+    projectId: string,
+    message: string,
+  ): Promise<{ ok: true; sha: string; changes: ExplorerChangeResult[] } | Refusal> {
+    const committed = await this.mutate("coder.gitCommit", { projectId, message }, (answer) => {
+      const result = answer as { sha: string; status: GitStatus; changes: ExplorerChangeResult[] };
+      return { sha: result.sha, status: result.status, changes: result.changes };
+    });
+    if ("ok" in committed) return committed;
+    this.set({
+      git: {
+        ...(this.state.git ?? {}),
+        [projectId]: {
+          status: committed.status,
+          branches: this.state.git?.[projectId]?.branches ?? [],
+        },
+      },
+    });
+    return { ok: true, sha: committed.sha, changes: committed.changes };
   }
 
   /** The difference for one file in Changes. A refusal stays with the tab. */

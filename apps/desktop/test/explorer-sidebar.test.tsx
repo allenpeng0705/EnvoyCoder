@@ -11,7 +11,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@envoydev/protocol";
 
 import { TaskPane } from "../src/components/TaskPane.js";
-import type { ChangeListing, DirectoryListing } from "../src/components/ExplorerSidebar.js";
+import type {
+  ChangeListing,
+  DirectoryListing,
+  ExplorerChange,
+} from "../src/components/ExplorerSidebar.js";
+import type { Refusal } from "../src/i18n/notice.js";
 
 afterEach(cleanup);
 
@@ -32,8 +37,18 @@ function renderExplorer(
     explorerOpen?: boolean;
     onListDirectory?: (path: string) => Promise<DirectoryListing>;
     onListChanges?: (path: string) => Promise<ChangeListing>;
+    /** What the Changes tab lists, when a test cares about stagedness. */
+    changes?: readonly ExplorerChange[];
+    onStage?: (paths: readonly string[]) => Promise<{ ok: true; changes: readonly ExplorerChange[] } | Refusal>;
+    onUnstage?: (paths: readonly string[]) => Promise<{ ok: true; changes: readonly ExplorerChange[] } | Refusal>;
+    onCommit?: (
+      message: string,
+    ) => Promise<{ ok: true; sha: string; changes: readonly ExplorerChange[] } | Refusal>;
   } = {},
 ): void {
+  const changes = overrides.changes ?? [
+    { path: "src/main.ts", kind: "modified" as const, staged: false, unstaged: true },
+  ];
   render(
     <TaskPane
       task={task}
@@ -57,9 +72,12 @@ function renderExplorer(
         (async () => ({
           ok: true as const,
           repo: true,
-          changes: [{ path: "src/main.ts", kind: "modified" as const }],
+          changes,
         }))
       }
+      {...(overrides.onStage !== undefined ? { onStage: overrides.onStage } : {})}
+      {...(overrides.onUnstage !== undefined ? { onUnstage: overrides.onUnstage } : {})}
+      {...(overrides.onCommit !== undefined ? { onCommit: overrides.onCommit } : {})}
       onSend={vi.fn()}
       onAnswer={vi.fn()}
       onStart={vi.fn()}
@@ -67,6 +85,12 @@ function renderExplorer(
     />,
   );
 }
+
+/** The Changes tab, with the three writes the daemon exposes. */
+const CHANGES = [
+  { path: "src/main.ts", kind: "modified" as const, staged: false, unstaged: true },
+  { path: "src/new.ts", kind: "added" as const, staged: true, unstaged: false },
+];
 
 describe("the explorer sidebar", () => {
   it("stays closed until the window asks for it", () => {
@@ -156,7 +180,7 @@ describe("the explorer sidebar", () => {
         onListChanges={async () => ({
           ok: true as const,
           repo: true,
-          changes: [{ path: "src/main.ts", kind: "modified" as const }],
+          changes: [{ path: "src/main.ts", kind: "modified" as const, staged: false, unstaged: true }],
         })}
         onReadDiff={async () => ({
           ok: true as const,
@@ -179,5 +203,77 @@ describe("the explorer sidebar", () => {
     expect(await screen.findByText("new")).toBeTruthy();
     expect(screen.getByText("old")).toBeTruthy();
     expect(screen.getByText("+1")).toBeTruthy();
+  });
+
+  it("stages one path, and only the control that would do something is drawn", async () => {
+    const onStage = vi.fn(async () => ({
+      ok: true as const,
+      changes: [{ path: "src/main.ts", kind: "modified" as const, staged: true, unstaged: false }],
+    }));
+    renderExplorer({ changes: CHANGES, onStage, onUnstage: vi.fn(async () => ({ ok: true as const, changes: [] })) });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Changes" }));
+    await screen.findByText("src/main.ts");
+
+    // One file is unstaged (so it offers `+`), the other is staged (so it offers `−`) — and neither offers
+    // the action that would do nothing.
+    fireEvent.click(screen.getByRole("button", { name: "Stage src/main.ts" }));
+    await vi.waitFor(() => expect(onStage).toHaveBeenCalledWith(["src/main.ts"]));
+    expect(screen.getByRole("button", { name: "Unstage src/new.ts" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Stage src/new.ts" })).toBeNull();
+  });
+
+  it("commits what is staged, with the message, and reports the commit", async () => {
+    const onCommit = vi.fn(async () => ({
+      ok: true as const,
+      sha: "abc1234def5678",
+      changes: [],
+    }));
+    renderExplorer({ changes: CHANGES, onCommit, onStage: vi.fn() });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Changes" }));
+    await screen.findByText("src/main.ts");
+
+    // The button is off until both facts hold: a message, and something in the index.
+    const commitButton = screen.getByRole("button", { name: "Commit" }) as HTMLButtonElement;
+    expect(commitButton.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Commit message"), { target: { value: "add the keys" } });
+    expect((screen.getByRole("button", { name: "Commit" }) as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Commit" }));
+    await vi.waitFor(() => expect(onCommit).toHaveBeenCalledWith("add the keys"));
+    // The list came back from the write, and the sentence names the short sha rather than a wall of hex.
+    expect(await screen.findByText("Committed abc1234.")).toBeTruthy();
+  });
+
+  it("stages every changed path from one press, as a decision the user makes", async () => {
+    const onStage = vi.fn(async () => ({ ok: true as const, changes: [] }));
+    renderExplorer({ changes: CHANGES, onStage, onCommit: vi.fn() });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Changes" }));
+    await screen.findByText("src/main.ts");
+
+    // Only the *unstaged* path: staging something already in the index again is a no-op, not an error.
+    fireEvent.click(screen.getByRole("button", { name: "Stage all" }));
+    await vi.waitFor(() => expect(onStage).toHaveBeenCalledWith(["src/main.ts"]));
+  });
+
+  it("shows the daemon's refusal beside the control that caused it", async () => {
+    const onCommit = vi.fn(async (): Promise<{ ok: false; message: string } & Refusal> => ({
+      ok: false as const,
+      message: "Nothing is staged.",
+      key: "error.gitNothingStaged",
+    }));
+    renderExplorer({ changes: CHANGES, onCommit, onStage: vi.fn() });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Changes" }));
+    await screen.findByText("src/main.ts");
+    fireEvent.change(screen.getByLabelText("Commit message"), { target: { value: "anything" } });
+    fireEvent.click(screen.getByRole("button", { name: "Commit" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Nothing is staged");
+    // And the message the user typed is still there to be edited.
+    expect((screen.getByLabelText("Commit message") as HTMLInputElement).value).toBe("anything");
   });
 });

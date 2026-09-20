@@ -748,6 +748,11 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               explorerOpen={explorerOpen}
               onListDirectory={(path) => props.actions.listDirectory(path)}
               onListChanges={(path) => props.actions.listWorktreeChanges(path)}
+              // The three writes the Changes tab offers. Stagedness comes from each write's own answer, so the
+              // list, the branch chip and the repository agree without a second round trip.
+              onStage={(paths) => props.actions.gitStage(active.projectId, paths)}
+              onUnstage={(paths) => props.actions.gitUnstage(active.projectId, paths)}
+              onCommit={(message) => props.actions.gitCommit(active.projectId, message)}
               onReadFile={(path) => props.actions.readFile(path)}
               onReadDiff={(directory, path, from) => props.actions.readWorktreeDiff(directory, path, from)}
               onCreateEntry={(directory, name, kind) => props.actions.createEntry(directory, name, kind)}

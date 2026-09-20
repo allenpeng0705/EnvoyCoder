@@ -78,7 +78,12 @@ import { buildTranscript, type TranscriptEntry } from "../state/transcript.js";
 import { ApprovalChoices } from "./ApprovalChoices.js";
 import { ComposerControls } from "./ComposerControls.js";
 import { AttachButton, AttachmentTray } from "./ComposerAttach.js";
-import { ExplorerSidebar, type ChangeListing, type DirectoryListing } from "./ExplorerSidebar.js";
+import {
+  ExplorerSidebar,
+  type ChangeListing,
+  type DirectoryListing,
+  type ExplorerChange,
+} from "./ExplorerSidebar.js";
 import type { OpenedFile } from "./FileView.js";
 import { SlashCommandList } from "./SlashCommandList.js";
 import { WorkArea, type FileOpenRequest, type OpenedDiff } from "./WorkArea.js";
@@ -190,6 +195,15 @@ export interface TaskPaneProps {
   onListDirectory?: (path: string) => Promise<DirectoryListing>;
   /** Git changes in the task folder. `repo: false` is an answer, not a failure. */
   onListChanges?: (path: string) => Promise<ChangeListing>;
+  /**
+   * The Changes tab's three git writes, passed straight through.
+   *
+   * The pane owns the layout, the sidebar owns the list: a copy of these here would be a second place that
+   * decides what the tab can do, and the first thing to go stale is always the copy further from the data.
+   */
+  onStage?: (paths: readonly string[]) => Promise<{ ok: true; changes: readonly ExplorerChange[] } | Refusal>;
+  onUnstage?: (paths: readonly string[]) => Promise<{ ok: true; changes: readonly ExplorerChange[] } | Refusal>;
+  onCommit?: (message: string) => Promise<{ ok: true; sha: string; changes: readonly ExplorerChange[] } | Refusal>;
   /** Open one file from the explorer into a tab. */
   onReadFile?: (path: string) => Promise<{ ok: true; file: OpenedFile } | Refusal>;
   /** Open one change as a diff tab. `directory` is the task folder. */
@@ -703,6 +717,9 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
 
       {explorer && props.onListDirectory && props.onListChanges ? (
         <ExplorerSidebar
+          {...(props.onStage !== undefined ? { onStage: props.onStage } : {})}
+          {...(props.onUnstage !== undefined ? { onUnstage: props.onUnstage } : {})}
+          {...(props.onCommit !== undefined ? { onCommit: props.onCommit } : {})}
           cwd={task.cwd}
           onListDirectory={props.onListDirectory}
           onListChanges={props.onListChanges}

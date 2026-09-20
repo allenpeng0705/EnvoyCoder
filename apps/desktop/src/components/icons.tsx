@@ -168,6 +168,31 @@ export function FolderIcon({ size = 16 }: IconProps): JSX.Element {
  * The glyph is the rail's, not a task's: the chip that wears it names the branch the **project folder** is
  * on, and the two circles with the fork between them are the shape every git user already reads.
  */
+/**
+ * "Put this in the index" — a box with a plus, which is what `git add` does to a path.
+ *
+ * Two glyphs rather than one toggle, because a file can be staged *and* changed again: the two buttons then
+ * mean two different things at the same time, and a single toggle would have to lie about one of them.
+ */
+export function IndexAddIcon({ size = 16 }: IconProps): JSX.Element {
+  return (
+    <svg {...frame(size)}>
+      <rect x="4" y="4" width="16" height="16" rx="3" />
+      <path d="M12 8.5v7M8.5 12h7" />
+    </svg>
+  );
+}
+
+/** "Take this out of the index": the same box, minus the plus. */
+export function IndexRemoveIcon({ size = 16 }: IconProps): JSX.Element {
+  return (
+    <svg {...frame(size)}>
+      <rect x="4" y="4" width="16" height="16" rx="3" />
+      <path d="M8.5 12h7" />
+    </svg>
+  );
+}
+
 export function BranchIcon({ size = 16 }: IconProps): JSX.Element {
   return (
     <svg {...frame(size)}>
