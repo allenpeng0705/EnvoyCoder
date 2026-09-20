@@ -327,6 +327,33 @@ void main() {
 
         wire.close();
         await replies.close();
+
+        // 6. The same relay, dialled the way a **relay-hint** payload makes this app dial it.
+        //
+        //    `candidatesFor` builds a circuit from a bare relay hint as the family's short form
+        //    (`/p2p/<relay>/p2p-circuit/p2p/<home>`) with the relay's own address kept separately in
+        //    `libp2pRelayAddr`. Reproducing that shape against a real relay is what pins the fix:
+        //    without it the dial dies at `newStream(relayId)` with `No addresses found for peer:
+        //    <relay>`, so the off-LAN rung every hint-carrying QR offers could never open.
+        final advertised = harness.circuitAddrs.first;
+        final relayBase = advertised.substring(0, advertised.indexOf('/p2p-circuit'));
+        final relayPeer = advertised.substring(
+          advertised.lastIndexOf('/p2p/', advertised.indexOf('/p2p-circuit')) + 5,
+          advertised.indexOf('/p2p-circuit'),
+        );
+        final builtPath = '/p2p/$relayPeer/p2p-circuit/p2p/${harness.peerId}';
+        final builtWire = await Libp2pTransport(node: () async => phone!).dial(
+          HomeRemoteCandidate(
+            name: 'p2p-cn-relay',
+            url: builtPath,
+            homePeerId: harness.peerId,
+            sessionToken: harness.token,
+            libp2pRelayAddr: relayBase,
+          ),
+        );
+        expect(builtWire.readyState, wsOpen,
+            reason: 'the built circuit $builtPath did not dial through $relayBase');
+        builtWire.close();
       } finally {
         await phone?.stop();
         final process = harnessProcess;

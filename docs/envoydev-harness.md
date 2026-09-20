@@ -37,6 +37,18 @@ adapter covers the built-in harness, DeepSeek Harness, and any third-party agent
 Only agents with no ACP support get a bespoke argv adapter, and they are marked as such in the
 catalogue.
 
+**One adapter, two notification dialects — the lifecycle is shared, the content envelopes are not.**
+The claim above was read as "the envelopes are the same too", and they are not. DeepSeek Harness
+publishes the specification's `session/update {update: {sessionUpdate: …}}` chunks. The built-in
+harness publishes its own: `session/token` deltas, `session/update {message: {role, text}}` (a
+*different* field on the same method), and `session/activity` for tool calls
+(`../envoy-harness/packages/envoy-harness/src/protocol/acp-server.ts:174-200`, and its own WebUI's
+`packages/envoy-harness-web/src/client/acp/acp-notifications.ts:1-6`). A client that reads only the
+specification's envelope **drops every word the built-in harness says while still reporting a clean
+`end_turn`** — the run looks finished and the transcript is empty. Keeping that difference here is
+what makes "one client" true; `apps/desktop/src/daemon/acp/harness-dialect.ts` is the translation and
+`acp-transport.test.ts` asserts the content, not merely the `end_turn`.
+
 ## 3. `envoy-harness` — our built-in agent
 
 * **How:** spawned, and driven over ACP: `envoy-harness run --acp`

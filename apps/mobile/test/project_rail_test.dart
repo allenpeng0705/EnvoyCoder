@@ -4,14 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('groupByProject', () {
     test('keeps newest project first and ignores attention bubbling', () {
-      final older = ProjectInfo(
+      const older = ProjectInfo(
         id: 'p-old',
         path: '/repo/old',
         label: 'old',
         hostId: 'local',
         addedAt: '2026-09-01T00:00:00.000Z',
       );
-      final newer = ProjectInfo(
+      const newer = ProjectInfo(
         id: 'p-new',
         path: '/repo/new',
         label: 'new',
@@ -41,7 +41,7 @@ void main() {
     });
 
     test('pins then orders by recency inside a project', () {
-      final project = ProjectInfo(
+      const project = ProjectInfo(
         id: 'p',
         path: '/repo',
         label: 'repo',
@@ -51,21 +51,21 @@ void main() {
       final groups = groupByProject(
         projects: [project],
         tasks: [
-          TaskInfo(
+          const TaskInfo(
             id: 'old',
             projectId: 'p',
             title: 'old',
             status: 'idle',
             updatedAt: '2026-09-01T00:00:00.000Z',
           ),
-          TaskInfo(
+          const TaskInfo(
             id: 'new',
             projectId: 'p',
             title: 'new',
             status: 'idle',
             updatedAt: '2026-09-13T00:00:00.000Z',
           ),
-          TaskInfo(
+          const TaskInfo(
             id: 'pinned',
             projectId: 'p',
             title: 'pinned',
@@ -79,7 +79,7 @@ void main() {
     });
 
     test('keeps empty projects visible', () {
-      final project = ProjectInfo(
+      const project = ProjectInfo(
         id: 'p',
         path: '/repo',
         label: 'repo',
@@ -94,14 +94,14 @@ void main() {
 
   group('filterProjectGroups', () {
     test('keeps a project when the query hits its label, even with no tasks', () {
-      final empty = ProjectInfo(
+      const empty = ProjectInfo(
         id: 'archive',
         path: '/repo/archive',
         label: 'archive',
         hostId: 'local',
         addedAt: '2026-09-01T00:00:00.000Z',
       );
-      final other = ProjectInfo(
+      const other = ProjectInfo(
         id: 'other',
         path: '/repo/other',
         label: 'other',
@@ -126,7 +126,7 @@ void main() {
     });
 
     test('matches task title', () {
-      final project = ProjectInfo(
+      const project = ProjectInfo(
         id: 'p',
         path: '/repo',
         label: 'payments',
@@ -136,7 +136,7 @@ void main() {
       final groups = groupByProject(
         projects: [project],
         tasks: [
-          TaskInfo(
+          const TaskInfo(
             id: 't',
             projectId: 'p',
             title: 'Idempotency keys',

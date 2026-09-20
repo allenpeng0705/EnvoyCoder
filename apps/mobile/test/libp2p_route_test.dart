@@ -64,8 +64,7 @@ Future<void> _serveHome(P2PStream<dynamic> stream, String token) async {
 }
 
 void main() {
-  test('the walk wins on the direct libp2p rung and carries RPCs over it', () async {
-    final port = await _freePort();
+  test('the walk wins on the direct libp2p rung and carries RPCs over it', () async {    final port = await _freePort();
     final home = Libp2pNode(seedStore: MemoryLibp2pSeedStore());
     await home.start(
       listenAddrs: ['/ip4/127.0.0.1/tcp/$port'],
@@ -117,4 +116,58 @@ void main() {
     // `ensureConnected` is a no-op now, so this is the same transport, still open.
     expect(await client.call('coder.listTasks', {}), isA<Map<String, dynamic>>());
   }, timeout: const Timeout(Duration(seconds: 120)));
+
+  // The off-LAN rung is the one a category of pairing payloads cannot reach without this mapping.
+  //
+  // A payload that carries the desktop's peer id and a **relay hint** (the always-present community
+  // relay, or any `/ip4/…/p2p/<relay>` entry) makes the family build a circuit candidate whose `url`
+  // is the bare path `/p2p/<relay>/p2p-circuit/p2p/<home>`; the relay's own dialable address is only
+  // in `libp2pRelayAddr`. `Libp2pNode.dial` seeds the relay from the address it is handed, so the
+  // bare path made every built circuit rung die at `newStream(relayId)` with
+  // `No addresses found for peer: <relay>` — the off-LAN route this app exists to provide never
+  // dialled, while the same payload's full-form circuit (when the QR carried one) worked.
+  test('a built circuit dial carries the relay address, not just the bare path', () {
+    const home = '12D3KooWhome';
+    const relay = '12D3KooWrelay';
+    const relayAddr = '/ip4/47.93.11.212/tcp/4001/p2p/$relay';
+    const builtPath = '/p2p/$relay/p2p-circuit/p2p/$home';
+
+    // The family's built-circuit shape: path in `url`, relay address in `libp2pRelayAddr`.
+    expect(
+      libp2pDialTarget(const HomeRemoteCandidate(
+        name: 'p2p-cn-relay',
+        url: builtPath,
+        homePeerId: home,
+        sessionToken: 'tok',
+        libp2pRelayAddr: relayAddr,
+      )),
+      '$relayAddr/p2p-circuit/p2p/$home',
+    );
+
+    // The advertised shape already holds the whole route; prefixing would duplicate the hop.
+    const advertised = '$relayAddr/p2p-circuit/p2p/$home';
+    expect(
+      libp2pDialTarget(const HomeRemoteCandidate(
+        name: 'p2p-cn-relay',
+        url: advertised,
+        homePeerId: home,
+        sessionToken: 'tok',
+        libp2pRelayAddr: advertised,
+      )),
+      advertised,
+    );
+
+    // A direct dial is untouched.
+    const direct = '/ip4/192.168.1.9/tcp/4001/p2p/$home';
+    expect(
+      libp2pDialTarget(const HomeRemoteCandidate(
+        name: 'p2p-direct',
+        url: direct,
+        homePeerId: home,
+        sessionToken: 'tok',
+        libp2pRelayAddr: direct,
+      )),
+      direct,
+    );
+  });
 }

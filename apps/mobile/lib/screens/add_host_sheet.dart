@@ -33,65 +33,71 @@ class _AddHostSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Scrollable, not a bare `Column`: four two-line rows are taller than the sheet's 9/16-of-screen
+    // cap on a short phone, and the naming dialog that now follows a code opens a keyboard **over this
+    // sheet**, shrinking it further. A plain column overflowed by 6.5pt at 600pt of height; a scroll
+    // view spends a little of the sheet's height on nothing and cannot overflow at any of them.
     return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            leading: const Icon(Icons.qr_code_scanner),
-            title: const Text('Scan QR'),
-            subtitle: const Text('Pair with the code on your computer'),
-            onTap: () async {
-              final code = await Navigator.of(context).push<String>(
-                MaterialPageRoute(builder: (_) => const QrScanScreen()),
-              );
-              if (!context.mounted) return;
-              if (code == null || code.isEmpty) {
-                Navigator.of(context).pop();
-                return;
-              }
-              Navigator.of(context).pop(AddHostResult.code(code));
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.content_paste),
-            title: const Text('Paste link'),
-            subtitle: const Text('Paste the pairing link from EnvoyDev'),
-            onTap: () async {
-              final code = await _promptText(
-                context,
-                title: 'Paste pairing link',
-                hint: 'envoy://pair?…',
-              );
-              if (!context.mounted) return;
-              if (code == null || code.isEmpty) return;
-              Navigator.of(context).pop(AddHostResult.code(code));
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.lan_outlined),
-            title: const Text('Direct TCP'),
-            subtitle: const Text('Host, port, and optional token'),
-            onTap: () async {
-              final host = await _promptDirectTcp(context);
-              if (!context.mounted) return;
-              if (host == null) return;
-              Navigator.of(context).pop(AddHostResult.host(host));
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.terminal),
-            title: const Text('Remote SSH'),
-            subtitle: const Text('Reach the daemon through an SSH hop'),
-            onTap: () async {
-              final host = await _promptSsh(context);
-              if (!context.mounted) return;
-              if (host == null) return;
-              Navigator.of(context).pop(AddHostResult.host(host));
-            },
-          ),
-          const SizedBox(height: 8),
-        ],
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.qr_code_scanner),
+              title: const Text('Scan QR'),
+              subtitle: const Text('Pair with the code on your computer'),
+              onTap: () async {
+                final code = await Navigator.of(context).push<String>(
+                  MaterialPageRoute(builder: (_) => const QrScanScreen()),
+                );
+                if (!context.mounted) return;
+                if (code == null || code.isEmpty) {
+                  Navigator.of(context).pop();
+                  return;
+                }
+                Navigator.of(context).pop(AddHostResult.code(code));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.content_paste),
+              title: const Text('Paste link'),
+              subtitle: const Text('Paste the pairing link from EnvoyDev'),
+              onTap: () async {
+                final code = await _promptText(
+                  context,
+                  title: 'Paste pairing link',
+                  hint: 'envoy://pair?…',
+                );
+                if (!context.mounted) return;
+                if (code == null || code.isEmpty) return;
+                Navigator.of(context).pop(AddHostResult.code(code));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.lan_outlined),
+              title: const Text('Direct TCP'),
+              subtitle: const Text('Host, port, and optional token'),
+              onTap: () async {
+                final host = await _promptDirectTcp(context);
+                if (!context.mounted) return;
+                if (host == null) return;
+                Navigator.of(context).pop(AddHostResult.host(host));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.terminal),
+              title: const Text('Remote SSH'),
+              subtitle: const Text('Reach the daemon through an SSH hop'),
+              onTap: () async {
+                final host = await _promptSsh(context);
+                if (!context.mounted) return;
+                if (host == null) return;
+                Navigator.of(context).pop(AddHostResult.host(host));
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
       ),
     );
   }

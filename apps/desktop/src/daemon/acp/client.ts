@@ -55,6 +55,7 @@ import {
   userQuestionReply,
 } from "./protocol.js";
 import { sessionPromptAttempts } from "./prompt-attempts.js";
+import { HarnessDialect } from "./harness-dialect.js";
 
 // The shapes themselves live in `./protocol.ts` — see its header for why the seam is there — and are
 // re-exported so that the module a caller has always reached for stays this one.
@@ -189,6 +190,12 @@ const INVALID_PARAMS = -32602;
 export class AcpClient {
   private readonly child: ChildProcessWithoutNullStreams;
   private readonly options: AcpClientOptions;
+  /**
+   * The built-in harness's own notification dialect — `session/token`, a committed
+   * `session/update {message}`, and the `session/activity` trace stream. See `harness-dialect.ts` for
+   * why one ACP client needs it and for the streaming-versus-committed rule.
+   */
+  private readonly harness = new HarnessDialect();
   private readonly pending = new Map<number, Pending>();
   private readonly stderrLines: string[] = [];
   private nextId = 1;
@@ -594,6 +601,9 @@ export class AcpClient {
     // duplicate. A retry on any other failure would run the task twice. A picture never falls through
     // to `{text}`: that shape would drop it.
     const attempts = sessionPromptAttempts(sessionId, text, images);
+    // A fresh turn. What streamed, what was committed and where a thinking tag was left open are all
+    // per-turn facts, and a carry-over would either drop the next turn's fallback or duplicate it.
+    this.harness.beginTurn();
 
     try {
       const result = (await this.request("session/prompt", attempts.first, timeoutMs)) as {
@@ -610,6 +620,10 @@ export class AcpClient {
         stopReason?: string;
       };
       return { stopReason: result.stopReason ?? "unknown" };
+    } finally {
+      // The tail of a streamed turn, or the committed copy for a turn that streamed nothing. Emitted
+      // before this promise settles, so a run has recorded the last words before it records the end.
+      for (const update of this.harness.endTurn()) this.options.onUpdate?.(update);
     }
   }
 
@@ -743,11 +757,35 @@ export class AcpClient {
     // A notification.
     if (frame.method === "session/update") {
       const params = frame.params as { update?: AcpUpdate } | undefined;
-      if (params?.update) this.options.onUpdate?.(params.update);
+      if (params?.update) {
+        this.options.onUpdate?.(params.update);
+        return;
+      }
+      // The built-in harness's committed row (`{sessionId, message}`) — the *other* envelope on this
+      // method. The two are disjoint fields, so this needs no per-agent knowledge; see
+      // `harness-dialect.ts`.
+      this.emitHarness(frame.method, frame.params);
+      return;
+    }
+    // And its other two content channels. No agent that speaks the specification sends these, and an
+    // agent that did would mean the same thing by them, so they too are read by shape.
+    if (frame.method === "session/token" || frame.method === "session/activity") {
+      this.emitHarness(frame.method, frame.params);
       return;
     }
     // Other notifications are ignored on purpose: a client that logged every unknown method would
     // print a wall of text for each agent release, and there is nothing to act on.
+  }
+
+  /**
+   * Forward the built-in harness's dialect as the updates `RunManager` folds.
+   *
+   * The translation is in `harness-dialect.ts`; this is only the seam, so that the three envelopes
+   * share one place to reach `onUpdate`. Nothing here knows which agent is running: the shapes are
+   * the harness's own and no other agent emits them.
+   */
+  private emitHarness(method: string, params: unknown): void {
+    for (const update of this.harness.accept(method, params)) this.options.onUpdate?.(update);
   }
 
   private async handleIncomingRequest(id: number | string, method: string, params: unknown): Promise<void> {

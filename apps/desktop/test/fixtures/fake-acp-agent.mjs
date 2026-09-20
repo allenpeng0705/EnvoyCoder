@@ -23,6 +23,8 @@
  * | `fail` | a JSON-RPC error, the way a real agent reports a missing credential |
  * | `slow` | one chunk, then silence — so a test can cancel or steer mid-turn |
  * | `resume-me` | announces the session id it was given, so a resume is observable |
+ * | `harness-me` | the **built-in harness's own** envelopes: `session/token` deltas (with a split thinking tag), a committed `session/update {message}`, and a `session/activity` tool pair |
+ * | `harness-committed` | only the committed envelope, no deltas — the fallback a non-streaming turn needs |
  * | `mode-me` | announces its collaboration mode, so `session/set_mode` is observable |
  * | `model-me` | announces its session config, so `session/set_config_option` is observable |
  * | `thinking-me` | announces its thinking level, so the *second* config option is observable too |
@@ -313,6 +315,60 @@ function handlePrompt(id, params) {
         { name: "/review", description: "Review the diff" },
         { name: "", description: "dropped" },
       ],
+    });
+    ok(id, { stopReason: "end_turn" });
+    return;
+  }
+
+  if (text.includes("harness-me")) {
+    // **The built-in `envoy-harness`'s dialect, envelope for envelope** — taken from a real turn
+    // against the built peer rather than from the specification:
+    //   session/token   {sessionId, token: {role, delta}}
+    //   session/update  {sessionId, message: {role, text}}      (not the spec's `update`)
+    //   session/activity{sessionId, activity: {kind, toolName, …}}
+    // The first delta deliberately ends mid-tag (`<thi`), because a real token stream splits tags and
+    // a client that only stripped whole tags would leak the reasoning into the answer.
+    for (const delta of ["<thi", "nk>let me thin", "k</think>the ans", "wer"]) {
+      notify("session/token", { sessionId, token: { role: "assistant", delta } });
+    }
+    // The committed copy a real turn also sends. A client that translated both would print the answer
+    // twice, which is the bug this branch exists to catch.
+    notify("session/update", {
+      sessionId,
+      message: { role: "assistant", text: "<think>let me think</think>the answer" },
+    });
+    notify("session/activity", {
+      sessionId,
+      activity: {
+        ts: new Date().toISOString(),
+        kind: "tool_call",
+        toolName: "bash",
+        toolArgs: { command: "ls" },
+        summary: "bash — ls",
+      },
+    });
+    notify("session/activity", {
+      sessionId,
+      activity: {
+        ts: new Date().toISOString(),
+        kind: "tool_result",
+        toolName: "bash",
+        toolCallId: "provider-call-9",
+        isError: false,
+        resultPreview: "file-a",
+        summary: "ok — file-a",
+      },
+    });
+    ok(id, { stopReason: "end_turn" });
+    return;
+  }
+
+  if (text.includes("harness-committed")) {
+    // A turn that streams nothing: the harness's hermetic demo backend and a slash command both take
+    // this shape, and the committed row is the only copy of the answer there is.
+    notify("session/update", {
+      sessionId,
+      message: { role: "assistant", text: "<think>private</think>echoed back" },
     });
     ok(id, { stopReason: "end_turn" });
     return;

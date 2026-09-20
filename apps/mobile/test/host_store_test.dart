@@ -1,56 +1,9 @@
 import 'package:envoydev_mobile/models/host.dart';
 import 'package:envoydev_mobile/services/host_store.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// In-memory stand-in so tests do not touch the platform secure-storage plugin.
-class _MemorySecureStorage extends FlutterSecureStorage {
-  final Map<String, String> _values = {};
-
-  @override
-  Future<void> write({
-    required String key,
-    required String? value,
-    AndroidOptions? aOptions,
-    IOSOptions? iOptions,
-    LinuxOptions? lOptions,
-    WindowsOptions? wOptions,
-    WebOptions? webOptions,
-    MacOsOptions? mOptions,
-  }) async {
-    if (value == null) {
-      _values.remove(key);
-    } else {
-      _values[key] = value;
-    }
-  }
-
-  @override
-  Future<String?> read({
-    required String key,
-    AndroidOptions? aOptions,
-    IOSOptions? iOptions,
-    LinuxOptions? lOptions,
-    WindowsOptions? wOptions,
-    WebOptions? webOptions,
-    MacOsOptions? mOptions,
-  }) async =>
-      _values[key];
-
-  @override
-  Future<void> delete({
-    required String key,
-    AndroidOptions? aOptions,
-    IOSOptions? iOptions,
-    LinuxOptions? lOptions,
-    WindowsOptions? wOptions,
-    WebOptions? webOptions,
-    MacOsOptions? mOptions,
-  }) async {
-    _values.remove(key);
-  }
-}
+import 'support/memory_secure_storage.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -58,7 +11,7 @@ void main() {
   test('upsert keeps the token out of shared_preferences', () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
-    final secure = _MemorySecureStorage();
+    final secure = MemorySecureStorage();
     final store = HostStore(prefs: prefs, secure: secure);
 
     const host = CoderHost(
@@ -85,7 +38,7 @@ void main() {
   test('upsert replaces by id and stores an SSH password only in secure storage', () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
-    final secure = _MemorySecureStorage();
+    final secure = MemorySecureStorage();
     final store = HostStore(prefs: prefs, secure: secure);
 
     const first = CoderHost(
@@ -106,5 +59,42 @@ void main() {
     expect(loaded.single.ssh?.password, 'ssh-pass');
     expect(prefs.getString('envoydev.hosts.v1'), isNot(contains('ssh-pass')));
     expect(prefs.getString('envoydev.hosts.v1'), isNot(contains('tok-2')));
+  });
+
+  test('the active host is a stored choice, and forgetting that host clears it', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final store = HostStore(prefs: prefs, secure: MemorySecureStorage());
+
+    const first = CoderHost(
+      id: 'owner::a:4770',
+      label: 'a',
+      endpoint: 'a:4770',
+      ownerId: 'owner',
+      app: 'EnvoyDev',
+      token: 't-a',
+    );
+    const second = CoderHost(
+      id: 'owner::b:4770',
+      label: 'b',
+      endpoint: 'b:4770',
+      ownerId: 'owner',
+      app: 'EnvoyDev',
+      token: 't-b',
+    );
+    await store.upsert(first);
+    await store.upsert(second);
+
+    // Never switched: the store says "no choice", which is not the same as "no host" — the screen
+    // decides what that means, and it decides the first paired host.
+    expect(await store.loadActiveHostId(), isNull);
+
+    await store.saveActiveHostId(second.id);
+    expect(await store.loadActiveHostId(), second.id);
+
+    // Forgetting the active host must not leave a stored id pointing at a machine that is gone.
+    await store.remove(second.id);
+    expect(await store.loadActiveHostId(), isNull);
+    expect((await store.load()).map((h) => h.id), [first.id]);
   });
 }

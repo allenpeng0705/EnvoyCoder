@@ -41,7 +41,7 @@ Future<Map<String, dynamic>> _rpc(String method, [Map<String, dynamic> params = 
 void main() {
   testWidgets('lists folders and files, and hides node_modules', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(home: ExplorerScreen(rpc: _rpc, root: '/repo')),
+      const MaterialApp(home: ExplorerScreen(rpc: _rpc, root: '/repo')),
     );
     await tester.pumpAndSettle();
 
@@ -61,7 +61,7 @@ void main() {
 
   testWidgets('lists changes, and says when the folder is not a git repository', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(home: ExplorerScreen(rpc: _rpc, root: '/repo')),
+      const MaterialApp(home: ExplorerScreen(rpc: _rpc, root: '/repo')),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Changes'));

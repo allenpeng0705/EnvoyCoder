@@ -14,6 +14,15 @@ const _kHostsKey = 'envoydev.hosts.v1';
 const _kTokenPrefix = 'envoydev.host.token.';
 const _kSshPasswordPrefix = 'envoydev.host.ssh-password.';
 
+/// Which host the app opens on when more than one is paired.
+///
+/// This is the one piece of *choice* the store owns, and it is deliberately a plain id rather than,
+/// say, "the first host" or "the last one to connect". Both of those are silent defaults that change
+/// under the user: a reconnect reordering the list, or a fresh pairing arriving first, would move the
+/// app to a different machine between launches. A stored id only ever changes when the user switches
+/// host — which is the Connections button — so the screen is never a surprise.
+const _kActiveHostKey = 'envoydev.active-host.v1';
+
 class HostStore {
   HostStore({
     SharedPreferences? prefs,
@@ -79,5 +88,29 @@ class HostStore {
     await prefs.setString(_kHostsKey, encodeHosts(next));
     await _secure.delete(key: '$_kTokenPrefix$hostId');
     await _secure.delete(key: '$_kSshPasswordPrefix$hostId');
+    // Forgetting the host the app was on would leave the stored id pointing at nothing. Clearing it
+    // here rather than in the screen keeps the two facts — "this host is gone" and "this host was
+    // active" — from ever disagreeing, whichever screen forgets it.
+    if (await loadActiveHostId() == hostId) {
+      await prefs.remove(_kActiveHostKey);
+    }
+  }
+
+  /// The id of the host the app should open on, or null when the user has never switched.
+  ///
+  /// Null is **not** "no host": it means "no explicit choice yet", and the caller's rule (see
+  /// `ConnectionsController.activeHost`) decides what that means for the stored order. Keeping the
+  /// two apart is what lets `remove` fall back to the list rather than fabricate an id.
+  Future<String?> loadActiveHostId() async {
+    final prefs = await _preferences();
+    final id = prefs.getString(_kActiveHostKey);
+    return id == null || id.isEmpty ? null : id;
+  }
+
+  /// Remember [hostId] as the host to open on. Called on every explicit switch, and once on a fresh
+  /// pairing so the just-added machine is the one the user lands on.
+  Future<void> saveActiveHostId(String hostId) async {
+    final prefs = await _preferences();
+    await prefs.setString(_kActiveHostKey, hostId);
   }
 }

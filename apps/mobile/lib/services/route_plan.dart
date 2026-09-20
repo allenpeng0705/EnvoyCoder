@@ -87,9 +87,11 @@ String _dialablePeerId(CoderHost host) {
 
 /// The ordered candidates for [host], in the family's priority, with the family's names.
 ///
-/// `isOnWifi` only caps how many expensive libp2p candidates are kept (2 on Wi‑Fi, 1 otherwise); the
-/// app has no connectivity observer yet, so it takes the conservative cap. [DialBudget] at the call
-/// site is what bounds the walk further.
+/// `isOnWifi` only caps how many expensive libp2p candidates are kept (3 on Wi‑Fi, 2 otherwise); the
+/// app has no connectivity observer yet, so it takes the off-LAN cap. That cap still keeps the
+/// circuit: a private direct address must not be the only peer-to-peer rung, or a phone that paired
+/// on the LAN cannot reach the desktop from cellular. [DialBudget] at the call site is what bounds
+/// the walk further.
 ///
 /// `setCommunityHomePeerId` is process-wide state on the resolver (the family's own design). Setting
 /// it here, on every resolve, is what stops one host's peer id being used to build another host's

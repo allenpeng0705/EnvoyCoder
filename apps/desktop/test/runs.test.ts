@@ -202,6 +202,60 @@ describe("one run, end to end", () => {
     expect(start.input).toEqual({ command: "ls" });
   });
 
+  /**
+   * **The built-in harness's own envelopes, which is what it actually sends.**
+   *
+   * `envoy-harness` does not publish the specification's `session/update {update: {sessionUpdate}}`;
+   * it streams `session/token` deltas, commits `session/update {message}`, and reports tools through
+   * `session/activity`. Before the client learned those envelopes, a whole turn produced **no
+   * `run.output` at all** and the run still ended `done` — the exact "runs a while, shows finished,
+   * nothing to see" report this test now pins.
+   */
+  it("reads the built-in harness's own envelopes, so a turn is not silent", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "harness-me" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const text = (kind: "run.output" | "run.thought"): string =>
+      kinds(b.events, kind)
+        .map((event) => (event.kind === kind ? event.text : ""))
+        .join("");
+    // The answer is the streamed deltas joined — **once**. The committed copy of the same text is the
+    // harness's other envelope, and a client that translated both would render it twice.
+    expect(text("run.output")).toBe("the answer");
+    // The reasoning is its own row, and the tag split across two deltas (`<thi` + `nk>`) was
+    // recognized rather than leaked into the answer as literal text.
+    expect(text("run.thought")).toBe("let me think");
+
+    // The tool pair is one call keyed on one id. The harness's `tool_call` activity names no id, so a
+    // client that keyed on the provider id the *result* carries would leave a row stuck `running`.
+    const tools = kinds(b.events, "run.tool") as Extract<RunEvent, { kind: "run.tool" }>[];
+    expect(tools).toHaveLength(2);
+    expect(tools[0]!.status).toBe("running");
+    expect(tools[1]!.status).toBe("completed");
+    expect(tools[0]!.callId).toBe(tools[1]!.callId);
+    expect(tools[0]!.name).toBe("bash");
+    expect(tools[0]!.input).toEqual({ command: "ls" });
+    expect(tools[1]!.output).toBe("file-a");
+  });
+
+  it("renders the committed row when a turn streams nothing", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "harness-committed" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    // The harness's hermetic demo backend (and a slash command) commit a row without ever streaming a
+    // delta, so the committed copy is the only place the answer exists.
+    expect(said(b.events, "echoed back")).toBe(true);
+    expect(
+      kinds(b.events, "run.output")
+        .map((event) => (event.kind === "run.output" ? event.text : ""))
+        .join(""),
+    ).toBe("echoed back");
+    // Thinking is stripped from that row exactly as the harness strips it before committing.
+    expect(kinds(b.events, "run.thought")).toHaveLength(0);
+  });
+
   it("records context usage when the agent reports it, and stays silent when it does not", async () => {
     const b = await bench();
     await b.manager.start({ taskId: b.taskId, prompt: "run a tool" });
@@ -421,6 +475,45 @@ describe("resume and transcripts", () => {
     // `nextSeq` is what makes a reconnecting client cheap: it asks from here instead of re-fetching.
     const last = events[events.length - 1];
     expect(last && b.manager.events(run.id, last.seq)).toHaveLength(0);
+  });
+
+  it("reloads that transcript after the daemon is gone, and the next run can resume it", async () => {
+    const b = await bench();
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "hello" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the first run to end");
+    const firstSession = kinds(b.events, "run.session")[0];
+    if (firstSession?.kind !== "run.session") throw new Error("unreachable");
+
+    const file = join(coderPaths(b.home).transcriptsDir, `${run.id}.jsonl`);
+    const text = await readFile(file, "utf8");
+    expect(text).toContain('"kind":"run.started"');
+    expect(text).toContain(firstSession.sessionId);
+
+    const revived = new RunManager({
+      paths: coderPaths(b.home),
+      store: b.store,
+      onEvent: (event) => b.events.push(event),
+      resolveLaunch: () => ({
+        command: process.execPath,
+        args: [FAKE_AGENT],
+        cwd: b.home,
+        modeParam: "mode",
+      }),
+    });
+    cleanups.push(async () => {
+      await revived.stopAll();
+    });
+
+    const listed = await revived.history(b.taskId);
+    expect(listed.map((item) => item.id)).toEqual([run.id]);
+    expect(revived.events(run.id).some((event) => event.kind === "run.session")).toBe(true);
+
+    b.events.length = 0;
+    await revived.start({ taskId: b.taskId, prompt: "resume-me please", resume: true });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the resumed run to end");
+    const resumed = kinds(b.events, "run.session")[0];
+    expect(resumed?.kind === "run.session" ? resumed.resumed : false).toBe(true);
+    expect(resumed?.kind === "run.session" ? resumed.sessionId : "").toBe(firstSession.sessionId);
   });
 });
 

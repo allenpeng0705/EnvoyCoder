@@ -667,7 +667,11 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         | { taskId?: string; limit?: number }
         | undefined;
       const runs = requireRuns(deps);
-      return { runs: runs.list(input ?? {}) };
+      const filter = input ?? {};
+      if (filter.taskId !== undefined) {
+        return { runs: await runs.history(filter.taskId, filter.limit) };
+      }
+      return { runs: runs.list(filter) };
     },
 
     /* ────────────────── agents ────────────────── */
@@ -946,12 +950,13 @@ function requireProbeSession(deps: CoderServiceDeps): SessionProbe {
  * `sinceSeq: nextSeq` instead of re-fetching the transcript, and a gap in `seq` is how it knows it
  * must.
  */
-function snapshot(runs: RunManager, runId: string, sinceSeq: number): {
+async function snapshot(runs: RunManager, runId: string, sinceSeq: number): Promise<{
   run: AgentRun;
   events: readonly RunEvent[];
   nextSeq: number;
   live: boolean;
-} {
+}> {
+  await runs.recall(runId);
   const run = runs.get(runId);
   if (!run) {
     throw coderError(

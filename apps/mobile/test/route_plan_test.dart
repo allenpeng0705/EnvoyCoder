@@ -52,14 +52,28 @@ void main() {
 
     expect(names, [
       'lan',
-      // The P2P cap is 1 without a connectivity observer, and the direct address takes it — the
-      // circuit hop through the community relay is not offered on this walk.
+      // Off-LAN cap is 2, and this payload has one private direct plus the built-in
+      // circuit, so both fit. The circuit is what a later cellular open dials after
+      // the LAN address fails.
       'p2p-direct',
+      'p2p-cn-relay',
       'relay',
       'relay-1',
       'relay-2',
       'community-relay',
     ]);
+  });
+
+  test('a LAN pairing still offers the circuit once the phone leaves the network', () {
+    const loopback = '/ip4/127.0.0.1/tcp/49204/p2p/$home';
+    const circuit =
+        '/ip4/47.93.11.212/tcp/4001/p2p/12D3KooWrelay/p2p-circuit/p2p/$home';
+    final p2p = candidatesFor(host(
+      homePeerId: home,
+      bootstrapPeers: [loopback, directAddr, circuit],
+    )).where((c) => c.name.startsWith('p2p-'));
+    expect(p2p.map((c) => c.url), contains(circuit));
+    expect(p2p.any((c) => c.url.contains('127.0.0.1')), isFalse);
   });
 
   test('the primary address becomes the LAN rung when the code carried no LAN URL', () {

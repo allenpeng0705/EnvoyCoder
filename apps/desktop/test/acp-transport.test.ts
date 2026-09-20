@@ -349,6 +349,12 @@ describe.skipIf(builtInProbe.state !== "ready")("the ACP client, against the rea
    * harness needs no credential (it says so itself: `--acp using demo backend`), so this is where a
    * whole turn is asserted: handshake, session, prompt accepted, `end_turn`, clean stop.
    *
+   * **And it asserts the turn's words reach `onUpdate`**, which is the assertion whose absence let a
+   * real bug ship: this client understood only the specification's `session/update {update}` envelope,
+   * while the built-in harness publishes `session/update {message}`, `session/token` and
+   * `session/activity`. A handshake and an `end_turn` are both true of a harness whose every word is
+   * dropped, so the turn looked healthy while the window stayed empty — see `harness-dialect.ts`.
+   *
    * It also proves the *dialect* fallback. The two harnesses do not agree on how a prompt is shaped:
    * `dsh` takes the standard `prompt: [{type:"text", …}]`, the built-in one rejects it with
    * `-32602 text required` and wants a flat string
@@ -362,9 +368,11 @@ describe.skipIf(builtInProbe.state !== "ready")("the ACP client, against the rea
       builtInProbe,
       { prompt: "", cwd },
     );
+    const updates: AcpUpdate[] = [];
 
     const client = await AcpClient.start({
       launch: { command: resolved.command, args: resolved.args, cwd },
+      onUpdate: (update) => updates.push(update),
       requestTimeoutMs: 120_000,
     });
     cleanups.push(async () => client.stop());
@@ -376,6 +384,14 @@ describe.skipIf(builtInProbe.state !== "ready")("the ACP client, against the rea
     // `end_turn`, not `cancelled` and not a thrown error: the turn was accepted and finished. This is
     // the assertion `dsh` cannot make without a credential.
     expect(result.stopReason).toBe("end_turn");
+
+    // The demo backend answers `echo:<prompt>` on the harness's committed envelope, and nothing
+    // streams on this path — so this is the committed fallback, proven against the real peer.
+    const said = updates
+      .filter((update) => update.sessionUpdate === "agent_message_chunk")
+      .map((update) => (update.content as { text?: string } | undefined)?.text ?? "")
+      .join("");
+    expect(said).toContain("echo:say hello to the control plane");
   }, 180_000);
 
   it("publishes no session configuration options at all — the fact the thinking pill's reason rests on", async () => {

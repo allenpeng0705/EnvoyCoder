@@ -15,6 +15,7 @@ import '../services/host_client.dart';
 import '../theme/tokens.dart';
 import '../widgets/composer_attach.dart';
 import '../widgets/composer_controls.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/transcript_row.dart';
 import 'explorer_screen.dart';
 
@@ -50,6 +51,8 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   bool _live = false;
   bool _loading = true;
   bool _cancelling = false;
+  bool _archiving = false;
+  String _runId = '';
   String _sendMode = 'queue';
   String? _error;
   String? _taskId;
@@ -69,6 +72,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     super.initState();
     _taskId = widget.taskId;
     _cwd = widget.cwd;
+    _runId = widget.runId;
     _harnesses = List.of(widget.harnesses);
     _eventSub = widget.client.events.listen(_onEventFrame);
     unawaited(_bootstrap());
@@ -108,13 +112,59 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
         }
       } catch (_) {}
     }
+    await _loadHistory();
+  }
+
+  /// Every run of this task, oldest first, so a restart does not hide the earlier ones.
+  Future<void> _loadHistory() async {
+    final taskId = _taskId;
+    if (taskId != null) {
+      try {
+        final listed = await widget.client.call('coder.listRuns', {'taskId': taskId});
+        final runs = listed['runs'];
+        if (runs is List && runs.isNotEmpty) {
+          String? lastId;
+          var lastLive = false;
+          for (final raw in runs) {
+            if (raw is! Map) continue;
+            final id = raw['id'];
+            if (id is! String || id.isEmpty) continue;
+            _transcript.beginRun();
+            final snap = await widget.client.call('coder.tailRun', {'runId': id});
+            final events = snap['events'];
+            if (events is List) {
+              for (final event in events) {
+                if (event is Map) _applyEvent(Map<String, dynamic>.from(event));
+              }
+            }
+            lastId = id;
+            lastLive = snap['live'] == true;
+          }
+          if (!mounted) return;
+          if (lastId != null) {
+            final id = lastId;
+            setState(() {
+              _runId = id;
+              _live = lastLive;
+              _loading = false;
+              _error = null;
+            });
+            _syncReveal();
+            _scrollToEnd();
+            return;
+          }
+        }
+      } catch (_) {
+        // Fall through: one run is still worth opening, and a missing history must not lock the composer.
+      }
+    }
     await _loadTail();
   }
 
   Future<void> _loadTail() async {
     try {
       final snap = await widget.client.call('coder.tailRun', {
-        'runId': widget.runId,
+        'runId': _runId,
         if (_transcript.lastSeq > 0) 'sinceSeq': _transcript.lastSeq,
       });
       final events = snap['events'];
@@ -138,7 +188,9 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Could not open this run.';
+        _error = _taskId == null
+            ? 'Could not open this run.'
+            : 'The earlier conversation is not on this computer. A new message still starts here.';
       });
     }
   }
@@ -148,7 +200,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     final data = frame['data'];
     if (data is! Map) return;
     final event = Map<String, dynamic>.from(data);
-    if (event['runId'] != widget.runId) return;
+    if (event['runId'] != _runId) return;
     _applyEvent(event);
     if (mounted) {
       setState(() {});
@@ -260,7 +312,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     String? text,
   }) async {
     final params = <String, Object>{
-      'runId': widget.runId,
+      'runId': _runId,
       'requestId': requestId,
     };
     if (optionIds != null && optionIds.isNotEmpty) {
@@ -303,9 +355,14 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     }
   }
 
+  bool get _canSend {
+    if (_transcript.pendingApproval != null && _live) return false;
+    return _live || _taskId != null;
+  }
+
   Future<void> _send() async {
     final turn = composeTurn(_composer.text, _attachments);
-    if (turn.prompt.isEmpty || !_live) return;
+    if (turn.prompt.isEmpty || !_canSend) return;
     final previousText = _composer.text;
     final previousAttachments = List<ComposerAttachment>.of(_attachments);
     _composer.clear();
@@ -314,22 +371,54 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
       _attachNotice = null;
     });
     try {
-      await widget.client.call(
-        'coder.sendToRun',
+      if (_live) {
+        await widget.client.call(
+          'coder.sendToRun',
+          {
+            'runId': _runId,
+            'text': turn.prompt,
+            'mode': _sendMode,
+            if (turn.images.isNotEmpty) 'images': turn.images,
+          },
+          turn.images.isEmpty ? const Duration(seconds: 15) : const Duration(seconds: 60),
+        );
+        return;
+      }
+      final taskId = _taskId;
+      if (taskId == null) return;
+      final started = await widget.client.call(
+        'coder.startRun',
         {
-          'runId': widget.runId,
-          'text': turn.prompt,
-          'mode': _sendMode,
+          'taskId': taskId,
+          'prompt': turn.prompt,
+          'resume': true,
+          if (_selection.agentModeId != null) 'agentModeId': _selection.agentModeId,
+          if (_selection.model != null && _selection.model!.isNotEmpty) 'model': _selection.model,
+          if (_selection.thinkingLevel != null && _selection.thinkingLevel!.isNotEmpty)
+            'thinkingLevel': _selection.thinkingLevel,
           if (turn.images.isNotEmpty) 'images': turn.images,
         },
         turn.images.isEmpty ? const Duration(seconds: 15) : const Duration(seconds: 60),
       );
+      final run = started['run'];
+      final id = run is Map ? run['id'] as String? : null;
+      if (id == null || id.isEmpty) {
+        throw StateError('The computer did not start a run.');
+      }
+      _transcript.beginRun();
+      if (!mounted) return;
+      setState(() {
+        _runId = id;
+        _live = true;
+        _error = null;
+      });
+      await _loadTail();
     } catch (_) {
       if (!mounted) return;
       _composer.text = previousText;
       setState(() => _attachments = previousAttachments);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not send. Is the run still live?')),
+        const SnackBar(content: Text('Could not send. Try again.')),
       );
     }
   }
@@ -370,7 +459,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     if (!_live || _cancelling) return;
     setState(() => _cancelling = true);
     try {
-      await widget.client.call('coder.cancelRun', {'runId': widget.runId});
+      await widget.client.call('coder.cancelRun', {'runId': _runId});
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -379,6 +468,48 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     } finally {
       if (mounted) setState(() => _cancelling = false);
     }
+  }
+
+  /// Archive the task this screen is showing, then leave it.
+  ///
+  /// The screen has to own this rather than the list behind it: a task open here is still in the
+  /// list, and taking it out from under the user's own screen is the "removing the task you are
+  /// currently viewing" case. Archiving from here pops `true`, which is what tells the project list
+  /// to drop the row — the user is never left reading a transcript for a task that is no longer
+  /// listed. On a refusal the screen stays put with the reason, because navigating away from work
+  /// that still exists would be the lie.
+  ///
+  /// "Archive", not "Remove"/"Delete": the only task operation the protocol has is
+  /// `coder.archiveTask` (`packages/protocol/src/rpc.ts:2086`), which leaves the folder, the files
+  /// and the transcript on the computer (`apps/desktop/src/daemon/store.ts:582-594`). See
+  /// `project_list_screen.dart` for the full archive-vs-delete note.
+  Future<void> _archiveTask() async {
+    final taskId = _taskId;
+    if (taskId == null || taskId.isEmpty || _archiving) return;
+
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Archive ${widget.title}?',
+      message: 'It leaves the task list. The folder, its files and the transcript stay on this '
+          'computer — archiving is not deletion.',
+      confirmLabel: 'Archive',
+      destructive: false,
+    );
+    if (!confirmed || !mounted) return;
+
+    setState(() => _archiving = true);
+    try {
+      await widget.client.call('coder.archiveTask', {'id': taskId, 'archived': true});
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _archiving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not archive this task. It is still here.')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
   }
 
   @override
@@ -417,6 +548,19 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
             onPressed: () => unawaited(_openExplorer()),
             icon: const Icon(Icons.view_sidebar_outlined),
           ),
+          // Only when this run belongs to a task that exists in the list. A run opened without a
+          // task id (an older daemon's snapshot) has nothing to archive, and showing the button
+          // would offer an action that cannot be carried out.
+          if (_taskId != null && _taskId!.isNotEmpty)
+            Semantics(
+              label: 'Archive task',
+              button: true,
+              child: IconButton(
+                tooltip: 'Archive task',
+                onPressed: _archiving ? null : () => unawaited(_archiveTask()),
+                icon: const Icon(Icons.archive_outlined),
+              ),
+            ),
         ],
       ),
       body: Column(
@@ -537,7 +681,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         AttachMenuButton(
-                          enabled: _live && !approvalOpen,
+                          enabled: _canSend,
                           onImage: () => unawaited(_attach(pickGalleryImages)),
                           onPaste: () => unawaited(_attach(pasteClipboardImage)),
                           onFile: () => unawaited(_attach(pickDocuments)),
@@ -559,15 +703,15 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                               ),
                               TextField(
                                 controller: _composer,
-                                enabled: _live && !approvalOpen,
+                                enabled: _canSend,
                                 minLines: 1,
                                 maxLines: 4,
                                 decoration: InputDecoration(
-                                  hintText: approvalOpen
+                                  hintText: approvalOpen && _live
                                       ? 'Answer the request above first'
                                       : _live
                                           ? 'Send a follow-up…'
-                                          : 'Run is not live',
+                                          : 'Send a message to continue',
                                   border: const OutlineInputBorder(),
                                   isDense: true,
                                 ),
@@ -579,7 +723,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                         ),
                         const SizedBox(width: 8),
                         IconButton.filled(
-                          onPressed: _live && !approvalOpen && canSendComposer(_composer.text, _attachments)
+                          onPressed: _canSend && canSendComposer(_composer.text, _attachments)
                               ? () => unawaited(_send())
                               : null,
                           icon: const Icon(Icons.send),

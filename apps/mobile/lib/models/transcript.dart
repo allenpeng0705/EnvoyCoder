@@ -116,6 +116,18 @@ class Transcript {
   /// The highest `seq` applied. Also the watermark that makes a re-delivered event a no-op.
   int lastSeq = 0;
 
+  /// Start folding a different run without dropping the rows already on screen.
+  ///
+  /// Sequence numbers start over at 1 for each run. Leaving the watermark where the previous run
+  /// finished would throw away the new run's first events.
+  void beginRun() {
+    lastSeq = 0;
+    _byMessage.clear();
+    _byCall.clear();
+    _byRequest.clear();
+    _breakAnonymous();
+  }
+
   /// True once a sequence number has been seen to be missing.
   bool hasGap = false;
 

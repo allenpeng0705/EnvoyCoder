@@ -95,6 +95,14 @@ import {
 } from "./run-options.js";
 import type { CoderStore } from "./store.js";
 import { allowChoiceId, choiceAllows, isCommandAllowed, permissionMemoryKey, rememberCommand } from "./allowed-commands.js";
+import {
+  agentRunFromTranscript,
+  readTranscript,
+  rememberRun,
+  resumableSessionId,
+  runIdsForTask,
+  transcriptFile,
+} from "./transcript-log.js";
 
 export interface RunManagerDeps {
   paths: CoderPaths;
@@ -361,8 +369,11 @@ export class RunManager {
           ...(permissionEnv ? { extraEnv: permissionEnv } : {}),
         });
 
+    const runId = randomUUID();
+    const previousRunId = task.runId;
+    const file = transcriptFile(this.deps.paths.transcriptsDir, runId);
     const run: AgentRun = {
-      id: randomUUID(),
+      id: runId,
       taskId: task.id,
       harness: task.harness,
       ...(model ? { model } : {}),
@@ -372,6 +383,8 @@ export class RunManager {
       hostId: task.hostId ?? "local",
       startedAt: this.now(),
       status: "running",
+      // Set before the first event, or that event is the one a restarted daemon cannot read back.
+      ...(file !== undefined && this.settings().keepTranscripts ? { transcriptPath: file } : {}),
     };
     let markDone = (): void => undefined;
     const done = new Promise<void>((resolve) => {
@@ -405,6 +418,9 @@ export class RunManager {
     };
     this.active.set(run.id, live);
 
+    if (run.transcriptPath !== undefined) {
+      await rememberRun(this.deps.paths.transcriptsDir, task.id, run.id).catch(() => undefined);
+    }
     await this.deps.store.setTaskRun(task.id, { runId: run.id, status: "running" });
     await this.record(live, {
       kind: "run.started",
@@ -416,8 +432,81 @@ export class RunManager {
 
     // The turn runs in the background: `coder.startRun` answers as soon as the run *exists*, so the
     // UI renders a task starting rather than blocking until it finishes.
-    void this.drive(live, input.prompt, input.resume === true, modeToSet, input.images);
+    void this.drive(live, input.prompt, input.resume === true, modeToSet, input.images, previousRunId);
     return run;
+  }
+
+  /**
+   * Load a run the daemon no longer has in memory, from the transcript it wrote.
+   *
+   * No-op when the run is already here, or when nothing was written (the setting was off, or this
+   * build is older than the file). A phone that opens a task after a restart calls this through
+   * `tailRun` and gets the history instead of "there is no such run".
+   */
+  async recall(runId: string): Promise<void> {
+    if (this.active.has(runId) || this.finished.has(runId)) return;
+    const file = transcriptFile(this.deps.paths.transcriptsDir, runId);
+    if (file === undefined) return;
+    const events = await readTranscript(file);
+    const run = agentRunFromTranscript(events, file);
+    if (run === undefined) return;
+    const sessionId = resumableSessionId(events);
+    if (sessionId !== undefined) this.lastSession.set(run.taskId, sessionId);
+    const seq = events.reduce((max, event) => Math.max(max, event.seq), 0);
+    this.finished.set(runId, {
+      run,
+      events: [...events],
+      seq,
+      client: undefined,
+      launch: { command: "", args: [], cwd: "" },
+      sessionConfigs: [],
+      sessionPolicy: undefined,
+      turn: undefined,
+      queued: [],
+      intent: "none",
+      approval: undefined,
+      stderr: [],
+      settled: true,
+      done: Promise.resolve(),
+      markDone: () => undefined,
+    });
+  }
+
+  /**
+   * Every run of a task the daemon can still show, oldest first.
+   *
+   * Memory first is not enough: after a restart the only copy is the transcript index, and the
+   * task row names only the latest id. Both are included, and a run that did not record a start
+   * is left out rather than shown as an empty conversation.
+   */
+  async history(taskId: string, limit = RunManager.RECENT_LIMIT): Promise<AgentRun[]> {
+    const ids = [...(await runIdsForTask(this.deps.paths.transcriptsDir, taskId))];
+    const task = this.deps.store.findTask(taskId);
+    if (task?.runId !== undefined && !ids.includes(task.runId)) ids.push(task.runId);
+    for (const run of this.list({ taskId })) {
+      if (!ids.includes(run.id)) ids.push(run.id);
+    }
+    const runs: AgentRun[] = [];
+    for (const id of ids) {
+      await this.recall(id);
+      const run = this.get(id);
+      if (run !== undefined && run.taskId === taskId) runs.push(run);
+    }
+    return runs.slice(-limit);
+  }
+
+  /** The session to rejoin, including one that lives only in a transcript from before this process. */
+  private async sessionToResume(
+    taskId: string,
+    resume: boolean,
+    previousRunId: string | undefined,
+  ): Promise<string | undefined> {
+    if (!resume) return undefined;
+    const known = this.lastSession.get(taskId);
+    if (known !== undefined) return known;
+    if (previousRunId === undefined) return undefined;
+    await this.recall(previousRunId);
+    return this.lastSession.get(taskId);
   }
 
   /* ────────────────────────────── the turn loop ────────────────────────────── */
@@ -434,11 +523,12 @@ export class RunManager {
     firstPrompt: string,
     resume: boolean,
     agentModeId: string | undefined,
-    firstImages?: PromptImage[],
+    firstImages: PromptImage[] | undefined,
+    previousRunId: string | undefined,
   ): Promise<void> {
     const startClient = this.deps.startClient ?? AcpClient.start;
     try {
-      const resumeSessionId = resume ? this.lastSession.get(live.run.taskId) : undefined;
+      const resumeSessionId = await this.sessionToResume(live.run.taskId, resume, previousRunId);
       const client = await startClient({
         launch: live.launch,
         onUpdate: (update) => this.onUpdate(live, update),

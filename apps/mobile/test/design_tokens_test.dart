@@ -36,6 +36,20 @@ void main() {
     );
   });
 
+  test('the theme pins the app\'s divider to the border colour', () {
+    // The project list separates its rows with a bare `Divider()`; the colour, the thickness and the
+    // spacing are all local to *this* file, not to that row. If they move, the separator moves with
+    // them — which is the point of spending the row's line of code on `Divider()` and not a hex.
+    final dark = const CoderTheme(CoderColors.dark).toThemeData();
+    expect(dark.dividerTheme.color, CoderColors.dark.border);
+    expect(dark.dividerTheme.thickness, 1);
+    expect(dark.dividerTheme.space, 1);
+    expect(
+      const CoderTheme(CoderColors.light).toThemeData().dividerTheme.color,
+      CoderColors.light.border,
+    );
+  });
+
   test('the theme builds from tokens, so no screen hardcodes a colour', () {
     final theme = const CoderTheme(CoderColors.dark).toThemeData();
     expect(theme.colorScheme.primary, CoderColors.dark.accent);
