@@ -551,6 +551,30 @@ class AppLocalizationsDe extends AppLocalizations {
   String get explorerNoChanges => 'Keine Änderungen in diesem Ordner.';
 
   @override
+  String get explorerCommitMessage => 'Commit-Nachricht';
+
+  @override
+  String get explorerCommitCta => 'Committen';
+
+  @override
+  String get explorerCommitStageAll => 'Alles bereitstellen';
+
+  @override
+  String explorerCommitDone(String sha) {
+    return '$sha committet.';
+  }
+
+  @override
+  String explorerStage(String path) {
+    return '$path bereitstellen';
+  }
+
+  @override
+  String explorerUnstage(String path) {
+    return '$path zurücknehmen';
+  }
+
+  @override
   String get explorerCouldNotRead =>
       'Die Änderungen konnten nicht gelesen werden.';
 

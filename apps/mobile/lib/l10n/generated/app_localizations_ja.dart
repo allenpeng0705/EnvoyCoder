@@ -527,6 +527,30 @@ class AppLocalizationsJa extends AppLocalizations {
   String get explorerNoChanges => 'このフォルダに変更はありません。';
 
   @override
+  String get explorerCommitMessage => 'コミットメッセージ';
+
+  @override
+  String get explorerCommitCta => 'コミット';
+
+  @override
+  String get explorerCommitStageAll => 'すべてステージ';
+
+  @override
+  String explorerCommitDone(String sha) {
+    return '$sha をコミットしました。';
+  }
+
+  @override
+  String explorerStage(String path) {
+    return '$path をステージ';
+  }
+
+  @override
+  String explorerUnstage(String path) {
+    return '$path のステージを解除';
+  }
+
+  @override
   String get explorerCouldNotRead => '変更を読み取れませんでした。';
 
   @override

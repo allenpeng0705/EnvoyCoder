@@ -1068,6 +1068,42 @@ abstract class AppLocalizations {
   /// **'No changes in this folder.'**
   String get explorerNoChanges;
 
+  /// explorercommitmessage — Placeholder of the commit message field.
+  ///
+  /// In en, this message translates to:
+  /// **'Commit message'**
+  String get explorerCommitMessage;
+
+  /// explorercommitcta — The button that commits what is staged.
+  ///
+  /// In en, this message translates to:
+  /// **'Commit'**
+  String get explorerCommitCta;
+
+  /// explorercommitstageall — Stages every changed path from one press.
+  ///
+  /// In en, this message translates to:
+  /// **'Stage all'**
+  String get explorerCommitStageAll;
+
+  /// explorercommitdone — After a commit, naming the short sha.
+  ///
+  /// In en, this message translates to:
+  /// **'Committed {sha}.'**
+  String explorerCommitDone(String sha);
+
+  /// explorerstage — Stages one path, naming it.
+  ///
+  /// In en, this message translates to:
+  /// **'Stage {path}'**
+  String explorerStage(String path);
+
+  /// explorerunstage — Unstages one path, naming it.
+  ///
+  /// In en, this message translates to:
+  /// **'Unstage {path}'**
+  String explorerUnstage(String path);
+
   /// explorer.couldNotRead — The changes RPC failed.
   ///
   /// In en, this message translates to:

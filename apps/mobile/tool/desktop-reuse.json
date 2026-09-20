@@ -97,5 +97,11 @@
   "gitBranchesName": "git.branches.name",
   "gitBranchesCreate": "git.branches.create",
   "gitBranchesSwitched": "git.branches.switched",
-  "gitBranchesCreated": "git.branches.created"
+  "gitBranchesCreated": "git.branches.created",
+  "explorerCommitMessage": "explorer.commit.message",
+  "explorerCommitCta": "explorer.commit.cta",
+  "explorerCommitStageAll": "explorer.commit.stageAll",
+  "explorerCommitDone": "explorer.commit.done",
+  "explorerStage": "explorer.stage",
+  "explorerUnstage": "explorer.unstage"
 }

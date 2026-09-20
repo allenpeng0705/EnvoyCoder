@@ -700,6 +700,45 @@
   "@explorerNoChanges": {
     "description": "explorer.noChanges — Clean worktree."
   },
+  "explorerCommitMessage": "Commit message",
+  "@explorerCommitMessage": {
+    "description": "explorercommitmessage — Placeholder of the commit message field."
+  },
+  "explorerCommitCta": "Commit",
+  "@explorerCommitCta": {
+    "description": "explorercommitcta — The button that commits what is staged."
+  },
+  "explorerCommitStageAll": "Stage all",
+  "@explorerCommitStageAll": {
+    "description": "explorercommitstageall — Stages every changed path from one press."
+  },
+  "explorerCommitDone": "Committed {sha}.",
+  "@explorerCommitDone": {
+    "description": "explorercommitdone — After a commit, naming the short sha.",
+    "placeholders": {
+      "sha": {
+        "type": "String"
+      }
+    }
+  },
+  "explorerStage": "Stage {path}",
+  "@explorerStage": {
+    "description": "explorerstage — Stages one path, naming it.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "explorerUnstage": "Unstage {path}",
+  "@explorerUnstage": {
+    "description": "explorerunstage — Unstages one path, naming it.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
   "explorerCouldNotRead": "Could not read the changes.",
   "@explorerCouldNotRead": {
     "description": "explorer.couldNotRead — The changes RPC failed."

@@ -549,6 +549,30 @@ class AppLocalizationsIt extends AppLocalizations {
   String get explorerNoChanges => 'Nessuna modifica in questa cartella.';
 
   @override
+  String get explorerCommitMessage => 'Messaggio di commit';
+
+  @override
+  String get explorerCommitCta => 'Committa';
+
+  @override
+  String get explorerCommitStageAll => 'Metti tutto in stage';
+
+  @override
+  String explorerCommitDone(String sha) {
+    return '$sha committato.';
+  }
+
+  @override
+  String explorerStage(String path) {
+    return 'Metti $path in stage';
+  }
+
+  @override
+  String explorerUnstage(String path) {
+    return 'Togli $path dallo stage';
+  }
+
+  @override
   String get explorerCouldNotRead => 'Impossibile leggere le modifiche.';
 
   @override

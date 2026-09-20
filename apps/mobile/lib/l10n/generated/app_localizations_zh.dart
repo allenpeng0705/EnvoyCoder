@@ -521,6 +521,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get explorerNoChanges => '这个文件夹没有更改。';
 
   @override
+  String get explorerCommitMessage => '提交说明';
+
+  @override
+  String get explorerCommitCta => '提交';
+
+  @override
+  String get explorerCommitStageAll => '全部暂存';
+
+  @override
+  String explorerCommitDone(String sha) {
+    return '已提交 $sha。';
+  }
+
+  @override
+  String explorerStage(String path) {
+    return '暂存 $path';
+  }
+
+  @override
+  String explorerUnstage(String path) {
+    return '取消暂存 $path';
+  }
+
+  @override
   String get explorerCouldNotRead => '无法读取更改。';
 
   @override

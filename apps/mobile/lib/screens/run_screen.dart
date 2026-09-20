@@ -44,6 +44,9 @@ class RunScreen extends StatefulWidget {
 
 class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMixin {
   final _composer = TextEditingController();
+
+  /// The project this task belongs to — what the git writes act on.
+  String? _projectId;
   final _transcript = Transcript();
   final _scroll = ScrollController();
   List<ComposerAttachment> _attachments = [];
@@ -100,6 +103,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
           for (final raw in list) {
             if (raw is! Map) continue;
             if (raw['id'] != _taskId) continue;
+            _projectId = raw['projectId'] as String?;
             _selection = ComposerSelection(
               harnessId: raw['harness'] as String?,
               model: raw['model'] as String?,
@@ -455,6 +459,9 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
         builder: (_) => ExplorerScreen(
           rpc: (method, [params = const {}]) => widget.client.call(method, params),
           root: cwd,
+          // The git writes act on the **project**, never on a path: the daemon resolves the folder itself, so
+          // a client cannot name a directory for it to mutate. The id comes from the task the screen is showing.
+          projectId: _projectId,
         ),
       ),
     );

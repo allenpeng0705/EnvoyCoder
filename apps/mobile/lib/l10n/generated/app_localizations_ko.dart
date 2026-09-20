@@ -526,6 +526,30 @@ class AppLocalizationsKo extends AppLocalizations {
   String get explorerNoChanges => '이 폴더에 변경 사항이 없습니다.';
 
   @override
+  String get explorerCommitMessage => '커밋 메시지';
+
+  @override
+  String get explorerCommitCta => '커밋';
+
+  @override
+  String get explorerCommitStageAll => '모두 스테이지';
+
+  @override
+  String explorerCommitDone(String sha) {
+    return '$sha을(를) 커밋했습니다.';
+  }
+
+  @override
+  String explorerStage(String path) {
+    return '$path 스테이지';
+  }
+
+  @override
+  String explorerUnstage(String path) {
+    return '$path 스테이지 해제';
+  }
+
+  @override
   String get explorerCouldNotRead => '변경 사항을 읽지 못했습니다.';
 
   @override

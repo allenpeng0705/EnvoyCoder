@@ -552,6 +552,30 @@ class AppLocalizationsFr extends AppLocalizations {
   String get explorerNoChanges => 'Aucune modification dans ce dossier.';
 
   @override
+  String get explorerCommitMessage => 'Message de commit';
+
+  @override
+  String get explorerCommitCta => 'Committer';
+
+  @override
+  String get explorerCommitStageAll => 'Tout indexer';
+
+  @override
+  String explorerCommitDone(String sha) {
+    return '$sha commité.';
+  }
+
+  @override
+  String explorerStage(String path) {
+    return 'Indexer $path';
+  }
+
+  @override
+  String explorerUnstage(String path) {
+    return 'Désindexer $path';
+  }
+
+  @override
   String get explorerCouldNotRead => 'Impossible de lire les modifications.';
 
   @override
