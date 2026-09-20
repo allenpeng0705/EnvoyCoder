@@ -152,6 +152,27 @@ async function installPayloadAndExit(): Promise<never> {
   process.exit(0);
 }
 
+/**
+ * The home from `--home <path>`, applied before anything reads it.
+ *
+ * The service definitions (`@envoydev/platform`'s `serviceDefinition`) pass the home as an argument rather than
+ * relying only on `ENVOYMESH_HOME`, because a Windows task started at logon inherits whatever environment the
+ * session happens to have and the Task Scheduler's XML has no element for setting one. It is applied by setting
+ * the family's own variable rather than threading a path through the boot code: `resolveHomeDir()` is the single
+ * place that knows the resolution order (`ENVOYMESH_HOME` → per-OS default → legacy adoption), and a second route
+ * to the same answer is a second thing to get wrong.
+ */
+function homeOverrideFrom(argv: readonly string[]): string | undefined {
+  const flag = argv.findIndex((value) => value === "--home");
+  const found = flag >= 0 ? argv[flag + 1] : undefined;
+  const inline = argv.find((value) => value.startsWith("--home="))?.slice("--home=".length);
+  return (found ?? inline)?.trim() || undefined;
+}
+
+// Before every other read of the home: the install branch below and the boot after it both resolve it.
+const homeOverride = homeOverrideFrom(process.argv);
+if (homeOverride !== undefined) process.env.ENVOYMESH_HOME = homeOverride;
+
 if (process.argv.includes("--install-payload")) await installPayloadAndExit();
 
 const port = readPort();

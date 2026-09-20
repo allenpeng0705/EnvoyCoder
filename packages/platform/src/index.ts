@@ -582,3 +582,4 @@ export * from "./path-discovery.js";
  * `composeSearchPath` puts each answer's directory at the head of the list, so the probe and the spawn see it.
  */
 export * from "./shell-binaries.js";
+export * from "./service.js";
