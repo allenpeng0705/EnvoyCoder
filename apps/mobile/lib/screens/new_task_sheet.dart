@@ -7,11 +7,10 @@
 /// sheet is opened with no project at all (`initialProjectId == null`), which today has no caller in
 /// the app but is kept so the widget stays honest about the state it accepts.
 ///
-/// **The agent is the project's, not the task's.** The sheet resolves the project's agent (else the
-/// app default) only to know which model / mode / thinking options to offer, and it never sends a
-/// task-level `harness`: `coder.createTask` resolves the agent from the project, and the daemon moves
-/// the task when the project's agent changes. There is no Agent control here by design — the project
-/// row's own menu is where a project's agent is chosen and changed.
+/// **The agent starts as the project's, then belongs to the task.** The sheet defaults
+/// [ComposerSelection.harnessId] from the project (else the app default) and **sends it** on
+/// `coder.createTask`, so the task owns the choice from the first write. The Agent chip is how the
+/// user picks a different one before Add.
 ///
 /// The field is **one line**: a task's first message becomes its title, and a 3–8 line box spent the
 /// sheet's height on text nobody had typed yet (owner's ask). Attachments are **not offered here any
@@ -77,9 +76,6 @@ class _NewTaskSheet extends StatefulWidget {
   final String? initialProjectId;
 
   /// The app-wide default agent, used only when the project has not set one of its own.
-  ///
-  /// The sheet needs the *resolved* agent to offer the right model / mode / thinking options, because
-  /// the agent is what publishes those. It is never a task-level choice — see [_projectAgent].
   final String? appHarness;
 
   @override
@@ -100,17 +96,10 @@ class _NewTaskSheetState extends State<_NewTaskSheet> {
     return widget.projects.isNotEmpty ? widget.projects.first : null;
   }
 
-  /// The agent the daemon will run this new task on — **the project's, never the task's**.
+  /// The default agent a new task starts on — project, else the app default, else the built-in.
   ///
-  /// Mirrors the daemon's own resolution (`resolveTaskDefaults`: project default, else the app
-  /// default, else the built-in `envoy-harness`) so the model / mode / thinking chips offer the
-  /// options of the agent the task will actually start on. The built-in last resort is spelled out for
-  /// the same reason the window spells it out (`CoderApp.tsx`: `defaults.harness ?? "envoy-harness"`),
-  /// and an id the harness list does not have simply offers no chips rather than inventing options.
-  ///
-  /// It is deliberately **not** written into `coder.createTask`: the agent is a property of the
-  /// project, so the daemon resolves it from the project there, and `updateProject` moves the task
-  /// when the project's agent changes.
+  /// Mirrors the daemon's `resolveTaskDefaults`. The sheet **writes** this (or the user's pick) as
+  /// `harness` on `createTask`, so the task owns it after create.
   String? _projectAgent(ProjectInfo? project) =>
       project?.defaultHarness ?? widget.appHarness ?? 'envoy-harness';
 
@@ -139,13 +128,11 @@ class _NewTaskSheetState extends State<_NewTaskSheet> {
     });
     try {
       final title = prompt;
-      // **No `harness`.** A task has no agent of its own: `coder.createTask` resolves it from the
-      // project's own setting (else the app default), which is what "the new task follows the
-      // project's agent" means on the wire. Sending the project's value here would store it on the
-      // task as if the task had chosen it.
       final created = await widget.client.call('coder.createTask', {
         'projectId': projectId,
         'title': title.length > 80 ? '${title.substring(0, 80)}…' : title,
+        if (_selection.harnessId != null && _selection.harnessId!.isNotEmpty)
+          'harness': _selection.harnessId,
         if (_selection.model != null && _selection.model!.isNotEmpty) 'model': _selection.model,
       });
       final task = created['task'];

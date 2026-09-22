@@ -49,6 +49,9 @@ export const de: Catalogue = {
 
   /* ── the rail ── */
   "sidebar.aria": "Projekte und Aufgaben",
+  "layout.resize.rail": "Projektliste verbreitern oder verschmälern",
+  "layout.resize.settingsNav": "Einstellungsbereiche verbreitern oder verschmälern",
+  "layout.resize.explorer": "Dateiexplorer verbreitern oder verschmälern",
   "sidebar.add": "+ Projekt hinzufügen",
   "sidebar.add.title": "Ein Verzeichnis als Projekt registrieren",
   "sidebar.command.title": "Command Center öffnen",
@@ -61,7 +64,7 @@ export const de: Catalogue = {
   "sidebar.attention.one": "1 Aufgabe braucht dich",
   "sidebar.attention.many": "{count} Aufgaben brauchen dich",
   "sidebar.empty.title": "Noch keine Projekte",
-  "sidebar.empty.body": "Füge ein Verzeichnis hinzu, in dem du arbeitest. Aufgaben, die du darin startest, erscheinen hier, und das Projekt merkt sich, welchen Agenten sie verwenden sollen.",
+  "sidebar.empty.body": "Füge ein Verzeichnis hinzu, in dem du arbeitest. Aufgaben, die du darin startest, erscheinen hier, und das Projekt merkt sich, mit welchem Agenten neue Aufgaben starten.",
   "sidebar.empty.noMatch": "Nichts passt zu „{query}“.",
   "sidebar.empty.cannotLoadTitle": "Deine Projekte konnten nicht gelesen werden",
   "sidebar.empty.cannotLoadBody": "Diese Liste ist unbekannt, nicht leer — EnvoyDev konnte den Daemon nicht danach fragen.",
@@ -71,6 +74,9 @@ export const de: Catalogue = {
   "project.agent.picker.aria": "Coding-Agent für dieses Projekt: {agent}. Ändern",
   "project.agent.picker.title": "Coding-Agent für dieses Projekt ändern",
   "project.agent.picker.menu": "Coding-Agenten für dieses Projekt",
+  "task.agent.picker.aria": "Coding-Agent für diese Aufgabe: {agent}. Ändern",
+  "task.agent.picker.title": "Coding-Agent für diese Aufgabe ändern",
+  "task.agent.picker.menu": "Coding-Agenten für diese Aufgabe",
   "sidebar.project.settings": "Projekteinstellungen",
   "sidebar.project.newTask": "+ Neu",
   "sidebar.project.newTask.title": "Eine Aufgabe in {project} starten",
@@ -88,6 +94,7 @@ export const de: Catalogue = {
   "sidebar.task.menu.title": "Aufgabenaktionen",
   "sidebar.task.rename": "Umbenennen",
   "sidebar.task.rename.aria": "Neuer Name für diese Aufgabe",
+  "sidebar.task.changeAgent": "Agent ändern",
   "sidebar.tasks.empty": "Hier gibt es noch keine Aufgaben.",
   "sidebar.pair": "Telefon koppeln",
   "sidebar.settings": "Einstellungen",
@@ -405,9 +412,9 @@ export const de: Catalogue = {
   "settings.projects.note": "Jedes Projekt kann die Einstellungen dieses Computers überschreiben. Wenn du eines auswählst, öffnest du seine eigenen.",
   "settings.projects.empty": "Noch keine Projekte. Ein Projekt ist ein Ordner auf diesem Computer, in dem Agenten arbeiten — füge eines mit {add} oben in der Projektleiste hinzu oder über die Befehlspalette.",
   "settings.agents.empty": "Die Agentenliste ist noch nicht angekommen.",
-  "settings.agents.shipped.heading": "Auf diesem Rechner",
+  "settings.agents.shipped.heading": "Agenten",
   "settings.agents.mine.heading": "Deine Agenten",
-  "settings.agents.mine.empty": "Du hast noch keinen eigenen Agenten hinzugefügt. Alles unten kann hier hinzugefügt werden — auch ein Programm, das nicht auf der Liste steht.",
+  "settings.agents.mine.empty": "Noch nichts aus dem Katalog hinzugefügt. Unten browsen, um einen Agenten auf diese Liste zu setzen — oder ein Programm angeben, das nicht katalogisiert ist.",
   "settings.agents.mine.command": "Startet als: {command}",
   "settings.agents.mine.remove": "Entfernen",
   "settings.agents.mine.remove.title": "{agent} vergessen. Es wird nichts deinstalliert und nichts anderes angetastet.",
@@ -456,6 +463,8 @@ export const de: Catalogue = {
   "settings.agents.row.adding": "Wird hinzugefügt…",
   "settings.agents.row.add.title": "{agent} zu deinen Agenten hinzufügen. Kommandozeile und Umgebung stammen aus diesem Eintrag, genau wie oben geschrieben — die Konstanten des Rezepts kommen mit, und jede Variable, die das Rezept nicht setzt, bleibt dir überlassen.",
   "settings.agents.row.builtIn": "Dieser Agent ist bereits in EnvoyDev enthalten und wird deshalb oben unter „Auf diesem Rechner“ eingestellt statt ein zweites Mal hinzugefügt.",
+  "settings.agents.row.pick.short": "In Aufgabe wählen",
+  "settings.agents.row.pick.title": "Wähle {agent} in einer Aufgabe, einem Projekt oder den Neu-Aufgaben-Standards. EnvoyDev fügt das Rezept beim Auswählen automatisch hinzu.",
   "settings.agents.row.builtIn.short": "Enthalten",
   "settings.agents.row.nothingToInstall": "Nichts zu installieren",
   "settings.agents.row.restart": "EnvoyDev neu starten",
@@ -714,6 +723,10 @@ export const de: Catalogue = {
     "{provider} spricht ein Protokoll, das EnvoyDev noch nicht steuern kann, deshalb wurde der Lauf nicht gestartet. EnvoyDev steuert Agenten über ACP — wenn dieses Programm ACP spricht, trage beim Anbieter ACP als Dialekt ein und versuche es erneut.",
   "error.providerNotFound":
     "Es gibt hier keinen Agenten-Anbieter namens \"{id}\". Vielleicht wurde er in einem anderen Fenster entfernt.",
+  "error.providerInUse":
+    "\"{id}\" wird noch von {where} verwendet und wurde deshalb nicht entfernt. Verschiebe sie zuerst auf einen anderen Agenten.",
+  "error.agentUnknown":
+    "„{id}“ ist kein Agent, den EnvoyDev mitbringt oder katalogisiert, und wurde daher nicht gewählt.",
   "error.providerEnvNotAName":
     "EnvoyDev speichert die Namen der Umgebungsvariablen, die ein Agent braucht, niemals ihre Werte — und Eintrag {position} der Umgebungsliste dieses Anbieters ist kein Variablenname. Ein Name besteht aus Buchstaben, Ziffern und Unterstrichen und beginnt nicht mit einer Ziffer. Der Anbieter wurde nicht hinzugefügt.",
   "error.providerEnvUnset.one":

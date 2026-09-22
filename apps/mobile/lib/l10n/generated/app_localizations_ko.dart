@@ -1189,6 +1189,14 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String composerAgentValue(String value) {
+    return '에이전트: $value';
+  }
+
+  @override
+  String get composerAgentTooltip => '이 작업의 코딩 에이전트 변경';
+
+  @override
   String composerThinkingValue(String value) {
     return '사고: $value';
   }

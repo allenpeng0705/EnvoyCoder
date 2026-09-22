@@ -1,52 +1,9 @@
 /**
  * **Catalogue** — the 38 recipes, behind one press, and the form for a program that is not in it.
  *
- * ## The rule this file keeps: a row's verdict is measured, never implied — and never a chore
- *
- * A catalogue entry is a *recipe*: a command line, a version, and a link to where the tool comes from. "It is
- * in the catalogue" says nothing about this machine, so the daemon measures every row's cheap facts before it
- * serves the list (`CatalogEntry.availability`) and this file renders the verdict that measurement supports.
- *
- * What it used to do instead is the thing the owner reported: the row carried **no** claim about this
- * machine, said **"Not checked yet"**, and offered a *Check* button — thirty-eight of them, one per row, each
- * of which had to be pressed to learn a state. *"I don't want user to guess, to check if we can do that."*
- * The button is gone, the word `unchecked` is gone from this file and from the translations, and the two
- * actions a catalogue row has are the two a user can *do* rather than the one they had to press to *know*:
- * **Add** the recipe, or forget a provider they declared.
- *
- * ## What a Check used to cost, and what it costs now
- *
- * The old `title` on the button promised "one search of this machine's program directories, one row at a
- * time, with no process started and nothing downloaded" — which was true, and was the argument for making the
- * user press it 38 times. The argument was wrong in one place: **not starting a process is exactly what makes
- * the whole list affordable at once.** What is genuinely expensive is *starting* one of these agents, which
- * for 14 `npx -y …` recipes means downloading its package, and none of that is a verdict — it is a property
- * with a time (`Verified`), recorded when a session actually happens.
- *
- * ## Why the whole list is behind a button, and why that is not the hide feature this repo deleted
- *
- * The page measured **10,817 characters and 38 expanded rows** for this group alone — 71% of everything on
- * the Agents page and 5,835px of its 8,391 (`docs/settings-parity.md` §7.14). A user opening *Settings* to
- * change their language scrolled past thirty-eight recipes to find out they were on the wrong page.
- *
- * So the list opens on demand, and **nothing becomes invisible**: the heading carries the count
- * (`Catalogue · 38`), the button that opens it is always on screen, and the second way in — declaring a
- * program of your own — is a button beside it. That is the distinction that matters, because this repository
- * *did* delete a hiding feature (`docs/settings-parity.md` §5.8) and the two are not the same act:
- *
- *   * a **filter** moves an agent out of a list the user is looking at, and can do it to an agent *we ship*;
- *   * a **disclosure** collapses a group, states its size on the heading, and unfolds on one press — the same
- *     thing every settings page on this machine does with its advanced rows.
- *
- * ## The manual form, and the one thing it must not accept
- *
- * The daemon takes an agent nobody catalogued (`coder.addProvider`), so this form exists for it: a name, a
- * program, arguments, the **names** of any environment variables, and — required, with no default — a
- * statement of how the program is spoken to. The dialect has no default because a default would be us
- * choosing on the user's behalf for a program we cannot see, and both answers are wrong in a way nobody can
- * detect. The form says the same thing about the environment field that the schema enforces: **names, never
- * values**, because the value is read from the environment EnvoyDev's daemon runs in and a credential must
- * never be written down.
+ * Built-in harnesses and Added providers already share one Agents list on the page above. This block is
+ * *browse*: recipes that are not yet on that list. **Add** materialises a recipe as a provider so a task
+ * can name it; without that step the daemon has no command line to launch.
  */
 
 import type { JSX } from "react";
@@ -326,15 +283,9 @@ function CatalogRow(props: {
               {t("settings.agents.mine.remove")}
             </button>
           ) : (
-            <button
-              type="button"
-              className="button button--primary button--small"
-              disabled={props.busy}
-              title={t("settings.agents.row.add.title", { agent: entry.title })}
-              onClick={() => void props.onAdd(entry)}
-            >
-              {props.busy ? t("settings.agents.row.adding") : t("settings.agents.row.add")}
-            </button>
+            <span className="settings__agent-note" title={t("settings.agents.row.pick.title", { agent: entry.title })}>
+              {t("settings.agents.row.pick.short")}
+            </span>
           )}
         </>
       }

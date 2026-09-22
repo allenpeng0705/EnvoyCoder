@@ -40,7 +40,8 @@
  * both are reported as `not-completed`, which is the state that does not claim anything happened.
  */
 
-import type { HarnessAuth, HarnessId, RpcMethod, SignInOutcome } from "@envoydev/protocol";
+import type { AgentId, HarnessAuth, HarnessId, RpcMethod, SignInOutcome } from "@envoydev/protocol";
+import { isHarnessId } from "@envoydev/protocol";
 import {
   ENVOYDEV_ERRORS,
   coderError,
@@ -60,8 +61,9 @@ import {
   type StartSession,
 } from "./agent-processes.js";
 import { observeAuth, signInMethod } from "./auth-observation.js";
-import { launchForHarness } from "./launch.js";
+import { launchForAgent } from "./launch.js";
 import { keyed } from "./messages.js";
+import { ensureRunnableAgent, findRunnableProvider } from "./runnable-agent.js";
 import { authOf } from "./summaries.js";
 import type { CoderHandler } from "./service.js";
 import type { CoderStore } from "./store.js";
@@ -80,7 +82,7 @@ export const SIGN_IN_TIMEOUT_MS = 60_000;
 
 /** What one attempt came back as — the wire's result, built once so the handler adds nothing. */
 export interface SignInAnswer {
-  harness: HarnessId;
+  harness: AgentId;
   outcome: SignInOutcome;
   /** A keyed sentence in the user's language, with the agent's own words as a value. */
   detail: string;
@@ -149,24 +151,28 @@ export class SessionSignIn {
    * to whoever wrote the client rather than to a user, and is refused by `parseRpcParams` before this is
    * reached.
    */
-  async signIn(harness: HarnessId, options: { methodId?: string } = {}): Promise<SignInAnswer> {
-    const label = harnessDefinition(harness).label;
+  async signIn(id: AgentId, options: { methodId?: string } = {}): Promise<SignInAnswer> {
+    const shipped = isHarnessId(id) ? id : undefined;
+    const provider = shipped ? undefined : findRunnableProvider(this.deps.store, id);
+    const label = shipped ? harnessDefinition(shipped).label : (provider?.label ?? id);
     let client: ProbedAgent | undefined;
     const budget = this.deps.timeoutMs ?? SIGN_IN_TIMEOUT_MS;
     try {
       const attempt = (async (): Promise<SignInAnswer> => {
-        const cwd = await agentScratchDir(this.deps.paths, harness);
-        const launch = this.deps.resolveLaunch
-          ? this.deps.resolveLaunch({ harness, cwd })
-          : launchForHarness({
-              harness,
-              cwd,
-              paths: this.deps.paths,
-              ...(this.deps.platform ? { platform: this.deps.platform } : {}),
-              ...(this.deps.deliveryOf ? { delivery: this.deps.deliveryOf(harness) } : {}),
-            });
+        const cwd = await agentScratchDir(this.deps.paths, id);
+        const launch =
+          shipped && this.deps.resolveLaunch
+            ? this.deps.resolveLaunch({ harness: shipped, cwd })
+            : launchForAgent({
+                id,
+                ...(provider !== undefined ? { provider } : {}),
+                cwd,
+                paths: this.deps.paths,
+                ...(this.deps.platform ? { platform: this.deps.platform } : {}),
+                ...(shipped && this.deps.deliveryOf ? { delivery: this.deps.deliveryOf(shipped) } : {}),
+              });
         client = await this.acquire(launch);
-        return await this.attempt(harness, label, client, options);
+        return await this.attempt(id, label, client, options);
       })();
       // The abandoned attempt is not dropped: whatever it eventually resolves to is stopped by the
       // `finally` below, which is the same guarantee the probe gives (`acquire`). `withDeadline` also takes
@@ -183,13 +189,13 @@ export class SessionSignIn {
       // keyed refusal when there was one — embedded as a value, so the outer sentence is the only thing
       // translated — and `unknown` is recorded, because an agent we could not start has told us nothing.
       const reason = coderErrorMessage(error instanceof Error ? error.message : String(error));
-      const auth = await this.record(harness, {
+      const auth = await this.record(id, {
         opened: false,
         authMethods: [],
         reason,
       });
       return {
-        harness,
+        harness: id,
         outcome: "unavailable",
         detail: keyed(
           "signIn.unavailable",
@@ -212,13 +218,15 @@ export class SessionSignIn {
    * have happened without anybody lying about it.
    */
   private async attempt(
-    harness: HarnessId,
+    harness: AgentId,
     label: string,
     client: ProbedAgent,
     options: { methodId?: string },
   ): Promise<SignInAnswer> {
     const advertised = client.authMethods();
-    const declared = harnessAcpFacts(harness).authMethodId;
+    const declared = isHarnessId(harness)
+      ? harnessAcpFacts(harness).authMethodId
+      : findRunnableProvider(this.deps.store, harness)?.authMethodId;
     /**
      * **What a terminal would run, kept for the record.**
      *
@@ -358,7 +366,7 @@ export class SessionSignIn {
 
   /** Record what the attempt established, and answer in the wire's shape. */
   private async finish(
-    harness: HarnessId,
+    harness: AgentId,
     outcome: SignInOutcome,
     input: { opened: boolean; authMethods: readonly string[]; reason: string; detail: string },
   ): Promise<SignInAnswer> {
@@ -374,7 +382,7 @@ export class SessionSignIn {
    * store's own `harnesses` change event.
    */
   private async record(
-    harness: HarnessId,
+    harness: AgentId,
     input: {
       opened: boolean;
       authMethods: readonly string[];
@@ -388,7 +396,9 @@ export class SessionSignIn {
       observedAt: this.now(),
       opened: input.opened,
       authMethods: input.authMethods,
-      declared: harnessAcpFacts(harness).authMethodId,
+      declared: isHarnessId(harness)
+        ? harnessAcpFacts(harness).authMethodId
+        : findRunnableProvider(this.deps.store, harness)?.authMethodId,
       ...(input.terminal !== undefined ? { terminal: input.terminal } : {}),
       reason: input.reason,
     });
@@ -440,6 +450,8 @@ export class SessionSignIn {
  * still works and `coder.hello` still advertises the method.
  */
 export interface SignInHandlerDeps {
+  /** Needed so an unknown id is refused before anything is spawned. */
+  store: CoderStore;
   signIn?: SessionSignIn;
 }
 
@@ -458,9 +470,10 @@ export function createSignInHandlers(deps: SignInHandlerDeps): Partial<Record<Rp
   return {
     "coder.signInAgent": async (params) => {
       const input = parseRpcParams("coder.signInAgent", params) as {
-        harness: HarnessId;
+        harness: AgentId;
         methodId?: string;
       };
+      await ensureRunnableAgent(deps.store, input.harness);
       const answer = await requireSignIn(deps.signIn).signIn(input.harness, {
         ...(input.methodId !== undefined ? { methodId: input.methodId } : {}),
       });

@@ -8,25 +8,32 @@
 /// connected and why a phone paired five times left five rows, all labelled "Phone". `coder.hello`'s `client.id`
 /// is that something.
 ///
-/// ## Why shared_preferences and not the keychain
+/// ## Why the keychain, with preferences only as a fallback
 ///
 /// This is an **identifier, not a credential**: it proves nothing on its own, and the pairing token remains the
-/// only secret this app holds. Keeping it beside the host metadata matches that, and it survives app updates —
-/// which is the whole point, since an id that changed on every launch would be worse than none.
+/// only secret this app holds. It used to live only in shared preferences, which an uninstall wipes — so each
+/// reinstall looked like a new phone and Settings → This machine grew one pairing row per install. The iOS
+/// keychain keeps this id across uninstall/reinstall (Android keystore does not; the desktop still retires a
+/// platform's older pairings once a newer one has connected). An id that changed on every launch would be
+/// worse than none.
 library;
 
 import 'dart:math';
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// The preference key. Stable, because a changed key reads as a new device.
 const String kInstallIdKey = 'envoydev.install.id';
 
+/// Keychain first. Default accessibility is enough: the point is surviving uninstall, which preferences cannot.
+const FlutterSecureStorage _installIdStore = FlutterSecureStorage();
+
 /// This installation's id, created and persisted on first use.
 Future<String> installId() async {
   /**
    * **Storage is best-effort, and the id is not.** This is called while building `coder.hello`, and a handshake
-   * that fails because a preference could not be read would be a far worse outcome than an id the daemon does not
+   * that fails because storage could not be read would be a far worse outcome than an id the daemon does not
    * recognise: the phone would not connect at all, which is exactly what the tests in this repository caught when
    * the first version called `SharedPreferences` unconditionally.
    *
@@ -34,12 +41,24 @@ Future<String> installId() async {
    * device it has not seen before, which is the behaviour that shipped before this id existed.
    */
   try {
+    final fromKeychain = await _installIdStore.read(key: kInstallIdKey);
+    if (fromKeychain != null && fromKeychain.isNotEmpty) return fromKeychain;
+  } catch (_) {
+    // Plugin missing (unit tests) or keychain unavailable — preferences below still work.
+  }
+  try {
     final preferences = await SharedPreferences.getInstance();
     final existing = preferences.getString(kInstallIdKey);
-    if (existing != null && existing.isNotEmpty) return existing;
-    final created = randomInstallId();
-    await preferences.setString(kInstallIdKey, created);
-    return created;
+    final id = existing != null && existing.isNotEmpty ? existing : randomInstallId();
+    try {
+      await _installIdStore.write(key: kInstallIdKey, value: id);
+    } catch (_) {
+      await preferences.setString(kInstallIdKey, id);
+    }
+    if (existing == null || existing.isEmpty) {
+      await preferences.setString(kInstallIdKey, id);
+    }
+    return id;
   } catch (_) {
     return randomInstallId();
   }

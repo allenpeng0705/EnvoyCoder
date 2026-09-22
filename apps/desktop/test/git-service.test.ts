@@ -989,7 +989,7 @@ describe("a conflicting merge, resolved by an agent", () => {
     // because git answers with the resolved path (`/private/var/...` for a temp directory on macOS) while the
     // fixture holds the one it was handed.
     expect(answer.task.cwd).toBe(realpathSync(repo));
-    // An ordinary task of this project, so it follows the project's agent setting like every other one.
+    // A newly created task starts on the project's default agent.
     expect(answer.task.harness).toBe("envoy-harness");
 
     expect(started).toHaveLength(1);

@@ -20,6 +20,7 @@
 import type { JSX } from "react";
 
 import type { HarnessId, HarnessSummary } from "@envoydev/protocol";
+import { isHarnessId } from "@envoydev/protocol";
 
 import { agentFor } from "../../composer/agent-for.js";
 import { composerControls, modelNote, modelOffReason } from "../../composer/controls.js";
@@ -31,12 +32,17 @@ import type { CoderState } from "../../state/coderStore.js";
 import { ModelChoice } from "../ModelChoice.js";
 import { SettingRow } from "../SettingsRows.js";
 
-export function summaryFor(state: CoderState, harness: HarnessId): HarnessSummary | undefined {
+export function summaryFor(state: CoderState, harness: string): HarnessSummary | undefined {
+  if (!isHarnessId(harness)) return undefined;
   return state.harnesses.find((entry) => entry.id === harness);
 }
 
-export function labelForHarness(harness: HarnessId, state: CoderState): string {
-  return summaryFor(state, harness)?.label ?? harnessLabel(harness);
+export function labelForHarness(harness: string, state: CoderState): string {
+  return (
+    summaryFor(state, harness)?.label ??
+    state.providers.find((entry) => entry.id === harness)?.label ??
+    (isHarnessId(harness) ? harnessLabel(harness) : harness)
+  );
 }
 
 /**
@@ -49,7 +55,7 @@ export function labelForHarness(harness: HarnessId, state: CoderState): string {
  */
 export function ModelRow(props: {
   idPrefix: string;
-  harness: HarnessId;
+  harness: string;
   summary: HarnessSummary | undefined;
   value: string | undefined;
   title: string;
@@ -63,6 +69,14 @@ export function ModelRow(props: {
   onChoose: (model: string) => Promise<WriteFailure>;
 }): JSX.Element {
   const { t, locale } = useI18n();
+  if (!isHarnessId(props.harness)) {
+    const label = props.summary?.label ?? props.harness;
+    return (
+      <SettingRow title={props.title} detail={props.detail} developerNote={props.developerNote}>
+        <span className="settings__note">{t("task.composer.model.unknown", { agent: label })}</span>
+      </SettingRow>
+    );
+  }
   const agent = agentFor(props.harness, props.summary);
   // One call, exactly as the composer makes it — see the module doc for why that matters.
   const controls = composerControls(agent, { running: false, approvalPending: false }, {
@@ -108,7 +122,7 @@ export function ModelRow(props: {
           options={controls.model.options}
           selected={props.value}
           off={off}
-          bareId={modelAcceptsBareId(props.harness)}
+          bareId={isHarnessId(props.harness) && modelAcceptsBareId(props.harness)}
           title={t("task.composer.model.title")}
           onChoose={(model) => write(props.onChoose(model))}
         />
@@ -129,23 +143,31 @@ export function ModelRow(props: {
  *
  * **What it does not do, said on screen.** Only `envoy-harness` documents such a method —
  * `deepseek-harness` registers nine ACP methods and `session/set_policy` is not among them — so when the
- * default agent is one of the others, the row is **disabled and names it**. The alternative, a live
- * switch that stores a preference no agent hears, is precisely the lie this pane removes.
+ * default agent is one of the others, the row is **disabled and names it**. The same for a provider the
+ * user added: we have never established that it accepts a policy, so inventing one would be a claim.
+ * The alternative, a live switch that stores a preference no agent hears, is precisely the lie this pane
+ * removes.
  */
 export function ApprovalRow(props: {
   state: CoderState;
-  harness: HarnessId;
+  harness: string;
   checked: boolean;
   /** As `ModelRow`'s `onChoose`: the row shows the refusal, so the answer travels back to it. */
   onToggle: (checked: boolean) => Promise<WriteFailure>;
 }): JSX.Element {
   const { t } = useI18n();
   const summary = summaryFor(props.state, props.harness);
-  const agent = summary?.label ?? harnessLabel(props.harness);
+  const provider = props.state.providers.find((entry) => entry.id === props.harness);
+  const agent =
+    summary?.label ??
+    provider?.label ??
+    (isHarnessId(props.harness) ? harnessLabel(props.harness) : props.harness);
   const supported = summary?.capabilities.approvalPolicy === true;
+  // A known provider (or a shipped agent without the method) is *unsupported*, not *unknown*: we know
+  // enough to refuse inventing a policy. `unknown` is only for an id nobody has a row for yet.
   const note = supported
     ? t("settings.approvals.reaches", { agent })
-    : summary === undefined
+    : summary === undefined && provider === undefined
       ? t("settings.approvals.unknown", { agent })
       : t("settings.approvals.unsupported", { agent });
 

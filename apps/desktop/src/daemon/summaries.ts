@@ -211,6 +211,7 @@ export function summarizeProvider(
   provider: AgentProviderConfig,
   probe: (provider: AgentProviderConfig) => ProviderProbe,
   env: NodeJS.ProcessEnv,
+  auth: AgentAuthObservation | undefined = undefined,
 ): AgentProviderSummary {
   const result = probe(provider);
   return {
@@ -220,11 +221,9 @@ export function summarizeProvider(
     args: provider.args,
     env: providerEnvState(provider, env),
     transport: provider.transport,
-    // The reference, so the catalogue's own row knows this recipe is already in the user's list.
     ...(provider.catalogEntryId !== undefined ? { catalogEntryId: provider.catalogEntryId } : {}),
     availability: harnessAvailability(result),
-    // The probe's own sentence when it is not ready, and the resolved path when it is — the same wording
-    // `coder.probeHarness` uses, so one agent's diagnosis reads the same whichever tier it came from.
+    ...(auth !== undefined ? { auth: authOf(auth) } : {}),
     detail:
       result.state === "ready"
         ? `Ready to run${result.binaryPath ? ` (${result.binaryPath})` : ""}.`

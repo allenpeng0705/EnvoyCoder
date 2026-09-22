@@ -65,7 +65,10 @@ describe("the macOS agent", () => {
     const { contents } = define({ platform: "macos" });
     expect(contents).toContain(`<string>${base.node}</string>`);
     expect(contents).toContain(`<string>${base.entry}</string>`);
-    expect(contents).toContain(`<string>${base.logPath}</string>`);
+    // Same path for both streams truncates one with the other. They share the log directory only.
+    expect(contents).toContain("<string>/Users/anna/Library/Application Support/EnvoyDev/logs/daemon.out.log</string>");
+    expect(contents).toContain("<string>/Users/anna/Library/Application Support/EnvoyDev/logs/daemon.err.log</string>");
+    expect(contents).not.toContain(`<string>${base.logPath}</string>`);
     expect(contents).toContain(`<key>ENVOYMESH_HOME</key>\n    <string>${base.home}</string>`);
   });
 

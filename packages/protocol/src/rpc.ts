@@ -50,7 +50,9 @@ import {
   ENVOYDEV_ERRORS,
   type EnvoyDevErrorCode,
   type HarnessId,
+  type AgentId,
   HarnessIdSchema,
+  AgentIdSchema,
   looksLikeCredentialEnvName,
   ProjectDefaultsPatchSchema,
   RUN_MODES,
@@ -338,7 +340,7 @@ const TaskStatusSchema = z.enum(TASK_STATUSES);
  */
 const ProjectDefaultsSchema = z
   .object({
-    harness: HarnessIdSchema.optional(),
+    harness: AgentIdSchema.optional(),
     model: z.string().min(1).optional(),
     extraArgs: z.string().optional(),
   })
@@ -366,7 +368,7 @@ export const TaskSchema = z
     projectId: z.string().min(1),
     cwd: z.string().min(1),
     title: z.string(),
-    harness: HarnessIdSchema,
+    harness: AgentIdSchema,
     model: z.string().optional(),
     agentModeId: z.string().min(1).optional(),
     thinkingLevel: z.string().min(1).optional(),
@@ -388,7 +390,7 @@ export const AgentRunSchema = z
   .object({
     id: z.string().min(1),
     taskId: z.string().min(1),
-    harness: HarnessIdSchema,
+    harness: AgentIdSchema,
     model: z.string().optional(),
     thinkingLevel: z.string().min(1).optional(),
     pid: z.number().int().optional(),
@@ -421,7 +423,7 @@ export const RunEventSchema: z.ZodType<RunEvent> = z.discriminatedUnion("kind", 
     .object({
       ...RunEventBase,
       kind: z.literal("run.started"),
-      harness: HarnessIdSchema,
+      harness: AgentIdSchema,
       model: z.string().optional(),
       thinkingLevel: z.string().min(1).optional(),
       hostId: z.string().min(1),
@@ -842,7 +844,7 @@ export const ObservedSessionOptionSchema = z
 
 /** Everything one agent published about its own session configuration, and when we watched it. */
 export interface ObservedSessionOptions {
-  harness: HarnessId;
+  harness: AgentId;
   /** ISO 8601, daemon clock. */
   observedAt: string;
   /** The agent's own session id, for a maintainer tracing one observation back to one run. */
@@ -860,7 +862,7 @@ export interface ObservedSessionOptions {
 
 export const ObservedSessionOptionsSchema = z
   .object({
-    harness: HarnessIdSchema,
+    harness: AgentIdSchema,
     observedAt: z.string().min(1),
     sessionId: z.string().optional(),
     options: z.array(ObservedSessionOptionSchema).readonly(),
@@ -1512,12 +1514,11 @@ export type CatalogEnvConstant = z.infer<typeof CatalogEnvConstantSchema>;
  *     the same agreement rules — a provider is probed, never believed. What a user typed is a command to
  *     look for, not a claim that it is there, so a provider whose program is missing reads
  *     `not-installed` with the command that fixes it, exactly as a catalogue entry does.
- *   * there is no `capabilities`, no `modes`, no `models` and no `thinking`. We have never opened a
- *     session with this program, and every one of those fields would be a guess restated as our fact.
- *   * there is no `auth` either, and the reason is the same one a step further: an auth state is a fact
- *     about a session this daemon managed to open, and it opens none with a provider — no task can run on
- *     one yet. A field here would read `unknown` forever, which is not a fact about the program but a
- *     statement about us dressed as one about it. See `coder.signInAgent`.
+ *   * there is no `capabilities`, no `modes`, no `models` and no `thinking` until a session has been
+ *     opened — those stay off the row because we have not asked. `auth` is the exception: a sign-in is
+ *     a fact about whether a session opened, and once a task can run on this provider the same probe
+ *     that records it for a shipped agent records it here. Absent means nobody has looked, which the
+ *     window renders as `unknown` rather than as a sign-in button.
  *
  * The two tiers used to be required to agree on one further field, a stored `hidden` preference over the
  * pickers. It is **gone from both**, and the removal is the point rather than a tidy-up: a preference that
@@ -1557,12 +1558,18 @@ export interface AgentProviderSummary {
    */
   detail: string;
   /**
+   * Whether this provider will open a session, once a probe or a sign-in has looked.
+   *
+   * Optional because a provider nobody has started has no observation — the window treats absence as
+   * `unknown` and draws Sign in only for `needs-signin`.
+   */
+  auth?: HarnessAuth;
+  /**
    * **The catalogue entry this provider is**, when it was added from one.
    *
-   * It travels because the *catalogue row* has to know: pressing Add on `goose` stores a provider whose own id is
-   * `goose-acp` (a provider may not be the entry it references — the store's rule), so a list that matched on ids
-   * alone would leave the row offering **Add** for a recipe already in the user's list, and let it be added again
-   * and again. `addedProviderIds` keys on this.
+   * It travels because the *catalogue row* has to know: choosing `goose` stores a provider whose id is
+   * `goose` (same as the recipe), so a list that matched on ids alone would still offer a second path for a
+   * recipe already on the Agents list. `addedProviderIds` keys on this and on the provider id.
    */
   catalogEntryId?: string;
 
@@ -1578,6 +1585,7 @@ export const AgentProviderSummarySchema = z
     transport: z.enum(["acp", "cli"]),
     availability: HarnessAvailabilitySchema,
     detail: z.string(),
+    auth: HarnessAuthSchema.optional(),
     catalogEntryId: z.string().min(1).optional(),
   })
   .strict();
@@ -2509,7 +2517,7 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
         title: z.string(),
         /** Defaults to the project root: a quick question should not need a branch. */
         cwd: z.string().min(1).optional(),
-        harness: HarnessIdSchema.optional(),
+        harness: AgentIdSchema.optional(),
         model: z.string().optional(),
         extraArgs: z.string().optional(),
       })
@@ -2522,7 +2530,7 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
         id: z.string().min(1),
         title: z.string().optional(),
         pinned: z.boolean().optional(),
-        harness: HarnessIdSchema.optional(),
+        harness: AgentIdSchema.optional(),
         model: z.string().optional(),
         /**
          * Move the task to another folder.
@@ -2846,7 +2854,7 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
   "coder.probeSessionOptions": {
     params: z
       .object({
-        harness: HarnessIdSchema,
+        harness: AgentIdSchema,
         /**
          * Ask the agent rather than answering from a recent observation. Optional, and absent means
          * "your notes are fine" — which is what a window asks when it merely needs the list.
@@ -2856,7 +2864,7 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
       .strict(),
     result: z
       .object({
-        harness: HarnessIdSchema,
+        harness: AgentIdSchema,
         /** Required, for the reason `PROBE_OUTCOMES` gives: a failure must not read as an answer. */
         outcome: ProbeOutcomeSchema,
         /**
@@ -2980,14 +2988,14 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
   "coder.signInAgent": {
     params: z
       .object({
-        harness: HarnessIdSchema,
+        harness: AgentIdSchema,
         /** One of the agent's own advertised methods. Absent means "use what the catalogue declares". */
         methodId: z.string().min(1).optional(),
       })
       .strict(),
     result: z
       .object({
-        harness: HarnessIdSchema,
+        harness: AgentIdSchema,
         outcome: SignInOutcomeSchema,
         /** A keyed sentence in the user's language, with the agent's own words as a value. */
         detail: z.string().min(1),

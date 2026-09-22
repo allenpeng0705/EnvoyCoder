@@ -24,9 +24,9 @@
  *     supervisor that ignored that distinction would fight the user.
  *   * **Throttle, so a crash loop is not a storm.** launchd's minimum `ThrottleInterval` and systemd's `RestartSec`
  *     are set explicitly rather than left to defaults.
- *   * **Logs go where each platform can put them.** launchd redirects stdout and stderr to the plist's
- *     `StandardOutPath`/`StandardErrorPath`, so macOS gets the daemon's output *and* its own log, restart ledger and
- *     heartbeat in one directory; systemd collects the output in the journal; the Task Scheduler's XML has no
+ *   * **Logs go where each platform can put them.** launchd redirects stdout and stderr to two files
+ *     beside the daemon log (`daemon.out.log` and `daemon.err.log`) — the same file for both truncates
+ *     one stream with the other. systemd collects the output in the journal; the Task Scheduler's XML has no
  *     redirection, so on Windows the daemon's own log under the product's state is the only record.
  */
 
@@ -108,8 +108,23 @@ function programArguments(input: ServiceDefinitionInput): string[] {
   return [input.node, input.entry, "--home", input.home, "--managed-by", "service"];
 }
 
+/**
+ * A log file beside `logPath`.
+ *
+ * launchd opens `StandardOutPath` and `StandardErrorPath` separately. Pointing both at the
+ * same file truncates one stream with the other, so the two names have to differ.
+ */
+function logBeside(logPath: string, fileName: string): string {
+  const slash = Math.max(logPath.lastIndexOf("/"), logPath.lastIndexOf("\\"));
+  const sep = logPath.includes("\\") && !logPath.includes("/") ? "\\" : "/";
+  const dir = slash >= 0 ? logPath.slice(0, slash) : ".";
+  return `${dir}${sep}${fileName}`;
+}
+
 function launchdDefinition(input: ServiceDefinitionInput, label: string): ServiceDefinition {
   const args = programArguments(input);
+  const stdoutPath = logBeside(input.logPath, "daemon.out.log");
+  const stderrPath = logBeside(input.logPath, "daemon.err.log");
   return {
     kind: "launchd",
     label,
@@ -135,9 +150,9 @@ ${args.map((argument) => `    <string>${xml(argument)}</string>`).join("\n")}
   <key>ThrottleInterval</key>
   <integer>10</integer>
   <key>StandardOutPath</key>
-  <string>${xml(input.logPath)}</string>
+  <string>${xml(stdoutPath)}</string>
   <key>StandardErrorPath</key>
-  <string>${xml(input.logPath)}</string>
+  <string>${xml(stderrPath)}</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>ENVOYMESH_HOME</key>

@@ -3,8 +3,8 @@
  *
  * Two things are asserted that a pure-logic test cannot reach: that the tree actually *renders*
  * (a component that throws on a missing field passes every unit test in `task-model`), and
- * that the project → task relationship is visible — a group whose header names the agent its
- * children inherit, with the tasks under it.
+ * that the project → task relationship is visible — a group whose header names the default
+ * agent new tasks start with, with the tasks under it.
  *
  * `jsdom` is configured per file so the rest of the suite stays on Node.
  */
@@ -13,7 +13,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CoderSidebar } from "../src/components/CoderSidebar.js";
-import type { Project, Task } from "@envoydev/protocol";
+import type { HarnessSummary, Project, Task } from "@envoydev/protocol";
 
 /**
  * Fixtures, local to this test.
@@ -110,6 +110,7 @@ function renderSidebar(over: Partial<Parameters<typeof CoderSidebar>[0]> = {}) {
   const onRemoveProject = vi.fn();
   const onRenameTask = vi.fn();
   const onRemoveTask = vi.fn();
+  const onChangeTaskHarness = vi.fn();
   render(
     <CoderSidebar
       projects={SAMPLE_PROJECTS}
@@ -121,13 +122,22 @@ function renderSidebar(over: Partial<Parameters<typeof CoderSidebar>[0]> = {}) {
       onRemoveProject={onRemoveProject}
       onRenameTask={onRenameTask}
       onRemoveTask={onRemoveTask}
+      onChangeTaskHarness={onChangeTaskHarness}
       onOpenCommandCenter={vi.fn()}
       onOpenSettings={vi.fn()}
       onShowPairing={vi.fn()}
       {...over}
     />,
   );
-  return { onSelect, onNewTask, onOpenProjectSettings, onRemoveProject, onRenameTask, onRemoveTask };
+  return {
+    onSelect,
+    onNewTask,
+    onOpenProjectSettings,
+    onRemoveProject,
+    onRenameTask,
+    onRemoveTask,
+    onChangeTaskHarness,
+  };
 }
 
 /**
@@ -152,7 +162,7 @@ describe("CoderSidebar", () => {
   it("renders a project as a place, with its default agent on the header", () => {
     renderSidebar();
     const group = screen.getByTestId("project-envoymesh");
-    // The header names the agent new tasks inherit — the relationship the design is built on.
+    // The header names the agent new tasks start with — the relationship the design is built on.
     // Asserted on the header badge specifically: the same label also appears on each row that
     // uses that agent, and `getByText` would find either.
     const headerBadge = within(group).getByTitle("The agent new tasks in this project start with");
@@ -382,6 +392,53 @@ describe("a task's row menu", () => {
         .getAllByRole("menuitem")
         .map((item) => item.textContent),
     ).toEqual(["Rename", "Remove task"]);
+  });
+
+  it("lets the user change this task's agent from the row menu", () => {
+    const harness = (id: HarnessSummary["id"], label: string): HarnessSummary => ({
+      id,
+      label,
+      tier: id === "envoy-harness" ? "built-in" : "catalogued",
+      summary: "…",
+      modes: [],
+      models: { kind: "none", options: [], source: "…" },
+      thinking: { kind: "none", options: [], source: "…" },
+      capabilities: {
+        resume: true,
+        cancel: true,
+        approvals: true,
+        structuredTools: true,
+        streaming: true,
+        images: false,
+        agentMode: true,
+        model: true,
+        thinking: true,
+        approvalPolicy: true,
+      },
+      availability: { state: "ready", binary: `/usr/bin/${id}` },
+      auth: { state: "unknown" },
+      evidence: "…",
+    });
+    const { onChangeTaskHarness } = renderSidebar({
+      harnesses: [
+        harness("envoy-harness", "Envoy Harness"),
+        harness("deepseek-harness", "DeepSeek Harness"),
+      ],
+    });
+    openMenu("Actions for Review the migration diff");
+    expect(
+      within(menu("Actions for Review the migration diff"))
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent),
+    ).toEqual(["Rename", "Change agent", "Remove task"]);
+
+    fireEvent.click(
+      within(menu("Actions for Review the migration diff")).getByRole("menuitem", {
+        name: "Change agent",
+      }),
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "DeepSeek Harness" }));
+    expect(onChangeTaskHarness).toHaveBeenCalledWith("w2", "deepseek-harness");
   });
 
   it("calls an unnamed task by this app's word for it, in the trigger's name too", () => {

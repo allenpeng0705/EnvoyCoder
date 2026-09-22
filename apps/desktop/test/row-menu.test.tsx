@@ -27,7 +27,7 @@ import type { JSX } from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { CoderSettings, Project, Task } from "@envoydev/protocol";
+import type { CoderSettings, HarnessSummary, Project, Task } from "@envoydev/protocol";
 
 import { CoderApp } from "../src/components/CoderApp.js";
 import { I18nProvider } from "../src/i18n/context.js";
@@ -206,6 +206,50 @@ describe("renaming a task, from its row to the daemon", () => {
 
     await vi.waitFor(() =>
       expect(updateTask).toHaveBeenCalledWith({ id: task.id, title: "Add idempotency keys to refunds" }),
+    );
+  });
+});
+
+describe("changing a task's agent, from its row to the daemon", () => {
+  it("sends the harness on coder.updateTask", async () => {
+    function harness(id: HarnessSummary["id"], label: string): HarnessSummary {
+      return {
+        id,
+        label,
+        tier: id === "envoy-harness" ? "built-in" : "catalogued",
+        summary: "…",
+        modes: [],
+        models: { kind: "none", options: [], source: "…" },
+        thinking: { kind: "none", options: [], source: "…" },
+        capabilities: {
+          resume: true,
+          cancel: true,
+          approvals: true,
+          structuredTools: true,
+          streaming: true,
+          images: false,
+          agentMode: true,
+          model: true,
+          thinking: true,
+          approvalPolicy: true,
+        },
+        availability: { state: "ready", binary: `/usr/bin/${id}` },
+        auth: { state: "unknown" },
+        evidence: "…",
+      };
+    }
+    const { updateTask } = show({
+      harnesses: [
+        harness("envoy-harness", "Envoy Harness"),
+        harness("deepseek-harness", "DeepSeek Harness"),
+      ],
+    });
+
+    choose("Actions for Add idempotency keys", "Change agent");
+    fireEvent.click(screen.getByRole("menuitem", { name: "DeepSeek Harness" }));
+
+    await vi.waitFor(() =>
+      expect(updateTask).toHaveBeenCalledWith({ id: task.id, harness: "deepseek-harness" }),
     );
   });
 });

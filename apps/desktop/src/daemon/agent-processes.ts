@@ -33,7 +33,6 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { HarnessId } from "@envoydev/protocol";
 import type { CoderPaths } from "@envoydev/host-bridge";
 
 import type { AcpLaunch } from "./acp/client.js";
@@ -162,7 +161,7 @@ export class OwnedClients<T extends StoppableClient> {
  * The harness id is folded into the path rather than used raw, because it reaches a filesystem: a value with
  * a separator in it would put an agent's scratch directory somewhere nobody chose.
  */
-export async function agentScratchDir(paths: CoderPaths, harness: HarnessId): Promise<string> {
+export async function agentScratchDir(paths: CoderPaths, harness: string): Promise<string> {
   const dir = join(paths.stateDir, "agent-probe", harness.replace(/[^A-Za-z0-9._-]/g, "_"));
   await mkdir(dir, { recursive: true });
   return dir;

@@ -30,7 +30,7 @@ import type { JSX } from "react";
 
 import type { HarnessId, Project, TaskDefaults } from "@envoydev/protocol";
 
-import { offeredAgents } from "../../composer/agent-for.js";
+import { mergeOfferedAgents } from "../../composer/agent-for.js";
 import { useI18n } from "../../i18n/context.js";
 import type { SettingsScope } from "../../state/settings-scope.js";
 import { projectScope } from "../../state/settings-scope.js";
@@ -126,7 +126,11 @@ export function ProjectSection(props: ProjectSectionProps & { project: Project }
   const { project, state } = props;
   // The same rule as the New-tasks row, through the same function: a project's agent picker offers what was
   // measured, in the order the measurements imply, and no stored value shortens it.
-  const available = offeredAgents(state.harnesses);
+  const available = mergeOfferedAgents({
+    harnesses: state.harnesses,
+    providers: state.providers,
+    catalog: state.catalog,
+  });
   const defaults = project.defaults ?? {};
   // The project's own agent decides which models it offers, exactly as the composer reads a task's.
   const harness = defaults.harness ?? state.settings.defaults.harness ?? "envoy-harness";
@@ -171,7 +175,7 @@ export function ProjectSection(props: ProjectSectionProps & { project: Project }
             className="select"
             value={harness}
             aria-label={t("settings.project.harness.title")}
-            onChange={(event) => write(commit({ harness: event.target.value as HarnessId }))}
+            onChange={(event) => write(commit({ harness: event.target.value }))}
           >
             {available.every((entry) => entry.id !== harness) ? (
               // The stored value, when the measurement took it out of the list — see the New-tasks row in

@@ -1,9 +1,9 @@
 /**
  * What changes on a task when its agent becomes a different harness.
  *
- * Shared by `coder.updateTask({ harness })` and by project-default migration: switching Envoy → DeepSeek
- * (or the reverse) must clear a mode / model / thinking level the new agent cannot honour, or every later
- * run refuses with a sentence about a choice made for a *different* agent.
+ * Used by `coder.updateTask({ harness })`: switching Envoy → DeepSeek (or the reverse) must clear a
+ * mode / model / thinking level the new agent cannot honour, or every later run refuses with a
+ * sentence about a choice made for a *different* agent.
  */
 
 import {
@@ -11,26 +11,18 @@ import {
   harnessDefinition,
   resolveModelChoice,
 } from "@envoydev/agent-catalog";
-import type { HarnessId, Task } from "@envoydev/protocol";
-import { statusIsActive } from "@envoydev/protocol";
+import type { AgentId, HarnessId, Task } from "@envoydev/protocol";
+import { isHarnessId } from "@envoydev/protocol";
 
 /** Fields to write when moving a task onto `nextHarness`. */
 export interface HarnessSwitchPatch {
-  harness: HarnessId;
+  harness: AgentId;
   agentModeId?: string;
   clearAgentMode: boolean;
   model?: string;
   clearModel: boolean;
   thinkingLevel?: string;
   clearThinkingLevel: boolean;
-}
-
-/**
- * Idle (and finished) tasks may follow a project agent change; an active run keeps its harness until it
- * stops — migrating mid-run would contradict the process already on disk.
- */
-export function taskMayFollowProjectHarness(task: Task): boolean {
-  return task.archivedAt === undefined && !statusIsActive(task.status);
 }
 
 /**
@@ -42,9 +34,19 @@ export function taskMayFollowProjectHarness(task: Task): boolean {
  */
 export function harnessSwitchPatch(
   task: Pick<Task, "agentModeId" | "model" | "thinkingLevel">,
-  nextHarness: HarnessId,
+  nextHarness: AgentId,
   preferredModel?: string,
 ): HarnessSwitchPatch {
+  if (!isHarnessId(nextHarness)) {
+    // No catalogue entry to ask. A mode, model or thinking level chosen for a different agent
+    // would make the next run refuse, so they are dropped.
+    return {
+      harness: nextHarness,
+      clearAgentMode: task.agentModeId !== undefined,
+      clearModel: task.model !== undefined && task.model !== "",
+      clearThinkingLevel: task.thinkingLevel !== undefined,
+    };
+  }
   const next = harnessDefinition(nextHarness);
 
   let clearAgentMode = false;

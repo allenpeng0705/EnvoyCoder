@@ -12,6 +12,7 @@ import { ALL_HARNESSES, HARNESS_CATALOG, canApplyModel } from "@envoydev/agent-c
 
 import {
   composerControls,
+  displayModelId,
   looksLikeModelValue,
   modeDescription,
   modeLabel,
@@ -185,6 +186,43 @@ describe("the model control is honest about what it can do", () => {
     // …while the task's stored model wins over that, so a choice survives to the next run.
     const remembered = composerControls(withModels(LISTED), idle, { selectedModelId: "openai/gpt-4o" });
     expect(remembered.model.selected).toBe("openai/gpt-4o");
+  });
+
+  it("drops a listed id the new agent does not publish, so the header cannot keep yesterday's model", () => {
+    // After an agent switch the composer list refreshes; a stored id from the previous agent that is
+    // not in the new list must not stay on the title while the select falls back to "agent default".
+    expect(
+      displayModelId({
+        harness: "envoy-harness",
+        kind: "listed",
+        options: LISTED.options,
+        stored: "deepseek/deepseek-chat",
+      }),
+    ).toBeUndefined();
+    expect(
+      displayModelId({
+        harness: "envoy-harness",
+        kind: "listed",
+        options: LISTED.options,
+        stored: "openai/gpt-4o",
+      }),
+    ).toBe("openai/gpt-4o");
+    expect(
+      displayModelId({
+        harness: "envoy-harness",
+        kind: "listed",
+        options: [LISTED.options[0]!],
+        stored: undefined,
+      }),
+    ).toBe(LISTED.options[0]!.id);
+    expect(
+      displayModelId({
+        harness: "deepseek-harness",
+        kind: "free-text",
+        options: [],
+        stored: "deepseek/deepseek-chat",
+      }),
+    ).toBe("deepseek/deepseek-chat");
   });
 
   it("is ON and takes free text when the agent publishes no list but accepts a model", () => {
@@ -541,6 +579,14 @@ describe("the controls follow the agent's capabilities", () => {
     expect(full.controls.find((c) => c.kind === "approvals")?.enabled).toBe(true);
     // Claude Code is text-only here: no images.
     expect(full.controls.find((c) => c.kind === "images")?.enabled).toBe(false);
+  });
+
+  it("does not invent capabilities for a provider that has not been observed", async () => {
+    const { agentForProvider } = await import("../src/composer/agent-for.js");
+    const provider = agentForProvider("my-agent", { label: "My Agent", availability: { state: "ready" } });
+    const controls = composerControls(provider, working);
+    expect(controls.controls.find((c) => c.kind === "cancel")?.enabled).toBe(false);
+    expect(controls.controls.find((c) => c.kind === "approvals")?.enabled).toBe(false);
   });
 
   it("explains a control the agent cannot do, rather than leaving it blank", () => {

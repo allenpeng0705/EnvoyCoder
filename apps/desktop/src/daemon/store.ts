@@ -31,6 +31,7 @@ import { basename } from "node:path";
 import {
   type AgentAuthObservation,
   AgentAuthObservationSchema,
+  type AgentId,
   type AgentProviderConfig,
   AgentProviderConfigSchema,
   type CoderSettings,
@@ -47,8 +48,6 @@ import {
 } from "@envoydev/protocol";
 import type { CoderPaths } from "@envoydev/host-bridge";
 import { projectIdFor, resolveTaskDefaults, taskIdFor } from "@envoydev/task-model";
-import { harnessSwitchPatch, applyHarnessSwitch, taskMayFollowProjectHarness } from "./task-harness-switch.js";
-
 import { StateFiles, type FileNotes } from "./state-file.js";
 
 /** What a mutation reports, so a listener can refetch exactly one list. */
@@ -69,7 +68,7 @@ export interface AddProjectInput {
   path: string;
   label?: string;
   hostId?: string;
-  defaults?: { harness?: HarnessId; model?: string; extraArgs?: string };
+  defaults?: { harness?: AgentId; model?: string; extraArgs?: string };
   /**
    * What kind of version control the folder is, **measured by the caller**.
    *
@@ -84,7 +83,7 @@ export interface CreateTaskInput {
   projectId: string;
   title: string;
   cwd?: string;
-  harness?: HarnessId;
+  harness?: AgentId;
   model?: string;
   extraArgs?: string;
 }
@@ -93,7 +92,7 @@ export interface UpdateTaskInput {
   id: string;
   title?: string;
   pinned?: boolean;
-  harness?: HarnessId;
+  harness?: AgentId;
   model?: string;
   /**
    * Move the task to another folder. Already normalised and checked as a directory by the caller —
@@ -200,23 +199,6 @@ export class CoderStore {
 
   private readonly listeners = new Set<(change: StoreChange) => void>();
 
-  /**
-   * Tasks that were **running** when their project's agent changed, and so could not move with it.
-   *
-   * The rule is that the project's agent governs its tasks, and `updateProject` carries a change to
-   * every task that can take it — but a run in flight keeps the harness it was launched with, because
-   * switching it would contradict the process already on disk. Skipping such a task *permanently* was
-   * the gap: the project said one agent, the task silently kept another until somebody changed the
-   * project again. So the skip is now remembered, and applied the moment the run stops.
-   *
-   * Deliberately in memory, and deliberately not every divergent task: a task whose harness nobody
-   * derived from the project — created with an explicit `harness` over the API — must keep it, and only
-   * a project change can say which divergent tasks were meant to follow. A daemon that restarts
-   * mid-run forgets the mark and behaves exactly as it did before this existed: no worse, and the next
-   * project change picks the task up.
-   */
-  private readonly harnessFollowPending = new Set<string>();
-
   /** The write chain. See the module doc: one mutation at a time, in request order. */
   private tail: Promise<unknown> = Promise.resolve();
 
@@ -319,7 +301,7 @@ export class CoderStore {
   }
 
   /** What this agent published the last time we opened a session with it, if we ever have. */
-  sessionOptions(harness: HarnessId): ObservedSessionOptions | undefined {
+  sessionOptions(harness: AgentId): ObservedSessionOptions | undefined {
     return this.sessionOptionsState.find((entry) => entry.harness === harness);
   }
 
@@ -341,7 +323,7 @@ export class CoderStore {
    * differently on the two — but the difference is kept here because the file is the record and a
    * maintainer reading it must be able to tell "never probed" from "probed, no answer".
    */
-  agentAuth(harness: HarnessId): AgentAuthObservation | undefined {
+  agentAuth(harness: AgentId): AgentAuthObservation | undefined {
     return this.agentAuthState.find((entry) => entry.harness === harness);
   }
 
@@ -451,7 +433,7 @@ export class CoderStore {
   }
 
   /**
-   * Update a project — its label, its tags, and **the defaults its tasks inherit**.
+   * Update a project — its label, its tags, and **the defaults new tasks start with**.
    *
    * The defaults *replace* rather than merge, which is the opposite of `updateSettings` and deliberate:
    * a project's defaults are a complete statement about that project ("this one runs on DeepSeek"),
@@ -459,9 +441,9 @@ export class CoderStore {
    * same terms as `updateSettings` — a project scope whose model control can be emptied has to be able
    * to empty it — and `dropCleared` is what keeps the sentinel out of the stored file.
    *
-   * When the resolved agent changes, every **idle** task in the project is rewritten onto that agent
-   * (mode / model / thinking cleared when the new harness cannot honour them). That is what stops the
-   * project header saying DeepSeek while an open task still says Envoy. Active runs are left alone.
+   * Existing tasks keep the agent they already have. The project agent is only copied at `createTask`
+   * (when the client does not send one). Two tasks in one project can therefore run different agents
+   * in parallel; changing the default does not rewrite them.
    */
   async updateProject(
     id: string,
@@ -477,72 +459,6 @@ export class CoderStore {
     };
     this.projectsState = this.projectsState.map((project) => (project.id === id ? next : project));
     await this.persistProjects([id]);
-
-    if (patch.defaults !== undefined) {
-      const resolvedHarness = (project: Project): HarnessId =>
-        project.defaults?.harness ?? this.settingsState.defaults.harness ?? "envoy-harness";
-      const previousHarness = resolvedHarness(current);
-      const nextHarness = resolvedHarness(next);
-      if (previousHarness !== nextHarness) {
-        const preferredModel = next.defaults?.model;
-        const at = this.now().toISOString();
-        const migratedIds: string[] = [];
-        this.tasksState = this.tasksState.map((task) => {
-          if (task.projectId !== id || task.archivedAt !== undefined) return task;
-          if (!taskMayFollowProjectHarness(task)) {
-            // Running: it cannot move now, and it must not be left behind for good. Remember it, and
-            // `followProjectHarness` applies the same switch the moment the run stops.
-            if (task.harness !== nextHarness) this.harnessFollowPending.add(task.id);
-            return task;
-          }
-          if (task.harness === nextHarness) return task;
-          migratedIds.push(task.id);
-          return applyHarnessSwitch(
-            task,
-            harnessSwitchPatch(task, nextHarness, preferredModel),
-            at,
-          );
-        });
-        if (migratedIds.length > 0) await this.persistTasks(migratedIds);
-      }
-    }
-
-    return next;
-  }
-
-  /**
-   * Move a task onto its project's agent, if it was waiting for its run to stop to do so.
-   *
-   * The other half of `updateProject`'s rule. A run in flight cannot change harness, so a project change
-   * during one is remembered in `harnessFollowPending` rather than applied — and this is what applies it,
-   * which the daemon calls when a run ends (`RunManager.finish`). A task that was not waiting is left
-   * alone, however its harness was chosen: "the project changed" is the only thing that can say a
-   * divergent harness was meant to follow, and a task created with an explicit one never heard it.
-   *
-   * Safe to call for every task on every run end: the pending set is the guard, so the ordinary case is
-   * one `Set.delete` and no write at all.
-   */
-  async followProjectHarness(taskId: string): Promise<Task | undefined> {
-    if (!this.harnessFollowPending.delete(taskId)) return this.findTask(taskId);
-    const task = this.tasksState.find((candidate) => candidate.id === taskId);
-    if (!task || task.archivedAt !== undefined) return task;
-    if (!taskMayFollowProjectHarness(task)) {
-      // Spoken for again before the last run's ending landed — put it back in the queue.
-      this.harnessFollowPending.add(taskId);
-      return task;
-    }
-    const project = this.projectsState.find((candidate) => candidate.id === task.projectId);
-    if (!project) return task;
-    const nextHarness =
-      project.defaults?.harness ?? this.settingsState.defaults.harness ?? "envoy-harness";
-    if (task.harness === nextHarness) return task;
-    const next = applyHarnessSwitch(
-      task,
-      harnessSwitchPatch(task, nextHarness, project.defaults?.model),
-      this.now().toISOString(),
-    );
-    this.tasksState = this.tasksState.map((candidate) => (candidate.id === taskId ? next : candidate));
-    await this.persistTasks([taskId]);
     return next;
   }
 
@@ -777,20 +693,38 @@ export class CoderStore {
   /**
    * Forget a provider.
    *
-   * `undefined` when there is nothing under that id, which the handler turns into a refusal rather than a
-   * cheerful success — the same rule `removeProject` follows, so a user whose list changed under them in
-   * another window is told rather than left believing a removal happened twice.
-   *
-   * Nothing else is touched, and that is deliberate rather than an omission: a provider is a *recipe*, and
-   * no row refers to one — a task names a `HarnessId`. If a later slice lets a task run on a provider, that
-   * slice owes the archived-not-deleted treatment `removeProject` gives tasks.
+   * `undefined` when there is nothing under that id. Refuses, without deleting, when a task, a project
+   * default, or the app default still names it — those rows would otherwise point at an agent that can
+   * no longer be launched.
    */
-  async removeProvider(id: string): Promise<{ removed: string } | undefined> {
+  async removeProvider(
+    id: string,
+  ): Promise<{ removed: string } | { inUse: string } | undefined> {
     const current = this.providersState.find((provider) => provider.id === id);
     if (!current) return undefined;
+    const where = this.providerReferences(id);
+    if (where !== undefined) return { inUse: where };
     this.providersState = this.providersState.filter((provider) => provider.id !== id);
     await this.persistProviders([id]);
     return { removed: id };
+  }
+
+  /**
+   * Where this provider id is still named, as a short English phrase for the refusal.
+   *
+   * `undefined` when nothing refers to it. Archived tasks do not count: they are history, and a removed
+   * recipe does not have to stay so an old row can be re-run.
+   */
+  providerReferences(id: string): string | undefined {
+    const tasks = this.tasksState.filter((task) => task.archivedAt === undefined && task.harness === id).length;
+    const projects = this.projectsState.filter((project) => project.defaults?.harness === id).length;
+    const app = this.settingsState.defaults.harness === id;
+    if (tasks === 0 && projects === 0 && !app) return undefined;
+    const parts: string[] = [];
+    if (tasks > 0) parts.push(tasks === 1 ? "1 task" : `${tasks} tasks`);
+    if (projects > 0) parts.push(projects === 1 ? "1 project" : `${projects} projects`);
+    if (app) parts.push("the app default");
+    return parts.join(", ");
   }
 
   /* ────────────────────────────── authentication ────────────────────────────── */

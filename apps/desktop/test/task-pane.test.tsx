@@ -826,6 +826,48 @@ describe("the model control", () => {
     expect(picker.disabled).toBe(false);
     expect([...picker.options].map((option) => option.textContent)).toEqual(["MiniMax-M3"]);
     expect(picker.value).toBe("minimax/MiniMax-M3");
+    // Header and composer agree: with one configured model and nothing stored, both name it.
+    expect(screen.getByTitle("minimax/MiniMax-M3").textContent).toBe("minimax/MiniMax-M3");
+  });
+
+  it("does not keep a previous agent's model id on the header after the list under the field changes", () => {
+    // The bug: switching agent refreshed the composer options, but the title still printed `task.model`
+    // raw — including an id that is not in the new agent's list.
+    renderPane([], {
+      task: {
+        ...task,
+        harness: "envoy-harness",
+        model: "deepseek-official/deepseek-v4-flash",
+      },
+      harnesses: [
+        harnessFor("envoy-harness", {
+          models: {
+            kind: "listed",
+            options: [
+              {
+                id: "anthropic/claude-sonnet-4-6",
+                label: "claude-sonnet-4-6",
+                provider: "anthropic",
+                model: "claude-sonnet-4-6",
+              },
+              {
+                id: "openai/gpt-4o",
+                label: "gpt-4o",
+                provider: "openai",
+                model: "gpt-4o",
+              },
+            ],
+            source: "settings",
+          },
+        }),
+      ],
+      runLive: false,
+    });
+
+    // Stranded DeepSeek id must leave both the title and any model meta link.
+    expect(screen.queryByText("deepseek-official/deepseek-v4-flash")).toBeNull();
+    const header = document.querySelector(".pane__header");
+    expect(header?.textContent ?? "").not.toContain("deepseek-official/deepseek-v4-flash");
   });
 
   it("gives an agent with no published list a usable text field, not a disabled pill", () => {

@@ -1,15 +1,9 @@
 /**
- * **Every row in the catalogue can actually be added** — the leg that would have caught 38 broken buttons.
+ * **Every catalogue row can be stored** — through the same shape auto-Add and an explicit Add use.
  *
- * The owner pressed **Add** on the catalogue and got a refusal in the notice strip:
- * *"coder.addProvider was given a provider this build cannot store: a provider cannot be the catalogue entry it
- * says it came from — the reference would resolve to the provider itself"*. The window was sending `entry.id` as
- * both the provider's id and its `catalogEntryId`, and the store's own rule refuses that self-reference.
- *
- * Nothing caught it because the existing leg built the same input and only **inspected its fields**
- * (`catalog-rpc.test.ts`: `expect(add.catalogEntryId).toBe("vtcode")`), and the UI legs use fixtures. A builder
- * whose output is never *stored* is a builder nobody has run — so this test stores one of every entry, through the
- * same handler a press reaches.
+ * Choosing a catalogue agent from a picker calls `ensureRunnableAgent`, which stores `cataloguedProviderInput`
+ * (id = catalogue id). This test stores every entry the same way so a schema regression cannot hide behind
+ * the UI no longer showing an Add button.
  */
 
 import { mkdtemp, rm } from "node:fs/promises";
@@ -65,6 +59,7 @@ describe("adding a catalogue row", () => {
 
     const refused: { id: string; why: string }[] = [];
     for (const row of rows) {
+      if (row.builtIn) continue;
       try {
         await handlers["coder.addProvider"]?.(addInputFor(row), { session: undefined });
       } catch (error) {
@@ -77,7 +72,8 @@ describe("adding a catalogue row", () => {
     const stored = (await handlers["coder.listProviders"]?.({}, { session: undefined })) as {
       providers: { id: string; catalogEntryId?: string }[];
     };
-    expect(stored.providers).toHaveLength(rows.length);
+    const addable = rows.filter((row) => !row.builtIn);
+    expect(stored.providers).toHaveLength(addable.length);
 
     // **And the catalogue rows know it.** A provider added from a row has an id of its own, so a list matching on
     // ids alone would keep offering *Add* for a recipe already in the user's list — and let it be added again and
@@ -94,16 +90,15 @@ describe("adding a catalogue row", () => {
         detail: "",
       })),
     );
-    for (const row of rows) expect(added.has(row.id), `${row.id} is not seen as already added`).toBe(true);
+    for (const row of addable) expect(added.has(row.id), `${row.id} is not seen as already added`).toBe(true);
   });
 
-  it("gives each provider an id of its own, and keeps the reference to the recipe", async () => {
-    // The two facts the schema's rule is about, asserted on the builder rather than discovered on the wire.
+  it("uses the catalogue id as the provider id, with the same reference", async () => {
     const rows = await catalogRows(await handlersOverCatalogue());
-    for (const row of rows) {
+    for (const row of rows.filter((entry) => !entry.builtIn)) {
       const input = addInputFor(row);
       expect(input.catalogEntryId, row.id).toBe(row.id);
-      expect(input.id, `${row.id}: a provider may not be the entry it references`).not.toBe(row.id);
+      expect(input.id, row.id).toBe(row.id);
     }
   });
 });

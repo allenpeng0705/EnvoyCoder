@@ -1,4 +1,4 @@
-package app.envoydev.envoydev_mobile
+package com.envoymesh.envoydev
 
 import io.flutter.embedding.android.FlutterActivity
 

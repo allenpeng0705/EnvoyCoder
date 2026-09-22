@@ -49,6 +49,9 @@ export const ko: Catalogue = {
 
   /* ── the rail ── */
   "sidebar.aria": "프로젝트와 작업",
+  "layout.resize.rail": "프로젝트 목록 너비 조절",
+  "layout.resize.settingsNav": "설정 섹션 목록 너비 조절",
+  "layout.resize.explorer": "파일 탐색기 너비 조절",
   "sidebar.add": "+ 프로젝트 추가",
   "sidebar.add.title": "작업하는 디렉터리를 프로젝트로 등록",
   "sidebar.command.title": "명령 팔레트 열기",
@@ -61,7 +64,7 @@ export const ko: Catalogue = {
   "sidebar.attention.one": "작업 1개가 당신을 기다립니다",
   "sidebar.attention.many": "작업 {count}개가 당신을 기다립니다",
   "sidebar.empty.title": "아직 프로젝트가 없습니다",
-  "sidebar.empty.body": "작업하는 디렉터리를 추가하세요. 그 안에서 시작한 작업이 여기에 나타나고, 프로젝트는 어떤 에이전트를 써야 하는지 기억합니다.",
+  "sidebar.empty.body": "작업하는 디렉터리를 추가하세요. 그 안에서 시작한 작업이 여기에 나타나고, 프로젝트는 새 작업이 시작할 기본 에이전트를 기억합니다.",
   "sidebar.empty.noMatch": "“{query}”와 일치하는 것이 없습니다.",
   "sidebar.empty.cannotLoadTitle": "프로젝트를 읽을 수 없습니다",
   "sidebar.empty.cannotLoadBody": "이 목록은 비어 있는 것이 아니라 알 수 없는 상태입니다 — EnvoyDev가 데몬에 물어볼 수 없었습니다.",
@@ -71,6 +74,9 @@ export const ko: Catalogue = {
   "project.agent.picker.aria": "이 프로젝트의 코딩 에이전트: {agent}. 변경",
   "project.agent.picker.title": "이 프로젝트의 코딩 에이전트 변경",
   "project.agent.picker.menu": "이 프로젝트의 코딩 에이전트",
+  "task.agent.picker.aria": "이 작업의 코딩 에이전트: {agent}. 변경",
+  "task.agent.picker.title": "이 작업의 코딩 에이전트 변경",
+  "task.agent.picker.menu": "이 작업의 코딩 에이전트",
   "sidebar.project.settings": "프로젝트 설정",
   "sidebar.project.newTask": "+ 새로 만들기",
   "sidebar.project.newTask.title": "{project}에서 작업 시작",
@@ -88,6 +94,7 @@ export const ko: Catalogue = {
   "sidebar.task.menu.title": "작업 메뉴",
   "sidebar.task.rename": "이름 바꾸기",
   "sidebar.task.rename.aria": "이 작업의 새 이름",
+  "sidebar.task.changeAgent": "에이전트 변경",
   "sidebar.tasks.empty": "아직 여기에 작업이 없습니다.",
   "sidebar.pair": "휴대폰 페어링",
   "sidebar.settings": "설정",
@@ -405,9 +412,9 @@ export const ko: Catalogue = {
   "settings.projects.note": "각 프로젝트는 이 컴퓨터의 설정을 덮어쓸 수 있습니다. 하나를 선택하면 그 프로젝트의 설정이 열립니다.",
   "settings.projects.empty": "아직 프로젝트가 없습니다. 프로젝트는 에이전트가 작업하는 이 컴퓨터의 폴더입니다. 프로젝트 레일 위쪽의 {add}로 추가하거나 명령 팔레트에서 추가하세요.",
   "settings.agents.empty": "에이전트 목록이 아직 도착하지 않았습니다.",
-  "settings.agents.shipped.heading": "이 컴퓨터에서",
+  "settings.agents.shipped.heading": "에이전트",
   "settings.agents.mine.heading": "내 에이전트",
-  "settings.agents.mine.empty": "아직 직접 추가한 에이전트가 없습니다. 아래 항목은 모두 여기에서 추가할 수 있고, 목록에 없는 프로그램도 추가할 수 있습니다.",
+  "settings.agents.mine.empty": "아직 카탈로그에서 추가한 항목이 없습니다. 아래에서 에이전트를 이 목록에 넣거나, 카탈로그에 없는 프로그램을 선언할 수 있습니다.",
   "settings.agents.mine.command": "실행 명령: {command}",
   "settings.agents.mine.remove": "제거",
   "settings.agents.mine.remove.title": "{agent}을(를) 잊습니다. 아무것도 삭제되지 않고 다른 것도 건드리지 않습니다.",
@@ -456,6 +463,8 @@ export const ko: Catalogue = {
   "settings.agents.row.adding": "추가 중…",
   "settings.agents.row.add.title": "{agent}을(를) 내 에이전트에 추가합니다. 명령줄과 환경은 위에 적힌 그대로 이 항목에서 가져옵니다 — 레시피 자체의 상수도 함께 따라오고, 레시피가 설정하지 않는 변수는 그대로 사용자가 설정합니다.",
   "settings.agents.row.builtIn": "이 에이전트는 EnvoyDev에 이미 포함되어 있으므로 두 번 추가하지 않고 위의 “이 컴퓨터에서”에서 설정합니다.",
+  "settings.agents.row.pick.short": "작업에서 선택",
+  "settings.agents.row.pick.title": "작업·프로젝트·새 작업 기본값에서 {agent}를 고르세요. 고르면 EnvoyDev가 레시피를 자동으로 추가합니다.",
   "settings.agents.row.builtIn.short": "내장",
   "settings.agents.row.nothingToInstall": "설치할 것 없음",
   "settings.agents.row.restart": "EnvoyDev 다시 시작",
@@ -712,6 +721,10 @@ export const ko: Catalogue = {
     "{provider}은(는) EnvoyDev가 아직 다룰 수 없는 프로토콜을 사용하므로 실행이 시작되지 않았습니다. EnvoyDev는 ACP로 에이전트를 구동합니다 — 이 프로그램이 ACP를 지원한다면 공급자의 방언을 ACP로 지정하고 다시 시도하세요.",
   "error.providerNotFound":
     "여기에 \"{id}\"이라는 에이전트 공급자가 없습니다. 다른 창에서 제거되었을 수 있습니다.",
+  "error.providerInUse":
+    "\"{id}\"은(는) 아직 {where}에서 사용 중이어서 제거하지 않았습니다. 먼저 다른 에이전트로 옮기세요.",
+  "error.agentUnknown":
+    "\"{id}\"는 EnvoyDev가 제공하거나 카탈로그에 있는 에이전트가 아니어서 선택되지 않았습니다.",
   "error.providerEnvNotAName":
     "EnvoyDev는 에이전트가 필요로 하는 환경 변수의 이름만 저장하며 값은 절대 저장하지 않습니다. 이 공급자의 환경 목록에서 {position}번째 항목은 변수 이름이 아닙니다. 이름은 영문자, 숫자, 밑줄로 이루어지며 숫자로 시작할 수 없습니다. 공급자가 추가되지 않았습니다.",
   "error.providerEnvUnset.one":

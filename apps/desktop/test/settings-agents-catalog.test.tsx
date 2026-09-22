@@ -486,10 +486,9 @@ describe("the agents screen", () => {
     });
 
     const lists = document.querySelectorAll(".settings__agents");
-    const shippedRows = lists[0]?.querySelectorAll(".settings__agent") ?? [];
-    const providerRows = lists[1]?.querySelectorAll(".settings__agent") ?? [];
-    expect(shippedRows).toHaveLength(9);
-    expect(providerRows).toHaveLength(2);
+    const agentRows = lists[0]?.querySelectorAll(".settings__agent") ?? [];
+    // Built-in + Added share one list now.
+    expect(agentRows).toHaveLength(11);
     for (const agent of shipped) {
       expect(within(shippedList()).getByText(agent.label), agent.id).toBeTruthy();
     }
@@ -640,62 +639,21 @@ describe("what a catalogue row's verdict is", () => {
   });
 });
 
-describe("adding an agent from the catalogue", () => {
-  it("sends the command, the arguments and the environment names the entry describes", async () => {
-    // **The mutation this fails on:** any Add that builds its own config. Every field here comes off the row,
-    // and the test asserts them one by one because `addProvider` merely *being called* would pass on a call
-    // that dropped the argv or split the command line wrongly.
-    const calls = show();
-    press(row("VT Code"), en["settings.agents.row.add"]);
-    await waitFor(() => expect(calls.added).toHaveLength(1));
-    expect(calls.added).toEqual([
-      {
-        // The provider's own id, distinct from the recipe it references — see the note on `addInputFor`: this
-        // pair being *equal* is what the store refuses, and it is what broke every Add in the catalogue.
-        id: "vtcode-acp",
-        label: "VT Code",
-        command: "vtcode",
-        args: ["acp"],
-        // **Names, plus the reference — and never the value.** The entry's own recipe sets
-        // `VT_ACP_ENABLED=1`; a provider has no field for the `1`, and this is the wire half of the schema
-        // that has none. `catalogEntryId` is what makes the value unnecessary rather than merely forbidden:
-        // the daemon resolves the recipe's constants from the catalogue it ships.
-        env: ["VT_ACP_ENABLED", "VT_ACP_ZED_ENABLED"],
-        transport: "acp",
-        catalogEntryId: "vtcode",
-      },
-    ]);
-    expect(JSON.stringify(calls.added)).not.toContain('"1"');
+describe("catalogue rows point at pickers, not a separate Add", () => {
+  it("shows how to use a recipe instead of an Add button", () => {
+    show();
+    const vt = row("VT Code");
+    expect(within(vt).queryByRole("button", { name: en["settings.agents.row.add"] })).toBeNull();
+    expect(within(vt).getByText(en["settings.agents.row.pick.short"])).toBeTruthy();
+    expect(
+      within(vt).getByTitle(en["settings.agents.row.pick.title"].replace("{agent}", "VT Code")),
+    ).toBeTruthy();
   });
 
-  it("carries the dialect the row states, and never invents one", async () => {
-    // **The mutation this fails on:** defaulting the transport to `"acp"` on the way to `addProvider`. The
-    // failure is silent in both directions — a peer ignores an unknown `modeId` and reports success, and a
-    // one-shot CLI started as ACP gets an `initialize` it never answers — so the assertion is on the exact
-    // value the entry stated, from an entry whose stated value is the *unusual* one.
-    const calls = show();
-    press(row("Legacy CLI"), en["settings.agents.row.add"]);
-    await waitFor(() => expect(calls.added).toHaveLength(1));
-    expect(calls.added[0]?.transport).toBe("cli");
-    // Nothing else about the dialect travels with it: no `modeParam`, no `authMethodId`, because the entry
-    // states neither and a plausible guess is worse than an omission.
-    expect(Object.keys(calls.added[0] ?? {}).sort()).toEqual([
-      "args",
-      "catalogEntryId",
-      "command",
-      "env",
-      "id",
-      "label",
-      "transport",
-    ]);
-  });
-
-  it("offers Remove instead of Add for an entry the user has already declared", async () => {
-    // Adding is a **replace** (`coder.addProvider` is a complete statement of how to start a program), so a
-    // button labelled *Add* that silently replaced an existing agent would be the wrong control.
+  it("offers Remove for an entry the user has already declared", async () => {
     const calls = show({
       providers: [
-        { ...state.providers[0]!, id: "goose", label: "goose" },
+        { ...state.providers[0]!, id: "goose", label: "goose", catalogEntryId: "goose" },
       ],
     });
     const goose = row("goose");
@@ -704,14 +662,10 @@ describe("adding an agent from the catalogue", () => {
     await waitFor(() => expect(calls.removed).toEqual(["goose"]));
   });
 
-  it("shows the shipped agent rather than a second Add for the id that is in both lists", () => {
-    // The overlap rule (`resolveAgentEntry`: a built-in wins) arrives from the daemon as `builtIn`, so the
-    // window does not compute it — and the row says why instead of offering a duplicate.
+  it("shows the shipped agent rather than a second path for the id that is in both lists", () => {
     show();
     const cursor = row("Cursor");
     expect(within(cursor).queryByRole("button", { name: en["settings.agents.row.add"] })).toBeNull();
-    // The label on the row is two words; the sentence it stands for is the `title`, which is where an
-    // explanation goes when the row may not carry one (`settings/density.ts`).
     const label = within(cursor).getByText(en["settings.agents.row.builtIn.short"]);
     expect(label.getAttribute("title")).toBe(en["settings.agents.row.builtIn"]);
   });
@@ -770,8 +724,10 @@ describe("nothing on this page can take an agent out of a list", () => {
     // of the guarantee: a control whose wording reads as "hide" would restore the confusion the deletion is
     // about, so the title is asserted to say what Remove does *and* to avoid the vocabulary of hiding.
     const calls = show();
-    const providerList = document.querySelectorAll(".settings__agents")[1];
-    const providerRow = providerList?.querySelector(".settings__agent");
+    const agentList = document.querySelectorAll(".settings__agents")[0];
+    const providerRow = [...(agentList?.querySelectorAll(".settings__agent") ?? [])].find((row) =>
+      row.textContent?.includes("My Agent"),
+    );
     if (!(providerRow instanceof HTMLElement)) throw new Error("no provider row was rendered");
 
     const remove = within(providerRow).getByRole("button", { name: en["settings.agents.mine.remove"] });
@@ -939,10 +895,8 @@ describe("the catalogue's own conversions", () => {
     // The whole of `addInputFor`, asserted against the fixture entry rather than through a click, so a failure
     // here says which field drifted rather than which button did not respond.
     expect(addInputFor(catalog[2]!)).toEqual({
-      // **An id of its own, and the reference to the recipe.** They may not be equal: the store refuses a provider
-      // that *is* the catalogue entry it says it came from, and sending `entry.id` here is what made every Add in
-      // the catalogue fail on the wire (`catalog-add.test.ts` stores all 38 to keep that from coming back).
-      id: "vtcode-acp",
+      // Catalogue id = provider id = what a task names after auto-Add.
+      id: "vtcode",
       label: "VT Code",
       command: "vtcode",
       args: ["acp"],

@@ -20,7 +20,8 @@
  *     document. `stopPropagation` is part of the contract rather than tidiness: the shell binds Escape
  *     globally to "stop the agent" (`input/useShortcuts.ts`), and a user pressing Escape to dismiss a
  *     menu must not kill a run they were not looking at.
- *   * **Choosing an item closes** the menu, except for the destructive one, which asks in place.
+ *   * **Choosing an item closes** the menu, except for the destructive one, which asks in place, and
+ *     the pick item, which replaces the list with its options in the same popover.
  *
  * ## The destructive item, and design law 3
  *
@@ -70,6 +71,22 @@ export interface RowMenuConfirm {
   onConfirm: () => void;
 }
 
+/**
+ * A second panel of options, in the same popover — the same shape as the confirm, for a choice
+ * rather than a destruction.
+ *
+ * Used by the task row to change this task's agent without a second control on the row. Choosing the
+ * item replaces the list with the options; choosing an option closes and writes.
+ */
+export interface RowMenuPick {
+  /** The item in the menu list, e.g. "Change agent". */
+  label: string;
+  /** The accessible name of the options panel. */
+  ariaLabel: string;
+  options: readonly { id: string; label: string; current?: boolean }[];
+  onChoose: (id: string) => void;
+}
+
 export interface RowMenuProps {
   /**
    * The trigger's accessible name, naming **what this menu acts on**.
@@ -83,6 +100,8 @@ export interface RowMenuProps {
   actions: readonly RowMenuAction[];
   /** The destructive item and its question. Omitted for a menu with nothing destructive in it. */
   confirm?: RowMenuConfirm | undefined;
+  /** A nested choice (agents, …). Omitted when there is nothing to pick. */
+  pick?: RowMenuPick | undefined;
 }
 
 export function RowMenu(props: RowMenuProps): JSX.Element {
@@ -90,6 +109,8 @@ export function RowMenu(props: RowMenuProps): JSX.Element {
   const [open, setOpen] = useState(false);
   /** The destructive item has been chosen; the popover is showing the question instead of the list. */
   const [asking, setAsking] = useState(false);
+  /** The pick item has been chosen; the popover is showing its options instead of the list. */
+  const [picking, setPicking] = useState(false);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -100,16 +121,19 @@ export function RowMenu(props: RowMenuProps): JSX.Element {
 
   const items = props.actions;
   const confirm = props.confirm;
+  const pick = props.pick !== undefined && props.pick.options.length > 0 ? props.pick : undefined;
 
   const close = (returnFocus = true): void => {
     setOpen(false);
     setAsking(false);
+    setPicking(false);
     if (returnFocus) triggerRef.current?.focus();
   };
 
   const openMenu = (last: boolean): void => {
     landOnLast.current = last;
     setAsking(false);
+    setPicking(false);
     setOpen(true);
   };
 
@@ -125,7 +149,7 @@ export function RowMenu(props: RowMenuProps): JSX.Element {
     const buttons = itemRefs.current.filter((item): item is HTMLButtonElement => item !== null);
     if (buttons.length === 0) return;
     buttons[landOnLast.current ? buttons.length - 1 : 0]?.focus();
-  }, [open, asking]);
+  }, [open, asking, picking]);
 
   // Dismissal on an outside press. Both events, because a mouse fires `pointerdown` *and* `mousedown`
   // while a touch fires only the first — and closing twice is a no-op. Capture phase, so a handler on
@@ -244,6 +268,27 @@ export function RowMenu(props: RowMenuProps): JSX.Element {
               </button>
             </div>
           </div>
+        ) : picking && pick ? (
+          <div className="row-menu__list" role="menu" aria-label={pick.ariaLabel}>
+            {pick.options.map((option, index) => (
+              <button
+                key={option.id}
+                type="button"
+                role="menuitem"
+                className="row-menu__item"
+                aria-current={option.current === true ? "true" : undefined}
+                ref={(node) => {
+                  itemRefs.current[index] = node;
+                }}
+                onClick={() => {
+                  close(false);
+                  if (option.current !== true) pick.onChoose(option.id);
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         ) : (
           <div className="row-menu__list" role="menu" aria-label={props.label}>
             {items.map((item, index) => (
@@ -263,13 +308,26 @@ export function RowMenu(props: RowMenuProps): JSX.Element {
                 {item.label}
               </button>
             ))}
-            {confirm ? (
+            {pick ? (
               <button
                 type="button"
                 role="menuitem"
                 className="row-menu__item"
                 ref={(node) => {
                   itemRefs.current[items.length] = node;
+                }}
+                onClick={() => setPicking(true)}
+              >
+                {pick.label}
+              </button>
+            ) : null}
+            {confirm ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="row-menu__item"
+                ref={(node) => {
+                  itemRefs.current[items.length + (pick ? 1 : 0)] = node;
                 }}
                 // Not `button--danger` and not red: choosing this asks a question. The colour arrives
                 // with the question, in the panel above.

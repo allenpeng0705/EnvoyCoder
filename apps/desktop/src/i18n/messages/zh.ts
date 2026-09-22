@@ -49,6 +49,9 @@ export const zh: Catalogue = {
 
   /* ── the rail ── */
   "sidebar.aria": "项目与任务",
+  "layout.resize.rail": "调整项目列表宽度",
+  "layout.resize.settingsNav": "调整设置分区列表宽度",
+  "layout.resize.explorer": "调整文件浏览器宽度",
   "sidebar.add": "+ 添加项目",
   "sidebar.add.title": "把一个目录注册为项目",
   "sidebar.command.title": "打开命令中心",
@@ -61,7 +64,7 @@ export const zh: Catalogue = {
   "sidebar.attention.one": "1 个任务需要你",
   "sidebar.attention.many": "{count} 个任务需要你",
   "sidebar.empty.title": "还没有项目",
-  "sidebar.empty.body": "添加一个你工作的目录。在其中启动的任务会出现在这里，项目会记住它们该用哪个智能体。",
+  "sidebar.empty.body": "添加一个你工作的目录。在其中启动的任务会出现在这里，项目会记住新任务默认使用的智能体。",
   "sidebar.empty.noMatch": "没有匹配“{query}”的内容。",
   "sidebar.empty.cannotLoadTitle": "无法读取你的项目",
   "sidebar.empty.cannotLoadBody": "这个列表是未知的，而不是空的——EnvoyDev 无法向守护进程查询。",
@@ -71,6 +74,9 @@ export const zh: Catalogue = {
   "project.agent.picker.aria": "此项目的编码智能体：{agent}。更改",
   "project.agent.picker.title": "更改此项目的编码智能体",
   "project.agent.picker.menu": "此项目的编码智能体",
+  "task.agent.picker.aria": "此任务的编码智能体：{agent}。更改",
+  "task.agent.picker.title": "更改此任务的编码智能体",
+  "task.agent.picker.menu": "此任务的编码智能体",
   "sidebar.project.settings": "项目设置",
   "sidebar.project.newTask": "+ 新建",
   "sidebar.project.newTask.title": "在 {project} 中启动任务",
@@ -88,6 +94,7 @@ export const zh: Catalogue = {
   "sidebar.task.menu.title": "任务操作",
   "sidebar.task.rename": "重命名",
   "sidebar.task.rename.aria": "此任务的新名称",
+  "sidebar.task.changeAgent": "更改智能体",
   "sidebar.tasks.empty": "这里还没有任务。",
   "sidebar.pair": "配对手机",
   "sidebar.settings": "设置",
@@ -405,9 +412,9 @@ export const zh: Catalogue = {
   "settings.projects.note": "每个项目都可以覆盖本机的设置。选择其中一个会打开它自己的设置。",
   "settings.projects.empty": "还没有项目。项目是这台电脑上智能体工作的文件夹——用项目栏顶部的{add}添加一个，或者从命令中心添加。",
   "settings.agents.empty": "智能体列表还没有到达。",
-  "settings.agents.shipped.heading": "在这台电脑上",
+  "settings.agents.shipped.heading": "智能体",
   "settings.agents.mine.heading": "你的智能体",
-  "settings.agents.mine.empty": "你还没有添加自己的智能体。下面任何一个都可以在这里添加，不在列表里的程序也可以。",
+  "settings.agents.mine.empty": "还没有从目录添加智能体。浏览下方把某个智能体放进列表，也可以声明一个不在目录里的程序。",
   "settings.agents.mine.command": "运行命令：{command}",
   "settings.agents.mine.remove": "移除",
   "settings.agents.mine.remove.title": "忘掉 {agent}。不会卸载任何东西，也不会动其他任何设置。",
@@ -454,6 +461,8 @@ export const zh: Catalogue = {
   "settings.agents.row.adding": "正在添加…",
   "settings.agents.row.add.title": "把 {agent} 加入你的智能体。它的命令行和环境都取自这一条目，与上面写的一模一样——配方自带的常量会随之生效，配方没有设置的变量仍然由你自己设置。",
   "settings.agents.row.builtIn": "EnvoyDev 已经自带这个智能体，所以在上面的“在这台电脑上”中配置它，而不是再添加一次。",
+  "settings.agents.row.pick.short": "在任务里选用",
+  "settings.agents.row.pick.title": "在任务、项目或「新任务」默认里选择 {agent}。选用时 EnvoyDev 会自动加入该配方。",
   "settings.agents.row.builtIn.short": "自带",
   "settings.agents.row.nothingToInstall": "无需安装",
   "settings.agents.row.restart": "重启 EnvoyDev",
@@ -706,6 +715,10 @@ export const zh: Catalogue = {
     "{provider} 使用的协议 EnvoyDev 还无法驱动，因此这次运行没有启动。EnvoyDev 通过 ACP 驱动智能体——如果这个程序确实支持 ACP，请把该提供方的方言改为 ACP 后重试。",
   "error.providerNotFound":
     "这里没有名为 \"{id}\" 的智能体提供方。它可能已在另一个窗口中被移除。",
+  "error.providerInUse":
+    "\"{id}\" 仍被 {where} 使用，因此没有移除。请先把它们改到另一个智能体。",
+  "error.agentUnknown":
+    "「{id}」不是 EnvoyDev 自带或目录中的智能体，因此没有选用。",
   "error.providerEnvNotAName":
     "EnvoyDev 只保存智能体所需环境变量的名称，从不会保存它们的值，而这个提供方环境列表中的第 {position} 项不是一个变量名。变量名由字母、数字和下划线组成，且不能以数字开头。该提供方没有被添加。",
   "error.providerEnvUnset.one":

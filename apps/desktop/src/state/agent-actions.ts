@@ -137,7 +137,7 @@ export interface AgentActions {
 
   /** Trigger the agent's own sign-in flow. See the module doc for why all five outcomes are `ok: true`. */
   signInAgent(
-    harness: HarnessId,
+    harness: string,
     options?: { methodId?: string },
   ): Promise<{ ok: true; outcome: SignInOutcome; detail: string } | Refusal>;
 

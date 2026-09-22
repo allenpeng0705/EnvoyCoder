@@ -11,7 +11,7 @@
 
 Paseo's sidebar groups its **workspaces** by project as a *heading* — their word for the unit of work, and the reason ours must not be called the same thing: it reads like a level *above* a project, and it is not. EnvoyMesh's Coding tab, which this
 follows on the owner's instruction, makes the project a *row*: collapsible, configurable, and
-carrying the agent its children inherit. The difference is not cosmetic:
+carrying the default agent new tasks start with. The difference is not cosmetic:
 
 * the project header answers **"is this repo busy?"** — status counts and the default agent, without
   scrolling its tasks;

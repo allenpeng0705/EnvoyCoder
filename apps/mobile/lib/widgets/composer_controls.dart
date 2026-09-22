@@ -1,15 +1,12 @@
-/// Composer control chips — model, mode, thinking — driven by `coder.listHarnesses`.
+/// Composer control chips — agent, model, mode, thinking — driven by `coder.listHarnesses`.
 ///
-/// ## Why the agent is not one of them
+/// ## The agent is this task's
 ///
-/// The agent is a property of the **project**, not of a task: a task starts on its project's agent and
-/// follows it when the project changes (the daemon's `updateProject` migrates the project's idle tasks
-/// onto the new agent, `apps/desktop/src/daemon/store.ts`; the desktop's task header shows the project
-/// picker, not a per-task control). Mobile used to offer an Agent chip here that wrote a task-level
-/// `harness` into `coder.createTask` / `coder.updateTask`, which let one task in a project run a
-/// different agent from the project's own — the opposite of the owner's rule. So the chip is gone, and
-/// [ComposerSelection.harnessId] remains only as the **context** that decides which model / mode /
-/// thinking options the other three chips offer.
+/// A new task starts on the project's default agent. After that the task owns the choice: two tasks
+/// in one project can run different agents in parallel. The Agent chip writes `harness` on
+/// `coder.createTask` / `coder.updateTask`. Model / mode / thinking stay the options of whichever
+/// agent is selected; picking a different agent clears those three so a DeepSeek chip does not keep
+/// an Envoy mode.
 ///
 /// ## What each chip says, and why it changed twice
 ///
@@ -48,18 +45,14 @@ class ComposerSelection {
     this.thinkingLevel,
   });
 
-  /// The agent this task will run — **read-only context, never a task choice**.
-  ///
-  /// The new-task sheet resolves it from the project (`project.defaults.harness`, else the app
-  /// default); the run screen reads the task's stored value. It selects which model / mode / thinking
-  /// options the other chips can offer. [copyWith] deliberately has no `harnessId` parameter: nothing
-  /// in this widget may move a task off its project's agent.
+  /// The agent this task will run. Copied from the project at create, then owned by the task.
   final String? harnessId;
   final String? model;
   final String? agentModeId;
   final String? thinkingLevel;
 
   ComposerSelection copyWith({
+    String? harnessId,
     String? model,
     String? agentModeId,
     String? thinkingLevel,
@@ -68,7 +61,7 @@ class ComposerSelection {
     bool clearThinking = false,
   }) {
     return ComposerSelection(
-      harnessId: harnessId,
+      harnessId: harnessId ?? this.harnessId,
       model: clearModel ? null : (model ?? this.model),
       agentModeId: clearMode ? null : (agentModeId ?? this.agentModeId),
       thinkingLevel: clearThinking ? null : (thinkingLevel ?? this.thinkingLevel),
@@ -94,18 +87,22 @@ class ComposerControls extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final colors = CoderTheme.of(context);
-    // The agent is the *context* for the three task choices, not a choice of its own: `harnessId` names
-    // the project's agent (see the library doc), and an unknown one simply offers no chips.
     final current = harnessById(harnesses, selection.harnessId);
 
-    // **One line, glyphs instead of category words.** The owner's report on the previous shape — a
-    // header, then four half-width chips in a 2×2 grid — was that it "occupied too much space", and it
-    // did: `Options for this task` plus two rows of `Model: Default` cost ~106pt above the field on a
-    // 320pt phone. The icon carries the category now (the desktop's own glyph per concept:
-    // `icons.tsx` — sliders for Mode, a chip for Model, a bulb for Thinking), the chip shows the
-    // **value**, and the category is not lost: it is the first half of the chip's screen-reader label
-    // (`Model: Default`) and the tooltip is still the desktop's whole sentence.
+    // **One line, glyphs instead of category words.** Agent first — it decides which of the other
+    // three exist — then model, mode, thinking. The category is the screen-reader label, not the
+    // visible text.
     final chips = <Widget>[
+      if (harnesses.isNotEmpty)
+        _ChipButton(
+          icon: Icons.smart_toy_outlined,
+          label: _agentLabel(l10n, current),
+          semanticsLabel: l10n.composerAgentValue(_agentLabel(l10n, current)),
+          tooltip: l10n.composerAgentTooltip,
+          enabled: enabled,
+          colors: colors,
+          onTap: () => _pickAgent(context),
+        ),
       if (current != null && current.modelApplicable && current.modelsKind != 'none')
         _ChipButton(
           icon: Icons.memory,
@@ -142,8 +139,8 @@ class ComposerControls extends StatelessWidget {
         ),
     ];
 
-    // An agent that takes no model, mode or thinking — or a harness list that has not arrived — leaves
-    // nothing to set up, and a row of nothing would spend the composer on a gap.
+    // A harness list that has not arrived leaves nothing to set up, and a row of nothing would spend
+    // the composer on a gap. An agent with no model / mode / thinking still shows the Agent chip.
     if (chips.isEmpty) return const SizedBox.shrink();
 
     // **`Flexible`, so it is one line by construction.** Each chip takes what its own text needs and no
@@ -158,6 +155,11 @@ class ComposerControls extends StatelessWidget {
         ],
       ],
     );
+  }
+
+  String _agentLabel(AppLocalizations l10n, HarnessInfo? current) {
+    if (current != null) return current.label;
+    return l10n.composerAgentBare;
   }
 
   // The unset value is **"Default", the desktop's own word** (`task.composer.value.default`) for "the
@@ -185,6 +187,31 @@ class ComposerControls extends StatelessWidget {
       if (o.value == level) return o.label;
     }
     return level;
+  }
+
+  Future<void> _pickAgent(BuildContext context) async {
+    final l10n = context.l10n;
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            ListTile(title: Text(l10n.composerAgentBare)),
+            for (final harness in offeredHarnesses(harnesses))
+              ListTile(
+                title: Text(harness.label),
+                trailing: selection.harnessId == harness.id ? const Icon(Icons.check) : null,
+                onTap: () => Navigator.pop(context, harness.id),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (chosen == null || chosen == selection.harnessId) return;
+    // A different agent cannot honour the previous mode / model / thinking. Start clean so the
+    // chips match the agent that will actually run.
+    onChanged(ComposerSelection(harnessId: chosen));
   }
 
   Future<void> _pickModel(BuildContext context, HarnessInfo harness) async {

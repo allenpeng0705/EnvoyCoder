@@ -134,6 +134,27 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
       final tasks = _asMapList(tasksResult['tasks']).map((e) => TaskInfo.fromJson(e, l10n: l10n)).toList();
       final groups = groupByProject(projects: projects, tasks: tasks, l10n: l10n);
       final harnesses = _asMapList(harnessesResult?['harnesses']).map(HarnessInfo.fromJson).toList();
+      final taken = harnesses.map((h) => h.id).toSet();
+      try {
+        final providersResult = await widget.client.call('coder.listProviders', {});
+        for (final h in _asMapList(providersResult['providers']).map(HarnessInfo.fromJson).where((h) => h.ready)) {
+          if (taken.add(h.id)) harnesses.add(h);
+        }
+      } catch (_) {}
+      try {
+        final catalogResult = await widget.client.call('coder.listCatalog', {});
+        for (final raw in _asMapList(catalogResult['entries'])) {
+          if (raw['builtIn'] == true) continue;
+          final id = raw['id'] as String?;
+          if (id == null || id.isEmpty || taken.contains(id)) continue;
+          final mapped = Map<String, dynamic>.from(raw);
+          mapped['label'] = raw['title'] ?? id;
+          final info = HarnessInfo.fromJson(mapped);
+          if (!info.ready) continue;
+          taken.add(id);
+          harnesses.add(info);
+        }
+      } catch (_) {}
       String? appHarness;
       final settings = settingsResult?['settings'];
       if (settings is Map) {
@@ -192,9 +213,8 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
       projects: _projects,
       harnesses: _harnesses,
       initialProjectId: project.id,
-      // The app's own default agent, so the sheet resolves the same agent the daemon will use when the
-      // project has not set one. It is only context for the model / mode / thinking chips: the sheet
-      // never sends a task-level harness (see `showNewTaskSheet`).
+      // The app's own default agent, so the sheet starts on the same agent the daemon would resolve
+      // when the project has not set one. The user can change it; createTask sends the chosen harness.
       appHarness: _appHarness,
     );
     await _refresh();
@@ -368,6 +388,8 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
                                     onRenameTask: (task) => unawaited(_renameTask(task)),
                                     onPickAgent: (project, harnessId) =>
                                         unawaited(_setProjectAgent(project, harnessId)),
+                                    onPickTaskAgent: (task, harnessId) =>
+                                        unawaited(_setTaskAgent(task, harnessId)),
                                   ),
                                 ],
                               );
@@ -474,6 +496,21 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.l10n.projectListCouldNotChangeAgent)),
+      );
+    }
+  }
+
+  Future<void> _setTaskAgent(TaskInfo task, String harnessId) async {
+    try {
+      await widget.client.call('coder.updateTask', {
+        'id': task.id,
+        'harness': harnessId,
+      });
+      await _refresh();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.runCouldNotUpdateTask)),
       );
     }
   }
@@ -881,6 +918,7 @@ class _ProjectSection extends StatelessWidget {
     required this.onArchiveTask,
     required this.onRenameTask,
     required this.onPickAgent,
+    required this.onPickTaskAgent,
     required this.gitStatus,
     required this.onBranches,
   });
@@ -897,6 +935,7 @@ class _ProjectSection extends StatelessWidget {
   final void Function(TaskInfo task) onArchiveTask;
   final void Function(TaskInfo task) onRenameTask;
   final void Function(ProjectInfo project, String harnessId) onPickAgent;
+  final void Function(TaskInfo task, String harnessId) onPickTaskAgent;
 
   /// What the desktop answered about this project's repository, if it has been asked.
   final GitStatusInfo? gitStatus;
@@ -1028,9 +1067,9 @@ class _ProjectSection extends StatelessWidget {
                 size: 8,
                 color: _dotFor(task.status, colors),
               ),
-              // What the row can *do* besides open, behind the `…`: Rename and Remove — the same two
-              // actions the desktop task row offers (`CoderSidebar.tsx:557-583`), reached the same way
-              // the project row reaches its own secondary actions.
+              // What the row can *do* besides open, behind the `…`: Change agent, Rename, and Remove —
+              // the same three the desktop task row offers, reached the same way the project row
+              // reaches its own secondary actions.
               //
               // **No trailing `>`.** The owner asked for it gone, and the row does not need it: the
               // subtitle already says the status in words, and the `…` announces itself as the row's
@@ -1041,6 +1080,8 @@ class _ProjectSection extends StatelessWidget {
               // area from three controls to two for 320pt; two is what fits, and this makes it one.)
               trailing: _TaskOverflowMenu(
                 taskTitle: task.title,
+                canPickAgent: harnesses.isNotEmpty,
+                onPickAgent: () => unawaited(_pickTaskAgent(context, task)),
                 onRename: () => onRenameTask(task),
                 onArchive: () => onArchiveTask(task),
               ),
@@ -1082,6 +1123,29 @@ class _ProjectSection extends StatelessWidget {
     if (chosen != null) onPickAgent(group.project, chosen);
   }
 
+  Future<void> _pickTaskAgent(BuildContext context, TaskInfo task) async {
+    final offered = offeredHarnesses(harnesses);
+    final l10n = context.l10n;
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            ListTile(title: Text(l10n.composerAgentTooltip)),
+            for (final h in offered)
+              ListTile(
+                title: Text(h.label),
+                trailing: task.harness == h.id ? const Icon(Icons.check) : null,
+                onTap: () => Navigator.pop(context, h.id),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (chosen != null && chosen != task.harness) onPickTaskAgent(task, chosen);
+  }
+
   Color _dotFor(String status, CoderColors colors) => switch (status) {
         'needs-attention' => colors.statusDotWarning,
         'failed' => colors.statusDotDanger,
@@ -1094,7 +1158,7 @@ class _ProjectSection extends StatelessWidget {
 /// Which item of a project row's `…` was chosen.
 enum _ProjectMenuAction { agent, branches, remove }
 
-/// The project row's `…`: the agent new tasks inherit, and Remove.
+/// The project row's `…`: the default agent new tasks start with, and Remove.
 ///
 /// **Why these two, and not two more buttons on the row.** A row has room for one verb — starting
 /// work — and the desktop rail makes the same split (`CoderSidebar.tsx:339-370`): the agent and the
@@ -1161,9 +1225,9 @@ class _ProjectOverflowMenu extends StatelessWidget {
               subtitle: canPickAgent ? Text(l10n.projectListChangeAgent) : null,
             ),
           ),
-          // **Branches, immediately after the agent.** The two are the project's own settings — which agent
-          // new tasks inherit, and which branch its folder is on — and a repository that is not a git folder
-          // gets no item at all rather than one that cannot work.
+          // **Branches, immediately after the agent.** The two are the project's own settings — which
+          // agent new tasks start with, and which branch its folder is on — and a repository that is
+          // not a git folder gets no item at all rather than one that cannot work.
           if (canPickBranch)
             PopupMenuItem(
               value: _ProjectMenuAction.branches,
@@ -1194,9 +1258,9 @@ class _ProjectOverflowMenu extends StatelessWidget {
 }
 
 /// Which item of a task row's `…` was chosen.
-enum _TaskMenuAction { rename, archive }
+enum _TaskMenuAction { agent, rename, archive }
 
-/// The task row's `…`: Rename, and the removal that takes the task out of the list.
+/// The task row's `…`: Change agent, Rename, and the removal that takes the task out of the list.
 ///
 /// **Why `…` and not a second button on the row.** This is the shape the project row above already
 /// settled on (`_ProjectOverflowMenu`), and the desktop's task row uses it too
@@ -1206,22 +1270,27 @@ enum _TaskMenuAction { rename, archive }
 /// replaced, so the change spends no width, it gives some back.
 ///
 /// **Short labels, no repeated object.** The owner's ask: the row is already the task, so "Rename
-/// task" and "Archive task" twice say a noun the menu already sits on. They read "Rename" and
-/// "Remove" now — the same two words the desktop's menu uses. "Remove" is the *list* verb; the call
-/// behind it and the dialog in front of it both still say what actually happens (archive, files
-/// untouched — see `_archiveTask`), so the short label costs no truth. The `archive` enum member and
-/// the `onArchive` callback keep the operation's name in code, where the accurate word belongs.
+/// task" and "Archive task" twice say a noun the menu already sits on. They read "Change agent",
+/// "Rename" and "Remove" now — the same words the desktop's menu uses. "Remove" is the *list* verb;
+/// the call behind it and the dialog in front of it both still say what actually happens (archive,
+/// files untouched — see `_archiveTask`), so the short label costs no truth. The `archive` enum
+/// member and the `onArchive` callback keep the operation's name in code, where the accurate word
+/// belongs.
 ///
 /// Icon-only, so it carries a tooltip **and** a `Semantics` label, and the label names the row it acts
 /// on so a screen reader facing many of these can tell them apart.
 class _TaskOverflowMenu extends StatelessWidget {
   const _TaskOverflowMenu({
     required this.taskTitle,
+    required this.canPickAgent,
+    required this.onPickAgent,
     required this.onRename,
     required this.onArchive,
   });
 
   final String taskTitle;
+  final bool canPickAgent;
+  final VoidCallback onPickAgent;
   final VoidCallback onRename;
   final VoidCallback onArchive;
 
@@ -1234,6 +1303,7 @@ class _TaskOverflowMenu extends StatelessWidget {
       child: PopupMenuButton<_TaskMenuAction>(
         tooltip: l10n.connectionsMenuAria(taskTitle),
         onSelected: (action) => switch (action) {
+          _TaskMenuAction.agent => onPickAgent(),
           _TaskMenuAction.rename => onRename(),
           _TaskMenuAction.archive => onArchive(),
         },
@@ -1246,6 +1316,15 @@ class _TaskOverflowMenu extends StatelessWidget {
               title: Text(l10n.commonRename),
             ),
           ),
+          if (canPickAgent)
+            PopupMenuItem(
+              value: _TaskMenuAction.agent,
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.smart_toy_outlined),
+                title: Text(l10n.projectListChangeAgent),
+              ),
+            ),
           const PopupMenuDivider(),
           // Same order as the project row: the thing that changes the row first, the thing that
           // takes it away last. The removal is deliberately not painted in the danger colour — it is

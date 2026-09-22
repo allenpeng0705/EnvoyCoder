@@ -334,10 +334,9 @@ describe("one run, end to end", () => {
     expect(b.manager.events(run.id).some((event) => event.kind === "run.ended")).toBe(true);
   });
 
-  it("spends a waiting project-agent change when the run ends", async () => {
-    // The store rule is `project-agent-migrate.test.ts`; this is the wiring — a run ending is the only
-    // thing that spends the mark, and `finish` is the only place that happens. The mark is set the way
-    // a live run sets it: the task is active while the project's agent changes under it.
+  it("keeps the task's agent when a project default changes under a run", async () => {
+    // The store rule is `project-agent-migrate.test.ts`: the project agent is only the default for
+    // new tasks. Ending a run must not rewrite this one onto the new default.
     const b = await bench();
     const project = b.store.projects()[0]!;
     await b.store.setTaskRun(b.taskId, { status: "running", runId: "earlier" });
@@ -347,7 +346,7 @@ describe("one run, end to end", () => {
     await b.manager.start({ taskId: b.taskId, prompt: "please think about it" });
     await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
 
-    expect(b.store.findTask(b.taskId)?.harness).toBe("deepseek-harness");
+    expect(b.store.findTask(b.taskId)?.harness).toBe("envoy-harness");
   });
 });
 

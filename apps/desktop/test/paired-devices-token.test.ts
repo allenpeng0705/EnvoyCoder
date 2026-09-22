@@ -128,15 +128,14 @@ describe("the same device pairing again", () => {
     expect(await devices.resolveSession(second.record.token, iphone)).not.toBeNull();
 
     const rows = await devices.list();
-    expect(rows).toHaveLength(2);
-    // Exactly one is live, and it is the one the phone is using now.
-    expect(rows.filter((row) => row.revokedAt === undefined).map((row) => row.id)).toEqual([second.record.id]);
+    // The old pairing is gone, not left as a revoked row: a reinstall used to fill this list.
+    expect(rows.map((row) => row.id)).toEqual([second.record.id]);
     // **The old token is refused**, which is the assertion that matters: before this, revoking "the phone" left it
     // authenticated by the previous row.
     expect(await devices.resolveSession(first.record.token, iphone)).toBeNull();
     // And the row now says which device it is, instead of "Phone".
-    expect(rows.find((row) => row.id === second.record.id)?.clientName).toBe("Shi's iPhone");
-    expect(rows.find((row) => row.id === second.record.id)?.deviceLabel).toBe("Shi's iPhone");
+    expect(rows[0]?.clientName).toBe("Shi's iPhone");
+    expect(rows[0]?.deviceLabel).toBe("Shi's iPhone");
   });
 
   it("leaves a different device alone", async () => {
@@ -230,5 +229,37 @@ describe("identifying a device by id", () => {
     const live = (await devices.list()).filter((row) => row.revokedAt === undefined);
     expect(live).toHaveLength(2);
     expect(await devices.resolveSession(stranger.record.token)).not.toBeNull();
+  });
+
+  it("keeps only the newest pairing per platform after reinstalls", async () => {
+    // Each reinstall is a new install id, so same-id collapse cannot see them. Opening the list
+    // (or the new phone saying hello) drops the older iOS rows.
+    const devices = await store();
+    const first = await devices.mint({});
+    await devices.resolveSession(first.record.token);
+    await devices.identify(first.record.id, { id: "install-1", name: "envoydev-mobile", platform: "ios" });
+
+    const second = await devices.mint({ fresh: true });
+    await devices.resolveSession(second.record.token);
+    await devices.identify(second.record.id, { id: "install-2", name: "envoydev-mobile", platform: "ios" });
+
+    const rows = await devices.list();
+    expect(rows.map((row) => row.id)).toEqual([second.record.id]);
+    expect(await devices.resolveSession(first.record.token)).toBeNull();
+    expect(await devices.resolveSession(second.record.token)).not.toBeNull();
+  });
+
+  it("keeps a phone and another platform side by side", async () => {
+    const devices = await store();
+    const phone = await devices.mint({});
+    await devices.resolveSession(phone.record.token);
+    await devices.identify(phone.record.id, { id: "install-ios", name: "envoydev-mobile", platform: "ios" });
+
+    const other = await devices.mint({ fresh: true });
+    await devices.resolveSession(other.record.token);
+    await devices.identify(other.record.id, { id: "install-android", name: "envoydev-mobile", platform: "android" });
+
+    const live = (await devices.list()).map((row) => row.id).sort();
+    expect(live).toEqual([phone.record.id, other.record.id].sort());
   });
 });

@@ -93,6 +93,40 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
               .map((e) => HarnessInfo.fromJson(Map<String, dynamic>.from(e)))
               .toList();
         }
+        try {
+          final providers = await widget.client.call('coder.listProviders', {});
+          final added = providers['providers'];
+          if (added is List) {
+            final taken = _harnesses.map((h) => h.id).toSet();
+            final extra = <HarnessInfo>[];
+            for (final raw in added.whereType<Map>()) {
+              final h = HarnessInfo.fromJson(Map<String, dynamic>.from(raw));
+              if (!h.ready || !taken.add(h.id)) continue;
+              extra.add(h);
+            }
+            _harnesses = [..._harnesses, ...extra];
+          }
+        } catch (_) {}
+        try {
+          final catalog = await widget.client.call('coder.listCatalog', {});
+          final entries = catalog['entries'];
+          if (entries is List) {
+            final taken = _harnesses.map((h) => h.id).toSet();
+            final extra = <HarnessInfo>[];
+            for (final raw in entries.whereType<Map>()) {
+              if (raw['builtIn'] == true) continue;
+              final id = raw['id'] as String?;
+              if (id == null || id.isEmpty || taken.contains(id)) continue;
+              final mapped = Map<String, dynamic>.from(raw);
+              mapped['label'] = raw['title'] ?? id;
+              final h = HarnessInfo.fromJson(mapped);
+              if (!h.ready) continue;
+              taken.add(id);
+              extra.add(h);
+            }
+            _harnesses = [..._harnesses, ...extra];
+          }
+        } catch (_) {}
       } catch (_) {}
     }
     if (_taskId != null) {
@@ -345,12 +379,9 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     final taskId = _taskId;
     if (taskId == null) return;
     try {
-      // **No `harness`.** The agent belongs to the project, so this composer only writes the
-      // task-scoped choices. `selection.harnessId` is the context the chips render against (the task's
-      // stored agent, which the daemon keeps in step with the project on `updateProject`); sending it
-      // back would make a per-task override out of a project setting.
       await widget.client.call('coder.updateTask', {
         'id': taskId,
+        if (next.harnessId != null && next.harnessId!.isNotEmpty) 'harness': next.harnessId,
         if (next.model != null) 'model': next.model,
         if (next.agentModeId != null) 'agentModeId': next.agentModeId,
         if (next.thinkingLevel != null) 'thinkingLevel': next.thinkingLevel ?? '',

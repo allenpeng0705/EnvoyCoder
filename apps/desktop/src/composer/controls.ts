@@ -402,6 +402,38 @@ export function modelOffReason(
 }
 
 /**
+ * The model id the header and the composer both show.
+ *
+ * ## Why this is not simply `task.model`
+ *
+ * Changing the agent refreshes the *list* under the field (that agent’s published models). A stored
+ * id from the previous agent can still sit on the task until the daemon clears it — and even when it
+ * stays (free-text shape still valid), a **listed** picker cannot select an id that is not in the
+ * new list. The header used to print `task.model` raw while the select fell back to “agent default”,
+ * so the top stayed on yesterday’s id. One function decides both surfaces.
+ *
+ * Envoy Harness is the one special case kept from the pane: with a single configured model and no
+ * listed match, that model is what the next run will use, so both surfaces name it.
+ */
+export function displayModelId(input: {
+  harness: string;
+  kind: "listed" | "free-text" | "none";
+  options: readonly { id: string }[];
+  /** Picked override, else the task’s stored model (already resolved through `composerControls`). */
+  stored: string | undefined;
+}): string | undefined {
+  const { stored } = input;
+  const inList = stored !== undefined && input.options.some((model) => model.id === stored);
+  if (input.harness === "envoy-harness" && !inList && input.options.length === 1) {
+    return input.options[0]?.id;
+  }
+  if (input.kind === "listed" && stored !== undefined && !inList) {
+    return undefined;
+  }
+  return stored;
+}
+
+/**
  * The note under the model control, when it is not a refusal.
  *
  * Two cases, and the point is that they differ:

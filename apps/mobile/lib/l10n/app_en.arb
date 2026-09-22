@@ -1639,6 +1639,19 @@
       }
     }
   },
+  "composerAgentValue": "Agent: {value}",
+  "@composerAgentValue": {
+    "description": "composeragentvalue — The Agent chip: category and current value.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "composerAgentTooltip": "Change the coding agent for this task",
+  "@composerAgentTooltip": {
+    "description": "composeragenttooltip — Reused from desktop task.agent.picker.title"
+  },
   "composerThinkingValue": "Thinking: {value}",
   "@composerThinkingValue": {
     "description": "composerthinkingvalue — The Thinking chip: category and current value.",

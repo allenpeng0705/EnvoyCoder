@@ -1176,6 +1176,14 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String composerAgentValue(String value) {
+    return '智能体：$value';
+  }
+
+  @override
+  String get composerAgentTooltip => '更改此任务的编码智能体';
+
+  @override
   String composerThinkingValue(String value) {
     return '思考：$value';
   }

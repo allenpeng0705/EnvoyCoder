@@ -32,6 +32,7 @@ import {
 import { stat } from "node:fs/promises";
 
 import {
+  type AgentId,
   type AgentProviderConfig,
   type AgentRun,
   type CoderLanguage,
@@ -66,6 +67,7 @@ import {
   fetchedRecipe,
 } from "@envoydev/agent-catalog";
 import type { CoderPaths } from "@envoydev/host-bridge";
+import { resolveTaskDefaults } from "@envoydev/task-model";
 
 import { keyed, ref } from "./messages.js";
 import { createHealthHandlers } from "./health.js";
@@ -78,6 +80,7 @@ import { createGitHandlers, measureProjectVcs, type GitDeps } from "./git.js";
 import { notFound } from "./not-found.js";
 import { createRecheckHandlers } from "./recheck.js";
 import { createProviderHandlers } from "./providers.js";
+import { ensureRunnableAgent } from "./runnable-agent.js";
 import { createSignInHandlers } from "./sign-in.js";
 import type { SessionSignIn } from "./sign-in.js";
 import { summarize } from "./summaries.js";
@@ -363,7 +366,10 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     }),
     // The sign-in: one method whose whole subject is an agent's own authentication flow. Spread in the same
     // way the provider methods are, so this table stays the complete list of what the daemon serves.
-    ...createSignInHandlers({ ...(deps.signIn ? { signIn: deps.signIn } : {}) }),
+    ...createSignInHandlers({
+      store: deps.store,
+      ...(deps.signIn ? { signIn: deps.signIn } : {}),
+    }),
 
     /* ────────────────── who am I talking to ────────────────── */
     "coder.hello": async (params, context) => {
@@ -444,9 +450,10 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
       const input = parseRpcParams("coder.updateProject", params) as {
         id: string;
         label?: string;
-        defaults?: { harness?: HarnessId; model?: string; extraArgs?: string };
+        defaults?: { harness?: string; model?: string; extraArgs?: string };
         tags?: readonly string[];
       };
+      await ensureRunnableAgent(deps.store, input.defaults?.harness);
       const project = await deps.store.updateProject(input.id, {
         ...(input.label !== undefined ? { label: input.label } : {}),
         ...(input.defaults !== undefined ? { defaults: input.defaults } : {}),
@@ -545,12 +552,24 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         projectId: string;
         title: string;
         cwd?: string;
-        harness?: HarnessId;
+        harness?: AgentId;
         model?: string;
         extraArgs?: string;
       };
       const project = deps.store.findProject(input.projectId);
       if (!project) throw notFound("project", input.projectId);
+      // Gate the *resolved* agent — project/app default when the caller omitted harness — so a stale
+      // default cannot be stored and only refuse at launch.
+      const resolved = resolveTaskDefaults({
+        project,
+        appDefaults: deps.store.settings().defaults,
+        explicit: {
+          ...(input.harness ? { harness: input.harness } : {}),
+          ...(input.model ? { model: input.model } : {}),
+          ...(input.extraArgs ? { extraArgs: input.extraArgs } : {}),
+        },
+      });
+      await ensureRunnableAgent(deps.store, resolved.harness);
       const cwd = input.cwd ?? project.path;
       if (!(await isDirectory(cwd))) {
         throw coderError(
@@ -613,8 +632,8 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
       /**
        * **A stored mode / model / thinking the new harness cannot honour is dropped here.**
        *
-       * Same helper the project-default migration uses (`harnessSwitchPatch`), so a task switched from
-       * the pane and one rewritten because the project agent changed stay on identical rules.
+       * Same helper every `updateTask({ harness })` uses (`harnessSwitchPatch`), so a switch from
+       * the pane and one from the phone stay on identical rules.
        */
       let agentModeId = input.agentModeId;
       let clearAgentMode = false;
@@ -623,7 +642,9 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
       if (thinkingLevel === "") thinkingLevel = undefined;
 
       if (input.harness !== undefined) {
+        await ensureRunnableAgent(deps.store, input.harness);
         const current = deps.store.findTask(input.id);
+        const project = current !== undefined ? deps.store.findProject(current.projectId) : undefined;
         const switched = harnessSwitchPatch(
           {
             agentModeId: agentModeId ?? current?.agentModeId,
@@ -631,15 +652,24 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
             thinkingLevel: thinkingLevel ?? current?.thinkingLevel,
           },
           input.harness,
+          project?.defaults?.model,
         );
         if (switched.clearAgentMode) {
           agentModeId = undefined;
           clearAgentMode = true;
         }
-        // Only auto-clear model when the caller did not send a replacement.
-        if (input.model === undefined && switched.clearModel) {
-          clearModel = true;
-          model = undefined;
+        // Only auto-clear / auto-pick when the caller did not send a replacement. Prefer the project's
+        // default when the stored id cannot follow (`harnessSwitchPatch`); otherwise drop the stranded
+        // value so the header cannot keep yesterday's model after the agent (and the list under the
+        // field) changed.
+        if (input.model === undefined) {
+          if (switched.model !== undefined) {
+            model = switched.model;
+            clearModel = false;
+          } else if (switched.clearModel) {
+            clearModel = true;
+            model = undefined;
+          }
         }
         if (switched.clearThinkingLevel) {
           thinkingLevel = undefined;
@@ -900,9 +930,18 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
      */
     "coder.probeSessionOptions": async (params) => {
       const input = parseRpcParams("coder.probeSessionOptions", params) as {
-        harness: HarnessId;
+        harness: string;
         force?: boolean;
       };
+      if (!isHarnessId(input.harness)) {
+        await ensureRunnableAgent(deps.store, input.harness);
+        return {
+          harness: input.harness,
+          outcome: "unreachable" as const,
+          detail:
+            "What this agent offers is learned from a task run, not from a pre-flight check.",
+        };
+      }
       const probeSession = requireProbeSession(deps);
       const answer = await probeSession.probe(input.harness, {
         ...(input.force !== undefined ? { force: input.force } : {}),
@@ -947,7 +986,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
            * Merged rather than replaced, and `""` again means clear for `model`/`extraArgs` — the two
            * fields whose control is a picker with an "agent's own default" slot.
            */
-          defaults?: { harness?: HarnessId; model?: string; extraArgs?: string };
+          defaults?: { harness?: string; model?: string; extraArgs?: string };
           requireApprovalForDestructive?: boolean;
           keepTranscripts?: boolean;
           /**
@@ -961,6 +1000,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
           language?: CoderLanguage;
         };
       };
+      await ensureRunnableAgent(deps.store, input.settings.defaults?.harness);
       const settings = await deps.store.updateSettings(input.settings);
       return { settings };
     },

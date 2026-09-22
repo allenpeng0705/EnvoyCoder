@@ -53,7 +53,19 @@ import { MeshStatusBar } from "./MeshStatusBar.js";
 import { SettingsPane } from "./SettingsPane.js";
 import { useSettingsLayout } from "./SettingsNav.js";
 import { mintPairingCode, type PairPhoneOutcome } from "./settings/PairPhone.js";
+import { ResizeHandle } from "./ResizeHandle.js";
 import type { CoderState } from "../state/coderStore.js";
+import {
+  EXPLORER_WIDTH_DEFAULT,
+  EXPLORER_WIDTH_MAX,
+  EXPLORER_WIDTH_MIN,
+  EXPLORER_WIDTH_VAR,
+  RAIL_WIDTH_DEFAULT,
+  RAIL_WIDTH_MAX,
+  RAIL_WIDTH_MIN,
+  RAIL_WIDTH_VAR,
+  usePanelWidths,
+} from "../layout/panel-widths.js";
 // The logo, bundled by Vite: one import, and the built app carries the file with it (the Tauri build copies the
 // frontend `dist` into the bundle, so an image the window shows has to come through the bundler, not from a path
 // on disk).
@@ -92,6 +104,7 @@ function newTaskIntent(projects: readonly Project[]): { commandId?: string; idPr
 export function CoderApp(props: CoderAppProps): JSX.Element {
   // (the new-task flow is defined inside the component so it can drive the selection)
   const t = useT();
+  const { setRailWidth } = usePanelWidths();
   const { state } = props;
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -665,11 +678,18 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
             onGitMergeContinue={(projectId) => props.actions.gitMergeContinue(projectId)}
             onGitMergeAbort={(projectId) => props.actions.gitMergeAbort(projectId)}
             harnesses={state.harnesses}
+            providers={state.providers}
+            catalog={state.catalog}
             appHarness={state.settings.defaults.harness ?? "envoy-harness"}
             onOpenProjectInNewWindow={canOpenProjectInNewWindow() ? openProjectWindow : undefined}
             onRemoveProject={(projectId) => void removeProjectRow(projectId).then((f) => toRail(projectId, f))}
             focusProjectId={focusProjectId}
             onRenameTask={(taskId, title) => void renameTaskRow(taskId, title).then((f) => toRail(taskId, f))}
+            onChangeTaskHarness={(taskId, harness) => {
+              void props.actions.updateTask({ id: taskId, harness }).then((result) => {
+                toRail(taskId, result.ok ? undefined : result);
+              });
+            }}
             onRemoveTask={(taskId) => void removeTaskRow(taskId).then((f) => toRail(taskId, f))}
             failure={railFailure}
             onOpenCommandCenter={() => openPalette()}
@@ -678,6 +698,16 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
             unavailable={projectsUnavailable}
             tasksUnknown={!state.tasksKnown}
           />
+
+        <ResizeHandle
+          cssVar={RAIL_WIDTH_VAR}
+          edge="start"
+          min={RAIL_WIDTH_MIN}
+          max={RAIL_WIDTH_MAX}
+          defaultWidth={RAIL_WIDTH_DEFAULT}
+          label={t("layout.resize.rail")}
+          onResize={setRailWidth}
+        />
 
         <main className="work">
           {settingsScope !== undefined ? (
@@ -732,13 +762,10 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               events={active.runId ? (state.runs[active.runId]?.events ?? []) : []}
               runLive={runLive}
               harnesses={state.harnesses}
-              appHarness={state.settings.defaults.harness ?? "envoy-harness"}
-              onChangeProjectAgent={async (defaults) => {
-                const project = projectFor(state.projects, active);
-                if (project === undefined) {
-                  return { ok: false as const, message: "No project for this task." };
-                }
-                const result = await props.actions.updateProject({ id: project.id, defaults });
+              providers={state.providers}
+              catalog={state.catalog}
+              onChangeHarness={async (harness) => {
+                const result = await props.actions.updateTask({ id: active.id, harness });
                 if (!result.ok) return result;
                 return { ok: true as const };
               }}

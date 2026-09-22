@@ -21,7 +21,7 @@
  * that is already signed in cannot produce.
  */
 
-import type { AgentAuthObservation, HarnessAuthState, HarnessId } from "@envoydev/protocol";
+import type { AgentAuthObservation, AgentId, HarnessAuthState } from "@envoydev/protocol";
 
 /**
  * The sign-in method to name for an agent that wants one — **or nothing, when naming one would be a guess.**
@@ -92,7 +92,7 @@ export function authStateOf(input: {
  * and `AgentProviderSummary.detail` already follow.
  */
 export function observeAuth(input: {
-  harness: HarnessId;
+  harness: AgentId;
   /** ISO 8601 on the daemon's clock, supplied by the caller that has one. */
   observedAt: string;
   opened: boolean;

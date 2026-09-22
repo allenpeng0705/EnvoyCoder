@@ -396,16 +396,15 @@ describe("an agent row: one line, and not much else", () => {
 
 /* ────────────────────────────── the shape of the page ────────────────────────────── */
 
-describe("the Agents page opens as three counted groups, not one wall", () => {
+describe("the Agents page opens as two counted groups, not three", () => {
   it("carries a count on every group heading, so the page can be sized at a glance", () => {
-    // **The mutation this fails on:** dropping the count. `On this machine`, `Your agents` and `Catalogue` are
-    // three names; with their sizes on them they are three facts, and the third is the one that decides whether
-    // a user looks further. Asserted as `heading + count` rather than as two separate nodes, because that is
-    // what a reader sees.
+    // Built-in harnesses and added providers share one Agents list; Catalogue stays its own disclosure.
     const container = show(appScope("agents"));
     const headings = [...container.querySelectorAll(".settings__heading")].map(textOf);
-    expect(headings).toContain(`${en["settings.agents.shipped.heading"]} · ${state.harnesses.length}`);
-    expect(headings).toContain(`${en["settings.agents.mine.heading"]} · ${state.providers.length}`);
+    expect(headings).toContain(
+      `${en["settings.agents.shipped.heading"]} · ${state.harnesses.length + state.providers.length}`,
+    );
+    expect(headings).not.toContain(`${en["settings.agents.mine.heading"]} · ${state.providers.length}`);
     expect(headings).toContain(`${en["settings.agents.catalog.heading"]} · ${state.catalog.length}`);
   });
 

@@ -33,7 +33,15 @@ import type { JSX, ReactNode } from "react";
 
 import { useI18n } from "../i18n/context.js";
 import { localizeText } from "../i18n/notice.js";
+import {
+  SETTINGS_NAV_WIDTH_DEFAULT,
+  SETTINGS_NAV_WIDTH_MAX,
+  SETTINGS_NAV_WIDTH_MIN,
+  SETTINGS_NAV_WIDTH_VAR,
+  usePanelWidths,
+} from "../layout/panel-widths.js";
 import type { CoderState } from "../state/coderStore.js";
+import { ResizeHandle } from "./ResizeHandle.js";
 
 export interface SettingsShellProps {
   title: string;
@@ -60,8 +68,10 @@ export interface SettingsShellProps {
 
 export function SettingsShell(props: SettingsShellProps): JSX.Element {
   const { t } = useI18n();
+  const { setSettingsNavWidth } = usePanelWidths();
+  const withNav = props.nav !== undefined;
   return (
-    <section className={`pane${props.nav !== undefined ? " pane--sections" : ""}`} aria-label={props.ariaLabel}>
+    <section className={`pane${withNav ? " pane--sections" : ""}`} aria-label={props.ariaLabel}>
       <header className="pane__header">
         <div className="pane__title-group">
           {props.back !== undefined ? (
@@ -104,9 +114,21 @@ export function SettingsShell(props: SettingsShellProps): JSX.Element {
           leftover height and the header its own, so a list of forty projects moves under a header that
           stays put — measured in a real window rather than asserted here (docs/settings-parity.md §7.5).
           The bar, when there is one, is a **column of this row**, not a row of its own: it scrolls
-          independently and its own width never pushes the content out of the window. */}
+          independently and its own width never pushes the content out of the window. Drag the handle
+          between bar and body to change that column — same chrome persistence as the project rail. */}
       <div className="settings-layout">
         {props.nav}
+        {withNav ? (
+          <ResizeHandle
+            cssVar={SETTINGS_NAV_WIDTH_VAR}
+            edge="start"
+            min={SETTINGS_NAV_WIDTH_MIN}
+            max={SETTINGS_NAV_WIDTH_MAX}
+            defaultWidth={SETTINGS_NAV_WIDTH_DEFAULT}
+            label={t("layout.resize.settingsNav")}
+            onResize={setSettingsNavWidth}
+          />
+        ) : null}
         <div className="settings">{props.children}</div>
       </div>
     </section>

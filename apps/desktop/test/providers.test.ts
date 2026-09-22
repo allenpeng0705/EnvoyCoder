@@ -42,7 +42,7 @@ import {
   resolveProviderEnv,
 } from "@envoydev/agent-catalog";
 
-import { launchForHarness, launchForProvider } from "../src/daemon/launch.js";
+import { launchForAgent, launchForHarness, launchForProvider } from "../src/daemon/launch.js";
 import { createProviderHandlers } from "../src/daemon/providers.js";
 import { CoderStore } from "../src/daemon/store.js";
 import { CATALOGUES } from "../src/i18n/catalogues.js";
@@ -216,6 +216,30 @@ describe("a provider launches through the same path as a catalogue entry", () =>
         expect(code, harness).toBe(ENVOYDEV_ERRORS.harnessUnsupported);
       }
     }
+  });
+
+  it("starts an added provider and refuses a slug that was never added", () => {
+    const added = provider({ id: "goose", label: "Goose" });
+    const missing = refusalOf(() =>
+      launchForAgent({
+        id: "goose",
+        cwd: "/tmp",
+        paths: coderPaths("/tmp/envoydev-home"),
+        searchDirs: [],
+      }),
+    );
+    expect(missing.code).toBe(ENVOYDEV_ERRORS.agentUnknown);
+    // The same body as launchForProvider: a missing program is not "unknown agent".
+    const launched = refusalOf(() =>
+      launchForAgent({
+        id: "goose",
+        provider: added,
+        cwd: "/tmp",
+        paths: coderPaths("/tmp/envoydev-home"),
+        searchDirs: [],
+      }),
+    );
+    expect(launched.code).not.toBe(ENVOYDEV_ERRORS.agentUnknown);
   });
 
   it("refuses a command-line provider with the same code a command-line catalogue entry gets", () => {

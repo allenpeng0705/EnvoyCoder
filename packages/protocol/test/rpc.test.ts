@@ -509,6 +509,13 @@ describe("the thinking level an agent offers, and what 'no list' means", () => {
       updatedAt: "2026-09-13T10:00:00.000Z",
     };
     expect(TaskSchema.safeParse({ ...task, thinkingLevel: "max" }).success).toBe(true);
+    // An added provider is a task agent. A catalogue recipe that was never Added is still a slug
+    // here; the daemon is what refuses it. A capitalised id is not a slug at all.
+    expect(TaskSchema.safeParse({ ...task, harness: "goose" }).success).toBe(true);
+    expect(TaskSchema.safeParse({ ...task, harness: "Goose" }).success).toBe(false);
+    expect(
+      RPC_SPECS["coder.createTask"].params.safeParse({ projectId: "p", title: "t", harness: "goose" }).success,
+    ).toBe(true);
     // An empty level is not stored — the *absence* of the key is what "the agent decides" means.
     expect(TaskSchema.safeParse({ ...task, thinkingLevel: "" }).success).toBe(false);
     expect(RunEventSchema.safeParse({

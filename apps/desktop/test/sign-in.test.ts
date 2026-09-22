@@ -426,7 +426,11 @@ describe("the method, and the daemon that has no flow to serve it", () => {
     // A daemon built without an agent runtime cannot start an agent, so the method refuses **by name** rather
     // than answering with an outcome nothing produced — the same rule, sentence and key `requireRuns` and
     // `requireProbeSession` follow, because one missing runtime is one situation.
-    const handlers = createSignInHandlers({}) as Record<string, CoderHandler>;
+    const emptyRoot = await mkdtemp(join(tmpdir(), "envoydev-signin-wire-"));
+    cleanups.push(async () => rm(emptyRoot, { recursive: true, force: true }));
+    const emptyPaths = coderPaths(emptyRoot);
+    const emptyStore = await CoderStore.open({ paths: emptyPaths });
+    const handlers = createSignInHandlers({ store: emptyStore }) as Record<string, CoderHandler>;
     let code: string | null = null;
     let key: string | undefined;
     try {
@@ -469,13 +473,18 @@ describe("the method, and the daemon that has no flow to serve it", () => {
 
     // An id the wire schema refuses is refused by the schema, with no sentence for a user: this is a call
     // addressed to whoever wrote the client.
-    await expect(withFlow["coder.signInAgent"]?.({ harness: "not-a-harness" }, { session: undefined })).rejects.toThrow(
+    await expect(withFlow["coder.signInAgent"]?.({ harness: "Not a harness" }, { session: undefined })).rejects.toThrow(
       /coder\.signInAgent was called with an unusable/,
     );
     // And a real one reaches the flow, which reports what this machine can do with `opencode` — an agent this
     // build cannot launch, so the answer is `unavailable` rather than a sign-in nobody could perform.
     const answer = (await withFlow["coder.signInAgent"]?.({ harness: "opencode" }, { session: undefined })) as { outcome: string };
     expect(answer.outcome).toBe("unavailable");
+
+    // An id that is neither shipped nor Added is refused before anything is spawned.
+    await expect(
+      withFlow["coder.signInAgent"]?.({ harness: "not-added-agent" }, { session: undefined }),
+    ).rejects.toThrow(/agent-unknown|catalogues/);
   });
 });
 

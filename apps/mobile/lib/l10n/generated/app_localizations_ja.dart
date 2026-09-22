@@ -1191,6 +1191,14 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String composerAgentValue(String value) {
+    return 'エージェント: $value';
+  }
+
+  @override
+  String get composerAgentTooltip => 'このタスクのコーディングエージェントを変更';
+
+  @override
   String composerThinkingValue(String value) {
     return '思考: $value';
   }

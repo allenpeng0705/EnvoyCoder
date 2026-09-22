@@ -25,7 +25,7 @@ import { useState } from "react";
 
 import type { CoderSettings, HarnessId } from "@envoydev/protocol";
 
-import { offeredAgents } from "../../composer/agent-for.js";
+import { mergeOfferedAgents } from "../../composer/agent-for.js";
 import { useI18n } from "../../i18n/context.js";
 import { LOCALES, LOCALE_LABELS } from "../../i18n/locales.js";
 import { FolderSetting, SettingRow, TextSetting } from "../SettingsRows.js";
@@ -130,7 +130,11 @@ export function TasksSection(props: SettingsSectionProps): JSX.Element {
   // established is absent and orders the rest by how usable it says it is; nothing a user stored can enter
   // into it, which is why this row cannot be made to forget an agent. See its doc for the reasoning, and the
   // note under the select for where the ones it drops are.
-  const available = offeredAgents(props.state.harnesses);
+  const available = mergeOfferedAgents({
+    harnesses: props.state.harnesses,
+    providers: props.state.providers,
+    catalog: props.state.catalog,
+  });
   const defaultHarness = settings.defaults.harness ?? "envoy-harness";
 
   return (
@@ -150,7 +154,7 @@ export function TasksSection(props: SettingsSectionProps): JSX.Element {
               value={defaultHarness}
               aria-label={t("settings.defaultHarness.title")}
               onChange={(event) =>
-                write(props.onUpdate({ defaults: { harness: event.target.value as HarnessId } }))
+                write(props.onUpdate({ defaults: { harness: event.target.value } }))
               }
             >
               {available.some((entry) => entry.id === defaultHarness) ? null : (

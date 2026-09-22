@@ -69,6 +69,7 @@ import { useEffect, useState, type JSX } from "react";
 // `./features`, not the package root. The root pulls `node:fs` and the window goes white.
 import { composerFeatures, type AgentFeatureId } from "@envoydev/agent-catalog/features";
 import type { HarnessId } from "@envoydev/protocol";
+import { isHarnessId } from "@envoydev/protocol";
 
 import {
   modeDescription,
@@ -175,7 +176,7 @@ export interface ComposerControlsProps {
   modelBareId?: boolean;
   /** Which task these toggles belong to. A change resets a press that has not been saved yet. */
   taskId?: string;
-  harness?: HarnessId;
+  harness?: string;
   /** Remembered Fast. Absent is off, which is also the agent's own default. */
   fastMode?: boolean;
   /** Remembered Plan. Absent is off. */
@@ -274,7 +275,9 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
         : undefined;
 
   const features =
-    props.harness === undefined ? [] : composerFeatures(props.harness, props.selectedModelId);
+    props.harness !== undefined && isHarnessId(props.harness)
+      ? composerFeatures(props.harness, props.selectedModelId)
+      : [];
   const [pending, setPending] = useState<Partial<Record<AgentFeatureId, boolean>>>({});
   useEffect(() => {
     setPending({});

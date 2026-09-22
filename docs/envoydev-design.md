@@ -31,7 +31,7 @@ The owner's instruction was explicit, and it splits cleanly in two:
 ## 3. The left rail, and why it is not Paseo's
 
 Paseo's sidebar is a list of what they call *workspaces* grouped by project (their word; ours is a **task**). EnvoyMesh's Coding tab is a **tree**:
-a project is a row you can collapse and configure, and it names the agent its children inherit.
+a project is a row you can collapse and configure, and it names the default agent new tasks start with.
 
 The owner's instruction was to follow EnvoyMesh here, and the reason holds up:
 

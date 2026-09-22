@@ -2154,6 +2154,18 @@ abstract class AppLocalizations {
   /// **'Mode: {value}'**
   String composerModeValue(String value);
 
+  /// composeragentvalue — The Agent chip: category and current value.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent: {value}'**
+  String composerAgentValue(String value);
+
+  /// composeragenttooltip — Reused from desktop task.agent.picker.title
+  ///
+  /// In en, this message translates to:
+  /// **'Change the coding agent for this task'**
+  String get composerAgentTooltip;
+
   /// composerthinkingvalue — The Thinking chip: category and current value.
   ///
   /// In en, this message translates to:

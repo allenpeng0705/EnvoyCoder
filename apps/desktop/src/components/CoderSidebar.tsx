@@ -9,7 +9,7 @@
  * concrete — Paseo's sidebar is a list of what they call workspaces (our **tasks**) grouped by
  * project, where the group is a
  * heading; EnvoyMesh's is a *tree*, where the group is a row you can collapse, configure, and
- * that names the agent its children inherit.
+ * that names the default agent new tasks start with.
  *
  * That difference earns its keep the moment there is real work in flight:
  *
@@ -38,11 +38,14 @@ import { RowMenu } from "./RowMenu.js";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
-  type HarnessId,
+  type AgentId,
+  type AgentProviderSummary,
+  type CatalogEntry,
   type HarnessSummary,
   type Project,
   type Task,
   type TaskDefaults,
+  isHarnessId,
   statusNeedsHuman,
 } from "@envoydev/protocol";
 import {
@@ -56,6 +59,7 @@ import {
 import { useT } from "../i18n/context.js";
 import { localize, statusKey, type Notice, type Refusal } from "../i18n/notice.js";
 import { harnessBadge } from "../composer/harness-label.js";
+import { mergeOfferedAgents } from "../composer/agent-for.js";
 import type { GitSnapshot } from "../state/coderStore.js";
 
 import { ProjectAgentPicker } from "./ProjectAgentPicker.js";
@@ -72,7 +76,8 @@ export interface CoderSidebarProps {
   onAddProject: () => void;
   onOpenProjectSettings: (project: Project) => void;
   /**
-   * Change a project's coding agent from the rail badge. Migrates idle tasks on the daemon.
+   * Change a project's default coding agent from the rail badge. New tasks start with it;
+   * existing tasks keep the agent they already have.
    */
   onChangeProjectAgent?: (
     project: Project,
@@ -105,10 +110,14 @@ export interface CoderSidebarProps {
   onGitMergeContinue?: (projectId: string) => Promise<{ ok: true; sha: string } | Refusal>;
   /** Take a merge in progress back. */
   onGitMergeAbort?: (projectId: string) => Promise<{ ok: true } | Refusal>;
-  /** Agents this daemon lists — for the project agent menu. */
+  /** Agents this daemon lists — for the project default and this-task agent menus. */
   harnesses?: readonly HarnessSummary[];
+  /** Providers the user added. They join the same menus once they are not known-missing. */
+  providers?: readonly AgentProviderSummary[];
+  /** Catalogue recipes — choosing one auto-Adds on the daemon. */
+  catalog?: readonly CatalogEntry[];
   /** App-wide default agent when a project has not set its own. */
-  appHarness?: HarnessId;
+  appHarness?: AgentId;
   /**
    * Open this project in a new window (desktop shell only).
    *
@@ -127,6 +136,12 @@ export interface CoderSidebarProps {
   onRemoveProject: (projectId: string) => void;
   /** Rename a task. The daemon stores the title (`coder.updateTask`); the row edits it in place. */
   onRenameTask: (taskId: string, title: string) => void;
+  /**
+   * Change this *task's* coding agent from the row menu. Applies to the next run.
+   *
+   * Absent when the rail has no write path (a test that only renders the tree).
+   */
+  onChangeTaskHarness?: (taskId: string, harness: AgentId) => void;
   /**
    * Take a task out of the rail.
    *
@@ -353,12 +368,16 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                       project={group.project}
                       appHarness={props.appHarness ?? "envoy-harness"}
                       harnesses={props.harnesses}
+                      {...(props.providers !== undefined ? { providers: props.providers } : {})}
+                      {...(props.catalog !== undefined ? { catalog: props.catalog } : {})}
                       appearance="rail"
                       onChoose={(defaults) => props.onChangeProjectAgent!(group.project, defaults)}
                     />
                   ) : (
                     <span className="project__agent" title={t("sidebar.project.agent")}>
-                      {harnessBadge(group.defaultHarness)}
+                      {isHarnessId(group.defaultHarness)
+                        ? harnessBadge(group.defaultHarness)
+                        : group.defaultHarness}
                     </span>
                   )}
                   {props.onReadGit !== undefined &&
@@ -451,7 +470,11 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                           active={row.task.id === props.activeTaskId}
                           onSelect={props.onSelect}
                           onRenameTask={props.onRenameTask}
+                          onChangeTaskHarness={props.onChangeTaskHarness}
                           onRemoveTask={props.onRemoveTask}
+                          harnesses={props.harnesses}
+                          providers={props.providers}
+                          catalog={props.catalog}
                         />
                         {props.failure?.rowId === row.task.id ? (
                           <p className="sidebar__failure" role="status">
@@ -506,12 +529,28 @@ function TaskRow(input: {
   active: boolean;
   onSelect: (taskId: string) => void;
   onRenameTask: (taskId: string, title: string) => void;
+  onChangeTaskHarness?: (taskId: string, harness: AgentId) => void;
   onRemoveTask: (taskId: string) => void;
+  harnesses?: readonly HarnessSummary[];
+  providers?: readonly AgentProviderSummary[];
+  catalog?: readonly CatalogEntry[];
 }): JSX.Element {
   const t = useT();
   const task = input.row.task;
   const needsHuman = statusNeedsHuman(task.status);
   const name = task.title || t("task.untitled");
+  const agentOptions =
+    input.onChangeTaskHarness !== undefined && input.harnesses !== undefined
+      ? mergeOfferedAgents({
+          harnesses: input.harnesses,
+          ...(input.providers !== undefined ? { providers: input.providers } : {}),
+          ...(input.catalog !== undefined ? { catalog: input.catalog } : {}),
+        }).map((entry) => ({
+          id: entry.id,
+          label: entry.label,
+          current: entry.id === task.harness,
+        }))
+      : [];
 
   /** The row is being renamed, so the title slot is a field instead of a button. */
   const [renaming, setRenaming] = useState(false);
@@ -593,7 +632,9 @@ function TaskRow(input: {
               ) : null}
             </span>
             <span className="task-row__sub">
-              <span className="task-row__harness">{harnessBadge(task.harness)}</span>
+              <span className="task-row__harness">
+                {isHarnessId(task.harness) ? harnessBadge(task.harness) : task.harness}
+              </span>
               {task.worktree ? (
                 <span className="task-row__branch" title={task.worktree.path}>
                   {task.worktree.branch}
@@ -626,6 +667,19 @@ function TaskRow(input: {
             },
           },
         ]}
+        pick={
+          agentOptions.length > 0
+            ? {
+                label: t("sidebar.task.changeAgent"),
+                ariaLabel: t("task.agent.picker.menu"),
+                options: agentOptions,
+                onChoose: (id) => {
+                  const chosen = agentOptions.find((option) => option.id === id);
+                  if (chosen !== undefined) input.onChangeTaskHarness!(task.id, chosen.id);
+                },
+              }
+            : undefined
+        }
         confirm={{
           label: t("task.remove"),
           ariaLabel: t("task.remove.aria"),

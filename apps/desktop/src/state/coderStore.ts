@@ -1357,7 +1357,7 @@ export class CoderStore {
    * disagree with it about when the list is current.
    */
   async probeSessionOptions(
-    harness: HarnessId,
+    harness: string,
     options: { force?: boolean } = {},
   ): Promise<{ ok: true; outcome: ProbeOutcome; detail: string } | Refusal> {
     return this.mutate(
@@ -1469,7 +1469,7 @@ export class CoderStore {
   async createTask(input: {
     projectId: string;
     title: string;
-    harness?: HarnessId;
+    harness?: string;
     model?: string;
   }): Promise<{ ok: true; task: Task } | Refusal> {
     return this.mutate("coder.createTask", input, (result) => {
@@ -1489,6 +1489,8 @@ export class CoderStore {
       title?: string;
       pinned?: boolean;
       cwd?: string;
+      /** This task's agent. Applies to the next run; a live process keeps the one it started with. */
+      harness?: string;
       agentModeId?: string;
       /**
        * The model for this task's next run, provider-qualified — or `""` for **the agent's own
@@ -1601,7 +1603,7 @@ export class CoderStore {
    * was. Only a failure of the *call* is a `Refusal` — no connection, a method this daemon lacks.
    */
   async signInAgent(
-    harness: HarnessId,
+    harness: string,
     options: { methodId?: string } = {},
   ): Promise<{ ok: true; outcome: SignInOutcome; detail: string } | Refusal> {
     return this.mutate(

@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "app.envoydev.envoydev_mobile"
+    namespace = "com.envoymesh.envoydev"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,8 +15,8 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "app.envoydev.envoydev_mobile"
+        // Same id as iOS (`PRODUCT_BUNDLE_IDENTIFIER`) — one store brand, both platforms.
+        applicationId = "com.envoymesh.envoydev"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

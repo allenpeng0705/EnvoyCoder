@@ -514,10 +514,10 @@ export function createGitHandlers(deps: GitHandlerDeps): Partial<Record<RpcMetho
       }
 
       /**
-       * The task is created **first**, and it is an ordinary task in the project: it follows the project's own
-       * agent setting, it appears in the rail beside the user's other work, and its run can be watched,
-       * steered and answered like any other. A resolution that happened in a hidden mechanism would be a
-       * second, less trustworthy kind of run.
+       * The task is created **first**, and it is an ordinary task in the project: it starts on the
+       * project's default agent, it appears in the rail beside the user's other work, and its run can
+       * be watched, steered and answered like any other. A resolution that happened in a hidden
+       * mechanism would be a second, less trustworthy kind of run.
        *
        * Its folder is the **repository root** rather than the project's directory, because that is where the
        * conflicted paths in the prompt are relative to, and the merge itself runs there.

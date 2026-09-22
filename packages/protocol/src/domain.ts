@@ -168,6 +168,33 @@ export function isBuiltInHarness(value: string): boolean {
 export const PROVIDER_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
 /**
+ * An agent a **task** may name — a shipped `HarnessId`, or the id of a provider the user added.
+ *
+ * ## Why this is not a widening of `HarnessId`
+ *
+ * `HarnessId` is a closed union the catalogue branches on exhaustively (`harnessLabel`,
+ * `resolveAgentMode`, `resolveModelDelivery`). A user's Goose id in that union would either be a lie
+ * about what we ship, or a default in every one of those functions. So the shipped nine stay a
+ * `HarnessId`. What a task, a project default, a sign-in and a session observation name is this wider
+ * id: the same slug `coder.addProvider` already stores.
+ *
+ * The wire accepts any well-formed slug. The daemon is what checks the Add gate — the id must be one
+ * of the nine or a row in `providers.json` — because a schema cannot see that file.
+ */
+export type AgentId = string;
+
+export const AgentIdSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(PROVIDER_ID_PATTERN, "expected a lowercase id like `goose`");
+
+/** A shipped agent, or a slug that could name one the user added. */
+export function isAgentId(value: string): value is AgentId {
+  return AgentIdSchema.safeParse(value.trim()).success;
+}
+
+/**
  * What an environment variable **name** looks like — and why this is a pattern rather than `min(1)`.
  *
  * `AgentProviderConfig.env` holds names, and this is the rule that keeps it that: a name is
@@ -339,10 +366,9 @@ export interface AgentProviderConfig {
  *      ever ask it for — the shape promising a step that cannot happen.
  *   3. **No repeated environment name.** Two identical names are one variable, and a list that says
  *      otherwise makes "which of these is unset" unanswerable.
- *   4. **A reference names a catalogue entry, and only a catalogue entry can.** `catalogEntryId` is the
- *      same slug shape as an id, and it may not be the provider's own id — a provider that claimed to be
- *      the entry it says it came from would be a reference to itself, which resolves to nothing and reads
- *      as though something had been checked.
+ *   4. **A reference names a catalogue entry.** `catalogEntryId` is the same slug shape as an id. It may
+ *      equal the provider's own id when the provider *is* that recipe (auto-Add from a picker) — env
+ *      resolution looks up `acpAgent(catalogEntryId)`, not the provider row, so there is no self-loop.
  */
 export const AgentProviderConfigSchema = z
   .object({
@@ -393,20 +419,13 @@ export const AgentProviderConfigSchema = z
       if (seen.has(name)) fail(`"${name}" is named twice, and one variable is one variable`, `env.${index}`);
       seen.add(name);
     });
-    if (value.catalogEntryId === value.id) {
-      fail(
-        `a provider cannot be the catalogue entry it says it came from — the reference would resolve to ` +
-          `the provider itself`,
-        "catalogEntryId",
-      );
-    }
   });
 
 /* ────────────────────────────── the domain ───────────────────────────── */
 
 /**
  * A **project** is a registered root — a directory on a host that the user has said "this is
- * somewhere I work". It carries the defaults new tasks inherit.
+ * somewhere I work". It carries the defaults new tasks start with.
  *
  * The naming and the relationship are inherited deliberately (see `docs/envoydev-ui.md`):
  * a project is a *place*, a task is a *task in that place*. Keeping them distinct is what
@@ -422,7 +441,7 @@ export interface Project {
   /** Which machine this path is on (`"local"` or a paired host id). */
   hostId: string;
   addedAt: string;
-  /** Defaults inherited by new tasks under this project. */
+  /** Defaults new tasks under this project start with. */
   defaults?: TaskDefaults;
   /** VCS hint, discovered or set. */
   vcs?: { kind: "git" | "jj" | "none"; branch?: string };
@@ -431,7 +450,8 @@ export interface Project {
 }
 
 export interface TaskDefaults {
-  harness?: HarnessId;
+  /** A shipped agent, or a provider the user added. The daemon refuses anything else. */
+  harness?: AgentId;
   /** Provider-qualified model, e.g. `anthropic/claude-sonnet-4.5`, `deepseek/deepseek-v4`. */
   model?: string;
   /** Extra argv handed to the harness, as the user typed it. */
@@ -453,7 +473,13 @@ export interface Task {
   cwd: string;
   /** What the user asked for, shown as the row title. */
   title: string;
-  harness: HarnessId;
+  /**
+   * The agent assigned to this task — one of the nine we ship, or a provider the user added.
+   *
+   * A catalogue recipe that was never Added cannot sit here. The wire accepts the slug; the daemon
+   * refuses an id that is neither `isHarnessId` nor a stored provider.
+   */
+  harness: AgentId;
   /** Provider-qualified model actually used (defaults resolved at creation). */
   model?: string;
   /**
@@ -636,7 +662,8 @@ export function isRunMode(value: string): value is RunMode {
 export interface AgentRun {
   id: string;
   taskId: string;
-  harness: HarnessId;
+  /** The agent this run was started with — a shipped id or an added provider. */
+  harness: AgentId;
   model?: string;
   /**
    * The agent's own thinking-level id this run was started with, when one was chosen.
@@ -694,7 +721,7 @@ export interface RunEventBase {
 export type RunEvent =
   | (RunEventBase & {
       kind: "run.started";
-      harness: HarnessId;
+      harness: AgentId;
       model?: string;
       /** The thinking level the run was started with, as the agent's own id. See `AgentRun`. */
       thinkingLevel?: string;
@@ -911,6 +938,19 @@ export const ENVOYDEV_ERRORS = {
    * name" — one is a list the user edits, the other is the rail.
    */
   providerMissing: "envoydev.provider-missing",
+  /**
+   * A task, a project default, or the app default still names this provider.
+   *
+   * Distinct from `providerMissing`: the row exists, and forgetting it would leave those rows naming
+   * an agent that can no longer be launched. The sentence says which, so the user can move them first.
+   */
+  providerInUse: "envoydev.provider-in-use",
+  /**
+   * A task or a default named an id that is neither a shipped agent nor one the user added.
+   *
+   * The Add gate, on the wire. A catalogue recipe that was never Added is exactly this refusal.
+   */
+  agentUnknown: "envoydev.agent-unknown",
   /**
    * The id a user asked to add names an agent we already ship.
    *
@@ -1220,7 +1260,7 @@ export const RPC_METHODS = [
    * would leave the user with half of each — see `CoderStore.addProvider`.
    */
   "coder.addProvider",
-  /** Forget a provider. Nothing is launched and nothing else is touched. */
+  /** Forget a provider. Refused while a task or a default still names it. */
   "coder.removeProvider",
   /**
    * **Trigger the agent's own sign-in flow**, and report truthfully whether a session opens afterwards.
@@ -1235,11 +1275,8 @@ export const RPC_METHODS = [
    * owns is the *attempt* and the honest report of it — the result is one of `SIGN_IN_OUTCOMES`, and the
    * only member that means success is the one that opened a session.
    *
-   * Named agents rather than providers, and the parameter type says so: a provider is not runnable by a
-   * task yet and nothing in this daemon opens a session with one, so there is no flow here to trigger. When
-   * a task can run on a provider, this method's `harness` becomes the same kind of id `coder.addProvider`
-   * and `coder.removeProvider` already take — and that is a change to make deliberately, against a probe
-   * that exists, rather than a field widened in advance.
+   * The parameter is an `AgentId`: one of the nine we ship, or a provider the user added. A catalogue
+   * recipe that was never Added has no row to sign in, and the daemon refuses it as `agentUnknown`.
    */
   "coder.signInAgent",
   /**
@@ -1502,7 +1539,7 @@ export const DEFAULT_CODER_SETTINGS: CoderSettings = {
  */
 export const ProjectDefaultsPatchSchema = z
   .object({
-    harness: HarnessIdSchema.optional(),
+    harness: AgentIdSchema.optional(),
     model: z.string().optional(),
     extraArgs: z.string().optional(),
   })
@@ -1511,7 +1548,7 @@ export const ProjectDefaultsPatchSchema = z
 /** The stored shape: `""` is not a value a settings file may hold. */
 const ProjectDefaultsSchema = z
   .object({
-    harness: HarnessIdSchema.optional(),
+    harness: AgentIdSchema.optional(),
     model: z.string().min(1).optional(),
     extraArgs: z.string().optional(),
   })

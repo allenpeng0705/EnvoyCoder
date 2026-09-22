@@ -30,12 +30,18 @@ import 'package:flutter_test/flutter_test.dart';
 /// `testWidgets` body fails for leaving pending. It throws on any method the screen is not expected to
 /// call, so the test cannot pass by serving an answer the real daemon would not.
 class _StubClient extends HostClient {
-  _StubClient(super.host, {List<Map<String, dynamic>>? projects, List<Map<String, dynamic>>? tasks})
-      : projects = List.of(projects ?? const []),
-        tasks = List.of(tasks ?? const []);
+  _StubClient(
+    super.host, {
+    List<Map<String, dynamic>>? projects,
+    List<Map<String, dynamic>>? tasks,
+    List<Map<String, dynamic>>? harnesses,
+  })  : projects = List.of(projects ?? const []),
+        tasks = List.of(tasks ?? const []),
+        harnesses = List.of(harnesses ?? const []);
 
   final List<Map<String, dynamic>> projects;
   final List<Map<String, dynamic>> tasks;
+  final List<Map<String, dynamic>> harnesses;
 
   /// When set, the two write methods refuse — the stand-in for an older daemon (method not found) or a
   /// link that drops mid-call.
@@ -70,9 +76,16 @@ class _StubClient extends HostClient {
       case 'coder.listTasks':
         return {'tasks': List<Map<String, dynamic>>.from(tasks)};
       case 'coder.listHarnesses':
-        return {'harnesses': <Map<String, dynamic>>[]};
+        return {'harnesses': List<Map<String, dynamic>>.from(harnesses)};
       case 'coder.getSettings':
         return {'settings': <String, dynamic>{}};
+      case 'coder.updateTask':
+        if (failWrites) throw StateError('refused');
+        final id = params['id'];
+        final index = tasks.indexWhere((task) => task['id'] == id);
+        if (index < 0) throw StateError('no such task $id');
+        tasks[index] = {...tasks[index], ...params};
+        return {'task': tasks[index]};
       case 'coder.removeProject':
         if (failWrites) throw StateError('refused');
         final id = params['id'];
@@ -179,11 +192,13 @@ Future<_StubClient> _pumpScreen(
   WidgetTester tester, {
   List<Map<String, dynamic>>? projects,
   List<Map<String, dynamic>>? tasks,
+  List<Map<String, dynamic>>? harnesses,
 }) async {
   final client = _StubClient(
     _host,
     projects: projects ?? [_projectA, _projectB],
     tasks: tasks ?? [_taskA],
+    harnesses: harnesses,
   );
   await tester.pumpWidget(
     MaterialApp(
@@ -248,6 +263,43 @@ void main() {
     // The operation is archive; the menu says Remove, and the *dialog* behind it is what stays honest
     // (see the task-removal test below). No screen may claim a delete the protocol does not have.
     expect(find.textContaining('Delete'), findsNothing);
+    await _finish(client);
+  });
+
+  testWidgets('the task row\'s … menu can change this task\'s agent', (tester) async {
+    final client = await _pumpScreen(
+      tester,
+      tasks: [
+        {..._taskA, 'harness': 'envoy-harness'},
+      ],
+      harnesses: [
+        {
+          'id': 'envoy-harness',
+          'label': 'Envoy Harness',
+          'availability': {'state': 'ready'},
+        },
+        {
+          'id': 'deepseek-harness',
+          'label': 'DeepSeek Harness',
+          'availability': {'state': 'ready'},
+        },
+      ],
+    );
+
+    await tester.tap(_taskMenuButton('Fix the tests'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ListTile, 'Change agent'), findsOneWidget);
+
+    await tester.tap(find.text('Change agent'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('DeepSeek Harness'));
+    await tester.pumpAndSettle();
+
+    expect(client.writesTo('coder.updateTask'), 1);
+    expect(
+      client.calls.lastWhere((c) => c.method == 'coder.updateTask').params['harness'],
+      'deepseek-harness',
+    );
     await _finish(client);
   });
 

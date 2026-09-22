@@ -115,7 +115,9 @@ export function createProviderHandlers(
       return {
         providers: deps.store
           .providers()
-          .map((provider) => summarizeProvider(provider, deps.probe, deps.env)),
+          .map((provider) =>
+            summarizeProvider(provider, deps.probe, deps.env, deps.store.agentAuth(provider.id)),
+          ),
       };
     },
 
@@ -277,6 +279,13 @@ export function createProviderHandlers(
           ENVOYDEV_ERRORS.providerMissing,
           `There is no agent provider called "${id}" here. It may have been removed from another window.`,
           ref("error.providerNotFound", { id }),
+        );
+      }
+      if ("inUse" in result) {
+        throw coderError(
+          ENVOYDEV_ERRORS.providerInUse,
+          `"${id}" is still used by ${result.inUse}, so it was not removed. Move those onto another agent first.`,
+          ref("error.providerInUse", { id, where: result.inUse }),
         );
       }
       return { removed: result.removed };

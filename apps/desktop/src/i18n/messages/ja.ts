@@ -49,6 +49,9 @@ export const ja: Catalogue = {
 
   /* ── the rail ── */
   "sidebar.aria": "プロジェクトとタスク",
+  "layout.resize.rail": "プロジェクト一覧の幅を変更",
+  "layout.resize.settingsNav": "設定セクション一覧の幅を変更",
+  "layout.resize.explorer": "ファイルエクスプローラーの幅を変更",
   "sidebar.add": "+ プロジェクトを追加",
   "sidebar.add.title": "作業するディレクトリをプロジェクトとして登録",
   "sidebar.command.title": "コマンドパレットを開く",
@@ -61,7 +64,7 @@ export const ja: Catalogue = {
   "sidebar.attention.one": "1 件のタスクがあなたを待っています",
   "sidebar.attention.many": "{count} 件のタスクがあなたを待っています",
   "sidebar.empty.title": "まだプロジェクトがありません",
-  "sidebar.empty.body": "作業するディレクトリを追加してください。そこで開始したタスクがここに並び、プロジェクトはどのエージェントを使うべきかを覚えています。",
+  "sidebar.empty.body": "作業するディレクトリを追加してください。そこで開始したタスクがここに並び、プロジェクトは新しいタスクが始める既定のエージェントを覚えています。",
   "sidebar.empty.noMatch": "「{query}」に一致するものはありません。",
   "sidebar.empty.cannotLoadTitle": "プロジェクトを読み込めませんでした",
   "sidebar.empty.cannotLoadBody": "この一覧は空ではなく不明です — EnvoyDev はデーモンに問い合わせられませんでした。",
@@ -71,6 +74,9 @@ export const ja: Catalogue = {
   "project.agent.picker.aria": "このプロジェクトのコーディングエージェント: {agent}。変更",
   "project.agent.picker.title": "このプロジェクトのコーディングエージェントを変更",
   "project.agent.picker.menu": "このプロジェクトのコーディングエージェント",
+  "task.agent.picker.aria": "このタスクのコーディングエージェント: {agent}。変更",
+  "task.agent.picker.title": "このタスクのコーディングエージェントを変更",
+  "task.agent.picker.menu": "このタスクのコーディングエージェント",
   "sidebar.project.settings": "プロジェクト設定",
   "sidebar.project.newTask": "+ 新規",
   "sidebar.project.newTask.title": "{project} でタスクを開始",
@@ -88,6 +94,7 @@ export const ja: Catalogue = {
   "sidebar.task.menu.title": "タスクの操作",
   "sidebar.task.rename": "名前を変更",
   "sidebar.task.rename.aria": "このタスクの新しい名前",
+  "sidebar.task.changeAgent": "エージェントを変更",
   "sidebar.tasks.empty": "ここにはまだタスクがありません。",
   "sidebar.pair": "スマートフォンをペアリング",
   "sidebar.settings": "設定",
@@ -405,9 +412,9 @@ export const ja: Catalogue = {
   "settings.projects.note": "各プロジェクトはこのコンピューターの設定を上書きできます。選択すると、そのプロジェクト自身の設定が開きます。",
   "settings.projects.empty": "プロジェクトはまだありません。プロジェクトとは、エージェントが作業するこのコンピューター上のフォルダーです。プロジェクトバーの上部にある{add}で追加するか、コマンドパレットから追加してください。",
   "settings.agents.empty": "エージェント一覧はまだ届いていません。",
-  "settings.agents.shipped.heading": "このマシン上",
+  "settings.agents.shipped.heading": "エージェント",
   "settings.agents.mine.heading": "あなたのエージェント",
-  "settings.agents.mine.empty": "まだ自分のエージェントを追加していません。以下のものはどれでもここで追加でき、一覧にないプログラムも追加できます。",
+  "settings.agents.mine.empty": "カタログからまだ何も追加していません。下を見てエージェントをこの一覧に載せるか、カタログにないプログラムを宣言できます。",
   "settings.agents.mine.command": "実行コマンド: {command}",
   "settings.agents.mine.remove": "削除",
   "settings.agents.mine.remove.title": "{agent} を忘れます。アンインストールは行われず、ほかの何も変更されません。",
@@ -456,6 +463,8 @@ export const ja: Catalogue = {
   "settings.agents.row.adding": "追加中…",
   "settings.agents.row.add.title": "{agent} をあなたのエージェントに追加します。コマンドラインと環境はこの項目に書かれているとおりそのまま使われます——レシピ自身の定数も一緒に引き継がれ、レシピが設定しない変数はあなたが設定するままです。",
   "settings.agents.row.builtIn": "このエージェントは EnvoyDev に同梱されているため、二重に追加せず、上の「このマシン上」で設定します。",
+  "settings.agents.row.pick.short": "タスクで選ぶ",
+  "settings.agents.row.pick.title": "タスク、プロジェクト、または新規タスクの既定から {agent} を選びます。選ぶと EnvoyDev がレシピを自動で追加します。",
   "settings.agents.row.builtIn.short": "同梱",
   "settings.agents.row.nothingToInstall": "インストール不要",
   "settings.agents.row.restart": "EnvoyDev を再起動",
@@ -712,6 +721,10 @@ export const ja: Catalogue = {
     "{provider} は EnvoyDev がまだ扱えないプロトコルを使っているため、実行は開始されませんでした。EnvoyDev は ACP でエージェントを動かします — このプログラムが ACP に対応しているなら、プロバイダーの方言を ACP にして、もう一度試してください。",
   "error.providerNotFound":
     "ここに \"{id}\" というエージェントプロバイダーはありません。別のウィンドウで削除された可能性があります。",
+  "error.providerInUse":
+    "\"{id}\" はまだ {where} で使われているため、削除しませんでした。先に別のエージェントへ移してください。",
+  "error.agentUnknown":
+    "「{id}」は EnvoyDev が同梱・カタログするエージェントではないため、選択されませんでした。",
   "error.providerEnvNotAName":
     "EnvoyDev はエージェントが必要とする環境変数の「名前」だけを保存し、値は決して保存しません。このプロバイダーの環境リストの {position} 番目は変数名ではありません。名前は英数字とアンダースコアで構成し、数字で始めることはできません。プロバイダーは追加されませんでした。",
   "error.providerEnvUnset.one":

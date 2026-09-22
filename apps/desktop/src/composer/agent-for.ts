@@ -161,6 +161,48 @@ export function offeredAgents<T extends PickerSubject>(agents: readonly T[]): T[
 }
 
 /**
+ * One picker list: shipped harnesses, stored providers, then catalogue recipes not already covered.
+ *
+ * Choosing a catalogue id auto-Adds it on the daemon write path (`ensureRunnableAgent`), so the Agents
+ * page no longer needs a separate Add press for the same outcome.
+ */
+export function mergeOfferedAgents(input: {
+  harnesses: readonly { id: string; label: string; availability?: HarnessAvailability; available?: boolean | "unknown" }[];
+  providers?: readonly { id: string; label: string; catalogEntryId?: string; availability?: HarnessAvailability }[];
+  catalog?: readonly { id: string; title: string; builtIn?: boolean; availability?: HarnessAvailability }[];
+}): { id: string; label: string; availability?: HarnessAvailability }[] {
+  const rows: { id: string; label: string; availability?: HarnessAvailability }[] = [];
+  const taken = new Set<string>();
+  for (const harness of input.harnesses) {
+    taken.add(harness.id);
+    rows.push({
+      id: harness.id,
+      label: harness.label,
+      ...(harness.availability !== undefined ? { availability: harness.availability } : {}),
+    });
+  }
+  for (const provider of input.providers ?? []) {
+    taken.add(provider.id);
+    if (provider.catalogEntryId !== undefined) taken.add(provider.catalogEntryId);
+    rows.push({
+      id: provider.id,
+      label: provider.label,
+      ...(provider.availability !== undefined ? { availability: provider.availability } : {}),
+    });
+  }
+  for (const entry of input.catalog ?? []) {
+    if (entry.builtIn) continue;
+    if (taken.has(entry.id)) continue;
+    rows.push({
+      id: entry.id,
+      label: entry.title,
+      ...(entry.availability !== undefined ? { availability: entry.availability } : {}),
+    });
+  }
+  return offeredAgents(rows);
+}
+
+/**
  * How usable each state says an agent is — the whole ordering, and the reason `unknown` outranks the two
  * "something is missing" states.
  *
@@ -217,5 +259,36 @@ export function agentFor(
     // The third flag, on its own wire: whether this daemon can make a chosen level the one the agent
     // runs at. False for `envoy-harness`, whose ACP surface has no thought-level method at all.
     thinkingApplicable: summary?.capabilities.thinking === true,
+  };
+}
+
+/**
+ * A provider the user added, as the composer needs it.
+ *
+ * No modes, models, thinking, or claimed capabilities: we have not opened a session with this program,
+ * and inventing any of them would be a claim about somebody else's product. The pills stay off with the
+ * existing "unknown" sentences; Stop / Approvals stay off until a session observation says otherwise.
+ * Availability is the probe's, so a missing program still reads as missing.
+ */
+export function agentForProvider(
+  id: string,
+  summary: { label: string; availability?: HarnessAvailability } | undefined,
+): ComposerAgent {
+  return {
+    id,
+    label: summary?.label ?? id,
+    modes: [],
+    capabilities: {
+      resume: false,
+      cancel: false,
+      approvals: false,
+      structuredTools: false,
+      streaming: false,
+      images: false,
+    },
+    availability: availabilityOf(summary),
+    modesApplicable: false,
+    modelApplicable: false,
+    thinkingApplicable: false,
   };
 }

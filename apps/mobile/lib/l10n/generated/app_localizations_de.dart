@@ -1239,6 +1239,14 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
+  String composerAgentValue(String value) {
+    return 'Agent: $value';
+  }
+
+  @override
+  String get composerAgentTooltip => 'Coding-Agent für diese Aufgabe ändern';
+
+  @override
   String composerThinkingValue(String value) {
     return 'Denken: $value';
   }

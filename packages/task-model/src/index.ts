@@ -9,7 +9,7 @@
  * This model is inherited from EnvoyMesh's Coding tab rather than from Paseo's sidebar, on the
  * owner's instruction: both projects use the same two nouns, but EnvoyMesh's tree makes the
  * relationship visible — a project group is a *place*, its tasks are *work in that place*,
- * and a project carries the defaults (agent, model) that its tasks inherit. When you have
+ * and a project carries the defaults (agent, model) that new tasks start with. When you have
  * ten agents running across four repositories, "which repo is this in?" is the question the
  * sidebar must answer without a click, and a flat list of sessions cannot answer it.
  *
@@ -19,7 +19,7 @@
  */
 
 import {
-  type HarnessId,
+  type AgentId,
   type Project,
   type Task,
   type TaskStatus,
@@ -87,11 +87,11 @@ export function taskTitleFromPrompt(prompt: string, max = 60): string {
  */
 export function resolveTaskDefaults(input: {
   project?: Pick<Project, "defaults"> | undefined;
-  appDefaults?: { harness?: HarnessId; model?: string; extraArgs?: string } | undefined;
-  explicit?: { harness?: HarnessId; model?: string; extraArgs?: string } | undefined;
+  appDefaults?: { harness?: AgentId; model?: string; extraArgs?: string } | undefined;
+  explicit?: { harness?: AgentId; model?: string; extraArgs?: string } | undefined;
   /** Last resort, so a row is always runnable. */
-  fallbackHarness?: HarnessId;
-}): { harness: HarnessId; model?: string; extraArgs?: string } {
+  fallbackHarness?: AgentId;
+}): { harness: AgentId; model?: string; extraArgs?: string } {
   const harness =
     input.explicit?.harness ??
     input.project?.defaults?.harness ??
@@ -121,7 +121,7 @@ export interface ProjectGroup {
   project: Project;
   rows: readonly TaskRow[];
   /** The agent new tasks here will use — shown on the group header. */
-  defaultHarness: HarnessId;
+  defaultHarness: AgentId;
   counts: StatusCounts;
 }
 
@@ -240,7 +240,7 @@ function sortRows(
 export interface SearchFilters {
   text?: string;
   statuses?: readonly TaskStatus[];
-  harnesses?: readonly HarnessId[];
+  harnesses?: readonly AgentId[];
   projectIds?: readonly string[];
   hostIds?: readonly string[];
 }

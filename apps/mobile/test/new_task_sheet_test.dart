@@ -6,22 +6,16 @@
 // show the project... Second, the four buttons are not informative... The input field needn't be
 // multi-line and needn't the attachment icon. The 'Start' button should be 'Add'."*
 //
-// The later one, which is why there are three chips and not four: *"the new task should follow the
-// project's agent setting, not to have any default agent. The default agent is for project, not for
-// task."* The Agent chip wrote a task-level `harness` into `coder.createTask`, so a task could run an
-// agent its project did not use. It is gone; the sheet resolves the project's agent only to choose
-// which model / mode / thinking options to offer, and never sends one.
+// The later one, now reversed: a new task **starts** on the project's agent, and the user can change
+// it. The Agent chip is back; `coder.createTask` sends `harness` so the task owns the choice.
 //
 // This file pins each half on the sheet itself, at the width it has to survive:
 //
 //   * opened from a project — the only path the app has — the picker is **not** there; the latent
 //     no-project path still gets it;
-//   * the three task chips are **one line** of glyph + value (no header, no `Category:` prefix — the
-//     owner's follow-up: *"the buttons above the inputting field occupied too much space. Can we use
-//     icon buttons and just use one line for them including the texts. Maybe we don't need the title."*),
-//     the category is still the chip's screen-reader label, and the **agent is not among them**;
-//   * the agent the chips render against is the **project's**, not the first offered;
-//   * `coder.createTask` carries **no** `harness`, so the daemon resolves the project's agent;
+//   * the task chips are **one line** of glyph + value (Agent, then model / mode / thinking);
+//   * the agent the chips default to is the **project's**, not the first offered;
+//   * `coder.createTask` **sends** `harness` so the task owns it from the first write;
 //   * the input is one line, the paperclip is gone, and the primary button reads **Add**;
 //   * and the whole sheet lays out at 320pt with no overflow.
 //
@@ -259,7 +253,7 @@ void main() {
     await client.dispose();
   });
 
-  testWidgets('the task chips are one line of glyph + value, and the agent is not one of them',
+  testWidgets('the task chips are one line of glyph + value, and the agent is the first of them',
       (tester) async {
     final client = _StubClient(_host);
     await _openSheet(
@@ -276,13 +270,14 @@ void main() {
     expect(find.text('Options for this task'), findsNothing);
     // One line, glyph per concept (the window's own: a chip for Model, sliders for Mode, a bulb for
     // Thinking) and the **value** beside it — the category is not repeated on screen.
+    expect(find.byIcon(Icons.smart_toy_outlined), findsOneWidget);
     expect(find.byIcon(Icons.memory), findsOneWidget);
     expect(find.byIcon(Icons.tune), findsOneWidget);
     expect(find.byIcon(Icons.lightbulb_outline), findsOneWidget);
+    expect(find.text('Envoy Harness'), findsOneWidget);
     expect(find.text('Default'), findsNWidgets(3));
     expect(find.text('Model: Default'), findsNothing);
-    // The agent is a property of the project, so it is not offered here at all.
-    expect(find.text('Agent: Envoy'), findsNothing);
+    expect(find.text('Agent: Envoy Harness'), findsNothing);
     // The desktop's own sentence for the concept is the chip's tooltip…
     expect(
       tester
@@ -294,6 +289,12 @@ void main() {
       'What the agent is allowed to do in this task',
     );
     // …and the category it no longer shows is still what a screen reader hears, once.
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Semantics && widget.properties.label == 'Agent: Envoy Harness',
+      ),
+      findsOneWidget,
+    );
     expect(
       find.byWidgetPredicate(
         (widget) => widget is Semantics && widget.properties.label == 'Mode: Default',
@@ -329,7 +330,7 @@ void main() {
     expect(find.byIcon(Icons.tune), findsNothing);
 
     // And the picker offers DeepSeek's model, not the first offered agent's.
-    await tester.tap(find.byIcon(Icons.memory));
+    await tester.tap(find.text('Default'));
     await tester.pumpAndSettle();
     expect(find.text('DeepSeek Chat'), findsOneWidget);
     expect(find.text('GPT-5'), findsNothing);
@@ -337,8 +338,7 @@ void main() {
     await client.dispose();
   });
 
-  testWidgets('a new task carries no task-level agent: createTask is left to resolve the project',
-      (tester) async {
+  testWidgets('a new task sends the project agent as this task\'s harness', (tester) async {
     final client = _RecordingClient(_host);
     await _openSheet(
       tester,
@@ -357,18 +357,35 @@ void main() {
     final created = client.calls.firstWhere((call) => call['method'] == 'coder.createTask');
     final params = created['params'] as Map<String, dynamic>;
     expect(params['projectId'], 'p-a');
-    // The agent is the project's; the task does not have one of its own. Sending it here would store
-    // the project's value *as if the task had chosen it*, which is the half of the owner's rule that
-    // makes a later project change miss the task.
-    expect(params.containsKey('harness'), isFalse);
-    // Nothing in the create path writes an agent at all.
-    for (final call in client.calls) {
-      expect(
-        (call['params'] as Map).containsKey('harness'),
-        isFalse,
-        reason: '${call['method']} must not write a harness',
-      );
-    }
+    // The project default is copied onto the task so the task owns it from the first write.
+    expect(params['harness'], 'envoy-harness');
+
+    await client.dispose();
+  });
+
+  testWidgets('picking a different agent on the sheet is what createTask sends', (tester) async {
+    final client = _RecordingClient(_host);
+    await _openSheet(
+      tester,
+      _SheetHost(
+        client: client,
+        initialProjectId: 'p-a',
+        harnesses: [_agent, _agentDeepSeek],
+        appHarness: 'envoy-harness',
+      ),
+    );
+
+    await tester.tap(find.text('Envoy Harness'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('DeepSeek Harness'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'Use DeepSeek for this one');
+    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.pumpAndSettle();
+
+    final created = client.calls.firstWhere((call) => call['method'] == 'coder.createTask');
+    expect((created['params'] as Map)['harness'], 'deepseek-harness');
 
     await client.dispose();
   });
@@ -413,6 +430,7 @@ void main() {
     );
 
     // Everything asked for is still there at this width, and nothing overflowed.
+    expect(find.byIcon(Icons.smart_toy_outlined), findsOneWidget);
     expect(find.byIcon(Icons.memory), findsOneWidget);
     expect(find.byIcon(Icons.tune), findsOneWidget);
     expect(find.byIcon(Icons.lightbulb_outline), findsOneWidget);
@@ -439,7 +457,7 @@ void main() {
     // ignore: avoid_print
     print('MEASURE sheet=${sheet.height} chips=${boxes.length} chipHeight=${boxes.first.height} '
         'right=${boxes.last.right} input=${input.height}');
-    // **One line, and that is an assertion rather than an impression.** Three chips share a horizontal
+    // **One line, and that is an assertion rather than an impression.** The chips share a horizontal
     // centre, and the last one ends inside the sheet's own padding — a `Row` with flexible chips cannot
     // wrap, and a value that does not fit ellipsizes rather than pushing the next chip down.
     for (final box in boxes.skip(1)) {

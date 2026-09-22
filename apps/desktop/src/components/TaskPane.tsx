@@ -30,18 +30,20 @@ import type { JSX } from "react";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type {
-  HarnessId,
+  AgentId,
+  AgentProviderSummary,
+  CatalogEntry,
   HarnessSummary,
   ProbeOutcome,
   Project,
   PromptImage,
   RunEvent,
   Task,
-  TaskDefaults,
 } from "@envoydev/protocol";
+import { isHarnessId } from "@envoydev/protocol";
 
 import { hasShellPicker, pickFolder } from "../client/folder-picker.js";
-import { agentFor } from "../composer/agent-for.js";
+import { agentFor, agentForProvider } from "../composer/agent-for.js";
 import {
     canSend,
     composeTurn,
@@ -53,6 +55,7 @@ import {
 } from "../composer/attachments.js";
 import {
   composerControls,
+  displayModelId,
   modeOffReason,
   modelOffReason,
   taskLocationLabel,
@@ -66,6 +69,14 @@ import {
 } from "../composer/slash-commands.js";
 import { probeAsk, publishesOnlyInSession, type ProbeState } from "../composer/probe.js";
 import { useT } from "../i18n/context.js";
+import {
+  EXPLORER_WIDTH_DEFAULT,
+  EXPLORER_WIDTH_MAX,
+  EXPLORER_WIDTH_MIN,
+  EXPLORER_WIDTH_VAR,
+  usePanelWidths,
+} from "../layout/panel-widths.js";
+import { ResizeHandle } from "./ResizeHandle.js";
 import {
   localize,
   localizeText,
@@ -90,7 +101,7 @@ import type { StashActions } from "./StashPanel.js";
 import { WorkArea, type FileOpenRequest, type OpenedDiff } from "./WorkArea.js";
 import { FolderIcon } from "./icons.js";
 import { MessageMarkdown } from "./markdown/MessageMarkdown.js";
-import { ProjectAgentPicker } from "./ProjectAgentPicker.js";
+import { AgentPicker } from "./ProjectAgentPicker.js";
 
 export interface TaskPaneProps {
   task: Task;
@@ -156,14 +167,14 @@ export interface TaskPaneProps {
    * than rendering as an agent with no modes — two different facts that must not look alike.
    */
   harnesses?: readonly HarnessSummary[];
-  /** App-wide default agent — used when the project has not set its own. */
-  appHarness?: HarnessId;
+  providers?: readonly AgentProviderSummary[];
+  catalog?: readonly CatalogEntry[];
   /**
-   * Change this project's coding agent (migrates idle tasks on the daemon).
+   * Change this *task's* coding agent. Applies to the next run.
    *
-   * Absent when there is no project, or in a pane rendered without a write path.
+   * Absent in a pane rendered without a write path (a test, a preview).
    */
-  onChangeProjectAgent?: (defaults: TaskDefaults) => Promise<{ ok: true } | Refusal>;
+  onChangeHarness?: (harness: AgentId) => Promise<{ ok: true } | Refusal>;
   /**
    * Ask this agent what it offers, before any run — the pre-flight probe.
    *
@@ -173,7 +184,7 @@ export interface TaskPaneProps {
    * and then no probe is offered at all, rather than a button that goes nowhere.
    */
   onProbeAgent?: (
-    harness: HarnessId,
+    harness: AgentId,
     options: { force: boolean },
   ) => Promise<{ ok: true; outcome: ProbeOutcome; detail: string } | Refusal>;
   /**
@@ -243,6 +254,7 @@ const SUGGESTIONS = [
 
 export function TaskPane(props: TaskPaneProps): JSX.Element {
   const t = useT();
+  const { setExplorerWidth } = usePanelWidths();
   const { task, project, events } = props;
   const running = props.runLive;
   const [viewingFile, setViewingFile] = useState(false);
@@ -296,7 +308,9 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   };
 
   // A different task in the same pane is a different agent with different modes, so a choice made for
-  // the previous one must not appear to be in force here.
+  // the previous one must not appear to be in force here. The same when the *agent* changes: a model
+  // or mode picked for the last agent is not a choice about this one, and leaving `pickedModel` set
+  // would keep the header and the composer on yesterday's id after the list under the field refreshed.
   useEffect(() => {
     setPickedMode(undefined);
     setPickedModel(undefined);
@@ -305,11 +319,18 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     setAttachments([]);
     setAttachNotice(undefined);
     setDropping(false);
-  }, [task.id]);
+  }, [task.id, task.harness]);
 
   /* ── the controls above the field: what they offer is decided in `composer/controls.ts` ── */
-  const summary = props.harnesses?.find((harness) => harness.id === task.harness);
-  const agent = agentFor(task.harness, summary);
+  const summary = isHarnessId(task.harness)
+    ? props.harnesses?.find((harness) => harness.id === task.harness)
+    : undefined;
+  const provider = isHarnessId(task.harness)
+    ? undefined
+    : props.providers?.find((entry) => entry.id === task.harness);
+  const agent = isHarnessId(task.harness)
+    ? agentFor(task.harness, summary)
+    : agentForProvider(task.harness, provider);
 
   /**
    * Both controls, in one call: they branch on the same two facts (what the agent publishes, and
@@ -343,15 +364,19 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     (typeof controls.model.selected === "string" && controls.model.selected !== ""
       ? controls.model.selected
       : undefined);
-  const inList = stored !== undefined && listed.some((model) => model.id === stored);
-  // Envoy Harness has one saved model. A task that still says "default", or an old catalogue id,
-  // shows that model — it is the one the next run will use.
-  const selectedModelId =
-    task.harness === "envoy-harness" && !inList && listed.length === 1 ? listed[0]?.id : stored;
+  // Header and composer share `displayModelId`: a listed id that is not in this agent's options must
+  // not stay on the title after the agent (and the list under the field) changed.
+  const selectedModelId = displayModelId({
+    harness: task.harness,
+    kind: controls.model.kind,
+    options: listed,
+    stored,
+  });
   const modelOff = modelOffReason(controls.model, {
     known: summary !== undefined,
     agent: agent.label,
   });
+
   // The thinking level's half, and it is *two* off-states rather than one: "the agent publishes levels
   // we have not seen yet" and "this agent offers none" are different sentences, and `thinkingOffReason`
   // is what keeps the first from being read as the second.
@@ -566,26 +591,30 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               aria-label={t(statusKey(task.status))}
               title={t(statusKey(task.status))}
             />
-            {project !== undefined && props.onChangeProjectAgent !== undefined && props.harnesses !== undefined ? (
-              <ProjectAgentPicker
-                project={project}
-                appHarness={props.appHarness ?? "envoy-harness"}
+            {props.onChangeHarness !== undefined && props.harnesses !== undefined ? (
+              <AgentPicker
+                current={task.harness}
                 harnesses={props.harnesses}
+                {...(props.providers !== undefined ? { providers: props.providers } : {})}
+                {...(props.catalog !== undefined ? { catalog: props.catalog } : {})}
                 appearance="meta"
-                onChoose={props.onChangeProjectAgent}
+                ariaKey="task.agent.picker.aria"
+                titleKey="task.agent.picker.title"
+                menuKey="task.agent.picker.menu"
+                onChoose={props.onChangeHarness}
               />
             ) : (
-              <span className="pane__meta-link" title={harnessLabel(task.harness)}>
-                {harnessBadge(task.harness)}
+              <span className="pane__meta-link" title={isHarnessId(task.harness) ? harnessLabel(task.harness) : task.harness}>
+                {isHarnessId(task.harness) ? harnessBadge(task.harness) : task.harness}
               </span>
             )}
-            {task.model ? (
+            {selectedModelId ? (
               <>
                 <span className="pane__meta-sep" aria-hidden>
                   ·
                 </span>
-                <span className="pane__meta-link" title={task.model}>
-                  {task.model}
+                <span className="pane__meta-link" title={selectedModelId}>
+                  {selectedModelId}
                 </span>
               </>
             ) : null}
@@ -719,7 +748,17 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
       </WorkArea>
 
       {explorer && props.onListDirectory && props.onListChanges ? (
-        <ExplorerSidebar
+        <>
+          <ResizeHandle
+            cssVar={EXPLORER_WIDTH_VAR}
+            edge="end"
+            min={EXPLORER_WIDTH_MIN}
+            max={EXPLORER_WIDTH_MAX}
+            defaultWidth={EXPLORER_WIDTH_DEFAULT}
+            label={t("layout.resize.explorer")}
+            onResize={setExplorerWidth}
+          />
+          <ExplorerSidebar
           {...(props.onStage !== undefined ? { onStage: props.onStage } : {})}
           {...(props.onUnstage !== undefined ? { onUnstage: props.onUnstage } : {})}
           {...(props.onCommit !== undefined ? { onCommit: props.onCommit } : {})}
@@ -739,6 +778,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
           }
           onCreateEntry={props.onCreateEntry}
         />
+        </>
       ) : null}
 
       {viewingFile ? null : (
@@ -857,7 +897,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               models={controls.model.options}
               selectedModelId={selectedModelId}
               modelOff={modelOff}
-              modelBareId={modelAcceptsBareId(task.harness)}
+              modelBareId={isHarnessId(task.harness) && modelAcceptsBareId(task.harness)}
               agentLabel={agent.label}
               onChooseModel={(chosen) => {
                 // `""` is the agent's own default, and it is kept as the empty string here rather than

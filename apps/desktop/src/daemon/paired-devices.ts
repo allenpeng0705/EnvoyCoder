@@ -160,6 +160,14 @@ function isUnusedQr(record: PairedDeviceRecord): boolean {
   return isQrSecret(record.token) && !record.lastSeenAt && !record.revokedAt;
 }
 
+/** Name + platform, once the phone has introduced itself. Absent when either half was never sent. */
+function pairingIdentityKey(device: PairedDeviceRecord): string | undefined {
+  if (device.clientPlatform === undefined || device.clientName === undefined || device.clientName === "") {
+    return undefined;
+  }
+  return `${device.clientPlatform}\0${device.clientName}`;
+}
+
 async function atomicWrite(path: string, body: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   const tmp = `${path}.tmp-${process.pid}`;
@@ -280,7 +288,10 @@ export class PairedDeviceStore {
       // holding one of those tokens is refused rather than quietly working.
       const prunedCodes = this.pruneUnusedQrCodes({ keepNewest: true });
       const collapsed = this.collapseSameDevice();
-      if (prunedCodes || collapsed) await this.persist();
+      // Reinstalling the phone mints a new install id, so same-id collapse never sees the old rows.
+      // Drop those leftovers (and the revoked copies they leave) before the owner reads the list.
+      const retired = this.retireReinstalls();
+      if (prunedCodes || collapsed || retired) await this.persist();
       return this.devices.map(publicOf);
     });
   }
@@ -400,6 +411,7 @@ export class PairedDeviceStore {
     // itself last" the winner: a phone that identified an older row would have revoked the newer one it is
     // actually using. Found by a test written to expect one live row and getting two.
     if (match.clientId !== undefined && this.collapseSameDevice()) changed = true;
+    if (this.retireReinstalls()) changed = true;
     return changed;
   }
 
@@ -429,6 +441,40 @@ export class PairedDeviceStore {
       collapsed = true;
     }
     return collapsed;
+  }
+
+  /**
+   * One live pairing per phone name on a platform.
+   *
+   * Reinstalls of this app all introduce themselves as the same name (`envoydev-mobile` on `ios`) with a
+   * **new** install id, so `collapseSameDevice` — which only matches `clientId` — leaves every old token
+   * active. The list then grows by one row per install. The newest pairing under that name is the one
+   * in use; older rows, and revoked copies of them, are removed.
+   *
+   * A different name on the same platform is a different device (an iPhone and an iPad) and is kept.
+   * Rows that never sent a name or a platform are left alone — guessing from "Phone" would revoke
+   * somebody else's device.
+   */
+  private retireReinstalls(): boolean {
+    const newestLive = new Map<string, PairedDeviceRecord>();
+    for (const device of this.devices) {
+      const key = pairingIdentityKey(device);
+      if (key === undefined || device.revokedAt !== undefined || device.lastSeenAt === undefined) continue;
+      const seen = newestLive.get(key);
+      if (seen === undefined || device.createdAt >= seen.createdAt) newestLive.set(key, device);
+    }
+    const drop = new Set<string>();
+    for (const device of this.devices) {
+      const key = pairingIdentityKey(device);
+      if (key === undefined) continue;
+      const keep = newestLive.get(key);
+      if (keep === undefined || keep.id === device.id) continue;
+      if (device.revokedAt !== undefined && device.createdAt >= keep.createdAt) continue;
+      drop.add(device.id);
+    }
+    if (drop.size === 0) return false;
+    this.devices = this.devices.filter((device) => !drop.has(device.id));
+    return true;
   }
 
   /**

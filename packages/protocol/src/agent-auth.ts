@@ -37,7 +37,7 @@
 
 import { z } from "zod";
 
-import { HarnessIdSchema, type HarnessId } from "./domain.js";
+import { AgentIdSchema, type AgentId } from "./domain.js";
 
 /* ────────────────────────────── the fact ────────────────────────────── */
 
@@ -181,7 +181,7 @@ export function unknownAuth(): HarnessAuth {
  *     sentence of its own in the user's language.
  */
 export interface AgentAuthObservation {
-  harness: HarnessId;
+  harness: AgentId;
   /** ISO 8601, daemon clock. */
   observedAt: string;
   state: HarnessAuthState;
@@ -202,7 +202,7 @@ export interface AgentAuthObservation {
 
 export const AgentAuthObservationSchema = z
   .object({
-    harness: HarnessIdSchema,
+    harness: AgentIdSchema,
     observedAt: z.string().min(1),
     state: HarnessAuthStateSchema,
     methodId: z.string().min(1).optional(),

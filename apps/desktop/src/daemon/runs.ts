@@ -61,6 +61,7 @@ import {
   type TaskStatus,
   type PromptImage,
   coderError,
+  isHarnessId,
 } from "@envoydev/protocol";
 // Only what this file uses: the three delivery helpers (`harnessModelDelivery`, `resolveModelChoice`,
 // `thinkingDelivery`) are `run-options.ts`'s, and were imported here without being read — dead
@@ -80,7 +81,7 @@ import type { PlatformId } from "@envoydev/platform";
 import type { CoderPaths } from "@envoydev/host-bridge";
 
 import { AcpClient, type AcpLaunch, type AcpPermissionRequest, type AcpSessionPolicy, type AcpUpdate, type AcpUserQuestion, type AcpUserQuestionChoice } from "./acp/client.js";
-import { launchForHarness } from "./launch.js";
+import { launchForAgent } from "./launch.js";
 import { envoyRunModel } from "./envoy-llm.js";
 import { slashCommandsFromAcp } from "../composer/slash-commands.js";
 import { keyed, ref } from "./messages.js";
@@ -94,6 +95,7 @@ import {
   resolveThinkingDelivery,
 } from "./run-options.js";
 import type { CoderStore } from "./store.js";
+import { ensureRunnableAgent, findRunnableProvider } from "./runnable-agent.js";
 import { allowChoiceId, choiceAllows, isCommandAllowed, permissionMemoryKey, rememberCommand } from "./allowed-commands.js";
 import {
   agentRunFromTranscript,
@@ -356,23 +358,25 @@ export class RunManager {
     }
 
     const requested = input.model ?? task.model;
+    // A shipped agent, or a provider the user added. The resolvers below only know the nine.
+    const shipped = isHarnessId(task.harness) ? task.harness : undefined;
     // Envoy Harness has no model until Settings saves one. An empty picker, or a leftover catalogue
     // choice for a different provider, uses that saved model so the key and base URL travel with it.
     const model =
-      task.harness === "envoy-harness" ? envoyRunModel(this.deps.paths, requested) : requested;
+      shipped === "envoy-harness" ? envoyRunModel(this.deps.paths, requested) : requested;
     // **Checked before anything is spawned.** A mode the agent cannot accept has two possible
     // outcomes and only one of them is honest: refuse the call, or start an agent in a posture the
     // user did not ask for. The second is not a smaller version of the first — a user who chose
     // `plan` and got an unrestricted agent has been told something false about what is running.
     const requestedMode = input.agentModeId ?? task.agentModeId;
-    const agentModeId = resolveAgentMode(task.harness, requestedMode);
+    const agentModeId = shipped ? resolveAgentMode(shipped, requestedMode) : undefined;
     // A permission level is not `session/set_mode`. DeepSeek takes it as `DSH_PERMISSION_MODE` on the
     // process; Envoy Harness takes it as `session/set_policy`. `default` / `plan` / `review` stay on
     // `session/set_mode`, and those runs still get the settings switch as `autoRun`.
-    const permissionEnv = modeLaunchEnv(task.harness, agentModeId);
-    const permissionPolicy = envoyPermissionPolicy(task.harness, agentModeId);
-    const planMode = task.planMode === true || (task.harness === "envoy-harness" && requestedMode === "plan");
-    const modeToSet = collaborationModeToSet(task.harness, agentModeId, planMode);
+    const permissionEnv = shipped ? modeLaunchEnv(shipped, agentModeId) : undefined;
+    const permissionPolicy = shipped ? envoyPermissionPolicy(shipped, agentModeId) : undefined;
+    const planMode = task.planMode === true || (shipped === "envoy-harness" && requestedMode === "plan");
+    const modeToSet = shipped ? collaborationModeToSet(shipped, agentModeId, planMode) : undefined;
     // The model, on exactly the same terms and for a failure that is easier to miss: `envoy-harness`
     // parses `--model` whether or not `--provider` is there and *then ignores it*
     // (`../envoy-harness/packages/envoy-harness/src/cli/run/acp.ts:100-106`), so a model we could not
@@ -386,12 +390,12 @@ export class RunManager {
     // failure — a sentence a translated window cannot render, from a layer that cannot know which
     // refusal it is — where this produces the keyed one. Both refuse; only one of them is explainable
     // to a user.
-    const modelConfig = resolveModelDelivery(task.harness, model);
+    const modelConfig = shipped ? resolveModelDelivery(shipped, model) : undefined;
     // The thinking level, on the same terms and with an extra one recorded below: the *value* is not
     // checked against anything we have seen, because the observed list is a record of an earlier
     // session and the agent is the authority on what it currently accepts.
     const thinkingLevel = input.thinkingLevel ?? task.thinkingLevel;
-    const thinkingConfig = resolveThinkingDelivery(task.harness, thinkingLevel);
+    const thinkingConfig = shipped ? resolveThinkingDelivery(shipped, thinkingLevel) : undefined;
     /**
      * Whether this agent asks before destructive actions — the app setting, resolved for *this* agent.
      *
@@ -400,37 +404,41 @@ export class RunManager {
      * started from the phone or from a second window has to be governed by the same one.
      * `undefined` for an agent with no `session/set_policy` — deliberately not a refusal, for the
      * reasons `resolveApprovalPolicy` records, and disclosed on screen by the settings row instead.
+     *
+     * A provider has no catalogue `approvalPolicy` claim, so it is treated like any shipped agent that
+     * lacks the method: the setting is left alone, and Safety names that the switch does not reach it.
+     * Inventing `safe-only` here would either break agents that reject `session/set_policy`, or pretend
+     * EnvoyDev enforced a gate it never sent.
      */
     const sessionPolicy =
       permissionPolicy ??
-      resolveApprovalPolicy(
-        task.harness,
-        this.settings().requireApprovalForDestructive,
-      );
-    const launch = this.deps.resolveLaunch
-      ? this.deps.resolveLaunch({
-          harness: task.harness,
-          cwd: task.cwd,
-          ...(task.extraArgs ? { extraArgs: task.extraArgs } : {}),
-          ...(model ? { model } : {}),
-          ...(permissionEnv ? { extraEnv: permissionEnv } : {}),
-        })
-      : // **The same function the probe calls** (`launch.ts`), which is the point of it being a module
-        // rather than a method here: a probe starts the agent exactly the way a run does, so a change to
-        // the argv, the environment or the refusals cannot reach one path and miss the other.
-        launchForHarness({
-          harness: task.harness,
-          cwd: task.cwd,
-          paths: this.deps.paths,
-          ...(this.deps.platform ? { platform: this.deps.platform } : {}),
-          ...(task.extraArgs ? { extraArgs: task.extraArgs } : {}),
-          ...(model ? { model } : {}),
-          // **The user's delivery choice, read here rather than inside `launchForHarness`.** The launch is a
-          // pure function of its input on purpose; which route this machine takes is daemon state, and this is
-          // the one place a run is started from.
-          ...(this.deps.deliveryOf ? { delivery: this.deps.deliveryOf(task.harness) } : {}),
-          ...(permissionEnv ? { extraEnv: permissionEnv } : {}),
-        });
+      (shipped
+        ? resolveApprovalPolicy(shipped, this.settings().requireApprovalForDestructive)
+        : undefined);
+    if (!shipped) await ensureRunnableAgent(this.deps.store, task.harness);
+    const provider = shipped ? undefined : findRunnableProvider(this.deps.store, task.harness);
+    const launch =
+      shipped && this.deps.resolveLaunch
+        ? this.deps.resolveLaunch({
+            harness: shipped,
+            cwd: task.cwd,
+            ...(task.extraArgs ? { extraArgs: task.extraArgs } : {}),
+            ...(model ? { model } : {}),
+            ...(permissionEnv ? { extraEnv: permissionEnv } : {}),
+          })
+        : // **The same function the probe and sign-in call** (`launchForAgent`): a shipped id goes to
+          // `launchForHarness`, an added provider to `launchForProvider`.
+          launchForAgent({
+            id: task.harness,
+            ...(provider !== undefined ? { provider } : {}),
+            cwd: task.cwd,
+            paths: this.deps.paths,
+            ...(this.deps.platform ? { platform: this.deps.platform } : {}),
+            ...(task.extraArgs ? { extraArgs: task.extraArgs } : {}),
+            ...(shipped && model ? { model } : {}),
+            ...(shipped && this.deps.deliveryOf ? { delivery: this.deps.deliveryOf(shipped) } : {}),
+            ...(permissionEnv ? { extraEnv: permissionEnv } : {}),
+          });
 
     const runId = randomUUID();
     const previousRunId = task.runId;
@@ -465,10 +473,12 @@ export class RunManager {
         ...(modelConfig ? [modelConfig] : []),
         ...(thinkingConfig && thinkingLevel ? [{ ...thinkingConfig, value: thinkingLevel }] : []),
         // Plan, when this agent accepts it. Fast is remembered and not sent — see features.ts.
-        ...featureSessionConfigs(task.harness, model, {
-          ...(task.fastMode !== undefined ? { fastMode: task.fastMode } : {}),
-          ...(task.planMode !== undefined ? { planMode: task.planMode } : {}),
-        }),
+        ...(shipped
+          ? featureSessionConfigs(shipped, model, {
+              ...(task.fastMode !== undefined ? { fastMode: task.fastMode } : {}),
+              ...(task.planMode !== undefined ? { planMode: task.planMode } : {}),
+            })
+          : []),
       ],
       sessionPolicy,
       turn: undefined,
@@ -634,7 +644,8 @@ export class RunManager {
         sessionId: client.sessionId ?? "unknown",
         // A capability we record from the protocol the agent speaks, never a guess about this
         // particular run: an agent with no `session/resume` says so here.
-        resumable: harnessDefinition(live.run.harness).capabilities.resume,
+        resumable:
+          isHarnessId(live.run.harness) && harnessDefinition(live.run.harness).capabilities.resume,
         resumed: resumeSessionId !== undefined,
       });
 
@@ -699,6 +710,9 @@ export class RunManager {
    * disabled states rest on.
    */
   private async recordSessionOptions(live: LiveRun, client: AcpClient): Promise<void> {
+    // The catalogue's observation mapper only knows the nine. A provider's session still ran;
+    // its model list stays unknown until a probe written for that id exists.
+    if (!isHarnessId(live.run.harness)) return;
     try {
       await this.deps.store.recordSessionOptions(
         observeSessionOptions({
@@ -1188,17 +1202,6 @@ export class RunManager {
       // Letting it throw would be worse than either: the run is already `settled`, so `finish` cannot
       // run again, while the tail below (`active`, `finished`, `markDone`) would be skipped — the run
       // left in `active` with `live.done` never resolved, which is a daemon that hangs on quit.
-    }
-    // **A task that was running when its project's agent changed follows it now.** `updateProject`
-    // cannot move a live run — the agent on disk was launched with the old harness — so it remembers
-    // the task instead, and this is the moment that memory is spent. A task that was not waiting costs
-    // one `Set.delete`: a harness chosen explicitly, through the API, is never overwritten merely
-    // because a run ended.
-    try {
-      await this.deps.store.followProjectHarness(live.run.taskId);
-    } catch {
-      // The same rule as the row above: the ending is the record, and a store that cannot write must
-      // not cost it. The next project change picks the task up.
     }
     await this.record(live, { kind: "run.ended", exitCode, status });
     this.active.delete(live.run.id);

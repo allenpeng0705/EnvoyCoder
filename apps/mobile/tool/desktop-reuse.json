@@ -78,6 +78,8 @@
   "composerDefault": "task.composer.value.default",
   "composerModeSheet": "task.composer.agentMode.label",
   "composerModeTooltip": "task.composer.agentMode.title",
+  "composerAgentTooltip": "task.agent.picker.title",
+  "projectListChangeAgent": "sidebar.task.changeAgent",
   "composerModelSheet": "task.composer.model.label",
   "composerModelTooltip": "task.composer.model.title",
   "composerModelHint": "task.composer.model.placeholder",

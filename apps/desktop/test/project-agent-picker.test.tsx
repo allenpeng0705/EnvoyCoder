@@ -1,5 +1,5 @@
 /**
- * Project agent picker — click the label, pick an agent, updateProject fires.
+ * Agent picker — the rail writes the project default; the task header writes this task's harness.
  */
 
 /** @vitest-environment jsdom */
@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { HarnessSummary, Project } from "@envoydev/protocol";
 
-import { ProjectAgentPicker } from "../src/components/ProjectAgentPicker.js";
+import { AgentPicker, ProjectAgentPicker } from "../src/components/ProjectAgentPicker.js";
 import { I18nProvider } from "../src/i18n/context.js";
 import { en } from "../src/i18n/messages/en.js";
 
@@ -77,5 +77,35 @@ describe("ProjectAgentPicker", () => {
 
     await waitFor(() => expect(onChoose).toHaveBeenCalled());
     expect(onChoose).toHaveBeenCalledWith({ harness: "deepseek-harness" });
+  });
+
+  it("the task header writes this task's harness, not the project default", async () => {
+    const onChoose = vi.fn(async () => ({ ok: true as const }));
+    render(
+      <I18nProvider preference="en">
+        <AgentPicker
+          current="envoy-harness"
+          harnesses={[
+            harness("envoy-harness", "Envoy Harness"),
+            harness("deepseek-harness", "DeepSeek Harness"),
+          ]}
+          appearance="meta"
+          ariaKey="task.agent.picker.aria"
+          titleKey="task.agent.picker.title"
+          menuKey="task.agent.picker.menu"
+          onChoose={onChoose}
+        />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: en["task.agent.picker.aria"].replace("{agent}", "Envoy Harness"),
+      }),
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "DeepSeek Harness" }));
+
+    await waitFor(() => expect(onChoose).toHaveBeenCalled());
+    expect(onChoose).toHaveBeenCalledWith("deepseek-harness");
   });
 });

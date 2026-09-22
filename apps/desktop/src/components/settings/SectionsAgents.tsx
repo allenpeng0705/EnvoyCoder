@@ -184,18 +184,16 @@ export function AgentsSection(props: SettingsSectionProps & { onOpenLlm: () => v
 
   return (
     <>
-      {/* **The heading carries the count, and the count is the point.** Three groups with their sizes on them
-          are three facts; three groups with names only are three invitations to scroll and find out. */}
-      {/* **The count and the control that can change it, on one line.** *"After I run npm install -g … how do we
-          let EnvoyDev know that without restarting?"* — the daemon re-measures every row on the read, and the
-          two inputs it captures once per process need asking again, so the page gets one press that does that
-          and re-reads. It sits beside the number it invalidates rather than in a toolbar: a page-level gesture
-          with one meaning, and no per-row *Check* (which is the chore this page already removed). */}
+      {/* **One list of agents you can already use**, then the catalogue to browse. Built-in harnesses and
+          providers the user Added sit at the same level — only the catalogue stays behind a disclosure,
+          because its 38 recipes are browse, not "ready to pick". */}
       <div className="settings__section-head">
         <h2 className="settings__heading">
           {t("settings.agents.shipped.heading")}
           {" · "}
-          <span className="settings__agent-count">{state.harnesses.length}</span>
+          <span className="settings__agent-count">
+            {state.harnesses.length + (can.providers ? state.providers.length : 0)}
+          </span>
         </h2>
         {can.recheck ? (
           <button
@@ -231,9 +229,28 @@ export function AgentsSection(props: SettingsSectionProps & { onOpenLlm: () => v
               : {})}
           />
         ))}
-        {state.harnesses.length === 0 ? (
-          // An empty state teaches, and this one is the daemon saying it has not answered yet rather than a
-          // claim that we ship no agents — which is the distinction the sentence is written for.
+        {can.providers
+          ? state.providers.map((provider) => (
+              <ProviderRow
+                key={provider.id}
+                provider={provider}
+                commandLabel="settings.agents.mine.command"
+                canSignIn={can.signIn}
+                signingIn={signingIn === provider.id}
+                onSignIn={() => {
+                  setSigningIn(provider.id);
+                  setSignInResult(undefined);
+                  void agents.signInAgent(provider.id).then((result) => {
+                    setSigningIn((current) => (current === provider.id ? undefined : current));
+                    setSignInResult(result.ok ? result.detail : result.message);
+                  });
+                }}
+                onRemove={() => void agents.removeProvider(provider.id)}
+                {...(can.runFix ? { onRunFix: () => agents.runFix({ kind: "provider", id: provider.id }) } : {})}
+              />
+            ))
+          : null}
+        {state.harnesses.length === 0 && (!can.providers || state.providers.length === 0) ? (
           <li className="settings__agent settings__agent--empty">
             <p className="settings__note">{t("settings.agents.empty")}</p>
           </li>
@@ -246,41 +263,11 @@ export function AgentsSection(props: SettingsSectionProps & { onOpenLlm: () => v
         </p>
       ) : null}
 
-      <h2 className="settings__heading">
-        {t("settings.agents.mine.heading")}
-        {" · "}
-        <span className="settings__agent-count">{state.providers.length}</span>
-      </h2>
-      {can.providers ? (
-        <ul className="settings__agents">
-          {state.providers.map((provider) => (
-            <ProviderRow
-              key={provider.id}
-              provider={provider}
-              commandLabel="settings.agents.mine.command"
-              onRemove={() => void agents.removeProvider(provider.id)}
-              {...(can.runFix ? { onRunFix: () => agents.runFix({ kind: "provider", id: provider.id }) } : {})}
-            />
-          ))}
-          {state.providers.length === 0 ? (
-            // The empty state, and it is the one place on this page allowed to be a paragraph: with nothing to
-            // scan there is nothing to scan *past*, so the sentence that says where agents come from is the
-            // most useful thing that can be on a row here.
-            <li className="settings__agent settings__agent--empty">
-              <p className="settings__note">{t("settings.agents.mine.empty")}</p>
-            </li>
-          ) : null}
-        </ul>
-      ) : (
-        <p className="settings__note">{t("settings.agents.olderDaemon")}</p>
-      )}
+      {!can.providers ? <p className="settings__note">{t("settings.agents.olderDaemon")}</p> : null}
 
       {can.catalog ? (
         <CatalogList state={state} agents={agents} />
       ) : (
-        // **The sentence, not a throw.** `coder.listCatalog` does not exist on this daemon, so there is no
-        // catalogue to render — and rendering an *empty* one would say "there are no agents", which is a
-        // claim about the product rather than about the build.
         <p className="settings__note">{t("settings.agents.olderDaemon")}</p>
       )}
     </>
@@ -502,18 +489,12 @@ function ShippedAgent(props: {
  */
 function ProviderRow(props: {
   provider: SettingsSectionProps["state"]["providers"][number];
-  /**
-   * The label for the provider's command line, passed in as a **key** rather than as a string.
-   *
-   * `MessageKey` and not `string`, because this row renders it in two places — the line's `title` and the
-   * disclosure's own fact — and a caller that handed it pre-translated text would be able to pass anything.
-   * Typing it as the catalogue's own key type is what makes a typo a compile error rather than a French window
-   * with an English fragment in it.
-   */
   commandLabel: MessageKey;
   onRemove: () => void;
-  /** The same press, for a program the user declared — see `ShippedAgent`'s prop for why it is a closure. */
   onRunFix?: () => Promise<FixRunAnswer>;
+  canSignIn?: boolean;
+  signingIn?: boolean;
+  onSignIn?: () => void;
 }): JSX.Element {
   const { t, locale } = useI18n();
   const { provider } = props;
@@ -562,17 +543,29 @@ function ProviderRow(props: {
       lineIsCommand={verdict.lineIsCommand}
       lineTitle={verdict.lineTitle ?? t(props.commandLabel, { command })}
       actions={
-        /* **Remove, and it is not a hide.** This forgets a provider the *user declared* — an undo of their own
-           action, which is why it exists only on this list and on no shipped agent — and its title says what it
-           does and does not touch. Nothing is uninstalled. */
-        <button
-          type="button"
-          className="button button--ghost button--small"
-          title={t("settings.agents.mine.remove.title", { agent: provider.label })}
-          onClick={props.onRemove}
-        >
-          {t("settings.agents.mine.remove")}
-        </button>
+        <>
+          {props.canSignIn &&
+          props.provider.auth?.state === "needs-signin" &&
+          props.provider.auth.terminal === undefined ? (
+            <button
+              type="button"
+              className="button button--secondary button--small"
+              disabled={props.signingIn}
+              title={t("settings.agents.signIn.title", { agent: provider.label })}
+              onClick={() => props.onSignIn?.()}
+            >
+              {props.signingIn ? t("settings.agents.signIn.working") : t("settings.agents.signIn")}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="button button--ghost button--small"
+            title={t("settings.agents.mine.remove.title", { agent: provider.label })}
+            onClick={props.onRemove}
+          >
+            {t("settings.agents.mine.remove")}
+          </button>
+        </>
       }
       details={
         <>
@@ -580,6 +573,16 @@ function ProviderRow(props: {
             <GuideBlock guide={verdict.guide} {...(props.onRunFix !== undefined ? { run: props.onRunFix } : {})} />
           ) : null}
           <FactsBlock facts={facts} />
+          {props.provider.auth?.terminal !== undefined ? (
+            <div className="settings__agent-fix">
+              <p className="settings__agent-fact settings__agent-fact--lead">
+                {t("settings.agents.signIn.terminal")}
+              </p>
+              <p className="settings__agent-steps settings__agent-step">
+                <code className="settings__agent-command">{props.provider.auth.terminal}</code>
+              </p>
+            </div>
+          ) : null}
         </>
       }
     />

@@ -45,6 +45,9 @@ export const en = {
 
   /* ── the rail ── */
   "sidebar.aria": "Projects and tasks",
+  "layout.resize.rail": "Resize the project list",
+  "layout.resize.settingsNav": "Resize the settings sections list",
+  "layout.resize.explorer": "Resize the file explorer",
   "sidebar.add": "+ Add project",
   "sidebar.add.title": "Register a directory as a project",
   "sidebar.command.title": "Open the Command Center",
@@ -58,7 +61,7 @@ export const en = {
   "sidebar.attention.many": "{count} tasks need you",
   "sidebar.empty.title": "No projects yet",
   "sidebar.empty.body":
-    "Add a directory you work in. Tasks you start in it appear here, and the project remembers which agent they should use.",
+    "Add a directory you work in. Tasks you start in it appear here, and the project remembers the default agent new tasks start with.",
   "sidebar.empty.noMatch": "Nothing matches “{query}”.",
   "sidebar.empty.cannotLoadTitle": "Could not read your projects",
   "sidebar.empty.cannotLoadBody": "This list is unknown, not empty — EnvoyDev could not ask its daemon for it.",
@@ -68,6 +71,9 @@ export const en = {
   "project.agent.picker.aria": "Coding agent for this project: {agent}. Change",
   "project.agent.picker.title": "Change the coding agent for this project",
   "project.agent.picker.menu": "Coding agents for this project",
+  "task.agent.picker.aria": "Coding agent for this task: {agent}. Change",
+  "task.agent.picker.title": "Change the coding agent for this task",
+  "task.agent.picker.menu": "Coding agents for this task",
   "sidebar.project.settings": "Project settings",
   "sidebar.project.newTask": "+ New",
   "sidebar.project.newTask.title": "Start a task in {project}",
@@ -91,6 +97,7 @@ export const en = {
   "sidebar.task.menu.title": "Task actions",
   "sidebar.task.rename": "Rename",
   "sidebar.task.rename.aria": "New name for this task",
+  "sidebar.task.changeAgent": "Change agent",
   "sidebar.tasks.empty": "No tasks here yet.",
   // Pair + Settings sit on the rail's top row beside ⌘K (not in the title bar or a footer).
   "sidebar.pair": "Pair a phone",
@@ -564,10 +571,10 @@ export const en = {
          `unknown`: that one means "we tried to look and had nothing to search", and this one means nobody
          has looked yet. A row that rendered either of them as `ready` would be claiming a measurement
          nobody took, and a row that rendered them as "not installed" would be claiming the opposite. */
-  "settings.agents.shipped.heading": "On this machine",
+  "settings.agents.shipped.heading": "Agents",
   "settings.agents.mine.heading": "Your agents",
   "settings.agents.mine.empty":
-    "You have not added an agent of your own yet. Anything below can be added here, and so can a program that is not on the list.",
+    "Nothing added from the catalogue yet. Browse below to put an agent on this list, or declare a program that is not catalogued.",
   "settings.agents.mine.command": "Runs as: {command}",
   "settings.agents.mine.remove": "Remove",
   "settings.agents.mine.remove.title": "Forget {agent}. Nothing is uninstalled, and nothing else is touched.",
@@ -650,9 +657,12 @@ export const en = {
   "settings.agents.row.adding": "Adding…",
   "settings.agents.row.add.title":
     "Add {agent} to your agents. Its command line and its environment come from this entry exactly as they are written above — the recipe's own constants travel with it, and any variable the recipe does not set stays yours to set.",
+  "settings.agents.row.pick.short": "Pick for a task",
+  "settings.agents.row.pick.title":
+    "Choose {agent} from a task, project, or New tasks default. EnvoyDev adds the recipe automatically when you pick it.",
   "settings.agents.row.builtIn.short": "Built in",
   "settings.agents.row.builtIn":
-    "EnvoyDev already ships this agent, so it is configured in “On this machine” above rather than added a second time.",
+    "EnvoyDev already ships this agent, so it is on the Agents list above rather than added a second time.",
   "settings.agents.row.installLink": "Where to get it",
   "settings.agents.row.installLink.title": "{agent}'s own page",
   /**
@@ -1211,6 +1221,10 @@ export const en = {
     "{provider} speaks a protocol EnvoyDev cannot drive yet, so the run was not started. EnvoyDev drives agents over ACP — if this program does speak ACP, declare the provider's dialect as ACP and try again.",
   "error.providerNotFound":
     "There is no agent provider called \"{id}\" here. It may have been removed from another window.",
+  "error.providerInUse":
+    "\"{id}\" is still used by {where}, so it was not removed. Move those onto another agent first.",
+  "error.agentUnknown":
+    "\"{id}\" is not an agent EnvoyDev ships or catalogues, so it was not chosen.",
   // No value is echoed, in this sentence or anywhere else: what a user pasted into the name field is
   // very often the credential itself, and a refusal is a string that reaches a log, a transcript and a
   // bug report. So the sentence says *which entry* was wrong, which is what a user needs to fix it.

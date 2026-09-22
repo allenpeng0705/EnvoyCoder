@@ -52,9 +52,11 @@ import { join } from "node:path";
 
 import {
   ENVOYDEV_ERRORS,
+  type AgentId,
   type AgentProviderConfig,
   type HarnessId,
   coderError,
+  isHarnessId,
 } from "@envoydev/protocol";
 import {
   harnessAcpFacts,
@@ -503,4 +505,55 @@ function providerEnv(
       ? ref("error.providerEnvUnset.one", { provider: label, name: missing[0] ?? "" })
       : ref("error.providerEnvUnset.many", { provider: label, names: missing.join(", ") }),
   );
+}
+
+/**
+ * Start whichever agent a task named — a shipped harness, or a provider the user added.
+ *
+ * The two launch bodies stay separate (`launchForHarness`, `launchForProvider`). This is only the
+ * branch, so a run, a sign-in and a session probe cannot each invent a third spawn path.
+ */
+export function launchForAgent(input: {
+  id: AgentId;
+  /** Required when `id` is not one of the nine. Must be the stored provider with that id. */
+  provider?: AgentProviderConfig;
+  cwd: string;
+  paths: CoderPaths;
+  platform?: PlatformId;
+  model?: string;
+  extraArgs?: string;
+  extraEnv?: Record<string, string>;
+  searchDirs?: readonly string[];
+  delivery?: "installed" | "npx";
+  env?: NodeJS.ProcessEnv;
+}): AcpLaunch {
+  if (isHarnessId(input.id)) {
+    return launchForHarness({
+      harness: input.id,
+      cwd: input.cwd,
+      paths: input.paths,
+      ...(input.platform !== undefined ? { platform: input.platform } : {}),
+      ...(input.model !== undefined ? { model: input.model } : {}),
+      ...(input.extraArgs !== undefined ? { extraArgs: input.extraArgs } : {}),
+      ...(input.extraEnv !== undefined ? { extraEnv: input.extraEnv } : {}),
+      ...(input.searchDirs !== undefined ? { searchDirs: input.searchDirs } : {}),
+      ...(input.delivery !== undefined ? { delivery: input.delivery } : {}),
+    });
+  }
+  if (input.provider === undefined || input.provider.id !== input.id) {
+    throw coderError(
+      ENVOYDEV_ERRORS.agentUnknown,
+      `"${input.id}" is not an agent EnvoyDev ships and has not been added, so nothing was started. Add it from the Agents page first.`,
+      ref("error.agentUnknown", { id: input.id }),
+    );
+  }
+  return launchForProvider({
+    provider: input.provider,
+    cwd: input.cwd,
+    paths: input.paths,
+    ...(input.platform !== undefined ? { platform: input.platform } : {}),
+    ...(input.extraArgs !== undefined ? { extraArgs: input.extraArgs } : {}),
+    ...(input.searchDirs !== undefined ? { searchDirs: input.searchDirs } : {}),
+    ...(input.env !== undefined ? { env: input.env } : {}),
+  });
 }

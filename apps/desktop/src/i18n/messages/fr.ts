@@ -49,6 +49,9 @@ export const fr: Catalogue = {
 
   /* ── the rail ── */
   "sidebar.aria": "Projets et tâches",
+  "layout.resize.rail": "Redimensionner la liste des projets",
+  "layout.resize.settingsNav": "Redimensionner la liste des sections des réglages",
+  "layout.resize.explorer": "Redimensionner l’explorateur de fichiers",
   "sidebar.add": "+ Ajouter un projet",
   "sidebar.add.title": "Enregistrer un dossier comme projet",
   "sidebar.command.title": "Ouvrir la palette de commandes",
@@ -61,7 +64,7 @@ export const fr: Catalogue = {
   "sidebar.attention.one": "1 tâche vous attend",
   "sidebar.attention.many": "{count} tâches vous attendent",
   "sidebar.empty.title": "Aucun projet pour l'instant",
-  "sidebar.empty.body": "Ajoutez un dossier dans lequel vous travaillez. Les tâches que vous y lancez apparaissent ici, et le projet retient l'agent qu'elles doivent utiliser.",
+  "sidebar.empty.body": "Ajoutez un dossier dans lequel vous travaillez. Les tâches que vous y lancez apparaissent ici, et le projet retient l'agent par défaut avec lequel les nouvelles tâches commencent.",
   "sidebar.empty.noMatch": "Rien ne correspond à « {query} ».",
   "sidebar.empty.cannotLoadTitle": "Impossible de lire vos projets",
   "sidebar.empty.cannotLoadBody": "Cette liste est inconnue, pas vide — EnvoyDev n'a pas pu interroger son démon.",
@@ -71,6 +74,9 @@ export const fr: Catalogue = {
   "project.agent.picker.aria": "Agent de coding pour ce projet : {agent}. Modifier",
   "project.agent.picker.title": "Changer l'agent de coding de ce projet",
   "project.agent.picker.menu": "Agents de coding pour ce projet",
+  "task.agent.picker.aria": "Agent de coding pour cette tâche : {agent}. Modifier",
+  "task.agent.picker.title": "Changer l'agent de coding de cette tâche",
+  "task.agent.picker.menu": "Agents de coding pour cette tâche",
   "sidebar.project.settings": "Réglages du projet",
   "sidebar.project.newTask": "+ Nouvelle",
   "sidebar.project.newTask.title": "Lancer une tâche dans {project}",
@@ -88,6 +94,7 @@ export const fr: Catalogue = {
   "sidebar.task.menu.title": "Actions de la tâche",
   "sidebar.task.rename": "Renommer",
   "sidebar.task.rename.aria": "Nouveau nom pour cette tâche",
+  "sidebar.task.changeAgent": "Changer d'agent",
   "sidebar.tasks.empty": "Aucune tâche ici pour l'instant.",
   "sidebar.pair": "Associer un téléphone",
   "sidebar.settings": "Réglages",
@@ -405,9 +412,9 @@ export const fr: Catalogue = {
   "settings.projects.note": "Chaque projet peut remplacer les réglages de cet ordinateur. En sélectionner un ouvre les siens.",
   "settings.projects.empty": "Aucun projet pour l'instant. Un projet est un dossier de cet ordinateur dans lequel les agents travaillent — ajoutez-en un avec {add} en haut du volet des projets, ou depuis la palette de commandes.",
   "settings.agents.empty": "La liste des agents n'est pas encore arrivée.",
-  "settings.agents.shipped.heading": "Sur cette machine",
+  "settings.agents.shipped.heading": "Agents",
   "settings.agents.mine.heading": "Vos agents",
-  "settings.agents.mine.empty": "Vous n’avez pas encore ajouté d’agent à vous. Tout ce qui suit peut être ajouté ici, y compris un programme qui n’est pas dans la liste.",
+  "settings.agents.mine.empty": "Rien n’a encore été ajouté depuis le catalogue. Parcourez ci-dessous pour mettre un agent sur cette liste, ou déclarez un programme qui n’y figure pas.",
   "settings.agents.mine.command": "S’exécute comme : {command}",
   "settings.agents.mine.remove": "Retirer",
   "settings.agents.mine.remove.title": "Oublier {agent}. Rien n’est désinstallé et rien d’autre n’est touché.",
@@ -456,6 +463,8 @@ export const fr: Catalogue = {
   "settings.agents.row.adding": "Ajout…",
   "settings.agents.row.add.title": "Ajouter {agent} à vos agents. Sa ligne de commande et son environnement viennent de cette entrée, exactement tels qu’écrits ci-dessus : les constantes de la recette suivent, et toute variable que la recette ne définit pas reste à votre charge.",
   "settings.agents.row.builtIn": "EnvoyDev fournit déjà cet agent : il se configure ci-dessus dans « Sur cette machine » plutôt que d’être ajouté une seconde fois.",
+  "settings.agents.row.pick.short": "Choisir pour une tâche",
+  "settings.agents.row.pick.title": "Choisissez {agent} depuis une tâche, un projet ou les défauts des nouvelles tâches. EnvoyDev ajoute la recette automatiquement à la sélection.",
   "settings.agents.row.builtIn.short": "Intégré",
   "settings.agents.row.nothingToInstall": "Rien à installer",
   "settings.agents.row.restart": "Redémarrer EnvoyDev",
@@ -714,6 +723,10 @@ export const fr: Catalogue = {
     "{provider} parle un protocole qu'EnvoyDev ne sait pas encore piloter, donc l'exécution n'a pas été lancée. EnvoyDev pilote les agents via ACP — si ce programme parle bien ACP, déclarez ACP comme dialecte du fournisseur et réessayez.",
   "error.providerNotFound":
     "Il n'y a ici aucun fournisseur d'agent nommé \"{id}\". Il a peut-être été supprimé depuis une autre fenêtre.",
+  "error.providerInUse":
+    "\"{id}\" est encore utilisé par {where}, il n'a donc pas été retiré. Déplacez-les d'abord vers un autre agent.",
+  "error.agentUnknown":
+    "« {id} » n’est pas un agent fourni ou catalogué par EnvoyDev, il n’a donc pas été choisi.",
   "error.providerEnvNotAName":
     "EnvoyDev enregistre les noms des variables d'environnement dont un agent a besoin, jamais leurs valeurs, et l'entrée {position} de la liste d'environnement de ce fournisseur n'est pas un nom de variable. Un nom est composé de lettres, de chiffres et de traits de soulignement, et ne commence pas par un chiffre. Le fournisseur n'a pas été ajouté.",
   "error.providerEnvUnset.one":

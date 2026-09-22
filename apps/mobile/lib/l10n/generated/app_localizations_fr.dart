@@ -1238,6 +1238,15 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String composerAgentValue(String value) {
+    return 'Agent : $value';
+  }
+
+  @override
+  String get composerAgentTooltip =>
+      'Changer l\'agent de coding de cette tâche';
+
+  @override
   String composerThinkingValue(String value) {
     return 'Réflexion : $value';
   }

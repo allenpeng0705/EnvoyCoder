@@ -135,11 +135,9 @@ class AgentThinkingOption {
   final String label;
 }
 
-/// Agents a user may pick — ready ones first; others still listed with a reason.
+/// Agents a user may pick on the phone: installed, added, and ready. Nothing else.
 List<HarnessInfo> offeredHarnesses(List<HarnessInfo> all) {
-  final ready = all.where((h) => h.ready && h.id.isNotEmpty).toList();
-  if (ready.isNotEmpty) return ready;
-  return all.where((h) => h.id.isNotEmpty).toList();
+  return all.where((h) => h.ready && h.id.isNotEmpty).toList();
 }
 
 HarnessInfo? harnessById(List<HarnessInfo> all, String? id) {
