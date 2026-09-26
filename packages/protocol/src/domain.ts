@@ -588,6 +588,274 @@ export interface TaskCollaboration {
   lastHandoff?: TaskHandoff;
 }
 
+/* ────────────────────────────── Team / Job / JobStep (M5) ───────────────────────────── */
+
+/**
+ * Roles on a collaborative job step (`docs/envoydev-collaboration.md` §2).
+ *
+ * Superset of `TASK_ROLES` with `orchestrate` for the origin control-plane slot.
+ */
+export const JOB_ROLES = ["orchestrate", "plan", "implement", "review", "observe"] as const;
+export type JobRole = (typeof JOB_ROLES)[number];
+
+export function isJobRole(value: string): value is JobRole {
+  return (JOB_ROLES as readonly string[]).includes(value);
+}
+
+export const CONNECTION_STATUSES = [
+  "online",
+  "connecting",
+  "degraded",
+  "offline",
+  "unknown",
+] as const;
+export type ConnectionStatus = (typeof CONNECTION_STATUSES)[number];
+
+export const CONNECTION_TRANSPORTS = ["lan", "mesh", "ssh", "none"] as const;
+export type ConnectionTransport = (typeof CONNECTION_TRANSPORTS)[number];
+
+/** Reachability of a team member — orthogonal to work progress. */
+export interface ConnectionDetail {
+  status: ConnectionStatus;
+  transport: ConnectionTransport;
+  endpoint?: string;
+  connectedAt?: string;
+  lastHeartbeatAt?: string;
+  lastDialError?: string;
+  rttMs?: number;
+}
+
+export const BLOCK_REASONS = [
+  "no-progress",
+  "needs-attention",
+  "heartbeat-miss",
+  "offer-unacked",
+  "cancel-pending",
+] as const;
+export type BlockReason = (typeof BLOCK_REASONS)[number];
+
+export const RUN_PHASES = ["starting", "streaming", "needs-attention", "idle"] as const;
+export type RunPhase = (typeof RUN_PHASES)[number];
+
+/** Authoritative per-member row on the origin status board. */
+export interface MemberStatus {
+  memberId: string;
+  label: string;
+  rolesOffered: readonly JobRole[];
+  connection: ConnectionDetail;
+  currentStepId?: string;
+  currentRunId?: string;
+  runPhase?: RunPhase;
+  lastEventAt?: string;
+  blocked?: BlockReason;
+  healthNote?: string;
+}
+
+/** Member-local offer accept policy (§4.7). Default is manual. */
+export interface AcceptPolicy {
+  mode: "manual" | "auto-roles";
+  /** Only when mode is auto-roles. `implement` must be listed explicitly to auto-accept. */
+  autoAcceptRoles?: readonly JobRole[];
+}
+
+export interface StallPolicy {
+  T_stallMs: number;
+  T_approvalMs: number;
+  T_cancelAckMs: number;
+  onStall: "stop-and-retry" | "stop-and-reassign" | "alert-only";
+  onStopIgnored: "kick" | "abandon-and-reassign";
+  /**
+   * Automation is inert until the origin status board and ledger notes ship
+   * (`docs/envoydev-collaboration.md` §4.6 ship gate).
+   */
+  automationEnabled: boolean;
+}
+
+export interface FailurePolicy {
+  maxRetriesPerAssignee: number;
+  retryBackoffMs: number;
+  maxReassigns: number;
+  onStepExhausted: "fail-job" | "continue-partial";
+  onPeerRefuse: "reassign" | "fail-step";
+  onTeamRevoked: "cancel-job";
+  allowDegradedAssignees?: boolean;
+}
+
+export const DEFAULT_FAILURE_POLICY: FailurePolicy = {
+  maxRetriesPerAssignee: 2,
+  retryBackoffMs: 2000,
+  maxReassigns: 1,
+  onStepExhausted: "fail-job",
+  onPeerRefuse: "reassign",
+  onTeamRevoked: "cancel-job",
+  allowDegradedAssignees: false,
+};
+
+export const DEFAULT_STALL_POLICY: StallPolicy = {
+  T_stallMs: 60_000,
+  T_approvalMs: 600_000,
+  T_cancelAckMs: 10_000,
+  onStall: "stop-and-retry",
+  onStopIgnored: "abandon-and-reassign",
+  automationEnabled: false,
+};
+
+export const DEFAULT_ACCEPT_POLICY: AcceptPolicy = {
+  mode: "manual",
+};
+
+export interface TeamMember {
+  id: string;
+  label: string;
+  rolesOffered: readonly JobRole[];
+  /** Present on the origin for remote members; `"local"` for the origin machine itself. */
+  hostHints?: string;
+  joinedAt: string;
+  connection: ConnectionDetail;
+  acceptPolicy: AcceptPolicy;
+  /**
+   * Origin-only hash of the per-member secret minted at join.
+   * Never returned in TeamPublic / list APIs — peers present the plaintext as `memberToken`.
+   */
+  memberTokenHash?: string;
+}
+
+export interface Team {
+  id: string;
+  label: string;
+  /** Origin-only; never broadcast to peers after join. */
+  tokenHash: string;
+  tokenExpiresAt: string;
+  /** Token generation — increments on rotate. */
+  tokenGeneration: number;
+  members: readonly TeamMember[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const JOB_STATUSES = [
+  "drafting",
+  "running",
+  "merging",
+  "done",
+  "failed",
+  "cancelled",
+] as const;
+export type JobStatus = (typeof JOB_STATUSES)[number];
+
+export const JOB_STEP_STATUSES = [
+  "pending",
+  "offered",
+  "running",
+  "succeeded",
+  "failed",
+  "cancelled",
+] as const;
+export type JobStepStatus = (typeof JOB_STEP_STATUSES)[number];
+
+export interface JobStepAttempt {
+  memberId: string;
+  startedAt: string;
+  endedAt?: string;
+  error?: string;
+  outcome?: "succeeded" | "failed" | "cancelled" | "refused" | "abandoned";
+  offerId?: string;
+  runId?: string;
+  policy?: string;
+}
+
+export interface JobStep {
+  id: string;
+  jobId: string;
+  role: JobRole;
+  brief: string;
+  worktreeKey: string;
+  /** Absolute path or project-relative key the member must resolve before accept. */
+  cwdHint: string;
+  dependsOn?: readonly string[];
+  assigneeMemberId?: string;
+  status: JobStepStatus;
+  attempts: readonly JobStepAttempt[];
+  reassignCount?: number;
+  resultRef?: string;
+  deadline?: string;
+  /** Last `run.*` / progress report — used by stall (§4.5 / §7). */
+  lastEventAt?: string;
+  /** Last event sequence from the member run (§7.6); gaps set `hasGap`. */
+  lastEventSeq?: number;
+  /** True when a progress report skipped one or more event seq numbers. */
+  hasGap?: boolean;
+  /** Live approval request id when `runPhase` is needs-attention (§7.7). */
+  approvalRequestId?: string;
+  runPhase?: RunPhase;
+  blocked?: BlockReason;
+}
+
+export interface JobFinalReport {
+  summary: string;
+  artifacts: readonly string[];
+  failures: readonly {
+    stepId: string;
+    attempts: number;
+    lastError?: string;
+  }[];
+}
+
+export interface JobLedgerNote {
+  id: string;
+  at: string;
+  kind: "info" | "stop" | "reassign" | "stall" | "kick" | "report";
+  message: string;
+  stepId?: string;
+  memberId?: string;
+}
+
+export interface Job {
+  id: string;
+  teamId: string;
+  projectId?: string;
+  title: string;
+  goal: string;
+  status: JobStatus;
+  steps: readonly JobStep[];
+  finalReport?: JobFinalReport;
+  policy: FailurePolicy;
+  stallPolicy: StallPolicy;
+  ledger: readonly JobLedgerNote[];
+  createdAt: string;
+  updatedAt: string;
+  endedAt?: string;
+}
+
+/** Outbound offer to a member for one job step (§6.1). */
+export interface StepOffer {
+  offerId: string;
+  jobId: string;
+  stepId: string;
+  teamId: string;
+  brief: string;
+  role: JobRole;
+  worktreeKey: string;
+  cwdHint: string;
+  deadline?: string;
+  assigneeMemberId: string;
+  status: "pending" | "accepted" | "refused" | "cancelled";
+  policy?: string;
+  createdAt: string;
+  runId?: string;
+  /**
+   * Secret presented with `coder.cancelInboundJobStep` so only the origin that minted the
+   * offer (and the assignee who received it) can cancel — not every holder of the team token.
+   */
+  cancelNonce?: string;
+}
+
+export function shouldAutoAccept(policy: AcceptPolicy, role: JobRole): boolean {
+  if (policy.mode !== "auto-roles") return false;
+  const roles = policy.autoAcceptRoles ?? [];
+  return roles.includes(role);
+}
+
 /**
  * Status buckets, chosen to answer the only question the sidebar has to answer at a glance:
  * *does this need me?*
@@ -1145,6 +1413,18 @@ export const ENVOYDEV_ERRORS = {
    * is that the press changed nothing.
    */
   gitMergeResolveFailed: "envoydev.git-merge-resolve-failed",
+  /** Team token TTL expired or was rotated (`docs/envoydev-collaboration.md`). */
+  teamExpired: "envoydev.team-expired",
+  /** Job step exhausted retries and reassigns. */
+  stepExhausted: "envoydev.step-exhausted",
+  /** Job reached a terminal failure. */
+  jobFailed: "envoydev.job-failed",
+  /** No team with that id. */
+  teamMissing: "envoydev.team-missing",
+  /** No job with that id. */
+  jobMissing: "envoydev.job-missing",
+  /** No job step with that id. */
+  stepMissing: "envoydev.step-missing",
 } as const;
 
 export type EnvoyDevErrorCode = (typeof ENVOYDEV_ERRORS)[keyof typeof ENVOYDEV_ERRORS];
@@ -1432,6 +1712,58 @@ export const RPC_METHODS = [
   "coder.offerParticipantRun",
   "coder.acceptParticipantOffer",
   "coder.refuseParticipantOffer",
+  /* — Team / Job / JobStep (M5; docs/envoydev-collaboration.md) — */
+  "coder.createTeam",
+  "coder.listTeams",
+  "coder.teamStatus",
+  "coder.rotateTeamToken",
+  "coder.getTeamToken",
+  "coder.dissolveTeam",
+  "coder.joinTeam",
+  "coder.teamHeartbeat",
+  "coder.setMemberAcceptPolicy",
+  /**
+   * Origin window only (not pre-auth): accept a pending offer assigned to `local`.
+   * Peer `coder.acceptJobStepOffer` refuses local assignees — LAN preAuth looks like an owner session.
+   */
+  "coder.acceptLocalJobStepOffer",
+  "coder.refuseLocalJobStepOffer",
+  "coder.kickMember",
+  "coder.createJob",
+  "coder.listJobs",
+  "coder.getJob",
+  "coder.updateJobSteps",
+  "coder.startJob",
+  "coder.pauseJob",
+  "coder.stopJob",
+  "coder.offerJobStep",
+  "coder.acceptJobStepOffer",
+  "coder.refuseJobStepOffer",
+  "coder.stopJobStep",
+  "coder.reassignJobStep",
+  "coder.failJobStep",
+  "coder.suggestJobSteps",
+  "coder.setJobStallAutomation",
+  /** Origin → member: deliver a pending StepOffer. */
+  "coder.inboundJobStepOffer",
+  /** Member window: list pending inbound offers. */
+  "coder.listInboundJobOffers",
+  /** Member accepts an inbound offer (starts local run, notifies origin). */
+  "coder.acceptInboundJobStepOffer",
+  /** Member refuses an inbound offer (notifies origin). */
+  "coder.refuseInboundJobStepOffer",
+  /** Member → origin: run progress / phase for status board + stall. */
+  "coder.reportJobStepProgress",
+  /** Peer-side memberships this daemon holds after remote join. */
+  "coder.listTeamMemberships",
+  /** Origin → member: cancel an inbound offer and/or its live run. */
+  "coder.cancelInboundJobStep",
+  /** Member: answer a harness approval (origin may dial this; first wins §7.7). */
+  "coder.answerInboundJobStepApproval",
+  /** Origin: answer a job-step approval locally or by dialling the assignee. */
+  "coder.answerJobStepApproval",
+  /** Origin: list persisted offers for a job (Accept UI for local pending). */
+  "coder.listJobOffers",
   /**
    * Mint a pairing code for a phone (or other remote client).
    *

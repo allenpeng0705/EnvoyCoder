@@ -48,6 +48,7 @@ import {
   isHarnessId,
   statusNeedsHuman,
 } from "@envoydev/protocol";
+import type { Job } from "@envoydev/protocol";
 import {
   type ProjectGroup,
   type SearchFilters,
@@ -61,6 +62,7 @@ import { localize, statusKey, type Notice, type Refusal } from "../i18n/notice.j
 import { harnessBadge } from "../composer/harness-label.js";
 import { mergeOfferedAgents } from "../composer/agent-for.js";
 import type { GitSnapshot } from "../state/coderStore.js";
+import { jobAttentionCount } from "./JobPane.js";
 
 import { ProjectAgentPicker } from "./ProjectAgentPicker.js";
 import { ProjectBranches } from "./ProjectBranches.js";
@@ -68,6 +70,10 @@ import { ProjectBranches } from "./ProjectBranches.js";
 export interface CoderSidebarProps {
   projects: readonly Project[];
   tasks: readonly Task[];
+  /** Opt-in collaborative jobs (M5) — shown as rail rows under Jobs. */
+  jobs?: readonly Job[];
+  activeJobId?: string | undefined;
+  onSelectJob?: (jobId: string) => void;
   activeTaskId?: string | undefined;
   /** Called when the user picks a task. */
   onSelect: (taskId: string) => void;
@@ -246,7 +252,10 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
     return filterRows(tree, filters);
   }, [props.projects, props.tasks, props.activeTaskId, query]);
 
-  const attention = useMemo(() => attentionSummary(props.tasks), [props.tasks]);
+  const attention = useMemo(
+    () => attentionSummary(props.tasks, jobAttentionCount(props.jobs ?? [])),
+    [props.tasks, props.jobs],
+  );
 
   return (
     <aside className="sidebar" aria-label={t("sidebar.aria")}>
@@ -305,6 +314,31 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
           {attention.badge === 1
             ? t("sidebar.attention.one")
             : t("sidebar.attention.many", { count: attention.badge })}
+        </div>
+      ) : null}
+
+      {props.jobs && props.jobs.length > 0 ? (
+        <div className="sidebar__jobs" data-testid="job-list">
+          <div className="sidebar__group-label">{t("sidebar.jobs")}</div>
+          <ul className="sidebar__job-rows">
+            {props.jobs.map((job) => (
+              <li key={job.id}>
+                <button
+                  type="button"
+                  className={
+                    props.activeJobId === job.id
+                      ? "sidebar__task sidebar__task--active"
+                      : "sidebar__task"
+                  }
+                  onClick={() => props.onSelectJob?.(job.id)}
+                >
+                  <span className="dot" data-status={job.status} aria-hidden />
+                  <span className="sidebar__task-title">{job.title}</span>
+                  <span className="sidebar__task-meta">{job.status}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 

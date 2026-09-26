@@ -392,6 +392,261 @@ export const TaskCollaborationSchema = z
   })
   .strict();
 
+export const JobRoleSchema = z.enum(["orchestrate", "plan", "implement", "review", "observe"]);
+
+export const ConnectionStatusSchema = z.enum([
+  "online",
+  "connecting",
+  "degraded",
+  "offline",
+  "unknown",
+]);
+
+export const ConnectionTransportSchema = z.enum(["lan", "mesh", "ssh", "none"]);
+
+export const ConnectionDetailSchema = z
+  .object({
+    status: ConnectionStatusSchema,
+    transport: ConnectionTransportSchema,
+    endpoint: z.string().optional(),
+    connectedAt: z.string().optional(),
+    lastHeartbeatAt: z.string().optional(),
+    lastDialError: z.string().optional(),
+    rttMs: z.number().nonnegative().optional(),
+  })
+  .strict();
+
+export const BlockReasonSchema = z.enum([
+  "no-progress",
+  "needs-attention",
+  "heartbeat-miss",
+  "offer-unacked",
+  "cancel-pending",
+]);
+
+export const RunPhaseSchema = z.enum(["starting", "streaming", "needs-attention", "idle"]);
+
+export const AcceptPolicySchema = z
+  .object({
+    mode: z.enum(["manual", "auto-roles"]),
+    autoAcceptRoles: z.array(JobRoleSchema).readonly().optional(),
+  })
+  .strict();
+
+export const StallPolicySchema = z
+  .object({
+    T_stallMs: z.number().int().positive(),
+    T_approvalMs: z.number().int().positive(),
+    T_cancelAckMs: z.number().int().positive(),
+    onStall: z.enum(["stop-and-retry", "stop-and-reassign", "alert-only"]),
+    onStopIgnored: z.enum(["kick", "abandon-and-reassign"]),
+    automationEnabled: z.boolean(),
+  })
+  .strict();
+
+export const FailurePolicySchema = z
+  .object({
+    maxRetriesPerAssignee: z.number().int().nonnegative(),
+    retryBackoffMs: z.number().int().nonnegative(),
+    maxReassigns: z.number().int().nonnegative(),
+    onStepExhausted: z.enum(["fail-job", "continue-partial"]),
+    onPeerRefuse: z.enum(["reassign", "fail-step"]),
+    onTeamRevoked: z.literal("cancel-job"),
+    allowDegradedAssignees: z.boolean().optional(),
+  })
+  .strict();
+
+export const TeamMemberSchema = z
+  .object({
+    id: z.string().min(1),
+    label: z.string().min(1),
+    rolesOffered: z.array(JobRoleSchema).readonly(),
+    hostHints: z.string().optional(),
+    joinedAt: z.string().min(1),
+    connection: ConnectionDetailSchema,
+    acceptPolicy: AcceptPolicySchema,
+  })
+  .strict();
+
+export const TeamSchema = z
+  .object({
+    id: z.string().min(1),
+    label: z.string().min(1),
+    tokenHash: z.string().min(1),
+    tokenExpiresAt: z.string().min(1),
+    tokenGeneration: z.number().int().nonnegative(),
+    members: z.array(TeamMemberSchema).readonly(),
+    createdAt: z.string().min(1),
+    updatedAt: z.string().min(1),
+  })
+  .strict();
+
+/** Public team view — token plaintext only returned once at create/rotate. */
+export const TeamPublicSchema = z
+  .object({
+    id: z.string().min(1),
+    label: z.string().min(1),
+    tokenExpiresAt: z.string().min(1),
+    tokenGeneration: z.number().int().nonnegative(),
+    members: z.array(TeamMemberSchema).readonly(),
+    createdAt: z.string().min(1),
+    updatedAt: z.string().min(1),
+  })
+  .strict();
+
+export const MemberStatusSchema = z
+  .object({
+    memberId: z.string().min(1),
+    label: z.string().min(1),
+    rolesOffered: z.array(JobRoleSchema).readonly(),
+    connection: ConnectionDetailSchema,
+    currentStepId: z.string().min(1).optional(),
+    currentRunId: z.string().min(1).optional(),
+    runPhase: RunPhaseSchema.optional(),
+    lastEventAt: z.string().optional(),
+    blocked: BlockReasonSchema.optional(),
+    healthNote: z.string().optional(),
+  })
+  .strict();
+
+export const JobStepAttemptSchema = z
+  .object({
+    memberId: z.string().min(1),
+    startedAt: z.string().min(1),
+    endedAt: z.string().optional(),
+    error: z.string().optional(),
+    outcome: z.enum(["succeeded", "failed", "cancelled", "refused", "abandoned"]).optional(),
+    offerId: z.string().optional(),
+    runId: z.string().optional(),
+    policy: z.string().optional(),
+  })
+  .strict();
+
+export const JobStepStatusSchema = z.enum([
+  "pending",
+  "offered",
+  "running",
+  "succeeded",
+  "failed",
+  "cancelled",
+]);
+
+export const JobStepSchema = z
+  .object({
+    id: z.string().min(1),
+    jobId: z.string().min(1),
+    role: JobRoleSchema,
+    brief: z.string().min(1),
+    worktreeKey: z.string().min(1),
+    cwdHint: z.string().min(1),
+    dependsOn: z.array(z.string().min(1)).readonly().optional(),
+    assigneeMemberId: z.string().min(1).optional(),
+    status: JobStepStatusSchema,
+    attempts: z.array(JobStepAttemptSchema).readonly(),
+    reassignCount: z.number().int().nonnegative().optional(),
+    resultRef: z.string().optional(),
+    deadline: z.string().optional(),
+    lastEventAt: z.string().optional(),
+    lastEventSeq: z.number().int().nonnegative().optional(),
+    hasGap: z.boolean().optional(),
+    approvalRequestId: z.string().min(1).optional(),
+    runPhase: z.enum(["starting", "streaming", "needs-attention", "idle"]).optional(),
+    blocked: z
+      .enum(["no-progress", "needs-attention", "heartbeat-miss", "offer-unacked", "cancel-pending"])
+      .optional(),
+  })
+  .strict();
+
+export const JobStatusSchema = z.enum([
+  "drafting",
+  "running",
+  "merging",
+  "done",
+  "failed",
+  "cancelled",
+]);
+
+export const JobFinalReportSchema = z
+  .object({
+    summary: z.string(),
+    artifacts: z.array(z.string()).readonly(),
+    failures: z
+      .array(
+        z
+          .object({
+            stepId: z.string().min(1),
+            attempts: z.number().int().nonnegative(),
+            lastError: z.string().optional(),
+          })
+          .strict(),
+      )
+      .readonly(),
+  })
+  .strict();
+
+export const JobLedgerNoteSchema = z
+  .object({
+    id: z.string().min(1),
+    at: z.string().min(1),
+    kind: z.enum(["info", "stop", "reassign", "stall", "kick", "report"]),
+    message: z.string().min(1),
+    stepId: z.string().optional(),
+    memberId: z.string().optional(),
+  })
+  .strict();
+
+export const JobSchema = z
+  .object({
+    id: z.string().min(1),
+    teamId: z.string().min(1),
+    projectId: z.string().min(1).optional(),
+    title: z.string().min(1),
+    goal: z.string().min(1),
+    status: JobStatusSchema,
+    steps: z.array(JobStepSchema).readonly(),
+    finalReport: JobFinalReportSchema.optional(),
+    policy: FailurePolicySchema,
+    stallPolicy: StallPolicySchema,
+    ledger: z.array(JobLedgerNoteSchema).readonly(),
+    createdAt: z.string().min(1),
+    updatedAt: z.string().min(1),
+    endedAt: z.string().optional(),
+  })
+  .strict();
+
+export const StepOfferSchema = z
+  .object({
+    offerId: z.string().min(1),
+    jobId: z.string().min(1),
+    stepId: z.string().min(1),
+    teamId: z.string().min(1),
+    brief: z.string().min(1),
+    role: JobRoleSchema,
+    worktreeKey: z.string().min(1),
+    cwdHint: z.string().min(1),
+    deadline: z.string().optional(),
+    assigneeMemberId: z.string().min(1),
+    status: z.enum(["pending", "accepted", "refused", "cancelled"]),
+    policy: z.string().optional(),
+    createdAt: z.string().min(1),
+    runId: z.string().optional(),
+    cancelNonce: z.string().min(8).optional(),
+  })
+  .strict();
+
+export const JobStepDraftSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    role: JobRoleSchema,
+    brief: z.string().min(1),
+    worktreeKey: z.string().min(1),
+    cwdHint: z.string().min(1),
+    dependsOn: z.array(z.string().min(1)).readonly().optional(),
+    assigneeMemberId: z.string().min(1).optional(),
+    deadline: z.string().optional(),
+  })
+  .strict();
+
 export const TaskSchema = z
   .object({
     id: z.string().min(1),
@@ -3124,6 +3379,478 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
     result: z
       .object({ offerId: z.string().min(1), status: z.literal("refused"), policy: z.string().min(1) })
       .strict(),
+  },
+
+  /* — Team / Job / JobStep (M5) — */
+  "coder.createTeam": {
+    params: z
+      .object({
+        label: z.string().min(1).max(120),
+        /** Hours until token expiry. Default 24. */
+        ttlHours: z.number().positive().max(168).optional(),
+      })
+      .strict(),
+    result: z
+      .object({
+        team: TeamPublicSchema,
+        /** Shown once — copy/paste; never re-fetched in plaintext. */
+        token: z.string().min(16),
+        /**
+         * Copy/paste invite embedding the origin WebSocket URL so a second
+         * EnvoyDev can present the token to this daemon (`envoydev.team.v1.…`).
+         */
+        invite: z.string().min(16),
+      })
+      .strict(),
+  },
+  "coder.listTeams": {
+    params: EmptyParams,
+    result: z.object({ teams: z.array(TeamPublicSchema).readonly() }).strict(),
+  },
+  "coder.teamStatus": {
+    params: z.object({ teamId: z.string().min(1) }).strict(),
+    result: z
+      .object({
+        team: TeamPublicSchema,
+        board: z.array(MemberStatusSchema).readonly(),
+      })
+      .strict(),
+  },
+  "coder.rotateTeamToken": {
+    params: z
+      .object({
+        teamId: z.string().min(1),
+        ttlHours: z.number().positive().max(168).optional(),
+      })
+      .strict(),
+    result: z.object({ team: TeamPublicSchema, token: z.string().min(16), invite: z.string().min(16) }).strict(),
+  },
+  "coder.dissolveTeam": {
+    params: z.object({ teamId: z.string().min(1) }).strict(),
+    result: z.object({ dissolved: z.literal(true) }).strict(),
+  },
+  "coder.joinTeam": {
+    params: z
+      .object({
+        token: z.string().min(16),
+        label: z.string().min(1).max(120),
+        rolesOffered: z.array(JobRoleSchema).min(1).optional(),
+        hostHints: z.string().max(500).optional(),
+      })
+      .strict(),
+    result: z
+      .object({
+        teamId: z.string().min(1),
+        memberId: z.string().min(1),
+        team: TeamPublicSchema,
+        /** Shown once — proves this member on heartbeat / progress; never re-listed. */
+        memberToken: z.string().min(16),
+      })
+      .strict(),
+  },
+  "coder.teamHeartbeat": {
+    params: z
+      .object({
+        teamId: z.string().min(1),
+        memberId: z.string().min(1),
+        token: z.string().min(16),
+        /** Per-member secret from join — required so peers cannot spoof another memberId. */
+        memberToken: z.string().min(16),
+        /** Member pushes its AcceptPolicy on each beat — avoids pre-auth policy RPCs. */
+        acceptPolicy: AcceptPolicySchema.optional(),
+      })
+      .strict(),
+    result: z.object({ ok: z.literal(true), connection: ConnectionDetailSchema }).strict(),
+  },
+  "coder.setMemberAcceptPolicy": {
+    params: z
+      .object({
+        teamId: z.string().min(1),
+        memberId: z.string().min(1),
+        acceptPolicy: AcceptPolicySchema,
+      })
+      .strict(),
+    result: z.object({ member: TeamMemberSchema }).strict(),
+  },
+  "coder.getTeamToken": {
+    params: z.object({ teamId: z.string().min(1) }).strict(),
+    result: z.object({ teamId: z.string().min(1), token: z.string().min(16) }).strict(),
+  },
+  "coder.kickMember": {
+    params: z
+      .object({
+        teamId: z.string().min(1),
+        memberId: z.string().min(1),
+      })
+      .strict(),
+    result: z.object({ kicked: z.literal(true) }).strict(),
+  },
+  "coder.createJob": {
+    params: z
+      .object({
+        teamId: z.string().min(1),
+        title: z.string().min(1).max(200),
+        goal: z.string().min(1).max(16_000),
+        projectId: z.string().min(1).optional(),
+        steps: z.array(JobStepDraftSchema).max(64).optional(),
+        policy: FailurePolicySchema.partial().optional(),
+      })
+      .strict(),
+    result: z.object({ job: JobSchema }).strict(),
+  },
+  "coder.listJobs": {
+    params: z
+      .object({
+        teamId: z.string().min(1).optional(),
+        projectId: z.string().min(1).optional(),
+      })
+      .strict(),
+    result: z.object({ jobs: z.array(JobSchema).readonly() }).strict(),
+  },
+  "coder.getJob": {
+    params: z.object({ jobId: z.string().min(1) }).strict(),
+    result: z.object({ job: JobSchema }).strict(),
+  },
+  "coder.updateJobSteps": {
+    params: z
+      .object({
+        jobId: z.string().min(1),
+        steps: z.array(JobStepDraftSchema).max(64),
+      })
+      .strict(),
+    result: z.object({ job: JobSchema }).strict(),
+  },
+  "coder.startJob": {
+    params: z.object({ jobId: z.string().min(1) }).strict(),
+    result: z.object({ job: JobSchema }).strict(),
+  },
+  "coder.pauseJob": {
+    params: z.object({ jobId: z.string().min(1) }).strict(),
+    result: z.object({ job: JobSchema }).strict(),
+  },
+  "coder.stopJob": {
+    params: z.object({ jobId: z.string().min(1) }).strict(),
+    result: z.object({ job: JobSchema }).strict(),
+  },
+  "coder.offerJobStep": {
+    params: z
+      .object({
+        jobId: z.string().min(1),
+        stepId: z.string().min(1),
+        memberId: z.string().min(1).optional(),
+      })
+      .strict(),
+    result: z
+      .object({
+        status: z.enum(["offered", "accepted", "refused"]),
+        offer: StepOfferSchema.optional(),
+        policy: z.string().optional(),
+      })
+      .strict(),
+  },
+  "coder.acceptJobStepOffer": {
+    params: z
+      .object({
+        offerId: z.string().min(1),
+        /** Resolved local cwd — required when accepting. */
+        resolvedCwd: z.string().min(1),
+        /** Real harness run id — required on the pre-auth path (no empty "running"). */
+        runId: z.string().min(1),
+        /** Required — must equal offer.assigneeMemberId; never `local` on this pre-auth path. */
+        memberId: z.string().min(1),
+        /** Required — pre-auth mutator. */
+        teamToken: z.string().min(16),
+        /** Per-member secret from join — proves this machine is the assignee. */
+        memberToken: z.string().min(16),
+        /** Minted with the offer — proves the caller received this offer (not token alone). */
+        cancelNonce: z.string().min(8),
+      })
+      .strict(),
+    result: z
+      .object({
+        offerId: z.string().min(1),
+        status: z.literal("accepted"),
+        runId: z.string().min(1).optional(),
+      })
+      .strict(),
+  },
+  "coder.refuseJobStepOffer": {
+    params: z
+      .object({
+        offerId: z.string().min(1),
+        policy: z.string().min(1),
+        /** Required — must equal offer.assigneeMemberId; never `local` on this pre-auth path. */
+        memberId: z.string().min(1),
+        /** Required — pre-auth mutator. */
+        teamToken: z.string().min(16),
+        /** Per-member secret from join — proves this machine is the assignee. */
+        memberToken: z.string().min(16),
+        /** Minted with the offer — proves the caller received this offer. */
+        cancelNonce: z.string().min(8),
+      })
+      .strict(),
+    result: z
+      .object({
+        offerId: z.string().min(1),
+        status: z.literal("refused"),
+        policy: z.string().min(1),
+      })
+      .strict(),
+  },
+  /** Origin / loopback only — not in collab preAuth. */
+  "coder.acceptLocalJobStepOffer": {
+    params: z
+      .object({
+        offerId: z.string().min(1),
+        resolvedCwd: z.string().min(1),
+      })
+      .strict(),
+    result: z
+      .object({
+        offerId: z.string().min(1),
+        status: z.literal("accepted"),
+        runId: z.string().min(1).optional(),
+      })
+      .strict(),
+  },
+  "coder.refuseLocalJobStepOffer": {
+    params: z
+      .object({
+        offerId: z.string().min(1),
+        policy: z.string().min(1),
+      })
+      .strict(),
+    result: z
+      .object({
+        offerId: z.string().min(1),
+        status: z.literal("refused"),
+        policy: z.string().min(1),
+      })
+      .strict(),
+  },
+  "coder.inboundJobStepOffer": {
+    params: z
+      .object({
+        offer: StepOfferSchema,
+        originWs: z.string().min(1),
+        teamToken: z.string().min(16),
+      })
+      .strict(),
+    result: z
+      .object({
+        received: z.literal(true),
+        /** Auto-accepted when member AcceptPolicy allows. */
+        status: z.enum(["pending", "accepted", "refused"]),
+        runId: z.string().min(1).optional(),
+        policy: z.string().optional(),
+      })
+      .strict(),
+  },
+  "coder.listInboundJobOffers": {
+    params: EmptyParams,
+    result: z
+      .object({
+        offers: z.array(StepOfferSchema.extend({ originWs: z.string(), receivedAt: z.string() })).readonly(),
+      })
+      .strict(),
+  },
+  "coder.acceptInboundJobStepOffer": {
+    params: z
+      .object({
+        offerId: z.string().min(1),
+        resolvedCwd: z.string().min(1),
+      })
+      .strict(),
+    result: z
+      .object({
+        offerId: z.string().min(1),
+        status: z.literal("accepted"),
+        runId: z.string().min(1).optional(),
+        /** Local task id so the peer window can open the transcript (§11.3). */
+        taskId: z.string().min(1).optional(),
+      })
+      .strict(),
+  },
+  "coder.answerInboundJobStepApproval": {
+    params: z
+      .object({
+        offerId: z.string().min(1),
+        runId: z.string().min(1),
+        requestId: z.string().min(1),
+        optionId: z.string().min(1),
+        teamId: z.string().min(1),
+        teamToken: z.string().min(16),
+        /** Minted with the offer — origin or assignee only. */
+        cancelNonce: z.string().min(8),
+      })
+      .strict(),
+    result: z
+      .object({
+        /** True when this answer settled the approval; false if already resolved (§7.7). */
+        answered: z.boolean(),
+        alreadyResolved: z.boolean(),
+      })
+      .strict(),
+  },
+  "coder.answerJobStepApproval": {
+    params: z
+      .object({
+        jobId: z.string().min(1),
+        stepId: z.string().min(1),
+        requestId: z.string().min(1),
+        optionId: z.string().min(1),
+      })
+      .strict(),
+    result: z
+      .object({
+        answered: z.boolean(),
+        alreadyResolved: z.boolean(),
+      })
+      .strict(),
+  },
+  "coder.refuseInboundJobStepOffer": {
+    params: z
+      .object({
+        offerId: z.string().min(1),
+        policy: z.string().min(1),
+      })
+      .strict(),
+    result: z
+      .object({
+        offerId: z.string().min(1),
+        status: z.literal("refused"),
+        policy: z.string().min(1),
+      })
+      .strict(),
+  },
+  "coder.reportJobStepProgress": {
+    params: z
+      .object({
+        jobId: z.string().min(1),
+        stepId: z.string().min(1),
+        memberId: z.string().min(1),
+        teamToken: z.string().min(16),
+        /** Per-member secret from join — required on the pre-auth path. */
+        memberToken: z.string().min(16),
+        runId: z.string().min(1).optional(),
+        runPhase: z.enum(["starting", "streaming", "needs-attention", "idle"]).optional(),
+        lastEventAt: z.string().min(1).optional(),
+        blocked: z
+          .enum(["no-progress", "needs-attention", "heartbeat-miss", "offer-unacked", "cancel-pending"])
+          .optional(),
+        outcome: z.enum(["succeeded", "failed", "cancelled"]).optional(),
+        error: z.string().max(2_000).optional(),
+        ledgerMessage: z.string().max(500).optional(),
+        /** Monotonic per-run event seq from the member (§7.6). */
+        eventSeq: z.number().int().nonnegative().optional(),
+        /** Harness approval request id when blocked on approval. */
+        approvalRequestId: z.string().min(1).optional(),
+      })
+      .strict(),
+    result: z.object({ ok: z.literal(true), job: JobSchema }).strict(),
+  },
+  "coder.listTeamMemberships": {
+    params: EmptyParams,
+    result: z
+      .object({
+        memberships: z
+          .array(
+            z
+              .object({
+                teamId: z.string().min(1),
+                memberId: z.string().min(1),
+                label: z.string(),
+                teamLabel: z.string(),
+                rolesOffered: z.array(JobRoleSchema).readonly(),
+                acceptPolicy: AcceptPolicySchema,
+                joinedAt: z.string(),
+                originWs: z.string(),
+              })
+              .strict(),
+          )
+          .readonly(),
+      })
+      .strict(),
+  },
+  "coder.cancelInboundJobStep": {
+    params: z
+      .object({
+        offerId: z.string().min(1),
+        runId: z.string().min(1).optional(),
+        teamId: z.string().min(1),
+        teamToken: z.string().min(16),
+        /** Required — minted with the offer; team token alone is not enough. */
+        cancelNonce: z.string().min(8),
+        reason: z.string().max(200).optional(),
+      })
+      .strict(),
+    result: z
+      .object({
+        cancelled: z.boolean(),
+        /** True when a live harness was asked to stop. */
+        runCancelled: z.boolean(),
+      })
+      .strict(),
+  },
+  "coder.listJobOffers": {
+    params: z.object({ jobId: z.string().min(1) }).strict(),
+    result: z.object({ offers: z.array(StepOfferSchema).readonly() }).strict(),
+  },
+  "coder.stopJobStep": {
+    params: z
+      .object({
+        jobId: z.string().min(1),
+        stepId: z.string().min(1),
+        reason: z.string().max(500).optional(),
+      })
+      .strict(),
+    result: z.object({ job: JobSchema }).strict(),
+  },
+  "coder.reassignJobStep": {
+    params: z
+      .object({
+        jobId: z.string().min(1),
+        stepId: z.string().min(1),
+        memberId: z.string().min(1).optional(),
+      })
+      .strict(),
+    result: z.object({ job: JobSchema, offer: StepOfferSchema.optional() }).strict(),
+  },
+  "coder.failJobStep": {
+    params: z
+      .object({
+        jobId: z.string().min(1),
+        stepId: z.string().min(1),
+        reason: z.string().max(500).optional(),
+      })
+      .strict(),
+    result: z.object({ job: JobSchema }).strict(),
+  },
+  "coder.suggestJobSteps": {
+    params: z
+      .object({
+        jobId: z.string().min(1),
+        /** Optional hint for the orchestrator-agent; proposal only — daemon does not auto-commit. */
+        hint: z.string().max(4_000).optional(),
+      })
+      .strict(),
+    result: z
+      .object({
+        /** Proposed steps — caller must `updateJobSteps` to commit. */
+        steps: z.array(JobStepDraftSchema).readonly(),
+        note: z.string(),
+      })
+      .strict(),
+  },
+  "coder.setJobStallAutomation": {
+    params: z
+      .object({
+        jobId: z.string().min(1),
+        /** Only enable after status board + ledger notes are visible (§4.6 ship gate). */
+        enabled: z.boolean(),
+      })
+      .strict(),
+    result: z.object({ job: JobSchema }).strict(),
   },
 
   /* — paired phones — */

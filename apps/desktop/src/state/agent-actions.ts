@@ -243,4 +243,168 @@ export interface AgentActions {
    * `path` is the ordinary "nothing has written one yet" rather than a failure.
    */
   getDaemonLog(): Promise<DaemonLogAnswer>;
+
+  /* — Team / Job (M5) — */
+  createTeam(input: { label: string; ttlHours?: number }): Promise<
+    | { ok: true; team: { id: string; label: string; tokenExpiresAt: string; tokenGeneration: number; members: readonly unknown[]; createdAt: string; updatedAt: string }; token: string; invite: string }
+    | Refusal
+  >;
+  listTeams(): Promise<
+    | {
+        ok: true;
+        teams: ReadonlyArray<{
+          id: string;
+          label: string;
+          tokenExpiresAt: string;
+          tokenGeneration: number;
+          members: ReadonlyArray<{
+            id: string;
+            label: string;
+            rolesOffered: readonly string[];
+            connection: { status: string; transport: string };
+          }>;
+          createdAt: string;
+          updatedAt: string;
+        }>;
+      }
+    | Refusal
+  >;
+  teamStatus(teamId: string): Promise<
+    | { ok: true; team: unknown; board: readonly import("@envoydev/protocol").MemberStatus[] }
+    | Refusal
+  >;
+  rotateTeamToken(teamId: string, ttlHours?: number): Promise<
+    | { ok: true; team: unknown; token: string; invite?: string }
+    | Refusal
+  >;
+  dissolveTeam(teamId: string): Promise<{ ok: true; dissolved: true } | Refusal>;
+  joinTeam(input: {
+    token: string;
+    label: string;
+    rolesOffered?: readonly import("@envoydev/protocol").JobRole[];
+    hostHints?: string;
+  }): Promise<
+    | { ok: true; teamId: string; memberId: string; team: { id: string; label: string } }
+    | Refusal
+  >;
+  createJob(input: {
+    teamId: string;
+    title: string;
+    goal: string;
+    projectId?: string;
+    steps?: readonly {
+      role: import("@envoydev/protocol").JobRole;
+      brief: string;
+      worktreeKey: string;
+      cwdHint: string;
+      dependsOn?: readonly string[];
+    }[];
+  }): Promise<{ ok: true; job: import("@envoydev/protocol").Job } | Refusal>;
+  listJobs(filter: { teamId?: string; projectId?: string }): Promise<
+    | { ok: true; jobs: readonly import("@envoydev/protocol").Job[] }
+    | Refusal
+  >;
+  getJob(jobId: string): Promise<{ ok: true; job: import("@envoydev/protocol").Job } | Refusal>;
+  startJob(jobId: string): Promise<{ ok: true; job: import("@envoydev/protocol").Job } | Refusal>;
+  pauseJob(jobId: string): Promise<{ ok: true; job: import("@envoydev/protocol").Job } | Refusal>;
+  stopJob(jobId: string): Promise<{ ok: true; job: import("@envoydev/protocol").Job } | Refusal>;
+  stopJobStep(jobId: string, stepId: string, reason?: string): Promise<{ ok: true; job: import("@envoydev/protocol").Job } | Refusal>;
+  reassignJobStep(jobId: string, stepId: string, memberId?: string): Promise<{ ok: true; job: import("@envoydev/protocol").Job } | Refusal>;
+  suggestJobSteps(jobId: string, hint?: string): Promise<
+    | { ok: true; steps: readonly unknown[]; note: string }
+    | Refusal
+  >;
+  updateJobSteps(
+    jobId: string,
+    steps: readonly {
+      role: import("@envoydev/protocol").JobRole;
+      brief: string;
+      worktreeKey: string;
+      cwdHint: string;
+      dependsOn?: readonly string[];
+      id?: string;
+    }[],
+  ): Promise<{ ok: true; job: import("@envoydev/protocol").Job } | Refusal>;
+  kickMember(teamId: string, memberId: string): Promise<{ ok: true; kicked: true } | Refusal>;
+  setJobStallAutomation(
+    jobId: string,
+    enabled: boolean,
+  ): Promise<{ ok: true; job: import("@envoydev/protocol").Job } | Refusal>;
+  listInboundJobOffers(): Promise<
+    | {
+        ok: true;
+        offers: ReadonlyArray<
+          import("@envoydev/protocol").StepOffer & { originWs: string; receivedAt: string }
+        >;
+      }
+    | Refusal
+  >;
+  acceptInboundJobStepOffer(
+    offerId: string,
+    resolvedCwd: string,
+  ): Promise<{ ok: true; offerId: string; status: "accepted"; runId?: string; taskId?: string } | Refusal>;
+  refuseInboundJobStepOffer(
+    offerId: string,
+    policy: string,
+  ): Promise<{ ok: true; offerId: string; status: "refused"; policy: string } | Refusal>;
+  listTeamMemberships(): Promise<
+    | {
+        ok: true;
+        memberships: ReadonlyArray<{
+          teamId: string;
+          memberId: string;
+          label: string;
+          teamLabel: string;
+          rolesOffered: readonly string[];
+          acceptPolicy: import("@envoydev/protocol").AcceptPolicy;
+          joinedAt: string;
+          originWs: string;
+        }>;
+      }
+    | Refusal
+  >;
+  setMemberAcceptPolicy(
+    teamId: string,
+    memberId: string,
+    acceptPolicy: import("@envoydev/protocol").AcceptPolicy,
+  ): Promise<{ ok: true; member: unknown } | Refusal>;
+  /** Origin: pending/accepted offers for a job (Accept UI when local AcceptPolicy is manual). */
+  listJobOffers(
+    jobId: string,
+  ): Promise<{ ok: true; offers: readonly import("@envoydev/protocol").StepOffer[] } | Refusal>;
+  /** Owner window only — plaintext team token for pre-auth mutators. */
+  getTeamToken(teamId: string): Promise<{ ok: true; teamId: string; token: string } | Refusal>;
+  /** Origin Accept for a persisted local offer (not pre-auth). */
+  acceptLocalJobStepOffer(
+    offerId: string,
+    resolvedCwd: string,
+  ): Promise<{ ok: true; offerId: string; status: "accepted"; runId?: string } | Refusal>;
+  refuseLocalJobStepOffer(
+    offerId: string,
+    policy: string,
+  ): Promise<{ ok: true; offerId: string; status: "refused"; policy: string } | Refusal>;
+  /** @deprecated Prefer acceptLocalJobStepOffer for origin-local work. */
+  acceptJobStepOffer(
+    offerId: string,
+    resolvedCwd: string,
+    teamToken: string,
+  ): Promise<{ ok: true; offerId: string; status: "accepted"; runId?: string } | Refusal>;
+  refuseJobStepOffer(
+    offerId: string,
+    policy: string,
+    teamToken: string,
+  ): Promise<{ ok: true; offerId: string; status: "refused"; policy: string } | Refusal>;
+  /** Critical action: force-fail a step (§4.6 / §7.8). */
+  failJobStep(
+    jobId: string,
+    stepId: string,
+    reason?: string,
+  ): Promise<{ ok: true; job: import("@envoydev/protocol").Job } | Refusal>;
+  /** Origin: answer a job-step approval (local or remote; first wins). */
+  answerJobStepApproval(
+    jobId: string,
+    stepId: string,
+    requestId: string,
+    optionId: string,
+  ): Promise<{ ok: true; answered: boolean; alreadyResolved: boolean } | Refusal>;
 }

@@ -77,6 +77,8 @@ import {
   participantById,
 } from "./collaboration.js";
 import { forgetPeer, getPeer, listPeers, registerPeer } from "./peers.js";
+import { createCollabHandlers, COLLAB_PRE_AUTH_METHODS } from "./collab-handlers.js";
+export { COLLAB_PRE_AUTH_METHODS };
 import type { PairedDeviceStore } from "./paired-devices.js";
 import { createCatalogHandlers } from "./catalog.js";
 import { getEnvoyLlmPublic, setEnvoyLlm, envoyHarnessModels } from "./envoy-llm.js";
@@ -235,6 +237,19 @@ export interface CoderServiceDeps {
    * five outcomes and why only one of them is success.
    */
   signIn?: SessionSignIn;
+  /**
+   * Daemon listen port — required for team invites (origin WebSocket URL).
+   * May be a getter when the host binds after handlers are built (port `0`).
+   */
+  collabPort?: number | (() => number);
+  /** WebSocket path for invites / hostHints. Default `/ws`. */
+  collabWsPath?: string;
+  /** Peer membership heartbeats — started by serve.ts. */
+  membershipHeartbeat?: import("./membership-heartbeat.js").MembershipHeartbeat;
+  /** Injectable peer RPC (LAN / SSH / mesh). Defaults to WebSocket-only in unit tests. */
+  callPeer?: import("./member-peer-call.js").MemberPeerCall;
+  /** Notify windows when a collaborative job ledger row changes. */
+  onJobsChanged?: (jobId: string) => void;
 }
 
 /**
@@ -1149,6 +1164,29 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
       const offer = offers.refuse(input.offerId, input.policy);
       return { offerId: offer.id, status: "refused" as const, policy: input.policy };
     },
+
+    /* ────────────────── Team / Job / JobStep (M5) ────────────────── */
+    ...Object.fromEntries(
+      Object.entries(
+        createCollabHandlers({
+          paths: deps.paths,
+          store: deps.store,
+          ...(deps.runs ? { runs: deps.runs } : {}),
+          port: deps.collabPort ?? 4770,
+          ...(deps.collabWsPath ? { wsPath: deps.collabWsPath } : {}),
+          ...(deps.membershipHeartbeat ? { membershipHeartbeat: deps.membershipHeartbeat } : {}),
+          ...(deps.callPeer ? { callPeer: deps.callPeer } : {}),
+          ...(deps.onJobsChanged ? { onJobsChanged: deps.onJobsChanged } : {}),
+        }),
+      )
+        .filter((entry): entry is [string, (params: unknown, context: CoderCallContext) => Promise<unknown>] =>
+          typeof entry[1] === "function",
+        )
+        .map(([method, handler]) => [
+          method,
+          async (params: unknown, context: CoderCallContext) => handler(params, context),
+        ]),
+    ),
 
     /* ────────────────── settings ────────────────── */
     "coder.getSettings": async (params) => {

@@ -53,6 +53,7 @@ export type SettingsSectionId =
   | "shortcuts"
   | "machine"
   | "pairing"
+  | "teams"
   | "service"
   | "about";
 
@@ -269,6 +270,23 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
         file: "apps/desktop/src/components/settings/PairPhone.tsx",
         needle: "coder.mintPairing",
         because: "the shared module itself, which the section reuses rather than reimplements",
+      },
+    ],
+  },
+  {
+    id: "teams",
+    titleKey: "settings.section.teams.title",
+    band: { kind: "sentence", key: "settings.section.teams.detail" },
+    content: [
+      {
+        file: "apps/desktop/src/components/settings/TeamsSection.tsx",
+        needle: 't("settings.teams.create")',
+        because: "create team with a one-time copyable token",
+      },
+      {
+        file: "apps/desktop/src/components/settings/TeamsSection.tsx",
+        needle: "data-testid=\"teams-section\"",
+        because: "the Teams page itself — join, connection chips, and job create",
       },
     ],
   },

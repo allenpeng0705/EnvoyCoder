@@ -139,6 +139,11 @@ export interface CoderMeshPeerNode {
   getRelayAdvertisedMultiaddrs?(): string[]
   /** How many peers are connected right now; the honest source for `peerCount`. */
   getConnectedPeerIds?(): string[]
+  /**
+   * Open a protocol stream to a named multiaddr (EnvoyDev ↔ EnvoyDev member dial).
+   * Optional on fakes so unit tests that only cover hosting stay small.
+   */
+  dialProtocol?(multiaddr: string, protocol: string): Promise<unknown>
 }
 
 /** Defaults to `(options) => new EnvoyMesh(options)`; a test supplies a fake and captures `options`. */
@@ -201,6 +206,9 @@ function createProxyServe(
     // Per-connection state. `unregister` is assigned once this connection's session is resolved; a
     // shared options object would leave every connection pointing at the last one's handle.
     let unregister: () => void = () => undefined
+    // Captured at handshake so team-member sessions do not get the phone event bus
+    // (offers/progress ride RPC; run.* fan-out is owner-device territory).
+    let sessionKind: string | undefined
 
     return {
       sessionIdentity: {
@@ -208,6 +216,11 @@ function createProxyServe(
         resolveSession: async (token) => {
           const session = await ports.sessionIdentity.resolveSession(token)
           if (!session) return null
+          const caller =
+            session && typeof session === "object" && "caller" in session
+              ? (session as { caller?: { kind?: string } }).caller
+              : undefined
+          sessionKind = caller?.kind
           // Scope the close to the device the product identified. `register` is a no-op for an
           // undefined device id, which is the honest outcome for a session with no device.
           unregister = registry.register(session.deviceId, () => {
@@ -222,6 +235,11 @@ function createProxyServe(
       // connection's registry slot. Without it a closed connection would stay "revocable" forever
       // and the registry would grow one dead duplex per connection.
       subscribe: (send) => {
+        if (sessionKind === "team-member") {
+          return () => {
+            unregister()
+          }
+        }
         const unsubscribe = ports.subscribe?.(send) ?? (() => undefined)
         return () => {
           unsubscribe()
@@ -263,6 +281,12 @@ export interface CoderMeshPeer {
   readonly relayHints: string[]
   /** Close this device's live mesh streams (revocation); returns how many were closed. */
   closeStreamsForDevice(deviceId: string): number
+  /**
+   * Dial another peer's `CLIENT_PROXY_PROTOCOL` stream.
+   * Used for EnvoyDev ↔ EnvoyDev off-LAN member channels (`docs/envoydev-networking.md` §6).
+   * Throws when the peer is not hosting or the node has no dialer.
+   */
+  dialProtocol(multiaddr: string, protocol?: string): Promise<unknown>
 }
 
 /**
@@ -475,6 +499,13 @@ export function createCoderMeshPeer(options: CoderMeshPeerOptions): CoderMeshPee
 
     closeStreamsForDevice(deviceId: string): number {
       return registry.closeForDevice(deviceId)
+    },
+
+    async dialProtocol(multiaddr: string, protocol: string = CLIENT_PROXY_PROTOCOL): Promise<unknown> {
+      if (!node?.dialProtocol) {
+        throw new Error("The mesh peer is not hosting, so it cannot dial another peer.")
+      }
+      return node.dialProtocol(multiaddr, protocol)
     },
   }
 }

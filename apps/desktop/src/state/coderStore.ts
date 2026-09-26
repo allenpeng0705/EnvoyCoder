@@ -180,6 +180,12 @@ export interface CoderState {
    * land somewhere keyed by run rather than in whatever pane happens to be focused.
    */
   runs: Readonly<Record<string, { run: AgentRun; events: readonly RunEvent[] }>>;
+  /**
+   * Bumped when the daemon emits `coder:state-changed { kind: "jobs" }`.
+   * The Jobs rail refreshes from this rather than only polling.
+   * Optional on hand-built test snapshots — the live store always starts at 0.
+   */
+  jobsRevision?: number;
   /** True once projects, tasks and settings have arrived at least once. */
   loaded: boolean;
   /**
@@ -225,6 +231,7 @@ const initialState: CoderState = {
   catalog: [],
   mesh: { kind: "no-node", reason: "" },
   runs: {},
+  jobsRevision: 0,
   loaded: false,
   error: undefined,
   notes: [],
@@ -530,8 +537,16 @@ export class CoderStore {
       if (kinds.has("settings")) loads.push(this.loadSettings());
       if (kinds.has("harnesses")) loads.push(this.loadHarnesses());
       if (kinds.has("providers")) loads.push(this.loadProviders());
+      if (kinds.has("jobs")) {
+        // Jobs live outside the project/task lists — bump a revision so the rail refetches.
+        this.set({ jobsRevision: (this.state.jobsRevision ?? 0) + 1 });
+      }
       const needLists = [...kinds].some(
-        (k) => k !== "settings" && k !== "harnesses" && k !== "providers",
+        (k) =>
+          k !== "settings" &&
+          k !== "harnesses" &&
+          k !== "providers" &&
+          k !== "jobs",
       );
       if (needLists) loads.push(this.loadLists());
       void Promise.all(loads);
@@ -1801,6 +1816,302 @@ export class CoderStore {
     const answer = await this.read<{ log: DaemonLogRead }>("coder.getDaemonLog", {});
     if (!answer.ok) return { ok: false, ...noticeFromError(answer.error) };
     return { ok: true, log: answer.value.log };
+  }
+
+  async createTeam(input: { label: string; ttlHours?: number }) {
+    return this.mutate("coder.createTeam", input, (result) => {
+      const answer = result as { team: unknown; token: string; invite: string };
+      return { ok: true as const, team: answer.team as never, token: answer.token, invite: answer.invite };
+    });
+  }
+
+  async listTeams() {
+    return this.mutate("coder.listTeams", {}, (result) => {
+      const answer = result as { teams: readonly never[] };
+      return { ok: true as const, teams: answer.teams };
+    });
+  }
+
+  async teamStatus(teamId: string) {
+    return this.mutate("coder.teamStatus", { teamId }, (result) => {
+      const answer = result as { team: unknown; board: readonly import("@envoydev/protocol").MemberStatus[] };
+      return { ok: true as const, team: answer.team, board: answer.board };
+    });
+  }
+
+  async rotateTeamToken(teamId: string, ttlHours?: number) {
+    return this.mutate(
+      "coder.rotateTeamToken",
+      { teamId, ...(ttlHours !== undefined ? { ttlHours } : {}) },
+      (result) => {
+        const answer = result as { team: unknown; token: string; invite: string };
+        return { ok: true as const, team: answer.team, token: answer.token, invite: answer.invite };
+      },
+    );
+  }
+
+  async dissolveTeam(teamId: string) {
+    return this.mutate("coder.dissolveTeam", { teamId }, () => ({ ok: true as const, dissolved: true as const }));
+  }
+
+  async joinTeam(input: {
+    token: string;
+    label: string;
+    rolesOffered?: readonly import("@envoydev/protocol").JobRole[];
+    hostHints?: string;
+  }) {
+    return this.mutate("coder.joinTeam", input, (result) => {
+      const answer = result as { teamId: string; memberId: string; team: { id: string; label: string } };
+      return { ok: true as const, ...answer };
+    });
+  }
+
+  async createJob(input: {
+    teamId: string;
+    title: string;
+    goal: string;
+    projectId?: string;
+    steps?: readonly {
+      role: import("@envoydev/protocol").JobRole;
+      brief: string;
+      worktreeKey: string;
+      cwdHint: string;
+      dependsOn?: readonly string[];
+    }[];
+  }) {
+    return this.mutate("coder.createJob", input, (result) => {
+      const answer = result as { job: import("@envoydev/protocol").Job };
+      return { ok: true as const, job: answer.job };
+    });
+  }
+
+  async listJobs(filter: { teamId?: string; projectId?: string }) {
+    return this.mutate("coder.listJobs", filter, (result) => {
+      const answer = result as { jobs: readonly import("@envoydev/protocol").Job[] };
+      return { ok: true as const, jobs: answer.jobs };
+    });
+  }
+
+  async getJob(jobId: string) {
+    return this.mutate("coder.getJob", { jobId }, (result) => {
+      const answer = result as { job: import("@envoydev/protocol").Job };
+      return { ok: true as const, job: answer.job };
+    });
+  }
+
+  async startJob(jobId: string) {
+    return this.mutate("coder.startJob", { jobId }, (result) => {
+      const answer = result as { job: import("@envoydev/protocol").Job };
+      return { ok: true as const, job: answer.job };
+    });
+  }
+
+  async pauseJob(jobId: string) {
+    return this.mutate("coder.pauseJob", { jobId }, (result) => {
+      const answer = result as { job: import("@envoydev/protocol").Job };
+      return { ok: true as const, job: answer.job };
+    });
+  }
+
+  async stopJob(jobId: string) {
+    return this.mutate("coder.stopJob", { jobId }, (result) => {
+      const answer = result as { job: import("@envoydev/protocol").Job };
+      return { ok: true as const, job: answer.job };
+    });
+  }
+
+  async stopJobStep(jobId: string, stepId: string, reason?: string) {
+    return this.mutate(
+      "coder.stopJobStep",
+      { jobId, stepId, ...(reason ? { reason } : {}) },
+      (result) => {
+        const answer = result as { job: import("@envoydev/protocol").Job };
+        return { ok: true as const, job: answer.job };
+      },
+    );
+  }
+
+  async reassignJobStep(jobId: string, stepId: string, memberId?: string) {
+    return this.mutate(
+      "coder.reassignJobStep",
+      { jobId, stepId, ...(memberId ? { memberId } : {}) },
+      (result) => {
+        const answer = result as { job: import("@envoydev/protocol").Job };
+        return { ok: true as const, job: answer.job };
+      },
+    );
+  }
+
+  async suggestJobSteps(jobId: string, hint?: string) {
+    return this.mutate(
+      "coder.suggestJobSteps",
+      { jobId, ...(hint ? { hint } : {}) },
+      (result) => {
+        const answer = result as { steps: readonly unknown[]; note: string };
+        return { ok: true as const, steps: answer.steps, note: answer.note };
+      },
+    );
+  }
+
+  async updateJobSteps(
+    jobId: string,
+    steps: readonly {
+      role: import("@envoydev/protocol").JobRole;
+      brief: string;
+      worktreeKey: string;
+      cwdHint: string;
+      dependsOn?: readonly string[];
+      id?: string;
+    }[],
+  ) {
+    return this.mutate("coder.updateJobSteps", { jobId, steps }, (result) => {
+      const answer = result as { job: import("@envoydev/protocol").Job };
+      return { ok: true as const, job: answer.job };
+    });
+  }
+
+  async kickMember(teamId: string, memberId: string) {
+    return this.mutate("coder.kickMember", { teamId, memberId }, () => ({
+      ok: true as const,
+      kicked: true as const,
+    }));
+  }
+
+  async setJobStallAutomation(jobId: string, enabled: boolean) {
+    return this.mutate("coder.setJobStallAutomation", { jobId, enabled }, (result) => {
+      const answer = result as { job: import("@envoydev/protocol").Job };
+      return { ok: true as const, job: answer.job };
+    });
+  }
+
+  async listInboundJobOffers() {
+    return this.mutate("coder.listInboundJobOffers", {}, (result) => {
+      const answer = result as {
+        offers: ReadonlyArray<
+          import("@envoydev/protocol").StepOffer & { originWs: string; receivedAt: string }
+        >;
+      };
+      return { ok: true as const, offers: answer.offers };
+    });
+  }
+
+  async acceptInboundJobStepOffer(offerId: string, resolvedCwd: string) {
+    return this.mutate("coder.acceptInboundJobStepOffer", { offerId, resolvedCwd }, (result) => {
+      const answer = result as { offerId: string; status: "accepted"; runId?: string; taskId?: string };
+      return { ok: true as const, ...answer };
+    });
+  }
+
+  async refuseInboundJobStepOffer(offerId: string, policy: string) {
+    return this.mutate("coder.refuseInboundJobStepOffer", { offerId, policy }, (result) => {
+      const answer = result as { offerId: string; status: "refused"; policy: string };
+      return { ok: true as const, ...answer };
+    });
+  }
+
+  async listTeamMemberships() {
+    return this.mutate("coder.listTeamMemberships", {}, (result) => {
+      const answer = result as {
+        memberships: ReadonlyArray<{
+          teamId: string;
+          memberId: string;
+          label: string;
+          teamLabel: string;
+          rolesOffered: readonly string[];
+          acceptPolicy: import("@envoydev/protocol").AcceptPolicy;
+          joinedAt: string;
+          originWs: string;
+        }>;
+      };
+      return { ok: true as const, memberships: answer.memberships };
+    });
+  }
+
+  async getTeamToken(teamId: string) {
+    return this.mutate("coder.getTeamToken", { teamId }, (result) => {
+      const answer = result as { teamId: string; token: string };
+      return { ok: true as const, teamId: answer.teamId, token: answer.token };
+    });
+  }
+
+  async setMemberAcceptPolicy(
+    teamId: string,
+    memberId: string,
+    acceptPolicy: import("@envoydev/protocol").AcceptPolicy,
+  ) {
+    return this.mutate(
+      "coder.setMemberAcceptPolicy",
+      {
+        teamId,
+        memberId,
+        acceptPolicy,
+      },
+      (result) => {
+        const answer = result as { member: unknown };
+        return { ok: true as const, member: answer.member };
+      },
+    );
+  }
+
+  async listJobOffers(jobId: string) {
+    return this.mutate("coder.listJobOffers", { jobId }, (result) => {
+      const answer = result as { offers: readonly import("@envoydev/protocol").StepOffer[] };
+      return { ok: true as const, offers: answer.offers };
+    });
+  }
+
+  async acceptLocalJobStepOffer(offerId: string, resolvedCwd: string) {
+    return this.mutate(
+      "coder.acceptLocalJobStepOffer",
+      { offerId, resolvedCwd },
+      (result) => {
+        const answer = result as { offerId: string; status: "accepted"; runId?: string };
+        return { ok: true as const, ...answer };
+      },
+    );
+  }
+
+  async refuseLocalJobStepOffer(offerId: string, policy: string) {
+    return this.mutate("coder.refuseLocalJobStepOffer", { offerId, policy }, (result) => {
+      const answer = result as { offerId: string; status: "refused"; policy: string };
+      return { ok: true as const, ...answer };
+    });
+  }
+
+  async acceptJobStepOffer(offerId: string, resolvedCwd: string, teamToken: string) {
+    return this.mutate(
+      "coder.acceptJobStepOffer",
+      { offerId, resolvedCwd, teamToken },
+      (result) => {
+        const answer = result as { offerId: string; status: "accepted"; runId?: string };
+        return { ok: true as const, ...answer };
+      },
+    );
+  }
+
+  async refuseJobStepOffer(offerId: string, policy: string, teamToken: string) {
+    return this.mutate("coder.refuseJobStepOffer", { offerId, policy, teamToken }, (result) => {
+      const answer = result as { offerId: string; status: "refused"; policy: string };
+      return { ok: true as const, ...answer };
+    });
+  }
+
+  async failJobStep(jobId: string, stepId: string, reason?: string) {
+    return this.mutate("coder.failJobStep", { jobId, stepId, ...(reason ? { reason } : {}) }, (result) => {
+      const answer = result as { job: import("@envoydev/protocol").Job };
+      return { ok: true as const, job: answer.job };
+    });
+  }
+
+  async answerJobStepApproval(jobId: string, stepId: string, requestId: string, optionId: string) {
+    return this.mutate(
+      "coder.answerJobStepApproval",
+      { jobId, stepId, requestId, optionId },
+      (result) => {
+        const answer = result as { answered: boolean; alreadyResolved: boolean };
+        return { ok: true as const, ...answer };
+      },
+    );
   }
 
   /**

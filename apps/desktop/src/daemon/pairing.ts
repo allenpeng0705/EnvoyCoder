@@ -144,8 +144,9 @@ export function hostnameOfReach(raw: string): string {
  * The wording is a sentence rather than a code because a phone that tries this is not a broken
  * client; it is asking for something only the machine can do, and the message says where to go.
  */
-export function requireOwnerWindow(context: CoderCallContext, method: string): void {
-  if (context.session === undefined) return;
+export function requireOwnerWindow(context: CoderCallContext | undefined, method: string): void {
+  // Missing context = owner/loopback path (unit tests and daemon-internal calls).
+  if (context === undefined || context.session === undefined) return;
   throw coderError(
     ENVOYDEV_ERRORS.unauthorized,
     `${method} can only be done at the machine itself. A paired device cannot pair another one — ` +

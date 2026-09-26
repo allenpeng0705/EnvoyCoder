@@ -38,11 +38,14 @@ import {
 import {
   type CoderMeshPeer,
   type CoderPaths,
+  CLIENT_PROXY_PROTOCOL,
   coderPaths,
   coderSessionIdentity,
   createCoderDaemonHost,
   createCoderDispatcher,
   createCoderMeshPeer,
+  probeMeshDial,
+  probeMeshHost,
 } from "@envoydev/host-bridge";
 import {
   currentSearchPath,
@@ -72,7 +75,12 @@ import { RunManager } from "./runs.js";
 import { SessionProbe } from "./session-probe.js";
 import { WARM_STALE_MS, startDeepWarm } from "./deep-warm.js";
 import { SessionSignIn } from "./sign-in.js";
-import { createCoderHandlers } from "./service.js";
+import { createCoderHandlers, COLLAB_PRE_AUTH_METHODS } from "./service.js";
+import { startMembershipHeartbeats } from "./membership-heartbeat.js";
+import { createMemberPeerCall } from "./member-peer-call.js";
+import { configureMemberDial } from "./member-dial.js";
+import { closeAllSshMemberTunnels } from "./ssh-member-tunnel.js";
+import { findActiveTeamByToken } from "./teams.js";
 import { CoderStore } from "./store.js";
 import { AgentDeliveries } from "./deliveries.js";
 import { createPairingHandlers } from "./pairing.js";
@@ -377,6 +385,28 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
     settleMeshReady();
   }
 
+  const listenPort = options.port ?? DEFAULT_DAEMON_PORT;
+  const listenPath = options.path ?? DEFAULT_DAEMON_PATH;
+  // Host is created below; collab invites need the *bound* port when listenPort is 0.
+  let boundPort = listenPort;
+
+  // Mesh dial is wired after the peer starts; callers hold this ref so handlers built earlier still work.
+  const meshDialRef: {
+    dial?: (multiaddr: string, protocol: string) => Promise<unknown>;
+  } = {};
+  const memberPeerCall = createMemberPeerCall({
+    meshDial: (multiaddr, protocol) => {
+      if (!meshDialRef.dial) {
+        return Promise.reject(new Error("Mesh dial is not available on this daemon."));
+      }
+      return meshDialRef.dial(multiaddr, protocol);
+    },
+  });
+
+  const membershipHeartbeat = startMembershipHeartbeats({
+    membershipsFile: paths.membershipsFile,
+    callPeer: memberPeerCall,
+  });
   const handlers = {
     ...createCoderHandlers({
     // The same store the pairing family uses: the hello path records an identity through it, and two stores over
@@ -415,6 +445,12 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
     deliveries: { of: (harness) => deliveries.of(harness), set: (harness, next) => deliveries.set(harness, next) },
     onHarnessesChanged: () => bus.emit("coder:state-changed", { kind: "harnesses", at: new Date().toISOString() }),
     ...(options.isDirectory ? { isDirectory: options.isDirectory } : {}),
+    collabPort: () => boundPort,
+    collabWsPath: listenPath,
+    membershipHeartbeat,
+    callPeer: memberPeerCall,
+    onJobsChanged: (jobId) =>
+      bus.emit("coder:state-changed", { kind: "jobs", at: new Date().toISOString(), ids: [jobId] }),
   }),
     ...createPairingHandlers({
       store: pairedDevices,
@@ -452,14 +488,55 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
   // dispatches through **the same** dispatcher the WebSocket host uses. A second dispatcher for the
   // mesh would be two authorization surfaces that could drift, and the drift would stay invisible
   // until somebody tried the one method that differed.
+  //
+  // Team tokens are admitted for mesh proxy-connect so EnvoyDev ↔ EnvoyDev collab works off-LAN
+  // without minting a phone pairing. Team sessions may only call COLLAB_PRE_AUTH_METHODS.
+  const collabMethodSet = new Set<string>(COLLAB_PRE_AUTH_METHODS);
   const sessionIdentity = coderSessionIdentity({
-    resolveSession: (token) => pairedDevices.resolveSession(token),
+    resolveSession: async (token) => {
+      const paired = await pairedDevices.resolveSession(token);
+      if (paired) return paired;
+      const team = await findActiveTeamByToken(paths.teamsFile, token);
+      if (!team) return null;
+      return {
+        scopeKey: `product:${ENVOYDEV_PRODUCT_NAME}`,
+        ownerId: ENVOYDEV_PRODUCT_NAME,
+        isOwnerScope: false,
+        deviceId: `team:${team.teamId}`,
+        caller: { kind: "team-member", teamId: team.teamId, label: team.label },
+      };
+    },
   });
-  const dispatch = createCoderDispatcher({ handlers });
+  const baseDispatch = createCoderDispatcher({ handlers });
+  const dispatch = async (
+    method: string,
+    params: Record<string, unknown>,
+    session: Parameters<typeof baseDispatch>[2],
+  ) => {
+    const caller =
+      session && typeof session === "object" && "caller" in session
+        ? (session as { caller?: { kind?: string } }).caller
+        : undefined;
+    if (caller?.kind === "team-member" && !collabMethodSet.has(method)) {
+      throw new Error(`${method} is not allowed for a team session`);
+    }
+    const teamCaller =
+      caller && typeof caller === "object" && (caller as { kind?: string }).kind === "team-member"
+        ? (caller as { teamId?: string })
+        : undefined;
+    if (
+      teamCaller?.teamId &&
+      typeof params.teamId === "string" &&
+      params.teamId !== teamCaller.teamId
+    ) {
+      throw new Error(`${method} is not allowed for this team session`);
+    }
+    return baseDispatch(method, params, session);
+  };
 
   const host = createCoderDaemonHost({
-    port: options.port ?? DEFAULT_DAEMON_PORT,
-    path: options.path ?? DEFAULT_DAEMON_PATH,
+    port: listenPort,
+    path: listenPath,
     sessionIdentity,
     dispatch,
     nodeService: createNodeService(bus),
@@ -468,6 +545,8 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
     // perfectly healthy while never delivering an event. `@envoydev/protocol`'s `CODER_EVENTS`
     // documents the gap with its citation; `createCoderSocketMethods` explains the handling rules.
     socketMethods: createCoderSocketMethods(bus),
+    // Team collab: peers present a team token / offer proof inside params, not a phone pairing token.
+    preAuthMethods: [...COLLAB_PRE_AUTH_METHODS],
     onConnectionChange: (count) => {
       connections = Math.max(1, count);
     },
@@ -475,6 +554,7 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
   hostRef = host;
 
   await host.serve();
+  boundPort = host.port;
 
   // The peer starts **after** the socket answers, for the same reason the claim is written only then:
   // a daemon that has not accepted its first window must not be sitting in a network handshake. A peer
@@ -501,6 +581,26 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
         });
   if (meshPeer) {
     mesh = await meshPeer.start();
+    if (mesh.kind === "hosting") {
+      meshDialRef.dial = (multiaddr, protocol) => meshPeer!.dialProtocol(multiaddr, protocol);
+      configureMemberDial({
+        meshProbe: (multiaddr, timeoutMs, authToken) =>
+          authToken
+            ? probeMeshHost({
+                multiaddr,
+                protocol: CLIENT_PROXY_PROTOCOL,
+                dial: (addr, proto) => meshPeer!.dialProtocol(addr, proto),
+                token: authToken,
+                timeoutMs,
+              })
+            : probeMeshDial({
+                multiaddr,
+                protocol: CLIENT_PROXY_PROTOCOL,
+                dial: (addr, proto) => meshPeer!.dialProtocol(addr, proto),
+                timeoutMs,
+              }),
+      });
+    }
   }
   settleMeshReady();
 
@@ -650,6 +750,10 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
     warm: () => warm?.done(),
     async stop() {
       unsubscribe();
+      membershipHeartbeat.stop();
+      configureMemberDial({ meshProbe: null, openSshTunnel: null });
+      closeAllSshMemberTunnels();
+      meshDialRef.dial = undefined;
       // Before the agents: the pass asks agents to start, and one that began a moment ago must not leave a
       // child behind a daemon that is exiting — the property `agent-teardown.ts` exists for.
       warm?.stop();

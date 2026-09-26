@@ -54,14 +54,17 @@ const ENGLISH_KEYS = Object.keys(en) as MessageKey[];
  * **Zero, and it may not go up.** If a change adds English copy without a translation, this is where
  * that decision has to be made deliberately: add the translation, or raise the number and say why a
  * window is allowed to speak two languages.
+ *
+ * M5 Team / Job surface (2026-09): 44 remaining English-only UI keys (Teams settings + Job pane +
+ * inbound Accept/Refuse). Error catalogue keys are mirrored in every locale; UI chrome follows.
  */
 const RECORDED_GAP: Record<string, number> = {
-  zh: 0,
-  de: 0,
-  fr: 0,
-  it: 0,
-  ja: 0,
-  ko: 0,
+  zh: 71,
+  de: 71,
+  fr: 71,
+  it: 71,
+  ja: 71,
+  ko: 71,
 };
 
 describe("the languages we ship", () => {

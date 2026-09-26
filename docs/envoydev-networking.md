@@ -168,14 +168,21 @@ operations the daemon's protocol gives it.
 
 ## 6. Collaborative work (and remote runs as substrate)
 
-M5 is **team → job → tasks** under an **orchestrator** (the origin EnvoyDev): one copyable team
-token, members join and stay online, jobs are split and assigned (parallel/async with writer
-locks), results merge on the origin, failures follow retry → reassign → fail.
+M5 is **team → job → steps** under an **orchestrator** (the origin EnvoyDev): one copyable team
+token, members join and stay online, jobs are split into `JobStep`s and assigned (parallel/async with
+writer locks), results merge on the origin, failures follow retry → reassign → fail. Offers carry
+`cwdHint`; accept is manual by default; stall automation ships only after the status board.
 
 Normative design (incl. error/exception matrix): [`envoydev-collaboration.md`](envoydev-collaboration.md).
 
 D2 still fixes *where* work runs: on the machine with the code. Member channels use **LAN first,
-then EnvoyMesh** (§5 order). The EnvoyMesh node is transport only — not the orchestrator.
+then EnvoyMesh, then SSH** (`member-dial.ts`). Mesh hints that embed a WebSocket hop
+(`mesh:ws://…` or multiaddr `/ws` / `/wss`) are probed like LAN; pure `/p2p/…` multiaddrs dial
+through the daemon's own mesh peer (`CLIENT_PROXY_PROTOCOL`). SSH hints (`ssh:user@host[/port]`)
+open a local-forward tunnel (`buildSshArgs` / `ssh-member-tunnel.ts`) and probe the local
+`ws://127.0.0.1:…`. Peer RPC (`member-peer-call.ts`) reuses the same routes so offers and
+heartbeats follow the channel dial chose. The EnvoyMesh node is transport only — not
+the orchestrator.
 
 Invariants for every remote leg: **origin can always cancel**, **events stream as `run.*`**,
 **peer may refuse with a named policy**. Collaboration adds: **one writer per worktree key**,

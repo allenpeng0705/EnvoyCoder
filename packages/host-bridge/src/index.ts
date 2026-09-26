@@ -123,6 +123,16 @@ export interface CoderPaths {
   stateDir: string;
   projectsFile: string;
   tasksFile: string;
+  /** Team roster + token hashes (M5). */
+  teamsFile: string;
+  /** Job + JobStep ledger (M5). */
+  jobsFile: string;
+  /** Persisted step offers pending accept/refuse (M5). */
+  jobOffersFile: string;
+  /** Peer-side team memberships after remote join (M5). */
+  membershipsFile: string;
+  /** Peer-side inbound step offers awaiting Accept/Refuse (M5). */
+  inboundJobOffersFile: string;
   settingsFile: string;
   /**
    * What each agent published about itself the last time a session was opened with it.
@@ -206,6 +216,11 @@ export function coderPaths(home: string = resolveHomeDir()): CoderPaths {
     stateDir,
     projectsFile: join(stateDir, "projects.json"),
     tasksFile: join(stateDir, "tasks.json"),
+    teamsFile: join(stateDir, "teams.json"),
+    jobsFile: join(stateDir, "jobs.json"),
+    jobOffersFile: join(stateDir, "job-offers.json"),
+    membershipsFile: join(stateDir, "team-memberships.json"),
+    inboundJobOffersFile: join(stateDir, "inbound-job-offers.json"),
     settingsFile: join(stateDir, "settings.json"),
     sessionOptionsFile: join(stateDir, "session-options.json"),
     providersFile: join(stateDir, "providers.json"),
@@ -767,6 +782,17 @@ export {
   type CoderMeshPeerOptions,
   type CoderMeshProxyPorts,
 } from "./mesh-peer.js";
+
+export {
+  callMeshHostRpc,
+  probeMeshHost,
+  probeMeshDial,
+  type MeshRpcOutcome,
+  type MeshStreamDial,
+} from "./mesh-rpc-client.js";
+
+/** The family's client-proxy protocol id — re-exported so member dial never imports `@envoymesh/network` from apps. */
+export { CLIENT_PROXY_PROTOCOL } from "@envoymesh/network";
 
 /**
  * The peer's own identity: where the key file lives, and the fs-backed loader that honours it.

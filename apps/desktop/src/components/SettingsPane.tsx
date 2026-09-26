@@ -115,6 +115,7 @@ import { AgentsSection } from "./settings/SectionsAgents.js";
 import { GeneralSection, SafetySection, TasksSection } from "./settings/SectionsControls.js";
 import { AppearanceSection } from "./settings/SectionsAppearance.js";
 import { PairingSection } from "./settings/PairingSection.js";
+import { TeamsSection } from "./settings/TeamsSection.js";
 import { ServiceSection } from "./settings/SectionsService.js";
 import { LlmSection } from "./settings/EnvoyLlmPanel.js";
 import { ProjectSection, ProjectsSection } from "./settings/SectionsProjects.js";
@@ -189,6 +190,9 @@ export interface SettingsPaneProps {
    * this pane is drawn the answer may already exist.
    */
   mintedPairing?: PairPhoneOutcome | undefined;
+  /** Open a collaborative job in the main work area (Teams section). */
+  onOpenJob?: ((jobId: string) => void) | undefined;
+  onOpenTask?: ((taskId: string) => void) | undefined;
 }
 
 /**
@@ -405,6 +409,16 @@ function sectionBody(props: SettingsPaneProps & { section: SettingsSectionId }):
           onUpdate={props.onUpdate}
           agents={props.agents}
           {...(props.mintedPairing !== undefined ? { mintedPairing: props.mintedPairing } : {})}
+        />
+      );
+    case "teams":
+      return (
+        <TeamsSection
+          state={props.state}
+          onUpdate={props.onUpdate}
+          agents={props.agents}
+          {...(props.onOpenJob !== undefined ? { onOpenJob: props.onOpenJob } : {})}
+          {...(props.onOpenTask !== undefined ? { onOpenTask: props.onOpenTask } : {})}
         />
       );
     case "service":

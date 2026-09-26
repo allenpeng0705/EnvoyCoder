@@ -49,6 +49,7 @@ import { CoderSidebar } from "./CoderSidebar.js";
 import { CommandCenter, buildCommandContributions } from "./CommandCenter.js";
 import { PanelRightIcon } from "./icons.js";
 import { TaskPane } from "./TaskPane.js";
+import { JobPane } from "./JobPane.js";
 import { MeshStatusBar } from "./MeshStatusBar.js";
 import { SettingsPane } from "./SettingsPane.js";
 import { useSettingsLayout } from "./SettingsNav.js";
@@ -297,6 +298,28 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    * is a secret with an expiry, not a value to rediscover.
    */
   const [mintedPairing, setMintedPairing] = useState<PairPhoneOutcome | undefined>(undefined);
+  /** Collaborative job open in the work area (M5 Job pane). */
+  const [activeJobId, setActiveJobId] = useState<string | undefined>(undefined);
+  const [railJobs, setRailJobs] = useState<readonly import("@envoydev/protocol").Job[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const listJobs = props.actions.listJobs?.bind(props.actions);
+    if (typeof listJobs !== "function") return;
+    const refresh = (): void => {
+      void listJobs({}).then((result) => {
+        if (cancelled || !result.ok) return;
+        setRailJobs(result.jobs);
+      });
+    };
+    refresh();
+    // Backup poll — primary refresh is `jobsRevision` from `coder:state-changed { kind: "jobs" }`.
+    const timer = window.setInterval(refresh, 15_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [props.actions, activeJobId, settingsScope, state.jobsRevision ?? 0]);
   /**
    * Every way the pane's scope changes. Opening **Mobile Pairing** also mints here — in the click
    * handler, not in a mount effect — so `<StrictMode>` cannot create two paired-device records, and
@@ -650,8 +673,18 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
         <CoderSidebar
             projects={state.projects}
             tasks={state.tasks}
+            jobs={railJobs}
+            activeJobId={activeJobId}
+            onSelectJob={(jobId) => {
+              setActiveJobId(jobId);
+              setSettingsScope(undefined);
+              setActiveId(undefined);
+            }}
             activeTaskId={activeId}
-            onSelect={setActiveId}
+            onSelect={(taskId) => {
+              setActiveId(taskId);
+              setActiveJobId(undefined);
+            }}
             onNewTask={(projectId) => {
               // "+ New" on a project header names the project, so there is nothing left to ask: the task
               // is created and opened, and the composer is the form. A refusal answers under that project's
@@ -754,6 +787,22 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
                 if (projectId === undefined) return Promise.resolve(undefined);
                 return props.actions.updateProject({ id: projectId, defaults }).then(asFailure);
               }}
+              onOpenJob={(jobId) => {
+                setActiveJobId(jobId);
+                setActiveId(undefined);
+                setSettingsScope(undefined);
+              }}
+              onOpenTask={(taskId) => {
+                setActiveId(taskId);
+                setActiveJobId(undefined);
+                setSettingsScope(undefined);
+              }}
+            />
+          ) : activeJobId ? (
+            <JobPane
+              jobId={activeJobId}
+              agents={props.actions}
+              onClose={() => setActiveJobId(undefined)}
             />
           ) : active ? (
             <TaskPane

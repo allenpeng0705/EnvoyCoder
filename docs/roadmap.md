@@ -129,16 +129,31 @@ in the family's words. *Acceptance:* a recorded sequence of the phone answering 
 > and the host-connect access-gate fix so non-owner sessions can still call product RPC when
 > `socketMethods` is configured. A live phone recording answering an approval remains a manual check.
 
-**M5 — collaborative work (team → job → tasks).** Orchestrator (origin EnvoyDev) creates a
+**M5 — collaborative work (team → job → steps).** Orchestrator (origin EnvoyDev) creates a
 **team** (one copyable team token; members join; online via heartbeat), then **jobs** split into
-**tasks** assigned to members (LAN then mesh). Parallel/async where writer locks allow; results
-merge on the origin. Failure: retry → reassign → fail with a job report.
+**steps** (`JobStep`) assigned to members (LAN then mesh). Parallel/async where writer locks allow;
+results merge on the origin. Failure: retry → reassign → fail with a job report. Offers carry
+`cwdHint`; accept is manual by default; stall automation ships only after the status board.
 *Proves:* D2 + team orchestration. *Acceptance:* team online; job completes across ≥2 members;
-named refuse; exhausted task follows §7 policy.
+named refuse; exhausted step follows §7 policy.
 Design: [`docs/envoydev-collaboration.md`](envoydev-collaboration.md) (normative, incl. error matrix).
 
-> **Status:** Local handoff / peer-directory / offer stubs exist (M5a/M5b stepping stones).
-> Team token, Job ledger, parallel scheduler, and §7 failure machine are the next slices.
+> **Status:** Cross-daemon join (invite embeds origin WebSocket URL), inbound StepOffer delivery,
+> Accept/Refuse on the member (with refuse reason), accept → harness run + progress into the job
+> ledger, and §7 retry / refuse→reassign / job-failed / stall-on-no-progress / step deadlines /
+> continue-partial gaps / event-seq `hasGap` are wired. Peer membership heartbeats run on an
+> interval; joiners start as `unknown` until the first heartbeat. Origin Stop / kick / reassign /
+> stall-stop dial `coder.cancelInboundJobStep` (ack / abandon + reassign per `onStopIgnored`).
+> Pre-auth hardening (§4.2.1): live token expiry, per-member `memberToken`, offer `cancelNonce`,
+> accept requires real `runId` + live attempt, terminal progress bound to `resultRef`, inbound
+> approval bound to offer+run. Origin can answer remote step approvals via
+> `coder.answerJobStepApproval` (first wins). Stall automation remains behind the §4.6 ship-gate
+> toggle. Off-LAN member dial: SSH hints open a local-forward tunnel; pure `/p2p/` multiaddrs dial
+> through the daemon's mesh peer (`CLIENT_PROXY` + team-token session). Embedded mesh WS hops still
+> probe like LAN. Team tokens honour hard TTL + idle expiry (default 8h without activity).
+> Evidence: `apps/desktop/test/m5-two-daemon.test.ts` (join → offer → accept → stop, and peer
+> accept → `done` + `finalReport`); `m5-jobs.test.ts` covers expiry / superseded accept / progress
+> guards; `member-dial.test.ts` covers SSH/mesh dial seams.
 
 **M6 — packaging.** *Proves:* the app installs and starts on all three platforms, with evidence
 in CI rather than unit tests only.

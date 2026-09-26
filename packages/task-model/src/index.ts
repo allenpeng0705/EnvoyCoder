@@ -314,7 +314,7 @@ export interface AttentionSummary {
  * A control plane that shows three different counts in three places (tray, title bar, mobile
  * badge) teaches users to trust none of them.
  */
-export function attentionSummary(tasks: readonly Task[]): AttentionSummary {
+export function attentionSummary(tasks: readonly Task[], extraBadge = 0): AttentionSummary {
   const needsAttention = tasks
     .filter((task) => task.status === "needs-attention")
     .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
@@ -324,7 +324,7 @@ export function attentionSummary(tasks: readonly Task[]): AttentionSummary {
   return {
     needsAttention,
     failed,
-    badge: needsAttention.length + failed.length,
+    badge: needsAttention.length + failed.length + Math.max(0, extraBadge),
   };
 }
 
