@@ -13,31 +13,52 @@ means concretely:
   LAN → public → P2P → bootstrap → relay last — from `envoy_thin_client`'s `CandidateResolver`
   (`lib/services/route_plan.dart` is the app's whole contribution: which pairing field goes where).
 
+Bundle ID on both platforms: **`com.envoymesh.envoydev`**. Version: `0.1.0+1` in `pubspec.yaml`.
+
 ## What it does today
 
 | Screen | What it is for |
 |---|---|
-| `host_list_screen.dart` | the paired machines, and adding another |
+| `no_hosts_screen.dart` / `connections_sheet.dart` | paired machines, switch host, add another |
 | `add_host_sheet.dart` | paste or scan a pairing code |
 | `qr_scan_screen.dart` | the camera path onto the same code |
-| `host_home_screen.dart` | projects → tasks, search, agent picker, New task, settings |
-| `new_task_sheet.dart` | createTask + startRun with agent/model/mode/thinking |
-| `run_screen.dart` | markdown (+ highlight), Queue/Steer, Stop, composer controls |
+| `project_list_screen.dart` | projects → tasks, search, agent picker, New task |
+| `add_project_sheet.dart` | add a folder the daemon already knows |
+| `new_task_sheet.dart` | createTask + startRun with agent / model / mode / thinking |
+| `run_screen.dart` | markdown (+ highlight), Queue / Steer, Stop, composer controls |
+| `explorer_screen.dart` | browse the project tree on the daemon |
 | `settings_screen.dart` | daemon settings + Envoy Harness LLM |
+| `network_status_screen.dart` | how this phone is reaching the daemon |
+
+Git on the phone matches the desktop for the flows that matter away from the desk: branches, stash,
+and resolving a conflicted merge (including handing the conflict to an agent).
+
+## Pairing
+
+1. On the desktop: Settings → **Mobile Pairing** (or the rail / palette *Pair a phone*).
+2. On the phone: scan the QR, paste the URI, or enter `host:port` + token / SSH hop.
+3. Tokens live in `flutter_secure_storage`. The phone sends a stable install id with `coder.hello` so
+   reinstalls of the same app do not leave a pile of live pairing rows on the desktop.
+
+Store listing copy and icons: `store-release/` and `play-store-assets/` (screenshots are still
+manual). Review notes for App Store / Play: `store-release/apple_google_reviewing.md`.
 
 ## Running it
 
 ```bash
+# from the EnvoyCoder repo root — the daemon the phone talks to
+npm run daemon
+
+# in another terminal
 cd apps/mobile
 flutter pub get
 flutter test
-flutter run          # a device or emulator, with a daemon reachable from it
+flutter run          # a device or emulator, with that daemon reachable
 ```
 
-The app needs a daemon to talk to. Start one from the repository root with `npm run daemon`, then pair
-from the phone. The daemon refuses remote clients **on purpose** until it has a session store, which is
-the next mobile milestone (`docs/roadmap.md`, M4) — so the phone reaches a daemon on the same machine,
-or over the SSH hop, until that lands.
+The phone reaches a daemon on the same machine, over LAN / mesh, or over an SSH hop. Pairing is the
+M4 contract in `docs/roadmap.md` — tokens, QR, and product RPC for a paired device are landed; a live
+recording of the phone answering an approval remains a manual check.
 
 ## How it is built, and the decisions worth knowing
 
@@ -58,9 +79,10 @@ host and connects to it).
 
 **Tokens live in the platform's secure storage.** `host_store.dart` keeps a host's *metadata* in
 `shared_preferences` and its token in `flutter_secure_storage`, and a test asserts the token never
-appears in the preferences JSON. The token is the whole credential, so where it sits is a security
-decision rather than a storage detail — and it is one of the places this product deliberately differs
-from the reference implementation (`docs/envoydev-paseo-inheritance.md` §4).
+appears in the preferences JSON. The install id prefers the keychain so an iOS uninstall/reinstall
+does not look like a brand-new phone to the desktop. The token is the whole credential, so where it
+sits is a security decision rather than a storage detail — and it is one of the places this product
+deliberately differs from the reference implementation (`docs/envoydev-paseo-inheritance.md` §4).
 
 **The transcript is folded, not appended.** `models/transcript.dart` owns the four rules that make a
 streaming run readable on a small screen — join fragments by message, drop a repeated sequence number,
