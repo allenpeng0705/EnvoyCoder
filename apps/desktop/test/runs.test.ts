@@ -205,6 +205,29 @@ describe("one run, end to end", () => {
     expect(start.input).toEqual({ command: "ls" });
   });
 
+  it("emits run.diff for paths write tools named, before run.ended", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "edit-files please" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const diffs = kinds(b.events, "run.diff") as Extract<RunEvent, { kind: "run.diff" }>[];
+    expect(diffs).toHaveLength(1);
+    expect(diffs[0]!.files).toEqual([
+      { path: "src/a.ts", added: 0, removed: 0 },
+      { path: "src/b.ts", added: 0, removed: 0 },
+    ]);
+    // Diff is news about the turn, not its ending — it must land before `run.ended`.
+    const sequences = b.events.map((event) => event.kind);
+    expect(sequences.indexOf("run.diff")).toBeLessThan(sequences.indexOf("run.ended"));
+  });
+
+  it("stays silent about run.diff when tools only read or ran commands", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "run a tool" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+    expect(kinds(b.events, "run.diff")).toHaveLength(0);
+  });
+
   /**
    * **The built-in harness's own envelopes, which is what it actually sends.**
    *

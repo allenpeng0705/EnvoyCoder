@@ -202,6 +202,14 @@ describe("run events", () => {
       commands: [{ name: "compact", description: "Summarize the conversation", argumentHint: "[focus]" }],
     },
     "run.status": { ...base, kind: "run.status", status: "needs-attention", note: "waiting" },
+    "run.handoff": {
+      ...base,
+      kind: "run.handoff",
+      fromId: "p-plan",
+      toId: "p-impl",
+      role: "implement",
+      brief: "Plan approved; implement the diff.",
+    },
     "run.ended": { ...base, kind: "run.ended", exitCode: 0, status: "done" },
   };
 

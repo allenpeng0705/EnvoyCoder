@@ -533,10 +533,59 @@ export interface Task {
   runId?: string;
   /** Worktree/branch this task is bound to, when it has one. */
   worktree?: { path: string; branch: string };
-  /** Set when the task is executing on another machine (distributed mode). */
+  /**
+   * Where this task's *active* work runs (`"local"` or a peer id).
+   *
+   * With collaboration, each participant may have its own `hostId`; this field is the task-level
+   * tip used by the rail when no collaboration block is present.
+   */
   hostId?: string;
+  /**
+   * Multi-role collaboration on this task (M5).
+   *
+   * Absent means a single-agent task (today's default). Present means human-assigned participants
+   * and roles; see `docs/envoydev-collaboration.md`.
+   */
+  collaboration?: TaskCollaboration;
   pinned?: boolean;
   archivedAt?: string;
+}
+
+/** Roles a human may assign to a collaboration participant (M5a). */
+export const TASK_ROLES = ["plan", "implement", "review", "observe"] as const;
+export type TaskRole = (typeof TASK_ROLES)[number];
+
+export function isTaskRole(value: string): value is TaskRole {
+  return (TASK_ROLES as readonly string[]).includes(value);
+}
+
+/**
+ * One participant in a collaborative task — a local agent slot or another EnvoyDev peer.
+ *
+ * Remoteness is `hostId`, not a separate product feature (`docs/envoydev-collaboration.md`).
+ */
+export interface TaskParticipant {
+  id: string;
+  kind: "agent" | "peer";
+  role: TaskRole;
+  /** `"local"` or a peer id from `coder.listPeers`. */
+  hostId: string;
+  /** Required when `kind` is `"agent"`; a peer may name one after accept. */
+  harness?: AgentId;
+  label?: string;
+}
+
+export interface TaskHandoff {
+  fromId?: string;
+  toId: string;
+  brief?: string;
+  at: string;
+}
+
+export interface TaskCollaboration {
+  participants: readonly TaskParticipant[];
+  activeParticipantId?: string;
+  lastHandoff?: TaskHandoff;
 }
 
 /**
@@ -705,6 +754,11 @@ export const RUN_EVENT_KINDS = [
   "run.usage",
   "run.commands",
   "run.status",
+  /**
+   * A collaboration handoff recorded on the run that follows it — who became active and why.
+   * See `docs/envoydev-collaboration.md`.
+   */
+  "run.handoff",
   "run.ended",
 ] as const;
 
@@ -856,6 +910,15 @@ export type RunEvent =
       commands: readonly { name: string; description: string; argumentHint?: string }[];
     })
   | (RunEventBase & { kind: "run.status"; status: TaskStatus; note?: string })
+  | (RunEventBase & {
+      kind: "run.handoff";
+      /** Previous active participant, when there was one. */
+      fromId?: string;
+      /** Participant that became active. */
+      toId: string;
+      role: TaskRole;
+      brief?: string;
+    })
   | (RunEventBase & { kind: "run.ended"; exitCode: number | null; status: TaskStatus });
 
 /* ────────────────────────────── errors ───────────────────────────── */
@@ -1350,14 +1413,25 @@ export const RPC_METHODS = [
   "coder.listCatalog",
   "coder.meshStatus",
   "coder.listPeers",
-  // **`coder.offerRemoteRun` used to sit here, and it is gone on purpose.** It was a spec with no
-  // handler and no caller: it promised a client that a run could be handed to another machine, which is
-  // a mesh feature rather than a settings change, and nothing in the daemon ever served it. A method in
-  // this catalogue is a claim about what this product can do, so a claim nothing implements is the same
-  // defect as a switch nothing reads. `docs/settings-parity.md` §8.1 records what would bring it back:
-  // a peer directory (`coder.listPeers` returns an empty list today), the session store that makes the
-  // remote path reachable, and a broker decision — then the method and its params are written together,
-  // against a handler.
+  /**
+   * Owner maintains the peer directory until mesh discovery lands (M5b).
+   * See `docs/envoydev-collaboration.md`.
+   */
+  "coder.registerPeer",
+  "coder.forgetPeer",
+  /** Replace a task's collaboration participants and roles (M5a). */
+  "coder.setTaskCollaboration",
+  /** Hand the active turn to another participant (M5a). */
+  "coder.handoffTask",
+  /**
+   * Offer the active turn to a **peer** participant (M5b).
+   *
+   * Replaces the deleted `coder.offerRemoteRun`: collaboration is the product; this is the remote
+   * substrate under a handoff (`docs/envoydev-collaboration.md`).
+   */
+  "coder.offerParticipantRun",
+  "coder.acceptParticipantOffer",
+  "coder.refuseParticipantOffer",
   /**
    * Mint a pairing code for a phone (or other remote client).
    *
@@ -1517,6 +1591,14 @@ export interface CoderSettings {
    * and a second window could not see (and which a cleared webview cache would silently lose).
    */
   language?: CoderLanguage;
+  /**
+   * How this window is painted: light, dark, or follow the OS.
+   *
+   * Optional so an older settings file still parses; absent means `"dark"` — this product's default
+   * palette (`docs/design-tokens.md`), not `"system"`, so a light desktop does not change the look
+   * until the user asks. Applied by writing (or clearing) `document.documentElement.dataset.theme`.
+   */
+  theme?: "light" | "dark" | "system";
 }
 
 export const DEFAULT_CODER_SETTINGS: CoderSettings = {
@@ -1524,6 +1606,7 @@ export const DEFAULT_CODER_SETTINGS: CoderSettings = {
   requireApprovalForDestructive: true,
   keepTranscripts: true,
   language: DEFAULT_CODER_LANGUAGE,
+  theme: "dark",
 };
 
 /**
@@ -1563,6 +1646,7 @@ export const CoderSettingsSchema = z
     // Optional, and validated against the same closed list the app's picker offers: a client that
     // asked for a language nobody translated is a client bug the daemon should refuse, not store.
     language: CoderLanguageSchema.optional(),
+    theme: z.enum(["light", "dark", "system"]).optional(),
   })
   .strict();
 

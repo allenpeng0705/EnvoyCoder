@@ -599,6 +599,25 @@ export class CoderStore {
   }
 
   /**
+   * Replace a task's collaboration block (M5a). Clears collaboration when `collaboration` is undefined.
+   */
+  async setTaskCollaboration(
+    id: string,
+    collaboration: Task["collaboration"] | undefined,
+  ): Promise<Task | undefined> {
+    const current = this.tasksState.find((task) => task.id === id);
+    if (!current) return undefined;
+    const next: Task = {
+      ...current,
+      ...(collaboration !== undefined ? { collaboration } : { collaboration: undefined }),
+      updatedAt: this.now().toISOString(),
+    };
+    this.tasksState = this.tasksState.map((task) => (task.id === id ? next : task));
+    await this.persistTasks([id]);
+    return next;
+  }
+
+  /**
    * Record what one agent published about itself in the session that just opened.
    *
    * ## Why this is a *record* and not a setting

@@ -61,6 +61,7 @@ import {
   taskLocationLabel,
   thinkingOffReason,
 } from "../composer/controls.js";
+import { canResumeRun } from "../composer/resume.js";
 import { harnessBadge, harnessLabel, modelAcceptsBareId } from "../composer/harness-label.js";
 import {
   filterSlashCommands,
@@ -85,7 +86,8 @@ import {
   type WriteFailure,
   statusKey,
 } from "../i18n/notice.js";
-import { buildTranscript, type TranscriptEntry } from "../state/transcript.js";
+import { buildTranscript, type ToolEntry, type TranscriptEntry } from "../state/transcript.js";
+import { toolGroupSummary } from "../state/tool-group-summary.js";
 import { ApprovalChoices } from "./ApprovalChoices.js";
 import { ComposerControls } from "./ComposerControls.js";
 import { AttachButton, AttachmentTray } from "./ComposerAttach.js";
@@ -133,6 +135,9 @@ export interface TaskPaneProps {
    * argument is absent, so the two say the same thing; carrying them here as well is what keeps the
    * control's *displayed* value and the value the run is started with identical even if the
    * `updateTask` that saved the choice is still in flight.
+   *
+   * `resume` is true when the pane is rejoining a session the transcript already named as resumable
+   * and the agent advertises resume — otherwise a fresh session.
    */
   onStart: (
     prompt: string,
@@ -140,6 +145,7 @@ export interface TaskPaneProps {
     model?: string,
     thinkingLevel?: string,
     images?: PromptImage[],
+    resume?: boolean,
   ) => WriteFailure | Promise<WriteFailure>;
   /** Remember the agent's mode for this task, so the next run starts the way the user left it. */
   onChangeMode?: (agentModeId: string) => void | Promise<void>;
@@ -385,6 +391,13 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     known: summary !== undefined,
     agent: agent.label,
   });
+  // Idle + a resumable session in the transcript + the agent advertises resume → the next Start
+  // rejoins rather than opening a blank session (`canResumeRun`).
+  const canResume = canResumeRun({
+    running,
+    resumeCapability: agent.capabilities.resume,
+    events,
+  });
 
   /* ── asking the agent what it offers ──
      The three gates and the four states are decided in `composer/probe.ts`, so they are testable without a
@@ -562,9 +575,20 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
           ? selectedThinkingLevel
           : undefined;
       settle(
-        images === undefined
-          ? props.onStart(turn.prompt, modeEnabled ? selectedModeId : undefined, chosenModel, chosenThinking)
-          : props.onStart(turn.prompt, modeEnabled ? selectedModeId : undefined, chosenModel, chosenThinking, images),
+        (() => {
+          const mode = modeEnabled ? selectedModeId : undefined;
+          if (images === undefined && !canResume) {
+            return props.onStart(turn.prompt, mode, chosenModel, chosenThinking);
+          }
+          return props.onStart(
+            turn.prompt,
+            mode,
+            chosenModel,
+            chosenThinking,
+            images,
+            canResume ? true : undefined,
+          );
+        })(),
       );
     }
   };
@@ -968,7 +992,9 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                     ? t("task.composer.submit.blocked")
                     : running
                       ? t("task.composer.send.queued")
-                      : t("task.composer.start")
+                      : canResume
+                        ? t("task.composer.resume")
+                        : t("task.composer.start")
                 }
               >
                 <svg
@@ -985,7 +1011,13 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                   <path d="M5 12h13" />
                   <path d="m12 5 7 7-7 7" />
                 </svg>
-                <span className="visually-hidden">{running ? t("task.composer.send") : t("task.composer.start")}</span>
+                <span className="visually-hidden">
+                  {running
+                    ? t("task.composer.send")
+                    : canResume
+                      ? t("task.composer.resume")
+                      : t("task.composer.start")}
+                </span>
               </button>
             ) : null}
             </div>
@@ -1047,18 +1079,28 @@ function TranscriptRow(props: {
       );
 
     case "tool":
+      return <ToolRow entry={entry} />;
+
+    case "tools": {
+      const anyRunning = entry.tools.some((tool) => tool.status === "running");
+      const anyFailed = entry.tools.some((tool) => tool.status === "failed");
+      const tone = anyRunning ? "live" : anyFailed ? "danger" : "quiet";
       return (
-        <li className={`row row--tool row--tool-${entry.status}`}>
-          <p className="row__tool-head">
-            <span className={`dot dot--${entry.status === "running" ? "live" : entry.status === "failed" ? "danger" : "quiet"}`} aria-hidden />
-            {entry.name}
-          </p>
-          {entry.input !== undefined ? (
-            <pre className="row__code">{summarize(entry.input)}</pre>
-          ) : null}
-          {entry.output !== undefined ? <pre className="row__code">{summarize(entry.output)}</pre> : null}
+        <li className={`row row--tools${anyRunning ? " row--tools-live" : ""}`}>
+          <details open={anyRunning}>
+            <summary className="row__tool-head">
+              <span className={`dot dot--${tone}`} aria-hidden />
+              {toolGroupSummary(t, entry.counts)}
+            </summary>
+            <ol className="row__tool-list">
+              {entry.tools.map((tool) => (
+                <ToolRow key={tool.id} entry={tool} nested />
+              ))}
+            </ol>
+          </details>
         </li>
       );
+    }
 
     case "approval":
       return (
@@ -1074,6 +1116,23 @@ function TranscriptRow(props: {
         </li>
       );
   }
+}
+
+function ToolRow(props: { entry: ToolEntry; nested?: boolean }): JSX.Element {
+  const { entry } = props;
+  return (
+    <li className={`row row--tool row--tool-${entry.status}${props.nested === true ? " row--tool-nested" : ""}`}>
+      <p className="row__tool-head">
+        <span
+          className={`dot dot--${entry.status === "running" ? "live" : entry.status === "failed" ? "danger" : "quiet"}`}
+          aria-hidden
+        />
+        {entry.name}
+      </p>
+      {entry.input !== undefined ? <pre className="row__code">{summarize(entry.input)}</pre> : null}
+      {entry.output !== undefined ? <pre className="row__code">{summarize(entry.output)}</pre> : null}
+    </li>
+  );
 }
 
 /**

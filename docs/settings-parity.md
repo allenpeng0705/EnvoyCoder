@@ -837,9 +837,11 @@ already tried here and rejected.
      which nothing served. It came out of `RPC_METHODS` and `RPC_SPECS` in the same slice. A settings
      row for a feature whose own protocol entry is a promise nothing implements is the defect twice.
 
-  **What would bring it back**, in the order the work actually goes: the peer directory, then the
-  session store that makes a remote run reachable, then the broker decision — and then the method, its
-  params and the row are written together, against a handler. The tolerant settings read (§7.14) is what
+  **What would bring remote participation back as a settings row**, in the order the work actually
+  goes: the peer directory (`coder.listPeers` / `coder.registerPeer`), collaboration on the task
+  (`docs/envoydev-collaboration.md`), then a settings control that gates offers — written together
+  against handlers. M5a/M5b land the directory and offer path; a settings toggle remains optional.
+  The tolerant settings read (§7.14) is what
   lets an upgrading user's settings file keep its language, its default agent and its nominated folder
   while the dead key is dropped — and it does so for **any** key this build does not have, which is the
   property the constant that used to do this job could not have.

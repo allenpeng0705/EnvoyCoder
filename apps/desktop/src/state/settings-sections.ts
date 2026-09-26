@@ -44,6 +44,7 @@ import type { MessageKey } from "../i18n/messages/en.js";
 /** The sections this pane has. Adding one is a change to this union, the page switch and this file. */
 export type SettingsSectionId =
   | "general"
+  | "appearance"
   | "tasks"
   | "safety"
   | "agents"
@@ -125,6 +126,23 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
         file: "apps/desktop/src/components/settings/SectionsControls.tsx",
         needle: 't("settings.defaultPath.title")',
         because: "and the folder `Add project` starts in is the second",
+      },
+    ],
+  },
+  {
+    id: "appearance",
+    titleKey: "settings.section.appearance.title",
+    band: { kind: "sentence", key: "settings.section.appearance.detail" },
+    content: [
+      {
+        file: "apps/desktop/src/components/settings/SectionsAppearance.tsx",
+        needle: 't("settings.theme.title")',
+        because: "the theme select is the Appearance section's first (and today only) row",
+      },
+      {
+        file: "apps/desktop/src/main.tsx",
+        needle: "state.settings.theme",
+        because: "Root applies the stored preference through applyTheme whenever it changes",
       },
     ],
   },

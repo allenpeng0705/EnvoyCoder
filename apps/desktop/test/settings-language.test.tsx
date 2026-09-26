@@ -175,6 +175,7 @@ describe("the sections bar, in the same language", () => {
   /** The pane's German section names, in the order the registry puts them. */
   const GERMAN_SECTIONS = [
     "Allgemein",
+    "Darstellung",
     "Neue Aufgaben",
     "Sicherheit",
     "Agenten",

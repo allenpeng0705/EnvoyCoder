@@ -114,7 +114,7 @@
  * **And the platform's widgets follow the app's palette, not the desktop's.**
  *
  * The token sheet declares `color-scheme: light dark`, which means "pick by the user's preference" — while this
- * app's palette is decided by `data-theme` (`main.tsx` forces dark today; the appearance slice will set it).
+ * app's palette is decided by `data-theme` (Settings → Appearance via `applyTheme`; default dark).
  * The two can disagree, and when they do the UA draws its own widgets — scrollbars, `<select>` popups, checkboxes,
  * the text caret, and every form control the reset above does not cover — for the desktop's scheme rather than
  * for the one on screen. The measurement that found this is in §7.28: the classes that set no `color` at all
@@ -4087,6 +4087,46 @@ button.explorer__change:hover {
 
 .row--tool-failed {
   border-color: var(--status-danger);
+}
+
+/* Several consecutive tools collapse into one expandable row — the summary is prose
+   ("edited 3 files, ran 2 commands"), the list inside is the same cards as a lone tool. */
+.row--tools {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+}
+
+.row--tools-live {
+  border-color: var(--accent);
+}
+
+.row--tools > details > summary.row__tool-head {
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.row--tools > details > summary.row__tool-head::-webkit-details-marker {
+  display: none;
+}
+
+.row__tool-list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.row--tool-nested {
+  /* Nested cards sit inside the group surface — no second fill, just a hairline. */
+  background: transparent;
+  padding: var(--space-2);
 }
 
 .row__tool-head {

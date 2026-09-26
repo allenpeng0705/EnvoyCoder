@@ -102,11 +102,11 @@ Initial public release of EnvoyDev Mobile.
 
 | Field | Value |
 |-------|--------|
-| Support URL | `TODO: https://…` (required) |
-| Marketing URL | `TODO: https://…` (optional) |
-| Privacy Policy URL | `TODO: https://…` (required) |
+| Support URL | `https://github.com/allenpeng0705/EnvoyCoder/issues` |
+| Marketing URL | `https://www.homeclaw.cn/envoy` |
+| Privacy Policy URL | `https://www.homeclaw.cn/envoy/privacy` |
 
-Suggested privacy policy topics to cover:
+Suggested privacy policy topics (covered on the family privacy page under **EnvoyDev**):
 
 - Pairing / session tokens stored on device (Keychain / secure storage)
 - Camera for QR pairing

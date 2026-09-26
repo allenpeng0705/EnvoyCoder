@@ -3,22 +3,22 @@
   "entries": [
     {
       "path": "apps/desktop/src/state/coderStore.ts",
-      "lines": 1895,
+      "lines": 1897,
       "reason": "The window's single state store, read directly by React components. Splitting it is a state-layer refactor with UI call sites to migrate, not a mechanical file move. Outstanding."
     },
     {
       "path": "apps/desktop/src/i18n/messages/en.ts",
-      "lines": 1317,
+      "lines": 1340,
       "reason": "The English catalogue every other locale is measured against. Splitting it means splitting key namespaces across all locale files and the i18n parity gate at once. Outstanding."
     },
     {
       "path": "apps/desktop/src/daemon/store.ts",
-      "lines": 948,
+      "lines": 882,
       "reason": "Daemon persistence for projects, tasks and settings on disk. Splitting needs a storage layer extracted beneath the handlers first. Outstanding."
     },
     {
       "path": "apps/desktop/src/composer/controls.ts",
-      "lines": 823,
+      "lines": 855,
       "reason": "The composer's per-agent capability projection; the per-agent branches want their own modules. Outstanding."
     },
     {
@@ -28,22 +28,22 @@
     },
     {
       "path": "apps/desktop/src/daemon/runs.ts",
-      "lines": 1274,
+      "lines": 1277,
       "reason": "One agent turn's event lifecycle; event normalization and retention want separate modules. Outstanding."
     },
     {
       "path": "apps/desktop/src/daemon/service.ts",
-      "lines": 1154,
+      "lines": 1194,
       "reason": "The daemon's method handlers; the handler families need extracting behind the dispatcher (@envoydev/host-bridge). Outstanding."
     },
     {
       "path": "packages/protocol/src/domain.ts",
-      "lines": 1731,
+      "lines": 1778,
       "reason": "The shared domain nouns the daemon, window and phone agree on; splitting by bounded context is the follow-up. Outstanding."
     },
     {
       "path": "packages/protocol/src/rpc.ts",
-      "lines": 3274,
+      "lines": 3282,
       "reason": "Every method schema and event name in one wire module; splitting by surface (session / project / daemon) is the follow-up. Outstanding."
     },
     {
@@ -53,7 +53,7 @@
     },
     {
       "path": "packages/agent-catalog/src/index.ts",
-      "lines": 1441,
+      "lines": 1442,
       "reason": "The agent catalogue and its two tiers; separating catalogue data from lookup logic is the follow-up. Outstanding."
     }
   ]

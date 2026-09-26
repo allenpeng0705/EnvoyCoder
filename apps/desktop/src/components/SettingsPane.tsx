@@ -113,6 +113,7 @@ import { SettingsShell, StoreNotes } from "./SettingsShell.js";
 import { AboutSection, MachineSection, ShortcutsSection } from "./settings/SectionsFacts.js";
 import { AgentsSection } from "./settings/SectionsAgents.js";
 import { GeneralSection, SafetySection, TasksSection } from "./settings/SectionsControls.js";
+import { AppearanceSection } from "./settings/SectionsAppearance.js";
 import { PairingSection } from "./settings/PairingSection.js";
 import { ServiceSection } from "./settings/SectionsService.js";
 import { LlmSection } from "./settings/EnvoyLlmPanel.js";
@@ -369,6 +370,8 @@ function sectionBody(props: SettingsPaneProps & { section: SettingsSectionId }):
   switch (props.section) {
     case "general":
       return <GeneralSection state={props.state} onUpdate={props.onUpdate} agents={props.agents} />;
+    case "appearance":
+      return <AppearanceSection state={props.state} onUpdate={props.onUpdate} agents={props.agents} />;
     case "tasks":
       return <TasksSection state={props.state} onUpdate={props.onUpdate} agents={props.agents} />;
     case "safety":

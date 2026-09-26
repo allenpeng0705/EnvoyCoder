@@ -144,6 +144,8 @@ function describeEvent(event: RunEvent): string {
       return `answered       ${event.optionId}`;
     case "run.diff":
       return `diff           ${event.files.length} file(s)`;
+    case "run.handoff":
+      return `handoff        ${event.role}${event.brief ? ` — ${event.brief}` : ""}`;
     case "run.usage":
       return `context        ${event.contextUsed ?? "?"}/${event.contextSize ?? "?"}`;
     case "run.commands":

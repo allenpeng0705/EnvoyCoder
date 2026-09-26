@@ -166,20 +166,20 @@ The phone never holds a provider key, never runs an agent, and never writes to a
 It starts runs, watches them, answers approvals and reads diffs — which is exactly the set of
 operations the daemon's protocol gives it.
 
-## 6. Distributed runs
+## 6. Collaborative work (and remote runs as substrate)
 
-D2 fixes *where* work runs: on the machine with the code. What is still open is **who brokers it**,
-and the design doc lists that as an open decision. The two candidate shapes:
+M5 is **team → job → tasks** under an **orchestrator** (the origin EnvoyDev): one copyable team
+token, members join and stay online, jobs are split and assigned (parallel/async with writer
+locks), results merge on the origin, failures follow retry → reassign → fail.
 
-* **daemon-to-daemon** — EnvoyDev on machine A offers a run to EnvoyDev on machine B over the
-  mesh; each daemon is sovereign, and the node is only a transport;
-* **through the node** — the run is a product RPC on B's node, which A calls with its product
-  session. Simpler, and it inherits the node's policy, but it makes the node a broker of workloads
-  rather than a transport.
+Normative design (incl. error/exception matrix): [`envoydev-collaboration.md`](envoydev-collaboration.md).
 
-Either way, three invariants hold from day one: **the origin can always cancel** (a run you cannot
-stop is not a run you started), **events stream back in the same shape as local runs** (a remote run
-is a run), and **a peer may always refuse** with a reason that names the policy, not the network.
+D2 still fixes *where* work runs: on the machine with the code. Member channels use **LAN first,
+then EnvoyMesh** (§5 order). The EnvoyMesh node is transport only — not the orchestrator.
+
+Invariants for every remote leg: **origin can always cancel**, **events stream as `run.*`**,
+**peer may refuse with a named policy**. Collaboration adds: **one writer per worktree key**,
+**team before job**, and the §7 failure machine.
 
 ## 7. Ports and paths
 

@@ -67,6 +67,15 @@ const READERS: Readonly<Record<string, readonly ReadSite[]>> = {
         "the window when it changes",
     },
   ],
+  theme: [
+    {
+      file: "apps/desktop/src/main.tsx",
+      needle: "state.settings.theme",
+      because:
+        "Root calls `applyTheme` whenever the stored preference changes, writing or clearing " +
+        "`document.documentElement.dataset.theme`",
+    },
+  ],
   defaultProjectPath: [
     {
       file: "apps/desktop/src/components/CoderApp.tsx",

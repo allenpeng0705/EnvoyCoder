@@ -286,6 +286,17 @@ export const HARNESS_THINKING_DELIVERY: Readonly<Partial<Record<HarnessId, Think
       'REASONING_CONFIG_ID = "reasoning_effort" and its category is "thought_level" ' +
       "(@deepseek-ai/dsh-acp 0.1.2-rc.1, lib/index.js:306, :494-508).",
   },
+  claudecode: {
+    kind: "session-config",
+    configId: "effort",
+    // VERIFIED 2026-09-26 against `@agentclientprotocol/claude-agent-acp` on PATH: `session/new`
+    // publishes `{id:'effort', category:'thought_level', values: default|low|medium|high|xhigh|max}`,
+    // and `session/set_config_option {configId:'effort', value:'high'}` answered without error.
+    source:
+      "session/set_config_option {configId: 'effort'}; category thought_level values default | low | " +
+      "medium | high | xhigh | max. Measured 2026-09-26 against claude-agent-acp on this machine: a " +
+      "set of 'high' was accepted (no -32602).",
+  },
 };
 
 /**
@@ -357,40 +368,38 @@ export const HARNESS_THINKING: Readonly<Record<HarnessId, AgentThinking>> = {
       "current route — which is why the window says when it saw these rather than promising them.",
   },
 
-  // The three agents this build now drives over ACP. Their thought-level surface was **observed**, and
-  // none of the three has a delivery wired, which is a different fact from "it offers none" — so each
-  // says what was actually seen and the window's disabled pill is honest for a reason about *our* build.
+  // Claude: delivery wired (see `HARNESS_THINKING_DELIVERY`). Levels still arrive only inside a
+  // session, so the static kind stays `"session"` until one is observed.
   claudecode: {
     kind: "session",
     options: [],
     source:
-      "Published per session, and NOT yet wired as a delivery: `session/new` answers with an option " +
-      "whose category is `thought_level` — {id: 'effort', name: 'Effort'} with default | low | medium | " +
-      "high | xhigh | max — observed 2026-09-14 through @agentclientprotocol/claude-agent-acp 0.77.0. " +
-      "`effort` was read, not exercised: whether `session/set_config_option {configId: 'effort'}` " +
-      "accepts one of those values is the next thing to check, and until it is checked the pill stays " +
-      "disabled rather than sending a level whose effect nobody measured.",
+      "Published per session as `{id: 'effort', category: 'thought_level'}` with default | low | " +
+      "medium | high | xhigh | max (observed 2026-09-14; set exercised 2026-09-26 — see delivery).",
   },
+  // Codex: an earlier observation saw `reasoning_effort` after setting a model; on 2026-09-26 the
+  // same bridge answered no thought_level option after `set model`, and
+  // `session/set_config_option {configId:'reasoning_effort'}` came back `-32602 Invalid params` for
+  // every level tried. No delivery until a build accepts one again.
   codex: {
     kind: "session",
     options: [],
     source:
-      "Published per session, and only **after a model is set** — which is why no static answer can be " +
-      "given: on a fresh session through @agentclientprotocol/codex-acp 1.11.0 the option list held " +
-      "`mode`, `collaboration_mode` and `model`, and the `reasoning_effort` select (category " +
-      "`thought_level`, values low | medium | high | xhigh) appeared in the state returned by " +
-      "`session/set_config_option {configId: 'model'}`. Same shape as `deepseek-harness`'s: the levels " +
-      "belong to the model that was resolved. No delivery is wired, so the pill is disabled with a " +
-      "reason about our build rather than about the agent.",
+      "Earlier (2026-09-14, @agentclientprotocol/codex-acp 1.11.0) a `reasoning_effort` select " +
+      "appeared after setting a model. Re-measured 2026-09-26: after `set_config_option model` the " +
+      "option list still had only mode / collaboration_mode / model, and setting `reasoning_effort` " +
+      "to low|medium|high|xhigh each returned -32602 Invalid params. Pill stays off — our build " +
+      "must not advertise a level this bridge currently refuses.",
   },
+  // Cursor: no thought_level option; effort is baked into model ids. Measured, so `"none"`.
   cursor: {
-    kind: "session",
+    kind: "none",
     options: [],
     source:
       "Observed: a session opened through `cursor-agent acp` (2026.06.24) published `mode` and `model` " +
       "and **no** option in the `thought_level` category; its reasoning depth travels inside the model " +
-      "ids instead (`grok-4.6[effort=high,fast=true]`). Recorded as \"session\" rather than \"none\" " +
-      "because this is one observation of one build, and the honest claim is what we saw.",
+      "ids instead (`grok-4.6[effort=high,fast=true]`). Recorded as \"none\": that is what the protocol " +
+      "offered, not a gap in our wiring.",
   },
 
   // The catalogued CLIs: not "none", because we have not read their thought-level surface — and they

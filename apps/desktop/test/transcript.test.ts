@@ -104,6 +104,52 @@ describe("tool calls", () => {
     // the agent hung.
     expect(transcript.entries[0]).toMatchObject({ status: "running" });
   });
+
+  it("collapses consecutive tools into one group with bucket counts", () => {
+    const transcript = buildTranscript([
+      at(1, { kind: "run.tool", callId: "c1", name: "Write", status: "completed", input: { path: "a.ts" } }),
+      at(2, { kind: "run.tool", callId: "c2", name: "Edit", status: "completed", input: { path: "b.ts" } }),
+      at(3, { kind: "run.tool", callId: "c3", name: "shell", status: "completed", input: { command: "ls" } }),
+    ]);
+    expect(transcript.entries).toHaveLength(1);
+    expect(transcript.entries[0]).toMatchObject({
+      kind: "tools",
+      counts: { edited: 2, ran: 1, searched: 0, other: 0 },
+    });
+    expect(transcript.entries[0]!.kind === "tools" ? transcript.entries[0].tools : []).toHaveLength(3);
+  });
+
+  it("leaves a single tool as a tool row, and breaks a group around an approval", () => {
+    const transcript = buildTranscript([
+      at(1, { kind: "run.tool", callId: "c1", name: "Write", status: "completed" }),
+      at(2, {
+        kind: "run.approval-requested",
+        requestId: "req-1",
+        question: "Allow?",
+        options: [{ id: "allow-once", label: "Allow once" }],
+      }),
+      at(3, { kind: "run.tool", callId: "c2", name: "Edit", status: "completed" }),
+      at(4, { kind: "run.tool", callId: "c3", name: "bash", status: "completed" }),
+    ]);
+    expect(transcript.entries.map((entry) => entry.kind)).toEqual(["tool", "approval", "tools"]);
+  });
+
+  it("renders run.diff as a file-count notice", () => {
+    const transcript = buildTranscript([
+      at(1, {
+        kind: "run.diff",
+        files: [
+          { path: "a.ts", added: 0, removed: 0 },
+          { path: "b.ts", added: 0, removed: 0 },
+        ],
+      }),
+    ]);
+    expect(transcript.entries).toHaveLength(1);
+    expect(transcript.entries[0]).toMatchObject({
+      kind: "note",
+      notice: { key: "run.diff.many", values: { count: 2 } },
+    });
+  });
 });
 
 describe("approvals", () => {

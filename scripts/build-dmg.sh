@@ -10,8 +10,9 @@
 #   bash scripts/build-dmg.sh
 #
 # Needs: git, Node.js >= 22, pnpm (or corepack), Rust, and the Xcode
-# command line tools. Signing is optional — set APPLE_SIGNING_IDENTITY
-# if you have a Developer ID, otherwise the DMG is unsigned.
+# command line tools. Produces an **unsigned** DMG by default.
+# Apple signing / notarization are M6 work — this script does not read
+# APPLE_SIGNING_IDENTITY or pass it into Tauri yet.
 #
 # Output: dist/desktop/*.dmg
 

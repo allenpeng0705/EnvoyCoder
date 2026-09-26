@@ -10,6 +10,7 @@ import type { JSX } from "react";
 import { useEffect, useId, useState } from "react";
 
 import { useT } from "../../i18n/context.js";
+import { isDarkTheme } from "../../design/applyTheme.js";
 import { CodeFence } from "./CodeFence.js";
 import { containsUnsafeMermaidSource } from "./mermaid-source-policy.js";
 import type { MarkdownPhase } from "./types.js";
@@ -41,9 +42,7 @@ export function MermaidFence(props: {
     void (async () => {
       try {
         const mermaid = (await import("mermaid")).default;
-        const dark =
-          typeof document !== "undefined" &&
-          document.documentElement.getAttribute("data-theme") === "dark";
+        const dark = isDarkTheme();
         mermaid.initialize({
           startOnLoad: false,
           securityLevel: "strict",

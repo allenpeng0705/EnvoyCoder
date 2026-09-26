@@ -171,9 +171,8 @@ Three controls, all of which exist because their absence causes a specific confu
   that silently chooses is how people conclude the agent ignored their message.
 * **Agent and model pills** on the row and in the toolbar, so "which model wrote this?" never needs
   an archaeology session.
-* **Attach** — not built yet. The composer today is a textarea, a Queue/Steer select and Send; the
-  files a run touched will list in the transcript when the diff surface lands (`run.diff` is declared
-  and rendered but never emitted).
+* **Attach** — not built yet. The composer today is a textarea, a Queue/Steer select and Send; files
+  a run touched already list as a one-line `run.diff` summary when write tools name paths.
 
 ## 6. Approvals, inline
 
@@ -256,6 +255,6 @@ a tool call is one row built from two events keyed by the agent's `callId`; an a
 where the agent paused and is *updated in place* when answered; and a missing `seq` is **reported**,
 because a transcript that silently skips a frame is how a user reads a decision they never saw.
 
-What is still placeholder: the diff panel. `run.diff` renders as a one-line summary (`"3 files
-changed."`) with no way to open the files — that is the next slice, and the reason `run.tool` keeps
-its `input` and `output` rather than only a rendered string.
+What is still placeholder: the diff *panel*. `run.diff` is emitted and renders as a one-line summary
+(`"3 files changed."`) with no way to open the files — that is the next slice, and the reason
+`run.tool` keeps its `input` and `output` rather than only a rendered string.

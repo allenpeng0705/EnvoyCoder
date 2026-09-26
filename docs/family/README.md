@@ -14,8 +14,8 @@ fix belongs in EnvoyMesh (family guide §7.4) — after which the copy is refres
 | [`envoymesh-refactoring-plan.md`](envoymesh-refactoring-plan.md) | EnvoyMesh's own module refactor | Background, not product design. It is here because the reusable / product-bound split **is** the interface EnvoyDev consumes, and it explains why `@envoymesh/api/core` exists and why the bare `@envoymesh/api` barrel is off limits. EnvoyDev appears in it only as motivation (§1, §11) |
 
 Our own documents are one level up, in [`docs/`](../): the design, the UI, the harness catalogue, the
-platform rules, the networking model, the EnvoyMesh integration and the roadmap. Nothing in *this*
-folder is ours to write.
+platform rules, the networking model, collaborative tasks (`envoydev-collaboration.md`), the
+EnvoyMesh integration and the roadmap. Nothing in *this* folder is ours to write.
 
 ## Why a copy is safe to keep
 

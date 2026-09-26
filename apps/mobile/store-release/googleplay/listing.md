@@ -94,10 +94,10 @@ Initial public release of EnvoyDev Mobile.
 
 | Field | Value |
 |-------|--------|
-| Email | `TODO: support@…` (required) |
+| Email | `shilei.peng@qq.com` (alternate: `shileipeng@gmail.com`) |
 | Phone | optional |
-| Website | `TODO: https://…` |
-| Privacy policy | `TODO: https://…` (required) |
+| Website | `https://www.homeclaw.cn/envoy` |
+| Privacy policy | `https://www.homeclaw.cn/envoy/privacy` |
 
 ---
 

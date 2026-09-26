@@ -806,8 +806,9 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               onNewTask={() => {
                 void startNewTask(active.projectId).then((failure) => toRail(active.projectId, failure));
               }}
-              onStart={async (prompt, agentModeId, model, thinkingLevel, images) => {
+              onStart={async (prompt, agentModeId, model, thinkingLevel, images, resume) => {
                 const result = await props.actions.startRun(active.id, prompt, {
+                  ...(resume === true ? { resume: true } : {}),
                   ...(agentModeId !== undefined ? { agentModeId } : {}),
                   ...(model !== undefined ? { model } : {}),
                   ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),

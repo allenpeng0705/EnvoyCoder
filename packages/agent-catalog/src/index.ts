@@ -618,8 +618,9 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       "completed (`stopReason: 'end_turn'`, with usage), streaming `agent_thought_chunk`, `tool_call` " +
       "(title 'Terminal', kind 'execute'), `tool_call_update` and `agent_message_chunk`. `images` is the " +
       "advertised `promptCapabilities.image: true`. UNVERIFIED: `capabilities.cancel` (ACP's " +
-      "`session/cancel` was not exercised on this agent) and `approvals` — see the `capabilities` note; " +
-      "`effort` was read but is not wired as a thinking level yet (`./session-options.ts`).",
+      "`session/cancel` was not exercised on this agent) and `approvals` — see the `capabilities` note. " +
+      "`effort` is wired as a thinking delivery (`./session-options.ts`): set_config_option was " +
+      "accepted for a live level on 2026-09-26.",
   },
 
   codex: {

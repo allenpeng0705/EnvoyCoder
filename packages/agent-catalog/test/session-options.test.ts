@@ -272,11 +272,23 @@ describe("the thinking level", () => {
     expect(thinkingDelivery("envoy-harness")).toBeUndefined();
   });
 
-  it("does not claim an unread agent has none", () => {
-    // The third-party entries: their thought-level surface has not been read and they cannot be
-    // launched, so nothing will ever be observed. `"session"` says exactly that, and the window's reason
-    // for them is our own ("not wired up yet") rather than a statement about somebody else's product.
-    for (const id of ["claudecode", "codex", "copilot", "opencode", "cursor", "omp", "pi"] as const) {
+  it("wires Claude's effort delivery once a set was measured, and leaves Codex/Cursor honest", () => {
+    // Claude: session-published levels + measured set_config_option → delivery on.
+    expect(harnessThinking("claudecode").kind).toBe("session");
+    expect(canApplyThinking("claudecode")).toBe(true);
+    expect(thinkingDelivery("claudecode")?.configId).toBe("effort");
+
+    // Codex: earlier builds showed reasoning_effort; today's bridge rejects every level → no delivery.
+    expect(harnessThinking("codex").kind).toBe("session");
+    expect(canApplyThinking("codex")).toBe(false);
+    expect(thinkingDelivery("codex")).toBeUndefined();
+
+    // Cursor: observed no thought_level option — effort lives in model ids → "none".
+    expect(harnessThinking("cursor").kind).toBe("none");
+    expect(canApplyThinking("cursor")).toBe(false);
+
+    // Unread / undrivable third parties stay "session" so we do not claim they have none.
+    for (const id of ["copilot", "opencode", "omp", "pi"] as const) {
       expect(harnessThinking(id).kind, id).toBe("session");
       expect(canApplyThinking(id), id).toBe(false);
     }
@@ -325,7 +337,8 @@ describe("the thinking level", () => {
 
   it("keeps the delivery and the option id in one place, so a value cannot travel to the wrong option", () => {
     // `HARNESS_THINKING_DELIVERY` is the only thing the daemon sends with, and the id is the agent's.
-    expect(Object.keys(HARNESS_THINKING_DELIVERY)).toEqual(["deepseek-harness"]);
+    expect(Object.keys(HARNESS_THINKING_DELIVERY).sort()).toEqual(["claudecode", "deepseek-harness"]);
     expect(HARNESS_THINKING_DELIVERY["deepseek-harness"]?.kind).toBe("session-config");
+    expect(HARNESS_THINKING_DELIVERY.claudecode?.configId).toBe("effort");
   });
 });

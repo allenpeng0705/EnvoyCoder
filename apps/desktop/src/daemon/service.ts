@@ -71,6 +71,12 @@ import { resolveTaskDefaults } from "@envoydev/task-model";
 
 import { keyed, ref } from "./messages.js";
 import { createHealthHandlers } from "./health.js";
+import {
+  OfferBook,
+  buildCollaboration,
+  participantById,
+} from "./collaboration.js";
+import { forgetPeer, getPeer, listPeers, registerPeer } from "./peers.js";
 import type { PairedDeviceStore } from "./paired-devices.js";
 import { createCatalogHandlers } from "./catalog.js";
 import { getEnvoyLlmPublic, setEnvoyLlm, envoyHarnessModels } from "./envoy-llm.js";
@@ -263,6 +269,8 @@ export type CoderHandler = (params: unknown, context: CoderCallContext) => Promi
  */
 export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcMethod, CoderHandler>> {
   const isDirectory = deps.isDirectory ?? defaultIsDirectory;
+  /** Pending peer offers for this daemon process (M5b). */
+  const offers = new OfferBook();
   /**
    * The daemon's own probe: the catalogue's, over **the resolved search path** rather than the inherited one.
    *
@@ -961,10 +969,185 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
 
     "coder.listPeers": async (params) => {
       parseRpcParams("coder.listPeers", params);
-      // No peer directory yet: reachability comes from the mesh, and discovering peers is M5's work
-      // (`docs/roadmap.md`). An empty list is the honest answer — inventing rows here is how a UI
-      // ends up offering "run on the workstation" for a machine nobody can reach.
-      return { peers: [] };
+      const peers = await listPeers(deps.paths.stateDir);
+      return { peers };
+    },
+
+    "coder.registerPeer": async (params) => {
+      const input = parseRpcParams("coder.registerPeer", params) as {
+        id: string;
+        label: string;
+        reachable?: boolean;
+      };
+      const peer = await registerPeer(deps.paths.stateDir, input);
+      return { peer };
+    },
+
+    "coder.forgetPeer": async (params) => {
+      const input = parseRpcParams("coder.forgetPeer", params) as { id: string };
+      const forgotten = await forgetPeer(deps.paths.stateDir, input.id);
+      return { forgotten };
+    },
+
+    "coder.setTaskCollaboration": async (params) => {
+      const input = parseRpcParams("coder.setTaskCollaboration", params) as {
+        taskId: string;
+        participants: Parameters<typeof buildCollaboration>[0]["participants"];
+        activeParticipantId?: string;
+      };
+      const current = deps.store.findTask(input.taskId);
+      if (!current) throw notFound("task", input.taskId);
+      const collaboration = buildCollaboration({
+        participants: input.participants,
+        ...(input.activeParticipantId !== undefined
+          ? { activeParticipantId: input.activeParticipantId }
+          : {}),
+      });
+      const task = await deps.store.setTaskCollaboration(input.taskId, collaboration);
+      if (!task) throw notFound("task", input.taskId);
+      return { task };
+    },
+
+    "coder.handoffTask": async (params) => {
+      const input = parseRpcParams("coder.handoffTask", params) as {
+        taskId: string;
+        toParticipantId: string;
+        brief?: string;
+      };
+      const current = deps.store.findTask(input.taskId);
+      if (!current) throw notFound("task", input.taskId);
+      if (current.collaboration === undefined) {
+        throw coderError(
+          ENVOYDEV_ERRORS.badRequest,
+          "This task has no collaboration. Assign participants first.",
+          ref("error.collaboration.empty"),
+        );
+      }
+      const target = participantById(current, input.toParticipantId);
+      if (target === undefined) {
+        throw coderError(
+          ENVOYDEV_ERRORS.badRequest,
+          `There is no participant called “${input.toParticipantId}” on this task.`,
+          ref("error.collaboration.participantMissing", { id: input.toParticipantId }),
+        );
+      }
+      if (deps.runs?.liveFor(input.taskId)) {
+        throw coderError(
+          ENVOYDEV_ERRORS.badRequest,
+          "A run is already in progress. Finish or stop it before handing off to another participant.",
+          ref("error.collaboration.handoffWhileRunning"),
+        );
+      }
+      const fromId = current.collaboration.activeParticipantId;
+      const collaboration = {
+        ...current.collaboration,
+        activeParticipantId: target.id,
+        lastHandoff: {
+          ...(fromId !== undefined ? { fromId } : {}),
+          toId: target.id,
+          ...(input.brief !== undefined && input.brief !== "" ? { brief: input.brief } : {}),
+          at: new Date().toISOString(),
+        },
+      };
+      const task = await deps.store.setTaskCollaboration(input.taskId, collaboration);
+      if (!task) throw notFound("task", input.taskId);
+      return { task };
+    },
+
+    "coder.offerParticipantRun": async (params) => {
+      const input = parseRpcParams("coder.offerParticipantRun", params) as {
+        taskId: string;
+        participantId: string;
+        prompt: string;
+      };
+      const current = deps.store.findTask(input.taskId);
+      if (!current) throw notFound("task", input.taskId);
+      const participant = participantById(current, input.participantId);
+      if (participant === undefined) {
+        throw coderError(
+          ENVOYDEV_ERRORS.badRequest,
+          `There is no participant called “${input.participantId}” on this task.`,
+          ref("error.collaboration.participantMissing", { id: input.participantId }),
+        );
+      }
+      if (participant.kind !== "peer") {
+        throw coderError(
+          ENVOYDEV_ERRORS.badRequest,
+          `Participant “${participant.id}” is a local agent. Start a run on this machine instead of offering it remotely.`,
+          ref("error.collaboration.notPeer", { id: participant.id }),
+        );
+      }
+      // Local hostId on a peer participant: treat as this machine (same daemon).
+      if (participant.hostId === "local") {
+        await deps.store.setTaskCollaboration(input.taskId, {
+          ...current.collaboration!,
+          activeParticipantId: participant.id,
+          lastHandoff: {
+            ...(current.collaboration?.activeParticipantId
+              ? { fromId: current.collaboration.activeParticipantId }
+              : {}),
+            toId: participant.id,
+            at: new Date().toISOString(),
+          },
+        });
+        const runs = requireRuns(deps);
+        const run = await runs.start({ taskId: input.taskId, prompt: input.prompt });
+        return { status: "started" as const, runId: run.id };
+      }
+      const peer = await getPeer(deps.paths.stateDir, participant.hostId);
+      if (peer === undefined) {
+        throw coderError(
+          ENVOYDEV_ERRORS.peerRefused,
+          `There is no peer called “${participant.hostId}”. Register it first, or pick a participant on this machine.`,
+          ref("error.collaboration.peerUnknown", { id: participant.hostId }),
+        );
+      }
+      if (!peer.reachable) {
+        return {
+          status: "refused" as const,
+          policy: "peer-unreachable",
+        };
+      }
+      // Reachable remote peer: record an offer pending accept/refuse. Full daemon-to-daemon
+      // dial lands with mesh discovery; until then accept starts locally for test peers.
+      const offer = offers.create({
+        taskId: input.taskId,
+        participantId: participant.id,
+        prompt: input.prompt,
+        peerId: peer.id,
+      });
+      return { status: "offered" as const, offerId: offer.id };
+    },
+
+    "coder.acceptParticipantOffer": async (params) => {
+      const input = parseRpcParams("coder.acceptParticipantOffer", params) as { offerId: string };
+      const offer = offers.accept(input.offerId);
+      const current = deps.store.findTask(offer.taskId);
+      if (!current?.collaboration) throw notFound("task", offer.taskId);
+      await deps.store.setTaskCollaboration(offer.taskId, {
+        ...current.collaboration,
+        activeParticipantId: offer.participantId,
+        lastHandoff: {
+          ...(current.collaboration.activeParticipantId
+            ? { fromId: current.collaboration.activeParticipantId }
+            : {}),
+          toId: offer.participantId,
+          at: new Date().toISOString(),
+        },
+      });
+      // Until mesh dial exists, accepting on this daemon starts the run locally with the peer's hostId.
+      const runs = requireRuns(deps);
+      await runs.start({ taskId: offer.taskId, prompt: offer.prompt, forceLocalPeer: true });
+      return { offerId: offer.id, status: "accepted" as const };
+    },
+
+    "coder.refuseParticipantOffer": async (params) => {
+      const input = parseRpcParams("coder.refuseParticipantOffer", params) as {
+        offerId: string;
+        policy: string;
+      };
+      const offer = offers.refuse(input.offerId, input.policy);
+      return { offerId: offer.id, status: "refused" as const, policy: input.policy };
     },
 
     /* ────────────────── settings ────────────────── */

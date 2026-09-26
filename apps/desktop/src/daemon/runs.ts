@@ -105,6 +105,8 @@ import {
   runIdsForTask,
   transcriptFile,
 } from "./transcript-log.js";
+import { isFileMutatingTool, pathFromToolInput } from "../state/tool-buckets.js";
+import { activeParticipant, harnessForRun, hostIdForRun } from "./collaboration.js";
 
 export interface RunManagerDeps {
   paths: CoderPaths;
@@ -228,6 +230,11 @@ interface LiveRun {
   stderr: string[];
   settled: boolean;
   /**
+   * Paths write/edit tools named during this run — emitted as one `run.diff` before `run.ended`.
+   * Added/removed stay 0 when we only know the path; the UI headline is the file count.
+   */
+  touchedFiles: Map<string, { added: number; removed: number }>;
+  /**
    * Resolves when the run has finished and every write it makes has been made.
    *
    * Without it, shutdown returns while a cancelled run is still appending its last events — so a
@@ -263,6 +270,11 @@ export interface StartRunInput {
   thinkingLevel?: string;
   /** Pictures for this turn. Absent when the message is only words. */
   images?: PromptImage[];
+  /**
+   * After `coder.acceptParticipantOffer` on this daemon: run a peer participant locally while
+   * keeping `run.hostId` as the peer id. Mesh dial will replace this path (M5b).
+   */
+  forceLocalPeer?: boolean;
 }
 
 export class RunManager {
@@ -357,9 +369,27 @@ export class RunManager {
       );
     }
 
+    // Collaboration: the active participant's harness/host, not always the task's defaults.
+    const participant = activeParticipant(task);
+    if (
+      participant !== undefined &&
+      participant.kind === "peer" &&
+      participant.hostId !== "local" &&
+      input.forceLocalPeer !== true
+    ) {
+      throw coderError(
+        ENVOYDEV_ERRORS.badRequest,
+        `Participant “${participant.id}” runs on another machine. Offer the turn with coder.offerParticipantRun.`,
+        ref("error.collaboration.notPeer", { id: participant.id }),
+      );
+    }
+
+    const runHarness = harnessForRun(task);
+    const runHostId = hostIdForRun(task);
+
     const requested = input.model ?? task.model;
     // A shipped agent, or a provider the user added. The resolvers below only know the nine.
-    const shipped = isHarnessId(task.harness) ? task.harness : undefined;
+    const shipped = isHarnessId(runHarness) ? runHarness : undefined;
     // Envoy Harness has no model until Settings saves one. An empty picker, or a leftover catalogue
     // choice for a different provider, uses that saved model so the key and base URL travel with it.
     const model =
@@ -415,8 +445,8 @@ export class RunManager {
       (shipped
         ? resolveApprovalPolicy(shipped, this.settings().requireApprovalForDestructive)
         : undefined);
-    if (!shipped) await ensureRunnableAgent(this.deps.store, task.harness);
-    const provider = shipped ? undefined : findRunnableProvider(this.deps.store, task.harness);
+    if (!shipped) await ensureRunnableAgent(this.deps.store, runHarness);
+    const provider = shipped ? undefined : findRunnableProvider(this.deps.store, runHarness);
     const launch =
       shipped && this.deps.resolveLaunch
         ? this.deps.resolveLaunch({
@@ -429,7 +459,7 @@ export class RunManager {
         : // **The same function the probe and sign-in call** (`launchForAgent`): a shipped id goes to
           // `launchForHarness`, an added provider to `launchForProvider`.
           launchForAgent({
-            id: task.harness,
+            id: runHarness,
             ...(provider !== undefined ? { provider } : {}),
             cwd: task.cwd,
             paths: this.deps.paths,
@@ -446,12 +476,12 @@ export class RunManager {
     const run: AgentRun = {
       id: runId,
       taskId: task.id,
-      harness: task.harness,
+      harness: runHarness,
       ...(model ? { model } : {}),
       // Only when the agent accepted it, which `resolveThinkingDelivery` has just established: a run
       // that named a level the agent refused never gets here, so this field cannot claim one.
       ...(thinkingConfig && thinkingLevel ? { thinkingLevel } : {}),
-      hostId: task.hostId ?? "local",
+      hostId: runHostId,
       startedAt: this.now(),
       status: "running",
       // Set before the first event, or that event is the one a restarted daemon cannot read back.
@@ -487,6 +517,7 @@ export class RunManager {
       approval: undefined,
       stderr: [],
       settled: false,
+      touchedFiles: new Map(),
       done,
       markDone,
     };
@@ -503,6 +534,17 @@ export class RunManager {
       ...(run.thinkingLevel ? { thinkingLevel: run.thinkingLevel } : {}),
       hostId: run.hostId,
     });
+    // Collaboration handoff: name the transfer on the run that follows it so the transcript shows it.
+    const handoff = task.collaboration?.lastHandoff;
+    if (handoff !== undefined && participant !== undefined && handoff.toId === participant.id) {
+      await this.record(live, {
+        kind: "run.handoff",
+        ...(handoff.fromId !== undefined ? { fromId: handoff.fromId } : {}),
+        toId: handoff.toId,
+        role: participant.role,
+        ...(handoff.brief !== undefined && handoff.brief !== "" ? { brief: handoff.brief } : {}),
+      });
+    }
 
     // The turn runs in the background: `coder.startRun` answers as soon as the run *exists*, so the
     // UI renders a task starting rather than blocking until it finishes.
@@ -543,6 +585,7 @@ export class RunManager {
       approval: undefined,
       stderr: [],
       settled: true,
+      touchedFiles: new Map(),
       done: Promise.resolve(),
       markDone: () => undefined,
     });
@@ -754,19 +797,29 @@ export class RunManager {
         return;
       }
       case "tool_call": {
+        const name = typeof update.title === "string" && update.title !== "" ? update.title : "tool";
+        const kind = typeof update.kind === "string" ? update.kind : undefined;
+        const input = update.rawInput !== undefined ? update.rawInput : undefined;
+        this.noteTouchedFile(live, name, kind, input);
         void this.record(live, {
           kind: "run.tool",
           callId: String(update.toolCallId ?? ""),
-          name: typeof update.title === "string" && update.title !== "" ? update.title : "tool",
+          name,
           status: "running",
-          ...(update.rawInput !== undefined ? { input: update.rawInput } : {}),
+          ...(input !== undefined ? { input } : {}),
         });
         return;
       }
       case "tool_call_update": {
+        const callId = String(update.toolCallId ?? "");
+        // A terminal update often carries no title; recover the start's name so a late path in
+        // content still counts toward `run.diff`.
+        const name = this.toolName(live, callId) ?? "";
+        const input = this.toolInput(live, callId);
+        this.noteTouchedFile(live, name, undefined, input);
         void this.record(live, {
           kind: "run.tool",
-          callId: String(update.toolCallId ?? ""),
+          callId,
           name: "",
           status: update.status === "failed" ? "failed" : "completed",
           ...(update.content !== undefined ? { output: update.content } : {}),
@@ -961,6 +1014,20 @@ export class RunManager {
       if (event && event.kind === "run.tool" && event.callId === callId && event.name !== "") return event.name;
     }
     return undefined;
+  }
+
+  /**
+   * Remember a path a write/edit tool named, for one `run.diff` at the end of the turn.
+   *
+   * Line counts stay 0 when we only know the path — the transcript headline is the file count, and
+   * inventing added/removed from the tool args would be a guess dressed as a diff.
+   */
+  private noteTouchedFile(live: LiveRun, name: string, kind: string | undefined, input: unknown): void {
+    if (!isFileMutatingTool(name, kind)) return;
+    const path = pathFromToolInput(input);
+    if (path === undefined) return;
+    if (live.touchedFiles.has(path)) return;
+    live.touchedFiles.set(path, { added: 0, removed: 0 });
   }
 
   /* ────────────────────────────── control ────────────────────────────── */
@@ -1202,6 +1269,18 @@ export class RunManager {
       // Letting it throw would be worse than either: the run is already `settled`, so `finish` cannot
       // run again, while the tail below (`active`, `finished`, `markDone`) would be skipped — the run
       // left in `active` with `live.done` never resolved, which is a daemon that hangs on quit.
+    }
+    // Before the ending: one summary of files write tools named. Absent when nothing mutated a path
+    // we could read — a silent run is better than a zero-file "diff" pretending to be news.
+    if (live.touchedFiles.size > 0) {
+      await this.record(live, {
+        kind: "run.diff",
+        files: [...live.touchedFiles.entries()].map(([path, counts]) => ({
+          path,
+          added: counts.added,
+          removed: counts.removed,
+        })),
+      });
     }
     await this.record(live, { kind: "run.ended", exitCode, status });
     this.active.delete(live.run.id);

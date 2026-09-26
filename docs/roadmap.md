@@ -129,21 +129,48 @@ in the family's words. *Acceptance:* a recorded sequence of the phone answering 
 > and the host-connect access-gate fix so non-owner sessions can still call product RPC when
 > `socketMethods` is configured. A live phone recording answering an approval remains a manual check.
 
-**M5 — distributed runs.** A task offered to a peer, accepted or refused by policy, with the events
-streamed back to the origin. *Proves:* D2 — the work happens where the code is, and the origin can
-watch and steer it. *Acceptance:* a run on machine B whose transcript is complete on machine A, and a
-refusal that names the policy that refused it.
+**M5 — collaborative work (team → job → tasks).** Orchestrator (origin EnvoyDev) creates a
+**team** (one copyable team token; members join; online via heartbeat), then **jobs** split into
+**tasks** assigned to members (LAN then mesh). Parallel/async where writer locks allow; results
+merge on the origin. Failure: retry → reassign → fail with a job report.
+*Proves:* D2 + team orchestration. *Acceptance:* team online; job completes across ≥2 members;
+named refuse; exhausted task follows §7 policy.
+Design: [`docs/envoydev-collaboration.md`](envoydev-collaboration.md) (normative, incl. error matrix).
 
-**M6 — packaging.** Signed/notarised macOS bundles, NSIS for Windows (**with signing configured —
-Paseo ships unsigned Windows builds and its Windows CI never launches the packaged app**), and
-AppImage/deb/rpm for Linux. *Proves:* the app installs and starts on all three, with a smoke test in
-CI per platform rather than unit tests only.
+> **Status:** Local handoff / peer-directory / offer stubs exist (M5a/M5b stepping stones).
+> Team token, Job ledger, parallel scheduler, and §7 failure machine are the next slices.
 
-> **A second half of M6, designed and not yet built:** the daemon's *lifetime* — app-managed by default, an
-> opt-in OS service for a host that must answer the phone with no window open, the watchdog layers that keep
-> it up, and upgrade/stop/restart/uninstall on all three platforms. `docs/daemon-lifecycle.md` records the
-> decision, the facts it rests on (including the family's reserved exit code `2` for `exitForNodeSupervisor`),
-> the gap list, and what it deliberately does not decide.
+**M6 — packaging.** *Proves:* the app installs and starts on all three platforms, with evidence
+in CI rather than unit tests only.
+
+> **What exists today (unsigned builders + resource checks):**
+> * macOS: `scripts/build-dmg.sh` → Tauri `dmg,app` (unsigned unless you export signing into Tauri yourself)
+> * Windows: `scripts/build-exe.ps1` → NSIS (unsigned)
+> * Linux: `scripts/build-linux.sh` → `deb` + AppImage (not rpm)
+> * Release workflow: stage bundle + `check-bundle-resources` / installer-script checks — **not** a full
+>   `tauri build`, **not** signed/notarised installers, **not** an install-and-launch smoke per OS
+>
+> **Still open for M6 acceptance:** Apple signing + notarization, Windows code signing, optional rpm/msi
+> if we choose to ship them, and CI that installs the package and launches the app on each platform.
+>
+> **Daemon lifetime (M6 second half) — mostly landed.** App-managed by default; opt-in OS service
+> (claim `managedBy`, payload, health/heartbeat, bounds, reconcile, drain, supervisor units, Settings
+> row, owner-only RPC). Residuals: `docs/daemon-lifecycle.md` §9–§10.
+
+## Next refinements (backlog)
+
+Ordered after the 2026-09 composer-honesty sprint (gates green, Resume UI, Claude thinking delivery).
+
+| Priority | Item | Notes |
+| --- | --- | --- |
+| Done | **Appearance: theme** | Settings → Appearance; `theme` on `CoderSettings`; `applyTheme` / light palette already in CSS |
+| Done | **Transcript: group tools + emit `run.diff`** | Consecutive tools collapse; daemon emits `run.diff` from write/edit paths before `run.ended` |
+| Next | **Appearance: content size** | Font ramp + `contentFontSize` — deferred from theme slice (`settings-parity.md` §8.2) |
+| Next | **Codex / Cursor thinking honesty** | Claude `effort` wired. Codex rejects `reasoning_effort` today; Cursor has no `thought_level` |
+| Release | **Mobile store: device screenshots + deploy privacy** | Listing URLs filled; re-capture shots at store sizes; deploy `EnvoyMesh/sites/privacy.html` to homeclaw |
+| Release | **M6 signing + install smoke** | Unsigned builders exist; signing/notarization and CI install-launch still owed |
+| Architecture | **M5 team / job orchestration** | Team-first + orchestrator + §7 failure matrix — `docs/envoydev-collaboration.md` |
+| Polish | **History / sidebar nav render** | Model done; UI thin (`paseo-feature-parity` #7) |
 
 ## Explicitly not planned
 

@@ -305,6 +305,30 @@ function handlePrompt(id, params) {
     return;
   }
 
+  if (text.includes("edit-files")) {
+    // Two write tools naming paths — the daemon should emit one `run.diff` before `run.ended`.
+    update({
+      sessionUpdate: "tool_call",
+      toolCallId: "edit-1",
+      title: "Write",
+      kind: "edit",
+      status: "in_progress",
+      rawInput: { path: "src/a.ts", contents: "export const a = 1;\n" },
+    });
+    update({ sessionUpdate: "tool_call_update", toolCallId: "edit-1", status: "completed" });
+    update({
+      sessionUpdate: "tool_call",
+      toolCallId: "edit-2",
+      title: "Edit",
+      kind: "edit",
+      status: "in_progress",
+      rawInput: { file_path: "src/b.ts", old_string: "x", new_string: "y" },
+    });
+    update({ sessionUpdate: "tool_call_update", toolCallId: "edit-2", status: "completed" });
+    ok(id, { stopReason: "end_turn" });
+    return;
+  }
+
   if (text.includes("commands")) {
     // The shape ACP agents use to publish their own slash commands (`available_commands_update`).
     // A leading slash and a nameless entry are noise the daemon must drop, not offer.

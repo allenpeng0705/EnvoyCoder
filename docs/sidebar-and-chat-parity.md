@@ -85,7 +85,8 @@ but has no key listener behind it.
 ### 2.2 What we have today
 
 `apps/desktop/src/components/TaskPane.tsx`: a textarea, a `Queue`/`Steer` `<select>`, and a Send
-button; the transcript renders text, tool calls, `run.diff` (never emitted), approvals and usage as rows.
+button; the transcript renders text, tool calls (consecutive ones grouped), `run.diff` (emitted from
+write/edit paths), approvals and usage as rows.
 Approvals are answered inline already (`TaskPane` renders the options), which is the one place we are
 already at parity. `SettingsPane.tsx` holds app settings; a project defaults UI does not exist.
 
@@ -94,7 +95,7 @@ already at parity. `SettingsPane.tsx` holds app settings; a project defaults UI 
 | # | Item | Why here | Needs |
 |---|---|---|---|
 | C1 | **Agent + model pills** on the composer and the run row | "which model wrote this?" is the question a control plane exists to answer | `coder.listHarnesses` exists; a per-run model field is in the protocol; no picker component yet |
-| C2 | **Tool-call grouping + sentence summary** | ten tool calls currently read as ten rows; paseo's summary is one line | a grouping pass over `RUN_EVENT_KINDS` in the transcript builder (`state/transcript.ts`) |
+| C2 | **Tool-call grouping + sentence summary** | shipped: consecutive tools collapse; write paths emit `run.diff` | done (`state/transcript.ts`, `daemon/runs.ts`) |
 | C3 | **Task list** (the agent's todos) | the single most useful "is it on track?" signal | a `run.todos` event kind (not in `RUN_EVENT_KINDS` today) + a panel |
 | C4 | **Context meter as a ring** | `run.usage` already carries `used`/`size`; we render one text line | a component; tokens exist |
 | C5 | **Send-button label + the forced-interrupt exception** | small, and it is the difference between a message that lands and one that strands behind an approval | `state/` + `TaskPane.tsx`; the exception is already documented in `paseo-design-decisions.md` |
@@ -109,8 +110,9 @@ Three items above are blocked on wire fields, not on UI work:
 
 1. **`run.todos`** — without it, C3 cannot exist. It is one more member of `RUN_EVENT_KINDS`.
 2. **A per-run attachment list** — C8 needs a field on the send path.
-3. **`run.diff` emission** — the type and the transcript row already exist and the daemon never emits it;
-   the file-changes sentence in C2 is much weaker without it.
+3. **`run.diff` emission** — shipped: write/edit tools that name a path become one `run.diff`
+   before `run.ended`; the file-count sentence in C2 is no longer empty. A full diff viewer is still
+   owed (`paseo-feature-parity` #9).
 
 ## 4. Honest note on who implements this
 

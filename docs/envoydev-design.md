@@ -144,10 +144,14 @@ EnvoyDev cannot read anyone's chat transcripts. That separation is enforced by p
 
 Open, and deliberately so:
 
-* **how a distributed run is brokered** — peer-to-peer between daemons, or through the node as a
-  relay for control messages (D2 fixes *where* the work runs, not who negotiates it);
+* **role vocabulary and playbooks beyond v1** — `plan` / `implement` / `review` / `observe` are
+  shipped; richer playbooks and an orchestrator role are M5c
+  ([`envoydev-collaboration.md`](envoydev-collaboration.md));
 * **the transcript format** — we own ours, but whether it is a projection of the harness's own log or
   a copy is unsettled;
 * **whether windows may attach to a remote daemon** — the desktop today would spawn a local daemon;
   attaching to a peer's is the interesting case and needs the same ownership rules as the node;
 * **pricing/licensing of this repo** — inherited from the family's practice, not yet written down.
+
+**Closed here:** how a distributed *leg* is brokered — **daemon-to-daemon**; the node is transport
+only. Collaboration (roles, handoffs) is the M5 product; remote offer/stream is substrate.

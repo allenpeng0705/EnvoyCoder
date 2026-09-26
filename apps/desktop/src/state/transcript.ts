@@ -32,19 +32,32 @@
 import type { RunEvent, TaskStatus } from "@envoydev/protocol";
 
 import { localNotice, type Notice } from "../i18n/notice.js";
+import { countToolBuckets, type ToolCounts } from "./tool-buckets.js";
+
+export type ToolEntry = {
+  kind: "tool";
+  id: string;
+  callId: string;
+  name: string;
+  status: "running" | "completed" | "failed";
+  input?: unknown;
+  output?: unknown;
+};
 
 export type TranscriptEntry =
   | { kind: "user"; id: string; text: string; mode: "queue" | "steer"; delivered: "queued" | "steered" }
   | { kind: "assistant"; id: string; text: string }
   | { kind: "thought"; id: string; text: string }
+  | ToolEntry
+  /**
+   * Consecutive tool calls collapsed into one expandable row with bucket counts
+   * ("edited 3 files, ran 2 commands"). Singles stay as `tool`.
+   */
   | {
-      kind: "tool";
+      kind: "tools";
       id: string;
-      callId: string;
-      name: string;
-      status: "running" | "completed" | "failed";
-      input?: unknown;
-      output?: unknown;
+      tools: readonly ToolEntry[];
+      counts: ToolCounts;
     }
   | {
       kind: "approval";
@@ -277,6 +290,20 @@ export function buildTranscript(events: readonly RunEvent[]): Transcript {
         break;
       }
 
+      case "run.handoff": {
+        breakAnonymousRun();
+        entries.push({
+          kind: "note",
+          id: `ho${event.seq}`,
+          notice:
+            event.brief !== undefined && event.brief !== ""
+              ? localNotice("run.handoff.brief", { role: event.role, brief: event.brief })
+              : localNotice("run.handoff", { role: event.role }),
+          tone: "quiet",
+        });
+        break;
+      }
+
       case "run.usage": {
         breakAnonymousRun();
         if (event.contextUsed !== undefined && event.contextSize) {
@@ -300,7 +327,44 @@ export function buildTranscript(events: readonly RunEvent[]): Transcript {
     }
   }
 
-  return { entries, hasGap, lastSeq, pendingApprovalId };
+  return { entries: groupConsecutiveTools(entries), hasGap, lastSeq, pendingApprovalId };
+}
+
+/**
+ * Collapse runs of two or more tool rows into one `tools` group with bucket counts.
+ *
+ * Approvals, messages and notes break a run — an approval must stay a first-class card, not
+ * disappear inside a collapsed tool list. A single tool stays a `tool` row.
+ */
+function groupConsecutiveTools(entries: readonly TranscriptEntry[]): TranscriptEntry[] {
+  const out: TranscriptEntry[] = [];
+  let pending: ToolEntry[] = [];
+
+  const flush = (): void => {
+    if (pending.length === 0) return;
+    if (pending.length === 1) {
+      out.push(pending[0]!);
+    } else {
+      out.push({
+        kind: "tools",
+        id: `tools-${pending[0]!.id}`,
+        tools: pending,
+        counts: countToolBuckets(pending),
+      });
+    }
+    pending = [];
+  };
+
+  for (const entry of entries) {
+    if (entry.kind === "tool") {
+      pending.push(entry);
+      continue;
+    }
+    flush();
+    out.push(entry);
+  }
+  flush();
+  return out;
 }
 
 /**

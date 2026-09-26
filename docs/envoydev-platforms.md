@@ -23,7 +23,7 @@ claim to ship for — a claim with no entry is a claim that silently does nothin
 
 | | macOS | Linux | Windows |
 |---|---|---|---|
-| Shipped | ✓ dmg, app | ✓ AppImage, deb, rpm | ✓ msi, nsis |
+| Shipped | ✓ dmg, app | ✓ AppImage, deb | ✓ nsis |
 | Shell for a command line | `/bin/sh -lc` | `/bin/sh -lc` | `cmd.exe /d /s /c` (PowerShell on request) |
 | Real signals | ✓ | ✓ | **no** — `kill` is terminate |
 | Process-tree kill | process group (`-pid`) | process group | `taskkill /pid N /T [/F]` |
@@ -184,8 +184,13 @@ AppImage hit exactly that gap).
 * **CI runs all three OSes** (`.github/workflows/ci.yml`): peers check, typecheck, unit tests, the UI
   bundle, the smoke script, plus a Flutter job for the phone. The Windows and Linux legs are the
   point — they are where platform assumptions fail.
-* **Windows signing is configured from the start.** Paseo ships unsigned NSIS builds and its Windows
-  CI never launches the packaged app; we treat "installs and starts on Windows" as a milestone
-  (M6), not a hope.
+* **Installer scripts produce unsigned packages today.** `build-dmg.sh` → `dmg,app`; `build-exe.ps1` →
+  NSIS; `build-linux.sh` → `deb` + AppImage. Apple signing / notarization and Windows code signing are
+  **not** wired through those scripts yet; M6 still owes signed installers and a CI install-and-launch
+  smoke (Paseo’s Windows CI never launched the packaged app either — that gap is the bar we have to
+  clear, not a reason to claim we already cleared it).
+* **`tauri.conf.json` `bundle.targets`** lists only what the installer scripts actually ship
+  (`dmg`, `app`, `nsis`, `appimage`, `deb`). Unused targets (`msi`, `rpm`) are not advertised as
+  shipping until a script builds them.
 * **Icons** are generated (`npx tauri icon <png>`); this scaffold ships the config and leaves the icon
   set to that command rather than committing a placeholder that would have to be replaced.

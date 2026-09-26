@@ -390,6 +390,34 @@ describe("the composer", () => {
     expect(pane.onSend).not.toHaveBeenCalled();
   });
 
+  it("resumes when the transcript named a resumable session and the agent can rejoin", () => {
+    // Wire + daemon already accept `resume`; this is the UI half of paseo-feature-parity #2. Idle,
+    // a resumable `run.session`, and `capabilities.resume` → the send control says Resume and the
+    // start call carries `resume: true`.
+    const pane = renderPane(
+      [
+        event({
+          kind: "run.session",
+          sessionId: "sess-1",
+          resumable: true,
+          resumed: false,
+        }),
+      ],
+      {
+        runLive: false,
+        harnesses: [harnessFor("deepseek-harness")],
+      },
+    );
+    fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "continue" } });
+    const send = screen.getByRole("button", { name: "Resume — continue the previous session" });
+    expect(send.getAttribute("data-hint")).toContain("Resume");
+    fireEvent.click(send);
+    expect(pane.onStart).toHaveBeenCalled();
+    const args = pane.onStart.mock.calls[0] as unknown[];
+    expect(args[0]).toBe("continue");
+    expect(args[5]).toBe(true);
+  });
+
   it("offers Stop only while there is something to stop", () => {
     const running = renderPane([]);
     expect(screen.getByRole("button", { name: "Stop" })).toBeTruthy();
@@ -736,13 +764,14 @@ describe("the agent's mode control", () => {
     fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "plan it out" } });
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
 
-    // Four arguments now, and the fourth is asserted rather than ignored: `envoy-harness` offers no
-    // thinking level, so the run must be started with none. A call that carried `undefined` there by
-    // accident and one that carried a level would otherwise look identical to this test.
+    // Four arguments: mode, model, thinking. The fixture's task still carries a DeepSeek model id
+    // from the shared sample, but this pane is on `envoy-harness` — `displayModelId` drops a listed
+    // id the new agent does not publish, so the run starts with the agent's own default rather than
+    // yesterday's model. Thinking is none: envoy-harness offers no level.
     expect(onStart).toHaveBeenCalledWith(
       "plan it out",
       "read-only",
-      "deepseek-official/deepseek-v4-flash",
+      undefined,
       undefined,
     );
   });

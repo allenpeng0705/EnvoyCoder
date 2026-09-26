@@ -362,6 +362,36 @@ export const ProjectSchema = z
   })
   .strict();
 
+export const TaskRoleSchema = z.enum(["plan", "implement", "review", "observe"]);
+
+export const TaskParticipantSchema = z
+  .object({
+    id: z.string().min(1),
+    kind: z.enum(["agent", "peer"]),
+    role: TaskRoleSchema,
+    hostId: z.string().min(1),
+    harness: AgentIdSchema.optional(),
+    label: z.string().optional(),
+  })
+  .strict();
+
+export const TaskHandoffSchema = z
+  .object({
+    fromId: z.string().min(1).optional(),
+    toId: z.string().min(1),
+    brief: z.string().optional(),
+    at: z.string().min(1),
+  })
+  .strict();
+
+export const TaskCollaborationSchema = z
+  .object({
+    participants: z.array(TaskParticipantSchema).readonly(),
+    activeParticipantId: z.string().min(1).optional(),
+    lastHandoff: TaskHandoffSchema.optional(),
+  })
+  .strict();
+
 export const TaskSchema = z
   .object({
     id: z.string().min(1),
@@ -381,6 +411,7 @@ export const TaskSchema = z
     runId: z.string().optional(),
     worktree: z.object({ path: z.string(), branch: z.string() }).strict().optional(),
     hostId: z.string().optional(),
+    collaboration: TaskCollaborationSchema.optional(),
     pinned: z.boolean().optional(),
     archivedAt: z.string().optional(),
   })
@@ -544,6 +575,16 @@ export const RunEventSchema: z.ZodType<RunEvent> = z.discriminatedUnion("kind", 
       kind: z.literal("run.status"),
       status: TaskStatusSchema,
       note: z.string().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      ...RunEventBase,
+      kind: z.literal("run.handoff"),
+      fromId: z.string().min(1).optional(),
+      toId: z.string().min(1),
+      role: TaskRoleSchema,
+      brief: z.string().optional(),
     })
     .strict(),
   z
@@ -3013,6 +3054,76 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
   "coder.listPeers": {
     params: EmptyParams,
     result: z.object({ peers: z.array(CoderPeerSchema).readonly() }).strict(),
+  },
+  "coder.registerPeer": {
+    params: z
+      .object({
+        id: z.string().min(1),
+        label: z.string().min(1),
+        /** When false, offers are refused with peer-refused. Default true. */
+        reachable: z.boolean().optional(),
+      })
+      .strict(),
+    result: z.object({ peer: CoderPeerSchema }).strict(),
+  },
+  "coder.forgetPeer": {
+    params: z.object({ id: z.string().min(1) }).strict(),
+    result: z.object({ forgotten: z.boolean() }).strict(),
+  },
+  "coder.setTaskCollaboration": {
+    params: z
+      .object({
+        taskId: z.string().min(1),
+        participants: z.array(TaskParticipantSchema).max(16),
+        activeParticipantId: z.string().min(1).optional(),
+      })
+      .strict(),
+    result: z.object({ task: TaskSchema }).strict(),
+  },
+  "coder.handoffTask": {
+    params: z
+      .object({
+        taskId: z.string().min(1),
+        toParticipantId: z.string().min(1),
+        brief: z.string().max(8_000).optional(),
+      })
+      .strict(),
+    result: z.object({ task: TaskSchema }).strict(),
+  },
+  "coder.offerParticipantRun": {
+    params: z
+      .object({
+        taskId: z.string().min(1),
+        participantId: z.string().min(1),
+        prompt: z.string().min(1),
+      })
+      .strict(),
+    result: z
+      .object({
+        /** Local start: a run id. Peer pending: an offer id. */
+        status: z.enum(["started", "offered", "refused"]),
+        runId: z.string().min(1).optional(),
+        offerId: z.string().min(1).optional(),
+        /** Set when status is refused — the policy name. */
+        policy: z.string().min(1).optional(),
+      })
+      .strict(),
+  },
+  "coder.acceptParticipantOffer": {
+    params: z.object({ offerId: z.string().min(1) }).strict(),
+    result: z.object({ offerId: z.string().min(1), status: z.literal("accepted") }).strict(),
+  },
+  "coder.refuseParticipantOffer": {
+    params: z
+      .object({
+        offerId: z.string().min(1),
+        /** Policy name the peer cites — required so the origin sees why. */
+        policy: z.string().min(1),
+      })
+      .strict(),
+    result: z
+      .object({ offerId: z.string().min(1), status: z.literal("refused"), policy: z.string().min(1) })
+      .strict(),
   },
 
   /* — paired phones — */

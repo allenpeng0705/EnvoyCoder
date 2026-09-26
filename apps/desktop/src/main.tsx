@@ -1,14 +1,15 @@
 import type { JSX } from "react";
-import { StrictMode } from "react";
+import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { CoderApp } from "./components/CoderApp.js";
+import { applyTheme } from "./design/applyTheme.js";
 import { I18nProvider } from "./i18n/context.js";
 import { useCoderActions, useCoderState } from "./state/useCoderState.js";
 // Design tokens before the app sheet: `styles.css` consumes these variables, and one import order
 // that works by accident is one refactor away from a screen with no colours.
-// Dark is this product's default palette (`docs/design-tokens.md`); the sheet also follows the OS, but
-// "default" has to mean default — a light desktop must not change what the app looks like.
-document.documentElement.dataset.theme = "dark";
+// Dark is this product's default until settings load (`docs/design-tokens.md`); Settings → Appearance
+// then writes or clears `data-theme` via `applyTheme`.
+applyTheme("dark");
 
 /**
  * The platform, for the handful of CSS rules that are genuinely OS-specific.
@@ -40,10 +41,16 @@ import "./styles.css";
  * (`system` included); the provider resolves it against what the platform reports, and re-renders
  * every `t()` in the window when the setting changes. No reload, and no second source of truth about
  * which language is in use.
+ *
+ * Theme follows the same path: `applyTheme` runs whenever `settings.theme` changes so Light / Dark /
+ * System take effect without a reload.
  */
 function Root(): JSX.Element {
   const state = useCoderState();
   const actions = useCoderActions();
+  useEffect(() => {
+    applyTheme(state.settings.theme ?? "dark");
+  }, [state.settings.theme]);
   return (
     <I18nProvider preference={state.settings.language ?? "system"}>
       <CoderApp state={state} actions={actions} />

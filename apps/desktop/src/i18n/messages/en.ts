@@ -256,6 +256,7 @@ export const en = {
   "task.composer.send.queued": "The agent finishes the turn it is on, then reads this.",
   "task.composer.send": "Send",
   "task.composer.start": "Start",
+  "task.composer.resume": "Resume — continue the previous session",
   "task.composer.submit.blocked": "Answer the request above first",
 
   /* ── the four controls above the field: the folder, the agent's mode, its model, how it thinks ──
@@ -418,6 +419,18 @@ export const en = {
   "run.end.other": "Ended.",
   "run.diff.one": "1 file changed.",
   "run.diff.many": "{count} files changed.",
+  "run.tools.edited.one": "edited 1 file",
+  "run.tools.edited.many": "edited {count} files",
+  "run.tools.ran.one": "ran 1 command",
+  "run.tools.ran.many": "ran {count} commands",
+  "run.tools.searched.one": "searched once",
+  "run.tools.searched.many": "searched {count} times",
+  "run.tools.other.one": "used 1 tool",
+  "run.tools.other.many": "used {count} tools",
+  "run.tools.summary.empty": "Tools",
+  "run.tools.summary.two": "{a} and {b}",
+  "run.tools.summary.many": "{head}, and {last}",
+  "run.tools.summary.comma": ", ",
   "run.context": "Context {percent}% full.",
 
   /* ── the status line, and the one place the mesh is always visible ──
@@ -470,6 +483,8 @@ export const en = {
   "settings.section.general.title": "General",
   "settings.section.general.detail":
     "The language this window speaks, and the folder a new project starts from.",
+  "settings.section.appearance.title": "Appearance",
+  "settings.section.appearance.detail": "Light, dark, or the same as this computer.",
   "settings.section.tasks.title": "New tasks",
   "settings.section.tasks.detail":
     "The agent, the model and the arguments every new task starts with.",
@@ -500,6 +515,12 @@ export const en = {
   "settings.language.detail": "Every label, notice and error, including the daemon's.",
   "settings.language.aria": "Language",
   "settings.language.system": "Same as this computer",
+  "settings.theme.title": "Theme",
+  "settings.theme.detail": "Light, dark, or follow this computer.",
+  "settings.theme.aria": "Theme",
+  "settings.theme.dark": "Dark",
+  "settings.theme.light": "Light",
+  "settings.theme.system": "Same as this computer",
   "settings.folder.choose": "Choose…",
   "settings.defaultPath.title": "The folder Add project starts in",
   "settings.defaultPath.detail": "Pre-filled when you add a project.",
@@ -1183,6 +1204,32 @@ export const en = {
     "There is no project called \"{id}\" on this machine. It may have been removed from another window.",
   "error.taskNotFound":
     "There is no task called \"{id}\" on this machine. It may have been removed from another window.",
+  "error.collaboration.empty": "A collaboration needs at least one participant.",
+  "error.collaboration.duplicateId":
+    "Two participants share the id “{id}”. Each participant needs its own id.",
+  "error.collaboration.badRole":
+    "“{role}” is not a role this build knows. Use plan, implement, review, or observe.",
+  "error.collaboration.agentNeedsHarness":
+    "Participant “{id}” is an agent and needs a harness id.",
+  "error.collaboration.multiWriter":
+    "Two implement roles on the same host would write the same tree. Keep one implementer per host.",
+  "error.collaboration.activeMissing":
+    "Active participant “{id}” is not in the participant list.",
+  "error.collaboration.offerMissing":
+    "That offer is gone — it may have expired when the daemon restarted.",
+  "error.collaboration.offerSettled": "That offer was already answered.",
+  "error.collaboration.peerUnknown":
+    "There is no peer called “{id}”. Register it first, or pick a participant on this machine.",
+  "error.collaboration.peerUnreachable":
+    "Peer “{label}” is not reachable, so this machine will not offer it work.",
+  "error.collaboration.notPeer":
+    "Participant “{id}” is a local agent. Start a run on this machine instead of offering it remotely.",
+  "error.collaboration.handoffWhileRunning":
+    "A run is already in progress. Finish or stop it before handing off to another participant.",
+  "error.collaboration.participantMissing":
+    "There is no participant called “{id}” on this task.",
+  "run.handoff": "Handed off to {role}.",
+  "run.handoff.brief": "Handed off to {role}: {brief}",
   "error.pairedDeviceMissing":
     "There is no paired device called \"{id}\". It may already have been revoked.",
   // Refused by `coder.forgetPairedDevice` when the record is not revoked. Named for the guard, not for
