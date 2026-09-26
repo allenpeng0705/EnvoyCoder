@@ -83,7 +83,7 @@ Origin EnvoyDev = Orchestrator
 | Responsibility | Orchestrator | Member peer |
 |---|---|---|
 | Team token mint / revoke / rotate | Yes | No |
-| Know members, roles, online state | Yes | Own heartbeat only |
+| Know members, roles, **connection status**, online state | **Yes (always)** | Own heartbeat only; no view of other peers |
 | **Live status of every peer / task** | **Yes (authoritative)** | Reports status; cannot see whole team |
 | Split job → tasks | Yes | No |
 | Assign / reassign tasks | Yes | Accept or refuse with policy |
@@ -128,11 +128,53 @@ Tradeoff (accepted): revoke of a single compromised member requires **rotating t
 4. Origin validates token → adds member → returns `{ teamId, memberId, peersSummary }`.
 5. Both sides open a control channel (prefer LAN `ws://`, else mesh). Heartbeats keep `online`.
 
-### 4.4 Online / connected
+### 4.4 Connection status (required on the orchestrator)
 
-A member is **online** only if the last heartbeat is within `H` (e.g. 15s) **and** the control
-channel is up. Jobs that need role `R` may start only when ≥1 online member offers `R` (or the
-orchestrator is that role locally).
+The orchestrator **must always know the connection status of every team member**. This is not
+optional telemetry — scheduling, stall detection, and critical actions (§4.6) all branch on it.
+
+Connection is tracked **separately** from work progress:
+
+| Layer | Question | Signal |
+|---|---|---|
+| **Connection** | Can we reach this peer’s EnvoyDev? | Control channel + heartbeat |
+| **Work progress** | Is it producing results for its task? | `run.*` events at origin (`lastEventAt`) |
+
+A peer can be `online` and still `blocked: "no-progress"`. Both fields appear on the status board.
+
+```
+ConnectionStatus = online | connecting | degraded | offline | unknown
+
+ConnectionDetail {
+  status: ConnectionStatus,
+  transport: lan | mesh | ssh | none,
+  endpoint?: string,           // how origin last dialled (no secrets)
+  connectedAt?,
+  lastHeartbeatAt?,
+  lastDialError?,              // envoydev.* code + short reason
+  rttMs?,                      // optional; degraded if rising hard
+}
+```
+
+| Status | Meaning | How decided |
+|---|---|---|
+| `online` | Channel up; heartbeat within `H` (e.g. 15s) | Heartbeat OK |
+| `connecting` | Join or redial in flight | Dial started, not yet first heartbeat |
+| `degraded` | Up but late heartbeats, high RTT, or flapping | Missed 1–2 intervals or transport fallback mid-session |
+| `offline` | No usable channel / heartbeat past `3H` | Dial fail, close, or timeout |
+| `unknown` | Rostered but never successfully connected this session | After join accept, before first dial result |
+
+**Rules:**
+
+1. Origin updates `ConnectionDetail` on join, dial, heartbeat, disconnect, and transport switch
+   (LAN → mesh counts as a status event).
+2. Assign / reassign only to members with `connection.status === "online"` (or `degraded` if
+   job policy allows `allowDegradedAssignees`).
+3. Transition to `offline` mid-task → treat as **Peer offline** in §7.2 (retry/reassign path).
+4. UI on the origin shows a **per-peer connection chip** (status + transport) on the team and job
+   views so the human sees the same truth the orchestrator uses.
+5. Peers do **not** see other peers’ connection status — only the orchestrator’s board is
+   authoritative (avoids split-brain “I think B is up”).
 
 ### 4.5 Peer status board (orchestrator view)
 
@@ -142,20 +184,18 @@ The human UI and the orchestrator-agent both read this board — peers do not.
 ```
 MemberStatus {
   memberId, label, rolesOffered[],
-  connection: online | degraded | offline,
-  lastHeartbeatAt,
-  transport: lan | mesh | unknown,
+  connection: ConnectionDetail,   // §4.4 — always present
   currentTaskId?, currentRunId?,
   runPhase?: starting | streaming | needs-attention | idle,
   lastEventAt?,          // last run.* received at origin
-  blocked?: BlockReason, // see below
+  blocked?: BlockReason, // work-progress blocks (orthogonal to connection)
   healthNote?,           // short machine-readable + user sentence
 }
 
 BlockReason =
-  | "no-progress"        // running but no run.* for T_stall
+  | "no-progress"        // running but no run.* for T_stall (peer may still be online)
   | "needs-attention"    // approval/question unanswered past T_approval
-  | "heartbeat-miss"     // channel up historically, heartbeat late
+  | "heartbeat-miss"     // maps toward connection.degraded / offline
   | "offer-unacked"      // offer sent, no accept/refuse
   | "cancel-pending"     // stop sent, peer not confirmed
 ```
@@ -165,8 +205,9 @@ BlockReason =
 `streaming` / `starting`). Needs-attention uses a longer `T_approval` (e.g. 5–15 min) so humans
 can answer without false stalls.
 
-Heartbeats alone are not enough: a peer can be “online” yet produce no transcript. Progress is
-**events arriving at the origin**, not merely a live socket.
+Heartbeats alone are not enough: a peer can be `online` yet produce no transcript. Progress is
+**events arriving at the origin**, not merely a live socket. Connection status answers
+reachability; `lastEventAt` / `blocked` answer “are we getting results?”
 
 ### 4.6 Critical actions (orchestrator may take)
 
@@ -402,7 +443,8 @@ Before implementing a slice, these must hold:
 4. **One writer per worktreeKey** — parallel elsewhere is encouraged.
 5. **Retry then reassign then fail** — always recorded; refuse ≠ retry.
 6. **Cancel / stop always works from origin** — including remote runs; ignored stop → abandon + kick/reassign.
-7. **Status board is authoritative on origin** — stalled peers are visible; critical actions (§4.6) are first-class.
+7. **Status board is authoritative on origin** — **connection status per peer** (§4.4) plus work
+   progress; stalled peers are visible; critical actions (§4.6) are first-class.
 8. **Final report on origin** — peers never “own” the merged outcome.
 9. **LAN then mesh** — transport detail, not a user choice.
 10. **Node is not the orchestrator** — mesh carries bytes only.
