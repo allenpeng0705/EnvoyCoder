@@ -910,7 +910,7 @@ describe("the model a run is started on", () => {
   it("leaves the session's configuration alone for the agent that reads it from argv", async () => {
     // The negative half, and the one that would catch a daemon that "helpfully" set both. For
     // `envoy-harness` the model is a pair of launch flags
-    // (`../envoy-harness/packages/envoy-harness/src/cli/run/acp.ts:100-106`); calling
+    // (`../envoy-harness/packages/envoy-harness/src/cli/run/acp.ts:99-111`); calling
     // `session/set_config_option` at it as well would be a second, undocumented write against a
     // protocol that has no such method in its own dispatch, and the fixture reports the empty state
     // rather than accepting it silently.

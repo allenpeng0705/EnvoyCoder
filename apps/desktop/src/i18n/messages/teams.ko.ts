@@ -148,6 +148,7 @@ export const teams = {
   "settings.teams.copyToken": "초대 복사",
   "settings.teams.rotate": "새 초대",
   "settings.teams.dissolve": "해체",
+  "settings.teams.dissolveOk": "팀을 해산했습니다.",
   "settings.teams.tokenOnce": "이 초대를 공유하세요. 한 번만 표시됩니다.",
   "settings.teams.pasteToken": "초대",
   "settings.teams.empty": "아직 팀이 없습니다.",

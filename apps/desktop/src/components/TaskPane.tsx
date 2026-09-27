@@ -5,11 +5,10 @@
  *
  *   1. **The header states where the work is.** Host only appears when the task is not on this
  *      machine — saying "This machine" on every local task is noise. Cwd and branch stay visible.
- *   2. **The composer distinguishes Queue from Steer.** Sending while an agent works either waits for
- *      the turn or joins it; one control that silently picks for the user is how people conclude the
- *      agent ignored their message.
- *   3. **Approvals are a block in the transcript, not a modal.** A modal blocks the window and hides
- *      the context needed to decide; the request belongs inline, where the agent paused.
+ *   2. **Send while running queues.** The window always queues; a status line says so. Steer stays
+ *      on the wire for other clients (`docs/envoydev-ui-polish.md` §2).
+ *   3. **Approvals take over the composer**, not a modal. Transcript keeps history; the pending
+ *      decision owns the composer chrome so it cannot scroll away (`docs/envoydev-ui-polish.md` §1).
  *   4. **The transcript is rendered from events, and this component does no folding.** Joining
  *      chunks, pairing a tool call with its result and attaching an approval to its call all happen
  *      in `state/transcript.ts`, which is pure and tested. This file turns rows into elements.
@@ -28,7 +27,7 @@
 
 import type { JSX } from "react";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type {
   AgentId,
   AgentProviderSummary,
@@ -86,11 +85,12 @@ import {
   type WriteFailure,
   statusKey,
 } from "../i18n/notice.js";
-import { buildTranscript, type ToolEntry, type TranscriptEntry } from "../state/transcript.js";
+import { buildTranscript, type TranscriptEntry } from "../state/transcript.js";
 import { toolGroupSummary } from "../state/tool-group-summary.js";
 import { ApprovalChoices } from "./ApprovalChoices.js";
 import { ComposerControls } from "./ComposerControls.js";
 import { AttachButton, AttachmentTray } from "./ComposerAttach.js";
+import { ToolCard } from "./tools/ToolCard.js";
 import {
   ExplorerSidebar,
   type ChangeListing,
@@ -297,9 +297,16 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
    */
   const stickToEnd = useRef(true);
   const stickTask = useRef<string | undefined>(undefined);
+  const approvalAnchorRef = useRef<HTMLLIElement | null>(null);
 
   const transcript = buildTranscript(events);
   const approvalOpen = transcript.pendingApprovalId !== undefined;
+  const pendingApproval = transcript.entries.find(
+    (entry): entry is Extract<TranscriptEntry, { kind: "approval" }> =>
+      entry.kind === "approval" &&
+      entry.resolvedWith === undefined &&
+      entry.requestId === transcript.pendingApprovalId,
+  );
   const commandQuery = slashQuery(text);
   const commandMatches =
     commandQuery === undefined ? [] : filterSlashCommands(latestSlashCommands(events), commandQuery);
@@ -448,6 +455,12 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     if (!probe.ask) return;
     void askAgent(false);
   }, [probe.ask, task.harness]);
+
+  // Pending approval owns the composer — keep the related transcript row in view.
+  useLayoutEffect(() => {
+    if (!pendingApproval) return;
+    approvalAnchorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [pendingApproval?.requestId]);
 
   // `hasShellPicker()` is synchronous on purpose (see `folder-picker.ts`): a control that decides after
   // an `await` looks like a dead click, and a disabled one can say why in the same tick as the render.
@@ -726,10 +739,10 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
         ) : null}
 
         {transcript.entries.length === 0 ? (
-          <div className="transcript__empty">
+          <div className="transcript__empty transcript__hero" data-testid="task-empty-hero">
             <p className="transcript__empty-title">{t("task.transcript.empty.title")}</p>
             <p className="transcript__empty-body">
-              {t("task.transcript.empty.body", { cwd: task.cwd })}
+              {t("task.transcript.empty.body", { cwd: basename(task.cwd) })}
             </p>
             <ul className="suggestions">
               {SUGGESTIONS.map((key) => (
@@ -763,6 +776,12 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                   entry={entry}
                   streaming={streaming}
                   onAnswer={props.onAnswer}
+                  pendingApprovalId={transcript.pendingApprovalId}
+                  approvalAnchorRef={
+                    entry.kind === "approval" && entry.requestId === transcript.pendingApprovalId
+                      ? approvalAnchorRef
+                      : undefined
+                  }
                 />
               );
             })}
@@ -821,6 +840,29 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
             addFiles([...event.dataTransfer.files]);
           }}
         >
+          {pendingApproval ? (
+            <div
+              className="composer__takeover approval approval--takeover"
+              role="alertdialog"
+              aria-label={t("task.approval.takeover.aria")}
+              data-testid="approval-takeover"
+            >
+              <div className="approval__body">
+                <p className="approval__question">{localizeText(t, pendingApproval.question)}</p>
+                {pendingApproval.detail ? (
+                  <p className="approval__detail">{localizeText(t, pendingApproval.detail)}</p>
+                ) : null}
+              </div>
+              <div className="approval__actions">
+                <ApprovalChoices entry={pendingApproval} onAnswer={props.onAnswer} />
+              </div>
+            </div>
+          ) : null}
+          {running && !approvalOpen ? (
+            <p className="composer__queue-status" role="status" data-testid="composer-queue-status">
+              {t("task.composer.queueStatus")}
+            </p>
+          ) : null}
           {commandMatches.length > 0 ? (
             <SlashCommandList
               commands={commandMatches}
@@ -841,6 +883,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
             className="composer__input"
             rows={2}
             value={text}
+            disabled={approvalOpen}
             onChange={(event) => {
               setText(event.target.value);
               setCommandIndex(0);
@@ -1035,6 +1078,8 @@ function TranscriptRow(props: {
   entry: TranscriptEntry;
   streaming?: boolean;
   onAnswer: (requestId: string, choice: string | readonly string[] | { text: string }) => void | Promise<void>;
+  pendingApprovalId?: string;
+  approvalAnchorRef?: RefObject<HTMLLIElement | null>;
 }): JSX.Element | null {
   const t = useT();
   const { entry } = props;
@@ -1079,7 +1124,7 @@ function TranscriptRow(props: {
       );
 
     case "tool":
-      return <ToolRow entry={entry} />;
+      return <ToolCard entry={entry} />;
 
     case "tools": {
       const anyRunning = entry.tools.some((tool) => tool.status === "running");
@@ -1094,7 +1139,7 @@ function TranscriptRow(props: {
             </summary>
             <ol className="row__tool-list">
               {entry.tools.map((tool) => (
-                <ToolRow key={tool.id} entry={tool} nested />
+                <ToolCard key={tool.id} entry={tool} nested />
               ))}
             </ol>
           </details>
@@ -1102,12 +1147,22 @@ function TranscriptRow(props: {
       );
     }
 
-    case "approval":
+    case "approval": {
+      const pendingHere =
+        entry.resolvedWith === undefined && entry.requestId === props.pendingApprovalId;
       return (
-        <li className="row row--approval">
-          <ApprovalCard entry={entry} onAnswer={props.onAnswer} />
+        <li
+          className="row row--approval"
+          ref={pendingHere ? props.approvalAnchorRef : undefined}
+        >
+          <ApprovalCard
+            entry={entry}
+            onAnswer={props.onAnswer}
+            actionsInComposer={pendingHere}
+          />
         </li>
       );
+    }
 
     case "note":
       return (
@@ -1118,83 +1173,51 @@ function TranscriptRow(props: {
   }
 }
 
-function ToolRow(props: { entry: ToolEntry; nested?: boolean }): JSX.Element {
-  const { entry } = props;
-  return (
-    <li className={`row row--tool row--tool-${entry.status}${props.nested === true ? " row--tool-nested" : ""}`}>
-      <p className="row__tool-head">
-        <span
-          className={`dot dot--${entry.status === "running" ? "live" : entry.status === "failed" ? "danger" : "quiet"}`}
-          aria-hidden
-        />
-        {entry.name}
-      </p>
-      {entry.input !== undefined ? <pre className="row__code">{summarize(entry.input)}</pre> : null}
-      {entry.output !== undefined ? <pre className="row__code">{summarize(entry.output)}</pre> : null}
-    </li>
-  );
-}
-
 /**
- * An approval, inline.
+ * An approval in the transcript.
  *
- * The wording rule is the family's: headline first, in the user's language; detail second; developer
- * fields last and small. The headline comes from the daemon, which is the only place that knows what
- * the agent is about to do — this component renders it and does not reword it, because two surfaces
- * describing one decision differently is how a user comes to distrust both.
- *
- * "In the user's language" is why the daemon's sentence is rendered through `localizeText`: it sends
- * a key with it (`approval.question.tool`), so the headline is German for a German user and the
- * English sentence is what an untranslated language reads. The option labels are *not* translated —
- * they are the agent's own words for its own choices, and rewording them would be putting a second
- * vocabulary on one decision.
+ * While pending, choices live in the composer takeover (`actionsInComposer`); the transcript keeps
+ * a compact marker so the pause stays in history. Answered cards keep the full body.
  */
 function ApprovalCard(props: {
   entry: Extract<TranscriptEntry, { kind: "approval" }>;
   onAnswer: (requestId: string, choice: string | readonly string[] | { text: string }) => void | Promise<void>;
+  /** Pending — actions are in the composer; show a pointer, not a second set of buttons. */
+  actionsInComposer?: boolean;
 }): JSX.Element {
   const t = useT();
   const { entry } = props;
   const answered = entry.resolvedWith !== undefined;
   const stacked = entry.selection === "many" || entry.selection === "text";
+  const inComposer = props.actionsInComposer === true && !answered;
 
   return (
     <div
-      className={`approval${answered ? " approval--answered" : ""}${stacked ? " approval--stack" : ""}`}
-      role={answered ? "status" : "alertdialog"}
+      className={`approval${answered ? " approval--answered" : ""}${stacked ? " approval--stack" : ""}${
+        inComposer ? " approval--deferred" : ""
+      }`}
+      role={answered || inComposer ? "status" : "alertdialog"}
       aria-label={answered ? t("task.approval.answered") : t("task.approval.aria")}
     >
       <div className="approval__body">
         <p className="approval__question">{localizeText(t, entry.question)}</p>
-        {entry.detail ? <p className="approval__detail">{localizeText(t, entry.detail)}</p> : null}
+        {entry.detail && !inComposer ? (
+          <p className="approval__detail">{localizeText(t, entry.detail)}</p>
+        ) : null}
+        {inComposer ? (
+          <p className="approval__detail">{t("task.approval.pendingInComposer")}</p>
+        ) : null}
       </div>
-      <div className="approval__actions">
-        <ApprovalChoices entry={entry} onAnswer={props.onAnswer} />
-      </div>
+      {!inComposer ? (
+        <div className="approval__actions">
+          <ApprovalChoices entry={entry} onAnswer={props.onAnswer} />
+        </div>
+      ) : null}
     </div>
   );
 }
 
 /* ────────────────────────────── formatting ────────────────────────────── */
-
-/**
- * A tool's input or output, as a few readable lines.
- *
- * Bounded on purpose: an agent that cats a 4000-line file must not paste it into the transcript. The
- * full value is still in the run's transcript on disk, which is where "show me everything" belongs.
- */
-function summarize(value: unknown, limit = 400): string {
-  let text: string;
-  if (typeof value === "string") text = value;
-  else {
-    try {
-      text = JSON.stringify(value, null, 2) ?? String(value);
-    } catch {
-      text = String(value);
-    }
-  }
-  return text.length > limit ? `${text.slice(0, limit)}\n…` : text;
-}
 
 function dotClassFor(status: Task["status"]): string {
   switch (status) {

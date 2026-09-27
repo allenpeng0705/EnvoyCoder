@@ -170,7 +170,7 @@ export interface AcpAgentInfo {
  * Taken from `envoy-harness`'s parameter check, which is the contract rather than a suggestion:
  * `always-confirm` (ask before every tool), `safe-only` (auto-allow read-only tools and single safe shell
  * commands, ask for everything else) and `off` (never ask)
- * (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:237-295`,
+ * (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:239-297`,
  * `.../src/permissions/auto-run.ts:1-70`). Verified against the built peer: a fresh session answers
  * `session/get_policy` with no `autoRun` at all, each of the three values is accepted and echoed back,
  * and anything else is refused `-32602 preset, sandbox, approval, or autoRun required`.

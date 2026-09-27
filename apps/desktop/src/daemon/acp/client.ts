@@ -101,7 +101,7 @@ export interface AcpClientOptions {
    * The agent's own mode to set once the session exists (`session/set_mode`).
    *
    * **Set after `session/new`, never in it.** `session/new` accepts a working directory and nothing
-   * else about behaviour (`../envoy-harness/packages/envoy-harness/src/protocol/acp-server.ts:88-95`
+   * else about behaviour (`../envoy-harness/packages/envoy-harness/src/protocol/acp-server.ts:91-102`
    * reads `cwd` and answers `{sessionId}`), so a mode is a *second* call on a session that already
    * exists. That ordering is also why a mode change cannot retroactively apply to a run already in
    * flight: by the time the user picks another one, the session this client opened is the one it set.
@@ -555,7 +555,7 @@ export class AcpClient {
    * `{sessionId, autoRun}`, the peer's own parameters: it validates the value against
    * `always-confirm | safe-only | off` and answers `-32602 preset, sandbox, approval, or autoRun
    * required` for anything else, so the value is passed through verbatim
-   * (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:237-295`). The peer also
+   * (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:239-297`). The peer also
    * exposes `session/get_policy` for the other direction, which is how the setting was verified against
    * the built binary rather than inferred from its source — the daemon does not call it, because a
    * policy this daemon set is one it already knows.

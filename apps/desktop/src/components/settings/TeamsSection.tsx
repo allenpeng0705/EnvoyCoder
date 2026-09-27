@@ -28,6 +28,7 @@ import {
 } from "../../state/team-defaults.js";
 import { PencilIcon } from "../icons.js";
 import type { SettingsSectionProps } from "./SectionProps.js";
+import { showShellToast } from "../../state/shell-toast.js";
 import { copyText } from "./clipboard.js";
 import { peekInviteRoleCatalog } from "./peek-team-invite.js";
 
@@ -304,7 +305,7 @@ export function TeamsSection(
         return;
       }
       setJoinToken("");
-      setNotice(t("settings.teams.joinOk", { label: result.team.label }));
+      showShellToast(t("settings.teams.joinOk", { label: result.team.label }));
       await reload();
     } finally {
       inFlight.current = false;
@@ -362,6 +363,7 @@ export function TeamsSection(
         setNotice(result.message);
         return;
       }
+      showShellToast(t("settings.teams.dissolveOk"));
       await reload();
     } finally {
       inFlight.current = false;
@@ -392,7 +394,9 @@ export function TeamsSection(
               type="button"
               className="button button--secondary button--small"
               onClick={() =>
-                void copyText(freshInvite ?? freshToken ?? "").then(() => setNotice(t("settings.teams.copied")))
+                void copyText(freshInvite ?? freshToken ?? "").then(() =>
+                  showShellToast(t("settings.teams.copied")),
+                )
               }
             >
               {t("settings.teams.copyToken")}

@@ -148,6 +148,7 @@ export const teams = {
   "settings.teams.copyToken": "复制邀请",
   "settings.teams.rotate": "新邀请",
   "settings.teams.dissolve": "解散",
+  "settings.teams.dissolveOk": "团队已解散。",
   "settings.teams.tokenOnce": "分享此邀请。只显示一次。",
   "settings.teams.pasteToken": "邀请",
   "settings.teams.empty": "还没有团队。",

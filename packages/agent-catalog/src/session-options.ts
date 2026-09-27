@@ -326,7 +326,7 @@ const NOT_LAUNCHABLE =
  *     that. Verified against the real binary (see `HARNESS_THINKING_DELIVERY`).
  *   * **`envoy-harness`** has no thought-level surface at all: its ACP dispatch handles
  *     `session/set_model`, `session/set_policy` and `session/set_mode`, and nothing else of the kind
- *     (`../envoy-harness/src/protocol/acp-server.ts:294-310, 431`), and its `session/new` answers
+ *     (`../envoy-harness/packages/envoy-harness/src/protocol/acp-server.ts:305-327, 452`), and its `session/new` answers
  *     `{sessionId}` with no `configOptions` at all. VERIFIED against the built peer over a real pipe:
  *     `session/set_config_option` came back `-32601 method not found: session/set_config_option`. So
  *     the pill is disabled with that reason, which is the outcome the design asks for: not a guess.
@@ -350,7 +350,7 @@ export const HARNESS_THINKING: Readonly<Record<HarnessId, AgentThinking>> = {
     source:
       "No thought-level method exists in the peer's ACP dispatch: acp-server.ts handles " +
       "session/set_model, session/set_policy and session/set_mode and nothing of the kind " +
-      "(../envoy-harness/packages/envoy-harness/src/protocol/acp-server.ts:294-310, :431), and its " +
+      "(../envoy-harness/packages/envoy-harness/src/protocol/acp-server.ts:305-327, :452), and its " +
       "session/new answers {sessionId} with no configOptions. VERIFIED against the built peer: " +
       "session/set_config_option → -32601 \"method not found: session/set_config_option\". Its CLI " +
       "documents --plan (a mode) and --provider/--model, and no effort flag (cli/argv-help.ts:23-24, :43).",

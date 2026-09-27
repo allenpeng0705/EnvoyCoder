@@ -1846,6 +1846,12 @@ button.explorer__change:hover {
   color: var(--foreground-muted);
 }
 
+/* Empty-task hero: title + one line + suggestion CTAs; composer stays below. */
+.transcript__hero {
+  padding-top: 12vh;
+  text-align: start;
+}
+
 .transcript__empty-title {
   margin: 0 0 var(--space-1);
   color: var(--foreground);
@@ -1986,6 +1992,50 @@ button.explorer__change:hover {
   transition:
     border-color var(--motion-pop) var(--motion-ease),
     box-shadow var(--motion-pop) var(--motion-ease);
+}
+
+.composer__queue-status {
+  margin: 0 0 var(--space-2);
+  padding: 0 var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--foreground-muted);
+}
+
+.composer__takeover,
+.approval--takeover {
+  margin-bottom: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--status-warning) 45%, var(--border));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--status-warning) 8%, var(--surface-1));
+}
+
+.approval--deferred {
+  opacity: 0.92;
+}
+
+.row__tool-kind {
+  font-size: var(--font-size-sm);
+  color: var(--foreground-muted);
+  margin-inline-end: var(--space-2);
+}
+
+.row__tool-name {
+  margin-inline-end: var(--space-2);
+}
+
+.row__tool-path {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--foreground-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row__code--cmd {
+  color: var(--foreground);
 }
 
 /* The card is the field: a second ring inside a bordered card is two focus indicators for one
@@ -2602,6 +2652,34 @@ button.explorer__change:hover {
 }
 
 .banner span {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Ephemeral success/failure that outlives Settings / sheets (`docs/envoydev-ui-polish.md` §3).
+   Not for refusals — those stay on `.banner`. */
+.shell-toast {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+  font-size: var(--font-size-sm);
+  color: var(--foreground);
+  z-index: 20;
+}
+
+.shell-toast--ok {
+  border-bottom-color: color-mix(in srgb, var(--status-success) 35%, var(--border));
+}
+
+.shell-toast--error {
+  border-bottom-color: color-mix(in srgb, var(--status-danger) 40%, var(--border));
+}
+
+.shell-toast__message {
   flex: 1;
   min-width: 0;
 }

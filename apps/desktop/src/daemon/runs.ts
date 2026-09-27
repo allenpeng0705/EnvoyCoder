@@ -409,7 +409,7 @@ export class RunManager {
     const modeToSet = shipped ? collaborationModeToSet(shipped, agentModeId, planMode) : undefined;
     // The model, on exactly the same terms and for a failure that is easier to miss: `envoy-harness`
     // parses `--model` whether or not `--provider` is there and *then ignores it*
-    // (`../envoy-harness/packages/envoy-harness/src/cli/run/acp.ts:100-106`), so a model we could not
+    // (`../envoy-harness/packages/envoy-harness/src/cli/run/acp.ts:99-111`), so a model we could not
     // take apart would leave the agent answering on its default while the transcript named the user's
     // choice. Refusing here is the only outcome that does not mislead — and it happens before the
     // process exists, so there is nothing half-started to clean up.

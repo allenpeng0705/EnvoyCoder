@@ -21,9 +21,9 @@
  *   2. **A tool call is one row with two events.** `run.tool` arrives as `running` and later as
  *      `completed`/`failed` with the same `callId`; the row is updated in place, and a call that
  *      never completes stays visible as `running` rather than disappearing.
- *   3. **An approval belongs to the call that raised it.** It is rendered *in place*, at the point
- *      in the transcript where the agent paused — never as a modal, which would hide the context a
- *      user needs to decide (`docs/envoydev-ui.md` §6).
+ *   3. **An approval belongs to the call that raised it.** It is folded into the transcript at the
+ *      pause point for history; while pending, the composer takeover owns the choices
+ *      (`docs/envoydev-ui.md` §6, `docs/envoydev-ui-polish.md` §1) — never a window modal.
  *   4. **Gaps are reported, not hidden.** `seq` is monotonic per run, so a missing sequence number
  *      means this client dropped a frame. Saying so is the honest alternative to rendering a
  *      transcript that silently skips the sentence explaining the change.

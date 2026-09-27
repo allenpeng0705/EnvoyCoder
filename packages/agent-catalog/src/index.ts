@@ -151,7 +151,7 @@ export type AgentLaunch =
        * specification's `modeId`.
        *
        * **Two contracts, and both were observed rather than inferred.** `envoy-harness` parses
-       * `obj.mode` (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:352-375`);
+       * `obj.mode` (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:722-745`);
        * `cursor-agent acp`, `@agentclientprotocol/claude-agent-acp` and `@agentclientprotocol/codex-acp`
        * all require `modeId`, and refuse `mode` with `-32603 … path: ["modeId"]` / `-32602 … modeId:
        * expected string, received undefined`.
@@ -239,7 +239,7 @@ export interface AgentCapabilities {
    *
    *   * `envoy-harness` answers the ACP method `session/set_mode` with `{sessionId, mode}`, and its
    *     accepted kinds are exactly `default | plan | review`
-   *     (`../envoy-harness/packages/envoy-harness/src/protocol/acp-server.ts:431` handling,
+   *     (`../envoy-harness/packages/envoy-harness/src/protocol/acp-server.ts:452` handling,
    *     `.../src/plan/mode-kind.ts` for `ModeKind`, `.../src/protocol/acp-params.ts:352-375` for the
    *     parameter check that rejects anything else).
    *   * `deepseek-harness` has **no** `session/set_mode`: its ACP surface offers `session/new`,
@@ -266,7 +266,7 @@ export interface AgentCapabilities {
    *   * `envoy-harness` answers the ACP method `session/set_policy` with
    *     `{sessionId, sandbox?, approval?, autoRun?, preset?}`; `autoRun` is exactly
    *     `always-confirm | safe-only | off`, decided per tool call by `shouldAskUnderAutoRun` in the
-   *     live permission hook (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:237-295`,
+   *     live permission hook (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:239-297`,
    *     `.../src/permissions/auto-run.ts:48-70`, `.../src/protocol/agent-backend-host.ts:217-231`).
    *     Verified against the built peer, not only its source: `session/get_policy` on a fresh session
    *     answers `{sandbox:"workspace-write",approval:"on-request"}` with **no** `autoRun`, and
@@ -391,7 +391,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       binaries: ["envoy-harness", "envoy"],
       // The model travels as **flags**, and both of them. Its `--acp` dispatch builds a live agent
       // only when `--provider` is set and reads `--model` only in that branch
-      // (`../envoy-harness/packages/envoy-harness/src/cli/run/acp.ts:100-106`), so `--model` alone is
+      // (`../envoy-harness/packages/envoy-harness/src/cli/run/acp.ts:99-111`), so `--model` alone is
       // parsed, dropped and then reported to the user as the model they chose. `modelArgs` emits the
       // pair or nothing at all, and throws rather than dropping one — see `./models.ts`.
       buildArgs: ({ extraArgs, model }) => [
@@ -404,7 +404,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       transport: "acp",
       // The peer's own field name, read out of its parser rather than guessed from the specification:
       // `parseSessionSetModeParams` looks at `obj.mode` and nothing else
-      // (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:352-375`). It is the
+      // (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:722-745`). It is the
       // *older* of the two names this catalogue records, and the one every other ACP agent here does
       // **not** use — see `AgentLaunch.modeParam` for why the difference has to be written down.
       modeParam: "mode",

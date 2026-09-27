@@ -52,6 +52,7 @@ import { TeamJobCreateSheet } from "./TeamJobCreateSheet.js";
 import { TaskPane } from "./TaskPane.js";
 import { JobPane } from "./JobPane.js";
 import { MeshStatusBar } from "./MeshStatusBar.js";
+import { ShellToastHost } from "./ShellToastHost.js";
 import { SettingsPane } from "./SettingsPane.js";
 import { useSettingsLayout } from "./SettingsNav.js";
 import { mintPairingCode, type PairPhoneOutcome } from "./settings/PairPhone.js";
@@ -681,6 +682,8 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
           </button>
         </div>
       ) : null}
+
+      <ShellToastHost />
 
       <div className="shell__body">
         <CoderSidebar

@@ -148,6 +148,7 @@ export const teams = {
   "settings.teams.copyToken": "Copia invito",
   "settings.teams.rotate": "Nuovo invito",
   "settings.teams.dissolve": "Sciogli",
+  "settings.teams.dissolveOk": "Team sciolto.",
   "settings.teams.tokenOnce": "Condividi questo invito. Mostrato una sola volta.",
   "settings.teams.pasteToken": "Invito",
   "settings.teams.empty": "Ancora nessun team.",
