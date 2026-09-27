@@ -20,6 +20,7 @@ import {
   setJobStallAutomation,
   startJob,
   suggestJobSteps,
+  listJobStepTemplates,
   updateJobSteps,
 } from "../src/daemon/jobs.js";
 import {
@@ -86,7 +87,7 @@ describe("teams", () => {
     const joined = await joinTeam(paths.teamsFile, {
       token: created.token,
       label: "laptop",
-      rolesOffered: ["implement"],
+      rolesOffered: ["developer"],
       hostHints: "ws://127.0.0.1:4771/ws",
     });
     expect(joined.teamId).toBe(created.team.id);
@@ -117,6 +118,105 @@ describe("teams", () => {
     const listed = await listTeams(paths.teamsFile);
     expect(listed).toHaveLength(1);
   });
+
+  it("stores memberLabel, custom catalog, and rolesAssigned override", async () => {
+    const paths = await tempPaths();
+    const { setMemberRolesAssigned, requireTeam, suggestMemberRoles } = await import(
+      "../src/daemon/teams.js"
+    );
+    const { effectiveRoles } = await import("@envoydev/protocol");
+    const created = await createTeam(paths.teamsFile, {
+      label: "Desk",
+      memberLabel: "workstation",
+      originWs: "ws://127.0.0.1:4770/ws",
+      roleCatalog: [
+        { id: "orchestrate", writer: false },
+        { id: "implement", writer: true },
+        { id: "design", writer: false },
+      ],
+      rolesOffered: ["orchestrate", "implement"],
+    });
+    expect(created.team.members[0]?.label).toBe("workstation");
+    expect(created.team.roleCatalog.map((r) => r.id)).toEqual(["orchestrate", "implement", "design"]);
+    expect(parseTeamInvite(created.invite).roleCatalog?.map((r) => r.id)).toContain("design");
+
+    const joined = await joinTeam(paths.teamsFile, {
+      token: created.token,
+      label: "laptop",
+      rolesOffered: ["design"],
+      hostHints: "ws://127.0.0.1:4771/ws",
+    });
+    await expect(
+      joinTeam(paths.teamsFile, {
+        token: created.token,
+        label: "evil",
+        rolesOffered: ["orchestrate"],
+        hostHints: "ws://127.0.0.1:4772/ws",
+      }),
+    ).rejects.toThrow(/orchestrat|not valid|bad/i);
+
+    await setMemberRolesAssigned(paths.teamsFile, {
+      teamId: created.team.id,
+      memberId: joined.memberId,
+      roles: ["implement"],
+    });
+    const team = await requireTeam(paths.teamsFile, created.team.id);
+    const peer = team.members.find((m) => m.id === joined.memberId)!;
+    expect(peer.rolesOffered).toEqual(["design"]);
+    expect(peer.rolesAssigned).toEqual(["implement"]);
+    expect(effectiveRoles(peer)).toEqual(["implement"]);
+
+    // Suggest is proposal-only when empty.
+    await setMemberRolesAssigned(paths.teamsFile, {
+      teamId: created.team.id,
+      memberId: joined.memberId,
+      roles: [],
+    });
+    const cleared = (await requireTeam(paths.teamsFile, created.team.id)).members.find(
+      (m) => m.id === joined.memberId,
+    )!;
+    // Still has rolesOffered design — clear offered via join refresh simulation
+    const emptyPeer = { ...cleared, rolesOffered: [] as const, rolesAssigned: undefined };
+    const proposal = suggestMemberRoles(team, emptyPeer);
+    expect(proposal.roles.length).toBeGreaterThan(0);
+    expect(proposal.roles).not.toContain("orchestrate");
+    expect(proposal.note).toMatch(/Proposal only/i);
+
+    expect(() => suggestMemberRoles(team, peer)).toThrow(/already has roles/i);
+  });
+
+  it("locks custom writer roles on the same worktreeKey", () => {
+    expect(() =>
+      assertWriterLocks(
+        [
+          {
+            id: "a",
+            jobId: "j",
+            role: "code",
+            brief: "one",
+            worktreeKey: "main",
+            cwdHint: ".",
+            status: "pending",
+            attempts: [],
+          },
+          {
+            id: "b",
+            jobId: "j",
+            role: "patch",
+            brief: "two",
+            worktreeKey: "main",
+            cwdHint: ".",
+            status: "pending",
+            attempts: [],
+          },
+        ],
+        [
+          { id: "code", writer: true },
+          { id: "patch", writer: true },
+        ],
+      ),
+    ).toThrow(/writer|worktree/i);
+  });
 });
 
 describe("jobs", () => {
@@ -126,7 +226,7 @@ describe("jobs", () => {
         {
           id: "a",
           jobId: "j",
-          role: "implement",
+          role: "developer",
           brief: "one",
           worktreeKey: "main",
           cwdHint: ".",
@@ -136,7 +236,7 @@ describe("jobs", () => {
         {
           id: "b",
           jobId: "j",
-          role: "implement",
+          role: "developer",
           brief: "two",
           worktreeKey: "main",
           cwdHint: ".",
@@ -160,7 +260,7 @@ describe("jobs", () => {
       goal: "ship",
       steps: [
         {
-          role: "implement",
+          role: "developer",
           brief: "do it",
           worktreeKey: "main",
           cwdHint: paths.workDir,
@@ -187,7 +287,7 @@ describe("jobs", () => {
       memberId: "local",
       acceptPolicy: {
         mode: "auto-roles",
-        autoAcceptRoles: ["implement", "review", "plan", "observe"],
+        autoAcceptRoles: ["developer", "tester", "designer", "document"],
       },
     });
     let job = await createJob(paths.jobsFile, {
@@ -196,7 +296,7 @@ describe("jobs", () => {
       goal: "ship",
       steps: [
         {
-          role: "implement",
+          role: "developer",
           brief: "do it",
           worktreeKey: "main",
           cwdHint: join(paths.dir, "missing-path"),
@@ -225,7 +325,7 @@ describe("jobs", () => {
     const peer = await joinTeam(paths.teamsFile, {
       token: team.token,
       label: "peer",
-      rolesOffered: ["implement"],
+      rolesOffered: ["developer"],
       hostHints: "ws://127.0.0.1:9/ws",
     });
     // Force peer offline for dial so first offer goes to local — then offer peer explicitly.
@@ -235,7 +335,7 @@ describe("jobs", () => {
       goal: "ship",
       steps: [
         {
-          role: "implement",
+          role: "developer",
           brief: "do it",
           worktreeKey: "main",
           cwdHint: paths.workDir,
@@ -253,7 +353,7 @@ describe("jobs", () => {
     job = await updateJobSteps(paths.jobsFile, job.id, [
       {
         id: job.steps[0]!.id,
-        role: "implement",
+        role: "developer",
         brief: "do it",
         worktreeKey: "main",
         cwdHint: paths.workDir,
@@ -277,7 +377,7 @@ describe("jobs", () => {
     await joinTeam(paths.teamsFile, {
       token: team2.token,
       label: "other",
-      rolesOffered: ["implement"],
+      rolesOffered: ["developer"],
     });
     job = await createJob(paths.jobsFile, {
       teamId: team2.team.id,
@@ -285,7 +385,7 @@ describe("jobs", () => {
       goal: "g",
       steps: [
         {
-          role: "review",
+          role: "tester",
           brief: "look",
           worktreeKey: "rev",
           cwdHint: paths.workDir,
@@ -321,7 +421,7 @@ describe("jobs", () => {
       memberId: "local",
       acceptPolicy: {
         mode: "auto-roles",
-        autoAcceptRoles: ["implement", "review", "plan", "observe"],
+        autoAcceptRoles: ["developer", "tester", "designer", "document"],
       },
     });
     let job = await createJob(paths.jobsFile, {
@@ -330,7 +430,7 @@ describe("jobs", () => {
       goal: "ship",
       steps: [
         {
-          role: "implement",
+          role: "developer",
           brief: "do it",
           worktreeKey: "main",
           cwdHint: paths.workDir,
@@ -379,7 +479,7 @@ describe("jobs", () => {
       memberId: "local",
       acceptPolicy: {
         mode: "auto-roles",
-        autoAcceptRoles: ["implement", "review", "plan", "observe"],
+        autoAcceptRoles: ["developer", "tester", "designer", "document"],
       },
     });
     let job = await createJob(paths.jobsFile, {
@@ -388,7 +488,7 @@ describe("jobs", () => {
       goal: "ship",
       steps: [
         {
-          role: "implement",
+          role: "developer",
           brief: "do it",
           worktreeKey: "main",
           cwdHint: paths.workDir,
@@ -440,8 +540,77 @@ describe("jobs", () => {
     });
     const suggested = suggestJobSteps(job, "focus on tests");
     expect(suggested.note).toMatch(/Proposal only/i);
+    expect(suggested.templateId).toBe("pipeline");
     expect(suggested.steps.length).toBeGreaterThan(0);
+    expect(suggested.steps.every((s) => s.id)).toBe(true);
     expect(job.steps).toHaveLength(0);
+  });
+
+  it("templates cover sequential and parallel graphs", async () => {
+    const paths = await tempPaths();
+    const team = await createTeam(paths.teamsFile, {
+      label: "Desk",
+      originWs: "ws://127.0.0.1:4770/ws",
+    });
+    const job = await createJob(paths.jobsFile, {
+      teamId: team.team.id,
+      title: "Feature",
+      goal: "ship a feature",
+      projectId: "proj",
+    });
+
+    const pipeline = suggestJobSteps(job, { templateId: "pipeline" });
+    expect(pipeline.steps.map((s) => s.id)).toEqual(["s1", "s2", "s3", "s4"]);
+    expect(pipeline.steps[1]?.dependsOn).toEqual(["s1"]);
+    expect(new Set(pipeline.steps.map((s) => s.worktreeKey)).size).toBe(1);
+    await updateJobSteps(paths.jobsFile, job.id, pipeline.steps, paths.teamsFile);
+
+    const parallel = suggestJobSteps(job, { templateId: "parallel-feature", parallelCount: 3 });
+    expect(parallel.steps.filter((s) => s.role === "developer").length).toBe(4); // 3 features + integrate
+    const featureKeys = parallel.steps.filter((s) => s.id?.startsWith("s") && s.role === "developer" && s.dependsOn?.includes("s1"));
+    expect(featureKeys).toHaveLength(3);
+    expect(new Set(featureKeys.map((s) => s.worktreeKey)).size).toBe(3);
+    const integrate = parallel.steps.find((s) => s.brief.includes("Merge"));
+    expect(integrate?.dependsOn).toEqual(["s2", "s3", "s4"]);
+    await updateJobSteps(paths.jobsFile, job.id, parallel.steps, paths.teamsFile);
+
+    const hotfix = suggestJobSteps(job, { hint: "urgent hotfix patch" });
+    expect(hotfix.templateId).toBe("hotfix");
+    expect(hotfix.steps).toHaveLength(2);
+
+    const catalog = listJobStepTemplates();
+    expect(catalog.map((t) => t.id)).toContain("review-pass");
+  });
+
+  it("allows sequential writers on the same worktreeKey when dependsOn chains them", () => {
+    expect(() =>
+      assertWriterLocks(
+        [
+          {
+            id: "s1",
+            jobId: "j",
+            role: "developer",
+            brief: "first",
+            worktreeKey: "main",
+            cwdHint: ".",
+            status: "pending",
+            attempts: [],
+          },
+          {
+            id: "s2",
+            jobId: "j",
+            role: "developer",
+            brief: "second",
+            worktreeKey: "main",
+            cwdHint: ".",
+            dependsOn: ["s1"],
+            status: "pending",
+            attempts: [],
+          },
+        ],
+        [{ id: "developer", label: "Developer", writer: true }],
+      ),
+    ).not.toThrow();
   });
 
   it("marks new joiners unknown until heartbeat", async () => {
@@ -453,7 +622,7 @@ describe("jobs", () => {
     const joined = await joinTeam(paths.teamsFile, {
       token: created.token,
       label: "laptop",
-      rolesOffered: ["implement"],
+      rolesOffered: ["developer"],
       hostHints: "ws://127.0.0.1:9/ws",
     });
     const peer = joined.team.members.find((m) => m.id === joined.memberId);
@@ -496,7 +665,7 @@ describe("jobs", () => {
       memberId: "local",
       acceptPolicy: {
         mode: "auto-roles",
-        autoAcceptRoles: ["implement"],
+        autoAcceptRoles: ["developer"],
       },
     });
     let job = await createJob(paths.jobsFile, {
@@ -505,7 +674,7 @@ describe("jobs", () => {
       goal: "ship",
       steps: [
         {
-          role: "implement",
+          role: "developer",
           brief: "do it",
           worktreeKey: "main",
           cwdHint: paths.workDir,
@@ -552,7 +721,7 @@ describe("jobs", () => {
       goal: "look",
       steps: [
         {
-          role: "review",
+          role: "tester",
           brief: "look",
           worktreeKey: "rev",
           cwdHint: paths.workDir,
@@ -592,7 +761,7 @@ describe("jobs", () => {
       memberId: "local",
       acceptPolicy: {
         mode: "auto-roles",
-        autoAcceptRoles: ["implement"],
+        autoAcceptRoles: ["developer"],
       },
     });
     let job = await createJob(paths.jobsFile, {
@@ -601,7 +770,7 @@ describe("jobs", () => {
       goal: "ship",
       steps: [
         {
-          role: "implement",
+          role: "developer",
           brief: "do it",
           worktreeKey: "main",
           cwdHint: paths.workDir,
@@ -652,7 +821,7 @@ describe("jobs", () => {
       goal: "ship",
       steps: [
         {
-          role: "implement",
+          role: "developer",
           brief: "do it",
           worktreeKey: "main",
           cwdHint: paths.workDir,
@@ -684,7 +853,7 @@ describe("jobs", () => {
     const peer = await joinTeam(paths.teamsFile, {
       token: team.token,
       label: "peer",
-      rolesOffered: ["implement"],
+      rolesOffered: ["developer"],
       hostHints: "ws://127.0.0.1:9/ws",
     });
     await teamHeartbeat(paths.teamsFile, {
@@ -699,7 +868,7 @@ describe("jobs", () => {
       goal: "ship",
       steps: [
         {
-          role: "implement",
+          role: "developer",
           brief: "do it",
           worktreeKey: "main",
           cwdHint: paths.workDir,
@@ -744,7 +913,7 @@ describe("jobs", () => {
       goal: "ship",
       steps: [
         {
-          role: "implement",
+          role: "developer",
           brief: "do it",
           worktreeKey: "main",
           cwdHint: paths.workDir,
@@ -793,7 +962,7 @@ describe("membership heartbeat", () => {
       token: "abcdefghijklmnopqrstuv",
       memberToken: "member-token-abcdef",
       originWs: "ws://127.0.0.1:4770/ws",
-      rolesOffered: ["implement"],
+      rolesOffered: ["developer"],
       acceptPolicy: { mode: "manual" },
       joinedAt: new Date().toISOString(),
     });
@@ -850,7 +1019,7 @@ describe("cross-daemon join (injected peer RPC)", () => {
           const joined = await joinTeam(originPaths.teamsFile, {
             token: params.token,
             label: params.label,
-            rolesOffered: ["implement"],
+            rolesOffered: ["developer"],
             hostHints: params.hostHints,
           });
           return { ok: true, result: joined };
@@ -862,7 +1031,7 @@ describe("cross-daemon join (injected peer RPC)", () => {
     const result = (await peerHandlers["coder.joinTeam"]!({
       token: created.invite,
       label: "laptop",
-      rolesOffered: ["implement"],
+      rolesOffered: ["developer"],
     })) as { teamId: string; memberId: string };
     expect(joinCalled).toBe(true);
     expect(result.teamId).toBe(created.team.id);
@@ -891,7 +1060,7 @@ describe("cross-daemon join (injected peer RPC)", () => {
     const joined = await joinTeam(originPaths.teamsFile, {
       token: created.token,
       label: "peer",
-      rolesOffered: ["implement"],
+      rolesOffered: ["developer"],
       hostHints: "ws://127.0.0.1:4771/ws",
     });
     await saveMembership(peerPaths.membershipsFile, {
@@ -902,7 +1071,7 @@ describe("cross-daemon join (injected peer RPC)", () => {
       token: created.token,
       memberToken: joined.memberToken,
       originWs: "ws://127.0.0.1:4770/ws",
-      rolesOffered: ["implement"],
+      rolesOffered: ["developer"],
       acceptPolicy: { mode: "manual" },
       joinedAt: new Date().toISOString(),
     });
@@ -913,7 +1082,7 @@ describe("cross-daemon join (injected peer RPC)", () => {
       goal: "ship",
       steps: [
         {
-          role: "implement",
+          role: "developer",
           brief: "do it",
           worktreeKey: "main",
           cwdHint: work,
@@ -984,7 +1153,7 @@ describe("cross-daemon join (injected peer RPC)", () => {
     await updateJobSteps(originPaths.jobsFile, job.id, [
       {
         id: step.id,
-        role: "implement",
+        role: "developer",
         brief: step.brief,
         worktreeKey: "main",
         cwdHint: work,

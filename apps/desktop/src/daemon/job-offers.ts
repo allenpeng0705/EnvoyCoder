@@ -33,6 +33,7 @@ import {
 } from "./jobs.js";
 import {
   memberOnlineForAssign,
+  normalizeTeamRecord,
   requireTeam,
   teamTokenPlain,
   touchTeamActivity,
@@ -61,8 +62,8 @@ export async function offerJobStep(
   if (!dependenciesSatisfied(step, job.steps)) {
     throw coderError(ENVOYDEV_ERRORS.badRequest, "Step dependencies are not satisfied.", ref("error.job.deps"));
   }
-  assertWriterLocks(job.steps);
   const team = await requireTeam(teamsPath, job.teamId);
+  assertWriterLocks(job.steps, normalizeTeamRecord(team).roleCatalog);
   const exclude = input.excludeMemberIds ?? new Set<string>();
   const memberId =
     input.memberId && !exclude.has(input.memberId)
@@ -364,7 +365,8 @@ export async function refuseJobStepOffer(
     ],
   };
   if (job.policy.onPeerRefuse === "fail-step") {
-    next = await failStep(jobsPath, next, offer.stepId, `refused:${input.policy}`);
+    const catalog = normalizeTeamRecord(await requireTeam(teamsPath, job.teamId)).roleCatalog;
+    next = await failStep(jobsPath, next, offer.stepId, `refused:${input.policy}`, catalog);
   } else {
     // §7: refuse → reassign (default). Exclude the refusing member.
     next = await saveJob(jobsPath, next);

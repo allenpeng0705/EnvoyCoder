@@ -392,7 +392,20 @@ export const TaskCollaborationSchema = z
   })
   .strict();
 
-export const JobRoleSchema = z.enum(["orchestrate", "plan", "implement", "review", "observe"]);
+/** Role id slug — catalog membership is enforced at the team boundary. */
+export const JobRoleSchema = z
+  .string()
+  .min(1)
+  .max(40)
+  .regex(/^[a-z][a-z0-9_-]{0,39}$/, "Role id must be a lowercase slug");
+
+export const RoleDefSchema = z
+  .object({
+    id: JobRoleSchema,
+    label: z.string().min(1).max(80).optional(),
+    writer: z.boolean(),
+  })
+  .strict();
 
 export const ConnectionStatusSchema = z.enum([
   "online",
@@ -461,6 +474,8 @@ export const TeamMemberSchema = z
     id: z.string().min(1),
     label: z.string().min(1),
     rolesOffered: z.array(JobRoleSchema).readonly(),
+    /** Orchestrator override; when non-empty, covers rolesOffered for scheduling. */
+    rolesAssigned: z.array(JobRoleSchema).readonly().optional(),
     hostHints: z.string().optional(),
     joinedAt: z.string().min(1),
     connection: ConnectionDetailSchema,
@@ -475,6 +490,7 @@ export const TeamSchema = z
     tokenHash: z.string().min(1),
     tokenExpiresAt: z.string().min(1),
     tokenGeneration: z.number().int().nonnegative(),
+    roleCatalog: z.array(RoleDefSchema).min(1).readonly(),
     members: z.array(TeamMemberSchema).readonly(),
     createdAt: z.string().min(1),
     updatedAt: z.string().min(1),
@@ -488,6 +504,7 @@ export const TeamPublicSchema = z
     label: z.string().min(1),
     tokenExpiresAt: z.string().min(1),
     tokenGeneration: z.number().int().nonnegative(),
+    roleCatalog: z.array(RoleDefSchema).min(1).readonly(),
     members: z.array(TeamMemberSchema).readonly(),
     createdAt: z.string().min(1),
     updatedAt: z.string().min(1),
@@ -3386,6 +3403,12 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
     params: z
       .object({
         label: z.string().min(1).max(120),
+        /** Label for this machine on the roster (origin / orchestrator member). Default “This machine”. */
+        memberLabel: z.string().min(1).max(120).optional(),
+        /** Roles this machine offers; must include orchestrate. Default: all catalog roles. */
+        rolesOffered: z.array(JobRoleSchema).min(1).optional(),
+        /** Team role catalog; default = presets. Must include orchestrate. */
+        roleCatalog: z.array(RoleDefSchema).min(1).optional(),
         /** Hours until token expiry. Default 24. */
         ttlHours: z.number().positive().max(168).optional(),
       })
@@ -3434,7 +3457,8 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
       .object({
         token: z.string().min(16),
         label: z.string().min(1).max(120),
-        rolesOffered: z.array(JobRoleSchema).min(1).optional(),
+        /** Empty allowed — origin may assign later via rolesAssigned. */
+        rolesOffered: z.array(JobRoleSchema).optional(),
         hostHints: z.string().max(500).optional(),
       })
       .strict(),
@@ -3458,9 +3482,18 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
         memberToken: z.string().min(16),
         /** Member pushes its AcceptPolicy on each beat — avoids pre-auth policy RPCs. */
         acceptPolicy: AcceptPolicySchema.optional(),
+        /** Member may refresh rolesOffered on each beat (never rolesAssigned). */
+        rolesOffered: z.array(JobRoleSchema).optional(),
       })
       .strict(),
-    result: z.object({ ok: z.literal(true), connection: ConnectionDetailSchema }).strict(),
+    result: z
+      .object({
+        ok: z.literal(true),
+        connection: ConnectionDetailSchema,
+        /** Origin mirrors current override so the peer UI can show “covered”. */
+        rolesAssigned: z.array(JobRoleSchema).readonly().optional(),
+      })
+      .strict(),
   },
   "coder.setMemberAcceptPolicy": {
     params: z
@@ -3471,6 +3504,51 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
       })
       .strict(),
     result: z.object({ member: TeamMemberSchema }).strict(),
+  },
+  "coder.setTeamRoleCatalog": {
+    params: z
+      .object({
+        teamId: z.string().min(1),
+        roleCatalog: z.array(RoleDefSchema).min(1),
+      })
+      .strict(),
+    result: z.object({ team: TeamPublicSchema }).strict(),
+  },
+  "coder.setMemberRolesAssigned": {
+    params: z
+      .object({
+        teamId: z.string().min(1),
+        memberId: z.string().min(1),
+        /** Empty clears the override (member's rolesOffered apply again). */
+        roles: z.array(JobRoleSchema),
+      })
+      .strict(),
+    result: z.object({ member: TeamMemberSchema }).strict(),
+  },
+  "coder.setMemberRolesOffered": {
+    params: z
+      .object({
+        teamId: z.string().min(1),
+        memberId: z.string().min(1),
+        rolesOffered: z.array(JobRoleSchema),
+      })
+      .strict(),
+    result: z.object({ member: TeamMemberSchema }).strict(),
+  },
+  "coder.suggestMemberRoles": {
+    params: z
+      .object({
+        teamId: z.string().min(1),
+        memberId: z.string().min(1),
+        hint: z.string().max(500).optional(),
+      })
+      .strict(),
+    result: z
+      .object({
+        roles: z.array(JobRoleSchema).readonly(),
+        note: z.string(),
+      })
+      .strict(),
   },
   "coder.getTeamToken": {
     params: z.object({ teamId: z.string().min(1) }).strict(),
@@ -3762,6 +3840,8 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
                 label: z.string(),
                 teamLabel: z.string(),
                 rolesOffered: z.array(JobRoleSchema).readonly(),
+                rolesAssigned: z.array(JobRoleSchema).readonly().optional(),
+                roleCatalog: z.array(RoleDefSchema).readonly().optional(),
                 acceptPolicy: AcceptPolicySchema,
                 joinedAt: z.string(),
                 originWs: z.string(),
@@ -3830,15 +3910,70 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
     params: z
       .object({
         jobId: z.string().min(1),
-        /** Optional hint for the orchestrator-agent; proposal only — daemon does not auto-commit. */
+        /**
+         * Named step graph (`docs/envoydev-collaboration.md` §5.3). Absent → pick from
+         * hint keywords, else `pipeline`.
+         */
+        templateId: z
+          .enum([
+            "pipeline",
+            "parallel-feature",
+            "parallel-test",
+            "hotfix",
+            "solo",
+            "design-spike",
+            "docs-pass",
+            "review-pass",
+          ])
+          .optional(),
+        /** Fan-out width for parallel templates (2–4). Ignored by sequential templates. */
+        parallelCount: z.number().int().min(2).max(4).optional(),
+        /** Optional hint for keyword pick / brief text; proposal only — daemon does not auto-commit. */
         hint: z.string().max(4_000).optional(),
       })
       .strict(),
     result: z
       .object({
+        templateId: z.enum([
+          "pipeline",
+          "parallel-feature",
+          "parallel-test",
+          "hotfix",
+          "solo",
+          "design-spike",
+          "docs-pass",
+          "review-pass",
+        ]),
         /** Proposed steps — caller must `updateJobSteps` to commit. */
         steps: z.array(JobStepDraftSchema).readonly(),
         note: z.string(),
+      })
+      .strict(),
+  },
+  "coder.listJobStepTemplates": {
+    params: z.object({}).strict(),
+    result: z
+      .object({
+        templates: z
+          .array(
+            z
+              .object({
+                id: z.enum([
+                  "pipeline",
+                  "parallel-feature",
+                  "parallel-test",
+                  "hotfix",
+                  "solo",
+                  "design-spike",
+                  "docs-pass",
+                  "review-pass",
+                ]),
+                title: z.string(),
+                detail: z.string(),
+              })
+              .strict(),
+          )
+          .readonly(),
       })
       .strict(),
   },

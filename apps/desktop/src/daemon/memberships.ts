@@ -10,7 +10,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 
-import type { AcceptPolicy, JobRole, StepOffer } from "@envoydev/protocol";
+import type { AcceptPolicy, JobRole, RoleDef, StepOffer } from "@envoydev/protocol";
 import { DEFAULT_ACCEPT_POLICY } from "@envoydev/protocol";
 
 function isMissing(error: unknown): boolean {
@@ -45,6 +45,13 @@ export interface TeamMembership {
   memberToken: string;
   originWs: string;
   rolesOffered: readonly JobRole[];
+  /** Snapshot of the team catalog at join (for peer Settings UI). */
+  roleCatalog?: readonly RoleDef[];
+  /**
+   * Origin override mirrored on heartbeat when present — peer shows “covered” banner.
+   * Cleared when origin clears rolesAssigned.
+   */
+  rolesAssigned?: readonly JobRole[];
   acceptPolicy: AcceptPolicy;
   joinedAt: string;
 }
@@ -101,6 +108,40 @@ export async function updateMembershipAcceptPolicy(
   const row = file.memberships[teamId];
   if (!row) return undefined;
   const next = { ...row, acceptPolicy };
+  file.memberships[teamId] = next;
+  await writeJsonFile(path, file);
+  return next;
+}
+
+export async function updateMembershipRolesOffered(
+  path: string,
+  teamId: string,
+  rolesOffered: readonly JobRole[],
+): Promise<TeamMembership | undefined> {
+  const file = await readMemberships(path);
+  const row = file.memberships[teamId];
+  if (!row) return undefined;
+  const next = { ...row, rolesOffered: [...rolesOffered] };
+  file.memberships[teamId] = next;
+  await writeJsonFile(path, file);
+  return next;
+}
+
+export async function updateMembershipRolesAssigned(
+  path: string,
+  teamId: string,
+  rolesAssigned: readonly JobRole[] | undefined,
+): Promise<TeamMembership | undefined> {
+  const file = await readMemberships(path);
+  const row = file.memberships[teamId];
+  if (!row) return undefined;
+  const next =
+    rolesAssigned && rolesAssigned.length > 0
+      ? { ...row, rolesAssigned: [...rolesAssigned] }
+      : (() => {
+          const { rolesAssigned: _c, ...rest } = row;
+          return rest;
+        })();
   file.memberships[teamId] = next;
   await writeJsonFile(path, file);
   return next;

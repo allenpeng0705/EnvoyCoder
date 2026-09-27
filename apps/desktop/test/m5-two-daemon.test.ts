@@ -107,7 +107,7 @@ describe("M5 two-daemon path", () => {
     const joined = (await peerClient.call("coder.joinTeam", {
       token: created.invite,
       label: "laptop",
-      rolesOffered: ["implement", "review"],
+      rolesOffered: ["developer", "tester"],
     })) as { teamId: string; memberId: string; team: { label: string }; memberToken: string };
     expect(joined.teamId).toBe(created.team.id);
     expect(joined.team.label).toBe("Desk");
@@ -141,7 +141,7 @@ describe("M5 two-daemon path", () => {
       goal: "prove M5",
       steps: [
         {
-          role: "implement",
+          role: "developer",
           brief: "touch a file",
           worktreeKey: "main",
           cwdHint: peer.work,
@@ -218,7 +218,7 @@ describe("M5 two-daemon path", () => {
     const joined = (await peerClient.call("coder.joinTeam", {
       token: created.invite,
       label: "laptop",
-      rolesOffered: ["implement"],
+      rolesOffered: ["developer"],
     })) as { teamId: string; memberId: string; memberToken: string };
 
     await peerClient.call("coder.teamHeartbeat", {
@@ -234,7 +234,7 @@ describe("M5 two-daemon path", () => {
       goal: "done report",
       steps: [
         {
-          role: "implement",
+          role: "developer",
           brief: "ship it",
           worktreeKey: "main",
           cwdHint: peer.work,

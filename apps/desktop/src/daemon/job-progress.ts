@@ -33,7 +33,7 @@ import {
   stopJobStep,
   writeJsonFile,
 } from "./jobs.js";
-import { requireTeam } from "./teams.js";
+import { normalizeTeamRecord, requireTeam } from "./teams.js";
 
 type RemoteStepCancel = (job: Job, stepId: string) => Promise<void>;
 const remoteCancelByJobsFile = new Map<string, RemoteStepCancel>();
@@ -306,11 +306,14 @@ export async function completeJobStep(
     );
     return { ...s, status: "succeeded" as const, attempts };
   });
-  job = maybeCompleteJob({
-    ...job,
-    steps,
-    ledger: [...job.ledger, note("info", "Step succeeded", { stepId })],
-  });
+  job = maybeCompleteJob(
+    {
+      ...job,
+      steps,
+      ledger: [...job.ledger, note("info", "Step succeeded", { stepId })],
+    },
+    normalizeTeamRecord(await requireTeam(teamsPath, job.teamId)).roleCatalog,
+  );
   job = await saveJob(jobsPath, job);
   if (job.status === "running") {
     for (const step of job.steps) {

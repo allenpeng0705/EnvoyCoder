@@ -129,31 +129,25 @@ in the family's words. *Acceptance:* a recorded sequence of the phone answering 
 > and the host-connect access-gate fix so non-owner sessions can still call product RPC when
 > `socketMethods` is configured. A live phone recording answering an approval remains a manual check.
 
-**M5 — collaborative work (team → job → steps).** Orchestrator (origin EnvoyDev) creates a
-**team** (one copyable team token; members join; online via heartbeat), then **jobs** split into
-**steps** (`JobStep`) assigned to members (LAN then mesh). Parallel/async where writer locks allow;
-results merge on the origin. Failure: retry → reassign → fail with a job report. Offers carry
-`cwdHint`; accept is manual by default; stall automation ships only after the status board.
-*Proves:* D2 + team orchestration. *Acceptance:* team online; job completes across ≥2 members;
-named refuse; exhausted step follows §7 policy.
-Design: [`docs/envoydev-collaboration.md`](envoydev-collaboration.md) (normative, incl. error matrix).
+**M5 — collaborative work (team → job → steps).** Orchestrator (origin EnvoyDev) creates
+**team**(s) (copyable invite token; members join; online via heartbeat), then **Team jobs** on a
+**project**, split into **steps** (`JobStep`) assigned to members (LAN then mesh). Git is the
+content bus (local clones + pull/commit); EnvoyDev schedules (`dependsOn`, `worktreeKey`).
+Parallel/async where writer locks allow; results merge on the origin. Failure: retry → reassign →
+fail with a job report. Accept is manual by default; stall automation ships only after the status
+board. *Proves:* D2 + team orchestration. *Acceptance:* team online; job completes across ≥2
+members; named refuse; exhausted step follows §7 policy.
+Design + next UX plan: [`docs/envoydev-collaboration.md`](envoydev-collaboration.md) (§11, **§13**).
 
-> **Status:** Cross-daemon join (invite embeds origin WebSocket URL), inbound StepOffer delivery,
-> Accept/Refuse on the member (with refuse reason), accept → harness run + progress into the job
-> ledger, and §7 retry / refuse→reassign / job-failed / stall-on-no-progress / step deadlines /
-> continue-partial gaps / event-seq `hasGap` are wired. Peer membership heartbeats run on an
-> interval; joiners start as `unknown` until the first heartbeat. Origin Stop / kick / reassign /
-> stall-stop dial `coder.cancelInboundJobStep` (ack / abandon + reassign per `onStopIgnored`).
-> Pre-auth hardening (§4.2.1): live token expiry, per-member `memberToken`, offer `cancelNonce`,
-> accept requires real `runId` + live attempt, terminal progress bound to `resultRef`, inbound
-> approval bound to offer+run. Origin can answer remote step approvals via
-> `coder.answerJobStepApproval` (first wins). Stall automation remains behind the §4.6 ship-gate
-> toggle. Off-LAN member dial: SSH hints open a local-forward tunnel; pure `/p2p/` multiaddrs dial
-> through the daemon's mesh peer (`CLIENT_PROXY` + team-token session). Embedded mesh WS hops still
-> probe like LAN. Team tokens honour hard TTL + idle expiry (default 8h without activity).
-> Evidence: `apps/desktop/test/m5-two-daemon.test.ts` (join → offer → accept → stop, and peer
-> accept → `done` + `finalReport`); `m5-jobs.test.ts` covers expiry / superseded accept / progress
-> guards; `member-dial.test.ts` covers SSH/mesh dial seams.
+> **Status:** Control plane landed — cross-daemon join, inbound offers, Accept/Refuse → harness
+> run + ledger, §7 failure/stall/deadlines, heartbeats, remote cancel, pre-auth (§4.2.1), SSH/mesh
+> dial, role catalog + step **templates** (`suggestJobSteps` / `listJobStepTemplates`). Job create
+> today is still Settings → Teams (first project). Evidence: `m5-two-daemon.test.ts`,
+> `m5-jobs.test.ts`, `member-dial.test.ts`.
+>
+> **Next (§13):** Project-scoped **Team job** affordance (not “New job”); pick existing team or
+> Create team…; draft when crew incomplete; **Start** gated with guidance when members offline or
+> roles missing; rail row under the project. Multiple teams remain allowed.
 
 **M6 — packaging.** *Proves:* the app installs and starts on all three platforms, with evidence
 in CI rather than unit tests only.
@@ -184,7 +178,7 @@ Ordered after the 2026-09 composer-honesty sprint (gates green, Resume UI, Claud
 | Next | **Codex / Cursor thinking honesty** | Claude `effort` wired. Codex rejects `reasoning_effort` today; Cursor has no `thought_level` |
 | Release | **Mobile store: device screenshots + deploy privacy** | Listing URLs filled; re-capture shots at store sizes; deploy `EnvoyMesh/sites/privacy.html` to homeclaw |
 | Release | **M6 signing + install smoke** | Unsigned builders exist; signing/notarization and CI install-launch still owed |
-| Architecture | **M5 team / job orchestration** | Team-first + orchestrator + §7 failure matrix — `docs/envoydev-collaboration.md` |
+| Architecture | **M5 Team job from project (§13)** | Control plane done; next: project **Team job** + crew guidance — `envoydev-collaboration.md` §13 |
 | Polish | **History / sidebar nav render** | Model done; UI thin (`paseo-feature-parity` #7) |
 
 ## Explicitly not planned

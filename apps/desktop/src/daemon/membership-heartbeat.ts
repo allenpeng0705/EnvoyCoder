@@ -34,7 +34,7 @@ export function startMembershipHeartbeats(options: {
   let timer: ReturnType<typeof setInterval> | undefined;
 
   async function beatOne(m: TeamMembership): Promise<void> {
-    await call({
+    const result = await call({
       url: m.originWs,
       method: "coder.teamHeartbeat",
       params: {
@@ -43,9 +43,18 @@ export function startMembershipHeartbeats(options: {
         token: m.token,
         memberToken: m.memberToken,
         acceptPolicy: m.acceptPolicy,
+        rolesOffered: m.rolesOffered,
       },
       timeoutMs: 5_000,
     });
+    if (!result.ok) return;
+    const body = result.result as { rolesAssigned?: readonly string[] };
+    const { updateMembershipRolesAssigned } = await import("./memberships.js");
+    await updateMembershipRolesAssigned(
+      options.membershipsFile,
+      m.teamId,
+      body.rolesAssigned && body.rolesAssigned.length > 0 ? body.rolesAssigned : undefined,
+    );
   }
 
   async function beatNow(): Promise<void> {

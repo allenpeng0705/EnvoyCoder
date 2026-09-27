@@ -245,8 +245,28 @@ export interface AgentActions {
   getDaemonLog(): Promise<DaemonLogAnswer>;
 
   /* — Team / Job (M5) — */
-  createTeam(input: { label: string; ttlHours?: number }): Promise<
-    | { ok: true; team: { id: string; label: string; tokenExpiresAt: string; tokenGeneration: number; members: readonly unknown[]; createdAt: string; updatedAt: string }; token: string; invite: string }
+  createTeam(input: {
+    label: string;
+    memberLabel?: string;
+    rolesOffered?: readonly import("@envoydev/protocol").JobRole[];
+    roleCatalog?: readonly import("@envoydev/protocol").RoleDef[];
+    ttlHours?: number;
+  }): Promise<
+    | {
+        ok: true;
+        team: {
+          id: string;
+          label: string;
+          tokenExpiresAt: string;
+          tokenGeneration: number;
+          roleCatalog: readonly import("@envoydev/protocol").RoleDef[];
+          members: readonly unknown[];
+          createdAt: string;
+          updatedAt: string;
+        };
+        token: string;
+        invite: string;
+      }
     | Refusal
   >;
   listTeams(): Promise<
@@ -257,10 +277,12 @@ export interface AgentActions {
           label: string;
           tokenExpiresAt: string;
           tokenGeneration: number;
+          roleCatalog: readonly import("@envoydev/protocol").RoleDef[];
           members: ReadonlyArray<{
             id: string;
             label: string;
             rolesOffered: readonly string[];
+            rolesAssigned?: readonly string[];
             connection: { status: string; transport: string };
           }>;
           createdAt: string;
@@ -310,8 +332,22 @@ export interface AgentActions {
   stopJob(jobId: string): Promise<{ ok: true; job: import("@envoydev/protocol").Job } | Refusal>;
   stopJobStep(jobId: string, stepId: string, reason?: string): Promise<{ ok: true; job: import("@envoydev/protocol").Job } | Refusal>;
   reassignJobStep(jobId: string, stepId: string, memberId?: string): Promise<{ ok: true; job: import("@envoydev/protocol").Job } | Refusal>;
-  suggestJobSteps(jobId: string, hint?: string): Promise<
-    | { ok: true; steps: readonly unknown[]; note: string }
+  suggestJobSteps(
+    jobId: string,
+    options?: {
+      templateId?: string;
+      parallelCount?: number;
+      hint?: string;
+    },
+  ): Promise<
+    | { ok: true; templateId: string; steps: readonly unknown[]; note: string }
+    | Refusal
+  >;
+  listJobStepTemplates(): Promise<
+    | {
+        ok: true;
+        templates: ReadonlyArray<{ id: string; title: string; detail: string }>;
+      }
     | Refusal
   >;
   updateJobSteps(
@@ -356,6 +392,8 @@ export interface AgentActions {
           label: string;
           teamLabel: string;
           rolesOffered: readonly string[];
+          rolesAssigned?: readonly string[];
+          roleCatalog?: readonly import("@envoydev/protocol").RoleDef[];
           acceptPolicy: import("@envoydev/protocol").AcceptPolicy;
           joinedAt: string;
           originWs: string;
@@ -368,6 +406,25 @@ export interface AgentActions {
     memberId: string,
     acceptPolicy: import("@envoydev/protocol").AcceptPolicy,
   ): Promise<{ ok: true; member: unknown } | Refusal>;
+  setTeamRoleCatalog(
+    teamId: string,
+    roleCatalog: readonly import("@envoydev/protocol").RoleDef[],
+  ): Promise<{ ok: true; team: unknown } | Refusal>;
+  setMemberRolesAssigned(
+    teamId: string,
+    memberId: string,
+    roles: readonly import("@envoydev/protocol").JobRole[],
+  ): Promise<{ ok: true; member: unknown } | Refusal>;
+  setMemberRolesOffered(
+    teamId: string,
+    memberId: string,
+    rolesOffered: readonly import("@envoydev/protocol").JobRole[],
+  ): Promise<{ ok: true; member: unknown } | Refusal>;
+  suggestMemberRoles(
+    teamId: string,
+    memberId: string,
+    hint?: string,
+  ): Promise<{ ok: true; roles: readonly string[]; note: string } | Refusal>;
   /** Origin: pending/accepted offers for a job (Accept UI when local AcceptPolicy is manual). */
   listJobOffers(
     jobId: string,

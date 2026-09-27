@@ -15,8 +15,13 @@ import {
   type ConnectionDetail,
   DEFAULT_ACCEPT_POLICY,
   ENVOYDEV_ERRORS,
+  RESERVED_ORCHESTRATE_ROLE,
+  defaultRoleCatalog,
+  effectiveRoles,
+  isJobRoleId,
   type JobRole,
   type MemberStatus,
+  type RoleDef,
   type Team,
   type TeamMember,
   coderError,
@@ -44,6 +49,7 @@ export interface TeamPublic {
   label: string;
   tokenExpiresAt: string;
   tokenGeneration: number;
+  roleCatalog: readonly RoleDef[];
   members: readonly TeamMember[];
   createdAt: string;
   updatedAt: string;
@@ -87,15 +93,114 @@ function unknownConnection(hostHints?: string): ConnectionDetail {
   };
 }
 
+/** Ensure every on-disk team has a roleCatalog (migration from pre-catalog files). */
+export function normalizeTeamRecord(team: TeamRecord): TeamRecord {
+  if (team.roleCatalog && team.roleCatalog.length > 0) return team;
+  return { ...team, roleCatalog: defaultRoleCatalog() };
+}
+
+export function catalogIds(catalog: readonly RoleDef[]): ReadonlySet<string> {
+  return new Set(catalog.map((r) => r.id));
+}
+
+export function validateRoleCatalog(catalog: readonly RoleDef[]): RoleDef[] {
+  if (catalog.length === 0) {
+    throw coderError(ENVOYDEV_ERRORS.badRequest, "A team needs at least one role.", ref("error.team.badRoles"));
+  }
+  const seen = new Set<string>();
+  const out: RoleDef[] = [];
+  for (const raw of catalog) {
+    const id = raw.id.trim();
+    if (!id || seen.has(id)) {
+      throw coderError(
+        ENVOYDEV_ERRORS.badRequest,
+        "Role ids must be unique.",
+        ref("error.team.badRoles"),
+      );
+    }
+    if (!isJobRoleId(id)) {
+      throw coderError(
+        ENVOYDEV_ERRORS.badRequest,
+        `Role id “${id}” is not a valid slug.`,
+        ref("error.team.badRoles"),
+      );
+    }
+    seen.add(id);
+    const writer = id === RESERVED_ORCHESTRATE_ROLE ? false : !!raw.writer;
+    out.push({
+      id,
+      writer,
+      ...(raw.label?.trim() ? { label: raw.label.trim() } : {}),
+    });
+  }
+  if (!seen.has(RESERVED_ORCHESTRATE_ROLE)) {
+    throw coderError(
+      ENVOYDEV_ERRORS.badRequest,
+      "The role catalog must include orchestrate.",
+      ref("error.team.badRoles"),
+    );
+  }
+  return out;
+}
+
+/** Steps must use roles from the team catalog. */
+export function assertStepsInCatalog(
+  steps: readonly { role: string }[],
+  catalog: readonly RoleDef[],
+): void {
+  const ids = catalogIds(catalog);
+  for (const step of steps) {
+    if (!ids.has(step.role)) {
+      throw coderError(
+        ENVOYDEV_ERRORS.badRequest,
+        `Role “${step.role}” is not on this team.`,
+        ref("error.team.badRoles"),
+      );
+    }
+  }
+}
+
+/**
+ * Roles a remote member may claim. Rejects unknown ids and reserved orchestrate.
+ * Empty is allowed (origin may assign later).
+ */
+export function validateMemberRolesOffered(
+  roles: readonly JobRole[] | undefined,
+  catalog: readonly RoleDef[],
+  opts: { allowOrchestrate: boolean },
+): JobRole[] {
+  const list = roles ? [...roles] : [];
+  const ids = catalogIds(catalog);
+  for (const role of list) {
+    if (!ids.has(role)) {
+      throw coderError(
+        ENVOYDEV_ERRORS.badRequest,
+        `Role “${role}” is not on this team.`,
+        ref("error.team.badRoles"),
+      );
+    }
+    if (role === RESERVED_ORCHESTRATE_ROLE && !opts.allowOrchestrate) {
+      throw coderError(
+        ENVOYDEV_ERRORS.badRequest,
+        "Only this machine may offer the orchestrator role.",
+        ref("error.team.badRoles"),
+      );
+    }
+  }
+  return list;
+}
+
 export function toPublic(team: TeamRecord): TeamPublic {
+  const normalized = normalizeTeamRecord(team);
   return {
-    id: team.id,
-    label: team.label,
-    tokenExpiresAt: team.tokenExpiresAt,
-    tokenGeneration: team.tokenGeneration,
-    members: team.members.map(({ memberTokenHash: _h, ...m }) => m),
-    createdAt: team.createdAt,
-    updatedAt: team.updatedAt,
+    id: normalized.id,
+    label: normalized.label,
+    tokenExpiresAt: normalized.tokenExpiresAt,
+    tokenGeneration: normalized.tokenGeneration,
+    roleCatalog: normalized.roleCatalog,
+    members: normalized.members.map(({ memberTokenHash: _h, ...m }) => m),
+    createdAt: normalized.createdAt,
+    updatedAt: normalized.updatedAt,
   };
 }
 
@@ -106,7 +211,13 @@ export async function readTeamFile(path: string): Promise<TeamFile> {
     if (typeof parsed !== "object" || parsed === null || typeof parsed.teams !== "object") {
       return { teams: {} };
     }
-    return parsed;
+    const teams: Record<string, TeamRecord> = {};
+    for (const [id, team] of Object.entries(parsed.teams)) {
+      if (team && typeof team === "object") {
+        teams[id] = normalizeTeamRecord(team as TeamRecord);
+      }
+    }
+    return { teams };
   } catch (error) {
     if (isMissing(error)) return { teams: {} };
     return { teams: {} };
@@ -142,23 +253,41 @@ export async function touchTeamActivity(
   await writeTeamFile(path, file);
 }
 
-function buildInvite(token: string, originWs: string, label: string): string {
-  return encodeTeamInvite({ token, originWs, label });
+function buildInvite(token: string, originWs: string, label: string, roleCatalog: readonly RoleDef[]): string {
+  return encodeTeamInvite({ token, originWs, label, roleCatalog });
 }
 
 export async function createTeam(
   path: string,
-  input: { label: string; ttlHours?: number; originWs: string },
+  input: {
+    label: string;
+    memberLabel?: string;
+    rolesOffered?: readonly JobRole[];
+    roleCatalog?: readonly RoleDef[];
+    ttlHours?: number;
+    originWs: string;
+  },
   now: () => Date = () => new Date(),
 ): Promise<{ team: TeamPublic; token: string; invite: string }> {
   const file = await readTeamFile(path);
   const at = now();
   const token = mintToken();
   const ttlMs = (input.ttlHours ?? 24) * 60 * 60 * 1000;
+  const roleCatalog = validateRoleCatalog(input.roleCatalog ?? defaultRoleCatalog());
+  const offered = validateMemberRolesOffered(
+    input.rolesOffered && input.rolesOffered.length > 0
+      ? input.rolesOffered
+      : roleCatalog.map((r) => r.id),
+    roleCatalog,
+    { allowOrchestrate: true },
+  );
+  if (!offered.includes(RESERVED_ORCHESTRATE_ROLE)) {
+    offered.unshift(RESERVED_ORCHESTRATE_ROLE);
+  }
   const localMember: TeamMember = {
     id: "local",
-    label: "This machine",
-    rolesOffered: ["orchestrate", "plan", "implement", "review", "observe"],
+    label: (input.memberLabel ?? "This machine").trim() || "This machine",
+    rolesOffered: offered,
     joinedAt: at.toISOString(),
     connection: onlineLocal(),
     acceptPolicy: { ...DEFAULT_ACCEPT_POLICY },
@@ -170,6 +299,7 @@ export async function createTeam(
     tokenHash: hashToken(token),
     tokenExpiresAt: new Date(at.getTime() + ttlMs).toISOString(),
     tokenGeneration: 1,
+    roleCatalog,
     members: [localMember],
     createdAt: at.toISOString(),
     updatedAt: at.toISOString(),
@@ -181,7 +311,7 @@ export async function createTeam(
   return {
     team: toPublic(record),
     token,
-    invite: buildInvite(token, input.originWs, record.label),
+    invite: buildInvite(token, input.originWs, record.label, roleCatalog),
   };
 }
 
@@ -255,7 +385,7 @@ export function buildMemberStatusBoard(
     return {
       memberId: m.id,
       label: m.label,
-      rolesOffered: m.rolesOffered,
+      rolesOffered: effectiveRoles(m),
       connection: m.connection,
       ...(currentStepId ? { currentStepId } : {}),
       ...(currentRunId ? { currentRunId } : {}),
@@ -305,7 +435,7 @@ export async function rotateTeamToken(
   return {
     team: toPublic(next),
     token,
-    invite: buildInvite(token, input.originWs, next.label),
+    invite: buildInvite(token, input.originWs, next.label, normalizeTeamRecord(next).roleCatalog),
   };
 }
 
@@ -339,10 +469,8 @@ export async function joinTeam(
   if (tokenExpired(team, at)) {
     throw coderError(ENVOYDEV_ERRORS.teamExpired, "That team token has expired.", ref("error.team.expired"));
   }
-  const roles: JobRole[] =
-    input.rolesOffered && input.rolesOffered.length > 0
-      ? [...input.rolesOffered]
-      : ["implement", "review"];
+  const catalog = normalizeTeamRecord(team).roleCatalog;
+  const roles = validateMemberRolesOffered(input.rolesOffered, catalog, { allowOrchestrate: false });
   const label = input.label.trim();
   // Same machine rejoining (same hostHints, else same label): refresh the row instead of a zombie duplicate.
   const existingIdx = team.members.findIndex(
@@ -354,16 +482,19 @@ export async function joinTeam(
   );
   const memberId = existingIdx >= 0 ? team.members[existingIdx]!.id : randomUUID();
   const memberToken = mintToken();
+  const prior = existingIdx >= 0 ? team.members[existingIdx]! : undefined;
   const member: TeamMember = {
     id: memberId,
     label,
     rolesOffered: roles,
+    ...(prior?.rolesAssigned && prior.rolesAssigned.length > 0
+      ? { rolesAssigned: prior.rolesAssigned }
+      : {}),
     ...(input.hostHints !== undefined ? { hostHints: input.hostHints } : {}),
-    joinedAt: existingIdx >= 0 ? team.members[existingIdx]!.joinedAt : at.toISOString(),
+    joinedAt: prior?.joinedAt ?? at.toISOString(),
     // §4.4: unknown until first dial / heartbeat — not silently "online".
     connection: unknownConnection(input.hostHints),
-    acceptPolicy:
-      existingIdx >= 0 ? team.members[existingIdx]!.acceptPolicy : { ...DEFAULT_ACCEPT_POLICY },
+    acceptPolicy: prior?.acceptPolicy ?? { ...DEFAULT_ACCEPT_POLICY },
     memberTokenHash: hashToken(memberToken),
   };
   const members =
@@ -372,6 +503,7 @@ export async function joinTeam(
       : [...team.members, member];
   const next: TeamRecord = {
     ...team,
+    roleCatalog: catalog,
     members,
     updatedAt: at.toISOString(),
     lastActivityAt: at.toISOString(),
@@ -389,6 +521,7 @@ export async function teamHeartbeat(
     token: string;
     memberToken: string;
     acceptPolicy?: AcceptPolicy;
+    rolesOffered?: readonly JobRole[];
   },
   now: () => Date = () => new Date(),
 ): Promise<ConnectionDetail> {
@@ -420,6 +553,11 @@ export async function teamHeartbeat(
       ref("error.team.badToken"),
     );
   }
+  const catalog = normalizeTeamRecord(team).roleCatalog;
+  const rolesOffered =
+    input.rolesOffered !== undefined
+      ? validateMemberRolesOffered(input.rolesOffered, catalog, { allowOrchestrate: false })
+      : row.rolesOffered;
   const connection: ConnectionDetail = {
     ...row.connection,
     status: "online",
@@ -430,11 +568,13 @@ export async function teamHeartbeat(
   const members = [...team.members];
   members[idx] = {
     ...row,
+    rolesOffered,
     connection,
     ...(input.acceptPolicy ? { acceptPolicy: input.acceptPolicy } : {}),
   };
   file.teams[team.id] = {
     ...team,
+    roleCatalog: catalog,
     members,
     updatedAt: at.toISOString(),
     lastActivityAt: at.toISOString(),
@@ -468,6 +608,162 @@ export async function setMemberAcceptPolicy(
   file.teams[team.id] = { ...team, members, updatedAt: new Date().toISOString() };
   await writeTeamFile(path, file);
   return members[idx]!;
+}
+
+/** Orchestrator override — empty clears so member rolesOffered apply again. */
+export async function setMemberRolesAssigned(
+  path: string,
+  input: { teamId: string; memberId: string; roles: readonly JobRole[] },
+): Promise<TeamMember> {
+  const file = await readTeamFile(path);
+  const team = file.teams[input.teamId];
+  if (!team) {
+    throw coderError(ENVOYDEV_ERRORS.teamMissing, "No team with that id.", ref("error.team.missing"));
+  }
+  const idx = team.members.findIndex((m) => m.id === input.memberId);
+  if (idx < 0) {
+    throw coderError(ENVOYDEV_ERRORS.badRequest, "That member is not on this team.", ref("error.team.unknownMember"));
+  }
+  const catalog = normalizeTeamRecord(team).roleCatalog;
+  const allowOrchestrate = input.memberId === "local";
+  const roles =
+    input.roles.length === 0
+      ? []
+      : validateMemberRolesOffered(input.roles, catalog, { allowOrchestrate });
+  if (allowOrchestrate && roles.length > 0 && !roles.includes(RESERVED_ORCHESTRATE_ROLE)) {
+    roles.unshift(RESERVED_ORCHESTRATE_ROLE);
+  }
+  const members = [...team.members];
+  const row = members[idx]!;
+  if (roles.length > 0) {
+    members[idx] = { ...row, rolesAssigned: roles };
+  } else {
+    const { rolesAssigned: _cleared, ...rest } = row;
+    members[idx] = rest;
+  }
+  file.teams[team.id] = { ...team, roleCatalog: catalog, members, updatedAt: new Date().toISOString() };
+  await writeTeamFile(path, file);
+  return members[idx]!;
+}
+
+/** Member (or origin for local) updates self-offered roles. */
+export async function setMemberRolesOffered(
+  path: string,
+  input: { teamId: string; memberId: string; rolesOffered: readonly JobRole[] },
+): Promise<TeamMember> {
+  const file = await readTeamFile(path);
+  const team = file.teams[input.teamId];
+  if (!team) {
+    throw coderError(ENVOYDEV_ERRORS.teamMissing, "No team with that id.", ref("error.team.missing"));
+  }
+  const idx = team.members.findIndex((m) => m.id === input.memberId);
+  if (idx < 0) {
+    throw coderError(ENVOYDEV_ERRORS.badRequest, "That member is not on this team.", ref("error.team.unknownMember"));
+  }
+  const catalog = normalizeTeamRecord(team).roleCatalog;
+  const allowOrchestrate = input.memberId === "local";
+  const rolesOffered = validateMemberRolesOffered(input.rolesOffered, catalog, { allowOrchestrate });
+  if (allowOrchestrate && !rolesOffered.includes(RESERVED_ORCHESTRATE_ROLE)) {
+    rolesOffered.unshift(RESERVED_ORCHESTRATE_ROLE);
+  }
+  const members = [...team.members];
+  members[idx] = { ...members[idx]!, rolesOffered };
+  file.teams[team.id] = { ...team, roleCatalog: catalog, members, updatedAt: new Date().toISOString() };
+  await writeTeamFile(path, file);
+  return members[idx]!;
+}
+
+export async function setTeamRoleCatalog(
+  path: string,
+  input: { teamId: string; roleCatalog: readonly RoleDef[] },
+): Promise<TeamPublic> {
+  const file = await readTeamFile(path);
+  const team = file.teams[input.teamId];
+  if (!team) {
+    throw coderError(ENVOYDEV_ERRORS.teamMissing, "No team with that id.", ref("error.team.missing"));
+  }
+  const roleCatalog = validateRoleCatalog(input.roleCatalog);
+  const ids = catalogIds(roleCatalog);
+  // Reject if any member still references a removed role (idle prune would surprise).
+  for (const m of team.members) {
+    for (const role of [...m.rolesOffered, ...(m.rolesAssigned ?? [])]) {
+      if (!ids.has(role)) {
+        throw coderError(
+          ENVOYDEV_ERRORS.badRequest,
+          `Cannot remove role “${role}” while a member still uses it.`,
+          ref("error.team.badRoles"),
+        );
+      }
+    }
+  }
+  const next: TeamRecord = {
+    ...team,
+    roleCatalog,
+    updatedAt: new Date().toISOString(),
+  };
+  file.teams[team.id] = next;
+  await writeTeamFile(path, file);
+  return toPublic(next);
+}
+
+/**
+ * Propose roles for a member when offered/assigned are empty (Phase 2).
+ * Heuristic only — human must confirm via setMemberRolesAssigned / setMemberRolesOffered.
+ * Never invents ids outside the team catalog; never includes orchestrate for remotes.
+ */
+export function suggestMemberRoles(
+  team: TeamRecord,
+  member: TeamMember,
+  hint?: string,
+): { roles: JobRole[]; note: string } {
+  const catalog = normalizeTeamRecord(team).roleCatalog;
+  const current = effectiveRoles(member);
+  if (current.length > 0) {
+    throw coderError(
+      ENVOYDEV_ERRORS.badRequest,
+      "That member already has roles. Clear the override or their offer first.",
+      ref("error.team.badRoles"),
+    );
+  }
+  const workers = catalog.filter((r) => r.id !== RESERVED_ORCHESTRATE_ROLE);
+  const workerIds = workers.map((r) => r.id);
+  if (workerIds.length === 0) {
+    return {
+      roles: [],
+      note: "This team has no worker roles to suggest. Add roles to the catalog first.",
+    };
+  }
+  const hintLower = hint?.toLowerCase() ?? "";
+  const byHint = workerIds.find(
+    (id) => hintLower.includes(id) || hintLower.includes(catalog.find((r) => r.id === id)?.label?.toLowerCase() ?? "\0"),
+  );
+  // Prefer a single primary: hint match → first writer → developer → first worker.
+  const writerId = workers.find((r) => r.writer)?.id;
+  let primary: JobRole =
+    byHint ??
+    (workerIds.includes("developer") ? "developer" : undefined) ??
+    writerId ??
+    workerIds[0]!;
+  // Optional second role from hint keywords (tester/review, document/doc).
+  const secondary: JobRole | undefined = (() => {
+    if (hintLower.includes("test") && workerIds.includes("tester") && primary !== "tester") return "tester";
+    if (hintLower.includes("design") && workerIds.includes("designer") && primary !== "designer") return "designer";
+    if (
+      (hintLower.includes("doc") || hintLower.includes("write")) &&
+      workerIds.includes("document") &&
+      primary !== "document"
+    ) {
+      return "document";
+    }
+    // Legacy catalog keywords
+    if (hintLower.includes("review") && workerIds.includes("review") && primary !== "review") return "review";
+    return undefined;
+  })();
+  const proposed: JobRole[] = secondary ? [primary, secondary] : [primary];
+  return {
+    roles: proposed,
+    note: "Proposal only — confirm to assign. Daemon does not auto-apply.",
+  };
 }
 
 export async function kickMember(path: string, teamId: string, memberId: string): Promise<void> {

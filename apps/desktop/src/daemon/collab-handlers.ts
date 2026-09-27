@@ -17,6 +17,8 @@ import {
   listMemberships,
   saveMembership,
   updateMembershipAcceptPolicy,
+  updateMembershipRolesAssigned,
+  updateMembershipRolesOffered,
 } from "./memberships.js";
 import {
   startMembershipHeartbeats,
@@ -41,6 +43,7 @@ import {
   stopJob,
   stopJobStep,
   suggestJobSteps,
+  listJobStepTemplates,
   updateJobSteps,
   readOffers,
 } from "./jobs.js";
@@ -55,6 +58,10 @@ import {
   requireTeam,
   rotateTeamToken,
   setMemberAcceptPolicy,
+  setMemberRolesAssigned,
+  setMemberRolesOffered,
+  setTeamRoleCatalog,
+  suggestMemberRoles,
   teamHeartbeat,
   teamTokenPlain,
   toPublic,
@@ -126,6 +133,9 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
       requireOwnerWindow(context, "coder.createTeam");
       const input = parseRpcParams("coder.createTeam", params) as {
         label: string;
+        memberLabel?: string;
+        rolesOffered?: JobRole[];
+        roleCatalog?: import("@envoydev/protocol").RoleDef[];
         ttlHours?: number;
       };
       return createTeam(deps.paths.teamsFile, {
@@ -187,7 +197,11 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
         const remote = await peerCall(deps)<{
           teamId: string;
           memberId: string;
-          team: { id: string; label: string };
+          team: {
+            id: string;
+            label: string;
+            roleCatalog?: readonly import("@envoydev/protocol").RoleDef[];
+          };
           memberToken: string;
         }>({
           url: invite.originWs,
@@ -215,7 +229,12 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
           token: invite.token,
           memberToken: remote.result.memberToken,
           originWs: normalizeWsUrl(invite.originWs),
-          rolesOffered: input.rolesOffered ?? ["implement", "review"],
+          rolesOffered: input.rolesOffered ?? [],
+          ...(remote.result.team.roleCatalog
+            ? { roleCatalog: remote.result.team.roleCatalog }
+            : invite.roleCatalog
+              ? { roleCatalog: invite.roleCatalog }
+              : {}),
           acceptPolicy: { mode: "manual" },
           joinedAt: new Date().toISOString(),
         });
@@ -237,6 +256,7 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
         token: string;
         memberToken: string;
         acceptPolicy?: AcceptPolicy;
+        rolesOffered?: JobRole[];
       };
       const membership = (await listMemberships(deps.paths.membershipsFile)).find(
         (m) => m.teamId === input.teamId && m.memberId === input.memberId,
@@ -250,7 +270,11 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
             ref("error.team.badToken"),
           );
         }
-        const remote = await peerCall(deps)<{ ok: true; connection: unknown }>({
+        const remote = await peerCall(deps)<{
+          ok: true;
+          connection: unknown;
+          rolesAssigned?: readonly string[];
+        }>({
           url: membership.originWs,
           method: "coder.teamHeartbeat",
           params: {
@@ -259,15 +283,30 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
             token: membership.token,
             memberToken: membership.memberToken,
             acceptPolicy: membership.acceptPolicy,
+            rolesOffered: input.rolesOffered ?? membership.rolesOffered,
           },
         });
         if (!remote.ok) {
           throw coderError(ENVOYDEV_ERRORS.teamExpired, remote.message, ref("error.team.expired"));
         }
+        const assigned = remote.result.rolesAssigned;
+        await updateMembershipRolesAssigned(
+          deps.paths.membershipsFile,
+          membership.teamId,
+          assigned && assigned.length > 0 ? assigned : undefined,
+        );
         return remote.result;
       }
       const connection = await teamHeartbeat(deps.paths.teamsFile, input);
-      return { ok: true as const, connection };
+      const team = await requireTeam(deps.paths.teamsFile, input.teamId);
+      const row = team.members.find((m) => m.id === input.memberId);
+      return {
+        ok: true as const,
+        connection,
+        ...(row?.rolesAssigned && row.rolesAssigned.length > 0
+          ? { rolesAssigned: row.rolesAssigned }
+          : {}),
+      };
     },
     "coder.getTeamToken": async (params, context) => {
       requireOwnerWindow(context, "coder.getTeamToken");
@@ -329,6 +368,93 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
       const member = await setMemberAcceptPolicy(deps.paths.teamsFile, input);
       return { member };
     },
+    "coder.setTeamRoleCatalog": async (params, context) => {
+      requireOwnerWindow(context, "coder.setTeamRoleCatalog");
+      const input = parseRpcParams("coder.setTeamRoleCatalog", params) as {
+        teamId: string;
+        roleCatalog: import("@envoydev/protocol").RoleDef[];
+      };
+      const team = await setTeamRoleCatalog(deps.paths.teamsFile, input);
+      return { team };
+    },
+    "coder.setMemberRolesAssigned": async (params, context) => {
+      requireOwnerWindow(context, "coder.setMemberRolesAssigned");
+      const input = parseRpcParams("coder.setMemberRolesAssigned", params) as {
+        teamId: string;
+        memberId: string;
+        roles: JobRole[];
+      };
+      const member = await setMemberRolesAssigned(deps.paths.teamsFile, input);
+      return { member };
+    },
+    "coder.setMemberRolesOffered": async (params, context) => {
+      requireOwnerWindow(context, "coder.setMemberRolesOffered");
+      const input = parseRpcParams("coder.setMemberRolesOffered", params) as {
+        teamId: string;
+        memberId: string;
+        rolesOffered: JobRole[];
+      };
+      const membership = (await listMemberships(deps.paths.membershipsFile)).find(
+        (m) => m.teamId === input.teamId && m.memberId === input.memberId,
+      );
+      if (membership) {
+        await updateMembershipRolesOffered(
+          deps.paths.membershipsFile,
+          input.teamId,
+          input.rolesOffered,
+        );
+        await peerCall(deps)({
+          url: membership.originWs,
+          method: "coder.teamHeartbeat",
+          params: {
+            teamId: membership.teamId,
+            memberId: membership.memberId,
+            token: membership.token,
+            memberToken: membership.memberToken,
+            acceptPolicy: membership.acceptPolicy,
+            rolesOffered: input.rolesOffered,
+          },
+        });
+        return {
+          member: {
+            ...membership,
+            id: membership.memberId,
+            rolesOffered: input.rolesOffered,
+            joinedAt: membership.joinedAt,
+            connection: { status: "online" as const, transport: "lan" as const },
+            hostHints: selfHostHint(deps),
+          },
+        };
+      }
+      // Origin may only rewrite this machine's offered roles — remotes use heartbeat / membership.
+      if (input.memberId !== "local") {
+        throw coderError(
+          ENVOYDEV_ERRORS.badRequest,
+          "Assign roles with an override, or let the member update their own offer.",
+          ref("error.team.badRoles"),
+        );
+      }
+      const member = await setMemberRolesOffered(deps.paths.teamsFile, input);
+      return { member };
+    },
+    "coder.suggestMemberRoles": async (params, context) => {
+      requireOwnerWindow(context, "coder.suggestMemberRoles");
+      const input = parseRpcParams("coder.suggestMemberRoles", params) as {
+        teamId: string;
+        memberId: string;
+        hint?: string;
+      };
+      const team = await requireTeam(deps.paths.teamsFile, input.teamId);
+      const member = team.members.find((m) => m.id === input.memberId);
+      if (!member) {
+        throw coderError(
+          ENVOYDEV_ERRORS.badRequest,
+          "That member is not on this team.",
+          ref("error.team.unknownMember"),
+        );
+      }
+      return suggestMemberRoles(team, member, input.hint);
+    },
     "coder.kickMember": async (params, context) => {
       requireOwnerWindow(context, "coder.kickMember");
       const input = parseRpcParams("coder.kickMember", params) as {
@@ -366,7 +492,7 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
         policy?: Partial<import("@envoydev/protocol").FailurePolicy>;
       };
       await requireTeam(deps.paths.teamsFile, input.teamId);
-      const job = await createJob(deps.paths.jobsFile, input);
+      const job = await createJob(deps.paths.jobsFile, input, deps.paths.teamsFile);
       return { job };
     },
     "coder.listJobs": async (params) => {
@@ -404,7 +530,7 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
         jobId: string;
         steps: import("./jobs.js").JobStepDraft[];
       };
-      const job = await updateJobSteps(deps.paths.jobsFile, input.jobId, input.steps);
+      const job = await updateJobSteps(deps.paths.jobsFile, input.jobId, input.steps, deps.paths.teamsFile);
       return { job };
     },
     "coder.startJob": async (params, context) => {
@@ -719,10 +845,28 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
       requireOwnerWindow(context, "coder.suggestJobSteps");
       const input = parseRpcParams("coder.suggestJobSteps", params) as {
         jobId: string;
+        templateId?:
+          | "pipeline"
+          | "parallel-feature"
+          | "parallel-test"
+          | "hotfix"
+          | "solo"
+          | "design-spike"
+          | "docs-pass"
+          | "review-pass";
+        parallelCount?: number;
         hint?: string;
       };
       const job = await getJob(deps.paths.jobsFile, input.jobId);
-      return suggestJobSteps(job, input.hint);
+      return suggestJobSteps(job, {
+        ...(input.templateId ? { templateId: input.templateId } : {}),
+        ...(input.parallelCount !== undefined ? { parallelCount: input.parallelCount } : {}),
+        ...(input.hint ? { hint: input.hint } : {}),
+      });
+    },
+    "coder.listJobStepTemplates": async (_params, context) => {
+      requireOwnerWindow(context, "coder.listJobStepTemplates");
+      return { templates: listJobStepTemplates() };
     },
     "coder.setJobStallAutomation": async (params, context) => {
       requireOwnerWindow(context, "coder.setJobStallAutomation");

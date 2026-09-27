@@ -387,6 +387,10 @@ export function createCollabInboundHandlers(deps: CollabDeps): Partial<Record<st
           label: m.label,
           teamLabel: m.teamLabel,
           rolesOffered: m.rolesOffered,
+          ...(m.rolesAssigned && m.rolesAssigned.length > 0
+            ? { rolesAssigned: m.rolesAssigned }
+            : {}),
+          ...(m.roleCatalog && m.roleCatalog.length > 0 ? { roleCatalog: m.roleCatalog } : {}),
           acceptPolicy: m.acceptPolicy,
           joinedAt: m.joinedAt,
           originWs: m.originWs,

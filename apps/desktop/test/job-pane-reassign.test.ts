@@ -20,8 +20,8 @@ function member(
 describe("suggestReassignMember", () => {
   it("picks the next online peer that offers the step role", () => {
     const board = [
-      member({ memberId: "local", label: "This machine", rolesOffered: ["implement"] }),
-      member({ memberId: "peer-a", label: "laptop", rolesOffered: ["implement", "review"] }),
+      member({ memberId: "local", label: "This machine", rolesOffered: ["developer"] }),
+      member({ memberId: "peer-a", label: "laptop", rolesOffered: ["developer", "tester"] }),
       member({
         memberId: "peer-b",
         label: "desk",
@@ -29,13 +29,13 @@ describe("suggestReassignMember", () => {
         connection: { status: "offline", transport: "none" },
       }),
     ];
-    const next = suggestReassignMember(board, { role: "implement", assigneeMemberId: "local" });
+    const next = suggestReassignMember(board, { role: "developer", assigneeMemberId: "local" });
     expect(next?.label).toBe("laptop");
   });
 
   it("returns undefined when nobody else is eligible", () => {
     const board = [
-      member({ memberId: "local", label: "This machine", rolesOffered: ["implement"] }),
+      member({ memberId: "local", label: "This machine", rolesOffered: ["developer"] }),
       member({
         memberId: "peer-a",
         label: "laptop",
@@ -43,6 +43,6 @@ describe("suggestReassignMember", () => {
         connection: { status: "online", transport: "lan" },
       }),
     ];
-    expect(suggestReassignMember(board, { role: "implement", assigneeMemberId: "local" })).toBeUndefined();
+    expect(suggestReassignMember(board, { role: "developer", assigneeMemberId: "local" })).toBeUndefined();
   });
 });

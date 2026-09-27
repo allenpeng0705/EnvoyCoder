@@ -20,16 +20,21 @@ import {
   type JobRole,
   type JobStep,
   type JobStepAttempt,
+  type RoleDef,
   type StallPolicy,
   type StepOffer,
   coderError,
+  effectiveRoles,
+  isWriterRole,
   shouldAutoAccept,
 } from "@envoydev/protocol";
 
 import { ref } from "./messages.js";
 import {
   type TeamRecord,
+  assertStepsInCatalog,
   memberOnlineForAssign,
+  normalizeTeamRecord,
   requireTeam,
   teamTokenPlain,
   touchTeamActivity,
@@ -40,6 +45,14 @@ import {
   acceptJobStepOffer,
   refuseJobStepOffer,
 } from "./job-offers.js";
+import {
+  buildJobStepTemplate,
+  listJobStepTemplates,
+  type JobStepTemplateId,
+  type SuggestJobStepsOptions,
+} from "./job-step-templates.js";
+
+export { listJobStepTemplates, type JobStepTemplateId, type SuggestJobStepsOptions };
 
 export interface JobFile {
   jobs: Record<string, Job>;
@@ -141,24 +154,6 @@ function draftToStep(jobId: string, draft: JobStepDraft): JobStep {
   };
 }
 
-/** One writer (`implement`) per worktreeKey among non-terminal steps. */
-export function assertWriterLocks(steps: readonly JobStep[]): void {
-  const writers = new Map<string, string>();
-  for (const step of steps) {
-    if (step.role !== "implement") continue;
-    if (step.status === "succeeded" || step.status === "failed" || step.status === "cancelled") continue;
-    const existing = writers.get(step.worktreeKey);
-    if (existing !== undefined && existing !== step.id) {
-      throw coderError(
-        ENVOYDEV_ERRORS.badRequest,
-        `Two implement steps share worktree key “${step.worktreeKey}”.`,
-        ref("error.job.writerLock", { key: step.worktreeKey }),
-      );
-    }
-    writers.set(step.worktreeKey, step.id);
-  }
-}
-
 export function dependenciesSatisfied(step: JobStep, steps: readonly JobStep[]): boolean {
   if (!step.dependsOn || step.dependsOn.length === 0) return true;
   const byId = new Map(steps.map((s) => [s.id, s]));
@@ -166,6 +161,33 @@ export function dependenciesSatisfied(step: JobStep, steps: readonly JobStep[]):
     const dep = byId.get(id);
     return dep?.status === "succeeded";
   });
+}
+
+/**
+ * One writer role per worktreeKey among steps that can run *now* (catalog.writer).
+ * Sequential chains may share a key: later writers stay blocked by `dependsOn` until
+ * the earlier step succeeds and frees the lock.
+ */
+export function assertWriterLocks(
+  steps: readonly JobStep[],
+  catalog: readonly RoleDef[] = [],
+): void {
+  const writers = new Map<string, string>();
+  for (const step of steps) {
+    if (!isWriterRole(step.role, catalog)) continue;
+    if (step.status === "succeeded" || step.status === "failed" || step.status === "cancelled") continue;
+    // Pending but waiting on deps cannot race — same key is fine until they unlock.
+    if (step.status === "pending" && !dependenciesSatisfied(step, steps)) continue;
+    const existing = writers.get(step.worktreeKey);
+    if (existing !== undefined && existing !== step.id) {
+      throw coderError(
+        ENVOYDEV_ERRORS.badRequest,
+        `Two writer steps share worktree key “${step.worktreeKey}”.`,
+        ref("error.job.writerLock", { key: step.worktreeKey }),
+      );
+    }
+    writers.set(step.worktreeKey, step.id);
+  }
 }
 
 export async function createJob(
@@ -178,12 +200,19 @@ export async function createJob(
     steps?: readonly JobStepDraft[];
     policy?: Partial<FailurePolicy>;
   },
+  teamsPath?: string,
 ): Promise<Job> {
   const file = await readJobs(jobsPath);
   const at = new Date().toISOString();
   const id = randomUUID();
   const steps = (input.steps ?? []).map((d) => draftToStep(id, d));
-  assertWriterLocks(steps);
+  let catalog: readonly RoleDef[] = [];
+  if (teamsPath) {
+    const team = await requireTeam(teamsPath, input.teamId);
+    catalog = normalizeTeamRecord(team).roleCatalog;
+    assertStepsInCatalog(steps, catalog);
+  }
+  assertWriterLocks(steps, catalog);
   const job: Job = {
     id,
     teamId: input.teamId,
@@ -236,6 +265,7 @@ export async function updateJobSteps(
   jobsPath: string,
   jobId: string,
   drafts: readonly JobStepDraft[],
+  teamsPath?: string,
 ): Promise<Job> {
   const job = await getJob(jobsPath, jobId);
   if (job.status !== "drafting" && job.status !== "running") {
@@ -250,7 +280,13 @@ export async function updateJobSteps(
     if (existing && existing.status !== "pending") return existing;
     return draftToStep(jobId, d);
   });
-  assertWriterLocks(steps);
+  let catalog: readonly RoleDef[] = [];
+  if (teamsPath) {
+    const team = await requireTeam(teamsPath, job.teamId);
+    catalog = normalizeTeamRecord(team).roleCatalog;
+    assertStepsInCatalog(steps, catalog);
+  }
+  assertWriterLocks(steps, catalog);
   return saveJob(jobsPath, {
     ...job,
     steps,
@@ -282,7 +318,7 @@ export function pickAssignee(
     const sticky = team.members.find((m) => m.id === step.assigneeMemberId);
     if (
       sticky &&
-      sticky.rolesOffered.includes(step.role) &&
+      effectiveRoles(sticky).includes(step.role) &&
       memberOnlineForAssign(sticky, !!policy.allowDegradedAssignees)
     ) {
       return sticky.id;
@@ -291,7 +327,7 @@ export function pickAssignee(
   const candidates = team.members.filter(
     (m) =>
       !excludeMemberIds.has(m.id) &&
-      m.rolesOffered.includes(step.role) &&
+      effectiveRoles(m).includes(step.role) &&
       memberOnlineForAssign(m, !!policy.allowDegradedAssignees),
   );
   return candidates[0]?.id;
@@ -307,7 +343,10 @@ export async function startJob(
   if (job.steps.length === 0) {
     throw coderError(ENVOYDEV_ERRORS.badRequest, "Add at least one step before starting.", ref("error.job.noSteps"));
   }
-  assertWriterLocks(job.steps);
+  const team = await requireTeam(teamsPath, job.teamId);
+  const catalog = normalizeTeamRecord(team).roleCatalog;
+  assertStepsInCatalog(job.steps, catalog);
+  assertWriterLocks(job.steps, catalog);
   job = await saveJob(jobsPath, {
     ...job,
     status: "running",
@@ -454,12 +493,10 @@ export async function reassignJobStep(
     throw coderError(ENVOYDEV_ERRORS.stepMissing, "No step with that id.", ref("error.job.stepMissing"));
   }
   const reassignCount = (step.reassignCount ?? 0) + 1;
+  const catalog = normalizeTeamRecord(await requireTeam(teamsPath, job.teamId)).roleCatalog;
   if (reassignCount > job.policy.maxReassigns) {
-    job = await failStep(jobsPath, job, input.stepId, "reassign-exhausted");
+    job = await failStep(jobsPath, job, input.stepId, "reassign-exhausted", catalog);
     throw coderError(ENVOYDEV_ERRORS.stepExhausted, "Step exhausted retries and reassigns.", ref("error.job.exhausted"));
-  }
-  if (step.role === "implement") {
-    // Writer lock: only reassign on same worktreeKey — another member executes same key, not a new tree.
   }
   const exclude = new Set(input.excludeMemberIds ?? []);
   if (step.assigneeMemberId) exclude.add(step.assigneeMemberId);
@@ -511,7 +548,7 @@ export async function reassignJobStep(
     excludeMemberIds: exclude,
   });
   if (result.status === "refused" && result.policy === "no-candidate") {
-    job = await failStep(jobsPath, await getJob(jobsPath, job.id), input.stepId, "no-candidate");
+    job = await failStep(jobsPath, await getJob(jobsPath, job.id), input.stepId, "no-candidate", catalog);
     return { job };
   }
   return { job: await getJob(jobsPath, job.id), offer: result.offer };
@@ -525,6 +562,7 @@ export async function failJobStep(
   jobId: string,
   stepId: string,
   reason = "force-fail",
+  teamsPath?: string,
 ): Promise<Job> {
   const job = await getJob(jobsPath, jobId);
   const step = job.steps.find((s) => s.id === stepId);
@@ -534,7 +572,10 @@ export async function failJobStep(
   if (step.status === "succeeded" || step.status === "failed" || step.status === "cancelled") {
     return job;
   }
-  return failStep(jobsPath, job, stepId, reason);
+  const catalog = teamsPath
+    ? normalizeTeamRecord(await requireTeam(teamsPath, job.teamId)).roleCatalog
+    : [];
+  return failStep(jobsPath, job, stepId, reason, catalog);
 }
 
 export function buildReport(job: Job, summary: string): JobFinalReport {
@@ -552,12 +593,12 @@ export function buildReport(job: Job, summary: string): JobFinalReport {
   };
 }
 
-export function maybeCompleteJob(job: Job): Job {
+export function maybeCompleteJob(job: Job, catalog: readonly RoleDef[] = []): Job {
   const terminal = job.steps.every(
     (s) => s.status === "succeeded" || s.status === "failed" || s.status === "cancelled",
   );
   if (!terminal) return job;
-  const writerFailed = job.steps.some((s) => s.role === "implement" && s.status === "failed");
+  const writerFailed = job.steps.some((s) => isWriterRole(s.role, catalog) && s.status === "failed");
   const anyFailed = job.steps.some((s) => s.status === "failed");
   const continuePartial = job.policy.onStepExhausted === "continue-partial" && !writerFailed;
   const failed = anyFailed && !continuePartial;
@@ -576,7 +617,13 @@ export function maybeCompleteJob(job: Job): Job {
   };
 }
 
-export async function failStep(jobsPath: string, job: Job, stepId: string, error: string): Promise<Job> {
+export async function failStep(
+  jobsPath: string,
+  job: Job,
+  stepId: string,
+  error: string,
+  catalog: readonly RoleDef[] = [],
+): Promise<Job> {
   const steps = job.steps.map((s) =>
     s.id === stepId
       ? {
@@ -596,7 +643,7 @@ export async function failStep(jobsPath: string, job: Job, stepId: string, error
     ledger: [...job.ledger, note("info", `Step failed (${error})`, { stepId })],
   };
   const step = steps.find((s) => s.id === stepId)!;
-  if (step.role === "implement" || job.policy.onStepExhausted === "fail-job") {
+  if (isWriterRole(step.role, catalog) || job.policy.onStepExhausted === "fail-job") {
     next = {
       ...next,
       status: "failed",
@@ -605,7 +652,7 @@ export async function failStep(jobsPath: string, job: Job, stepId: string, error
       ledger: [...next.ledger, note("report", `Job failed (${error})`, { stepId })],
     };
   } else {
-    next = maybeCompleteJob(next);
+    next = maybeCompleteJob(next, catalog);
   }
   return saveJob(jobsPath, next);
 }
@@ -631,39 +678,20 @@ export function retriesForAssignee(step: JobStep, memberId: string): number {
 }
 
 /**
- * After a run fails: retry same assignee (with backoff slots) or reassign / fail.
+ * Propose a step graph from a named template (or hint keywords). Proposal only —
+ * caller must `updateJobSteps` to commit; daemon never auto-starts.
  */
 export function suggestJobSteps(
   job: Job,
-  hint?: string,
-): { steps: JobStepDraft[]; note: string } {
-  const baseKey = job.projectId ?? "default";
-  const cwd = ".";
-  const proposed: JobStepDraft[] = [
-    {
-      role: "plan",
-      brief: hint?.trim() || `Plan: ${job.goal.slice(0, 200)}`,
-      worktreeKey: `${baseKey}:plan`,
-      cwdHint: cwd,
-    },
-    {
-      role: "implement",
-      brief: `Implement: ${job.title}`,
-      worktreeKey: `${baseKey}:main`,
-      cwdHint: cwd,
-      dependsOn: [],
-    },
-    {
-      role: "review",
-      brief: `Review: ${job.title}`,
-      worktreeKey: `${baseKey}:review`,
-      cwdHint: cwd,
-    },
-  ];
-  // Wire dependsOn after ids would exist — caller commits via updateJobSteps
+  options?: SuggestJobStepsOptions | string,
+): { templateId: JobStepTemplateId; steps: JobStepDraft[]; note: string } {
+  const opts: SuggestJobStepsOptions =
+    typeof options === "string" ? { hint: options } : (options ?? {});
+  const built = buildJobStepTemplate(job, opts);
   return {
-    steps: proposed,
-    note: "Proposal only — review and save steps to commit. Daemon does not auto-start.",
+    templateId: built.templateId,
+    steps: built.steps,
+    note: built.note,
   };
 }
 

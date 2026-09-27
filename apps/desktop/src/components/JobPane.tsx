@@ -12,7 +12,7 @@ import type { AgentActions } from "../state/agent-actions.js";
 
 type LedgerFilter = "all" | "step" | "member";
 
-const AUTO_ACCEPT_ROLES = ["plan", "implement", "review", "observe"] as const satisfies readonly JobRole[];
+const AUTO_ACCEPT_ROLES = ["developer", "tester", "designer", "document"] as const satisfies readonly JobRole[];
 
 function rolesFromPolicy(policy: AcceptPolicy | undefined): readonly JobRole[] {
   if (policy?.mode !== "auto-roles") return [];
@@ -55,6 +55,9 @@ export function JobPane(props: {
   const [ledgerStepId, setLedgerStepId] = useState<string>("");
   const [ledgerMemberId, setLedgerMemberId] = useState<string>("");
   const [localAcceptRoles, setLocalAcceptRoles] = useState<readonly JobRole[]>([]);
+  const [templates, setTemplates] = useState<ReadonlyArray<{ id: string; title: string; detail: string }>>([]);
+  const [templateId, setTemplateId] = useState<string>("pipeline");
+  const [parallelCount, setParallelCount] = useState(2);
 
   const reload = useCallback(async () => {
     const result = await props.agents.getJob(props.jobId);
@@ -106,6 +109,14 @@ export function JobPane(props: {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    void props.agents.listJobStepTemplates().then((r) => {
+      if (!r.ok) return;
+      setTemplates(r.templates);
+      if (r.templates[0]) setTemplateId(r.templates[0].id);
+    });
+  }, [props.agents]);
 
   async function act(fn: () => Promise<{ ok: true; job: Job } | { ok: false; message: string }>): Promise<void> {
     setBusy(true);
@@ -185,21 +196,75 @@ export function JobPane(props: {
               </button>
             </>
           ) : null}
+          <label className="job-pane__template">
+            <span className="settings__note">{t("job.pane.template")}</span>
+            <select
+              value={templateId}
+              disabled={busy}
+              data-testid="job-template"
+              onChange={(e) => setTemplateId(e.target.value)}
+              title={templates.find((x) => x.id === templateId)?.detail}
+            >
+              {(templates.length > 0 ? templates : [{ id: "pipeline", title: "Design → code → test → docs", detail: "" }]).map(
+                (tmpl) => (
+                  <option key={tmpl.id} value={tmpl.id} title={tmpl.detail}>
+                    {tmpl.title}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+          {templateId === "parallel-feature" || templateId === "parallel-test" ? (
+            <label className="job-pane__template">
+              <span className="settings__note">{t("job.pane.parallelCount")}</span>
+              <select
+                value={parallelCount}
+                disabled={busy}
+                data-testid="job-parallel-count"
+                onChange={(e) => setParallelCount(Number(e.target.value))}
+              >
+                {[2, 3, 4].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <button
             type="button"
             className="button"
             disabled={busy}
+            data-testid="job-suggest-steps"
             onClick={() => {
-              void props.agents.suggestJobSteps(job.id).then((r) => {
-                if (!r.ok) {
-                  setNotice(r.message);
-                  return;
-                }
-                const preview = (r.steps as { role: string; brief: string }[])
-                  .map((s) => `${s.role}: ${s.brief}`)
-                  .join(" · ");
-                setNotice(`${r.note}${preview ? ` — ${preview}` : ""}`);
-              });
+              void props.agents
+                .suggestJobSteps(job.id, {
+                  templateId,
+                  ...(templateId === "parallel-feature" || templateId === "parallel-test"
+                    ? { parallelCount }
+                    : {}),
+                })
+                .then(async (r) => {
+                  if (!r.ok) {
+                    setNotice(r.message);
+                    return;
+                  }
+                  const drafts = r.steps as ReadonlyArray<{
+                    id?: string;
+                    role: JobRole;
+                    brief: string;
+                    worktreeKey: string;
+                    cwdHint: string;
+                    dependsOn?: readonly string[];
+                  }>;
+                  const preview = drafts.map((s) => s.role).join(" → ");
+                  if (!window.confirm(`${r.note}\n\n${preview}\n\n${t("job.pane.suggestConfirm")}`)) {
+                    setNotice(`${r.note} — ${preview}`);
+                    return;
+                  }
+                  await act(() => props.agents.updateJobSteps(job.id, drafts));
+                  setNotice(t("job.pane.suggestApplied"));
+                });
             }}
           >
             {t("job.pane.suggest")}
@@ -402,10 +467,10 @@ export function JobPane(props: {
                     <legend className="setting__title">{t("job.pane.localAutoAccept")}</legend>
                     {(
                       [
-                        ["plan", "settings.teams.role.plan"],
-                        ["implement", "settings.teams.role.implement"],
-                        ["review", "settings.teams.role.review"],
-                        ["observe", "settings.teams.role.observe"],
+                        ["developer", "settings.teams.role.developer"],
+                        ["tester", "settings.teams.role.tester"],
+                        ["designer", "settings.teams.role.designer"],
+                        ["document", "settings.teams.role.document"],
                       ] as const
                     ).map(([role, key]) => (
                       <label key={role} className="settings__pairing-field">

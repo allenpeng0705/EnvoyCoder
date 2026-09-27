@@ -6,6 +6,8 @@
  * to the orchestrator (`docs/envoydev-collaboration.md` §4.1).
  */
 
+import type { RoleDef } from "@envoydev/protocol";
+
 export const TEAM_INVITE_PREFIX = "envoydev.team.v1.";
 
 export interface TeamInvitePayload {
@@ -15,6 +17,8 @@ export interface TeamInvitePayload {
   originWs: string;
   /** Optional display label for the invite card. */
   label?: string;
+  /** Optional role catalog so Join can render checkboxes before dialing. */
+  roleCatalog?: readonly RoleDef[];
 }
 
 export function encodeTeamInvite(payload: TeamInvitePayload): string {
@@ -22,8 +26,27 @@ export function encodeTeamInvite(payload: TeamInvitePayload): string {
     token: payload.token,
     originWs: payload.originWs,
     ...(payload.label ? { label: payload.label } : {}),
+    ...(payload.roleCatalog && payload.roleCatalog.length > 0
+      ? { roleCatalog: payload.roleCatalog }
+      : {}),
   });
   return `${TEAM_INVITE_PREFIX}${Buffer.from(json, "utf8").toString("base64url")}`;
+}
+
+function parseRoleCatalog(raw: unknown): RoleDef[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const out: RoleDef[] = [];
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null) continue;
+    const row = item as { id?: unknown; label?: unknown; writer?: unknown };
+    if (typeof row.id !== "string" || !/^[a-z][a-z0-9_-]{0,39}$/.test(row.id)) continue;
+    out.push({
+      id: row.id,
+      writer: row.writer === true,
+      ...(typeof row.label === "string" && row.label.trim() ? { label: row.label.trim() } : {}),
+    });
+  }
+  return out.length > 0 ? out : undefined;
 }
 
 /**
@@ -40,6 +63,7 @@ export function parseTeamInvite(raw: string): TeamInvitePayload {
         token?: unknown;
         originWs?: unknown;
         label?: unknown;
+        roleCatalog?: unknown;
       };
       if (typeof parsed.token !== "string" || parsed.token.length < 16) {
         throw new Error("bad invite token");
@@ -47,10 +71,12 @@ export function parseTeamInvite(raw: string): TeamInvitePayload {
       if (typeof parsed.originWs !== "string" || !/^wss?:\/\//.test(parsed.originWs)) {
         throw new Error("bad invite origin");
       }
+      const roleCatalog = parseRoleCatalog(parsed.roleCatalog);
       return {
         token: parsed.token,
         originWs: parsed.originWs,
         ...(typeof parsed.label === "string" ? { label: parsed.label } : {}),
+        ...(roleCatalog ? { roleCatalog } : {}),
       };
     } catch {
       throw new Error("That team invite is not valid.");

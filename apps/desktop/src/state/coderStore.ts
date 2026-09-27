@@ -1818,7 +1818,13 @@ export class CoderStore {
     return { ok: true, log: answer.value.log };
   }
 
-  async createTeam(input: { label: string; ttlHours?: number }) {
+  async createTeam(input: {
+    label: string;
+    memberLabel?: string;
+    rolesOffered?: readonly import("@envoydev/protocol").JobRole[];
+    roleCatalog?: readonly import("@envoydev/protocol").RoleDef[];
+    ttlHours?: number;
+  }) {
     return this.mutate("coder.createTeam", input, (result) => {
       const answer = result as { team: unknown; token: string; invite: string };
       return { ok: true as const, team: answer.team as never, token: answer.token, invite: answer.invite };
@@ -1942,15 +1948,41 @@ export class CoderStore {
     );
   }
 
-  async suggestJobSteps(jobId: string, hint?: string) {
+  async suggestJobSteps(
+    jobId: string,
+    options?: { templateId?: string; parallelCount?: number; hint?: string },
+  ) {
     return this.mutate(
       "coder.suggestJobSteps",
-      { jobId, ...(hint ? { hint } : {}) },
+      {
+        jobId,
+        ...(options?.templateId ? { templateId: options.templateId } : {}),
+        ...(options?.parallelCount !== undefined ? { parallelCount: options.parallelCount } : {}),
+        ...(options?.hint ? { hint: options.hint } : {}),
+      },
       (result) => {
-        const answer = result as { steps: readonly unknown[]; note: string };
-        return { ok: true as const, steps: answer.steps, note: answer.note };
+        const answer = result as {
+          templateId: string;
+          steps: readonly unknown[];
+          note: string;
+        };
+        return {
+          ok: true as const,
+          templateId: answer.templateId,
+          steps: answer.steps,
+          note: answer.note,
+        };
       },
     );
+  }
+
+  async listJobStepTemplates() {
+    return this.mutate("coder.listJobStepTemplates", {}, (result) => {
+      const answer = result as {
+        templates: ReadonlyArray<{ id: string; title: string; detail: string }>;
+      };
+      return { ok: true as const, templates: answer.templates };
+    });
   }
 
   async updateJobSteps(
@@ -2049,6 +2081,53 @@ export class CoderStore {
       (result) => {
         const answer = result as { member: unknown };
         return { ok: true as const, member: answer.member };
+      },
+    );
+  }
+
+  async setTeamRoleCatalog(
+    teamId: string,
+    roleCatalog: readonly import("@envoydev/protocol").RoleDef[],
+  ) {
+    return this.mutate("coder.setTeamRoleCatalog", { teamId, roleCatalog }, (result) => {
+      const answer = result as { team: unknown };
+      return { ok: true as const, team: answer.team };
+    });
+  }
+
+  async setMemberRolesAssigned(
+    teamId: string,
+    memberId: string,
+    roles: readonly import("@envoydev/protocol").JobRole[],
+  ) {
+    return this.mutate("coder.setMemberRolesAssigned", { teamId, memberId, roles }, (result) => {
+      const answer = result as { member: unknown };
+      return { ok: true as const, member: answer.member };
+    });
+  }
+
+  async setMemberRolesOffered(
+    teamId: string,
+    memberId: string,
+    rolesOffered: readonly import("@envoydev/protocol").JobRole[],
+  ) {
+    return this.mutate(
+      "coder.setMemberRolesOffered",
+      { teamId, memberId, rolesOffered },
+      (result) => {
+        const answer = result as { member: unknown };
+        return { ok: true as const, member: answer.member };
+      },
+    );
+  }
+
+  async suggestMemberRoles(teamId: string, memberId: string, hint?: string) {
+    return this.mutate(
+      "coder.suggestMemberRoles",
+      { teamId, memberId, ...(hint !== undefined ? { hint } : {}) },
+      (result) => {
+        const answer = result as { roles: readonly string[]; note: string };
+        return { ok: true as const, roles: answer.roles, note: answer.note };
       },
     );
   }

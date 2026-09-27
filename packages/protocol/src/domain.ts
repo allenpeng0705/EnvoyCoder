@@ -593,13 +593,82 @@ export interface TaskCollaboration {
 /**
  * Roles on a collaborative job step (`docs/envoydev-collaboration.md` §2).
  *
- * Superset of `TASK_ROLES` with `orchestrate` for the origin control-plane slot.
+ * Preset ids are the default catalog for new teams; teams may add custom role ids.
+ * Wire validation is the slug + membership in the team's `roleCatalog`, not a closed enum.
  */
-export const JOB_ROLES = ["orchestrate", "plan", "implement", "review", "observe"] as const;
-export type JobRole = (typeof JOB_ROLES)[number];
+export const JOB_ROLES = [
+  "orchestrate",
+  "developer",
+  "tester",
+  "designer",
+  "document",
+] as const;
+/** Any catalog role id (preset or custom). */
+export type JobRole = string;
+export type PresetJobRole = (typeof JOB_ROLES)[number];
 
-export function isJobRole(value: string): value is JobRole {
+/** Role id slug: letter start, then letters/digits/_/- (max 40). */
+export const JOB_ROLE_ID_PATTERN = /^[a-z][a-z0-9_-]{0,39}$/;
+
+export function isJobRoleId(value: string): boolean {
+  return JOB_ROLE_ID_PATTERN.test(value);
+}
+
+/** @deprecated Prefer `isJobRoleId` + catalog membership; kept for preset checks. */
+export function isJobRole(value: string): value is PresetJobRole {
   return (JOB_ROLES as readonly string[]).includes(value);
+}
+
+/** One entry in a team's role catalog — presets or orchestrator-defined custom roles. */
+export interface RoleDef {
+  id: JobRole;
+  /** Display label; defaults to `id` in UI when omitted. */
+  label?: string;
+  /**
+   * When true, steps with this role take the worktree lock (at most one such
+   * step per worktreeKey among concurrently eligible steps). Coding-team presets are
+   * all true — tester/designer/document also create and edit files. Only mark
+   * false for a rare read-only custom role.
+   */
+  writer: boolean;
+}
+
+/**
+ * Default roles for a coding team. Every worker role may edit the project
+ * (tests, design notes, docs, and code). Concurrent edits to the **same**
+ * worktreeKey are still serialized via the lock — use different keys to parallelize.
+ */
+export const PRESET_ROLE_CATALOG: readonly RoleDef[] = [
+  { id: "orchestrate", label: "Orchestrator", writer: false },
+  { id: "developer", label: "Developer", writer: true },
+  { id: "tester", label: "Tester", writer: true },
+  { id: "designer", label: "Designer", writer: true },
+  { id: "document", label: "Document", writer: true },
+];
+
+export const RESERVED_ORCHESTRATE_ROLE: JobRole = "orchestrate";
+
+export function defaultRoleCatalog(): RoleDef[] {
+  return PRESET_ROLE_CATALOG.map((r) => ({ ...r }));
+}
+
+export function isWriterRole(role: JobRole, catalog: readonly RoleDef[]): boolean {
+  const def = catalog.find((r) => r.id === role);
+  if (def) return def.writer;
+  // Legacy fallback when catalog is missing / role unknown: old `implement` + new `developer`.
+  return role === "implement" || role === "developer";
+}
+
+/**
+ * Scheduling roles: orchestrator override covers member self-offer until cleared.
+ * Empty → not a candidate.
+ */
+export function effectiveRoles(member: {
+  rolesOffered: readonly JobRole[];
+  rolesAssigned?: readonly JobRole[];
+}): readonly JobRole[] {
+  if (member.rolesAssigned && member.rolesAssigned.length > 0) return member.rolesAssigned;
+  return member.rolesOffered;
 }
 
 export const CONNECTION_STATUSES = [
@@ -641,6 +710,7 @@ export type RunPhase = (typeof RUN_PHASES)[number];
 export interface MemberStatus {
   memberId: string;
   label: string;
+  /** Effective roles for scheduling (override wins over self-offer). */
   rolesOffered: readonly JobRole[];
   connection: ConnectionDetail;
   currentStepId?: string;
@@ -707,7 +777,13 @@ export const DEFAULT_ACCEPT_POLICY: AcceptPolicy = {
 export interface TeamMember {
   id: string;
   label: string;
+  /** What this machine offers (member-written). */
   rolesOffered: readonly JobRole[];
+  /**
+   * Orchestrator override. When non-empty, covers `rolesOffered` for scheduling
+   * until cleared (`docs/envoydev-collaboration.md` §2).
+   */
+  rolesAssigned?: readonly JobRole[];
   /** Present on the origin for remote members; `"local"` for the origin machine itself. */
   hostHints?: string;
   joinedAt: string;
@@ -728,6 +804,8 @@ export interface Team {
   tokenExpiresAt: string;
   /** Token generation — increments on rotate. */
   tokenGeneration: number;
+  /** Preset + custom roles this team recognises. Always includes `orchestrate`. */
+  roleCatalog: readonly RoleDef[];
   members: readonly TeamMember[];
   createdAt: string;
   updatedAt: string;
@@ -1722,6 +1800,10 @@ export const RPC_METHODS = [
   "coder.joinTeam",
   "coder.teamHeartbeat",
   "coder.setMemberAcceptPolicy",
+  "coder.setTeamRoleCatalog",
+  "coder.setMemberRolesAssigned",
+  "coder.setMemberRolesOffered",
+  "coder.suggestMemberRoles",
   /**
    * Origin window only (not pre-auth): accept a pending offer assigned to `local`.
    * Peer `coder.acceptJobStepOffer` refuses local assignees — LAN preAuth looks like an owner session.
@@ -1743,6 +1825,7 @@ export const RPC_METHODS = [
   "coder.reassignJobStep",
   "coder.failJobStep",
   "coder.suggestJobSteps",
+  "coder.listJobStepTemplates",
   "coder.setJobStallAutomation",
   /** Origin → member: deliver a pending StepOffer. */
   "coder.inboundJobStepOffer",

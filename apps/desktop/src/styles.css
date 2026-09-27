@@ -4294,6 +4294,140 @@ button.explorer__change:hover {
   opacity: 0.85;
   overflow-wrap: anywhere;
 }
+
+/* Settings → Teams: create vs join as two ruled routes; roster cards with air. */
+.settings__teams {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.settings__teams-status {
+  margin: 0.25rem 0 0.75rem;
+}
+.settings__teams-invite {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0 0 1.25rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent, #4a7) 8%, transparent);
+}
+.settings__teams-invite .settings__pairing-value {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  padding: 0.35rem 0;
+  user-select: all;
+}
+.settings__teams-field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
+}
+.settings__teams-field .setting__title {
+  font-size: 0.85rem;
+}
+.settings__teams-roles {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+.settings__teams-roles legend {
+  padding: 0;
+  margin: 0 0 0.4rem;
+}
+.settings__teams-role-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+}
+.settings__teams-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.settings__teams-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.settings__teams-card,
+.settings__teams-offer {
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.settings__teams-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.75rem;
+}
+.settings__teams-members {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.settings__teams-offer-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+}
+.settings__teams-jobs {
+  margin-top: 1rem;
+}
+.settings__teams-catalog {
+  list-style: none;
+  margin: 0.35rem 0 0.5rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.settings__teams-catalog-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+}
+.settings__teams-add-role {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.settings__teams-member-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.35rem 0;
+  border-top: 1px solid color-mix(in srgb, var(--border, #333) 55%, transparent);
+}
+.settings__teams-member-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
 .settings__paired-list {
   list-style: none;
   margin: 0 0 1rem;
@@ -4311,3 +4445,15 @@ button.explorer__change:hover {
   border: 1px solid var(--border, #333);
   border-radius: 8px;
 }
+
+.job-pane__template {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.85rem;
+  max-width: 16rem;
+}
+.job-pane__template select {
+  min-width: 10rem;
+}
+

@@ -13,6 +13,11 @@ where they disagree, **this document wins** and the wire catches up in later sli
 
 **Naming:** the assignment unit under a Job is **`JobStep`** on the wire and in types. The UI
 says **Step**. Rail **`Task`** remains everyday single-agent work and must not be overloaded.
+Creating collaborative work from a project is labeled **Team job** (never “New job”).
+
+**Content bus:** multi-machine jobs depend on **Git**. Each member runs against a local clone
+(`cwdHint`); step briefs carry pull / commit / push. EnvoyDev schedules and locks
+(`dependsOn`, `worktreeKey`); it does not clone or sync the tree over the mesh (D2).
 
 ---
 
@@ -28,34 +33,77 @@ Team                    durable roster + team token + per-member join secret
 | Unit | Created by | Lives on | Purpose |
 |---|---|---|---|
 | **Team** | Orchestrator (origin EnvoyDev) | Origin | Members online, shared invite credential + per-member proof, roles available |
-| **Job** | Orchestrator | Origin | Complex goal; split plan; final report |
+| **Job** | Orchestrator | Origin | Complex goal; split plan; final report — scoped to a **project** when created from the rail |
 | **JobStep** | Orchestrator (split from Job) | Origin (assignment); execute on member | One assignable chunk (UI: **Step**) |
 | **Run** | Member daemon | Member (events streamed to origin) | Actual agent execution |
 | **Task** (rail) | Human / everyday coding | Local project | Unrelated to JobStep — do not conflate |
 
+An origin may own **multiple teams** (home vs work, client A vs lab). Default UX assumes one
+active team; create/job flows always allow pick-existing or create-another (§11.2 D).
+
 **Lifecycle order (mandatory):**
 
-1. Create **Team** (mint token; members join; heartbeats prove online).
-2. Create **Job**(s) against that team (only when enough members are online for the roles needed).
-3. Orchestrator **splits** the job into **steps** (`JobStep`) and **assigns** them.
-4. Members execute **in parallel / asynchronously** where safe.
-5. Orchestrator **collects**, **re-organizes**, and **reports** the final result.
-6. On failure: **retry → reassign → fail** (see §7) — never silent drop.
+1. Ensure a **Team** exists (mint token; members join; heartbeats prove online) — may be created
+   from the Teams page or inline while starting a Team job.
+2. Create a **Team job** on a **project** (draft OK without a full online crew).
+3. Orchestrator **splits** into **steps** (templates / Suggest) and reviews the graph.
+4. **Start** only when enough members are **online** and offer the roles the steps need — else
+   guide the user to fix the crew (§11.6), do not fail silently.
+5. Members execute **in parallel / asynchronously** where safe (Git moves content).
+6. Orchestrator **collects**, **re-organizes**, and **reports** the final result.
+7. On failure: **retry → reassign → fail** (see §7) — never silent drop.
 
-Do not invent the team inside every job. A team outlives a job; a job does not outlive its team
-token’s validity without rotation.
+Do not invent a throwaway team inside every job by default — reuse an existing team. A team
+outlives a job; a job does not outlive its team token’s validity without rotation. Never convert
+a rail **Task** into a Job; they are parallel entry points under the same project.
 
 ---
 
 ## 2. Roles
 
-| Role | Typical duty | Writer? |
+Each team carries a **role catalog** (preset + optional custom entries). Default presets
+(coding teams):
+
+| Role | Typical duty | Edits files? |
 |---|---|---|
-| `orchestrate` | Split job, assign, merge report (usually local to origin) | No (control plane) |
-| `plan` | Produce a plan / acceptance criteria | No |
-| `implement` | Edit the tree | **Yes** |
-| `review` | Review diffs / request changes | No |
-| `observe` | Read-only watcher | No |
+| `orchestrate` | Split job, assign, merge report (origin control plane) | No |
+| `developer` | Application / library code | **Yes** |
+| `tester` | Tests, fixtures, CI scripts | **Yes** |
+| `designer` | Design notes, UX sketches in-repo | **Yes** |
+| `document` | Docs, changelogs, comments | **Yes** |
+
+Every worker preset **edits files** — a role that cannot touch the tree is useless for
+EnvoyDev. Concurrent steps that edit still share a **worktree lock**: at most one
+editing step per `worktreeKey` at a time (`RoleDef.writer` in
+`packages/protocol/src/domain.ts`). Parallelize with different keys (e.g. `main` vs
+`docs`), not by marking a role “non-editing”. Only a custom read-only role should set
+`writer: false`. Older `implement` remains a locking role when no catalog entry says
+otherwise.
+
+The orchestrator may add custom role ids (slug) with that flag
+(`Team.roleCatalog` — `apps/desktop/src/daemon/teams.ts`).
+
+**Who sets a member’s roles**
+
+| Field | Who writes | Meaning |
+|---|---|---|
+| `rolesOffered` | Member (join / Settings) | What this machine is willing to do |
+| `rolesAssigned` | Origin only | Override that **covers** `rolesOffered` until cleared |
+
+```text
+effectiveRoles(member) =
+  rolesAssigned   if non-empty
+  else rolesOffered
+  else []         // not a scheduling candidate
+```
+
+(`effectiveRoles` in `packages/protocol/src/domain.ts`; status board + `pickAssignee`
+use it — `teams.ts` / `jobs.ts`.) Reserved `orchestrate` is only for the origin
+`local` member.
+
+**Suggest roles (Phase 2).** When both layers are empty, origin may call `coder.suggestMemberRoles`
+for a catalog-only **proposal** (refused if the member already has roles). Human confirm writes
+`rolesAssigned`. Daemon never auto-applies (`teams.ts` `suggestMemberRoles`).
 
 Roles are **labels + policy**, mapped onto agent modes/capabilities when the agent can honour them;
 otherwise disabled with a reason ([`paseo-feature-parity.md`](paseo-feature-parity.md)).
@@ -336,12 +384,34 @@ JobStep {
 
 | Allowed in parallel | Forbidden |
 |---|---|
-| Steps with **different** `worktreeKey`, or non-writer roles | Two **writer** (`implement`) steps on the **same** `worktreeKey` |
+| Steps with **different** `worktreeKey`, or non-writer roles | Two **writer** steps that are both runnable on the **same** `worktreeKey` |
 | Plan / review / observe alongside remote implement on another tree | Silent multi-writer on one cwd |
 | Async completion; orchestrator merges when dependencies satisfied | Assuming wall-clock order without a merge plan |
 
 Dependency edges (optional): `JobStep.dependsOn: JobStepId[]`. A step is schedulable only when
 dependencies are `succeeded` (or explicitly `skipped` by policy).
+
+**Writer lock vs sequence.** The lock refuses two *concurrently eligible* writers on one
+`worktreeKey` (`jobs.ts` `assertWriterLocks`). A pipeline may reuse the same key when later
+steps list earlier ones in `dependsOn` — only the unlocked head can run; Git pull/commit in
+each brief carries content between machines.
+
+**Step templates** (`coder.listJobStepTemplates` / `coder.suggestJobSteps`). Named graphs with
+stable draft ids and wired `dependsOn` — proposal only; the window confirms via
+`coder.updateJobSteps`. Hint keywords can pick a template when `templateId` is omitted.
+
+| Id | Shape |
+|---|---|
+| `pipeline` | design → developer → tester → document (same key, chained) |
+| `parallel-feature` | design → N developers (distinct keys) → integrate → test → docs |
+| `parallel-test` | developer → N testers (distinct keys) → docs |
+| `hotfix` | developer → tester |
+| `solo` | one developer end-to-end |
+| `design-spike` / `docs-pass` | single designer / document step |
+| `review-pass` | developer → two parallel testers → docs |
+
+`parallelCount` (2–4) widens fan-out templates. EnvoyDev schedules order and folder locks; Git
+remains the content bus.
 
 ---
 
@@ -545,16 +615,17 @@ Before implementing a slice, these must hold:
 | Phone pairing (QR) | **Different** product: owner’s phone client — not team join |
 | Team / Job / JobStep / team token / retry matrix | **Wired** — invite join, inbound offers, runs, §7, heartbeats, remote stop; pre-auth auth (§4.2.1: expiry, memberToken, cancelNonce, live-offer accept, remote cancel on kick/reassign/stall); stall toggle gated; two-daemon loopback proof |
 
-Implementation order (normative ship gate for stall):
+Implementation order (normative ship gate for stall) — **items 1–8 largely landed**; next slice §13:
 
-1. **Team + token + heartbeat + join** (copy/paste)
-2. **Job + JobStep ledger + assign/offer** (with `cwdHint`) on top of / beside existing offer RPC
-3. **Origin UI**: Teams page + Job pane status board + **manual** critical actions + ledger notes
-4. **Parallel scheduler + worktree locks**
-5. **§7 failure machine** (retry/reassign/fail + report)
-6. **LAN → mesh → SSH dial** for member channels (SSH tunnel + mesh CLIENT_PROXY)
-7. **`StallPolicy` automation** — only after step 3 is visible
-8. Orchestrator-agent assist (`orchestrate` role / suggest steps)
+1. **Team + token + heartbeat + join** (copy/paste) — done
+2. **Job + JobStep ledger + assign/offer** (with `cwdHint`) on top of / beside existing offer RPC — done
+3. **Origin UI**: Teams page + Job pane status board + **manual** critical actions + ledger notes — done (create still Teams-centric)
+4. **Parallel scheduler + worktree locks** — done (`dependsOn` + concurrent-eligible writer lock)
+5. **§7 failure machine** (retry/reassign/fail + report) — done
+6. **LAN → mesh → SSH dial** for member channels (SSH tunnel + mesh CLIENT_PROXY) — done
+7. **`StallPolicy` automation** — only after step 3 is visible — gated toggle
+8. Orchestrator-agent assist — **step templates** + Suggest → confirm (`coder.suggestJobSteps` / `listJobStepTemplates`) — done; LLM assist later
+9. **Project-scoped Team job UX** — §13 (next)
 
 ---
 
@@ -584,24 +655,25 @@ work:
 
 | Concept | Where it lives in the UI |
 |---|---|
-| **Team** | Settings-adjacent surface: **Teams** (or Mesh → Teams). Not a rail tree node for every repo. |
-| **Job** | Appears in the **rail as a job row** under the project that owns the work (or a top “Jobs” filter). Opening it opens the **Job pane**. |
-| **Task** (job child) | Rows **inside the Job pane** (checklist / board), not separate rail entries by default — avoids “project → job → task” fatigue. |
-| **Run** | Transcript region inside the Job pane (per-task tabs or a unified ledger with peer labels). |
+| **Team** | Settings → **Teams** (setup: invite, roles, rotate, dissolve). Not a rail tree node. Multiple teams allowed. |
+| **Team job** | Created from a **project** (same place as a new Task). Rail row under that project. Opens the **Job pane**. |
+| **Step** | Rows **inside the Job pane** (checklist / board), not separate rail entries. |
+| **Run** | Transcript / ledger region inside the Job pane. |
 
-Everyday single-agent tasks stay Project → Task. Jobs are an **opt-in mode** once a team exists.
+Everyday single-agent work stays Project → **Task**. Collaboration is Project → **Team job** (opt-in).
+Do **not** convert a Task into a Job.
 
 **Naming in the UI (user language):**
 
 | Internal | On screen |
 |---|---|
 | Team | Team |
-| Job | Job |
+| Job | **Team job** (create affordance); **Job** in the pane title once open |
 | Task (rail) | Task — everyday single-agent work |
 | JobStep | **Step** — never “task” next to rail tasks |
 | Run | (no extra word — show agent output) |
 | Member | Machine / teammate (prefer the member’s `label`) |
-| Orchestrator | **This machine** or omitted — users “run the job,” they don’t manage an orchestrator |
+| Orchestrator | **This machine** or omitted — users “run the team job,” they don’t manage an orchestrator |
 
 ### 11.2 Origin surfaces (orchestrator human)
 
@@ -619,16 +691,19 @@ Teams
      [Copy team token]  [Rotate token]  [Dissolve team]
 ```
 
-- **Create team** → show token once in a copy field + expiry; “Share this token with other
-  EnvoyDev machines (Paste in Join team).” No QR.
-- Member rows: **connection chip first** (colour = §4.4 status), then label, then roles.
+- **Create team** → team name, **this machine’s label**, role catalog (presets + custom),
+  roles this machine offers (`orchestrate` always on); then show token once + expiry.
+  “Share this invite with other EnvoyDev machines (Paste in Join team).” No QR.
+- Member rows: **connection chip first**, then label, then **effective** roles; origin may
+  set `rolesAssigned` (override) or clear it.
 - Rotate / Dissolve are **destructive**: confirm with the consequence (“everyone must paste a new
   token”; “running jobs will cancel”).
 
 **B. Join team (member machine)**
 
 Simple full-page or Settings card: **Paste team token** → **Join**. On success: “Joined *Desk +
-lab* as *laptop*.” Offer role checkboxes (implement / review / …). No peer list of others’ IPs.
+lab* as *laptop*.” Offer role checkboxes from the invite’s catalog (optional — host can assign
+later). No peer list of others’ IPs.
 
 **C. Job pane (primary orchestration UX)**
 
@@ -661,12 +736,26 @@ Rules:
 6. Final report is a first-class end state: headline outcome, then failures/attempts, then artifacts
    — not a raw JSON dump.
 
-**D. Creating a job**
+**D. Creating a Team job (from a project)**
 
-1. Pick team (must have ≥1 online member for required roles — else disable Start with reason).
-2. Goal text (the complex job).
-3. Optional: “Suggest steps” (orchestrator-agent) → editable step list before Start.
-4. Start → assignments go out; user watches Job pane.
+Primary entry: on a **project** in the rail / project chrome, **Team job** (parallel to creating
+a Task). Sets `Job.projectId` and a default `cwdHint` from that project’s path.
+
+Flow:
+
+1. **Team** — pick an existing team (default: only team, or last-used). If none: CTA **Create
+   team…** (inline or jump to Teams) → mint invite → wait for joins → return to the draft job.
+   If several teams: selector + **Create team…**.
+2. **Title + goal** for the complex work (draft saved even if the crew is incomplete).
+3. **Steps** — pick a step template → Suggest → confirm → `updateJobSteps` (Git pull/commit
+   language in briefs). User may edit before Start.
+4. **Start** — enabled only when enough members are **online** (or degraded, per §4.4) and their
+   effective roles cover every step role. Otherwise show a **fix crew** panel (§11.6) with
+   concrete next actions — never a mute disabled button with no explanation.
+5. After Start → offers go out; user watches the Job pane.
+
+Secondary: Settings → Teams may still list jobs / open the pane; project-scoped create is the
+canonical path. Teams page remains the place for invite, rotate, kick, dissolve, role catalog.
 
 ### 11.3 Member machine UX (peer)
 
@@ -718,11 +807,19 @@ so automation is never silent.
 
 ### 11.6 Empty, error, and waiting states
 
-- No team: Job create disabled — “Create a team and have at least one machine join.”
-- Team, all offline: “No machines online. Steps will wait until someone reconnects.”
-- Stall automation fired: ledger note + peer chip **Blocked · no progress**.
-- Partial job done: report banner **Finished with gaps** + list of failed steps.
-- Token expiring &lt; 2h: Teams banner **Team token expires soon** + Rotate.
+Guide the user to **fix** the crew; do not only disable Start.
+
+| Situation | Guidance (headline → action) |
+|---|---|
+| No team on this origin | “Create a team and invite at least one other machine.” → **Create team** |
+| Team, zero members joined (only origin) | “Share the team invite so another machine can join.” → **Copy invite** / open Teams |
+| Team, members offline / unknown | “Waiting for *laptop* to come online.” → list offline machines; **Open team** |
+| Online but missing roles for steps | “*Build-box* needs to offer **tester** (or assign it).” → Open team / role controls |
+| Start blocked for any of the above | Keep the Team job draft; Start disabled with the same reason + CTA |
+| Team OK, Start allowed | Clear primary **Start** |
+| Stall automation fired | Ledger note + peer chip **Blocked · no progress** |
+| Partial job done | Report banner **Finished with gaps** + failed steps |
+| Token expiring &lt; 2h | Teams banner **Team token expires soon** + Rotate |
 
 ### 11.7 Phone (M4 client of origin)
 
@@ -777,11 +874,55 @@ remaining implementation risks called out here.
 
 ### 12.4 Verdict
 
-The control-plane design is **ready to implement behind Team/Job/JobStep types**. UI ships in
-this order: **Teams (create/join/token/connection chips) → Job pane (steps + peers + stop/reassign)
-→ failure machine + report → LAN/mesh dial → stall automation → orchestrator-agent suggest steps**.
+Control plane + Teams page + Job pane + templates are **landed**. Next product slice is
+**project-scoped Team job** create + crew guidance (§13) — so users start collaborative work
+from the project like a Task, with clear fixes when the team or online roles are missing.
+
 Do not ship critical automation (`onStall` stop/kick) without the status board and ledger notes
 visible — silent stops train users to distrust the product.
+
+---
+
+## 13. Implementation plan — project Team job (next)
+
+Normative UX plan for the next M5 UI slice. Wire types already support `Job.projectId`, multiple
+teams, templates, and Start gating; this slice is **origin desktop UX + copy**.
+
+### 13.1 Goals
+
+1. Affordance **Team job** on a project (parallel to Task create) — not “New job”.
+2. Created job binds `projectId` + default `cwdHint` from that project.
+3. Team picker: existing team(s) **or** Create team…; one team → show it without a noisy picker.
+4. Draft allowed when crew incomplete; **Start** gated with §11.6 guidance + CTAs.
+5. Rail shows the Team job under its project; open → Job pane (templates / Start already there).
+6. Settings → Teams remains setup + secondary job list; not the only create path.
+
+### 13.2 Non-goals (this slice)
+
+- Converting Task ↔ Job  
+- Replacing Git with mesh file sync  
+- Single-team-only hard limit (keep multiple teams)  
+- Phone creating teams/jobs  
+- LLM step authoring beyond templates  
+
+### 13.3 Work items
+
+| # | Work | Proof |
+|---|---|---|
+| 1 | i18n: `Team job`, crew-guidance strings (§11.6) | locale keys + i18n test debt ok |
+| 2 | Project chrome / rail: **Team job** → `createJob({ projectId, … })` | component + unit/e2e |
+| 3 | Create sheet: team select \| Create team… \| title/goal → open Job pane | TeamsSection create can thin later |
+| 4 | Job pane Start: compute role coverage vs online board; show fix panel | reuse `teamStatus` board |
+| 5 | Docs already updated (§1 / §11); keep roadmap M5 status in sync | this § + `roadmap.md` |
+| 6 | Regression: existing Teams create + two-daemon job path still works | `m5-jobs` / `m5-two-daemon` |
+
+### 13.4 Acceptance
+
+- From a project with no team: **Team job** guides to create/invite; no mute dead-end.  
+- From a project with a team but offline peers: draft + fix guidance; Start blocked with reason.  
+- From a project with online peers covering step roles: Start offers steps; job appears under project.  
+- Multiple teams: user can pick or create another when starting a Team job.  
+- `npx vitest run` (touched tests) + `npm run build -w @envoydev/desktop` green.
 
 ---
 
