@@ -195,7 +195,4 @@ flutter run         # device or emulator; daemon reachable (same machine, LAN, o
 - EnvoyMesh (source) → [github.com/allenpeng0705/EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh)
 - EnvoyMesh (product) → [www.homeclaw.cn/envoy](https://www.homeclaw.cn/envoy)
 - envoy-harness (the built-in agent runtime) → [github.com/allenpeng0705/envoy-harness](https://github.com/allenpeng0705/envoy-harness)
-- Design notes → [`docs/envoydev-design.md`](docs/envoydev-design.md)
 - Collaborative Team jobs → [`docs/envoydev-collaboration.md`](docs/envoydev-collaboration.md)
-- Roadmap → [`docs/roadmap.md`](docs/roadmap.md)
-- Issues → [github.com/allenpeng0705/EnvoyCoder/issues](https://github.com/allenpeng0705/EnvoyCoder/issues)
