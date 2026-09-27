@@ -82,7 +82,7 @@ export const teams = {
   "settings.teams.removeRole": "移除",
   "settings.teams.customRoleId": "custom-role-id",
   "settings.teams.roleIdInvalid": "请使用小写标识（字母、数字、_ 或 -）。",
-  "settings.teams.roleIdDuplicate": "该角色 id 已在团队中。",
+  "settings.teams.roleIdDuplicate": "该角色已在团队中。",
   "settings.teams.roleLocked": "必需",
   "settings.teams.joinRolesHint": "可选 — 留空则可由主持方稍后分配角色。",
   "settings.teams.assignRoles": "分配角色（覆盖）",
@@ -180,4 +180,6 @@ export const teams = {
   "settings.teams.inviteDone": "完成",
   "settings.teams.createWaiting": "请先分享上方邀请。点「完成」后再创建另一个团队。",
   "settings.teams.role.orchestrate": "编排器",
+  "settings.teams.customRoleName": "角色名称",
+  "settings.teams.roleNameInvalid": "请输入角色名称。",
 } as const;

@@ -32,6 +32,7 @@ EnvoyDev is built on **[EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh)**
 - **Cancel, queue, or steer.** Queue waits for the turn. Steer interrupts it. The transcript records which one happened.
 - **Git where the work is.** Branch, fetch, pull, stash, merge — and hand a conflicted merge to an agent when you want help resolving it.
 - **Keep the daemon reachable.** App-managed by default; optionally run it as an OS service so the phone can reach a machine with no window open.
+- **Team jobs across machines.** Host a team, invite another EnvoyDev, and run collaborative steps on the same Git project — see [Team jobs](#team-jobs--work-across-machines) below.
 - **Resume after a disconnect.** Your work is on your machine — pick it up where you left off.
 - **macOS, Windows, and Linux.** All three are first-class. Version `0.1.0` — Settings → About compares this window with the service.
 
@@ -39,6 +40,42 @@ EnvoyDev is built on **[EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh)**
   <img src="project.png" alt="EnvoyDev project view" width="800">
 </p>
 <p align="center"><em>The project view — one task, one transcript, every agent.</em></p>
+
+### Team jobs — work across machines
+
+A **Team job** is collaborative work on a **Git project**: one machine hosts the team (origin), others join with an invite, and each step runs on a member’s local clone. Everyday **Tasks** stay single-agent on one machine; Team jobs are a separate entry under the project.
+
+Design and wire details: [`docs/envoydev-collaboration.md`](docs/envoydev-collaboration.md).
+
+#### How to use it
+
+1. **Prepare Git** — On every machine that will run a step, open the same project as a Git repo with at least one remote (`origin` is fine). Team jobs share work through Git, not the mesh.
+2. **Host a team** — On the origin desktop: Settings → **Teams** → **Create team**, or create one while starting a Team job. Copy the invite (shown once).
+3. **Join** — On another EnvoyDev: Settings → **Teams** → **Join team**, paste the invite, pick roles this machine offers.
+4. **Start a Team job** — On the origin, open a project → **Team job**. Choose (or create) a team, set title and goal, **Create draft**. Use step templates / Suggest in the Job pane, then **Start** when peers are online with the roles you need.
+5. **Phone (optional)** — A paired phone can watch the job and answer approvals; team admin and Start stay on the origin desktop.
+
+If you **Cancel** a Team job sheet after creating a new team and before **Create draft**, that unused solo team is removed so Settings does not fill with leftovers.
+
+#### Try two peers on one computer
+
+One EnvoyDev install is one identity — a second window attaches to the same daemon. For a real join, run **two homes**:
+
+```bash
+# Terminal A — origin
+ENVOYMESH_HOME=/tmp/envoy-origin npm run tauri:dev
+
+# Terminal B — peer
+ENVOYMESH_HOME=/tmp/envoy-peer npm run tauri:dev
+```
+
+Use the same Git project path (or two clones of the same remote) on both. Automated proof of the invite → join → offer path:
+
+```bash
+npx vitest run apps/desktop/test/m5-two-daemon.test.ts
+```
+
+---
 
 ### Phone (EnvoyDev Mobile)
 
@@ -97,6 +134,7 @@ The **EnvoyDev Mobile** app is the phone-side companion to your desktop. It pair
 - See your projects and tasks; start a new task with agent / model / mode
 - Read the live transcript
 - Answer approval cards
+- Watch a **Team job** and answer its approvals (create team / Start stay on the desktop)
 - Queue a follow-up or steer the run
 - Stop a run
 - Branch, stash, and resolve git conflicts (with an agent when you want)
@@ -158,5 +196,6 @@ flutter run         # device or emulator; daemon reachable (same machine, LAN, o
 - EnvoyMesh (product) → [www.homeclaw.cn/envoy](https://www.homeclaw.cn/envoy)
 - envoy-harness (the built-in agent runtime) → [github.com/allenpeng0705/envoy-harness](https://github.com/allenpeng0705/envoy-harness)
 - Design notes → [`docs/envoydev-design.md`](docs/envoydev-design.md)
+- Collaborative Team jobs → [`docs/envoydev-collaboration.md`](docs/envoydev-collaboration.md)
 - Roadmap → [`docs/roadmap.md`](docs/roadmap.md)
 - Issues → [github.com/allenpeng0705/EnvoyCoder/issues](https://github.com/allenpeng0705/EnvoyCoder/issues)

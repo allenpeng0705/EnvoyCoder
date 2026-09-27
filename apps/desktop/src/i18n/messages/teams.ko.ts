@@ -82,7 +82,7 @@ export const teams = {
   "settings.teams.removeRole": "제거",
   "settings.teams.customRoleId": "custom-role-id",
   "settings.teams.roleIdInvalid": "소문자 슬러그를 사용하세요(문자, 숫자, _ 또는 -).",
-  "settings.teams.roleIdDuplicate": "해당 역할 id가 이미 팀에 있습니다.",
+  "settings.teams.roleIdDuplicate": "그 역할은 이미 팀에 있습니다.",
   "settings.teams.roleLocked": "필수",
   "settings.teams.joinRolesHint": "선택 — 비워 두면 호스트가 나중에 역할을 할당할 수 있습니다.",
   "settings.teams.assignRoles": "역할 할당(덮어쓰기)",
@@ -180,4 +180,6 @@ export const teams = {
   "settings.teams.inviteDone": "완료",
   "settings.teams.createWaiting": "위 초대를 먼저 공유하세요. 다른 팀을 만들기 전에 완료를 누르세요.",
   "settings.teams.role.orchestrate": "오케스트레이터",
+  "settings.teams.customRoleName": "역할 이름",
+  "settings.teams.roleNameInvalid": "역할 이름을 입력하세요.",
 } as const;

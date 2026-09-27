@@ -77,6 +77,7 @@ import { capabilitiesFor, currentSearchPath, detectPlatform, type PlatformId } f
 import type { CoderPaths } from "@envoydev/host-bridge";
 
 import type { AcpLaunch } from "./acp/client.js";
+import { envoyDecisionLaunchEnv } from "./envoy-decision.js";
 import { envoyLlmBaseUrlArgs, envoyLlmLaunchEnv } from "./envoy-llm.js";
 import { ref } from "./messages.js";
 import type { MessageKey } from "../i18n/messages/en.js";
@@ -185,6 +186,8 @@ export function launchForHarness(input: LaunchInput): AcpLaunch {
         })()
       : undefined;
   const llmEnv = harness === "envoy-harness" ? envoyLlmLaunchEnv(input.paths, runProvider) : {};
+  const decisionEnv =
+    harness === "envoy-harness" ? envoyDecisionLaunchEnv(input.paths) : {};
   const baseUrlArgs = harness === "envoy-harness" ? envoyLlmBaseUrlArgs(input.paths, runProvider) : [];
   const withBaseUrl = (args: string[]): string[] =>
     baseUrlArgs.length === 0 ? args : [...args, ...baseUrlArgs];
@@ -239,6 +242,7 @@ export function launchForHarness(input: LaunchInput): AcpLaunch {
             }
           : {}),
         ...llmEnv,
+        ...decisionEnv,
         ...input.extraEnv,
       },
       // The catalogue's own wording for this gap, and it is **unchanged** on purpose: `drivable.test.ts`

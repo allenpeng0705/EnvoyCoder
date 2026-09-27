@@ -473,6 +473,23 @@ export const ko: Catalogue = {
   "settings.agents.envoyLlm.saving": "저장 중…",
   "settings.agents.envoyLlm.saved": "저장됨.",
   "settings.agents.envoyLlm.loading": "LLM 설정을 불러오는 중…",
+
+  "settings.agents.envoyDecision.heading": "Decision gate",
+  "settings.agents.envoyDecision.note":
+    "Optional System One (Laya / Jev) for Envoy Harness. Off by default. API keys stay in the host environment (for example TYPESAFE_API_KEY), not in this form.",
+  "settings.agents.envoyDecision.mode": "Mode",
+  "settings.agents.envoyDecision.modeOff": "Off",
+  "settings.agents.envoyDecision.modeShadow": "Shadow (log only)",
+  "settings.agents.envoyDecision.modeEnforce": "Enforce (auto-allow when safe)",
+  "settings.agents.envoyDecision.backend": "Backend",
+  "settings.agents.envoyDecision.endpoint": "Endpoint",
+  "settings.agents.envoyDecision.endpoint.placeholder":
+    "http://127.0.0.1:8000/v1/systemone",
+  "settings.agents.envoyDecision.endpoint.detail":
+    "Laya loopback or a documented Jev URL. Leave empty for the backend default.",
+  "settings.agents.envoyDecision.save": "Save",
+  "settings.agents.envoyDecision.saving": "Saving…",
+  "settings.agents.envoyDecision.saved": "Saved.",
   "settings.agents.olderDaemon": "이 창이 연결된 데몬은 이전 빌드이고 에이전트 목록의 이 부분이 없어서 여기에 표시할 수 없습니다. 창과 데몬이 같은 빌드가 되도록 EnvoyDev를 다시 시작하세요.",
   "settings.agents.catalog.heading": "카탈로그",
   "settings.agents.catalog.browse": "카탈로그 보기",

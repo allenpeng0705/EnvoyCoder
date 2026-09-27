@@ -471,6 +471,22 @@ export const zh: Catalogue = {
   "settings.agents.envoyLlm.saving": "正在保存…",
   "settings.agents.envoyLlm.saved": "已保存。",
   "settings.agents.envoyLlm.loading": "正在加载 LLM 设置…",
+  "settings.agents.envoyDecision.heading": "决策门控",
+  "settings.agents.envoyDecision.note":
+    "可选的 System One（Laya / Jev），供 Envoy Harness 使用。默认关闭。API 密钥留在主机环境（例如 TYPESAFE_API_KEY），不在此表单中。",
+  "settings.agents.envoyDecision.mode": "模式",
+  "settings.agents.envoyDecision.modeOff": "关闭",
+  "settings.agents.envoyDecision.modeShadow": "影子（仅记录）",
+  "settings.agents.envoyDecision.modeEnforce": "强制（安全时自动放行）",
+  "settings.agents.envoyDecision.backend": "后端",
+  "settings.agents.envoyDecision.endpoint": "端点",
+  "settings.agents.envoyDecision.endpoint.placeholder":
+    "http://127.0.0.1:8000/v1/systemone",
+  "settings.agents.envoyDecision.endpoint.detail":
+    "Laya 本机地址或文档中的 Jev URL。留空则使用后端默认值。",
+  "settings.agents.envoyDecision.save": "保存",
+  "settings.agents.envoyDecision.saving": "正在保存…",
+  "settings.agents.envoyDecision.saved": "已保存。",
   "settings.agents.olderDaemon": "这个窗口连接的守护进程版本较旧，没有这部分智能体列表，因此无法在这里显示。请重启 EnvoyDev，让窗口和守护进程来自同一个构建。",
   "settings.agents.catalog.heading": "目录",
   "settings.agents.catalog.browse": "浏览目录",

@@ -73,7 +73,7 @@
   "settings.teams.removeRole": "削除",
   "settings.teams.customRoleId": "custom-role-id",
   "settings.teams.roleIdInvalid": "小文字のスラッグを使ってください（英字、数字、_ または -）。",
-  "settings.teams.roleIdDuplicate": "その役割 id はすでにチームにあります。",
+  "settings.teams.roleIdDuplicate": "その役割はすでにチームにあります。",
   "settings.teams.roleLocked": "必須",
   "settings.teams.joinRolesHint": "任意 — 空のままにすると、ホストが後から役割を割り当てできます。",
   "settings.teams.assignRoles": "役割を割り当て（上書き）",
@@ -170,5 +170,7 @@
   "settings.teams.rolesAdvanced": "役割（任意）",
   "settings.teams.inviteDone": "完了",
   "settings.teams.createWaiting": "上の招待を共有してください。別のチームを作る前に「完了」を押します。",
-  "settings.teams.role.orchestrate": "オーケストレーター"
+  "settings.teams.role.orchestrate": "オーケストレーター",
+  "settings.teams.customRoleName": "役割名",
+  "settings.teams.roleNameInvalid": "役割名を入力してください。"
 }

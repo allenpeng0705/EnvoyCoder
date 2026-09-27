@@ -23,8 +23,10 @@ import { useI18n } from "../../i18n/context.js";
 import {
   defaultTeamBase,
   hostMemberLabel,
+  roleIdFromName,
   uniqueTeamLabel,
 } from "../../state/team-defaults.js";
+import { PencilIcon } from "../icons.js";
 import type { SettingsSectionProps } from "./SectionProps.js";
 import { copyText } from "./clipboard.js";
 import { peekInviteRoleCatalog } from "./peek-team-invite.js";
@@ -49,6 +51,18 @@ function tokenExpiringSoon(expiresAt: string, withinMs = 2 * 60 * 60 * 1000): bo
 
 function roleLabel(def: RoleDef): string {
   return def.label?.trim() || def.id;
+}
+
+function WriterMark(props: { label: string }): ReactElement {
+  return (
+    <span
+      className="settings__teams-writer"
+      title={props.label}
+      aria-label={props.label}
+    >
+      <PencilIcon size={13} />
+    </span>
+  );
 }
 
 type TeamPublicView = {
@@ -89,17 +103,21 @@ export function TeamsSection(
   const [createOffered, setCreateOffered] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(PRESET_ROLE_CATALOG.map((r) => [r.id, true])),
   );
-  const [customRoleId, setCustomRoleId] = useState("");
+  const [customRoleName, setCustomRoleName] = useState("");
   const [customRoleWriter, setCustomRoleWriter] = useState(true);
   const [joinToken, setJoinToken] = useState("");
   const [joinLabel, setJoinLabel] = useState("laptop");
   const [joinCatalog, setJoinCatalog] = useState<readonly RoleDef[]>(PRESET_ROLE_CATALOG.filter(
     (r) => r.id !== RESERVED_ORCHESTRATE_ROLE,
   ));
-  const [joinRoles, setJoinRoles] = useState<Record<string, boolean>>({
-    implement: true,
-    review: true,
-  });
+  const [joinRoles, setJoinRoles] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(
+      PRESET_ROLE_CATALOG.filter((r) => r.id !== RESERVED_ORCHESTRATE_ROLE).map((r) => [
+        r.id,
+        true,
+      ]),
+    ),
+  );
   const [freshToken, setFreshToken] = useState<string | undefined>();
   const [freshInvite, setFreshInvite] = useState<string | undefined>();
   const [notice, setNotice] = useState<string | undefined>();
@@ -110,7 +128,9 @@ export function TeamsSection(
   const [route, setRoute] = useState<"create" | "join">("create");
   /** Inline confirm — `window.confirm` is unreliable in the Tauri webview (click looks like a no-op). */
   const [pendingConfirm, setPendingConfirm] = useState<
-    { kind: "dissolve" | "rotate"; teamId: string } | undefined
+    | { kind: "dissolve" | "rotate"; teamId: string }
+    | { kind: "suggest"; teamId: string; memberId: string; roles: readonly string[] }
+    | undefined
   >();
   const [inbound, setInbound] = useState<
     ReadonlyArray<
@@ -213,18 +233,30 @@ export function TeamsSection(
   }, [joinToken]);
 
   function addCustomRole(): void {
-    const id = customRoleId.trim().toLowerCase();
-    if (!/^[a-z][a-z0-9_-]{0,39}$/.test(id)) {
-      setNotice(t("settings.teams.roleIdInvalid"));
+    const name = customRoleName.trim();
+    if (!name) {
+      setNotice(t("settings.teams.roleNameInvalid"));
       return;
     }
-    if (createCatalog.some((r) => r.id === id)) {
+    if (
+      createCatalog.some(
+        (r) => (r.label?.trim() || r.id).toLowerCase() === name.toLowerCase(),
+      )
+    ) {
       setNotice(t("settings.teams.roleIdDuplicate"));
       return;
     }
-    setCreateCatalog((prev) => [...prev, { id, writer: customRoleWriter }]);
+    const id = roleIdFromName(
+      name,
+      createCatalog.map((r) => r.id),
+    );
+    if (!id) {
+      setNotice(t("settings.teams.roleNameInvalid"));
+      return;
+    }
+    setCreateCatalog((prev) => [...prev, { id, label: name, writer: customRoleWriter }]);
     setCreateOffered((prev) => ({ ...prev, [id]: false }));
-    setCustomRoleId("");
+    setCustomRoleName("");
     setCustomRoleWriter(true);
   }
 
@@ -294,6 +326,25 @@ export function TeamsSection(
       setFreshToken(result.token);
       setFreshInvite(result.invite ?? result.token);
       await reload();
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function applySuggestedRoles(
+    teamId: string,
+    memberId: string,
+    roles: readonly string[],
+  ): Promise<void> {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    setPendingConfirm(undefined);
+    try {
+      const apply = await props.agents.setMemberRolesAssigned(teamId, memberId, roles);
+      if (!apply.ok) setNotice(apply.message);
+      else await reload();
     } finally {
       inFlight.current = false;
       setBusy(false);
@@ -513,48 +564,55 @@ export function TeamsSection(
                   <ul className="settings__teams-catalog">
                     {createCatalog.map((def) => (
                       <li key={def.id} className="settings__teams-catalog-row">
-                        <span>
+                        <span className="settings__teams-catalog-name">
                           {roleLabel(def)}
-                          {def.writer ? (
-                            <span className="chip chip--quiet"> {t("settings.teams.writer")}</span>
-                          ) : null}
+                          {def.writer ? <WriterMark label={t("settings.teams.writer")} /> : null}
                         </span>
-                        {def.id !== RESERVED_ORCHESTRATE_ROLE ? (
-                          <button
-                            type="button"
-                            className="button button--ghost button--small"
-                            onClick={() => {
-                              setCreateCatalog((prev) => prev.filter((r) => r.id !== def.id));
-                              setCreateOffered((prev) => {
-                                const next = { ...prev };
-                                delete next[def.id];
-                                return next;
-                              });
-                            }}
-                          >
-                            {t("settings.teams.removeRole")}
-                          </button>
-                        ) : (
-                          <span className="settings__note">{t("settings.teams.roleLocked")}</span>
-                        )}
+                        <span className="settings__teams-catalog-action">
+                          {def.id !== RESERVED_ORCHESTRATE_ROLE ? (
+                            <button
+                              type="button"
+                              className="button button--ghost button--small"
+                              onClick={() => {
+                                setCreateCatalog((prev) => prev.filter((r) => r.id !== def.id));
+                                setCreateOffered((prev) => {
+                                  const next = { ...prev };
+                                  delete next[def.id];
+                                  return next;
+                                });
+                              }}
+                            >
+                              {t("settings.teams.removeRole")}
+                            </button>
+                          ) : (
+                            <span className="settings__note settings__teams-role-locked">
+                              {t("settings.teams.roleLocked")}
+                            </span>
+                          )}
+                        </span>
                       </li>
                     ))}
                   </ul>
                   <div className="settings__teams-add-role">
                     <input
                       className="settings__pairing-input"
-                      placeholder={t("settings.teams.customRoleId")}
-                      value={customRoleId}
-                      onChange={(e) => setCustomRoleId(e.target.value)}
-                      data-testid="custom-role-id"
+                      placeholder={t("settings.teams.customRoleName")}
+                      value={customRoleName}
+                      onChange={(e) => setCustomRoleName(e.target.value)}
+                      data-testid="custom-role-name"
+                      aria-label={t("settings.teams.customRoleName")}
                     />
-                    <label className="settings__teams-role">
+                    <label
+                      className="settings__teams-role settings__teams-writer-toggle"
+                      title={t("settings.teams.writer.hint")}
+                    >
                       <input
                         type="checkbox"
                         checked={customRoleWriter}
                         onChange={(e) => setCustomRoleWriter(e.target.checked)}
                       />
-                      {t("settings.teams.writer")}
+                      <PencilIcon size={13} />
+                      <span>{t("settings.teams.writer")}</span>
                     </label>
                     <button type="button" className="button button--small" onClick={addCustomRole}>
                       {t("settings.teams.addRole")}
@@ -804,70 +862,102 @@ export function TeamsSection(
                                     );
                                   })}
                                 </div>
-                                <div className="settings__pairing-actions">
-                                  {unset ? (
-                                    <button
-                                      type="button"
-                                      className="button button--small"
-                                      disabled={busy}
-                                      data-testid={`suggest-roles-${member.id}`}
-                                      onClick={() => {
-                                        setBusy(true);
-                                        void props.agents
-                                          .suggestMemberRoles(team.id, member.id)
-                                          .then((r) => {
-                                            if (!r.ok) {
+                                {pendingConfirm?.kind === "suggest" &&
+                                pendingConfirm.teamId === team.id &&
+                                pendingConfirm.memberId === member.id ? (
+                                  <div
+                                    className="confirm settings__teams-confirm"
+                                    role="alertdialog"
+                                    data-testid={`suggest-roles-confirm-${member.id}`}
+                                  >
+                                    <p className="confirm__question">
+                                      {t("settings.teams.suggestConfirm", {
+                                        roles: pendingConfirm.roles.join(", "),
+                                      })}
+                                    </p>
+                                    <div className="confirm__actions">
+                                      <button
+                                        type="button"
+                                        className="button button--ghost button--small"
+                                        disabled={busy}
+                                        onClick={() => setPendingConfirm(undefined)}
+                                      >
+                                        {t("action.cancel")}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="button button--small"
+                                        disabled={busy}
+                                        data-testid={`suggest-roles-apply-${member.id}`}
+                                        onClick={() =>
+                                          void applySuggestedRoles(
+                                            team.id,
+                                            member.id,
+                                            pendingConfirm.roles,
+                                          )
+                                        }
+                                      >
+                                        {t("settings.teams.suggestRoles")}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="settings__pairing-actions">
+                                    {unset ? (
+                                      <button
+                                        type="button"
+                                        className="button button--small"
+                                        disabled={busy}
+                                        data-testid={`suggest-roles-${member.id}`}
+                                        onClick={() => {
+                                          if (inFlight.current) return;
+                                          inFlight.current = true;
+                                          setBusy(true);
+                                          void props.agents
+                                            .suggestMemberRoles(team.id, member.id)
+                                            .then((r) => {
+                                              inFlight.current = false;
                                               setBusy(false);
-                                              setNotice(r.message);
-                                              return;
-                                            }
-                                            if (r.roles.length === 0) {
-                                              setBusy(false);
+                                              if (!r.ok) {
+                                                setNotice(r.message);
+                                                return;
+                                              }
+                                              if (r.roles.length === 0) {
+                                                setNotice(r.note);
+                                                return;
+                                              }
                                               setNotice(r.note);
-                                              return;
-                                            }
-                                            setNotice(r.note);
-                                            if (
-                                              !window.confirm(
-                                                t("settings.teams.suggestConfirm", {
-                                                  roles: r.roles.join(", "),
-                                                }),
-                                              )
-                                            ) {
-                                              setBusy(false);
-                                              return;
-                                            }
-                                            void props.agents
-                                              .setMemberRolesAssigned(team.id, member.id, r.roles)
-                                              .then((apply) => {
-                                                setBusy(false);
-                                                if (!apply.ok) setNotice(apply.message);
-                                                else void reload();
+                                              setPendingConfirm({
+                                                kind: "suggest",
+                                                teamId: team.id,
+                                                memberId: member.id,
+                                                roles: r.roles,
                                               });
-                                          });
-                                      }}
-                                    >
-                                      {t("settings.teams.suggestRoles")}
-                                    </button>
-                                  ) : null}
-                                  {overrideActive ? (
-                                    <button
-                                      type="button"
-                                      className="button button--ghost button--small"
-                                      disabled={busy}
-                                      onClick={() => {
-                                        void props.agents
-                                          .setMemberRolesAssigned(team.id, member.id, [])
-                                          .then((r) => {
-                                            if (!r.ok) setNotice(r.message);
-                                            else void reload();
-                                          });
-                                      }}
-                                    >
-                                      {t("settings.teams.clearOverride")}
-                                    </button>
-                                  ) : null}
-                                </div>
+                                            });
+                                        }}
+                                      >
+                                        {t("settings.teams.suggestRoles")}
+                                      </button>
+                                    ) : null}
+                                    {overrideActive ? (
+                                      <button
+                                        type="button"
+                                        className="button button--ghost button--small"
+                                        disabled={busy}
+                                        onClick={() => {
+                                          void props.agents
+                                            .setMemberRolesAssigned(team.id, member.id, [])
+                                            .then((r) => {
+                                              if (!r.ok) setNotice(r.message);
+                                              else void reload();
+                                            });
+                                        }}
+                                      >
+                                        {t("settings.teams.clearOverride")}
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                )}
                               </fieldset>
                             </details>
                           ) : null}
@@ -875,7 +965,9 @@ export function TeamsSection(
                       );
                     })}
                   </ul>
-                  {pendingConfirm?.teamId === team.id ? (
+                  {pendingConfirm &&
+                  pendingConfirm.kind !== "suggest" &&
+                  pendingConfirm.teamId === team.id ? (
                     <div className="confirm settings__teams-confirm" role="alertdialog">
                       <p className="confirm__question">
                         {pendingConfirm.kind === "dissolve"

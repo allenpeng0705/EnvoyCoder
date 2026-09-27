@@ -4264,6 +4264,37 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
       })
       .strict(),
   },
+
+  /**
+   * Envoy Harness decision gate (System One). Off by default. No secrets on the wire.
+   */
+  "coder.getEnvoyDecision": {
+    params: EmptyParams,
+    result: z
+      .object({
+        mode: z.enum(["off", "shadow", "enforce"]),
+        backend: z.enum(["null", "laya-http", "jev", "onnx"]),
+        endpoint: z.string().min(1).optional(),
+      })
+      .strict(),
+  },
+  "coder.setEnvoyDecision": {
+    params: z
+      .object({
+        mode: z.enum(["off", "shadow", "enforce"]).optional(),
+        backend: z.enum(["null", "laya-http", "jev", "onnx"]).optional(),
+        /** Empty string clears a stored endpoint. */
+        endpoint: z.string().optional(),
+      })
+      .strict(),
+    result: z
+      .object({
+        mode: z.enum(["off", "shadow", "enforce"]),
+        backend: z.enum(["null", "laya-http", "jev", "onnx"]),
+        endpoint: z.string().min(1).optional(),
+      })
+      .strict(),
+  },
 });
 
 export type { CoderSettings };

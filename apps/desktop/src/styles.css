@@ -196,14 +196,21 @@ body {
 /* ── shell ─────────────────────────────────────────────────────────────── */
 
 .shell {
-  display: grid;
-  grid-template-rows: 38px 1fr 24px;
+  /* **Flex, not a fixed grid.** This was `grid-template-rows: 38px 1fr 24px` — three rows for a
+     column that sometimes renders a fourth child (the error banner between titlebar and body). The
+     banner took the `1fr` row, the work area was crushed into 24px, and the status bar landed in an
+     implicit row that read as mid-window. Same defect class as `.sidebar` (conditional children vs
+     a counted grid). One growing body + `flex: none` chrome cannot mis-count. */
+  display: flex;
+  flex-direction: column;
   height: 100%;
+  min-height: 0;
 }
 
 .shell__body {
   display: grid;
   grid-template-columns: var(--rail-width) var(--panel-resize-hit) minmax(0, 1fr);
+  flex: 1 1 auto;
   min-height: 0;
 }
 
@@ -246,6 +253,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: none;
   height: 38px;
   padding: 0 8px;
   border-bottom: 1px solid var(--border);
@@ -2506,7 +2514,9 @@ button.explorer__change:hover {
 .statusbar {
   display: flex;
   align-items: center;
+  flex: none;
   gap: 8px;
+  height: 24px;
   padding: 0 10px;
   border-top: 1px solid var(--border);
   background: var(--bg-raised);
@@ -2581,6 +2591,7 @@ button.explorer__change:hover {
 .banner {
   display: flex;
   align-items: center;
+  flex: none;
   gap: 10px;
   padding: 6px 12px;
   background: rgba(230, 160, 60, 0.1);
@@ -4483,12 +4494,42 @@ button.explorer__change:hover {
   gap: 0.35rem;
 }
 .settings__teams-catalog-row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 5.5rem;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.35rem 0.75rem;
+  column-gap: 0.75rem;
   font-size: 0.85rem;
+}
+.settings__teams-catalog-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.settings__teams-catalog-action {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 1.75rem;
+}
+.settings__teams-catalog-action .button,
+.settings__teams-role-locked {
+  margin: 0;
+  padding-inline: 0.35rem;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  text-align: end;
+  white-space: nowrap;
+}
+.settings__teams-writer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--foreground-muted, #9aa);
+  flex-shrink: 0;
+}
+.settings__teams-writer-toggle {
+  gap: 0.3rem;
 }
 .settings__teams-add-role {
   display: flex;

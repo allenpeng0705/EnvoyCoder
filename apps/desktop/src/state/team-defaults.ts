@@ -5,6 +5,8 @@
  * `uniqueTeamLabel` so a colliding create still lands uniquely on disk.
  */
 
+import { JOB_ROLE_ID_PATTERN, isJobRoleId } from "@envoydev/protocol";
+
 export function uniqueTeamLabel(desired: string, existing: readonly string[]): string {
   const base = desired.trim() || "Team";
   const taken = new Set(existing.map((l) => l.trim().toLowerCase()).filter(Boolean));
@@ -33,4 +35,31 @@ export function hostMemberLabel(orchestratorLabel: string, projectLabel: string 
   const role = orchestratorLabel.trim() || "Orchestrator";
   const project = projectLabel?.trim();
   return project && project.length > 0 ? `${role} · ${project}` : role;
+}
+
+/**
+ * Wire id for a custom role the user named in plain language.
+ * Latin names become slugs (`Security Review` → `security-review`); others fall back to `role` / `role-2`.
+ */
+export function roleIdFromName(name: string, existingIds: readonly string[]): string | undefined {
+  const label = name.trim();
+  if (!label) return undefined;
+  const taken = new Set(existingIds.map((id) => id.toLowerCase()));
+  let base = label
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  if (!JOB_ROLE_ID_PATTERN.test(base)) {
+    base = "role";
+  }
+  if (!taken.has(base)) return base;
+  for (let n = 2; n < 10_000; n++) {
+    const suffix = `-${n}`;
+    const candidate = `${base.slice(0, 40 - suffix.length)}${suffix}`;
+    if (isJobRoleId(candidate) && !taken.has(candidate)) return candidate;
+  }
+  return undefined;
 }

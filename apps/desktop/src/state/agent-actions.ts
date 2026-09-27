@@ -56,6 +56,19 @@ export interface EnvoyLlmSetInput {
   clearApiKey?: boolean;
 }
 
+/** What `coder.getEnvoyDecision` / `coder.setEnvoyDecision` return. */
+export interface EnvoyDecisionPublic {
+  mode: "off" | "shadow" | "enforce";
+  backend: "null" | "laya-http" | "jev" | "onnx";
+  endpoint?: string;
+}
+
+export interface EnvoyDecisionSetInput {
+  mode?: "off" | "shadow" | "enforce";
+  backend?: "null" | "laya-http" | "jev" | "onnx";
+  endpoint?: string;
+}
+
 /**
  * What every service call answers: the status the supervisor returned, or a refusal.
  *
@@ -193,6 +206,14 @@ export interface AgentActions {
 
   /** Save Envoy Harness LLM settings; optional key replace / clear. Syncs `defaults.model`. */
   setEnvoyLlm(input: EnvoyLlmSetInput): Promise<{ ok: true } & EnvoyLlmPublic | Refusal>;
+
+  /** Envoy Harness decision gate — off by default; no secrets on the wire. */
+  getEnvoyDecision(): Promise<{ ok: true } & EnvoyDecisionPublic | Refusal>;
+
+  /** Save Envoy Harness decision-gate settings (mode / backend / endpoint). */
+  setEnvoyDecision(
+    input: EnvoyDecisionSetInput,
+  ): Promise<{ ok: true } & EnvoyDecisionPublic | Refusal>;
 
   /**
    * **The daemon service, which the operating system owns.**

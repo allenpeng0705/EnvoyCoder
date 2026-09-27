@@ -82,7 +82,7 @@ export const teams = {
   "settings.teams.removeRole": "Entfernen",
   "settings.teams.customRoleId": "custom-role-id",
   "settings.teams.roleIdInvalid": "Kleinbuchstaben-Slug verwenden (Buchstaben, Ziffern, _ oder -).",
-  "settings.teams.roleIdDuplicate": "Diese Rollen-ID ist schon im Team.",
+  "settings.teams.roleIdDuplicate": "Diese Rolle ist bereits im Team.",
   "settings.teams.roleLocked": "Erforderlich",
   "settings.teams.joinRolesHint": "Optional — leer lassen; der Host kann Rollen später zuweisen.",
   "settings.teams.assignRoles": "Rollen zuweisen (Override)",
@@ -180,4 +180,6 @@ export const teams = {
   "settings.teams.inviteDone": "Fertig",
   "settings.teams.createWaiting": "Teile zuerst die Einladung oben. Tippe Fertig, bevor du ein weiteres Team erstellst.",
   "settings.teams.role.orchestrate": "Orchestrator",
+  "settings.teams.customRoleName": "Rollenname",
+  "settings.teams.roleNameInvalid": "Rollenname eingeben.",
 } as const;

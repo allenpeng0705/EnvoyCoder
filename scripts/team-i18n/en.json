@@ -73,7 +73,7 @@
   "settings.teams.removeRole": "Remove",
   "settings.teams.customRoleId": "custom-role-id",
   "settings.teams.roleIdInvalid": "Use a lowercase slug (letters, digits, _ or -).",
-  "settings.teams.roleIdDuplicate": "That role id is already on the team.",
+  "settings.teams.roleIdDuplicate": "That role is already on the team.",
   "settings.teams.roleLocked": "Required",
   "settings.teams.joinRolesHint": "Optional — the host can assign roles later.",
   "settings.teams.assignRoles": "Assign roles",
@@ -170,5 +170,7 @@
   "settings.teams.rolesAdvanced": "Roles (optional)",
   "settings.teams.inviteDone": "Done",
   "settings.teams.createWaiting": "Share the invite above. Tap Done before creating another team.",
-  "settings.teams.role.orchestrate": "Orchestrator"
+  "settings.teams.role.orchestrate": "Orchestrator",
+  "settings.teams.customRoleName": "Role name",
+  "settings.teams.roleNameInvalid": "Enter a role name."
 }

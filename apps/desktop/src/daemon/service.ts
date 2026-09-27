@@ -81,6 +81,10 @@ import { createCollabHandlers, COLLAB_PRE_AUTH_METHODS } from "./collab-handlers
 export { COLLAB_PRE_AUTH_METHODS };
 import type { PairedDeviceStore } from "./paired-devices.js";
 import { createCatalogHandlers } from "./catalog.js";
+import {
+  getEnvoyDecisionPublic,
+  setEnvoyDecision,
+} from "./envoy-decision.js";
 import { getEnvoyLlmPublic, setEnvoyLlm, envoyHarnessModels } from "./envoy-llm.js";
 import { harnessSwitchPatch } from "./task-harness-switch.js";
 import { createFixHandlers } from "./fixes.js";
@@ -1240,6 +1244,20 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         clearApiKey?: boolean;
       };
       return setEnvoyLlm(deps.paths, deps.store, input);
+    },
+
+    "coder.getEnvoyDecision": async (params) => {
+      parseRpcParams("coder.getEnvoyDecision", params);
+      return getEnvoyDecisionPublic(deps.paths);
+    },
+
+    "coder.setEnvoyDecision": async (params) => {
+      const input = parseRpcParams("coder.setEnvoyDecision", params) as {
+        mode?: "off" | "shadow" | "enforce";
+        backend?: "null" | "laya-http" | "jev" | "onnx";
+        endpoint?: string;
+      };
+      return setEnvoyDecision(deps.paths, input);
     },
 
     // **There is deliberately no `coder.setAgentHidden` here, and its absence is a design decision rather

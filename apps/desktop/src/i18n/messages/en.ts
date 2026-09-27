@@ -557,9 +557,11 @@ export const en = {
   "settings.teams.writer.hint": "Every coding role edits the project (code, tests, design notes, docs). Leave this on. Turn it off only for a rare read-only custom role. Two steps that edit still cannot share the same project folder at once — use different folders to work in parallel.",
   "settings.teams.addRole": "Add",
   "settings.teams.removeRole": "Remove",
+  "settings.teams.customRoleName": "Role name",
   "settings.teams.customRoleId": "custom-role-id",
+  "settings.teams.roleNameInvalid": "Enter a role name.",
   "settings.teams.roleIdInvalid": "Use a lowercase slug (letters, digits, _ or -).",
-  "settings.teams.roleIdDuplicate": "That role id is already on the team.",
+  "settings.teams.roleIdDuplicate": "That role is already on the team.",
   "settings.teams.roleLocked": "Required",
   "settings.teams.joinRolesHint": "Optional — the host can assign roles later.",
   "settings.teams.assignRoles": "Assign roles",
@@ -765,6 +767,22 @@ export const en = {
   "settings.agents.envoyLlm.saving": "Saving…",
   "settings.agents.envoyLlm.saved": "Saved.",
   "settings.agents.envoyLlm.loading": "Loading LLM settings…",
+  "settings.agents.envoyDecision.heading": "Decision gate",
+  "settings.agents.envoyDecision.note":
+    "Optional System One (Laya / Jev) for Envoy Harness. Off by default. API keys stay in the host environment (for example TYPESAFE_API_KEY), not in this form.",
+  "settings.agents.envoyDecision.mode": "Mode",
+  "settings.agents.envoyDecision.modeOff": "Off",
+  "settings.agents.envoyDecision.modeShadow": "Shadow (log only)",
+  "settings.agents.envoyDecision.modeEnforce": "Enforce (auto-allow when safe)",
+  "settings.agents.envoyDecision.backend": "Backend",
+  "settings.agents.envoyDecision.endpoint": "Endpoint",
+  "settings.agents.envoyDecision.endpoint.placeholder":
+    "http://127.0.0.1:8000/v1/systemone",
+  "settings.agents.envoyDecision.endpoint.detail":
+    "Laya loopback or a documented Jev URL. Leave empty for the backend default.",
+  "settings.agents.envoyDecision.save": "Save",
+  "settings.agents.envoyDecision.saving": "Saving…",
+  "settings.agents.envoyDecision.saved": "Saved.",
   "settings.agents.olderDaemon":
     "The daemon this window is talking to is an older build and does not have this part of the agent list, so it cannot be shown here. Restart EnvoyDev so the window and its daemon are the same build.",
   /**

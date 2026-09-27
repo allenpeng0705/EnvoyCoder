@@ -1885,6 +1885,13 @@ export const RPC_METHODS = [
   /** Write Envoy Harness LLM settings (and optionally replace or clear the stored API key). */
   "coder.setEnvoyLlm",
   /**
+   * Read Envoy Harness decision-gate settings (System One / Laya / Jev). Off by default.
+   * API keys are never on this wire — configure via host env.
+   */
+  "coder.getEnvoyDecision",
+  /** Write Envoy Harness decision-gate settings (mode / backend / endpoint). */
+  "coder.setEnvoyDecision",
+  /**
    * Whether this machine's daemon runs under a *supervisor* — a launchd agent, a systemd user unit or a Windows
    * task — rather than only while the window is open. Read-only, and about the service rather than about the
    * daemon answering: "installed and stopped" is a real state, and the one a failed start leaves behind.

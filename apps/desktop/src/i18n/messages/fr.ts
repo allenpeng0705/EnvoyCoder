@@ -473,6 +473,23 @@ export const fr: Catalogue = {
   "settings.agents.envoyLlm.saving": "Enregistrement…",
   "settings.agents.envoyLlm.saved": "Enregistré.",
   "settings.agents.envoyLlm.loading": "Chargement des réglages LLM…",
+
+  "settings.agents.envoyDecision.heading": "Decision gate",
+  "settings.agents.envoyDecision.note":
+    "Optional System One (Laya / Jev) for Envoy Harness. Off by default. API keys stay in the host environment (for example TYPESAFE_API_KEY), not in this form.",
+  "settings.agents.envoyDecision.mode": "Mode",
+  "settings.agents.envoyDecision.modeOff": "Off",
+  "settings.agents.envoyDecision.modeShadow": "Shadow (log only)",
+  "settings.agents.envoyDecision.modeEnforce": "Enforce (auto-allow when safe)",
+  "settings.agents.envoyDecision.backend": "Backend",
+  "settings.agents.envoyDecision.endpoint": "Endpoint",
+  "settings.agents.envoyDecision.endpoint.placeholder":
+    "http://127.0.0.1:8000/v1/systemone",
+  "settings.agents.envoyDecision.endpoint.detail":
+    "Laya loopback or a documented Jev URL. Leave empty for the backend default.",
+  "settings.agents.envoyDecision.save": "Save",
+  "settings.agents.envoyDecision.saving": "Saving…",
+  "settings.agents.envoyDecision.saved": "Saved.",
   "settings.agents.olderDaemon": "Le démon auquel cette fenêtre parle est une version plus ancienne et n’a pas cette partie de la liste des agents : elle ne peut donc pas être affichée ici. Redémarrez EnvoyDev pour que la fenêtre et son démon soient de la même version.",
   "settings.agents.catalog.heading": "Catalogue",
   "settings.agents.catalog.browse": "Parcourir le catalogue",

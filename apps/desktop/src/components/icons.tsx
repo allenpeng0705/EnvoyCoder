@@ -264,6 +264,16 @@ export function FileIcon({ size = 16 }: IconProps): JSX.Element {
   );
 }
 
+/** Edits files — a pencil. Used as a compact mark next to writing roles. */
+export function PencilIcon({ size = 16 }: IconProps): JSX.Element {
+  return (
+    <svg {...frame(size)}>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
 /** Show or hide the explorer — a panel on the right of a window. */
 export function PanelRightIcon({ size = 16 }: IconProps): JSX.Element {
   return (

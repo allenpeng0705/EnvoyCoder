@@ -473,6 +473,23 @@ export const ja: Catalogue = {
   "settings.agents.envoyLlm.saving": "保存中…",
   "settings.agents.envoyLlm.saved": "保存しました。",
   "settings.agents.envoyLlm.loading": "LLM 設定を読み込み中…",
+
+  "settings.agents.envoyDecision.heading": "Decision gate",
+  "settings.agents.envoyDecision.note":
+    "Optional System One (Laya / Jev) for Envoy Harness. Off by default. API keys stay in the host environment (for example TYPESAFE_API_KEY), not in this form.",
+  "settings.agents.envoyDecision.mode": "Mode",
+  "settings.agents.envoyDecision.modeOff": "Off",
+  "settings.agents.envoyDecision.modeShadow": "Shadow (log only)",
+  "settings.agents.envoyDecision.modeEnforce": "Enforce (auto-allow when safe)",
+  "settings.agents.envoyDecision.backend": "Backend",
+  "settings.agents.envoyDecision.endpoint": "Endpoint",
+  "settings.agents.envoyDecision.endpoint.placeholder":
+    "http://127.0.0.1:8000/v1/systemone",
+  "settings.agents.envoyDecision.endpoint.detail":
+    "Laya loopback or a documented Jev URL. Leave empty for the backend default.",
+  "settings.agents.envoyDecision.save": "Save",
+  "settings.agents.envoyDecision.saving": "Saving…",
+  "settings.agents.envoyDecision.saved": "Saved.",
   "settings.agents.olderDaemon": "このウィンドウが接続しているデーモンは古いビルドで、エージェント一覧のこの部分を持っていないため、ここには表示できません。ウィンドウとデーモンが同じビルドになるよう EnvoyDev を再起動してください。",
   "settings.agents.catalog.heading": "カタログ",
   "settings.agents.catalog.browse": "カタログを見る",

@@ -1739,6 +1739,32 @@ export class CoderStore {
     );
   }
 
+  async getEnvoyDecision(): Promise<
+    { ok: true } & import("./agent-actions.js").EnvoyDecisionPublic | Refusal
+  > {
+    return this.mutate("coder.getEnvoyDecision", {}, (result) => {
+      const answer = result as import("./agent-actions.js").EnvoyDecisionPublic;
+      return { ok: true as const, ...answer };
+    });
+  }
+
+  async setEnvoyDecision(
+    input: import("./agent-actions.js").EnvoyDecisionSetInput,
+  ): Promise<{ ok: true } & import("./agent-actions.js").EnvoyDecisionPublic | Refusal> {
+    return this.mutate(
+      "coder.setEnvoyDecision",
+      {
+        ...(input.mode !== undefined ? { mode: input.mode } : {}),
+        ...(input.backend !== undefined ? { backend: input.backend } : {}),
+        ...(input.endpoint !== undefined ? { endpoint: input.endpoint } : {}),
+      },
+      (result) => {
+        const answer = result as import("./agent-actions.js").EnvoyDecisionPublic;
+        return { ok: true as const, ...answer };
+      },
+    );
+  }
+
   async updateSettings(patch: Partial<CoderSettings>): Promise<{ ok: true } | Refusal> {
     return this.mutate("coder.updateSettings", { settings: patch }, (result) => {
       this.set({ settings: (result as { settings: CoderSettings }).settings });

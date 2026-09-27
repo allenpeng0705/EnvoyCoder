@@ -82,7 +82,7 @@ export const teams = {
   "settings.teams.removeRole": "Retirer",
   "settings.teams.customRoleId": "custom-role-id",
   "settings.teams.roleIdInvalid": "Utilisez un slug en minuscules (lettres, chiffres, _ ou -).",
-  "settings.teams.roleIdDuplicate": "Cet identifiant de rôle est déjà dans l’équipe.",
+  "settings.teams.roleIdDuplicate": "Ce rôle est déjà dans l’équipe.",
   "settings.teams.roleLocked": "Obligatoire",
   "settings.teams.joinRolesHint": "Facultatif — laissez vide et l’hôte pourra assigner les rôles plus tard.",
   "settings.teams.assignRoles": "Assigner les rôles (remplacement)",
@@ -180,4 +180,6 @@ export const teams = {
   "settings.teams.inviteDone": "Terminé",
   "settings.teams.createWaiting": "Partagez d’abord l’invitation ci-dessus. Appuyez sur Terminé avant d’en créer une autre.",
   "settings.teams.role.orchestrate": "Orchestrateur",
+  "settings.teams.customRoleName": "Nom du rôle",
+  "settings.teams.roleNameInvalid": "Saisissez un nom de rôle.",
 } as const;

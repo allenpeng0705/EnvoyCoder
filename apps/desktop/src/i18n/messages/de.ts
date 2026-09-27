@@ -473,6 +473,23 @@ export const de: Catalogue = {
   "settings.agents.envoyLlm.saving": "Speichert…",
   "settings.agents.envoyLlm.saved": "Gespeichert.",
   "settings.agents.envoyLlm.loading": "LLM-Einstellungen werden geladen…",
+
+  "settings.agents.envoyDecision.heading": "Decision gate",
+  "settings.agents.envoyDecision.note":
+    "Optional System One (Laya / Jev) for Envoy Harness. Off by default. API keys stay in the host environment (for example TYPESAFE_API_KEY), not in this form.",
+  "settings.agents.envoyDecision.mode": "Mode",
+  "settings.agents.envoyDecision.modeOff": "Off",
+  "settings.agents.envoyDecision.modeShadow": "Shadow (log only)",
+  "settings.agents.envoyDecision.modeEnforce": "Enforce (auto-allow when safe)",
+  "settings.agents.envoyDecision.backend": "Backend",
+  "settings.agents.envoyDecision.endpoint": "Endpoint",
+  "settings.agents.envoyDecision.endpoint.placeholder":
+    "http://127.0.0.1:8000/v1/systemone",
+  "settings.agents.envoyDecision.endpoint.detail":
+    "Laya loopback or a documented Jev URL. Leave empty for the backend default.",
+  "settings.agents.envoyDecision.save": "Save",
+  "settings.agents.envoyDecision.saving": "Saving…",
+  "settings.agents.envoyDecision.saved": "Saved.",
   "settings.agents.olderDaemon": "Der Daemon, mit dem dieses Fenster spricht, ist ein älterer Build und hat diesen Teil der Agentenliste nicht; er kann hier deshalb nicht angezeigt werden. Starte EnvoyDev neu, damit Fenster und Daemon derselbe Build sind.",
   "settings.agents.catalog.heading": "Katalog",
   "settings.agents.catalog.browse": "Katalog durchsehen",

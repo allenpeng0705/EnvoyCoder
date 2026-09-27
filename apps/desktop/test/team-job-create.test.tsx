@@ -209,4 +209,111 @@ describe("TeamJobCreateSheet", () => {
     await waitFor(() => expect(screen.getByTestId("team-job-invite")).toBeTruthy());
     expect(createTeam).toHaveBeenCalledTimes(1);
   });
+
+  it("prefills the job title from the project and keeps it editable", async () => {
+    const agents = stubAgentActions({
+      listTeams: vi.fn(async () => ({ ok: true as const, teams: [soloTeam] })),
+      assessGitContentBus: vi.fn(async () => ({ ok: true as const, path: project.path })),
+    });
+    render(
+      <I18nProvider preference="en">
+        <TeamJobCreateSheet
+          project={project}
+          agents={agents}
+          onCreated={vi.fn()}
+          onCancel={vi.fn()}
+          onOpenTeams={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("team-job-title")).toBeTruthy());
+    const title = screen.getByTestId("team-job-title") as HTMLInputElement;
+    expect(title.value).toBe("api");
+    fireEvent.change(title, { target: { value: "Ship attach" } });
+    expect(title.value).toBe("Ship attach");
+  });
+
+  it("dissolves a provisional team when Cancel is pressed before Create draft", async () => {
+    const dissolveTeam = vi.fn(async () => ({ ok: true as const, dissolved: true as const }));
+    const createdTeam = {
+      id: "team-new",
+      label: "api",
+      members: soloTeam.members,
+    };
+    const listTeams = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true as const, teams: [] })
+      .mockResolvedValue({ ok: true as const, teams: [createdTeam] });
+    const agents = stubAgentActions({
+      listTeams,
+      assessGitContentBus: vi.fn(async () => ({ ok: true as const, path: project.path })),
+      createTeam: vi.fn(async () => ({
+        ok: true as const,
+        team: createdTeam,
+        token: "tok",
+        invite: "invite-uri",
+      })),
+      dissolveTeam,
+    });
+    const onCancel = vi.fn();
+    render(
+      <I18nProvider preference="en">
+        <TeamJobCreateSheet
+          project={project}
+          agents={agents}
+          onCreated={vi.fn()}
+          onCancel={onCancel}
+          onOpenTeams={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("team-job-no-team")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /Create team/i }));
+    await waitFor(() => expect(screen.getByTestId("team-job-invite")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /^Cancel$/i }));
+    await waitFor(() => expect(dissolveTeam).toHaveBeenCalledWith("team-new"));
+    expect(onCancel).toHaveBeenCalled();
+  });
+
+  it("dissolves a provisional team when the sheet unmounts without Cancel", async () => {
+    const dissolveTeam = vi.fn(async () => ({ ok: true as const, dissolved: true as const }));
+    const createdTeam = {
+      id: "team-orphan",
+      label: "api",
+      members: soloTeam.members,
+    };
+    const listTeams = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true as const, teams: [] })
+      .mockResolvedValue({ ok: true as const, teams: [createdTeam] });
+    const agents = stubAgentActions({
+      listTeams,
+      assessGitContentBus: vi.fn(async () => ({ ok: true as const, path: project.path })),
+      createTeam: vi.fn(async () => ({
+        ok: true as const,
+        team: createdTeam,
+        token: "tok",
+        invite: "invite-uri",
+      })),
+      dissolveTeam,
+    });
+    const view = render(
+      <I18nProvider preference="en">
+        <TeamJobCreateSheet
+          project={project}
+          agents={agents}
+          onCreated={vi.fn()}
+          onCancel={vi.fn()}
+          onOpenTeams={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("team-job-no-team")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /Create team/i }));
+    await waitFor(() => expect(screen.getByTestId("team-job-invite")).toBeTruthy());
+    view.unmount();
+    await waitFor(() => expect(dissolveTeam).toHaveBeenCalledWith("team-orphan"));
+  });
 });

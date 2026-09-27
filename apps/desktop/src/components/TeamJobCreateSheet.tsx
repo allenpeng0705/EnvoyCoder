@@ -1,8 +1,9 @@
 /**
  * Create a Team job on a project (§13) — pick/create team, title, goal → Job pane.
  *
- * Layout is three beats: status → team → job. Secondary team actions stay as
- * text links so the primary “Create draft” button stays obvious.
+ * Layout is three beats: status → team → job. A team created from this sheet is
+ * provisional until Create draft succeeds — Cancel *or any unmount* dissolves it
+ * when nobody joined, so navigating away does not leave orphan teams.
  */
 
 import { useEffect, useRef, useState, type ReactElement } from "react";
@@ -39,10 +40,16 @@ export function TeamJobCreateSheet(props: {
   const { t } = useI18n();
   const [teams, setTeams] = useState<readonly TeamRow[]>([]);
   const [teamId, setTeamId] = useState<string>("");
-  const [title, setTitle] = useState("");
+  const [teamNameDraft, setTeamNameDraft] = useState(() => defaultTeamBase(props.project.label));
+  const [title, setTitle] = useState(() => props.project.label);
   const [goal, setGoal] = useState("");
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
+  /** Teams minted from this sheet; discarded on Cancel / unmount if still solo. */
+  const provisionalTeamIds = useRef(new Set<string>());
+  const jobCommitted = useRef(false);
+  const agentsRef = useRef(props.agents);
+  agentsRef.current = props.agents;
   const [notice, setNotice] = useState<string | undefined>();
   const [freshInvite, setFreshInvite] = useState<string | undefined>();
   const [loaded, setLoaded] = useState(false);
@@ -74,6 +81,7 @@ export function TeamJobCreateSheet(props: {
       const rows = toRows(r.teams);
       setTeams(rows);
       if (rows[0]) setTeamId(rows[0].id);
+      setTeamNameDraft(uniqueTeamLabel(defaultTeamBase(props.project.label), rows.map((x) => x.label)));
     });
     void props.agents.assessGitContentBus(props.project.path).then((r) => {
       if (cancelled) return;
@@ -83,7 +91,52 @@ export function TeamJobCreateSheet(props: {
     return () => {
       cancelled = true;
     };
-  }, [props.agents, props.project.path]);
+  }, [props.agents, props.project.path, props.project.label]);
+
+  async function discardProvisionalTeams(
+    agents: AgentActions = agentsRef.current,
+  ): Promise<void> {
+    const ids = [...provisionalTeamIds.current];
+    if (ids.length === 0) return;
+    provisionalTeamIds.current.clear();
+    const listed = await agents.listTeams();
+    const byId = new Map(
+      listed.ok
+        ? listed.teams.map((team) => [
+            team.id,
+            team.members as ReadonlyArray<{ id: string }>,
+          ])
+        : [],
+    );
+    for (const id of ids) {
+      const members = byId.get(id) ?? [];
+      if (members.some((m) => m.id !== "local")) continue;
+      await agents.dissolveTeam(id);
+    }
+  }
+
+  // Sidebar / settings / palette close the sheet without pressing Cancel — same cleanup.
+  useEffect(() => {
+    return () => {
+      if (jobCommitted.current) return;
+      void discardProvisionalTeams(agentsRef.current);
+    };
+  }, []);
+
+  async function handleCancel(): Promise<void> {
+    if (inFlight.current) return;
+    if (!jobCommitted.current && provisionalTeamIds.current.size > 0) {
+      inFlight.current = true;
+      setBusy(true);
+      try {
+        await discardProvisionalTeams();
+      } finally {
+        inFlight.current = false;
+        setBusy(false);
+      }
+    }
+    props.onCancel();
+  }
 
   async function createTeamInline(): Promise<void> {
     if (inFlight.current) return;
@@ -92,14 +145,19 @@ export function TeamJobCreateSheet(props: {
     setNotice(undefined);
     try {
       const existing = teams.map((x) => x.label);
+      const label = uniqueTeamLabel(
+        teamNameDraft.trim() || defaultTeamBase(props.project.label),
+        existing,
+      );
       const result = await props.agents.createTeam({
-        label: uniqueTeamLabel(defaultTeamBase(props.project.label), existing),
+        label,
         memberLabel: hostMemberLabel(t("settings.teams.role.orchestrate"), props.project.label),
       });
       if (!result.ok) {
         setNotice(result.message);
         return;
       }
+      provisionalTeamIds.current.add(result.team.id);
       setFreshInvite(result.invite ?? result.token);
       const created: TeamRow = {
         id: result.team.id,
@@ -107,15 +165,17 @@ export function TeamJobCreateSheet(props: {
         members: (result.team.members as TeamRow["members"]) ?? [],
       };
       const listed = await props.agents.listTeams();
+      let rows: TeamRow[];
       if (listed.ok) {
-        const rows = toRows(listed.teams);
+        rows = toRows(listed.teams);
         if (!rows.some((r) => r.id === created.id)) rows.unshift(created);
-        setTeams(rows);
       } else {
-        setTeams([created]);
+        rows = [created];
         setNotice(listed.message);
       }
+      setTeams(rows);
       setTeamId(created.id);
+      setTeamNameDraft(uniqueTeamLabel(defaultTeamBase(props.project.label), rows.map((x) => x.label)));
     } finally {
       inFlight.current = false;
       setBusy(false);
@@ -171,6 +231,8 @@ export function TeamJobCreateSheet(props: {
         setNotice(result.message);
         return;
       }
+      jobCommitted.current = true;
+      provisionalTeamIds.current.clear();
       props.onCreated(result.job.id);
     } finally {
       inFlight.current = false;
@@ -206,7 +268,7 @@ export function TeamJobCreateSheet(props: {
             {t("teamJob.create.blurb", { project: props.project.label })}
           </p>
         </div>
-        <button type="button" className="button" onClick={props.onCancel}>
+        <button type="button" className="button" disabled={busy} onClick={() => void handleCancel()}>
           {t("action.cancel")}
         </button>
       </header>
@@ -232,16 +294,26 @@ export function TeamJobCreateSheet(props: {
         <section className="team-job-sheet__section" data-testid="team-job-no-team">
           <h2 className="team-job-sheet__section-title">{t("teamJob.create.sectionTeam")}</h2>
           <p className="team-job-sheet__hint">{t("teamJob.crew.noTeam")}</p>
+          <label className="settings__teams-field">
+            <span className="setting__title">{t("settings.teams.label")}</span>
+            <input
+              className="settings__pairing-input"
+              value={teamNameDraft}
+              disabled={busy}
+              data-testid="team-job-team-name"
+              onChange={(e) => setTeamNameDraft(e.target.value)}
+            />
+          </label>
           <div className="team-job-sheet__actions">
             <button
               type="button"
               className="button button--primary"
-              disabled={busy}
+              disabled={busy || teamNameDraft.trim() === ""}
               onClick={() => void createTeamInline()}
             >
               {t("teamJob.create.createTeam")}
             </button>
-            <button type="button" className="button" onClick={props.onOpenTeams}>
+            <button type="button" className="button" disabled={busy} onClick={props.onOpenTeams}>
               {t("teamJob.create.openTeams")}
             </button>
           </div>
@@ -250,11 +322,8 @@ export function TeamJobCreateSheet(props: {
         <>
           <section className="team-job-sheet__section">
             <h2 className="team-job-sheet__section-title">{t("teamJob.create.sectionTeam")}</h2>
-            {teams.length === 1 ? (
-              <p className="team-job-sheet__team-name" data-testid="team-job-single-team">
-                {teams[0]!.label}
-              </p>
-            ) : (
+            <label className="settings__teams-field">
+              <span className="setting__title">{t("teamJob.create.team")}</span>
               <select
                 className="settings__pairing-input"
                 value={teamId}
@@ -269,7 +338,7 @@ export function TeamJobCreateSheet(props: {
                   </option>
                 ))}
               </select>
-            )}
+            </label>
 
             {peersNote ? (
               <p
@@ -311,11 +380,21 @@ export function TeamJobCreateSheet(props: {
             <p className="team-job-sheet__links">
               <details className="settings__teams-advanced team-job-sheet__more">
                 <summary className="setting__title">{t("teamJob.create.moreTeam")}</summary>
+                <label className="settings__teams-field">
+                  <span className="setting__title">{t("settings.teams.label")}</span>
+                  <input
+                    className="settings__pairing-input"
+                    value={teamNameDraft}
+                    disabled={busy}
+                    data-testid="team-job-team-name"
+                    onChange={(e) => setTeamNameDraft(e.target.value)}
+                  />
+                </label>
                 <div className="team-job-sheet__actions">
                   <button
                     type="button"
                     className="button button--secondary button--small"
-                    disabled={busy}
+                    disabled={busy || teamNameDraft.trim() === ""}
                     onClick={() => void createTeamInline()}
                   >
                     {t("teamJob.create.createTeam")}
@@ -323,6 +402,7 @@ export function TeamJobCreateSheet(props: {
                   <button
                     type="button"
                     className="button button--ghost button--small"
+                    disabled={busy}
                     onClick={props.onOpenTeams}
                   >
                     {t("teamJob.create.openTeams")}

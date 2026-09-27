@@ -29,6 +29,7 @@ import { mergeOfferedAgents } from "../../composer/agent-for.js";
 import { useI18n } from "../../i18n/context.js";
 import { LOCALES, LOCALE_LABELS } from "../../i18n/locales.js";
 import { FolderSetting, SettingRow, TextSetting } from "../SettingsRows.js";
+import { EnvoyDecisionPanel } from "./EnvoyDecisionPanel.js";
 import type { SettingsSectionProps } from "./SectionProps.js";
 import { ApprovalRow, ModelRow, labelForHarness, summaryFor } from "./SettingsRowParts.js";
 import { verdictSuffix } from "./agent-verdict.js";
@@ -259,6 +260,10 @@ export function SafetySection(props: SettingsSectionProps): JSX.Element {
           />
         )}
       </SettingRow>
+
+      {defaultHarness === "envoy-harness" ? (
+        <EnvoyDecisionPanel agents={props.agents} />
+      ) : null}
     </>
   );
 }

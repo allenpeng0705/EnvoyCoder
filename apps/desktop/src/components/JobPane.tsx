@@ -3,7 +3,7 @@
  * Stall automation is not enabled from this UI by default (§4.6 ship gate).
  */
 
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 
 import type { AcceptPolicy, Job, JobLedgerNote, JobRole, MemberStatus, StepOffer } from "@envoydev/protocol";
 
@@ -62,6 +62,8 @@ export function JobPane(props: {
   const [pendingOffers, setPendingOffers] = useState<readonly StepOffer[]>([]);
   const [notice, setNotice] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
+  /** Sync lock — `setBusy(true)` alone does not stop a second Suggest click before re-render. */
+  const inFlight = useRef(false);
   const [ledgerFilter, setLedgerFilter] = useState<LedgerFilter>("all");
   const [ledgerStepId, setLedgerStepId] = useState<string>("");
   const [ledgerMemberId, setLedgerMemberId] = useState<string>("");
@@ -155,16 +157,22 @@ export function JobPane(props: {
   }, [props.agents]);
 
   async function act(fn: () => Promise<{ ok: true; job: Job } | { ok: false; message: string }>): Promise<void> {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setNotice(undefined);
-    const result = await fn();
-    setBusy(false);
-    if (!result.ok) {
-      setNotice(result.message);
-      return;
+    try {
+      const result = await fn();
+      if (!result.ok) {
+        setNotice(result.message);
+        return;
+      }
+      setJob(result.job);
+      void reload();
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
     }
-    setJob(result.job);
-    void reload();
   }
 
   if (!job) {
@@ -309,15 +317,19 @@ export function JobPane(props: {
                 setNotice(t("job.pane.suggestOnlyDraft"));
                 return;
               }
+              if (inFlight.current) return;
+              inFlight.current = true;
+              setBusy(true);
+              setNotice(undefined);
               // Daemon inherits cwdHint from existing steps (project path from create).
-              void props.agents
-                .suggestJobSteps(job.id, {
-                  templateId,
-                  ...(templateId === "parallel-feature" || templateId === "parallel-test"
-                    ? { parallelCount }
-                    : {}),
-                })
-                .then(async (r) => {
+              void (async () => {
+                try {
+                  const r = await props.agents.suggestJobSteps(job.id, {
+                    templateId,
+                    ...(templateId === "parallel-feature" || templateId === "parallel-test"
+                      ? { parallelCount }
+                      : {}),
+                  });
                   if (!r.ok) {
                     setNotice(r.message);
                     return;
@@ -335,9 +347,19 @@ export function JobPane(props: {
                     setNotice(`${r.note} — ${preview}`);
                     return;
                   }
-                  await act(() => props.agents.updateJobSteps(job.id, drafts));
+                  const updated = await props.agents.updateJobSteps(job.id, drafts);
+                  if (!updated.ok) {
+                    setNotice(updated.message);
+                    return;
+                  }
+                  setJob(updated.job);
                   setNotice(t("job.pane.suggestApplied"));
-                });
+                  void reload();
+                } finally {
+                  inFlight.current = false;
+                  setBusy(false);
+                }
+              })();
             }}
           >
             {t("job.pane.suggest")}
