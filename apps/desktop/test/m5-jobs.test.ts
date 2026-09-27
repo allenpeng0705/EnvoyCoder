@@ -2,11 +2,24 @@
  * Team + Job ledger (M5) — token/invite join, cwdHint refuse, writer locks, stall, §7.
  */
 
+import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
+
+const execFileAsync = promisify(execFile);
+
+/** Team-job Start requires a Git work tree with a remote (content bus). */
+async function prepareGitWorkDir(dir: string): Promise<void> {
+  await mkdir(dir, { recursive: true });
+  await execFileAsync("git", ["init"], { cwd: dir });
+  await execFileAsync("git", ["remote", "add", "origin", "https://example.com/repo.git"], {
+    cwd: dir,
+  });
+}
 
 import {
   assertWriterLocks,
@@ -18,9 +31,11 @@ import {
   reportJobStepProgress,
   retriesForAssignee,
   setJobStallAutomation,
+  saveJob,
   startJob,
   suggestJobSteps,
   listJobStepTemplates,
+  pauseJob,
   updateJobSteps,
 } from "../src/daemon/jobs.js";
 import {
@@ -249,7 +264,7 @@ describe("jobs", () => {
 
   it("leaves local offers pending under default manual AcceptPolicy", async () => {
     const paths = await tempPaths();
-    await mkdir(paths.workDir, { recursive: true });
+    await prepareGitWorkDir(paths.workDir);
     const team = await createTeam(paths.teamsFile, {
       label: "Desk",
       originWs: "ws://127.0.0.1:4770/ws",
@@ -276,7 +291,7 @@ describe("jobs", () => {
     expect(offered.offer?.status).toBe("pending");
   });
 
-  it("refuses path-missing on local auto-accept", async () => {
+  it("refuses Start when cwdHint is missing (Git content bus)", async () => {
     const paths = await tempPaths();
     const team = await createTeam(paths.teamsFile, {
       label: "Desk",
@@ -290,7 +305,7 @@ describe("jobs", () => {
         autoAcceptRoles: ["developer", "tester", "designer", "document"],
       },
     });
-    let job = await createJob(paths.jobsFile, {
+    const job = await createJob(paths.jobsFile, {
       teamId: team.team.id,
       title: "Fix",
       goal: "ship",
@@ -303,21 +318,124 @@ describe("jobs", () => {
         },
       ],
     });
+    await expect(
+      startJob(paths.jobsFile, paths.jobOffersFile, paths.teamsFile, job.id),
+    ).rejects.toThrow(/missing|Clone|folder/i);
+  });
+
+  it("refuses Start when the folder is not a Git repo", async () => {
+    const paths = await tempPaths();
+    await mkdir(paths.workDir, { recursive: true });
+    const team = await createTeam(paths.teamsFile, {
+      label: "Desk",
+      originWs: "ws://127.0.0.1:4770/ws",
+    });
+    const job = await createJob(paths.jobsFile, {
+      teamId: team.team.id,
+      title: "Fix",
+      goal: "ship",
+      steps: [
+        {
+          role: "developer",
+          brief: "do it",
+          worktreeKey: "main",
+          cwdHint: paths.workDir,
+        },
+      ],
+    });
+    await expect(
+      startJob(paths.jobsFile, paths.jobOffersFile, paths.teamsFile, job.id),
+    ).rejects.toThrow(/Git repository|not a Git/i);
+  });
+
+  it("refuses Start when the Git repo has no remote", async () => {
+    const paths = await tempPaths();
+    await mkdir(paths.workDir, { recursive: true });
+    await execFileAsync("git", ["init"], { cwd: paths.workDir });
+    const team = await createTeam(paths.teamsFile, {
+      label: "Desk",
+      originWs: "ws://127.0.0.1:4770/ws",
+    });
+    const job = await createJob(paths.jobsFile, {
+      teamId: team.team.id,
+      title: "Fix",
+      goal: "ship",
+      steps: [
+        {
+          role: "developer",
+          brief: "do it",
+          worktreeKey: "main",
+          cwdHint: paths.workDir,
+        },
+      ],
+    });
+    await expect(
+      startJob(paths.jobsFile, paths.jobOffersFile, paths.teamsFile, job.id),
+    ).rejects.toThrow(/remote/i);
+  });
+
+  it("Pause then Start resumes offering pending steps only", async () => {
+    const paths = await tempPaths();
+    await prepareGitWorkDir(paths.workDir);
+    const team = await createTeam(paths.teamsFile, {
+      label: "Desk",
+      originWs: "ws://127.0.0.1:4770/ws",
+    });
+    await setMemberAcceptPolicy(paths.teamsFile, {
+      teamId: team.team.id,
+      memberId: "local",
+      acceptPolicy: { mode: "manual" },
+    });
+    let job = await createJob(paths.jobsFile, {
+      teamId: team.team.id,
+      title: "Two steps",
+      goal: "ship",
+      steps: [
+        {
+          role: "developer",
+          brief: "first",
+          worktreeKey: "main",
+          cwdHint: paths.workDir,
+        },
+      ],
+    });
+    const firstId = job.steps[0]!.id;
+    job = await updateJobSteps(paths.jobsFile, job.id, [
+      {
+        id: firstId,
+        role: "developer",
+        brief: "first",
+        worktreeKey: "main",
+        cwdHint: paths.workDir,
+      },
+      {
+        role: "developer",
+        brief: "second",
+        worktreeKey: "main",
+        cwdHint: paths.workDir,
+        dependsOn: [firstId],
+      },
+    ]);
+
     job = await startJob(paths.jobsFile, paths.jobOffersFile, paths.teamsFile, job.id);
-    const step = job.steps[0]!;
-    expect(
-      step.status === "pending" ||
-        step.status === "failed" ||
-        step.attempts.some((a) => a.outcome === "refused" || a.policy === "path-missing"),
-    ).toBe(true);
-    expect(step.attempts.some((a) => a.policy === "path-missing" || a.error?.includes("path") || a.outcome === "refused")).toBe(
-      true,
-    );
+    expect(job.status).toBe("running");
+    expect(job.steps[0]!.status).toBe("offered");
+    expect(job.steps[1]!.status).toBe("pending");
+
+    job = await pauseJob(paths.jobsFile, job.id);
+    expect(job.status).toBe("drafting");
+    expect(job.steps[0]!.status).toBe("offered");
+
+    job = await startJob(paths.jobsFile, paths.jobOffersFile, paths.teamsFile, job.id);
+    expect(job.status).toBe("running");
+    // Already-offered step stays offered; dependent stays pending until first completes.
+    expect(job.steps[0]!.status).toBe("offered");
+    expect(job.steps[1]!.status).toBe("pending");
   });
 
   it("reassigns after refuse when policy is reassign", async () => {
     const paths = await tempPaths();
-    await mkdir(paths.workDir, { recursive: true });
+    await prepareGitWorkDir(paths.workDir);
     const team = await createTeam(paths.teamsFile, {
       label: "Desk",
       originWs: "ws://127.0.0.1:4770/ws",
@@ -411,7 +529,7 @@ describe("jobs", () => {
 
   it("counts retries and fails the job after exhaustion", async () => {
     const paths = await tempPaths();
-    await mkdir(paths.workDir, { recursive: true });
+    await prepareGitWorkDir(paths.workDir);
     const team = await createTeam(paths.teamsFile, {
       label: "Desk",
       originWs: "ws://127.0.0.1:4770/ws",
@@ -469,7 +587,7 @@ describe("jobs", () => {
 
   it("records progress and stalls on no-progress when automation is on", async () => {
     const paths = await tempPaths();
-    await mkdir(paths.workDir, { recursive: true });
+    await prepareGitWorkDir(paths.workDir);
     const team = await createTeam(paths.teamsFile, {
       label: "Desk",
       originWs: "ws://127.0.0.1:4770/ws",
@@ -544,6 +662,101 @@ describe("jobs", () => {
     expect(suggested.steps.length).toBeGreaterThan(0);
     expect(suggested.steps.every((s) => s.id)).toBe(true);
     expect(job.steps).toHaveLength(0);
+  });
+
+  it("suggest inherits cwdHint from existing job steps", async () => {
+    const paths = await tempPaths();
+    const team = await createTeam(paths.teamsFile, {
+      label: "Desk",
+      originWs: "ws://127.0.0.1:4770/ws",
+    });
+    const job = await createJob(paths.jobsFile, {
+      teamId: team.team.id,
+      title: "Feature",
+      goal: "ship",
+      projectId: "proj",
+      steps: [
+        {
+          role: "developer",
+          brief: "seed",
+          worktreeKey: "proj:main",
+          cwdHint: "/real/project/path",
+        },
+      ],
+    });
+    const suggested = suggestJobSteps(job, { templateId: "pipeline" });
+    expect(suggested.steps.every((s) => s.cwdHint === "/real/project/path")).toBe(true);
+  });
+
+  it("start refuses when no online candidate for a root step", async () => {
+    const paths = await tempPaths();
+    await prepareGitWorkDir(paths.workDir);
+    const created = await createTeam(paths.teamsFile, {
+      label: "Desk",
+      originWs: "ws://127.0.0.1:4770/ws",
+      rolesOffered: ["orchestrate"],
+    });
+    // Local only offers orchestrate — developer step has no assignee.
+    const job = await createJob(paths.jobsFile, {
+      teamId: created.team.id,
+      title: "Fix",
+      goal: "ship",
+      steps: [
+        {
+          role: "developer",
+          brief: "code",
+          worktreeKey: "main",
+          cwdHint: paths.workDir,
+        },
+      ],
+    });
+    await expect(
+      startJob(paths.jobsFile, paths.jobOffersFile, paths.teamsFile, job.id),
+    ).rejects.toThrow(/online machine|role/i);
+  });
+
+  it("refuses replacing in-flight steps", async () => {
+    const paths = await tempPaths();
+    const team = await createTeam(paths.teamsFile, {
+      label: "Desk",
+      originWs: "ws://127.0.0.1:4770/ws",
+    });
+    const created = await createJob(paths.jobsFile, {
+      teamId: team.team.id,
+      title: "Fix",
+      goal: "ship",
+      steps: [
+        {
+          id: "keep",
+          role: "developer",
+          brief: "a",
+          worktreeKey: "main",
+          cwdHint: paths.workDir,
+        },
+      ],
+    });
+    // Simulate a live step without racing auto-accept / job completion.
+    await saveJob(paths.jobsFile, {
+      ...created,
+      status: "running",
+      steps: created.steps.map((s) => ({ ...s, status: "running" as const })),
+    });
+    await expect(
+      updateJobSteps(
+        paths.jobsFile,
+        created.id,
+        [
+          {
+            id: "brand-new",
+            role: "developer",
+            brief: "replace all",
+            worktreeKey: "main",
+            cwdHint: paths.workDir,
+          },
+        ],
+        paths.teamsFile,
+      ),
+    ).rejects.toThrow(/in progress|replace/i);
   });
 
   it("templates cover sequential and parallel graphs", async () => {
@@ -655,7 +868,7 @@ describe("jobs", () => {
 
   it("enforces step deadlines without stall automation", async () => {
     const paths = await tempPaths();
-    await mkdir(paths.workDir, { recursive: true });
+    await prepareGitWorkDir(paths.workDir);
     const team = await createTeam(paths.teamsFile, {
       label: "Desk",
       originWs: "ws://127.0.0.1:4770/ws",
@@ -702,7 +915,7 @@ describe("jobs", () => {
 
   it("continue-partial finishes done with gaps for non-writer failures", async () => {
     const paths = await tempPaths();
-    await mkdir(paths.workDir, { recursive: true });
+    await prepareGitWorkDir(paths.workDir);
     const team = await createTeam(paths.teamsFile, {
       label: "Desk",
       originWs: "ws://127.0.0.1:4770/ws",
@@ -751,7 +964,7 @@ describe("jobs", () => {
 
   it("records hasGap when eventSeq skips", async () => {
     const paths = await tempPaths();
-    await mkdir(paths.workDir, { recursive: true });
+    await prepareGitWorkDir(paths.workDir);
     const team = await createTeam(paths.teamsFile, {
       label: "Desk",
       originWs: "ws://127.0.0.1:4770/ws",
@@ -810,7 +1023,7 @@ describe("jobs", () => {
 
   it("refuses terminal progress on a step that is not running", async () => {
     const paths = await tempPaths();
-    await mkdir(paths.workDir, { recursive: true });
+    await prepareGitWorkDir(paths.workDir);
     const team = await createTeam(paths.teamsFile, {
       label: "Desk",
       originWs: "ws://127.0.0.1:4770/ws",
@@ -845,7 +1058,7 @@ describe("jobs", () => {
 
   it("refuses accept of a superseded offer after reassign", async () => {
     const paths = await tempPaths();
-    await mkdir(paths.workDir, { recursive: true });
+    await prepareGitWorkDir(paths.workDir);
     const team = await createTeam(paths.teamsFile, {
       label: "Desk",
       originWs: "ws://127.0.0.1:4770/ws",
@@ -902,7 +1115,7 @@ describe("jobs", () => {
 
   it("refuses refuse after accept and rejects expired team tokens on pre-auth", async () => {
     const paths = await tempPaths();
-    await mkdir(paths.workDir, { recursive: true });
+    await prepareGitWorkDir(paths.workDir);
     const team = await createTeam(paths.teamsFile, {
       label: "Desk",
       originWs: "ws://127.0.0.1:4770/ws",
@@ -1051,7 +1264,7 @@ describe("cross-daemon join (injected peer RPC)", () => {
     await mkdir(originPaths.stateDir, { recursive: true });
     await mkdir(peerPaths.stateDir, { recursive: true });
     const work = join(peerHome, "repo");
-    await mkdir(work, { recursive: true });
+    await prepareGitWorkDir(work);
 
     const created = await createTeam(originPaths.teamsFile, {
       label: "Origin",

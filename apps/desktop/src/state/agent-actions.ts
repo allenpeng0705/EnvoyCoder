@@ -350,6 +350,28 @@ export interface AgentActions {
       }
     | Refusal
   >;
+  assessGitContentBus(path: string): Promise<
+    | { ok: true; path: string }
+    | { ok: false; policy: "path-missing" | "not-a-git-repo" | "no-git-remote" | "git-missing" }
+    | Refusal
+  >;
+  /** Combined crew + Git Start gate — same answer desktop Job pane and Mobile use. */
+  assessTeamJobReadiness(jobId: string): Promise<
+    | {
+        ok: true;
+        canStart: boolean;
+        jobStatus: string;
+        message: string;
+        messageKey?: string;
+        messageValues?: Record<string, string>;
+        blockKind?: string;
+        missingRoles: readonly import("@envoydev/protocol").JobRole[];
+        offlineLabels: readonly string[];
+        git: { ok: true } | { ok: false; policy: "path-missing" | "not-a-git-repo" | "no-git-remote" | "git-missing" };
+        board: readonly import("@envoydev/protocol").MemberStatus[];
+      }
+    | Refusal
+  >;
   updateJobSteps(
     jobId: string,
     steps: readonly {

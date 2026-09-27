@@ -145,9 +145,13 @@ Design + next UX plan: [`docs/envoydev-collaboration.md`](envoydev-collaboration
 > today is still Settings → Teams (first project). Evidence: `m5-two-daemon.test.ts`,
 > `m5-jobs.test.ts`, `member-dial.test.ts`.
 >
-> **Next (§13):** Project-scoped **Team job** affordance (not “New job”); pick existing team or
-> Create team…; draft when crew incomplete; **Start** gated with guidance when members offline or
-> roles missing; rail row under the project. Multiple teams remain allowed.
+> **§13 (origin UX):** Project **Team job** create sheet (pick/create team, title/goal); jobs under
+> the project in the rail; Job pane **Start** gated with crew guidance + Open Teams. Multiple teams
+> remain allowed. Evidence: `job-crew.test.ts`; sheet `TeamJobCreateSheet`.
+>
+> **§11.7 (Mobile):** Paired phone may draft + Start on existing teams (`requireOriginClient`);
+> `coder.assessTeamJobReadiness` returns structured block reasons. No team admin on phone.
+> Evidence: `job-start-readiness.test.ts`; Flutter `team_job_sheet.dart`.
 
 **M6 — packaging.** *Proves:* the app installs and starts on all three platforms, with evidence
 in CI rather than unit tests only.
@@ -178,7 +182,7 @@ Ordered after the 2026-09 composer-honesty sprint (gates green, Resume UI, Claud
 | Next | **Codex / Cursor thinking honesty** | Claude `effort` wired. Codex rejects `reasoning_effort` today; Cursor has no `thought_level` |
 | Release | **Mobile store: device screenshots + deploy privacy** | Listing URLs filled; re-capture shots at store sizes; deploy `EnvoyMesh/sites/privacy.html` to homeclaw |
 | Release | **M6 signing + install smoke** | Unsigned builders exist; signing/notarization and CI install-launch still owed |
-| Architecture | **M5 Team job from project (§13)** | Control plane done; next: project **Team job** + crew guidance — `envoydev-collaboration.md` §13 |
+| Done | **M5 Team job from project (§13)** | Project create sheet + crew Start gate — `envoydev-collaboration.md` §13 |
 | Polish | **History / sidebar nav render** | Model done; UI thin (`paseo-feature-parity` #7) |
 
 ## Explicitly not planned

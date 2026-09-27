@@ -4299,7 +4299,70 @@ button.explorer__change:hover {
 .settings__teams {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.75rem;
+}
+.settings__teams-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  margin: 0.65rem 0 0.85rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border, #333);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface, #111) 80%, transparent);
+}
+.settings__teams-mode-btn {
+  appearance: none;
+  border: none;
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 560;
+  cursor: pointer;
+  color: var(--foreground-muted, #9aa);
+  background: transparent;
+}
+.settings__teams-mode-btn:hover {
+  color: var(--foreground, #eee);
+}
+.settings__teams-mode-btn--active {
+  color: var(--foreground, #eee);
+  background: color-mix(in srgb, var(--accent, #4a7) 22%, var(--surface, #1a1a1a));
+}
+.settings__teams-cta {
+  width: 100%;
+  justify-content: center;
+  margin-top: 0.25rem;
+}
+.settings__teams-advanced {
+  margin: 0.15rem 0 0.35rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--border, #333) 80%, transparent);
+  border-radius: 8px;
+}
+.settings__teams-advanced > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.85rem;
+  color: var(--foreground-muted, #9aa);
+}
+.settings__teams-advanced > summary::-webkit-details-marker {
+  display: none;
+}
+.settings__teams-advanced > summary::before {
+  content: "▸ ";
+  opacity: 0.7;
+}
+.settings__teams-advanced[open] > summary::before {
+  content: "▾ ";
+}
+.settings__teams-advanced[open] > summary {
+  margin-bottom: 0.55rem;
+  color: var(--foreground, #eee);
+}
+.settings__teams-advanced .settings__teams-roles {
+  margin-top: 0.35rem;
 }
 .settings__teams-status {
   margin: 0.25rem 0 0.75rem;
@@ -4319,7 +4382,25 @@ button.explorer__change:hover {
   display: block;
   width: 100%;
   max-width: 100%;
+  min-width: 0;
   padding: 0.35rem 0;
+  /* Invite URIs are one long token with no spaces — break anywhere so the card never overflows. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+  user-select: all;
+}
+.settings__teams-token {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
   user-select: all;
 }
 .settings__teams-field {
@@ -4427,6 +4508,9 @@ button.explorer__change:hover {
   border-top: none;
   padding-top: 0;
 }
+.settings__teams-confirm {
+  margin: 0.35rem 0 0;
+}
 
 .settings__paired-list {
   list-style: none;
@@ -4455,5 +4539,120 @@ button.explorer__change:hover {
 }
 .job-pane__template select {
   min-width: 10rem;
+}
+
+
+.job-pane__crew {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0.5rem 0 0.75rem;
+}
+.team-job-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.25rem 1.5rem 1.5rem;
+  max-width: 28rem;
+}
+.team-job-sheet__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.team-job-sheet__intro {
+  min-width: 0;
+}
+.team-job-sheet__blurb {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--foreground-muted, #9aa);
+}
+.team-job-sheet__notice {
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--status-danger, #c44) 12%, transparent);
+  font-size: 0.85rem;
+}
+.team-job-sheet__status {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  color: var(--foreground-muted, #9aa);
+}
+.team-job-sheet__status--warn {
+  color: var(--status-warning, #c90);
+}
+.team-job-sheet__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--border, #333);
+}
+.team-job-sheet__section-title {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--foreground-muted, #9aa);
+}
+.team-job-sheet__team-name {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 560;
+}
+.team-job-sheet__hint {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--foreground-muted, #9aa);
+}
+.team-job-sheet__hint--warn {
+  color: var(--status-warning, #c90);
+}
+.team-job-sheet__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.team-job-sheet__links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 0.35rem;
+  margin: 0.15rem 0 0;
+}
+.team-job-sheet__more {
+  width: 100%;
+  margin: 0;
+}
+.team-job-sheet__more .team-job-sheet__actions {
+  margin-top: 0.35rem;
+}
+.team-job-sheet__links-sep {
+  opacity: 0.45;
+  user-select: none;
+}
+.team-job-sheet__footer {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  padding-top: 0.35rem;
+}
+.team-job-sheet__footer .button--primary {
+  width: 100%;
+  justify-content: center;
+}
+.team-job-sheet__crew {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 

@@ -79,6 +79,8 @@ export interface CoderSidebarProps {
   onSelect: (taskId: string) => void;
   /** Called when the user asks for a new task inside a project. */
   onNewTask: (projectId: string) => void;
+  /** Called when the user asks for a Team job inside a project (§13). */
+  onTeamJob?: (projectId: string) => void;
   onAddProject: () => void;
   onOpenProjectSettings: (project: Project) => void;
   /**
@@ -317,30 +319,36 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
         </div>
       ) : null}
 
-      {props.jobs && props.jobs.length > 0 ? (
-        <div className="sidebar__jobs" data-testid="job-list">
-          <div className="sidebar__group-label">{t("sidebar.jobs")}</div>
-          <ul className="sidebar__job-rows">
-            {props.jobs.map((job) => (
-              <li key={job.id}>
-                <button
-                  type="button"
-                  className={
-                    props.activeJobId === job.id
-                      ? "sidebar__task sidebar__task--active"
-                      : "sidebar__task"
-                  }
-                  onClick={() => props.onSelectJob?.(job.id)}
-                >
-                  <span className="dot" data-status={job.status} aria-hidden />
-                  <span className="sidebar__task-title">{job.title}</span>
-                  <span className="sidebar__task-meta">{job.status}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+      {(() => {
+        const orphans = (props.jobs ?? []).filter(
+          (job) => !props.projects.some((p) => p.id === job.projectId),
+        );
+        if (orphans.length === 0) return null;
+        return (
+          <div className="sidebar__jobs" data-testid="job-list-orphan">
+            <div className="sidebar__group-label">{t("sidebar.jobs")}</div>
+            <ul className="sidebar__job-rows">
+              {orphans.map((job) => (
+                <li key={job.id}>
+                  <button
+                    type="button"
+                    className={
+                      props.activeJobId === job.id
+                        ? "sidebar__task sidebar__task--active"
+                        : "sidebar__task"
+                    }
+                    onClick={() => props.onSelectJob?.(job.id)}
+                  >
+                    <span className="dot" data-status={job.status} aria-hidden />
+                    <span className="sidebar__task-title">{job.title}</span>
+                    <span className="sidebar__task-meta">{job.status}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })()}
 
       <div className="sidebar__list" data-testid="task-list">
         {groups.length === 0 ? (
@@ -456,6 +464,15 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                         label: t("sidebar.project.menu.newTask"),
                         onSelect: () => props.onNewTask(group.project.id),
                       },
+                      ...(props.onTeamJob
+                        ? [
+                            {
+                              id: "team-job",
+                              label: t("sidebar.project.menu.teamJob"),
+                              onSelect: () => props.onTeamJob?.(group.project.id),
+                            },
+                          ]
+                        : []),
                       ...(props.onOpenProjectInNewWindow
                         ? [
                             {
@@ -520,6 +537,41 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                     {group.rows.length === 0 && props.tasksUnknown !== true ? (
                       <p className="project__empty">{t("sidebar.tasks.empty")}</p>
                     ) : null}
+                    <div className="project__tasks-bar" data-testid={`project-team-jobs-${group.project.id}`}>
+                      <span className="project__tasks-title">{t("sidebar.section.teamJobs")}</span>
+                      {props.onTeamJob ? (
+                        <button
+                          type="button"
+                          className="button button--ghost button--small"
+                          data-testid={`team-job-${group.project.id}`}
+                          onClick={() => props.onTeamJob?.(group.project.id)}
+                          title={t("sidebar.project.teamJob.title", { project: group.project.label })}
+                        >
+                          {t("sidebar.project.teamJob")}
+                        </button>
+                      ) : null}
+                    </div>
+                    <ul className="sidebar__job-rows" data-testid={`job-list-${group.project.id}`}>
+                      {(props.jobs ?? [])
+                        .filter((job) => job.projectId === group.project.id)
+                        .map((job) => (
+                          <li key={job.id}>
+                            <button
+                              type="button"
+                              className={
+                                props.activeJobId === job.id
+                                  ? "sidebar__task sidebar__task--active"
+                                  : "sidebar__task"
+                              }
+                              onClick={() => props.onSelectJob?.(job.id)}
+                            >
+                              <span className="dot" data-status={job.status} aria-hidden />
+                              <span className="sidebar__task-title">{job.title}</span>
+                              <span className="sidebar__task-meta">{job.status}</span>
+                            </button>
+                          </li>
+                        ))}
+                    </ul>
                   </>
                 )}
               </section>

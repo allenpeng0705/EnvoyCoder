@@ -1276,4 +1276,150 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get statusStopped => '停止';
+
+  @override
+  String get teamJobCreateTitle => 'チームジョブ';
+
+  @override
+  String teamJobCreateBlurb(String project) {
+    return project + ' で一緒に作業します。';
+  }
+
+  @override
+  String get teamJobCreateTeam => 'チーム';
+
+  @override
+  String get teamJobCreateJobTitle => 'タイトル';
+
+  @override
+  String get teamJobCreateJobGoal => '目標';
+
+  @override
+  String get teamJobCreateSubmit => '下書きを作成';
+
+  @override
+  String get teamJobCreateDraftHint => 'クルーがオンラインになってから開始できます。';
+
+  @override
+  String get teamJobCrewNoJoiners => '別のマシンを招待してください。下書きは作成できます。';
+
+  @override
+  String teamJobCrewAllOffline(String machines) {
+    return machines + ' のオンラインを待っています。';
+  }
+
+  @override
+  String get jobPaneCrewNoSteps => '開始前にステップを追加してください（ステップテンプレートを使用）。';
+
+  @override
+  String get jobPaneCrewNoMembers => 'このチームにはまだマシンがありません。「チーム」から招待してください。';
+
+  @override
+  String jobPaneCrewAllOffline(String machines) {
+    return 'オンラインのマシンがありません。待機中：' + machines + '。';
+  }
+
+  @override
+  String jobPaneCrewMissingRoles(String roles) {
+    return 'オンラインのマシンが提供していません：' + roles + '。「チーム」で役割を直すか、適切なピアを待ってください。';
+  }
+
+  @override
+  String get jobPaneStart => 'ジョブを開始';
+
+  @override
+  String get teamJobStartBlocked => '開始前にメンバー構成を直してください。';
+
+  @override
+  String get teamJobGitOk => 'Git 準備完了 — リモート付きリポジトリ。';
+
+  @override
+  String get teamJobGitPathMissing => 'プロジェクトフォルダがありません。';
+
+  @override
+  String get teamJobGitNotARepo => 'このプロジェクトは Git リポジトリではありません。チームジョブはファイル共有に Git が必要です。';
+
+  @override
+  String get teamJobGitNoRemote => 'チームジョブを開始する前に Git リモート（例：origin）を追加してください。';
+
+  @override
+  String get teamJobGitMissing => 'このマシンで Git を利用できません。';
+
+  @override
+  String get teamJobGitChecking => 'Git を確認中…';
+
+  @override
+  String get errorJobNotDrafting => '下書き中のジョブのみ開始できます。';
+
+  @override
+  String get errorOriginClientOnly => 'このマシン上の EnvoyDev、またはそれにペアリングした電話が必要です。';
+
+  @override
+  String get projectListTeamJob => 'チームジョブ';
+
+  @override
+  String get teamJobCrewNoTeamDesktop => 'デスクトップの EnvoyDev でチームを作成してから、引っ張って更新してください。';
+
+  @override
+  String get teamJobNeedsDesktopHint => 'キック、トークン更新、再割り当てはデスクトップのジョブ画面で行います。';
+
+  @override
+  String get teamJobReadyToStart => 'メンバーと Git の準備ができました — 開始できます。';
+
+  @override
+  String get teamJobWatchTitle => 'チームジョブ';
+
+  @override
+  String get teamJobStepsHeading => 'ステップ';
+
+  @override
+  String get teamJobLedgerHeading => '最近のメモ';
+
+  @override
+  String get teamJobStatusDrafting => '下書き';
+
+  @override
+  String get teamJobStatusPaused => '一時停止';
+
+  @override
+  String get teamJobStepPending => '保留';
+
+  @override
+  String get teamJobStepOffered => 'オファー済み';
+
+  @override
+  String get commonRefresh => '更新';
+
+  @override
+  String get jobPaneApprove => '許可';
+
+  @override
+  String get jobPaneDeny => '許可しない';
+
+  @override
+  String get jobPaneNeedsApproval => 'このステップの承認待ち';
+
+  @override
+  String get teamJobExistingHeading => 'このプロジェクトのチームジョブ';
+
+  @override
+  String get teamJobNewCta => '新しいチームジョブ';
+
+  @override
+  String get teamJobBackToList => 'ジョブ一覧に戻る';
+
+  @override
+  String get teamJobBackToEdit => '編集に戻る';
+
+  @override
+  String get teamJobPeersHeading => 'マシン';
+
+  @override
+  String get teamJobPeerOnline => 'オンライン';
+
+  @override
+  String get teamJobPeerDegraded => '不安定';
+
+  @override
+  String get teamJobPeerOffline => 'オフライン';
 }

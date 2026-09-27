@@ -9,8 +9,14 @@ import type { AcceptPolicy, Job, JobLedgerNote, JobRole, MemberStatus, StepOffer
 
 import { useI18n } from "../i18n/context.js";
 import type { AgentActions } from "../state/agent-actions.js";
+import { type GitUiPolicy } from "../state/job-git-ui.js";
 
 type LedgerFilter = "all" | "step" | "member";
+
+type StartReadiness = Extract<
+  Awaited<ReturnType<AgentActions["assessTeamJobReadiness"]>>,
+  { ok: true }
+>;
 
 const AUTO_ACCEPT_ROLES = ["developer", "tester", "designer", "document"] as const satisfies readonly JobRole[];
 
@@ -26,23 +32,28 @@ function policyFromRoles(roles: readonly JobRole[]): AcceptPolicy {
   return { mode: "auto-roles", autoAcceptRoles: [...roles] };
 }
 
-/** Next online peer that offers this step's role (§11.5). */
+/** Next online peer that offers this step's role (§11.5). Degraded only when policy allows. */
 export function suggestReassignMember(
   board: readonly MemberStatus[],
   step: { role: JobRole; assigneeMemberId?: string },
+  options?: { allowDegradedAssignees?: boolean },
 ): MemberStatus | undefined {
-  return board.find(
-    (m) =>
-      m.memberId !== step.assigneeMemberId &&
-      (m.connection.status === "online" || m.connection.status === "degraded") &&
-      m.rolesOffered.includes(step.role),
-  );
+  const allowDegraded = options?.allowDegradedAssignees === true;
+  return board.find((m) => {
+    if (m.memberId === step.assigneeMemberId) return false;
+    if (!m.rolesOffered.includes(step.role)) return false;
+    if (m.connection.status === "online") return true;
+    if (allowDegraded && m.connection.status === "degraded") return true;
+    return false;
+  });
 }
 
 export function JobPane(props: {
   jobId: string;
   agents: AgentActions;
   onClose: () => void;
+  /** Open Settings → Teams so the user can invite / fix roles (§11.6). */
+  onOpenTeams?: () => void;
 }): ReactElement {
   const { t } = useI18n();
   const [job, setJob] = useState<Job | undefined>();
@@ -58,17 +69,39 @@ export function JobPane(props: {
   const [templates, setTemplates] = useState<ReadonlyArray<{ id: string; title: string; detail: string }>>([]);
   const [templateId, setTemplateId] = useState<string>("pipeline");
   const [parallelCount, setParallelCount] = useState(2);
+  const [gitPolicy, setGitPolicy] = useState<GitUiPolicy>("checking");
+  const [startReadiness, setStartReadiness] = useState<StartReadiness | undefined>();
 
   const reload = useCallback(async () => {
+    setGitPolicy("checking");
+    setStartReadiness(undefined);
     const result = await props.agents.getJob(props.jobId);
     if (!result.ok) {
       setNotice(result.message);
+      setJob(undefined);
       return;
     }
     setJob(result.job);
+    const readiness = await props.agents.assessTeamJobReadiness(props.jobId);
+    if (readiness.ok) {
+      setStartReadiness(readiness);
+      if (!readiness.git.ok) {
+        setGitPolicy(readiness.git.policy);
+      } else if (result.job.status === "drafting" && !readiness.canStart && readiness.blockKind === "git") {
+        setGitPolicy("cwd-missing");
+      } else {
+        setGitPolicy("ok");
+      }
+      // Prefer the readiness board when present so Start and the peer column share one snapshot.
+      if (readiness.board.length > 0) setBoard(readiness.board);
+    } else {
+      setNotice(readiness.message);
+      setGitPolicy("git-missing");
+    }
     const status = await props.agents.teamStatus(result.job.teamId);
     if (status.ok) {
-      setBoard(status.board);
+      // Keep board from readiness when it already loaded; still refresh token / accept policy.
+      if (!readiness.ok || readiness.board.length === 0) setBoard(status.board);
       const team = status.team as {
         tokenExpiresAt?: string;
         members?: readonly { id: string; acceptPolicy?: AcceptPolicy }[];
@@ -76,6 +109,9 @@ export function JobPane(props: {
       setTokenExpiresAt(team.tokenExpiresAt);
       const local = team.members?.find((m) => m.id === "local");
       setLocalAcceptRoles(rolesFromPolicy(local?.acceptPolicy));
+    } else {
+      // Keep the last good board so a transient teamStatus blip does not fake "no members".
+      setNotice(t("job.pane.teamStatusFailed"));
     }
     const offers = await props.agents.listJobOffers(result.job.id);
     if (offers.ok) {
@@ -83,7 +119,7 @@ export function JobPane(props: {
         offers.offers.filter((o) => o.status === "pending" && o.assigneeMemberId === "local"),
       );
     } else setPendingOffers([]);
-  }, [props.agents, props.jobId]);
+  }, [props.agents, props.jobId, t]);
 
   async function setLocalRole(role: JobRole, enabled: boolean): Promise<void> {
     if (!job) return;
@@ -149,14 +185,44 @@ export function JobPane(props: {
   const tokenExpiringSoon =
     tokenExpiresAt !== undefined && Date.parse(tokenExpiresAt) - Date.now() < 2 * 60 * 60 * 1000;
 
-  const neededRoles = new Set(job.steps.map((s) => s.role));
-  const onlineForRoles = board.some(
-    (m) =>
-      (m.connection.status === "online" || m.connection.status === "degraded") &&
-      (neededRoles.size === 0 || m.rolesOffered.some((r) => neededRoles.has(r))),
-  );
+  const canStart = startReadiness?.canStart === true;
+  const crewBlocked =
+    startReadiness !== undefined &&
+    !startReadiness.canStart &&
+    startReadiness.blockKind !== undefined &&
+    startReadiness.blockKind !== "git" &&
+    startReadiness.blockKind !== "not-drafting";
 
   const filteredLedger = filterLedger(job.ledger, ledgerFilter, ledgerStepId, ledgerMemberId);
+
+  function crewMessage(): string {
+    if (startReadiness === undefined) return t("teamJob.git.checking");
+    if (startReadiness.canStart) return "";
+    const key = startReadiness.messageKey;
+    const values = startReadiness.messageValues ?? {};
+    switch (key) {
+      case "job.pane.crew.noSteps":
+        return t("job.pane.crew.noSteps");
+      case "job.pane.crew.noMembers":
+        return t("job.pane.crew.noMembers");
+      case "job.pane.crew.allOffline":
+        return t("job.pane.crew.allOffline", { machines: values.machines ?? "—" });
+      case "job.pane.crew.missingRoles":
+        return t("job.pane.crew.missingRoles", { roles: values.roles ?? "" });
+      case "teamJob.git.pathMissing":
+        return t("teamJob.git.pathMissing");
+      case "teamJob.git.notARepo":
+        return t("teamJob.git.notARepo");
+      case "teamJob.git.noRemote":
+        return t("teamJob.git.noRemote");
+      case "teamJob.git.missing":
+        return t("teamJob.git.missing");
+      case "error.job.notDrafting":
+        return t("error.job.notDrafting");
+      default:
+        return startReadiness.message || t("job.pane.startBlocked");
+    }
+  }
 
   return (
     <div className="task-pane job-pane" data-testid="job-pane" data-attention={jobAttention}>
@@ -171,8 +237,9 @@ export function JobPane(props: {
             <button
               type="button"
               className="button button--primary"
-              disabled={busy || !onlineForRoles}
-              title={!onlineForRoles ? t("job.pane.noOnline") : undefined}
+              disabled={busy || !canStart}
+              title={!canStart ? crewMessage() : undefined}
+              data-testid="job-start"
               onClick={() => void act(() => props.agents.startJob(job.id))}
             >
               {t("job.pane.start")}
@@ -234,9 +301,15 @@ export function JobPane(props: {
           <button
             type="button"
             className="button"
-            disabled={busy}
+            disabled={busy || job.status !== "drafting"}
+            title={job.status !== "drafting" ? t("job.pane.suggestOnlyDraft") : undefined}
             data-testid="job-suggest-steps"
             onClick={() => {
+              if (job.status !== "drafting") {
+                setNotice(t("job.pane.suggestOnlyDraft"));
+                return;
+              }
+              // Daemon inherits cwdHint from existing steps (project path from create).
               void props.agents
                 .suggestJobSteps(job.id, {
                   templateId,
@@ -279,10 +352,15 @@ export function JobPane(props: {
           {t("job.pane.tokenExpiring")}
         </p>
       ) : null}
-      {!onlineForRoles && job.status === "drafting" ? (
-        <p className="settings__note" role="status">
-          {t("job.pane.noOnline")}
-        </p>
+      {!canStart && job.status === "drafting" ? (
+        <div className="job-pane__crew" role="status" data-testid="job-crew-guidance" data-git={gitPolicy}>
+          <p className="settings__note">{crewMessage()}</p>
+          {props.onOpenTeams && crewBlocked && startReadiness?.blockKind !== "no-steps" ? (
+            <button type="button" className="button button--ghost button--small" onClick={props.onOpenTeams}>
+              {t("job.pane.crew.openTeams")}
+            </button>
+          ) : null}
+        </div>
       ) : null}
       {notice ? <p className="settings__note" role="status">{notice}</p> : null}
 
@@ -407,7 +485,9 @@ export function JobPane(props: {
                           className="button button--small"
                           disabled={busy}
                           onClick={() => {
-                            const next = suggestReassignMember(board, step);
+                            const next = suggestReassignMember(board, step, {
+                              allowDegradedAssignees: job.policy.allowDegradedAssignees === true,
+                            });
                             const ok = next
                               ? window.confirm(t("job.pane.reassignConfirm", { label: next.label }))
                               : window.confirm(t("job.pane.reassignConfirmNone"));

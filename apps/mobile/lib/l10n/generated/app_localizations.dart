@@ -2315,6 +2315,282 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Stopped'**
   String get statusStopped;
+
+  /// teamJob.create.title — Sheet title for creating a Team job.
+  ///
+  /// In en, this message translates to:
+  /// **'Team job'**
+  String get teamJobCreateTitle;
+
+  /// teamJob.create.blurb — Explains peers need a Git clone.
+  ///
+  /// In en, this message translates to:
+  /// **'Collaborative work in {project}. Peers need a local Git clone of this project.'**
+  String teamJobCreateBlurb(String project);
+
+  /// teamJob.create.team — Team picker label.
+  ///
+  /// In en, this message translates to:
+  /// **'Team'**
+  String get teamJobCreateTeam;
+
+  /// teamJob.create.jobTitle — Job title field.
+  ///
+  /// In en, this message translates to:
+  /// **'Title'**
+  String get teamJobCreateJobTitle;
+
+  /// teamJob.create.jobGoal — Job goal field.
+  ///
+  /// In en, this message translates to:
+  /// **'Goal'**
+  String get teamJobCreateJobGoal;
+
+  /// teamJob.create.submit — Create draft button.
+  ///
+  /// In en, this message translates to:
+  /// **'Create team job'**
+  String get teamJobCreateSubmit;
+
+  /// teamJob.create.draftHint — Draft ok; Start gated.
+  ///
+  /// In en, this message translates to:
+  /// **'You can draft now. Start is blocked until the crew is online with the roles you need.'**
+  String get teamJobCreateDraftHint;
+
+  /// teamJob.crew.noJoiners — Solo origin guidance.
+  ///
+  /// In en, this message translates to:
+  /// **'Share the team invite so another machine can join. You can still create a draft.'**
+  String get teamJobCrewNoJoiners;
+
+  /// teamJob.crew.allOffline — Waiting for machines.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for {machines} to come online.'**
+  String teamJobCrewAllOffline(String machines);
+
+  /// job.pane.crew.noSteps
+  ///
+  /// In en, this message translates to:
+  /// **'Add steps before starting (use a step template).'**
+  String get jobPaneCrewNoSteps;
+
+  /// job.pane.crew.noMembers
+  ///
+  /// In en, this message translates to:
+  /// **'This team has no machines yet. Invite someone from Teams.'**
+  String get jobPaneCrewNoMembers;
+
+  /// job.pane.crew.allOffline
+  ///
+  /// In en, this message translates to:
+  /// **'No machines online. Waiting for: {machines}.'**
+  String jobPaneCrewAllOffline(String machines);
+
+  /// job.pane.crew.missingRoles
+  ///
+  /// In en, this message translates to:
+  /// **'No online machine offers: {roles}. Fix roles on Teams, or wait for the right peer.'**
+  String jobPaneCrewMissingRoles(String roles);
+
+  /// job.pane.start — Start the Team job.
+  ///
+  /// In en, this message translates to:
+  /// **'Start job'**
+  String get jobPaneStart;
+
+  /// job.pane.startBlocked — Generic Start blocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Fix the crew before starting.'**
+  String get teamJobStartBlocked;
+
+  /// teamJob.git.ok
+  ///
+  /// In en, this message translates to:
+  /// **'Git ready — repository with a remote.'**
+  String get teamJobGitOk;
+
+  /// teamJob.git.pathMissing
+  ///
+  /// In en, this message translates to:
+  /// **'Project folder is missing.'**
+  String get teamJobGitPathMissing;
+
+  /// teamJob.git.notARepo
+  ///
+  /// In en, this message translates to:
+  /// **'This project is not a Git repository. Team jobs need Git to share files.'**
+  String get teamJobGitNotARepo;
+
+  /// teamJob.git.noRemote
+  ///
+  /// In en, this message translates to:
+  /// **'Add a Git remote (e.g. origin) before starting a Team job.'**
+  String get teamJobGitNoRemote;
+
+  /// teamJob.git.missing
+  ///
+  /// In en, this message translates to:
+  /// **'Git is not available on this machine.'**
+  String get teamJobGitMissing;
+
+  /// teamJob.git.checking
+  ///
+  /// In en, this message translates to:
+  /// **'Checking Git…'**
+  String get teamJobGitChecking;
+
+  /// error.job.notDrafting
+  ///
+  /// In en, this message translates to:
+  /// **'Only a drafting job can be started.'**
+  String get errorJobNotDrafting;
+
+  /// error.originClientOnly
+  ///
+  /// In en, this message translates to:
+  /// **'This needs EnvoyDev on this machine or a phone paired to it.'**
+  String get errorOriginClientOnly;
+
+  /// sidebar.project.menu.teamJob — Overflow menu item.
+  ///
+  /// In en, this message translates to:
+  /// **'Team job'**
+  String get projectListTeamJob;
+
+  /// Phone-only: no Create team — open desktop.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a team on desktop EnvoyDev, then pull to refresh.'**
+  String get teamJobCrewNoTeamDesktop;
+
+  /// Phone-only: admin actions stay on desktop.
+  ///
+  /// In en, this message translates to:
+  /// **'Kick, rotate token, and reassign stay on the desktop Job pane.'**
+  String get teamJobNeedsDesktopHint;
+
+  /// Phone-only: readiness ok.
+  ///
+  /// In en, this message translates to:
+  /// **'Crew and Git are ready — you can Start.'**
+  String get teamJobReadyToStart;
+
+  /// Phone-only: watch sheet title fallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Team job'**
+  String get teamJobWatchTitle;
+
+  /// Phone-only: steps section.
+  ///
+  /// In en, this message translates to:
+  /// **'Steps'**
+  String get teamJobStepsHeading;
+
+  /// Phone-only: ledger section.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent notes'**
+  String get teamJobLedgerHeading;
+
+  /// Phone-only: drafting status.
+  ///
+  /// In en, this message translates to:
+  /// **'Draft'**
+  String get teamJobStatusDrafting;
+
+  /// Phone-only: paused status.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused'**
+  String get teamJobStatusPaused;
+
+  /// Phone-only: pending step.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get teamJobStepPending;
+
+  /// Phone-only: offered step.
+  ///
+  /// In en, this message translates to:
+  /// **'Offered'**
+  String get teamJobStepOffered;
+
+  /// settings.service.action.refresh — Refresh control.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get commonRefresh;
+
+  /// job.pane.approve
+  ///
+  /// In en, this message translates to:
+  /// **'Allow'**
+  String get jobPaneApprove;
+
+  /// job.pane.deny
+  ///
+  /// In en, this message translates to:
+  /// **'Don’t allow'**
+  String get jobPaneDeny;
+
+  /// job.pane.needsApproval
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for approval on this step'**
+  String get jobPaneNeedsApproval;
+
+  /// Phone: list of project Team jobs.
+  ///
+  /// In en, this message translates to:
+  /// **'Team jobs on this project'**
+  String get teamJobExistingHeading;
+
+  /// Phone: create another Team job.
+  ///
+  /// In en, this message translates to:
+  /// **'New team job'**
+  String get teamJobNewCta;
+
+  /// Phone: back to job list.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to jobs'**
+  String get teamJobBackToList;
+
+  /// Phone: back from Start gate to edit.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to edit'**
+  String get teamJobBackToEdit;
+
+  /// Phone: peer board heading.
+  ///
+  /// In en, this message translates to:
+  /// **'Machines'**
+  String get teamJobPeersHeading;
+
+  /// Phone: peer online.
+  ///
+  /// In en, this message translates to:
+  /// **'Online'**
+  String get teamJobPeerOnline;
+
+  /// Phone: peer degraded.
+  ///
+  /// In en, this message translates to:
+  /// **'Unstable'**
+  String get teamJobPeerDegraded;
+
+  /// Phone: peer offline.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline'**
+  String get teamJobPeerOffline;
 }
 
 class _AppLocalizationsDelegate

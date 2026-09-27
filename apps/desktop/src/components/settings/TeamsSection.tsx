@@ -5,7 +5,7 @@
  * preset + custom catalog (orchestrator), member rolesOffered, orchestrator rolesAssigned override.
  */
 
-import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 
 import {
   PRESET_ROLE_CATALOG,
@@ -20,6 +20,11 @@ import {
 } from "@envoydev/protocol";
 
 import { useI18n } from "../../i18n/context.js";
+import {
+  defaultTeamBase,
+  hostMemberLabel,
+  uniqueTeamLabel,
+} from "../../state/team-defaults.js";
 import type { SettingsSectionProps } from "./SectionProps.js";
 import { copyText } from "./clipboard.js";
 import { peekInviteRoleCatalog } from "./peek-team-invite.js";
@@ -70,11 +75,16 @@ export function TeamsSection(
   },
 ): ReactElement {
   const { t } = useI18n();
+  const projectLabel = props.state.projects[0]?.label;
   const [teams, setTeams] = useState<readonly TeamPublicView[]>([]);
   const [boards, setBoards] = useState<Record<string, readonly MemberStatus[]>>({});
   const [jobs, setJobs] = useState<readonly Job[]>([]);
-  const [label, setLabel] = useState("Desk team");
-  const [memberLabel, setMemberLabel] = useState("desk");
+  const [label, setLabel] = useState(() => defaultTeamBase(projectLabel));
+  const [memberLabel, setMemberLabel] = useState(() =>
+    hostMemberLabel("Orchestrator", projectLabel),
+  );
+  const [labelTouched, setLabelTouched] = useState(false);
+  const [memberTouched, setMemberTouched] = useState(false);
   const [createCatalog, setCreateCatalog] = useState<RoleDef[]>(() => defaultRoleCatalog());
   const [createOffered, setCreateOffered] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(PRESET_ROLE_CATALOG.map((r) => [r.id, true])),
@@ -94,9 +104,14 @@ export function TeamsSection(
   const [freshInvite, setFreshInvite] = useState<string | undefined>();
   const [notice, setNotice] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
-  const [jobTitle, setJobTitle] = useState("");
-  const [jobGoal, setJobGoal] = useState("");
-  const [jobTeamId, setJobTeamId] = useState<string | undefined>();
+  /** Sync lock — `setBusy(true)` alone does not stop a second click before re-render. */
+  const inFlight = useRef(false);
+  /** Exclusive Host vs Join — showing both forms at once made the page feel crowded. */
+  const [route, setRoute] = useState<"create" | "join">("create");
+  /** Inline confirm — `window.confirm` is unreliable in the Tauri webview (click looks like a no-op). */
+  const [pendingConfirm, setPendingConfirm] = useState<
+    { kind: "dissolve" | "rotate"; teamId: string } | undefined
+  >();
   const [inbound, setInbound] = useState<
     ReadonlyArray<
       import("@envoydev/protocol").StepOffer & {
@@ -124,6 +139,26 @@ export function TeamsSection(
     () => createCatalog.filter((r) => r.id === RESERVED_ORCHESTRATE_ROLE || createOffered[r.id]),
     [createCatalog, createOffered],
   );
+
+  const orchestratorWord = t("settings.teams.role.orchestrate");
+
+  const suggestedTeamLabel = useMemo(
+    () => uniqueTeamLabel(defaultTeamBase(projectLabel), teams.map((x) => x.label)),
+    [projectLabel, teams],
+  );
+
+  const suggestedMemberLabel = useMemo(
+    () => hostMemberLabel(orchestratorWord, projectLabel),
+    [orchestratorWord, projectLabel],
+  );
+
+  useEffect(() => {
+    if (!labelTouched) setLabel(suggestedTeamLabel);
+  }, [suggestedTeamLabel, labelTouched]);
+
+  useEffect(() => {
+    if (!memberTouched) setMemberLabel(suggestedMemberLabel);
+  }, [suggestedMemberLabel, memberTouched]);
 
   const reload = useCallback(async () => {
     const listed = await props.agents.listTeams();
@@ -194,98 +229,98 @@ export function TeamsSection(
   }
 
   async function create(): Promise<void> {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setNotice(undefined);
-    const rolesOffered = createOfferable.map((r) => r.id);
-    const result = await props.agents.createTeam({
-      label: label.trim() || "Team",
-      memberLabel: memberLabel.trim() || "desk",
-      rolesOffered,
-      roleCatalog: createCatalog,
-    });
-    setBusy(false);
-    if (!result.ok) {
-      setNotice(result.message);
-      return;
+    try {
+      const rolesOffered = createOfferable.map((r) => r.id);
+      const result = await props.agents.createTeam({
+        label: label.trim() || "Team",
+        memberLabel: memberLabel.trim() || "desk",
+        rolesOffered,
+        roleCatalog: createCatalog,
+      });
+      if (!result.ok) {
+        setNotice(result.message);
+        return;
+      }
+      setFreshToken(result.token);
+      setFreshInvite(result.invite ?? result.token);
+      setLabelTouched(false);
+      await reload();
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
     }
-    setFreshToken(result.token);
-    setFreshInvite(result.invite ?? result.token);
-    await reload();
   }
 
   async function join(): Promise<void> {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setNotice(undefined);
-    const rolesOffered = joinCatalog.map((r) => r.id).filter((id) => joinRoles[id]);
-    const result = await props.agents.joinTeam({
-      token: joinToken.trim(),
-      label: joinLabel.trim() || "member",
-      rolesOffered,
-    });
-    setBusy(false);
-    if (!result.ok) {
-      setNotice(result.message);
-      return;
+    try {
+      const rolesOffered = joinCatalog.map((r) => r.id).filter((id) => joinRoles[id]);
+      const result = await props.agents.joinTeam({
+        token: joinToken.trim(),
+        label: joinLabel.trim() || "member",
+        rolesOffered,
+      });
+      if (!result.ok) {
+        setNotice(result.message);
+        return;
+      }
+      setJoinToken("");
+      setNotice(t("settings.teams.joinOk", { label: result.team.label }));
+      await reload();
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
     }
-    setJoinToken("");
-    setNotice(t("settings.teams.joinOk", { label: result.team.label }));
-    await reload();
   }
 
   async function rotate(teamId: string): Promise<void> {
-    if (!window.confirm(t("settings.teams.rotateConfirm"))) return;
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
-    const result = await props.agents.rotateTeamToken(teamId);
-    setBusy(false);
-    if (!result.ok) {
-      setNotice(result.message);
-      return;
+    setPendingConfirm(undefined);
+    try {
+      const result = await props.agents.rotateTeamToken(teamId);
+      if (!result.ok) {
+        setNotice(result.message);
+        return;
+      }
+      setFreshToken(result.token);
+      setFreshInvite(result.invite ?? result.token);
+      await reload();
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
     }
-    setFreshToken(result.token);
-    setFreshInvite(result.invite ?? result.token);
-    await reload();
   }
 
   async function dissolve(teamId: string): Promise<void> {
-    if (!window.confirm(t("settings.teams.dissolveConfirm"))) return;
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
-    const result = await props.agents.dissolveTeam(teamId);
-    setBusy(false);
-    if (!result.ok) {
-      setNotice(result.message);
-      return;
+    setPendingConfirm(undefined);
+    try {
+      const result = await props.agents.dissolveTeam(teamId);
+      if (!result.ok) {
+        setNotice(result.message);
+        return;
+      }
+      await reload();
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
     }
-    await reload();
   }
 
-  async function createJob(): Promise<void> {
-    const teamId = jobTeamId ?? teams[0]?.id;
-    if (!teamId || !jobTitle.trim() || !jobGoal.trim()) return;
-    setBusy(true);
-    const cwd = props.state.projects[0]?.path ?? ".";
-    const result = await props.agents.createJob({
-      teamId,
-      title: jobTitle.trim(),
-      goal: jobGoal.trim(),
-      projectId: props.state.projects[0]?.id,
-      steps: [
-        {
-          role: "developer",
-          brief: jobGoal.trim().slice(0, 500),
-          worktreeKey: "main",
-          cwdHint: cwd,
-        },
-      ],
-    });
-    setBusy(false);
-    if (!result.ok) {
-      setNotice(result.message);
-      return;
-    }
-    setJobTitle("");
-    setJobGoal("");
-    await reload();
-    props.onOpenJob?.(result.job.id);
+  function dismissInvite(): void {
+    setFreshInvite(undefined);
+    setFreshToken(undefined);
   }
 
   return (
@@ -301,15 +336,25 @@ export function TeamsSection(
         <div className="settings__teams-invite" data-testid="team-token-once">
           <p className="settings__note">{t("settings.teams.tokenOnce")}</p>
           <code className="settings__pairing-value">{freshInvite ?? freshToken}</code>
-          <button
-            type="button"
-            className="button button--secondary button--small"
-            onClick={() =>
-              void copyText(freshInvite ?? freshToken ?? "").then(() => setNotice(t("settings.teams.copied")))
-            }
-          >
-            {t("settings.teams.copyToken")}
-          </button>
+          <div className="settings__pairing-actions">
+            <button
+              type="button"
+              className="button button--secondary button--small"
+              onClick={() =>
+                void copyText(freshInvite ?? freshToken ?? "").then(() => setNotice(t("settings.teams.copied")))
+              }
+            >
+              {t("settings.teams.copyToken")}
+            </button>
+            <button
+              type="button"
+              className="button button--ghost button--small"
+              data-testid="team-invite-done"
+              onClick={dismissInvite}
+            >
+              {t("settings.teams.inviteDone")}
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -333,7 +378,27 @@ export function TeamsSection(
                     disabled={busy}
                     onClick={() => {
                       setBusy(true);
-                      void props.agents.acceptInboundJobStepOffer(offer.offerId, offer.cwdHint).then((r) => {
+                      void (async () => {
+                        const git = await props.agents.assessGitContentBus(offer.cwdHint);
+                        if (git.ok !== true) {
+                          setBusy(false);
+                          if ("policy" in git && git.policy === "not-a-git-repo") {
+                            setNotice(t("teamJob.git.notARepo"));
+                          } else if ("policy" in git && git.policy === "no-git-remote") {
+                            setNotice(t("teamJob.git.noRemote"));
+                          } else if ("policy" in git && git.policy === "git-missing") {
+                            setNotice(t("teamJob.git.missing"));
+                          } else if ("message" in git) {
+                            setNotice(git.message);
+                          } else {
+                            setNotice(t("teamJob.git.pathMissing"));
+                          }
+                          return;
+                        }
+                        const r = await props.agents.acceptInboundJobStepOffer(
+                          offer.offerId,
+                          offer.cwdHint,
+                        );
                         setBusy(false);
                         if (!r.ok) setNotice(r.message);
                         else {
@@ -344,7 +409,7 @@ export function TeamsSection(
                           }
                           void reload();
                         }
-                      });
+                      })();
                     }}
                   >
                     {t("settings.teams.acceptOffer")}
@@ -385,181 +450,208 @@ export function TeamsSection(
         </p>
       ) : null}
 
-      <section
-        className="settings__pairing-route"
-        data-route="create"
-        aria-labelledby="teams-create"
-        data-testid="teams-create"
-      >
-        <div className="settings__pairing-route-head">
-          <h2 className="settings__heading" id="teams-create">
+      <section className="settings__pairing-route" aria-labelledby="teams-start">
+        <h2 className="settings__heading" id="teams-start">
+          {t("settings.teams.start")}
+        </h2>
+        <div className="settings__teams-mode" role="tablist" aria-label={t("settings.teams.start")}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={route === "create"}
+            className={`settings__teams-mode-btn${route === "create" ? " settings__teams-mode-btn--active" : ""}`}
+            data-testid="teams-mode-create"
+            onClick={() => setRoute("create")}
+          >
             {t("settings.teams.create")}
-          </h2>
-          <span className="chip chip--quiet">{t("settings.teams.create.badge")}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={route === "join"}
+            className={`settings__teams-mode-btn${route === "join" ? " settings__teams-mode-btn--active" : ""}`}
+            data-testid="teams-mode-join"
+            onClick={() => setRoute("join")}
+          >
+            {t("settings.teams.join")}
+          </button>
         </div>
-        <p className="settings__note">{t("settings.teams.create.detail")}</p>
-        <div className="settings__pairing-fields">
-          <label className="settings__teams-field">
-            <span className="setting__title">{t("settings.teams.label")}</span>
-            <input
-              className="settings__pairing-input"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-            />
-          </label>
-          <label className="settings__teams-field">
-            <span className="setting__title">{t("settings.teams.memberLabel")}</span>
-            <input
-              className="settings__pairing-input"
-              value={memberLabel}
-              onChange={(e) => setMemberLabel(e.target.value)}
-              data-testid="create-member-label"
-            />
-          </label>
 
-          <fieldset className="settings__teams-roles" data-testid="create-role-catalog">
-            <legend className="setting__title">{t("settings.teams.roleCatalog")}</legend>
-            <p className="settings__note">{t("settings.teams.roleCatalog.detail")}</p>
-            <p className="settings__note">{t("settings.teams.writer.hint")}</p>
-            <ul className="settings__teams-catalog">
-              {createCatalog.map((def) => (
-                <li key={def.id} className="settings__teams-catalog-row">
-                  <span>
-                    {roleLabel(def)}
-                    {def.writer ? (
-                      <span className="chip chip--quiet"> {t("settings.teams.writer")}</span>
-                    ) : null}
-                  </span>
-                  {def.id !== RESERVED_ORCHESTRATE_ROLE ? (
-                    <button
-                      type="button"
-                      className="button button--ghost button--small"
-                      onClick={() => {
-                        setCreateCatalog((prev) => prev.filter((r) => r.id !== def.id));
-                        setCreateOffered((prev) => {
-                          const next = { ...prev };
-                          delete next[def.id];
-                          return next;
-                        });
-                      }}
-                    >
-                      {t("settings.teams.removeRole")}
-                    </button>
-                  ) : (
-                    <span className="settings__note">{t("settings.teams.roleLocked")}</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-            <div className="settings__teams-add-role">
-              <input
-                className="settings__pairing-input"
-                placeholder={t("settings.teams.customRoleId")}
-                value={customRoleId}
-                onChange={(e) => setCustomRoleId(e.target.value)}
-                data-testid="custom-role-id"
-              />
-              <label className="settings__teams-role">
+        {route === "create" ? (
+          <div data-route="create" data-testid="teams-create">
+            <p className="settings__note">{t("settings.teams.create.detail")}</p>
+            <div className="settings__pairing-fields">
+              <label className="settings__teams-field">
+                <span className="setting__title">{t("settings.teams.label")}</span>
                 <input
-                  type="checkbox"
-                  checked={customRoleWriter}
-                  onChange={(e) => setCustomRoleWriter(e.target.checked)}
+                  className="settings__pairing-input"
+                  value={label}
+                  onChange={(e) => {
+                    setLabelTouched(true);
+                    setLabel(e.target.value);
+                  }}
                 />
-                {t("settings.teams.writer")}
               </label>
-              <button type="button" className="button button--small" onClick={addCustomRole}>
-                {t("settings.teams.addRole")}
+              <label className="settings__teams-field">
+                <span className="setting__title">{t("settings.teams.memberLabel")}</span>
+                <input
+                  className="settings__pairing-input"
+                  value={memberLabel}
+                  onChange={(e) => {
+                    setMemberTouched(true);
+                    setMemberLabel(e.target.value);
+                  }}
+                  data-testid="create-member-label"
+                />
+              </label>
+
+              <details className="settings__teams-advanced">
+                <summary className="setting__title">{t("settings.teams.rolesAdvanced")}</summary>
+                <fieldset className="settings__teams-roles" data-testid="create-role-catalog">
+                  <legend className="setting__title">{t("settings.teams.roleCatalog")}</legend>
+                  <p className="settings__note">{t("settings.teams.roleCatalog.detail")}</p>
+                  <ul className="settings__teams-catalog">
+                    {createCatalog.map((def) => (
+                      <li key={def.id} className="settings__teams-catalog-row">
+                        <span>
+                          {roleLabel(def)}
+                          {def.writer ? (
+                            <span className="chip chip--quiet"> {t("settings.teams.writer")}</span>
+                          ) : null}
+                        </span>
+                        {def.id !== RESERVED_ORCHESTRATE_ROLE ? (
+                          <button
+                            type="button"
+                            className="button button--ghost button--small"
+                            onClick={() => {
+                              setCreateCatalog((prev) => prev.filter((r) => r.id !== def.id));
+                              setCreateOffered((prev) => {
+                                const next = { ...prev };
+                                delete next[def.id];
+                                return next;
+                              });
+                            }}
+                          >
+                            {t("settings.teams.removeRole")}
+                          </button>
+                        ) : (
+                          <span className="settings__note">{t("settings.teams.roleLocked")}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="settings__teams-add-role">
+                    <input
+                      className="settings__pairing-input"
+                      placeholder={t("settings.teams.customRoleId")}
+                      value={customRoleId}
+                      onChange={(e) => setCustomRoleId(e.target.value)}
+                      data-testid="custom-role-id"
+                    />
+                    <label className="settings__teams-role">
+                      <input
+                        type="checkbox"
+                        checked={customRoleWriter}
+                        onChange={(e) => setCustomRoleWriter(e.target.checked)}
+                      />
+                      {t("settings.teams.writer")}
+                    </label>
+                    <button type="button" className="button button--small" onClick={addCustomRole}>
+                      {t("settings.teams.addRole")}
+                    </button>
+                  </div>
+                </fieldset>
+
+                <fieldset className="settings__teams-roles" data-testid="create-roles-offered">
+                  <legend className="setting__title">{t("settings.teams.rolesThisMachine")}</legend>
+                  <div className="settings__teams-role-row">
+                    {createCatalog.map((def) => (
+                      <label key={def.id} className="settings__teams-role">
+                        <input
+                          type="checkbox"
+                          checked={def.id === RESERVED_ORCHESTRATE_ROLE || !!createOffered[def.id]}
+                          disabled={def.id === RESERVED_ORCHESTRATE_ROLE}
+                          onChange={(e) =>
+                            setCreateOffered((prev) => ({ ...prev, [def.id]: e.target.checked }))
+                          }
+                        />
+                        {roleLabel(def)}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              </details>
+
+              {freshInvite || freshToken ? (
+                <p className="settings__note" data-testid="teams-create-waiting">
+                  {t("settings.teams.createWaiting")}
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  className="button button--primary settings__teams-cta"
+                  disabled={busy}
+                  onClick={() => void create()}
+                >
+                  {t("settings.teams.create")}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div data-route="join" data-testid="teams-join">
+            <p className="settings__note">{t("settings.teams.join.detail")}</p>
+            <div className="settings__pairing-fields">
+              <label className="settings__teams-field">
+                <span className="setting__title">{t("settings.teams.pasteToken")}</span>
+                <input
+                  className="settings__pairing-input"
+                  value={joinToken}
+                  onChange={(e) => setJoinToken(e.target.value)}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </label>
+              <label className="settings__teams-field">
+                <span className="setting__title">{t("settings.teams.memberLabel")}</span>
+                <input
+                  className="settings__pairing-input"
+                  value={joinLabel}
+                  onChange={(e) => setJoinLabel(e.target.value)}
+                />
+              </label>
+              <details className="settings__teams-advanced">
+                <summary className="setting__title">{t("settings.teams.rolesAdvanced")}</summary>
+                <fieldset className="settings__teams-roles" data-testid="join-roles">
+                  <legend className="setting__title">{t("settings.teams.roles")}</legend>
+                  <p className="settings__note">{t("settings.teams.joinRolesHint")}</p>
+                  <div className="settings__teams-role-row">
+                    {joinCatalog.map((def) => (
+                      <label key={def.id} className="settings__teams-role">
+                        <input
+                          type="checkbox"
+                          checked={!!joinRoles[def.id]}
+                          onChange={(e) =>
+                            setJoinRoles((prev) => ({ ...prev, [def.id]: e.target.checked }))
+                          }
+                        />
+                        {roleLabel(def)}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              </details>
+              <button
+                type="button"
+                className="button button--primary settings__teams-cta"
+                disabled={busy || joinToken.trim().length < 16}
+                onClick={() => void join()}
+              >
+                {t("settings.teams.join")}
               </button>
             </div>
-          </fieldset>
-
-          <fieldset className="settings__teams-roles" data-testid="create-roles-offered">
-            <legend className="setting__title">{t("settings.teams.rolesThisMachine")}</legend>
-            <div className="settings__teams-role-row">
-              {createCatalog.map((def) => (
-                <label key={def.id} className="settings__teams-role">
-                  <input
-                    type="checkbox"
-                    checked={def.id === RESERVED_ORCHESTRATE_ROLE || !!createOffered[def.id]}
-                    disabled={def.id === RESERVED_ORCHESTRATE_ROLE}
-                    onChange={(e) =>
-                      setCreateOffered((prev) => ({ ...prev, [def.id]: e.target.checked }))
-                    }
-                  />
-                  {roleLabel(def)}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-
-          <button
-            type="button"
-            className="button button--primary"
-            disabled={busy}
-            onClick={() => void create()}
-          >
-            {t("settings.teams.create")}
-          </button>
-        </div>
-      </section>
-
-      <section
-        className="settings__pairing-route"
-        data-route="join"
-        aria-labelledby="teams-join"
-        data-testid="teams-join"
-      >
-        <div className="settings__pairing-route-head">
-          <h2 className="settings__heading" id="teams-join">
-            {t("settings.teams.join")}
-          </h2>
-          <span className="chip chip--quiet">{t("settings.teams.join.badge")}</span>
-        </div>
-        <p className="settings__note">{t("settings.teams.join.detail")}</p>
-        <div className="settings__pairing-fields">
-          <label className="settings__teams-field">
-            <span className="setting__title">{t("settings.teams.pasteToken")}</span>
-            <input
-              className="settings__pairing-input"
-              value={joinToken}
-              onChange={(e) => setJoinToken(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </label>
-          <label className="settings__teams-field">
-            <span className="setting__title">{t("settings.teams.memberLabel")}</span>
-            <input
-              className="settings__pairing-input"
-              value={joinLabel}
-              onChange={(e) => setJoinLabel(e.target.value)}
-            />
-          </label>
-          <fieldset className="settings__teams-roles" data-testid="join-roles">
-            <legend className="setting__title">{t("settings.teams.roles")}</legend>
-            <p className="settings__note">{t("settings.teams.joinRolesHint")}</p>
-            <div className="settings__teams-role-row">
-              {joinCatalog.map((def) => (
-                <label key={def.id} className="settings__teams-role">
-                  <input
-                    type="checkbox"
-                    checked={!!joinRoles[def.id]}
-                    onChange={(e) => setJoinRoles((prev) => ({ ...prev, [def.id]: e.target.checked }))}
-                  />
-                  {roleLabel(def)}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <button
-            type="button"
-            className="button button--secondary"
-            disabled={busy || joinToken.trim().length < 16}
-            onClick={() => void join()}
-          >
-            {t("settings.teams.join")}
-          </button>
-        </div>
+          </div>
+        )}
       </section>
 
       <section className="settings__pairing-route" aria-labelledby="teams-yours">
@@ -632,72 +724,28 @@ export function TeamsSection(
                             ) : null}
                           </div>
                           {member?.id === "local" ? (
-                            <fieldset className="settings__teams-roles" data-testid={`local-offer-${member.id}`}>
-                              <legend className="setting__title">{t("settings.teams.rolesThisMachine")}</legend>
-                              <div className="settings__teams-role-row">
-                                {catalog.map((def) => (
-                                  <label key={def.id} className="settings__teams-role">
-                                    <input
-                                      type="checkbox"
-                                      checked={
-                                        def.id === RESERVED_ORCHESTRATE_ROLE ||
-                                        member.rolesOffered.includes(def.id)
-                                      }
-                                      disabled={busy || def.id === RESERVED_ORCHESTRATE_ROLE}
-                                      onChange={(e) => {
-                                        const next = e.target.checked
-                                          ? [...new Set([...member.rolesOffered, def.id])]
-                                          : member.rolesOffered.filter((r) => r !== def.id);
-                                        if (!next.includes(RESERVED_ORCHESTRATE_ROLE)) {
-                                          next.unshift(RESERVED_ORCHESTRATE_ROLE);
-                                        }
-                                        void props.agents
-                                          .setMemberRolesOffered(team.id, "local", next)
-                                          .then((r) => {
-                                            if (!r.ok) setNotice(r.message);
-                                            else void reload();
-                                          });
-                                      }}
-                                    />
-                                    {roleLabel(def)}
-                                  </label>
-                                ))}
-                              </div>
-                            </fieldset>
-                          ) : null}
-                          {member ? (
-                            <fieldset className="settings__teams-roles" data-testid={`assign-roles-${member.id}`}>
-                              <legend className="setting__title">{t("settings.teams.assignRoles")}</legend>
-                              <div className="settings__teams-role-row">
-                                {assignable.map((def) => {
-                                  const checked = overrideActive
-                                    ? assigned.includes(def.id)
-                                    : false;
-                                  return (
+                            <details className="settings__teams-advanced">
+                              <summary className="setting__title">{t("settings.teams.rolesThisMachine")}</summary>
+                              <fieldset className="settings__teams-roles" data-testid={`local-offer-${member.id}`}>
+                                <div className="settings__teams-role-row">
+                                  {catalog.map((def) => (
                                     <label key={def.id} className="settings__teams-role">
                                       <input
                                         type="checkbox"
                                         checked={
-                                          def.id === RESERVED_ORCHESTRATE_ROLE && member.id === "local"
-                                            ? true
-                                            : checked
+                                          def.id === RESERVED_ORCHESTRATE_ROLE ||
+                                          member.rolesOffered.includes(def.id)
                                         }
-                                        disabled={
-                                          busy ||
-                                          (def.id === RESERVED_ORCHESTRATE_ROLE && member.id === "local")
-                                        }
+                                        disabled={busy || def.id === RESERVED_ORCHESTRATE_ROLE}
                                         onChange={(e) => {
-                                          const base = overrideActive
-                                            ? [...assigned]
-                                            : [...effective];
                                           const next = e.target.checked
-                                            ? [...new Set([...base, def.id])]
-                                            : base.filter((r) => r !== def.id);
-                                          if (member.id === "local" && !next.includes(RESERVED_ORCHESTRATE_ROLE)) {
+                                            ? [...new Set([...member.rolesOffered, def.id])]
+                                            : member.rolesOffered.filter((r) => r !== def.id);
+                                          if (!next.includes(RESERVED_ORCHESTRATE_ROLE)) {
                                             next.unshift(RESERVED_ORCHESTRATE_ROLE);
                                           }
                                           void props.agents
-                                            .setMemberRolesAssigned(team.id, member.id, next)
+                                            .setMemberRolesOffered(team.id, "local", next)
                                             .then((r) => {
                                               if (!r.ok) setNotice(r.message);
                                               else void reload();
@@ -706,97 +754,185 @@ export function TeamsSection(
                                       />
                                       {roleLabel(def)}
                                     </label>
-                                  );
-                                })}
-                              </div>
-                              <div className="settings__pairing-actions">
-                                {unset ? (
-                                  <button
-                                    type="button"
-                                    className="button button--small"
-                                    disabled={busy}
-                                    data-testid={`suggest-roles-${member.id}`}
-                                    onClick={() => {
-                                      setBusy(true);
-                                      void props.agents
-                                        .suggestMemberRoles(team.id, member.id)
-                                        .then((r) => {
-                                          if (!r.ok) {
-                                            setBusy(false);
-                                            setNotice(r.message);
-                                            return;
+                                  ))}
+                                </div>
+                              </fieldset>
+                            </details>
+                          ) : null}
+                          {member ? (
+                            <details className="settings__teams-advanced">
+                              <summary className="setting__title">{t("settings.teams.assignRoles")}</summary>
+                              <fieldset className="settings__teams-roles" data-testid={`assign-roles-${member.id}`}>
+                                <div className="settings__teams-role-row">
+                                  {assignable.map((def) => {
+                                    const checked = overrideActive
+                                      ? assigned.includes(def.id)
+                                      : false;
+                                    return (
+                                      <label key={def.id} className="settings__teams-role">
+                                        <input
+                                          type="checkbox"
+                                          checked={
+                                            def.id === RESERVED_ORCHESTRATE_ROLE && member.id === "local"
+                                              ? true
+                                              : checked
                                           }
-                                          if (r.roles.length === 0) {
-                                            setBusy(false);
-                                            setNotice(r.note);
-                                            return;
+                                          disabled={
+                                            busy ||
+                                            (def.id === RESERVED_ORCHESTRATE_ROLE && member.id === "local")
                                           }
-                                          setNotice(r.note);
-                                          if (
-                                            !window.confirm(
-                                              t("settings.teams.suggestConfirm", {
-                                                roles: r.roles.join(", "),
-                                              }),
-                                            )
-                                          ) {
-                                            setBusy(false);
-                                            return;
-                                          }
-                                          void props.agents
-                                            .setMemberRolesAssigned(team.id, member.id, r.roles)
-                                            .then((apply) => {
+                                          onChange={(e) => {
+                                            const base = overrideActive
+                                              ? [...assigned]
+                                              : [...effective];
+                                            const next = e.target.checked
+                                              ? [...new Set([...base, def.id])]
+                                              : base.filter((r) => r !== def.id);
+                                            if (member.id === "local" && !next.includes(RESERVED_ORCHESTRATE_ROLE)) {
+                                              next.unshift(RESERVED_ORCHESTRATE_ROLE);
+                                            }
+                                            void props.agents
+                                              .setMemberRolesAssigned(team.id, member.id, next)
+                                              .then((r) => {
+                                                if (!r.ok) setNotice(r.message);
+                                                else void reload();
+                                              });
+                                          }}
+                                        />
+                                        {roleLabel(def)}
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                                <div className="settings__pairing-actions">
+                                  {unset ? (
+                                    <button
+                                      type="button"
+                                      className="button button--small"
+                                      disabled={busy}
+                                      data-testid={`suggest-roles-${member.id}`}
+                                      onClick={() => {
+                                        setBusy(true);
+                                        void props.agents
+                                          .suggestMemberRoles(team.id, member.id)
+                                          .then((r) => {
+                                            if (!r.ok) {
                                               setBusy(false);
-                                              if (!apply.ok) setNotice(apply.message);
-                                              else void reload();
-                                            });
-                                        });
-                                    }}
-                                  >
-                                    {t("settings.teams.suggestRoles")}
-                                  </button>
-                                ) : null}
-                                {overrideActive ? (
-                                  <button
-                                    type="button"
-                                    className="button button--ghost button--small"
-                                    disabled={busy}
-                                    onClick={() => {
-                                      void props.agents
-                                        .setMemberRolesAssigned(team.id, member.id, [])
-                                        .then((r) => {
-                                          if (!r.ok) setNotice(r.message);
-                                          else void reload();
-                                        });
-                                    }}
-                                  >
-                                    {t("settings.teams.clearOverride")}
-                                  </button>
-                                ) : null}
-                              </div>
-                            </fieldset>
+                                              setNotice(r.message);
+                                              return;
+                                            }
+                                            if (r.roles.length === 0) {
+                                              setBusy(false);
+                                              setNotice(r.note);
+                                              return;
+                                            }
+                                            setNotice(r.note);
+                                            if (
+                                              !window.confirm(
+                                                t("settings.teams.suggestConfirm", {
+                                                  roles: r.roles.join(", "),
+                                                }),
+                                              )
+                                            ) {
+                                              setBusy(false);
+                                              return;
+                                            }
+                                            void props.agents
+                                              .setMemberRolesAssigned(team.id, member.id, r.roles)
+                                              .then((apply) => {
+                                                setBusy(false);
+                                                if (!apply.ok) setNotice(apply.message);
+                                                else void reload();
+                                              });
+                                          });
+                                      }}
+                                    >
+                                      {t("settings.teams.suggestRoles")}
+                                    </button>
+                                  ) : null}
+                                  {overrideActive ? (
+                                    <button
+                                      type="button"
+                                      className="button button--ghost button--small"
+                                      disabled={busy}
+                                      onClick={() => {
+                                        void props.agents
+                                          .setMemberRolesAssigned(team.id, member.id, [])
+                                          .then((r) => {
+                                            if (!r.ok) setNotice(r.message);
+                                            else void reload();
+                                          });
+                                      }}
+                                    >
+                                      {t("settings.teams.clearOverride")}
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </fieldset>
+                            </details>
                           ) : null}
                         </li>
                       );
                     })}
                   </ul>
-                  <div className="settings__pairing-actions">
-                    <button
-                      type="button"
-                      className="button button--small"
-                      disabled={busy}
-                      onClick={() => void rotate(team.id)}
-                    >
-                      {t("settings.teams.rotate")}
-                    </button>
-                    <button
-                      type="button"
-                      className="button button--small"
-                      disabled={busy}
-                      onClick={() => void dissolve(team.id)}
-                    >
-                      {t("settings.teams.dissolve")}
-                    </button>
-                  </div>
+                  {pendingConfirm?.teamId === team.id ? (
+                    <div className="confirm settings__teams-confirm" role="alertdialog">
+                      <p className="confirm__question">
+                        {pendingConfirm.kind === "dissolve"
+                          ? t("settings.teams.dissolveConfirm")
+                          : t("settings.teams.rotateConfirm")}
+                      </p>
+                      <div className="confirm__actions">
+                        <button
+                          type="button"
+                          className="button button--ghost button--small"
+                          disabled={busy}
+                          onClick={() => setPendingConfirm(undefined)}
+                        >
+                          {t("action.cancel")}
+                        </button>
+                        <button
+                          type="button"
+                          className={`button button--small${pendingConfirm.kind === "dissolve" ? " button--danger" : " button--secondary"}`}
+                          disabled={busy}
+                          data-testid={
+                            pendingConfirm.kind === "dissolve"
+                              ? `team-dissolve-confirm-${team.id}`
+                              : `team-rotate-confirm-${team.id}`
+                          }
+                          onClick={() =>
+                            void (pendingConfirm.kind === "dissolve"
+                              ? dissolve(team.id)
+                              : rotate(team.id))
+                          }
+                        >
+                          {pendingConfirm.kind === "dissolve"
+                            ? t("settings.teams.dissolve")
+                            : t("settings.teams.rotate")}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="settings__pairing-actions">
+                      <button
+                        type="button"
+                        className="button button--secondary button--small"
+                        disabled={busy}
+                        onClick={() => setPendingConfirm({ kind: "rotate", teamId: team.id })}
+                      >
+                        {t("settings.teams.rotate")}
+                      </button>
+                      <button
+                        type="button"
+                        className="button button--ghost button--small"
+                        disabled={busy}
+                        data-testid={`team-dissolve-${team.id}`}
+                        onClick={() => setPendingConfirm({ kind: "dissolve", teamId: team.id })}
+                      >
+                        {t("settings.teams.dissolve")}
+                      </button>
+                    </div>
+                  )}
                 </li>
               );
             })}
@@ -824,10 +960,11 @@ export function TeamsSection(
                       {t("settings.teams.assignedByOrigin", { roles: override.join(", ") })}
                     </p>
                   ) : null}
-                  <fieldset className="settings__teams-roles" data-testid={`offer-roles-${m.teamId}`}>
-                    <legend className="setting__title">{t("settings.teams.roles")}</legend>
-                    <div className="settings__teams-role-row">
-                      {catalog.map((def) => (
+                  <details className="settings__teams-advanced">
+                    <summary className="setting__title">{t("settings.teams.roles")}</summary>
+                    <fieldset className="settings__teams-roles" data-testid={`offer-roles-${m.teamId}`}>
+                      <div className="settings__teams-role-row">
+                        {catalog.map((def) => (
                           <label key={def.id} className="settings__teams-role">
                             <input
                               type="checkbox"
@@ -848,12 +985,14 @@ export function TeamsSection(
                             {roleLabel(def)}
                           </label>
                         ))}
-                    </div>
-                  </fieldset>
-                  <fieldset className="settings__teams-roles" data-testid={`accept-roles-${m.teamId}`}>
-                    <legend className="setting__title">{t("settings.teams.autoAccept")}</legend>
-                    <div className="settings__teams-role-row">
-                      {catalog.map((def) => (
+                      </div>
+                    </fieldset>
+                  </details>
+                  <details className="settings__teams-advanced">
+                    <summary className="setting__title">{t("settings.teams.autoAccept")}</summary>
+                    <fieldset className="settings__teams-roles" data-testid={`accept-roles-${m.teamId}`}>
+                      <div className="settings__teams-role-row">
+                        {catalog.map((def) => (
                           <label key={def.id} className="settings__teams-role">
                             <input
                               type="checkbox"
@@ -873,8 +1012,9 @@ export function TeamsSection(
                             {roleLabel(def)}
                           </label>
                         ))}
-                    </div>
-                  </fieldset>
+                      </div>
+                    </fieldset>
+                  </details>
                 </li>
               );
             })}
@@ -887,47 +1027,7 @@ export function TeamsSection(
           <h2 className="settings__heading" id="teams-jobs">
             {t("settings.teams.jobs")}
           </h2>
-          <div className="settings__pairing-fields">
-            <label className="settings__teams-field">
-              <span className="setting__title">{t("settings.teams.jobTitle")}</span>
-              <input
-                className="settings__pairing-input"
-                value={jobTitle}
-                onChange={(e) => setJobTitle(e.target.value)}
-              />
-            </label>
-            <label className="settings__teams-field">
-              <span className="setting__title">{t("settings.teams.jobGoal")}</span>
-              <textarea
-                className="settings__pairing-uri"
-                value={jobGoal}
-                onChange={(e) => setJobGoal(e.target.value)}
-                rows={3}
-              />
-            </label>
-            <label className="settings__teams-field">
-              <span className="setting__title">{t("settings.teams.jobTeam")}</span>
-              <select
-                className="settings__pairing-input"
-                value={jobTeamId ?? teams[0]?.id ?? ""}
-                onChange={(e) => setJobTeamId(e.target.value)}
-              >
-                {teams.map((team) => (
-                  <option key={team.id} value={team.id}>
-                    {team.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              className="button button--primary"
-              disabled={busy || !jobTitle.trim() || !jobGoal.trim()}
-              onClick={() => void createJob()}
-            >
-              {t("settings.teams.createJob")}
-            </button>
-          </div>
+          <p className="settings__note">{t("settings.teams.jobs.hint")}</p>
           {jobs.length > 0 ? (
             <ul className="settings__teams-list settings__teams-jobs">
               {jobs.map((job) => (
@@ -942,7 +1042,9 @@ export function TeamsSection(
                 </li>
               ))}
             </ul>
-          ) : null}
+          ) : (
+            <p className="settings__note">{t("settings.teams.jobsEmpty")}</p>
+          )}
         </section>
       ) : null}
     </div>

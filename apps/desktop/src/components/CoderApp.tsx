@@ -48,6 +48,7 @@ import {
 import { CoderSidebar } from "./CoderSidebar.js";
 import { CommandCenter, buildCommandContributions } from "./CommandCenter.js";
 import { PanelRightIcon } from "./icons.js";
+import { TeamJobCreateSheet } from "./TeamJobCreateSheet.js";
 import { TaskPane } from "./TaskPane.js";
 import { JobPane } from "./JobPane.js";
 import { MeshStatusBar } from "./MeshStatusBar.js";
@@ -108,6 +109,8 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
   const { setRailWidth } = usePanelWidths();
   const { state } = props;
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
+  /** Project id while the Team job create sheet is open (§13). Cleared on any other navigation. */
+  const [teamJobProjectId, setTeamJobProjectId] = useState<string | undefined>(undefined);
   const [paletteOpen, setPaletteOpen] = useState(false);
   /**
    * Project this window was opened to work in ("Open in new window" / pending from the shell).
@@ -160,6 +163,8 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    * existed or after.
    */
   const startNewTask = async (projectId: string, title = ""): Promise<WriteFailure> => {
+    // Leaving the Team job sheet so "+ New" / palette task create actually shows the task pane.
+    setTeamJobProjectId(undefined);
     // **The empty chat is a draft, and a draft is reused.** Paseo's helper is called `ensureWorkspace`
     // for the same reason: pressing "+ New" twice because the first press looked like nothing happened
     // should not leave two unnamed rows behind. Only an unnamed task with nothing running counts — a task
@@ -326,6 +331,8 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    * the code appears as soon as the page opens without a second "Show pairing code" press.
    */
   const goToSettings = (scope: SettingsScope | undefined): void => {
+    // Opening settings must dismiss the Team job sheet — otherwise closing settings resurrects it.
+    if (scope !== undefined) setTeamJobProjectId(undefined);
     setSettingsScope(scope);
     if (scope?.kind === "app" && scope.section === "pairing") {
       void mintPairingCode(props.actions).then(setMintedPairing);
@@ -353,6 +360,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    * scope reached the other.
    */
   const openProjectSettings = (project: Project): void => {
+    setTeamJobProjectId(undefined);
     setSettingsScope(projectScope(project.id));
   };
 
@@ -601,13 +609,18 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
           // nothing, and asking for both is the friction that makes a control plane tedious.
           const created = await props.actions.createTask({ projectId, title });
           if (!created.ok) return created;
+          setTeamJobProjectId(undefined);
           setActiveId(created.task.id);
           const started = await props.actions.startRun(created.task.id, title);
           return started.ok ? undefined : started;
         },
         onOpenSettings: openAppSettings,
         onPairPhone: openPairing,
-        onRevealTask: (taskId) => setActiveId(taskId),
+        onRevealTask: (taskId) => {
+          setTeamJobProjectId(undefined);
+          setActiveJobId(undefined);
+          setActiveId(taskId);
+        },
       }),
     [state.projects, state.tasks, state.settings.defaultProjectPath, props.actions, t],
   );
@@ -676,12 +689,14 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
             jobs={railJobs}
             activeJobId={activeJobId}
             onSelectJob={(jobId) => {
+              setTeamJobProjectId(undefined);
               setActiveJobId(jobId);
               setSettingsScope(undefined);
               setActiveId(undefined);
             }}
             activeTaskId={activeId}
             onSelect={(taskId) => {
+              setTeamJobProjectId(undefined);
               setActiveId(taskId);
               setActiveJobId(undefined);
             }}
@@ -690,6 +705,12 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               // is created and opened, and the composer is the form. A refusal answers under that project's
               // own row — including the one the ⌘N shortcut produces, which has no row of its own to speak in.
               void startNewTask(projectId).then((failure) => toRail(projectId, failure));
+            }}
+            onTeamJob={(projectId) => {
+              setTeamJobProjectId(projectId);
+              setActiveJobId(undefined);
+              setActiveId(undefined);
+              setSettingsScope(undefined);
             }}
             onAddProject={addProjectFromRail}
             onOpenProjectSettings={openProjectSettings}
@@ -788,21 +809,56 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
                 return props.actions.updateProject({ id: projectId, defaults }).then(asFailure);
               }}
               onOpenJob={(jobId) => {
+                setTeamJobProjectId(undefined);
                 setActiveJobId(jobId);
                 setActiveId(undefined);
                 setSettingsScope(undefined);
               }}
               onOpenTask={(taskId) => {
+                setTeamJobProjectId(undefined);
                 setActiveId(taskId);
                 setActiveJobId(undefined);
                 setSettingsScope(undefined);
               }}
             />
+          ) : teamJobProjectId ? (
+            (() => {
+              const project = state.projects.find((p) => p.id === teamJobProjectId);
+              if (!project) {
+                return (
+                  <div className="task-pane" data-testid="team-job-project-gone">
+                    <p className="settings__note">{t("teamJob.create.projectGone")}</p>
+                    <button type="button" className="button" onClick={() => setTeamJobProjectId(undefined)}>
+                      {t("action.cancel")}
+                    </button>
+                  </div>
+                );
+              }
+              return (
+                <TeamJobCreateSheet
+                  key={project.id}
+                  project={project}
+                  agents={props.actions}
+                  onCancel={() => setTeamJobProjectId(undefined)}
+                  onOpenTeams={() => {
+                    setTeamJobProjectId(undefined);
+                    goToSettings(appScope("teams"));
+                  }}
+                  onCreated={(jobId) => {
+                    setTeamJobProjectId(undefined);
+                    setActiveJobId(jobId);
+                    setActiveId(undefined);
+                    setSettingsScope(undefined);
+                  }}
+                />
+              );
+            })()
           ) : activeJobId ? (
             <JobPane
               jobId={activeJobId}
               agents={props.actions}
               onClose={() => setActiveJobId(undefined)}
+              onOpenTeams={() => goToSettings(appScope("teams"))}
             />
           ) : active ? (
             <TaskPane

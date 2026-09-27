@@ -696,6 +696,7 @@ void main() {
     // asked. `HarnessInfo.badge` shortens "Envoy Harness" to "Envoy" on both surfaces.
     expect(find.text('Envoy'), findsOneWidget);
     expect(find.text('Change agent'), findsOneWidget);
+    expect(find.text('Team job'), findsOneWidget);
     // Remove came along, and it is the same action the row used to offer, not a second wording. The
     // label is the short one: the row is already the project, so it does not say "project" again.
     expect(find.text('Remove'), findsOneWidget);

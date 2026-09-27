@@ -1826,6 +1826,13 @@ export const RPC_METHODS = [
   "coder.failJobStep",
   "coder.suggestJobSteps",
   "coder.listJobStepTemplates",
+  /** Origin/member: path is a Git repo with a remote (Team job content bus). */
+  "coder.assessGitContentBus",
+  /**
+   * Origin client (desktop window or paired phone): can this drafting job Start now?
+   * Returns structured crew + Git blockers so Mobile can show why Start is disabled.
+   */
+  "coder.assessTeamJobReadiness",
   "coder.setJobStallAutomation",
   /** Origin → member: deliver a pending StepOffer. */
   "coder.inboundJobStepOffer",

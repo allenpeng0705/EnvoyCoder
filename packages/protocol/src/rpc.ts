@@ -3977,6 +3977,55 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
       })
       .strict(),
   },
+  "coder.assessGitContentBus": {
+    params: z
+      .object({
+        /** Absolute or project path the step will use as `cwdHint`. */
+        path: z.string().min(1),
+      })
+      .strict(),
+    result: z.union([
+      z.object({ ok: z.literal(true), path: z.string() }).strict(),
+      z
+        .object({
+          ok: z.literal(false),
+          policy: z.enum(["path-missing", "not-a-git-repo", "no-git-remote", "git-missing"]),
+        })
+        .strict(),
+    ]),
+  },
+  "coder.assessTeamJobReadiness": {
+    params: z
+      .object({
+        jobId: z.string().min(1),
+      })
+      .strict(),
+    result: z
+      .object({
+        canStart: z.boolean(),
+        jobStatus: JobStatusSchema,
+        blockKind: z
+          .enum(["no-steps", "no-members", "all-offline", "missing-roles", "git", "not-drafting"])
+          .optional(),
+        /** English sentence for logs / fallback; Mobile prefers `messageKey`. */
+        message: z.string(),
+        messageKey: z.string().optional(),
+        messageValues: z.record(z.string(), z.string()).optional(),
+        missingRoles: z.array(JobRoleSchema).readonly(),
+        offlineLabels: z.array(z.string()).readonly(),
+        git: z.union([
+          z.object({ ok: z.literal(true) }).strict(),
+          z
+            .object({
+              ok: z.literal(false),
+              policy: z.enum(["path-missing", "not-a-git-repo", "no-git-remote", "git-missing"]),
+            })
+            .strict(),
+        ]),
+        board: z.array(MemberStatusSchema).readonly(),
+      })
+      .strict(),
+  },
   "coder.setJobStallAutomation": {
     params: z
       .object({

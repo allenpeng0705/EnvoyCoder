@@ -1326,4 +1326,150 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get statusStopped => 'Gestoppt';
+
+  @override
+  String get teamJobCreateTitle => 'Team-Job';
+
+  @override
+  String teamJobCreateBlurb(String project) {
+    return 'Gemeinsam an ' + project + ' arbeiten.';
+  }
+
+  @override
+  String get teamJobCreateTeam => 'Team';
+
+  @override
+  String get teamJobCreateJobTitle => 'Titel';
+
+  @override
+  String get teamJobCreateJobGoal => 'Ziel';
+
+  @override
+  String get teamJobCreateSubmit => 'Entwurf erstellen';
+
+  @override
+  String get teamJobCreateDraftHint => 'Später starten, wenn die Crew online ist.';
+
+  @override
+  String get teamJobCrewNoJoiners => 'Eine andere Maschine einladen. Entwurf geht trotzdem.';
+
+  @override
+  String teamJobCrewAllOffline(String machines) {
+    return 'Warte, bis ' + machines + ' online kommt.';
+  }
+
+  @override
+  String get jobPaneCrewNoSteps => 'Vor dem Start Schritte hinzufügen (Schrittvorlage nutzen).';
+
+  @override
+  String get jobPaneCrewNoMembers => 'Dieses Team hat noch keine Geräte. Lade jemanden unter Teams ein.';
+
+  @override
+  String jobPaneCrewAllOffline(String machines) {
+    return 'Keine Geräte online. Warte auf: ' + machines + '.';
+  }
+
+  @override
+  String jobPaneCrewMissingRoles(String roles) {
+    return 'Kein online Gerät bietet: ' + roles + '. Rollen unter Teams korrigieren oder auf den richtigen Peer warten.';
+  }
+
+  @override
+  String get jobPaneStart => 'Job starten';
+
+  @override
+  String get teamJobStartBlocked => 'Besetzung vor dem Start klären.';
+
+  @override
+  String get teamJobGitOk => 'Git bereit — Repository mit Remote.';
+
+  @override
+  String get teamJobGitPathMissing => 'Projektordner fehlt.';
+
+  @override
+  String get teamJobGitNotARepo => 'Dieses Projekt ist kein Git-Repository. Team-Jobs brauchen Git zum Teilen von Dateien.';
+
+  @override
+  String get teamJobGitNoRemote => 'Vor dem Start eines Team-Jobs ein Git-Remote hinzufügen (z. B. origin).';
+
+  @override
+  String get teamJobGitMissing => 'Git ist auf diesem Gerät nicht verfügbar.';
+
+  @override
+  String get teamJobGitChecking => 'Git wird geprüft…';
+
+  @override
+  String get errorJobNotDrafting => 'Nur ein Job im Entwurf kann gestartet werden.';
+
+  @override
+  String get errorOriginClientOnly => 'Das braucht EnvoyDev auf dieser Maschine oder ein damit gekoppeltes Telefon.';
+
+  @override
+  String get projectListTeamJob => 'Team-Job';
+
+  @override
+  String get teamJobCrewNoTeamDesktop => 'Erstelle ein Team in EnvoyDev auf dem Desktop, dann zum Aktualisieren ziehen.';
+
+  @override
+  String get teamJobNeedsDesktopHint => 'Entfernen, Token rotieren und neu zuweisen bleiben in der Desktop-Job-Ansicht.';
+
+  @override
+  String get teamJobReadyToStart => 'Besetzung und Git sind bereit — Start ist möglich.';
+
+  @override
+  String get teamJobWatchTitle => 'Team-Job';
+
+  @override
+  String get teamJobStepsHeading => 'Schritte';
+
+  @override
+  String get teamJobLedgerHeading => 'Aktuelle Notizen';
+
+  @override
+  String get teamJobStatusDrafting => 'Entwurf';
+
+  @override
+  String get teamJobStatusPaused => 'Pausiert';
+
+  @override
+  String get teamJobStepPending => 'Ausstehend';
+
+  @override
+  String get teamJobStepOffered => 'Angeboten';
+
+  @override
+  String get commonRefresh => 'Aktualisieren';
+
+  @override
+  String get jobPaneApprove => 'Erlauben';
+
+  @override
+  String get jobPaneDeny => 'Nicht erlauben';
+
+  @override
+  String get jobPaneNeedsApproval => 'Warte auf Freigabe für diesen Schritt';
+
+  @override
+  String get teamJobExistingHeading => 'Team-Jobs in diesem Projekt';
+
+  @override
+  String get teamJobNewCta => 'Neuer Team-Job';
+
+  @override
+  String get teamJobBackToList => 'Zurück zu Jobs';
+
+  @override
+  String get teamJobBackToEdit => 'Zurück zum Bearbeiten';
+
+  @override
+  String get teamJobPeersHeading => 'Geräte';
+
+  @override
+  String get teamJobPeerOnline => 'Online';
+
+  @override
+  String get teamJobPeerDegraded => 'Instabil';
+
+  @override
+  String get teamJobPeerOffline => 'Offline';
 }

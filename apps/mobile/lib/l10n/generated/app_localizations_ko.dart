@@ -1274,4 +1274,150 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get statusStopped => '중지됨';
+
+  @override
+  String get teamJobCreateTitle => '팀 작업';
+
+  @override
+  String teamJobCreateBlurb(String project) {
+    return project + '에서 함께 작업합니다.';
+  }
+
+  @override
+  String get teamJobCreateTeam => '팀';
+
+  @override
+  String get teamJobCreateJobTitle => '제목';
+
+  @override
+  String get teamJobCreateJobGoal => '목표';
+
+  @override
+  String get teamJobCreateSubmit => '초안 만들기';
+
+  @override
+  String get teamJobCreateDraftHint => '크루가 온라인이 되면 나중에 시작하세요.';
+
+  @override
+  String get teamJobCrewNoJoiners => '다른 기기를 초대하세요. 초안은 만들 수 있습니다.';
+
+  @override
+  String teamJobCrewAllOffline(String machines) {
+    return machines + '이(가) 온라인될 때까지 기다리는 중.';
+  }
+
+  @override
+  String get jobPaneCrewNoSteps => '시작하기 전에 단계를 추가하세요(단계 템플릿 사용).';
+
+  @override
+  String get jobPaneCrewNoMembers => '이 팀에는 아직 기기가 없습니다. 팀에서 초대하세요.';
+
+  @override
+  String jobPaneCrewAllOffline(String machines) {
+    return '온라인 기기가 없습니다. 대기 중: ' + machines + '.';
+  }
+
+  @override
+  String jobPaneCrewMissingRoles(String roles) {
+    return '온라인 기기가 제공하지 않음: ' + roles + '. 팀에서 역할을 고치거나 맞는 피어를 기다리세요.';
+  }
+
+  @override
+  String get jobPaneStart => '작업 시작';
+
+  @override
+  String get teamJobStartBlocked => '시작하기 전에 구성원을 맞추세요.';
+
+  @override
+  String get teamJobGitOk => 'Git 준비됨 — 원격이 있는 저장소.';
+
+  @override
+  String get teamJobGitPathMissing => '프로젝트 폴더가 없습니다.';
+
+  @override
+  String get teamJobGitNotARepo => '이 프로젝트는 Git 저장소가 아닙니다. 팀 작업은 파일 공유에 Git이 필요합니다.';
+
+  @override
+  String get teamJobGitNoRemote => '팀 작업을 시작하기 전에 Git 원격(예: origin)을 추가하세요.';
+
+  @override
+  String get teamJobGitMissing => '이 기기에서 Git을 사용할 수 없습니다.';
+
+  @override
+  String get teamJobGitChecking => 'Git 확인 중…';
+
+  @override
+  String get errorJobNotDrafting => '초안 상태의 작업만 시작할 수 있습니다.';
+
+  @override
+  String get errorOriginClientOnly => '이 기기의 EnvoyDev 또는 그에 페어링된 휴대전화가 필요합니다.';
+
+  @override
+  String get projectListTeamJob => '팀 작업';
+
+  @override
+  String get teamJobCrewNoTeamDesktop => '데스크톱 EnvoyDev에서 팀을 만든 뒤 당겨서 새로고침하세요.';
+
+  @override
+  String get teamJobNeedsDesktopHint => '추방, 토큰 교체, 재배정은 데스크톱 Job 창에서 합니다.';
+
+  @override
+  String get teamJobReadyToStart => '크루와 Git이 준비되었습니다 — 시작할 수 있습니다.';
+
+  @override
+  String get teamJobWatchTitle => '팀 작업';
+
+  @override
+  String get teamJobStepsHeading => '단계';
+
+  @override
+  String get teamJobLedgerHeading => '최근 메모';
+
+  @override
+  String get teamJobStatusDrafting => '초안';
+
+  @override
+  String get teamJobStatusPaused => '일시 중지';
+
+  @override
+  String get teamJobStepPending => '대기';
+
+  @override
+  String get teamJobStepOffered => '제안됨';
+
+  @override
+  String get commonRefresh => '새로고침';
+
+  @override
+  String get jobPaneApprove => '허용';
+
+  @override
+  String get jobPaneDeny => '허용 안 함';
+
+  @override
+  String get jobPaneNeedsApproval => '이 단계 승인 대기';
+
+  @override
+  String get teamJobExistingHeading => '이 프로젝트의 팀 작업';
+
+  @override
+  String get teamJobNewCta => '새 팀 작업';
+
+  @override
+  String get teamJobBackToList => '작업 목록으로';
+
+  @override
+  String get teamJobBackToEdit => '편집으로 돌아가기';
+
+  @override
+  String get teamJobPeersHeading => '기기';
+
+  @override
+  String get teamJobPeerOnline => '온라인';
+
+  @override
+  String get teamJobPeerDegraded => '불안정';
+
+  @override
+  String get teamJobPeerOffline => '오프라인';
 }

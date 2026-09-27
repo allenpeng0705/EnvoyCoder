@@ -31,6 +31,7 @@ import '../widgets/project_branches_sheet.dart';
 import 'new_task_sheet.dart';
 import 'add_project_sheet.dart';
 import 'run_screen.dart';
+import 'team_job_sheet.dart';
 
 class ProjectListScreen extends StatefulWidget {
   const ProjectListScreen({
@@ -220,6 +221,16 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
     await _refresh();
   }
 
+  /// Team job on an existing origin team — no team admin on the phone (§11.7).
+  Future<void> _teamJobFor(ProjectInfo project) async {
+    await showTeamJobSheet(
+      context: context,
+      client: widget.client,
+      project: project,
+    );
+    await _refresh();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -383,6 +394,7 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
                                     },
                                     onOpenTask: (task) => unawaited(_openTask(task)),
                                     onNewTask: () => unawaited(_newTaskFor(group.project)),
+                                    onTeamJob: () => unawaited(_teamJobFor(group.project)),
                                     onRemove: () => unawaited(_removeProject(group.project)),
                                     onArchiveTask: (task) => unawaited(_archiveTask(task)),
                                     onRenameTask: (task) => unawaited(_renameTask(task)),
@@ -914,6 +926,7 @@ class _ProjectSection extends StatelessWidget {
     required this.onToggle,
     required this.onOpenTask,
     required this.onNewTask,
+    required this.onTeamJob,
     required this.onRemove,
     required this.onArchiveTask,
     required this.onRenameTask,
@@ -931,6 +944,7 @@ class _ProjectSection extends StatelessWidget {
   final VoidCallback onToggle;
   final void Function(TaskInfo task) onOpenTask;
   final VoidCallback onNewTask;
+  final VoidCallback onTeamJob;
   final VoidCallback onRemove;
   final void Function(TaskInfo task) onArchiveTask;
   final void Function(TaskInfo task) onRenameTask;
@@ -1046,6 +1060,7 @@ class _ProjectSection extends StatelessWidget {
                 agentBadge: current?.badge,
                 canPickAgent: harnesses.isNotEmpty,
                 onPickAgent: () => unawaited(_pickAgent(context)),
+                onTeamJob: onTeamJob,
                 // Branches are only offered for a folder the desktop measured as a git repository: the menu
                 // item is the one place a user can reach them before the branch line exists.
                 canPickBranch: group.project.vcsKind == 'git',
@@ -1156,14 +1171,13 @@ class _ProjectSection extends StatelessWidget {
 }
 
 /// Which item of a project row's `…` was chosen.
-enum _ProjectMenuAction { agent, branches, remove }
+enum _ProjectMenuAction { agent, teamJob, branches, remove }
 
-/// The project row's `…`: the default agent new tasks start with, and Remove.
+/// The project row's `…`: the default agent new tasks start with, Team job, and Remove.
 ///
-/// **Why these two, and not two more buttons on the row.** A row has room for one verb — starting
-/// work — and the desktop rail makes the same split (`CoderSidebar.tsx:339-370`): the agent and the
-/// destructive action are menu items, and the trigger's label names the row it acts on. Three
-/// controls squeezed into a 320pt row is what made this row overflow; two is what fits.
+/// **Why these, and not more buttons on the row.** A row has room for one verb — starting a task —
+/// and the desktop rail makes the same split (`CoderSidebar.tsx:339-370`): secondary actions are menu
+/// items. Team job sits here (not a second `+`) so the phone keeps one create control for tasks.
 ///
 /// **Why the agent item is still tappable.** The badge it replaces was not decoration: it opened the
 /// picker that writes `project.defaults.harness`. Folding it into the menu while dropping the write
@@ -1179,6 +1193,7 @@ class _ProjectOverflowMenu extends StatelessWidget {
     required this.agentBadge,
     required this.canPickAgent,
     required this.onPickAgent,
+    required this.onTeamJob,
     required this.canPickBranch,
     required this.onPickBranches,
     required this.onRemove,
@@ -1192,6 +1207,7 @@ class _ProjectOverflowMenu extends StatelessWidget {
 
   final bool canPickAgent;
   final VoidCallback onPickAgent;
+  final VoidCallback onTeamJob;
   final bool canPickBranch;
   final VoidCallback onPickBranches;
   final VoidCallback onRemove;
@@ -1207,6 +1223,7 @@ class _ProjectOverflowMenu extends StatelessWidget {
         tooltip: l10n.connectionsMenuAria(projectLabel),
         onSelected: (action) => switch (action) {
           _ProjectMenuAction.agent => onPickAgent(),
+          _ProjectMenuAction.teamJob => onTeamJob(),
           _ProjectMenuAction.branches => onPickBranches(),
           _ProjectMenuAction.remove => onRemove(),
         },
@@ -1225,9 +1242,16 @@ class _ProjectOverflowMenu extends StatelessWidget {
               subtitle: canPickAgent ? Text(l10n.projectListChangeAgent) : null,
             ),
           ),
-          // **Branches, immediately after the agent.** The two are the project's own settings — which
-          // agent new tasks start with, and which branch its folder is on — and a repository that is
-          // not a git folder gets no item at all rather than one that cannot work.
+          PopupMenuItem(
+            value: _ProjectMenuAction.teamJob,
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.groups_outlined),
+              title: Text(l10n.projectListTeamJob),
+            ),
+          ),
+          // **Branches, immediately after Team job.** Agent + Team job + branch are the project's
+          // collaboration settings; a non-git folder gets no branch item rather than one that cannot work.
           if (canPickBranch)
             PopupMenuItem(
               value: _ProjectMenuAction.branches,

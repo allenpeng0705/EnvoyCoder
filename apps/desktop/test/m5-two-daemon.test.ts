@@ -70,6 +70,12 @@ async function boot(): Promise<{ daemon: StartedCoderDaemon; home: string; work:
   const home = await mkdtemp(join(tmpdir(), "envoy-m5-2d-"));
   const work = join(home, "repo");
   await mkdir(work, { recursive: true });
+  // Accept requires Git content bus (repo + remote).
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const exec = promisify(execFile);
+  await exec("git", ["init"], { cwd: work });
+  await exec("git", ["remote", "add", "origin", "https://example.com/repo.git"], { cwd: work });
   const daemon = await startCoderDaemon({
     port: 0,
     home,

@@ -24,10 +24,14 @@ import {
 } from "./memberships.js";
 import {
   reportJobStepProgress,
-  resolveCwdHint,
   readOffers,
   getJob,
 } from "./jobs.js";
+import {
+  assessGitContentBus,
+  gitContentBusMessage,
+  gitContentBusRef,
+} from "./job-git-readiness.js";
 import { requireTeam, memberTokenMatches } from "./teams.js";
 import { requireTeamToken } from "./collab-auth.js";
 import { requireOwnerWindow } from "./pairing.js";
@@ -107,14 +111,14 @@ export function createCollabInboundHandlers(deps: CollabDeps): Partial<Record<st
       await saveInboundOffer(deps.paths.inboundJobOffersFile, record);
 
       if (shouldAutoAccept(membership.acceptPolicy, input.offer.role)) {
-        const resolved = await resolveCwdHint(input.offer.cwdHint);
-        if (!resolved.ok) {
+        const git = await assessGitContentBus(input.offer.cwdHint);
+        if (!git.ok) {
           await peerCall(deps)({
             url: record.originWs,
             method: "coder.refuseJobStepOffer",
             params: {
               offerId: record.offerId,
-              policy: resolved.policy,
+              policy: git.policy,
               memberId: membership.memberId,
               teamToken: membership.token,
               memberToken: membership.memberToken,
@@ -123,10 +127,11 @@ export function createCollabInboundHandlers(deps: CollabDeps): Partial<Record<st
           });
           await patchInboundOffer(deps.paths.inboundJobOffersFile, record.offerId, {
             status: "refused",
-            policy: resolved.policy,
+            policy: git.policy,
           });
-          return { received: true as const, status: "refused" as const, policy: resolved.policy };
+          return { received: true as const, status: "refused" as const, policy: git.policy };
         }
+        const resolved = { ok: true as const, path: git.path };
         const started = await maybeStartLocalRun(deps, record, resolved.path, undefined, {
           originWs: record.originWs,
           teamToken: membership.token,
@@ -227,14 +232,15 @@ export function createCollabInboundHandlers(deps: CollabDeps): Partial<Record<st
       if (!offer || offer.status !== "pending") {
         throw coderError(ENVOYDEV_ERRORS.badRequest, "No pending inbound offer.", ref("error.job.offerMissing"));
       }
-      const resolved = await resolveCwdHint(input.resolvedCwd);
-      if (!resolved.ok) {
+      const git = await assessGitContentBus(input.resolvedCwd);
+      if (!git.ok) {
         throw coderError(
           ENVOYDEV_ERRORS.peerRefused,
-          "Path missing on this machine.",
-          ref("error.job.pathMissing"),
+          gitContentBusMessage(git.policy),
+          ref(gitContentBusRef(git.policy)),
         );
       }
+      const resolved = { ok: true as const, path: git.path };
       const membership = (await listMemberships(deps.paths.membershipsFile)).find(
         (m) => m.teamId === offer.teamId,
       );

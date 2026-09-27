@@ -1261,4 +1261,150 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get statusStopped => '已停止';
+
+  @override
+  String get teamJobCreateTitle => '团队任务';
+
+  @override
+  String teamJobCreateBlurb(String project) {
+    return '一起处理 ' + project + '。';
+  }
+
+  @override
+  String get teamJobCreateTeam => '团队';
+
+  @override
+  String get teamJobCreateJobTitle => '标题';
+
+  @override
+  String get teamJobCreateJobGoal => '目标';
+
+  @override
+  String get teamJobCreateSubmit => '创建草稿';
+
+  @override
+  String get teamJobCreateDraftHint => '船员在线后再开始。';
+
+  @override
+  String get teamJobCrewNoJoiners => '邀请另一台机器。仍可先创建草稿。';
+
+  @override
+  String teamJobCrewAllOffline(String machines) {
+    return '等待 ' + machines + ' 上线。';
+  }
+
+  @override
+  String get jobPaneCrewNoSteps => '开始前请先添加步骤（可使用步骤模板）。';
+
+  @override
+  String get jobPaneCrewNoMembers => '此团队还没有机器。请从「团队」邀请他人。';
+
+  @override
+  String jobPaneCrewAllOffline(String machines) {
+    return '没有在线机器。等待中：' + machines + '。';
+  }
+
+  @override
+  String jobPaneCrewMissingRoles(String roles) {
+    return '没有在线机器提供这些角色：' + roles + '。请在「团队」中修正角色，或等待合适的对等机。';
+  }
+
+  @override
+  String get jobPaneStart => '开始任务';
+
+  @override
+  String get teamJobStartBlocked => '开始前请先配齐成员。';
+
+  @override
+  String get teamJobGitOk => 'Git 就绪 — 带远程的仓库。';
+
+  @override
+  String get teamJobGitPathMissing => '项目文件夹缺失。';
+
+  @override
+  String get teamJobGitNotARepo => '此项目不是 Git 仓库。团队任务需要 Git 来共享文件。';
+
+  @override
+  String get teamJobGitNoRemote => '开始团队任务前请添加 Git 远程（例如 origin）。';
+
+  @override
+  String get teamJobGitMissing => '本机不可用 Git。';
+
+  @override
+  String get teamJobGitChecking => '正在检查 Git…';
+
+  @override
+  String get errorJobNotDrafting => '只有起草中的任务可以开始。';
+
+  @override
+  String get errorOriginClientOnly => '这需要本机上的 EnvoyDev，或已与之配对的手机。';
+
+  @override
+  String get projectListTeamJob => '团队任务';
+
+  @override
+  String get teamJobCrewNoTeamDesktop => '请在桌面版 EnvoyDev 上创建团队，然后下拉刷新。';
+
+  @override
+  String get teamJobNeedsDesktopHint => '踢出、轮换令牌与重新分配仍在桌面端的任务面板中操作。';
+
+  @override
+  String get teamJobReadyToStart => '成员与 Git 已就绪 — 可以开始。';
+
+  @override
+  String get teamJobWatchTitle => '团队任务';
+
+  @override
+  String get teamJobStepsHeading => '步骤';
+
+  @override
+  String get teamJobLedgerHeading => '最近记录';
+
+  @override
+  String get teamJobStatusDrafting => '草稿';
+
+  @override
+  String get teamJobStatusPaused => '已暂停';
+
+  @override
+  String get teamJobStepPending => '待处理';
+
+  @override
+  String get teamJobStepOffered => '已邀约';
+
+  @override
+  String get commonRefresh => '刷新';
+
+  @override
+  String get jobPaneApprove => '允许';
+
+  @override
+  String get jobPaneDeny => '不允许';
+
+  @override
+  String get jobPaneNeedsApproval => '此步骤等待批准';
+
+  @override
+  String get teamJobExistingHeading => '此项目上的团队任务';
+
+  @override
+  String get teamJobNewCta => '新建团队任务';
+
+  @override
+  String get teamJobBackToList => '返回任务列表';
+
+  @override
+  String get teamJobBackToEdit => '返回编辑';
+
+  @override
+  String get teamJobPeersHeading => '机器';
+
+  @override
+  String get teamJobPeerOnline => '在线';
+
+  @override
+  String get teamJobPeerDegraded => '不稳定';
+
+  @override
+  String get teamJobPeerOffline => '离线';
 }

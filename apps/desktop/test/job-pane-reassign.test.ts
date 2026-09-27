@@ -45,4 +45,24 @@ describe("suggestReassignMember", () => {
     ];
     expect(suggestReassignMember(board, { role: "developer", assigneeMemberId: "local" })).toBeUndefined();
   });
+
+  it("skips degraded peers unless allowDegradedAssignees", () => {
+    const board = [
+      member({ memberId: "local", label: "This machine", rolesOffered: ["developer"] }),
+      member({
+        memberId: "peer-a",
+        label: "laptop",
+        rolesOffered: ["developer"],
+        connection: { status: "degraded", transport: "mesh" },
+      }),
+    ];
+    expect(
+      suggestReassignMember(board, { role: "developer", assigneeMemberId: "local" }),
+    ).toBeUndefined();
+    expect(
+      suggestReassignMember(board, { role: "developer", assigneeMemberId: "local" }, {
+        allowDegradedAssignees: true,
+      })?.label,
+    ).toBe("laptop");
+  });
 });

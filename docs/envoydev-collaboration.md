@@ -19,6 +19,12 @@ Creating collaborative work from a project is labeled **Team job** (never “New
 (`cwdHint`); step briefs carry pull / commit / push. EnvoyDev schedules and locks
 (`dependsOn`, `worktreeKey`); it does not clone or sync the tree over the mesh (D2).
 
+**Git readiness (required for Team jobs):** every machine that runs a step must have, for that
+`cwdHint`: (1) a real directory, (2) a Git work tree, (3) at least one remote, (4) `git` on PATH.
+Origin **Start** and member **Accept** refuse with named policies (`path-missing`, `not-a-git-repo`,
+`no-git-remote`, `git-missing`) — see `job-git-readiness.ts`. The Team job create sheet and Job pane
+surface the same checks before Start. Everyday Tasks do not require this.
+
 ---
 
 ## 1. Hierarchy (read this first)
@@ -433,8 +439,10 @@ StepOffer {
 }
 ```
 
-4. Member resolves `cwdHint` to a local directory. If missing or not a directory → **refuse** with
-   `envoydev.peer-refused` and policy `path-missing`. Origin never assumes the peer’s home path.
+4. Member resolves `cwdHint` for the **Git content bus**. Refuse with `envoydev.peer-refused` and a
+   named policy when the path is missing (`path-missing`), not a Git repo (`not-a-git-repo`), has no
+   remotes (`no-git-remote`), or Git is unavailable (`git-missing`). Origin never assumes the peer’s
+   home path.
 5. Member **accepts** (manual, or per §4.7) → starts Run → streams `run.*` to origin; or
    **refuses** with a named policy.
 
@@ -625,7 +633,7 @@ Implementation order (normative ship gate for stall) — **items 1–8 largely l
 6. **LAN → mesh → SSH dial** for member channels (SSH tunnel + mesh CLIENT_PROXY) — done
 7. **`StallPolicy` automation** — only after step 3 is visible — gated toggle
 8. Orchestrator-agent assist — **step templates** + Suggest → confirm (`coder.suggestJobSteps` / `listJobStepTemplates`) — done; LLM assist later
-9. **Project-scoped Team job UX** — §13 (next)
+9. **Project-scoped Team job UX** — §13 — origin desktop landed (`TeamJobCreateSheet`, rail, crew gate)
 
 ---
 
@@ -816,6 +824,7 @@ Guide the user to **fix** the crew; do not only disable Start.
 | Team, members offline / unknown | “Waiting for *laptop* to come online.” → list offline machines; **Open team** |
 | Online but missing roles for steps | “*Build-box* needs to offer **tester** (or assign it).” → Open team / role controls |
 | Start blocked for any of the above | Keep the Team job draft; Start disabled with the same reason + CTA |
+| Project folder not a Git repo / no remote / Git missing | Create sheet + Job pane show Git guidance; **Start** and **Accept** refuse with `not-a-git-repo` / `no-git-remote` / `git-missing` / `path-missing` |
 | Team OK, Start allowed | Clear primary **Start** |
 | Stall automation fired | Ledger note + peer chip **Blocked · no progress** |
 | Partial job done | Report banner **Finished with gaps** + failed steps |
@@ -823,9 +832,15 @@ Guide the user to **fix** the crew; do not only disable Start.
 
 ### 11.7 Phone (M4 client of origin)
 
-Phone may **watch** job status and **answer approvals** for the origin’s job (same as today for
-tasks). It does **not** create teams, mint tokens, or kick peers in v1 — keeps the phone a thin
-client of the orchestrator machine.
+Phone may **draft + Start** a Team job on an **existing** origin team (project → Team job), **watch**
+job status, and **answer approvals** for runs on the origin (same as today for tasks). Start is gated
+by the origin daemon’s `coder.assessTeamJobReadiness` (crew online + roles + Git content bus) so the
+phone never invents a second policy — when Start is blocked, the daemon returns `blockKind`,
+`messageKey`, and a user-facing reason.
+
+It does **not** create teams, mint/rotate tokens, kick peers, or reassign/force-fail steps in v1 —
+those stay on the desktop Teams page / Job pane. Keeps the phone a thin client of the orchestrator
+machine, not a team peer.
 
 ### 11.8 Accessibility and density
 
@@ -874,18 +889,18 @@ remaining implementation risks called out here.
 
 ### 12.4 Verdict
 
-Control plane + Teams page + Job pane + templates are **landed**. Next product slice is
-**project-scoped Team job** create + crew guidance (§13) — so users start collaborative work
-from the project like a Task, with clear fixes when the team or online roles are missing.
+Control plane + Teams page + Job pane + templates + **project Team job** (§13) are **landed**.
+Users start collaborative work from the project; Start is gated with crew guidance when the team
+or online roles are missing.
 
 Do not ship critical automation (`onStall` stop/kick) without the status board and ledger notes
 visible — silent stops train users to distrust the product.
 
 ---
 
-## 13. Implementation plan — project Team job (next)
+## 13. Implementation plan — project Team job (landed)
 
-Normative UX plan for the next M5 UI slice. Wire types already support `Job.projectId`, multiple
+Normative UX plan for the M5 project-scoped Team job slice. Wire types already support `Job.projectId`, multiple
 teams, templates, and Start gating; this slice is **origin desktop UX + copy**.
 
 ### 13.1 Goals

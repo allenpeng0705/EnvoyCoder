@@ -28,6 +28,7 @@ import {
 } from "@envoydev/protocol";
 
 import { ref } from "./messages.js";
+import { uniqueTeamLabel } from "../state/team-defaults.js";
 import { encodeTeamInvite } from "./team-invite.js";
 
 export interface TeamFile {
@@ -257,6 +258,30 @@ function buildInvite(token: string, originWs: string, label: string, roleCatalog
   return encodeTeamInvite({ token, originWs, label, roleCatalog });
 }
 
+/**
+ * Repair already-stored duplicates (e.g. from double-click creates before the lock).
+ * Oldest team keeps the bare name; later ones become "Name 2", "Name 3", …
+ */
+export function dedupeTeamLabels(
+  teams: Record<string, TeamRecord>,
+  nowIso: string,
+): boolean {
+  const ordered = Object.values(teams).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const seen: string[] = [];
+  let changed = false;
+  for (const team of ordered) {
+    const next = uniqueTeamLabel(team.label, seen);
+    seen.push(next);
+    if (next !== team.label) {
+      teams[team.id] = { ...team, label: next, updatedAt: nowIso };
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+export { uniqueTeamLabel } from "../state/team-defaults.js";
+
 export async function createTeam(
   path: string,
   input: {
@@ -271,6 +296,9 @@ export async function createTeam(
 ): Promise<{ team: TeamPublic; token: string; invite: string }> {
   const file = await readTeamFile(path);
   const at = now();
+  if (dedupeTeamLabels(file.teams, at.toISOString())) {
+    await writeTeamFile(path, file);
+  }
   const token = mintToken();
   const ttlMs = (input.ttlHours ?? 24) * 60 * 60 * 1000;
   const roleCatalog = validateRoleCatalog(input.roleCatalog ?? defaultRoleCatalog());
@@ -292,9 +320,13 @@ export async function createTeam(
     connection: onlineLocal(),
     acceptPolicy: { ...DEFAULT_ACCEPT_POLICY },
   };
+  const label = uniqueTeamLabel(
+    input.label,
+    Object.values(file.teams).map((t) => t.label),
+  );
   const record: TeamRecord = {
     id: randomUUID(),
-    label: input.label.trim(),
+    label,
     token,
     tokenHash: hashToken(token),
     tokenExpiresAt: new Date(at.getTime() + ttlMs).toISOString(),
@@ -315,8 +347,11 @@ export async function createTeam(
   };
 }
 
-export async function listTeams(path: string): Promise<TeamPublic[]> {
+export async function listTeams(path: string, now: () => Date = () => new Date()): Promise<TeamPublic[]> {
   const file = await readTeamFile(path);
+  if (dedupeTeamLabels(file.teams, now().toISOString())) {
+    await writeTeamFile(path, file);
+  }
   return Object.values(file.teams)
     .map(toPublic)
     .sort((a, b) => a.label.localeCompare(b.label));

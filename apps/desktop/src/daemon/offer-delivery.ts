@@ -34,6 +34,7 @@ export type LocalAutoAcceptOutcome =
 
 const deliverers = new Map<string, OfferDeliverer>();
 const localStarters = new Map<string, LocalAutoAcceptStarter>();
+const localCancels = new Map<string, (runId: string) => Promise<void>>();
 
 /** Wired once per daemon from collab handlers (has peerCall + originWs). */
 export function configureOfferDelivery(teamsFile: string, next: OfferDeliverer | null): void {
@@ -45,6 +46,28 @@ export function configureOfferDelivery(teamsFile: string, next: OfferDeliverer |
 export function configureLocalAutoAccept(teamsFile: string, next: LocalAutoAcceptStarter | null): void {
   if (!next) localStarters.delete(teamsFile);
   else localStarters.set(teamsFile, next);
+}
+
+/** Cancel a harness started for local auto-accept when accept persistence fails. */
+export function configureLocalAutoAcceptCancel(
+  teamsFile: string,
+  next: ((runId: string) => Promise<void>) | null,
+): void {
+  if (!next) localCancels.delete(teamsFile);
+  else localCancels.set(teamsFile, next);
+}
+
+export async function cancelLocalAutoAcceptRun(options: {
+  teamsFile: string;
+  runId: string;
+}): Promise<void> {
+  const cancel = localCancels.get(options.teamsFile);
+  if (!cancel) return;
+  try {
+    await cancel(options.runId);
+  } catch {
+    /* best-effort */
+  }
 }
 
 /**

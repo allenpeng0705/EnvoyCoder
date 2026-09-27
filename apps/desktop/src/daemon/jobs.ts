@@ -51,6 +51,7 @@ import {
   type JobStepTemplateId,
   type SuggestJobStepsOptions,
 } from "./job-step-templates.js";
+import { assessGitContentBus, throwGitContentBus } from "./job-git-readiness.js";
 
 export { listJobStepTemplates, type JobStepTemplateId, type SuggestJobStepsOptions };
 
@@ -280,6 +281,17 @@ export async function updateJobSteps(
     if (existing && existing.status !== "pending") return existing;
     return draftToStep(jobId, d);
   });
+  // Replacing a running graph must not drop offered/running/succeeded steps (Suggest uses new ids).
+  for (const existing of job.steps) {
+    if (existing.status === "pending") continue;
+    if (!steps.some((s) => s.id === existing.id)) {
+      throw coderError(
+        ENVOYDEV_ERRORS.badRequest,
+        "Cannot replace steps that are already in progress. Pause the job first, or edit only pending steps.",
+        ref("error.job.stepsInFlight"),
+      );
+    }
+  }
   let catalog: readonly RoleDef[] = [];
   if (teamsPath) {
     const team = await requireTeam(teamsPath, job.teamId);
@@ -340,6 +352,13 @@ export async function startJob(
   jobId: string,
 ): Promise<Job> {
   let job = await getJob(jobsPath, jobId);
+  if (job.status !== "drafting") {
+    throw coderError(
+      ENVOYDEV_ERRORS.badRequest,
+      "Only a drafting job can be started.",
+      ref("error.job.notDrafting"),
+    );
+  }
   if (job.steps.length === 0) {
     throw coderError(ENVOYDEV_ERRORS.badRequest, "Add at least one step before starting.", ref("error.job.noSteps"));
   }
@@ -347,6 +366,25 @@ export async function startJob(
   const catalog = normalizeTeamRecord(team).roleCatalog;
   assertStepsInCatalog(job.steps, catalog);
   assertWriterLocks(job.steps, catalog);
+  // Preflight: every currently schedulable step needs an online assignee (UI crew gate can race).
+  const roots = job.steps.filter(
+    (s) => s.status === "pending" && dependenciesSatisfied(s, job.steps),
+  );
+  for (const step of roots) {
+    if (!pickAssignee(team, step, job.policy)) {
+      throw coderError(
+        ENVOYDEV_ERRORS.badRequest,
+        `No online machine offers role “${step.role}”. Fix the team, then try Start again.`,
+        ref("error.job.noCandidate", { role: step.role }),
+      );
+    }
+  }
+  // Origin machine must be Git-ready for every distinct cwd used by this job (content bus).
+  const cwdHints = [...new Set(job.steps.map((s) => s.cwdHint).filter((c) => c.trim() !== ""))];
+  for (const cwd of cwdHints) {
+    const git = await assessGitContentBus(cwd);
+    if (!git.ok) throwGitContentBus(git.policy);
+  }
   job = await saveJob(jobsPath, {
     ...job,
     status: "running",
@@ -356,7 +394,20 @@ export async function startJob(
   for (const step of job.steps) {
     if (step.status !== "pending") continue;
     if (!dependenciesSatisfied(step, job.steps)) continue;
-    await offerJobStep(jobsPath, offersPath, teamsPath, { jobId: job.id, stepId: step.id });
+    const offered = await offerJobStep(jobsPath, offersPath, teamsPath, {
+      jobId: job.id,
+      stepId: step.id,
+    });
+    if (offered.status === "refused" && offered.policy === "no-candidate") {
+      const current = await getJob(jobsPath, jobId);
+      await saveJob(jobsPath, {
+        ...current,
+        ledger: [
+          ...current.ledger,
+          note("info", `No candidate for step role “${step.role}”`, { stepId: step.id }),
+        ],
+      });
+    }
   }
   return getJob(jobsPath, jobId);
 }
@@ -687,7 +738,12 @@ export function suggestJobSteps(
 ): { templateId: JobStepTemplateId; steps: JobStepDraft[]; note: string } {
   const opts: SuggestJobStepsOptions =
     typeof options === "string" ? { hint: options } : (options ?? {});
-  const built = buildJobStepTemplate(job, opts);
+  // Prefer explicit cwd, else keep the path already on this job (project create sets it).
+  const inheritedCwd = job.steps.map((s) => s.cwdHint?.trim()).find((c) => c && c !== ".");
+  const built = buildJobStepTemplate(job, {
+    ...opts,
+    cwdHint: opts.cwdHint?.trim() || inheritedCwd || opts.cwdHint || ".",
+  });
   return {
     templateId: built.templateId,
     steps: built.steps,

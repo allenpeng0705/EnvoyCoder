@@ -17,7 +17,11 @@ import {
 
 import { ref } from "./messages.js";
 import { dialMember } from "./member-dial.js";
-import { deliverPendingOffer, startLocalAutoAcceptRun } from "./offer-delivery.js";
+import {
+  cancelLocalAutoAcceptRun,
+  deliverPendingOffer,
+  startLocalAutoAcceptRun,
+} from "./offer-delivery.js";
 import {
   assertWriterLocks,
   dependenciesSatisfied,
@@ -27,10 +31,14 @@ import {
   pickAssignee,
   readOffers,
   reassignJobStep,
-  resolveCwdHint,
   saveJob,
   writeJsonFile,
 } from "./jobs.js";
+import {
+  assessGitContentBus,
+  gitContentBusMessage,
+  gitContentBusRef,
+} from "./job-git-readiness.js";
 import {
   memberOnlineForAssign,
   normalizeTeamRecord,
@@ -162,10 +170,11 @@ export async function offerJobStep(
   // Origin Job pane Accepts pending local offers; power users set auto-roles on This machine.
   // Start a real harness *before* accept so we never mint a placeholder `job-run-…` id.
   if (shouldAutoAccept(liveMember.acceptPolicy, step.role)) {
-    const resolved = await resolveCwdHint(step.cwdHint);
-    if (!resolved.ok) {
-      return refuseOfferInternal(jobsPath, offersPath, teamsPath, offerId, resolved.policy);
+    const git = await assessGitContentBus(step.cwdHint);
+    if (!git.ok) {
+      return refuseOfferInternal(jobsPath, offersPath, teamsPath, offerId, git.policy);
     }
+    const resolved = { ok: true as const, path: git.path };
     const started = await startLocalAutoAcceptRun({
       teamsFile: teamsPath,
       offer,
@@ -178,20 +187,25 @@ export async function offerJobStep(
       // No RunManager wired (unit tests) — leave the offer pending for explicit Accept.
       return { status: "offered", offer };
     }
-    const accepted = await acceptJobStepOffer(jobsPath, offersPath, {
-      offerId,
-      resolvedCwd: resolved.path,
-      skipPathCheck: true,
-      runId: started.runId,
-    });
-    return {
-      status: "accepted",
-      offer: {
-        ...offer,
+    try {
+      const accepted = await acceptJobStepOffer(jobsPath, offersPath, {
+        offerId,
+        resolvedCwd: resolved.path,
+        skipPathCheck: true,
+        runId: started.runId,
+      });
+      return {
         status: "accepted",
-        runId: accepted.runId,
-      },
-    };
+        offer: {
+          ...offer,
+          status: "accepted",
+          runId: accepted.runId,
+        },
+      };
+    } catch (error) {
+      await cancelLocalAutoAcceptRun({ teamsFile: teamsPath, runId: started.runId });
+      throw error;
+    }
   }
 
   // Every path that creates a pending remote offer must deliver — complete/retry/stall
@@ -242,12 +256,12 @@ export async function acceptJobStepOffer(
     );
   }
   if (!input.skipPathCheck) {
-    const resolved = await resolveCwdHint(input.resolvedCwd);
-    if (!resolved.ok) {
+    const git = await assessGitContentBus(input.resolvedCwd);
+    if (!git.ok) {
       throw coderError(
         ENVOYDEV_ERRORS.peerRefused,
-        "Path missing on this machine.",
-        ref("error.job.pathMissing"),
+        gitContentBusMessage(git.policy),
+        ref(gitContentBusRef(git.policy)),
       );
     }
   }

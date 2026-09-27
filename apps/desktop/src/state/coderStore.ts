@@ -1985,6 +1985,35 @@ export class CoderStore {
     });
   }
 
+  async assessGitContentBus(path: string) {
+    return this.mutate("coder.assessGitContentBus", { path }, (result) => {
+      const answer = result as
+        | { ok: true; path: string }
+        | { ok: false; policy: "path-missing" | "not-a-git-repo" | "no-git-remote" | "git-missing" };
+      return answer.ok
+        ? { ok: true as const, path: answer.path }
+        : { ok: false as const, policy: answer.policy };
+    });
+  }
+
+  async assessTeamJobReadiness(jobId: string) {
+    return this.mutate("coder.assessTeamJobReadiness", { jobId }, (result) => {
+      const answer = result as {
+        canStart: boolean;
+        jobStatus: string;
+        message: string;
+        messageKey?: string;
+        messageValues?: Record<string, string>;
+        blockKind?: string;
+        missingRoles: readonly import("@envoydev/protocol").JobRole[];
+        offlineLabels: readonly string[];
+        git: { ok: true } | { ok: false; policy: "path-missing" | "not-a-git-repo" | "no-git-remote" | "git-missing" };
+        board: readonly import("@envoydev/protocol").MemberStatus[];
+      };
+      return { ok: true as const, ...answer };
+    });
+  }
+
   async updateJobSteps(
     jobId: string,
     steps: readonly {

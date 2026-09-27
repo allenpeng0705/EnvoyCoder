@@ -1308,4 +1308,150 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get statusStopped => 'Stopped';
+
+  @override
+  String get teamJobCreateTitle => 'Team job';
+
+  @override
+  String teamJobCreateBlurb(String project) {
+    return 'Work together on ' + project + '.';
+  }
+
+  @override
+  String get teamJobCreateTeam => 'Team';
+
+  @override
+  String get teamJobCreateJobTitle => 'Title';
+
+  @override
+  String get teamJobCreateJobGoal => 'Goal';
+
+  @override
+  String get teamJobCreateSubmit => 'Create draft';
+
+  @override
+  String get teamJobCreateDraftHint => 'Start later when the crew is online.';
+
+  @override
+  String get teamJobCrewNoJoiners => 'Invite another machine. You can still create a draft.';
+
+  @override
+  String teamJobCrewAllOffline(String machines) {
+    return 'Waiting for ' + machines + ' to come online.';
+  }
+
+  @override
+  String get jobPaneCrewNoSteps => 'Add steps before starting (use a step template).';
+
+  @override
+  String get jobPaneCrewNoMembers => 'This team has no machines yet. Invite someone from Teams.';
+
+  @override
+  String jobPaneCrewAllOffline(String machines) {
+    return 'No machines online. Waiting for: ' + machines + '.';
+  }
+
+  @override
+  String jobPaneCrewMissingRoles(String roles) {
+    return 'No online machine offers: ' + roles + '. Fix roles on Teams, or wait for the right peer.';
+  }
+
+  @override
+  String get jobPaneStart => 'Start job';
+
+  @override
+  String get teamJobStartBlocked => 'Fix the crew before starting.';
+
+  @override
+  String get teamJobGitOk => 'Git ready — repository with a remote.';
+
+  @override
+  String get teamJobGitPathMissing => 'Project folder is missing.';
+
+  @override
+  String get teamJobGitNotARepo => 'This project is not a Git repository. Team jobs need Git to share files.';
+
+  @override
+  String get teamJobGitNoRemote => 'Add a Git remote (e.g. origin) before starting a Team job.';
+
+  @override
+  String get teamJobGitMissing => 'Git is not available on this machine.';
+
+  @override
+  String get teamJobGitChecking => 'Checking Git…';
+
+  @override
+  String get errorJobNotDrafting => 'Only a drafting job can be started.';
+
+  @override
+  String get errorOriginClientOnly => 'This needs EnvoyDev on this machine or a phone paired to it.';
+
+  @override
+  String get projectListTeamJob => 'Team job';
+
+  @override
+  String get teamJobCrewNoTeamDesktop => 'Create a team on desktop EnvoyDev, then pull to refresh.';
+
+  @override
+  String get teamJobNeedsDesktopHint => 'Kick, rotate token, and reassign stay on the desktop Job pane.';
+
+  @override
+  String get teamJobReadyToStart => 'Crew and Git are ready — you can Start.';
+
+  @override
+  String get teamJobWatchTitle => 'Team job';
+
+  @override
+  String get teamJobStepsHeading => 'Steps';
+
+  @override
+  String get teamJobLedgerHeading => 'Recent notes';
+
+  @override
+  String get teamJobStatusDrafting => 'Draft';
+
+  @override
+  String get teamJobStatusPaused => 'Paused';
+
+  @override
+  String get teamJobStepPending => 'Pending';
+
+  @override
+  String get teamJobStepOffered => 'Offered';
+
+  @override
+  String get commonRefresh => 'Refresh';
+
+  @override
+  String get jobPaneApprove => 'Allow';
+
+  @override
+  String get jobPaneDeny => 'Don’t allow';
+
+  @override
+  String get jobPaneNeedsApproval => 'Waiting for approval on this step';
+
+  @override
+  String get teamJobExistingHeading => 'Team jobs on this project';
+
+  @override
+  String get teamJobNewCta => 'New team job';
+
+  @override
+  String get teamJobBackToList => 'Back to jobs';
+
+  @override
+  String get teamJobBackToEdit => 'Back to edit';
+
+  @override
+  String get teamJobPeersHeading => 'Machines';
+
+  @override
+  String get teamJobPeerOnline => 'Online';
+
+  @override
+  String get teamJobPeerDegraded => 'Unstable';
+
+  @override
+  String get teamJobPeerOffline => 'Offline';
 }

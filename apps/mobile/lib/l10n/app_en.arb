@@ -1756,5 +1756,209 @@
   "statusStopped": "Stopped",
   "@statusStopped": {
     "description": "statusstopped — Reused from desktop status.cancelled"
+  },
+  "teamJobCreateTitle": "Team job",
+  "@teamJobCreateTitle": {
+    "description": "teamJob.create.title — Sheet title for creating a Team job."
+  },
+  "teamJobCreateBlurb": "Work together on {project}.",
+  "@teamJobCreateBlurb": {
+    "description": "teamJob.create.blurb — Explains peers need a Git clone.",
+    "placeholders": {
+      "project": {
+        "type": "String"
+      }
+    }
+  },
+  "teamJobCreateTeam": "Team",
+  "@teamJobCreateTeam": {
+    "description": "teamJob.create.team — Team picker label."
+  },
+  "teamJobCreateJobTitle": "Title",
+  "@teamJobCreateJobTitle": {
+    "description": "teamJob.create.jobTitle — Job title field."
+  },
+  "teamJobCreateJobGoal": "Goal",
+  "@teamJobCreateJobGoal": {
+    "description": "teamJob.create.jobGoal — Job goal field."
+  },
+  "teamJobCreateSubmit": "Create draft",
+  "@teamJobCreateSubmit": {
+    "description": "teamJob.create.submit — Create draft button."
+  },
+  "teamJobCreateDraftHint": "Start later when the crew is online.",
+  "@teamJobCreateDraftHint": {
+    "description": "teamJob.create.draftHint — Draft ok; Start gated."
+  },
+  "teamJobCrewNoJoiners": "Invite another machine. You can still create a draft.",
+  "@teamJobCrewNoJoiners": {
+    "description": "teamJob.crew.noJoiners — Solo origin guidance."
+  },
+  "teamJobCrewAllOffline": "Waiting for {machines} to come online.",
+  "@teamJobCrewAllOffline": {
+    "description": "teamJob.crew.allOffline — Waiting for machines.",
+    "placeholders": {
+      "machines": {
+        "type": "String"
+      }
+    }
+  },
+  "jobPaneCrewNoSteps": "Add steps before starting (use a step template).",
+  "@jobPaneCrewNoSteps": {
+    "description": "job.pane.crew.noSteps"
+  },
+  "jobPaneCrewNoMembers": "This team has no machines yet. Invite someone from Teams.",
+  "@jobPaneCrewNoMembers": {
+    "description": "job.pane.crew.noMembers"
+  },
+  "jobPaneCrewAllOffline": "No machines online. Waiting for: {machines}.",
+  "@jobPaneCrewAllOffline": {
+    "description": "job.pane.crew.allOffline",
+    "placeholders": {
+      "machines": {
+        "type": "String"
+      }
+    }
+  },
+  "jobPaneCrewMissingRoles": "No online machine offers: {roles}. Fix roles on Teams, or wait for the right peer.",
+  "@jobPaneCrewMissingRoles": {
+    "description": "job.pane.crew.missingRoles",
+    "placeholders": {
+      "roles": {
+        "type": "String"
+      }
+    }
+  },
+  "jobPaneStart": "Start job",
+  "@jobPaneStart": {
+    "description": "job.pane.start — Start the Team job."
+  },
+  "teamJobStartBlocked": "Fix the crew before starting.",
+  "@teamJobStartBlocked": {
+    "description": "job.pane.startBlocked — Generic Start blocked."
+  },
+  "teamJobGitOk": "Git ready — repository with a remote.",
+  "@teamJobGitOk": {
+    "description": "teamJob.git.ok"
+  },
+  "teamJobGitPathMissing": "Project folder is missing.",
+  "@teamJobGitPathMissing": {
+    "description": "teamJob.git.pathMissing"
+  },
+  "teamJobGitNotARepo": "This project is not a Git repository. Team jobs need Git to share files.",
+  "@teamJobGitNotARepo": {
+    "description": "teamJob.git.notARepo"
+  },
+  "teamJobGitNoRemote": "Add a Git remote (e.g. origin) before starting a Team job.",
+  "@teamJobGitNoRemote": {
+    "description": "teamJob.git.noRemote"
+  },
+  "teamJobGitMissing": "Git is not available on this machine.",
+  "@teamJobGitMissing": {
+    "description": "teamJob.git.missing"
+  },
+  "teamJobGitChecking": "Checking Git…",
+  "@teamJobGitChecking": {
+    "description": "teamJob.git.checking"
+  },
+  "errorJobNotDrafting": "Only a drafting job can be started.",
+  "@errorJobNotDrafting": {
+    "description": "error.job.notDrafting"
+  },
+  "errorOriginClientOnly": "This needs EnvoyDev on this machine or a phone paired to it.",
+  "@errorOriginClientOnly": {
+    "description": "error.originClientOnly"
+  },
+  "projectListTeamJob": "Team job",
+  "@projectListTeamJob": {
+    "description": "sidebar.project.menu.teamJob — Overflow menu item."
+  },
+  "teamJobCrewNoTeamDesktop": "Create a team on desktop EnvoyDev, then pull to refresh.",
+  "@teamJobCrewNoTeamDesktop": {
+    "description": "Phone-only: no Create team — open desktop."
+  },
+  "teamJobNeedsDesktopHint": "Kick, rotate token, and reassign stay on the desktop Job pane.",
+  "@teamJobNeedsDesktopHint": {
+    "description": "Phone-only: admin actions stay on desktop."
+  },
+  "teamJobReadyToStart": "Crew and Git are ready — you can Start.",
+  "@teamJobReadyToStart": {
+    "description": "Phone-only: readiness ok."
+  },
+  "teamJobWatchTitle": "Team job",
+  "@teamJobWatchTitle": {
+    "description": "Phone-only: watch sheet title fallback."
+  },
+  "teamJobStepsHeading": "Steps",
+  "@teamJobStepsHeading": {
+    "description": "Phone-only: steps section."
+  },
+  "teamJobLedgerHeading": "Recent notes",
+  "@teamJobLedgerHeading": {
+    "description": "Phone-only: ledger section."
+  },
+  "teamJobStatusDrafting": "Draft",
+  "@teamJobStatusDrafting": {
+    "description": "Phone-only: drafting status."
+  },
+  "teamJobStatusPaused": "Paused",
+  "@teamJobStatusPaused": {
+    "description": "Phone-only: paused status."
+  },
+  "teamJobStepPending": "Pending",
+  "@teamJobStepPending": {
+    "description": "Phone-only: pending step."
+  },
+  "teamJobStepOffered": "Offered",
+  "@teamJobStepOffered": {
+    "description": "Phone-only: offered step."
+  },
+  "commonRefresh": "Refresh",
+  "@commonRefresh": {
+    "description": "settings.service.action.refresh — Refresh control."
+  },
+  "jobPaneApprove": "Allow",
+  "@jobPaneApprove": {
+    "description": "job.pane.approve"
+  },
+  "jobPaneDeny": "Don’t allow",
+  "@jobPaneDeny": {
+    "description": "job.pane.deny"
+  },
+  "jobPaneNeedsApproval": "Waiting for approval on this step",
+  "@jobPaneNeedsApproval": {
+    "description": "job.pane.needsApproval"
+  },
+  "teamJobExistingHeading": "Team jobs on this project",
+  "@teamJobExistingHeading": {
+    "description": "Phone: list of project Team jobs."
+  },
+  "teamJobNewCta": "New team job",
+  "@teamJobNewCta": {
+    "description": "Phone: create another Team job."
+  },
+  "teamJobBackToList": "Back to jobs",
+  "@teamJobBackToList": {
+    "description": "Phone: back to job list."
+  },
+  "teamJobBackToEdit": "Back to edit",
+  "@teamJobBackToEdit": {
+    "description": "Phone: back from Start gate to edit."
+  },
+  "teamJobPeersHeading": "Machines",
+  "@teamJobPeersHeading": {
+    "description": "Phone: peer board heading."
+  },
+  "teamJobPeerOnline": "Online",
+  "@teamJobPeerOnline": {
+    "description": "Phone: peer online."
+  },
+  "teamJobPeerDegraded": "Unstable",
+  "@teamJobPeerDegraded": {
+    "description": "Phone: peer degraded."
+  },
+  "teamJobPeerOffline": "Offline",
+  "@teamJobPeerOffline": {
+    "description": "Phone: peer offline."
   }
 }

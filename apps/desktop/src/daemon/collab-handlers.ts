@@ -47,6 +47,8 @@ import {
   updateJobSteps,
   readOffers,
 } from "./jobs.js";
+import { assessGitContentBus, gitContentBusMessage, gitContentBusRef } from "./job-git-readiness.js";
+import { assessTeamJobReadiness } from "./job-start-readiness.js";
 import {
   buildMemberStatusBoard,
   createTeam,
@@ -72,9 +74,13 @@ import {
   normalizeWsUrl,
   parseTeamInvite,
 } from "./team-invite.js";
-import { requireOwnerWindow } from "./pairing.js";
+import { requireOriginClient, requireOwnerWindow } from "./pairing.js";
 import { requireTeamToken } from "./collab-auth.js";
-import { configureLocalAutoAccept, configureOfferDelivery } from "./offer-delivery.js";
+import {
+  configureLocalAutoAccept,
+  configureLocalAutoAcceptCancel,
+  configureOfferDelivery,
+} from "./offer-delivery.js";
 import { configureJobsChanged } from "./jobs.js";
 import { configureRemoteStepCancel } from "./job-progress.js";
 import { createCollabInboundHandlers } from "./collab-inbound.js";
@@ -122,6 +128,9 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
     const job = await getJob(deps.paths.jobsFile, offer.jobId);
     const started = await maybeStartLocalRun(deps, offer, resolvedCwd, job.projectId);
     return started ? { runId: started.runId } : undefined;
+  });
+  configureLocalAutoAcceptCancel(deps.paths.teamsFile, async (runId) => {
+    if (deps.runs) await deps.runs.cancel(runId);
   });
   configureJobsChanged(deps.paths.jobsFile, deps.onJobsChanged ?? null);
   configureRemoteStepCancel(deps.paths.jobsFile, async (job, stepId) => {
@@ -482,7 +491,7 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
       return { kicked: true as const };
     },
     "coder.createJob": async (params, context) => {
-      requireOwnerWindow(context, "coder.createJob");
+      requireOriginClient(context, "coder.createJob");
       const input = parseRpcParams("coder.createJob", params) as {
         teamId: string;
         title: string;
@@ -525,7 +534,7 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
       return { job };
     },
     "coder.updateJobSteps": async (params, context) => {
-      requireOwnerWindow(context, "coder.updateJobSteps");
+      requireOriginClient(context, "coder.updateJobSteps");
       const input = parseRpcParams("coder.updateJobSteps", params) as {
         jobId: string;
         steps: import("./jobs.js").JobStepDraft[];
@@ -534,7 +543,7 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
       return { job };
     },
     "coder.startJob": async (params, context) => {
-      requireOwnerWindow(context, "coder.startJob");
+      requireOriginClient(context, "coder.startJob");
       const input = parseRpcParams("coder.startJob", params) as { jobId: string };
       const job = await startJob(
         deps.paths.jobsFile,
@@ -546,13 +555,13 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
       return { job: await getJob(deps.paths.jobsFile, job.id) };
     },
     "coder.pauseJob": async (params, context) => {
-      requireOwnerWindow(context, "coder.pauseJob");
+      requireOriginClient(context, "coder.pauseJob");
       const input = parseRpcParams("coder.pauseJob", params) as { jobId: string };
       const job = await pauseJob(deps.paths.jobsFile, input.jobId);
       return { job };
     },
     "coder.stopJob": async (params, context) => {
-      requireOwnerWindow(context, "coder.stopJob");
+      requireOriginClient(context, "coder.stopJob");
       const input = parseRpcParams("coder.stopJob", params) as { jobId: string };
       const before = await getJob(deps.paths.jobsFile, input.jobId);
       await cancelRemoteWork(deps, before);
@@ -717,8 +726,17 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
           ref("error.job.pathMissing"),
         );
       }
+      // Git content bus before harness — never orphan a run if Accept would refuse.
+      const git = await assessGitContentBus(input.resolvedCwd);
+      if (!git.ok) {
+        throw coderError(
+          ENVOYDEV_ERRORS.peerRefused,
+          gitContentBusMessage(git.policy),
+          ref(gitContentBusRef(git.policy)),
+        );
+      }
       const job = await getJob(deps.paths.jobsFile, existing.jobId);
-      const started = await maybeStartLocalRun(deps, existing, input.resolvedCwd, job.projectId);
+      const started = await maybeStartLocalRun(deps, existing, git.path, job.projectId);
       if (!started) {
         throw coderError(
           ENVOYDEV_ERRORS.peerRefused,
@@ -726,11 +744,21 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
           ref("error.job.pathMissing"),
         );
       }
-      return acceptJobStepOffer(deps.paths.jobsFile, deps.paths.jobOffersFile, {
-        offerId: input.offerId,
-        resolvedCwd: input.resolvedCwd,
-        runId: started.runId,
-      });
+      try {
+        return await acceptJobStepOffer(deps.paths.jobsFile, deps.paths.jobOffersFile, {
+          offerId: input.offerId,
+          resolvedCwd: git.path,
+          runId: started.runId,
+          skipPathCheck: true,
+        });
+      } catch (error) {
+        try {
+          await deps.runs.cancel(started.runId);
+        } catch {
+          /* best-effort */
+        }
+        throw error;
+      }
     },
     "coder.refuseLocalJobStepOffer": async (params, context) => {
       requireOwnerWindow(context, "coder.refuseLocalJobStepOffer");
@@ -842,7 +870,7 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
       return { job };
     },
     "coder.suggestJobSteps": async (params, context) => {
-      requireOwnerWindow(context, "coder.suggestJobSteps");
+      requireOriginClient(context, "coder.suggestJobSteps");
       const input = parseRpcParams("coder.suggestJobSteps", params) as {
         jobId: string;
         templateId?:
@@ -865,8 +893,35 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
       });
     },
     "coder.listJobStepTemplates": async (_params, context) => {
-      requireOwnerWindow(context, "coder.listJobStepTemplates");
+      requireOriginClient(context, "coder.listJobStepTemplates");
       return { templates: listJobStepTemplates() };
+    },
+    "coder.assessGitContentBus": async (params, context) => {
+      // Origin and members both need this before Start / Accept.
+      requireOriginClient(context, "coder.assessGitContentBus");
+      const input = parseRpcParams("coder.assessGitContentBus", params) as { path: string };
+      return assessGitContentBus(input.path);
+    },
+    "coder.assessTeamJobReadiness": async (params, context) => {
+      requireOriginClient(context, "coder.assessTeamJobReadiness");
+      const input = parseRpcParams("coder.assessTeamJobReadiness", params) as { jobId: string };
+      const job = await getJob(deps.paths.jobsFile, input.jobId);
+      const readiness = await assessTeamJobReadiness({
+        teamsFile: deps.paths.teamsFile,
+        job,
+      });
+      return {
+        canStart: readiness.canStart,
+        jobStatus: readiness.jobStatus,
+        ...(readiness.blockKind ? { blockKind: readiness.blockKind } : {}),
+        message: readiness.message,
+        ...(readiness.messageKey ? { messageKey: readiness.messageKey } : {}),
+        ...(readiness.messageValues ? { messageValues: readiness.messageValues } : {}),
+        missingRoles: readiness.missingRoles,
+        offlineLabels: readiness.offlineLabels,
+        git: readiness.git,
+        board: readiness.board,
+      };
     },
     "coder.setJobStallAutomation": async (params, context) => {
       requireOwnerWindow(context, "coder.setJobStallAutomation");
@@ -878,7 +933,9 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
       return { job };
     },
     ...createCollabInboundHandlers(deps),
-    "coder.answerJobStepApproval": async (params) => {
+    "coder.answerJobStepApproval": async (params, context) => {
+      // Origin window or paired phone — §11.7 approvals on Team job steps.
+      requireOriginClient(context, "coder.answerJobStepApproval");
       const input = parseRpcParams("coder.answerJobStepApproval", params) as {
         jobId: string;
         stepId: string;

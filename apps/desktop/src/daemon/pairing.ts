@@ -155,6 +155,24 @@ export function requireOwnerWindow(context: CoderCallContext | undefined, method
   );
 }
 
+/**
+ * Owner window **or** a paired phone (M5 Mobile Team job).
+ *
+ * Team *admin* (create/rotate/kick) stays `requireOwnerWindow`. Job orchestration that the phone
+ * needs — create/start/pause, templates, Git assess — uses this so the owner's paired client can
+ * Start a Team job without minting teams (§11.7).
+ */
+export function requireOriginClient(context: CoderCallContext | undefined, method: string): void {
+  if (context === undefined || context.session === undefined) return;
+  const session = context.session as { isOwnerScope?: boolean } | null;
+  if (session && session.isOwnerScope === true) return;
+  throw coderError(
+    ENVOYDEV_ERRORS.unauthorized,
+    `${method} needs EnvoyDev on this machine or a phone paired to it.`,
+    ref("error.originClientOnly"),
+  );
+}
+
 export function createPairingHandlers(deps: PairingHandlerDeps): Partial<Record<RpcMethod, CoderHandler>> {
   return {
     "coder.mintPairing": async (params, context) => {

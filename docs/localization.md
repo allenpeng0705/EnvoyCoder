@@ -39,13 +39,19 @@ merged across three products; ours is one catalogue per language, because our UI
 
     apps/desktop/src/i18n/
       locales.ts       the seven, their endonyms, resolveLocale, and the review state
-      messages/en.ts   the source: every key is written here first (179 keys)
+      messages/en.ts   the source: every key is written here first
       messages/<l>.ts  one catalogue per language
+      messages/teams.<l>.ts  Team / Job UI (M5) — spread into each catalogue
+      messages/git.<l>.ts    Git namespace fragment
+      messages/service.<l>.ts Background service fragment
       catalogues.ts    locale → catalogue, for the translator and the tests
       translate.ts     createTranslator: lookup, {} interpolation, English fallback
       context.tsx      I18nProvider / useT for the components
       notice.ts        the wire marker, and localize() for daemon prose
       status.ts        task status → key
+
+To refresh Team job translations from `scripts/team-i18n/*.json`:
+`node scripts/apply-team-i18n.mjs` (then strip any duplicate keys the spread would overwrite).
 
 ## The daemon speaks one language; the window speaks seven
 
