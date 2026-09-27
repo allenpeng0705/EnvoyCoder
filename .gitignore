@@ -23,3 +23,4 @@ apps/mobile/ios/Pods/
 apps/mobile/macos/Pods/
 # local runtime state (never commit a home)
 .envoydev-local/
+/docs
