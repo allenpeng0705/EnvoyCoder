@@ -92,10 +92,23 @@ async function stageNode() {
   say(`Node runtime staged at ${path.relative(root, dest)}.`);
 }
 
+/**
+ * Run a PATH command. On Windows, Node's spawn without a shell does not apply
+ * PATHEXT, so `pnpm` / `corepack` (which are `.cmd` shims) look missing even
+ * when `Get-Command pnpm` works — same trap as packages/platform findBinary.
+ */
+function spawnPath(cmd, args, cwd) {
+  return spawnSync(cmd, args, {
+    cwd,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+  });
+}
+
 function pnpm(args, cwd) {
-  const corepack = spawnSync("corepack", ["pnpm", ...args], { cwd, stdio: "inherit" });
+  const corepack = spawnPath("corepack", ["pnpm", ...args], cwd);
   if (corepack.status === 0) return;
-  const direct = spawnSync("pnpm", args, { cwd, stdio: "inherit" });
+  const direct = spawnPath("pnpm", args, cwd);
   if (direct.status === 0) return;
   if (corepack.error?.code === "ENOENT" && direct.error?.code === "ENOENT") {
     fail("pnpm is required to build Envoy Harness. Install it (`corepack enable`, or `npm install -g pnpm`) and run this again.");
