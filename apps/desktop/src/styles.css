@@ -498,7 +498,9 @@ textarea.input--multiline {
   border-top: 1px solid var(--border);
   margin-top: 8px;
   padding-bottom: 12px;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .sidebar__paired-empty {
@@ -555,6 +557,12 @@ textarea.input--multiline {
   color: var(--text-faint);
   font-size: var(--font-size-sm);
   flex-shrink: 0;
+}
+
+.sidebar__paired-list {
+  margin: 0;
+  padding: 0 0 8px;
+  min-height: 0;
 }
 
 .settings__paired-homes {
