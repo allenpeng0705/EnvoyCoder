@@ -392,8 +392,29 @@ function ensureWorkspaceInstalled() {
   }
 }
 
+/**
+ * Package mode resolves `@envoydev/*` through each package's `exports` → `./dist/…`.
+ * A fresh Windows clone often has `npm install` but never `tsc -b`, so dist is empty
+ * and esbuild reports "Could not resolve @envoydev/protocol".
+ */
+function ensureWorkspaceBuilt() {
+  const tscJs = path.join(root, "node_modules", "typescript", "bin", "tsc");
+  if (!existsSync(tscJs)) {
+    fail("typescript is not installed. From the EnvoyCoder root run `npm install`, then try again.");
+  }
+  say("Building workspace packages (tsc -b)…");
+  const result = spawnSync(process.execPath, [tscJs, "-b"], { cwd: root, stdio: "inherit" });
+  if (result.error) fail(`tsc failed to start: ${result.error.message}`);
+  if (result.status !== 0) fail(`tsc -b exited ${result.status}`);
+  const protocolDist = path.join(root, "packages", "protocol", "dist", "index.js");
+  if (!existsSync(protocolDist)) {
+    fail("tsc -b finished, but packages/protocol/dist/index.js is still missing.");
+  }
+}
+
 function stageDaemon() {
   ensureWorkspaceInstalled();
+  ensureWorkspaceBuilt();
   say("Building the daemon so it can run without this checkout…");
   // Prefer `daemon:package` (--package) over ENVOYDEV_DAEMON_PACKAGE alone: the
   // flag travels with argv; env can be dropped by a Windows spawn helper.

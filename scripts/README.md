@@ -9,6 +9,8 @@ Desktop product version is the one-line root **`VERSION`** file
 
 ```bash
 npm install   # required once per checkout (esbuild, Tauri CLI, workspace links)
+# packaging runs `tsc -b` itself before the daemon bundle; or do it by hand:
+npx tsc -b
 ```
 
 ## Desktop installers
