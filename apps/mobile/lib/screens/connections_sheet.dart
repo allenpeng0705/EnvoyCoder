@@ -22,12 +22,14 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../l10n/l10n.dart';
 import '../models/host.dart';
 import '../services/connections_controller.dart';
 import '../services/host_client.dart';
 import '../services/host_pairing_flow.dart';
+import '../services/share_host.dart';
 import '../theme/tokens.dart';
 import '../widgets/confirm_dialog.dart';
 import '../widgets/name_dialog.dart';
@@ -102,6 +104,17 @@ class _ConnectionsSheetState extends State<ConnectionsSheet> {
     if (!confirmed || !mounted) return;
     await widget.controller.forget(host);
     if (mounted) setState(() {});
+  }
+
+  /// Copy the method this phone used so a laptop can join the same home without minting on the home.
+  Future<void> _share(CoderHost host) async {
+    final l10n = context.l10n;
+    final payload = sharePayloadFor(host);
+    await Clipboard.setData(ClipboardData(text: payload));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(l10n.connectionsShareCopied)),
+    );
   }
 
   @override
@@ -196,6 +209,7 @@ class _ConnectionsSheetState extends State<ConnectionsSheet> {
                       },
                       onForget: () => unawaited(_forget(host)),
                       onRename: () => unawaited(_rename(host)),
+                      onShare: () => unawaited(_share(host)),
                     ),
                 ],
               ),
@@ -277,6 +291,7 @@ class _HostRow extends StatelessWidget {
     required this.onTap,
     required this.onForget,
     required this.onRename,
+    required this.onShare,
   });
 
   final CoderHost host;
@@ -287,6 +302,7 @@ class _HostRow extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onForget;
   final VoidCallback onRename;
+  final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -336,8 +352,10 @@ class _HostRow extends StatelessWidget {
       // the gesture that *acts* on it (tap to switch), and the menu carries the rest.
       trailing: _HostOverflowMenu(
         hostLabel: host.label,
+        joinMethod: host.effectiveJoinMethod,
         destructive: colors.destructive,
         onRename: onRename,
+        onShare: onShare,
         onForget: onForget,
       ),
       onTap: onTap,
@@ -361,36 +379,37 @@ class _HostRow extends StatelessWidget {
 }
 
 /// Which item of a host row's `…` was chosen.
-enum _HostMenuAction { rename, forget }
+enum _HostMenuAction { rename, share, forget }
 
-/// A connection row's `…`: Rename this connection, or Forget it.
+/// A connection row's `…`: Rename, Share connection (method this phone used), or Forget.
 ///
-/// **Why a menu and not more icons.** Three icon buttons overflowed the row by 16pt at 320pt, and
-/// the project row already settled the rule: the row keeps the gesture that acts on it, secondaries
-/// behind the trigger (`project_list_screen.dart`'s `_ProjectOverflowMenu`). The read-only status
-/// button has since moved to the top bar entirely, so this menu is the row's *only* trailing control;
-/// keeping Rename and Forget here is still right, because both change the connection and neither is
-/// what a tap on the row is for.
-///
-/// Rename is **local** — `ConnectionsController.renameHost` writes `HostStore`, and no RPC exists for
-/// a label the phone itself owns — while Forget still leads to the same confirmation it always did.
-/// The destructive item is last and wears the danger colour, exactly as "Remove project" does.
+/// Share is how a laptop away from the home gets the same credential: only the join method this
+/// phone actually used is copied (pairing link, host:port + token, or SSH fields).
 class _HostOverflowMenu extends StatelessWidget {
   const _HostOverflowMenu({
     required this.hostLabel,
+    required this.joinMethod,
     required this.destructive,
     required this.onRename,
+    required this.onShare,
     required this.onForget,
   });
 
   final String hostLabel;
+  final HostJoinMethod joinMethod;
   final Color destructive;
   final VoidCallback onRename;
+  final VoidCallback onShare;
   final VoidCallback onForget;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final shareLabel = switch (joinMethod) {
+      HostJoinMethod.link => l10n.connectionsShareLink,
+      HostJoinMethod.direct => l10n.connectionsShareDirect,
+      HostJoinMethod.ssh => l10n.connectionsShareSsh,
+    };
     return Semantics(
       label: l10n.connectionsMenuAria(hostLabel),
       button: true,
@@ -398,6 +417,7 @@ class _HostOverflowMenu extends StatelessWidget {
         tooltip: l10n.connectionsMenuAria(hostLabel),
         onSelected: (action) => switch (action) {
           _HostMenuAction.rename => onRename(),
+          _HostMenuAction.share => onShare(),
           _HostMenuAction.forget => onForget(),
         },
         itemBuilder: (context) => [
@@ -407,6 +427,15 @@ class _HostOverflowMenu extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.edit_outlined),
               title: Text(l10n.connectionsRenameTitle),
+            ),
+          ),
+          PopupMenuItem(
+            value: _HostMenuAction.share,
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.ios_share_outlined),
+              title: Text(shareLabel),
+              subtitle: Text(l10n.connectionsShareSubtitle),
             ),
           ),
           const PopupMenuDivider(),

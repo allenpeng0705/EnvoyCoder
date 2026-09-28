@@ -754,6 +754,7 @@ fn main() {
         .manage(PendingProjects::default())
         .manage(terminal::Sessions::default())
         .manage(browser::Pages::default())
+        .manage(HomeSshTunnels::default())
         // `daemon_port` is deliberately *not* a command any more. The window asks where the daemon
         // is (`daemon_endpoint`) rather than which port to dial: the shell decides what "the daemon"
         // means, and a command that handed out a port would invite the window to build a URL of its
@@ -762,6 +763,9 @@ fn main() {
                 coder_paths,
                 daemon_endpoint,
                 daemon_status,
+                paired_homes_read,
+                paired_homes_write,
+                paired_home_ssh_forward,
                 pick_folder,
                 // The clipboard: `Copy` beside an install command must not depend on the webview's gesture rules,
                 // which is what `copy_text`'s own doc explains.
@@ -1054,6 +1058,183 @@ fn pick_folder(
  * Returns the tool it used, so the window (or a test) can say which path answered rather than only that something
  * did.
  */
+/// Path for thin-client home credentials (`docs/envoydev-paired-homes.md`).
+fn paired_homes_path() -> PathBuf {
+    product_state_dir().join("paired-homes.json")
+}
+
+/// Read paired-home credentials. Missing file → empty Ok so the window can mint a client id.
+#[tauri::command]
+fn paired_homes_read() -> Result<Option<String>, String> {
+    let path = paired_homes_path();
+    match std::fs::read_to_string(&path) {
+        Ok(text) => Ok(Some(text)),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(format!("could not read {}: {err}", path.display())),
+    }
+}
+
+/// Write paired-home credentials (tokens included). Shell-owned file under product state — mode 0o600
+/// on Unix so a multi-user machine does not leave the token world-readable.
+#[tauri::command]
+fn paired_homes_write(text: String) -> Result<(), String> {
+    let dir = product_state_dir();
+    std::fs::create_dir_all(&dir).map_err(|err| format!("could not create {}: {err}", dir.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
+    }
+    let path = paired_homes_path();
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&path)
+            .map_err(|err| format!("could not write {}: {err}", path.display()))?;
+        file
+            .write_all(text.as_bytes())
+            .map_err(|err| format!("could not write {}: {err}", path.display()))?;
+        return Ok(());
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(&path, text).map_err(|err| format!("could not write {}: {err}", path.display()))
+    }
+}
+
+/// Live SSH local-forwards for paired homes (hop → this laptop's loopback).
+#[derive(Default)]
+struct HomeSshTunnels {
+    children: std::sync::Mutex<std::collections::HashMap<String, Child>>,
+}
+
+/// Open `ssh -N -L local:127.0.0.1:remotePort` for a paired-home hop. Returns `ws://127.0.0.1:…/path`.
+#[tauri::command]
+fn paired_home_ssh_forward(
+    tunnels: tauri::State<'_, HomeSshTunnels>,
+    hop: String,
+    remote_port: u16,
+    path: String,
+) -> Result<String, String> {
+    let key = format!("{hop}|{remote_port}|{path}");
+    let parsed = parse_ssh_hop(&hop).ok_or_else(|| format!("could not read SSH hop: {hop}"))?;
+    if remote_port == 0 {
+        return Err("remote daemon port must be positive".into());
+    }
+
+    {
+        let mut map = tunnels
+            .children
+            .lock()
+            .map_err(|_| "ssh tunnel state is poisoned".to_string())?;
+        if let Some(child) = map.get_mut(&key) {
+            match child.try_wait() {
+                Ok(None) => {
+                    // Still running — but we did not persist the local port on the first open.
+                    // Drop and reopen so the returned URL is always accurate.
+                    let _ = child.kill();
+                    map.remove(&key);
+                }
+                Ok(Some(_)) | Err(_) => {
+                    let _ = child.kill();
+                    map.remove(&key);
+                }
+            }
+        }
+    }
+
+    let local_port = free_loopback_port().map_err(|err| format!("could not reserve a local port: {err}"))?;
+    let ws_path = if path.starts_with('/') {
+        path.clone()
+    } else {
+        format!("/{path}")
+    };
+    let target = match &parsed.user {
+        Some(user) => format!("{user}@{}", parsed.host),
+        None => parsed.host.clone(),
+    };
+    let mut cmd = Command::new("ssh");
+    cmd.args([
+        "-N",
+        "-o",
+        "ExitOnForwardFailure=yes",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-o",
+        "ServerAliveInterval=15",
+        "-L",
+        &format!("{local_port}:127.0.0.1:{remote_port}"),
+        "-p",
+        &parsed.port.to_string(),
+        &target,
+    ]);
+    cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    let mut child = cmd
+        .spawn()
+        .map_err(|err| format!("could not start ssh: {err}"))?;
+    // Brief settle — ExitOnForwardFailure kills a bad forward; try_wait catches immediate death.
+    std::thread::sleep(std::time::Duration::from_millis(350));
+    match child.try_wait() {
+        Ok(None) => {}
+        Ok(Some(status)) => {
+            return Err(format!("ssh exited before the tunnel was ready ({status})"));
+        }
+        Err(err) => return Err(format!("could not check ssh: {err}")),
+    }
+    let mut map = tunnels
+        .children
+        .lock()
+        .map_err(|_| "ssh tunnel state is poisoned".to_string())?;
+    map.insert(key, child);
+    Ok(format!("ws://127.0.0.1:{local_port}{ws_path}"))
+}
+
+struct ParsedHop {
+    user: Option<String>,
+    host: String,
+    port: u16,
+}
+
+fn parse_ssh_hop(raw: &str) -> Option<ParsedHop> {
+    let text = raw.trim();
+    if text.is_empty() {
+        return None;
+    }
+    let (user, rest) = match text.split_once('@') {
+        Some((u, r)) if !u.is_empty() => (Some(u.to_string()), r),
+        _ => (None, text),
+    };
+    if let Some((host, port_s)) = rest.rsplit_once(':') {
+        let port: u16 = port_s.parse().ok()?;
+        if host.is_empty() || port == 0 {
+            return None;
+        }
+        return Some(ParsedHop {
+            user,
+            host: host.to_string(),
+            port,
+        });
+    }
+    Some(ParsedHop {
+        user,
+        host: rest.to_string(),
+        port: 22,
+    })
+}
+
+fn free_loopback_port() -> std::io::Result<u16> {
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0))?;
+    Ok(listener.local_addr()?.port())
+}
+
 #[tauri::command]
 fn copy_text(text: String) -> Result<String, String> {
     #[cfg(target_os = "macos")]

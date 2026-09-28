@@ -189,6 +189,7 @@ String encodeHosts(List<CoderHost> hosts) => jsonEncode(
                 if (host.relayWsUrls != null && host.relayWsUrls!.isNotEmpty)
                   'relayWsUrls': host.relayWsUrls,
                 if (host.lastSeenAt != null) 'lastSeenAt': host.lastSeenAt!.toIso8601String(),
+                if (host.joinMethod != null) 'joinMethod': host.joinMethod!.name,
                 if (host.ssh != null)
                   'ssh': {
                     'host': host.ssh!.host,
@@ -245,8 +246,17 @@ List<CoderHost> decodeHosts(String json, {Map<String, String> tokens = const {}}
             : null,
         ssh: ssh,
         lastSeenAt: map['lastSeenAt'] is String ? DateTime.tryParse(map['lastSeenAt'] as String) : null,
+        joinMethod: _joinMethodOf(map['joinMethod']),
       ),
     );
   }
   return hosts;
+}
+
+HostJoinMethod? _joinMethodOf(Object? raw) {
+  if (raw is! String) return null;
+  for (final value in HostJoinMethod.values) {
+    if (value.name == raw) return value;
+  }
+  return null;
 }

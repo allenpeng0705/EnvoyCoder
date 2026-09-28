@@ -53,9 +53,10 @@ export const ja: Catalogue = {
   "layout.resize.rail": "プロジェクト一覧の幅を変更",
   "layout.resize.settingsNav": "設定セクション一覧の幅を変更",
   "layout.resize.explorer": "ファイルエクスプローラーの幅を変更",
-  "sidebar.add": "+ プロジェクトを追加",
+  "sidebar.add": "+ プロジェクト",
   "sidebar.add.title": "作業するディレクトリをプロジェクトとして登録",
-  "sidebar.command.title": "コマンドパレットを開く",
+  "sidebar.theme.toLight": "ライトモードに切り替え",
+  "sidebar.theme.toDark": "ダークモードに切り替え",
   "sidebar.search.placeholder": "タスク、リポジトリ、パスを検索",
   "sidebar.search.aria": "タスク、リポジトリ、パスを検索",
   "sidebar.view.groupBy": "プロジェクトごとにまとめる",
@@ -70,6 +71,47 @@ export const ja: Catalogue = {
   "sidebar.empty.cannotLoadTitle": "プロジェクトを読み込めませんでした",
   "sidebar.empty.cannotLoadBody": "この一覧は空ではなく不明です — EnvoyDev はデーモンに問い合わせられませんでした。",
   "sidebar.section.tasks": "タスク",
+  "sidebar.section.thisMachine": "このマシン",
+  "sidebar.section.pairedHomes": "ペア済み EnvoyDev",
+  "homes.add": "+ ホーム",
+  "homes.add.title": "別の EnvoyDev とペアリング",
+  "homes.empty": "ペア済みホームはまだありません。設定 → ペア済みホームから追加してください。",
+  "homes.workingOn": "{label} で作業中",
+  "homes.online": "オンライン",
+  "homes.offline": "オフライン",
+  "homes.forget": "忘れる",
+  "homes.rename": "このホームの名前",
+  "homes.label.placeholder": "office-linux",
+  "homes.pasteUri": "ペアリングリンクまたは共有された接続",
+  "homes.pasteUri.placeholder": "envoy://pair?… — またはペア済みスマホの「接続を共有」を貼り付け",
+  "homes.pasteUri.detail":
+    "ホームの envoy://pair リンク、またはペア済みスマホが「接続を共有」でコピーした内容（リンク、ホスト:ポート + トークン、または SSH）を貼り付けてから参加します。",
+  "homes.method.aria": "このホームへの参加方法",
+  "homes.method.link": "ペアリングリンク",
+  "homes.method.direct": "ホスト:ポート",
+  "homes.method.ssh": "SSH",
+  "homes.direct.endpoint": "ホームのアドレス",
+  "homes.direct.endpoint.detail": "EnvoyDev デーモンの host:port（スマホの直接 TCP と同じ）。",
+  "homes.direct.token": "ペアリングトークン",
+  "homes.direct.token.placeholder": "ホームまたはスマホのトークン",
+  "homes.direct.token.detail":
+    "ペアリングコードの秘密、またはペア済みスマホがこのホーム用に共有するトークン。",
+  "homes.ssh.host": "SSH ホスト",
+  "homes.ssh.user": "SSH ユーザー（任意）",
+  "homes.ssh.port": "SSH ポート",
+  "homes.ssh.daemon": "向こう側のデーモン",
+  "homes.ssh.daemon.detail": "ホップ越しに見える host:port — 多くは 127.0.0.1:4770。",
+  "homes.ssh.token.detail":
+    "認証に必要です。向こう側のデーモンが 127.0.0.1 のときは、先に SSH トンネルを開きます。",
+  "homes.join": "ホームに参加",
+  "homes.joining": "参加中…",
+  "homes.joined": "{label} に参加しました。",
+  "homes.panel.title": "このノート上のペア済みホーム",
+  "homes.panel.detail":
+    "別の EnvoyDev（サーバーやオフィス機）にシンクライアントとして接続します。エージェントとキーはそのホームに残ります。ホームで新しいコードを発行できないときは、すでにペアしたスマホが接続情報を共有できます。",
+  "homes.sshHop": "SSH ホップ（任意）",
+  "homes.sshHop.detail":
+    "LAN でホームに届かないときの user@host:port。ループバック上のデーモンへの SSH 参加では、このホップ経由でローカル転送を開いてから接続します。",
   "sidebar.project.attention": "あなたを待っているタスク",
   "sidebar.project.agent": "このプロジェクトで新しいタスクを始めるエージェント",
   "project.agent.picker.aria": "このプロジェクトのコーディングエージェント: {agent}。変更",
@@ -161,9 +203,16 @@ export const ja: Catalogue = {
   "task.diagram.blocked": "この図は表示されませんでした。ソースが安全でないようです。",
   "task.diagram.failed": "この図を描けませんでした。代わりにソースを表示しています。",
   "task.approval.aria": "エージェントがあなたの回答を待っています",
+  "task.approval.takeover.aria": "エージェントがあなたの回答を待っています",
+  "task.approval.pendingInComposer": "下の入力欄で回答してください",
   "task.approval.answered": "回答済み",
   "task.approval.answeredWith": "回答済み: {option}",
   "task.approval.confirm": "確認",
+  "task.composer.queueStatus": "このターンが終わったら送信します",
+  "task.tool.bucket.read": "読み取り",
+  "task.tool.bucket.edit": "編集",
+  "task.tool.bucket.shell": "シェル",
+  "task.tool.bucket.other": "ツール",
   "task.composer.aria": "エージェントにメッセージを送る",
   "task.composer.commands": "コマンド",
   "task.remove": "タスクを削除",
@@ -384,8 +433,45 @@ export const ja: Catalogue = {
   "settings.section.shortcuts.detail": "このウィンドウが待ち受けているすべてのキー。キーボード層が読むのと同じ表から読み出しています。",
   "settings.section.machine.title": "このコンピューター",
   "settings.section.machine.detail": "このウィンドウが接続しているサービスと、その起動時の情報。",
-  "settings.section.pairing.title": "モバイルペアリング",
+  "settings.section.pairing.title": "デバイスをペアリング",
   "settings.section.pairing.detail": "スマートフォンからこのマシンに接続させます。コードを読み取るか、アドレスを入力するか、SSH 経由で接続します。",
+  "settings.section.homes.title": "ペア済みホーム",
+  "settings.section.homes.detail": "このノートから別の EnvoyDev にシンクライアントとして参加します。",
+  "settings.info.howHeading": "使い方",
+  "settings.section.agents.info.what":
+    "このページには、EnvoyDev がこのマシンで駆動できるコーディングエージェントが一覧されます。同梱のもの、追加したもの、取り込めるカタログのレシピです。各行の「準備完了 / 未準備」はデーモンの計測結果であり、推測ではありません。",
+  "settings.section.agents.info.how.1":
+    "エージェント一覧を確認します。行の「詳細」で能力、モード、モデルを見られます。",
+  "settings.section.agents.info.how.2":
+    "サインインやインストールが必要な場合は、その行の操作を使います。",
+  "settings.section.agents.info.how.3":
+    "カタログでほかの CLI を探します。「追加」でレシピをエージェント一覧に載せると、タスクから使えます。",
+  "settings.section.agents.info.how.4":
+    "新しいタスクは利用可能なエージェントから選びます。毎回同じものがよければ「新しいタスク」で既定を設定します。",
+  "settings.section.llm.info.what":
+    "これらの欄は Envoy Harness（組み込みエージェント実行環境）を設定します。ベース URL、モデル、API キーはこのマシンに留まり、保存後にウィンドウがキーを再読み込みすることはありません。",
+  "settings.section.llm.info.how.1":
+    "プロバイダーが求めるベース URL を設定します（または既定のままにします）。",
+  "settings.section.llm.info.how.2":
+    "モデル id を入力します。単独では OpenAI 互換でない場合は provider/model を使います。",
+  "settings.section.llm.info.how.3":
+    "API キーを貼り付けて保存するか、必要ならキーを削除します。終わったら保存します。",
+  "settings.section.pairing.info.what":
+    "ペアリングにより、EnvoyDev のスマホアプリがこのマシンのデーモンに届きます。スマホはエージェントを実行せず、プロバイダーキーも保持しません。実行の開始、監視、承認への回答だけを行います。",
+  "settings.section.pairing.info.how.1":
+    "コードのスキャンを優先します。このページで QR を表示し、スマホアプリで読み取ります。",
+  "settings.section.pairing.info.how.2":
+    "またはスマホの「ホストを追加」フォームに host:port と短いトークンを入力します。",
+  "settings.section.pairing.info.how.3":
+    "LAN で届かないときは SSH を使います。ペアリングは「このマシン」で取り消すまで残ります。再起動後に付け直す必要はありません。",
+  "settings.section.homes.info.what":
+    "ペア済みホームは、このノートがシンクライアントとして接続する他の EnvoyDev です。エージェントとキーはそのホームに残ります。資格情報はホームを忘れるまで保持されます。",
+  "settings.section.homes.info.how.1":
+    "相手のマシンで設定 → デバイスをペアリングしてコードを発行するか、すでにそのホームとペアしたスマホで「接続を共有」（使った方法だけ）します。",
+  "settings.section.homes.info.how.2":
+    "ペア済みホームの「ペアリングリンク」タブにリンクまたは共有文を貼る（またはホスト:ポート / SSH を入力）。名前を付けて参加。サイドバーの Paired EnvoyDev に表示され、忘れるか取り消すまで再起動後も再接続します。",
+  "settings.section.homes.info.how.3":
+    "忘れるとこのノートの資格情報だけが消えます。アクセスを切るにはホーム側で取り消してください。",
   "settings.section.service.title": "バックグラウンドサービス",
   "settings.section.service.detail": "このシステムのサービスマネージャーでデーモンを動かし続け、ウィンドウを閉じていてもペアリング済みのスマートフォンから接続できるようにします。",
   "settings.section.about.title": "アプリについて",
@@ -635,7 +721,7 @@ export const ja: Catalogue = {
   "settings.machine.windows.detail": "このウィンドウが接続した時点で接続していたウィンドウ数（このウィンドウを含む）。",
   "settings.machine.windows.one": "1 個のウィンドウ",
   "settings.machine.windows.many": "{count} 個のウィンドウ",
-  "settings.pairing.note": "ペアリングすると、スマートフォンからこのマシンに接続できます。コードにはアドレスとトークンが含まれるため、読み取り中だけ画面に表示してください。",
+  "settings.pairing.note": "ペアリングすると、スマートフォンや別の EnvoyDev からこのマシンに接続できます。コードにはアドレスとトークンが含まれるため、相手がスキャンまたは参加している間だけ画面に表示してください。",
   "settings.pairing.manage": "発行したコードは「このコンピューター」に一覧され、そこで無効にできます。",
   "settings.pairing.qr.title": "QR コードを読み取る",
   "settings.pairing.qr.primary": "推奨",
@@ -697,7 +783,7 @@ export const ja: Catalogue = {
   "settings.machine.paired.active.one": "有効なデバイス 1 台",
   "settings.machine.paired.active.many": "有効なデバイス {count} 台",
   "settings.machine.paired.state.active": "有効 · 最終使用 {when}",
-  "settings.machine.paired.state.unused": "未使用 · {when} に期限切れ",
+  "settings.machine.paired.state.unused": "未使用 · {when} に発行",
   "settings.machine.paired.state.revoked": "取消済み · {when}",
   "settings.machine.paired.state.expired": "期限切れ · {when}",
   "settings.machine.paired.revoke": "無効化",

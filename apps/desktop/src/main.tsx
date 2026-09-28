@@ -4,7 +4,12 @@ import { createRoot } from "react-dom/client";
 import { CoderApp } from "./components/CoderApp.js";
 import { applyTheme } from "./design/applyTheme.js";
 import { I18nProvider } from "./i18n/context.js";
-import { useCoderActions, useCoderState } from "./state/useCoderState.js";
+import {
+  useCoderActions,
+  useCoderState,
+  useHomeRegistry,
+  useLocalCoderActions,
+} from "./state/useCoderState.js";
 // Design tokens before the app sheet: `styles.css` consumes these variables, and one import order
 // that works by accident is one refactor away from a screen with no colours.
 // Dark is this product's default until settings load (`docs/design-tokens.md`); Settings → Appearance
@@ -48,12 +53,16 @@ import "./styles.css";
 function Root(): JSX.Element {
   const state = useCoderState();
   const actions = useCoderActions();
+  const localActions = useLocalCoderActions();
+  const homes = useHomeRegistry();
+  // Theme / language are always this machine's settings, not a paired home's.
+  const localSettings = homes.getSnapshot().local.settings;
   useEffect(() => {
-    applyTheme(state.settings.theme ?? "dark");
-  }, [state.settings.theme]);
+    applyTheme(localSettings.theme ?? "dark");
+  }, [localSettings.theme]);
   return (
-    <I18nProvider preference={state.settings.language ?? "system"}>
-      <CoderApp state={state} actions={actions} />
+    <I18nProvider preference={localSettings.language ?? "system"}>
+      <CoderApp state={state} actions={actions} localActions={localActions} homes={homes} />
     </I18nProvider>
   );
 }

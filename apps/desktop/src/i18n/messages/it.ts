@@ -53,9 +53,10 @@ export const it: Catalogue = {
   "layout.resize.rail": "Ridimensiona l’elenco dei progetti",
   "layout.resize.settingsNav": "Ridimensiona l’elenco delle sezioni delle impostazioni",
   "layout.resize.explorer": "Ridimensiona l’esploratore di file",
-  "sidebar.add": "+ Aggiungi progetto",
+  "sidebar.add": "+ Progetto",
   "sidebar.add.title": "Registra una cartella come progetto",
-  "sidebar.command.title": "Apri la palette dei comandi",
+  "sidebar.theme.toLight": "Passa alla modalità chiara",
+  "sidebar.theme.toDark": "Passa alla modalità scura",
   "sidebar.search.placeholder": "Cerca attività, repository, percorsi",
   "sidebar.search.aria": "Cerca attività, repository e percorsi",
   "sidebar.view.groupBy": "Raggruppa per progetto",
@@ -70,6 +71,47 @@ export const it: Catalogue = {
   "sidebar.empty.cannotLoadTitle": "Impossibile leggere i tuoi progetti",
   "sidebar.empty.cannotLoadBody": "Questo elenco è sconosciuto, non vuoto — EnvoyDev non ha potuto chiederlo al suo daemon.",
   "sidebar.section.tasks": "Attività",
+  "sidebar.section.thisMachine": "Questa macchina",
+  "sidebar.section.pairedHomes": "EnvoyDev abbinati",
+  "homes.add": "+ Home",
+  "homes.add.title": "Abbina un altro EnvoyDev",
+  "homes.empty": "Nessun home abbinato. Aggiungine uno da Impostazioni → Home abbinati.",
+  "homes.workingOn": "Lavoro su {label}",
+  "homes.online": "Online",
+  "homes.offline": "Offline",
+  "homes.forget": "Dimentica",
+  "homes.rename": "Nome per questo home",
+  "homes.label.placeholder": "office-linux",
+  "homes.pasteUri": "Link di abbinamento o connessione condivisa",
+  "homes.pasteUri.placeholder": "envoy://pair?… — oppure Condividi connessione dal telefono abbinato",
+  "homes.pasteUri.detail":
+    "Incolla un link envoy://pair dall’home, o il testo che un telefono abbinato ha copiato con Condividi connessione (link, host:porta + token, o SSH). Poi Unisciti.",
+  "homes.method.aria": "Come unirti a questo home",
+  "homes.method.link": "Link di abbinamento",
+  "homes.method.direct": "Host:porta",
+  "homes.method.ssh": "SSH",
+  "homes.direct.endpoint": "Indirizzo dell’home",
+  "homes.direct.endpoint.detail": "host:port del demone EnvoyDev (come il TCP diretto del telefono).",
+  "homes.direct.token": "Token di abbinamento",
+  "homes.direct.token.placeholder": "Token dall’home o dal telefono",
+  "homes.direct.token.detail":
+    "Il segreto di un codice di abbinamento, o il token che un telefono abbinato condivide per questo home.",
+  "homes.ssh.host": "Host SSH",
+  "homes.ssh.user": "Utente SSH (opzionale)",
+  "homes.ssh.port": "Porta SSH",
+  "homes.ssh.daemon": "Demone sul lato remoto",
+  "homes.ssh.daemon.detail": "host:port visto attraverso l’hop — spesso 127.0.0.1:4770.",
+  "homes.ssh.token.detail":
+    "Obbligatorio per autenticarsi. Se il demone è 127.0.0.1 sul remoto, l’app apre prima un tunnel SSH.",
+  "homes.join": "Unisci home",
+  "homes.joining": "Unione…",
+  "homes.joined": "Unito a {label}.",
+  "homes.panel.title": "Home abbinati su questo laptop",
+  "homes.panel.detail":
+    "Raggiungi un altro EnvoyDev (server o macchina in ufficio) come thin client. Agenti e chiavi restano su quell’home. Un telefono già abbinato può condividere la connessione se non puoi creare un codice sull’home.",
+  "homes.sshHop": "Hop SSH (opzionale)",
+  "homes.sshHop.detail":
+    "user@host:port quando questo laptop non raggiunge l’home in LAN. Per unioni SSH con demone in loopback, EnvoyDev apre prima un local-forward tramite questo hop.",
   "sidebar.project.attention": "Attività che ti aspettano",
   "sidebar.project.agent": "L'agente con cui partono le nuove attività di questo progetto",
   "project.agent.picker.aria": "Agente di coding per questo progetto: {agent}. Cambia",
@@ -161,9 +203,16 @@ export const it: Catalogue = {
   "task.diagram.blocked": "Questo diagramma non è stato disegnato — la sorgente sembrava non sicura.",
   "task.diagram.failed": "Impossibile disegnare questo diagramma. Al suo posto è mostrata la sorgente.",
   "task.approval.aria": "L'agente attende la tua risposta",
+  "task.approval.takeover.aria": "L'agente attende la tua risposta",
+  "task.approval.pendingInComposer": "Rispondi nel campo sotto",
   "task.approval.answered": "Risposto",
   "task.approval.answeredWith": "Risposto: {option}",
   "task.approval.confirm": "Conferma",
+  "task.composer.queueStatus": "Invio a fine turno",
+  "task.tool.bucket.read": "Lettura",
+  "task.tool.bucket.edit": "Modifica",
+  "task.tool.bucket.shell": "Shell",
+  "task.tool.bucket.other": "Strumento",
   "task.composer.aria": "Scrivi all'agente",
   "task.composer.commands": "Comandi",
   "task.remove": "Rimuovi attività",
@@ -384,8 +433,45 @@ export const it: Catalogue = {
   "settings.section.shortcuts.detail": "Ogni tasto che questa finestra ascolta, letto dalla stessa tabella che legge il livello tastiera.",
   "settings.section.machine.title": "Questo computer",
   "settings.section.machine.detail": "Il servizio a cui questa finestra è collegata, e con cosa è stato avviato.",
-  "settings.section.pairing.title": "Abbinamento mobile",
+  "settings.section.pairing.title": "Abbina dispositivi",
   "settings.section.pairing.detail": "Consenti a un telefono di raggiungere questa macchina: scansiona un codice, digita l'indirizzo o passa da SSH.",
+  "settings.section.homes.title": "Home abbinati",
+  "settings.section.homes.detail": "Unisciti a un altro EnvoyDev da questo laptop come thin client.",
+  "settings.info.howHeading": "Come usarlo",
+  "settings.section.agents.info.what":
+    "Questa pagina elenca ogni agente di coding che EnvoyDev può guidare su questa macchina: quelli forniti, quelli che hai aggiunto e le ricette del catalogo che puoi portare dentro. Ogni riga mostra Pronto o Non pronto in base a ciò che il daemon ha misurato — non a una stima.",
+  "settings.section.agents.info.how.1":
+    "Scorri l’elenco Agenti. Apri Dettagli su una riga per capacità, modalità e modelli.",
+  "settings.section.agents.info.how.2":
+    "Se un agente richiede accesso o installazione, usa l’azione su quella riga.",
+  "settings.section.agents.info.how.3":
+    "Sfoglia il Catalogo per altri CLI. Premi Aggiungi per mettere una ricetta nell’elenco Agenti così le attività possono usarla.",
+  "settings.section.agents.info.how.4":
+    "Le nuove attività scelgono tra gli agenti disponibili. Imposta un predefinito in Nuove attività se ne vuoi uno ogni volta.",
+  "settings.section.llm.info.what":
+    "Questi campi configurano Envoy Harness — il runtime agente integrato. URL di base, modello e chiave API restano su questa macchina; la finestra non ricarica mai la chiave dopo il salvataggio.",
+  "settings.section.llm.info.how.1":
+    "Imposta l’URL di base richiesto dal provider (o lascia il valore predefinito).",
+  "settings.section.llm.info.how.2":
+    "Inserisci l’id del modello. Usa provider/modello se non è compatibile OpenAI da solo.",
+  "settings.section.llm.info.how.3":
+    "Incolla una chiave API per salvarla, oppure cancella la chiave se serve rimuoverla. Salva al termine.",
+  "settings.section.pairing.info.what":
+    "L’abbinamento consente all’app telefono EnvoyDev di raggiungere il daemon di questa macchina. Il telefono non esegue mai agenti né conserva chiavi provider — avvia le esecuzioni, le osserva e risponde alle approvazioni.",
+  "settings.section.pairing.info.how.1":
+    "Preferisci Scansiona un codice: mostra il QR in questa pagina, poi scansionarlo nell’app telefono.",
+  "settings.section.pairing.info.how.2":
+    "Oppure digita host:port e un token breve nel modulo Aggiungi host del telefono.",
+  "settings.section.pairing.info.how.3":
+    "Usa SSH quando l’altro dispositivo non raggiunge la macchina in LAN. Gli abbinamenti restano finché non li revochi in Questa macchina — dopo un riavvio non serve abbinare di nuovo.",
+  "settings.section.homes.info.what":
+    "Gli home abbinati sono altri EnvoyDev che questo laptop raggiunge come thin client. Agenti e chiavi restano su quell’home. Le credenziali restano finché non dimentichi l’home.",
+  "settings.section.homes.info.how.1":
+    "Sull’altra macchina: Impostazioni → Abbina dispositivi e genera un codice — oppure su un telefono già abbinato, Condividi connessione (solo il metodo che ha usato).",
+  "settings.section.homes.info.how.2":
+    "In Home abbinati, incolla il link o il testo condiviso nella scheda Link di abbinamento (oppure digita host:porta / SSH). Assegna un nome, poi Unisciti. Compare sotto Paired EnvoyDev e si riconnette dopo il riavvio finché non dimentichi o revochi.",
+  "settings.section.homes.info.how.3":
+    "Dimentica rimuove solo le credenziali su questo laptop. Revoca sull’home per tagliare l’accesso.",
   "settings.section.service.title": "Servizio in background",
   "settings.section.service.detail": "Mantiene il servizio nel gestore di servizi di questo sistema, così un telefono associato può raggiungerlo a finestra chiusa.",
   "settings.section.about.title": "Informazioni",
@@ -637,7 +723,7 @@ export const it: Catalogue = {
   "settings.machine.windows.detail": "Quante finestre erano collegate quando questa finestra si è collegata, questa inclusa.",
   "settings.machine.windows.one": "1 finestra",
   "settings.machine.windows.many": "{count} finestre",
-  "settings.pairing.note": "L'abbinamento consente a un telefono di raggiungere questa macchina. Il codice porta l'indirizzo e un token: tienilo a schermo solo mentre il telefono scansiona.",
+  "settings.pairing.note": "L'abbinamento consente a un telefono o a un altro EnvoyDev di raggiungere questa macchina. Il codice porta indirizzo e token — tienilo a schermo solo mentre l'altro dispositivo scansiona o si unisce.",
   "settings.pairing.manage": "I codici emessi sono elencati in «Questo computer», dove puoi revocarli.",
   "settings.pairing.qr.title": "Scansiona un codice QR",
   "settings.pairing.qr.primary": "Consigliato",
@@ -699,7 +785,7 @@ export const it: Catalogue = {
   "settings.machine.paired.active.one": "1 dispositivo attivo",
   "settings.machine.paired.active.many": "{count} dispositivi attivi",
   "settings.machine.paired.state.active": "Attivo · ultimo utilizzo {when}",
-  "settings.machine.paired.state.unused": "Non ancora utilizzato · scade {when}",
+  "settings.machine.paired.state.unused": "Non ancora utilizzato · creato {when}",
   "settings.machine.paired.state.revoked": "Revocato · {when}",
   "settings.machine.paired.state.expired": "Scaduto · {when}",
   "settings.machine.paired.revoke": "Revoca",

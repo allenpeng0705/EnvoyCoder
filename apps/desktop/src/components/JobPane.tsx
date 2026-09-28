@@ -274,6 +274,7 @@ export function JobPane(props: {
           <label className="job-pane__template">
             <span className="settings__note">{t("job.pane.template")}</span>
             <select
+              className="select"
               value={templateId}
               disabled={busy}
               data-testid="job-template"
@@ -293,6 +294,7 @@ export function JobPane(props: {
             <label className="job-pane__template">
               <span className="settings__note">{t("job.pane.parallelCount")}</span>
               <select
+                className="select"
                 value={parallelCount}
                 disabled={busy}
                 data-testid="job-parallel-count"
@@ -612,6 +614,7 @@ export function JobPane(props: {
         <div className="job-pane__ledger-filters" data-testid="ledger-filters">
           <label>
             <select
+              className="select"
               value={ledgerFilter}
               onChange={(e) => setLedgerFilter(e.target.value as LedgerFilter)}
               aria-label={t("job.pane.ledgerFilter")}
@@ -622,7 +625,7 @@ export function JobPane(props: {
             </select>
           </label>
           {ledgerFilter === "step" ? (
-            <select value={ledgerStepId} onChange={(e) => setLedgerStepId(e.target.value)}>
+            <select className="select" value={ledgerStepId} onChange={(e) => setLedgerStepId(e.target.value)}>
               <option value="">{t("job.pane.ledgerAll")}</option>
               {job.steps.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -632,7 +635,7 @@ export function JobPane(props: {
             </select>
           ) : null}
           {ledgerFilter === "member" ? (
-            <select value={ledgerMemberId} onChange={(e) => setLedgerMemberId(e.target.value)}>
+            <select className="select" value={ledgerMemberId} onChange={(e) => setLedgerMemberId(e.target.value)}>
               <option value="">{t("job.pane.ledgerAll")}</option>
               {board.map((m) => (
                 <option key={m.memberId} value={m.memberId}>

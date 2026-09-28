@@ -325,7 +325,7 @@ export function TeamJobCreateSheet(props: {
             <label className="settings__teams-field">
               <span className="setting__title">{t("teamJob.create.team")}</span>
               <select
-                className="settings__pairing-input"
+                className="select"
                 value={teamId}
                 disabled={busy}
                 data-testid="team-job-team"

@@ -14,6 +14,16 @@ export const teams = {
   "sidebar.project.menu.teamJob": "팀 작업",
   "settings.section.teams.title": "팀",
   "settings.section.teams.detail": "팀을 만들고 토큰 하나를 공유한 뒤, 여러 기기에서 협업 작업을 실행하세요.",
+  "settings.section.teams.info.what":
+    "팀은 초대 하나로 여러 EnvoyDev 기기를 연결합니다. 팀 작업은 계획·구현·검토 같은 역할이 있는 단계로 일을 나누어 그 기기들에서 진행합니다.",
+  "settings.section.teams.info.how.1":
+    "한 기기(호스트)에서 팀을 만들거나, 다른 기기에서 붙여넣은 초대로 참가하세요.",
+  "settings.section.teams.info.how.2":
+    "초대를 한 번 복사해 공유하세요. 참가하는 사람은 모두 같은 초대를 붙여넣어야 합니다.",
+  "settings.section.teams.info.how.3":
+    "이 기기가 제공하는 역할을 설정하세요. 호스트는 구성원의 역할을 할당하거나 덮어쓸 수 있습니다.",
+  "settings.section.teams.info.how.4":
+    "프로젝트에서 팀 작업을 시작하세요(원격이 있는 Git). 이 페이지나 프로젝트 레일에서 작업을 엽니다.",
   "settings.teams.label": "팀 이름",
   "settings.teams.memberLabel": "이 기기 이름",
   "settings.teams.joinOk": "{label}에 참가했습니다.",

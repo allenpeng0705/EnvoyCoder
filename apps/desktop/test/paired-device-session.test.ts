@@ -56,13 +56,35 @@ describe("a paired device's session", () => {
     expect(session?.scopeKey).toBe("product:EnvoyDev");
   });
 
-  it("still refuses an unknown, revoked or expired token", async () => {
+  it("still refuses an unknown or revoked token", async () => {
     const { store: devices } = await store();
     const { record } = await devices.mint({ deviceLabel: "phone" });
     expect(await devices.resolveSession("not-a-token")).toBeNull();
 
     await devices.revoke(record.id);
     expect(await devices.resolveSession(record.token)).toBeNull();
+  });
+
+  it("keeps a token valid past its written expiresAt until revoke", async () => {
+    const { store: devices, home } = await store();
+    const { record } = await devices.mint({ deviceLabel: "phone" });
+    const file = pairedDevicesFile(coderPaths(home));
+    // Simulate a legacy on-disk row that claimed a past expiry — auth must ignore the calendar.
+    const { readFile, writeFile } = await import("node:fs/promises");
+    const raw = JSON.parse(await readFile(file, "utf8")) as {
+      devices: Array<{ id: string; expiresAt: string }>;
+    };
+    const row = raw.devices.find((d) => d.id === record.id);
+    expect(row).toBeTruthy();
+    row!.expiresAt = "2000-01-01T00:00:00.000Z";
+    await writeFile(file, JSON.stringify(raw), "utf8");
+
+    const reloaded = new PairedDeviceStore(file, {
+      ownerId: async () => (await readPairingIdentity(coderPaths(home)))?.ownerId ?? null,
+    });
+    expect(await reloaded.resolveSession(record.token)).not.toBeNull();
+    await reloaded.revoke(record.id);
+    expect(await reloaded.resolveSession(record.token)).toBeNull();
   });
 
   it("reads the identity without creating one, because a resolve is not a place to mint state", async () => {

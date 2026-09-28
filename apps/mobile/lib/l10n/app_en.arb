@@ -187,6 +187,26 @@
   "@connectionsMenuForget": {
     "description": "connections.menuForget — Menu item that forgets a machine."
   },
+  "connectionsShareLink": "Share pairing link",
+  "@connectionsShareLink": {
+    "description": "connections.shareLink — Copy the rebuilt envoy://pair URI (QR/paste method)."
+  },
+  "connectionsShareDirect": "Share host:port + token",
+  "@connectionsShareDirect": {
+    "description": "connections.shareDirect — Copy Direct TCP fields for another EnvoyDev."
+  },
+  "connectionsShareSsh": "Share SSH connection",
+  "@connectionsShareSsh": {
+    "description": "connections.shareSsh — Copy SSH hop + daemon + token for another EnvoyDev."
+  },
+  "connectionsShareSubtitle": "For a laptop that cannot reach the home to mint a code",
+  "@connectionsShareSubtitle": {
+    "description": "connections.shareSubtitle — Why Share exists (away-from-home laptop)."
+  },
+  "connectionsShareCopied": "Connection copied — paste it under Paired homes on the laptop",
+  "@connectionsShareCopied": {
+    "description": "connections.shareCopied — SnackBar after Share copies the clipboard."
+  },
   "hostScanQr": "Scan QR",
   "@hostScanQr": {
     "description": "host.scanQr — Add-host row: scan the pairing code."

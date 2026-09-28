@@ -115,14 +115,19 @@ import { AgentsSection } from "./settings/SectionsAgents.js";
 import { GeneralSection, SafetySection, TasksSection } from "./settings/SectionsControls.js";
 import { AppearanceSection } from "./settings/SectionsAppearance.js";
 import { PairingSection } from "./settings/PairingSection.js";
+import { PairedHomesPanel } from "./settings/PairedHomesPanel.js";
 import { TeamsSection } from "./settings/TeamsSection.js";
 import { ServiceSection } from "./settings/SectionsService.js";
 import { LlmSection } from "./settings/EnvoyLlmPanel.js";
 import { ProjectSection, ProjectsSection } from "./settings/SectionsProjects.js";
+import { SectionInfo, hasSectionInfo } from "./settings/SectionInfo.js";
 import type { PairPhoneOutcome } from "./settings/PairPhone.js";
+import type { HomeRegistry } from "../state/home-registry.js";
 
 export interface SettingsPaneProps {
   state: CoderState;
+  /** Thin-client home registry — join/forget paired EnvoyDev homes. */
+  homes?: HomeRegistry;
   onClose: () => void;
   /** The app-scope patch. Ignored while the pane is open for a project. */
   onUpdate: (patch: Partial<CoderSettings>) => Promise<WriteFailure>;
@@ -360,10 +365,13 @@ function SectionPage(props: SettingsPaneProps & { section: SettingsSectionId }):
           view, which is noise rather than information, and a page that started with its own caption
           beside a bar that already says it is exactly what a reader skips.
           A section whose band is data rather than a sentence (Projects) renders nothing here at all:
-          its scope is the projects page, and that page carries its own note. */}
-      {!wide && section.band.kind === "sentence" ? (
+          its scope is the projects page, and that page carries its own note.
+          Sections with an Info block skip the band sentence here: the Info *what* line covers the same
+          ground in more detail, and printing both would be the caption twice. */}
+      {!wide && section.band.kind === "sentence" && !hasSectionInfo(props.section) ? (
         <p className="settings__note">{t(section.band.key)}</p>
       ) : null}
+      {hasSectionInfo(props.section) ? <SectionInfo section={props.section} /> : null}
       {sectionBody(props)}
     </Page>
   );
@@ -411,6 +419,10 @@ function sectionBody(props: SettingsPaneProps & { section: SettingsSectionId }):
           {...(props.mintedPairing !== undefined ? { mintedPairing: props.mintedPairing } : {})}
         />
       );
+    case "homes":
+      // Thin-client joins only — minting for devices that reach *this* daemon is Pairing.
+      if (props.homes === undefined) return <p className="settings__note" />;
+      return <PairedHomesPanel homes={props.homes} />;
     case "teams":
       return (
         <TeamsSection

@@ -15,7 +15,7 @@
  * | case | the mutation it fails on |
  * |---|---|
  * | the chip counts only active records | restoring `String(devices.length)` (the shipped bug) |
- * | an unused, a revoked and an expired record render different words from an active one | collapsing the state helper back to `revokedAt ? revoked : expires` |
+ * | an unused and a revoked record render different words from an active one | collapsing the state helper back to a single "paired" sentence |
  * | Forget is offered on a revoked row and on nothing else | rendering Forget unconditionally, or keying it off "not active" |
  * | forgetting removes the row and the count does not move | deleting from the list without refreshing, or counting the row anyway |
  * | revoking an unused record is still the route that changes it | making Forget the only control on a non-active row |
@@ -116,8 +116,9 @@ const REVOKED: Row = {
   expiresAt: "2999-09-01T00:00:00.000Z",
   revokedAt: "2026-09-17T10:00:00.000Z",
 };
-const EXPIRED: Row = {
-  id: "pad_expired",
+/** Legacy row with a past `expiresAt` — must still authenticate until revoke (unused until first use). */
+const LEGACY_PAST_EXPIRY: Row = {
+  id: "pad_legacy",
   deviceLabel: "Old code",
   createdAt: "2025-01-01T00:00:00.000Z",
   expiresAt: "2000-01-01T00:00:00.000Z",
@@ -172,7 +173,7 @@ function show(initial: Row[]) {
 
 describe("the pairing list's count and its rows", () => {
   it("counts only active records and says which state each row is in", async () => {
-    show([ACTIVE, UNUSED, REVOKED, EXPIRED]);
+    show([ACTIVE, UNUSED, REVOKED, LEGACY_PAST_EXPIRY]);
 
     // **The count is of devices that are still valid and have been used.** Four records exist; only one
     // qualifies. `String(devices.length)` — the shipped bug — would read "4 here".
@@ -182,25 +183,26 @@ describe("the pairing list's count and its rows", () => {
     const active = rowFor("Used phone");
     const unused = rowFor("Fresh code");
     const revoked = rowFor("Withdrawn phone");
-    const expired = rowFor("Old code");
+    const legacy = rowFor("Old code");
 
     // The structural half: each row carries its derived state, so a test can tell them apart without
     // parsing a localized sentence.
     expect(active.dataset.deviceState).toBe("active");
     expect(unused.dataset.deviceState).toBe("unused");
     expect(revoked.dataset.deviceState).toBe("revoked");
-    expect(expired.dataset.deviceState).toBe("expired");
+    // Past calendar expiry must not invent an "expired" state — pairing lasts until revoke.
+    expect(legacy.dataset.deviceState).toBe("unused");
 
-    // The words half: the four states must not share a sentence. This is the defect the owner named —
+    // The words half: the states must not share a sentence. This is the defect the owner named —
     // a never-scanned code called "paired" — so each one says the fact that puts it in its state.
     expect(within(active).getByText(/^Active · last used /)).toBeTruthy();
-    expect(within(unused).getByText(/^Not used yet · expires /)).toBeTruthy();
+    expect(within(unused).getByText(/^Not used yet · minted /)).toBeTruthy();
     expect(within(revoked).getByText(/^Revoked · /)).toBeTruthy();
-    expect(within(expired).getByText(/^Expired · /)).toBeTruthy();
+    expect(within(legacy).getByText(/^Not used yet · minted /)).toBeTruthy();
   });
 
   it("offers Forget only on a revoked row, and keeps Revoke as the route for everything else", async () => {
-    const { forgetPairedDevice } = show([ACTIVE, UNUSED, REVOKED, EXPIRED]);
+    const { forgetPairedDevice } = show([ACTIVE, UNUSED, REVOKED, LEGACY_PAST_EXPIRY]);
     await chipText();
 
     // Destructive cleanup is a press on a record that is already dead. An active or unused record has no
@@ -218,7 +220,7 @@ describe("the pairing list's count and its rows", () => {
   });
 
   it("clears a revoked row on the press, and the chip does not move", async () => {
-    const { forgetPairedDevice } = show([ACTIVE, UNUSED, REVOKED, EXPIRED]);
+    const { forgetPairedDevice } = show([ACTIVE, UNUSED, REVOKED, LEGACY_PAST_EXPIRY]);
     await chipText();
 
     fireEvent.click(forget(rowFor("Withdrawn phone"))!);

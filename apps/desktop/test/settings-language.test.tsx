@@ -180,8 +180,10 @@ describe("the sections bar, in the same language", () => {
     "Sicherheit",
     "Agenten",
     "LLM",
-    // Mobile pairing sits above Projects in the registry — same order the bar renders.
-    "Mobile Kopplung",
+    // Pair devices (inbound), then Paired homes (this laptop → other machines).
+    "Geräte koppeln",
+    "Gekoppelte Homes",
+    "Teams",
     // …and the background service is the other half of that answer, so it sits directly under it.
     "Hintergrunddienst",
     "Projekte",
@@ -326,9 +328,9 @@ describe("the rest of the pane, in the same language", () => {
           onRemoveProject={vi.fn()}
           onRenameTask={vi.fn()}
           onRemoveTask={vi.fn()}
-          onOpenCommandCenter={vi.fn()}
           onOpenSettings={vi.fn()}
           onShowPairing={vi.fn()}
+          onSetTheme={vi.fn()}
         />
       </I18nProvider>,
     );

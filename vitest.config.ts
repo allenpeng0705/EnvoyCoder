@@ -33,6 +33,14 @@ export default defineConfig({
       { find: "@envoydev/platform", replacement: `${here}packages/platform/src/index.ts` },
       { find: "@envoydev/task-model", replacement: `${here}packages/task-model/src/index.ts` },
       { find: "@envoydev/agent-catalog", replacement: `${here}packages/agent-catalog/src/index.ts` },
+      {
+        find: "@envoydev/window-pairing-token",
+        replacement: `${here}../EnvoyMesh/packages/api/dist/pairing-token.js`,
+      },
+      {
+        find: "@envoydev/host-bridge/pairing-code",
+        replacement: `${here}packages/host-bridge/src/pairing-code.ts`,
+      },
       { find: "@envoydev/host-bridge", replacement: `${here}packages/host-bridge/src/index.ts` },
     ],
   },

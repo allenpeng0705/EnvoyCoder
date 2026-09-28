@@ -116,10 +116,11 @@ describe("the palette's Pair a phone row", () => {
       </I18nProvider>,
     );
 
-    // The catalogue, opened from the rail's ⌘K. The row is pressed **inside the dialog**: the
-    // rail's QR button now carries the same words as its accessible name, so an unscoped `getByText` would
-    // find two elements and the failure would be about the fixture rather than about the palette.
-    fireEvent.click(screen.getByRole("button", { name: en["sidebar.command.title"] }));
+    // The catalogue, opened with Mod+K (Command Center is keyboard-only on the rail). The row is
+    // pressed **inside the dialog**: the rail's QR button carries the same words as its accessible
+    // name, so an unscoped `getByText` would find two elements.
+    const mac = /mac|iphone|ipad/i.test(`${navigator.platform} ${navigator.userAgent}`);
+    fireEvent.keyDown(window, { key: "k", metaKey: mac, ctrlKey: !mac });
     fireEvent.click(
       within(screen.getByRole("dialog", { name: en["palette.title"] })).getByText(
         en["palette.pairPhone.title"],
@@ -189,7 +190,7 @@ describe("the palette's Pair a phone row", () => {
   });
 
   /**
-   * **The rail-top QR button** — beside ⌘K on the same row as Add project.
+   * **The rail-top QR button** — beside Settings / theme on the same row as + Project.
    *
    * Asserted through the shell: the press **mints** (one call, the shared one) and lands on the
    * pairing section rather than on whatever page happened to be open.

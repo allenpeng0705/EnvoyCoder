@@ -82,8 +82,8 @@ export interface PairPhonePanelProps {
   /**
    * Leave the pairing surface.
    *
-   * Closing does **not** revoke the code: the record is already on the daemon and expires on its own. The
-   * list below the row is where it is revoked, which is a different action with its own button.
+   * Closing does **not** revoke the code: the record stays on the daemon until revoked under This machine.
+   * Closing only leaves the mint surface; revoke is a different action with its own button.
    */
   onClose: () => void;
 }

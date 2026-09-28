@@ -53,9 +53,10 @@ export const ko: Catalogue = {
   "layout.resize.rail": "프로젝트 목록 너비 조절",
   "layout.resize.settingsNav": "설정 섹션 목록 너비 조절",
   "layout.resize.explorer": "파일 탐색기 너비 조절",
-  "sidebar.add": "+ 프로젝트 추가",
+  "sidebar.add": "+ 프로젝트",
   "sidebar.add.title": "작업하는 디렉터리를 프로젝트로 등록",
-  "sidebar.command.title": "명령 팔레트 열기",
+  "sidebar.theme.toLight": "라이트 모드로 전환",
+  "sidebar.theme.toDark": "다크 모드로 전환",
   "sidebar.search.placeholder": "작업, 저장소, 경로 검색",
   "sidebar.search.aria": "작업, 저장소 및 경로 검색",
   "sidebar.view.groupBy": "프로젝트별로 묶기",
@@ -70,6 +71,47 @@ export const ko: Catalogue = {
   "sidebar.empty.cannotLoadTitle": "프로젝트를 읽을 수 없습니다",
   "sidebar.empty.cannotLoadBody": "이 목록은 비어 있는 것이 아니라 알 수 없는 상태입니다 — EnvoyDev가 데몬에 물어볼 수 없었습니다.",
   "sidebar.section.tasks": "작업",
+  "sidebar.section.thisMachine": "이 기기",
+  "sidebar.section.pairedHomes": "페어링된 EnvoyDev",
+  "homes.add": "+ 홈",
+  "homes.add.title": "다른 EnvoyDev와 페어링",
+  "homes.empty": "페어링된 홈이 아직 없습니다. 설정 → 페어링된 홈에서 추가하세요.",
+  "homes.workingOn": "{label}에서 작업 중",
+  "homes.online": "온라인",
+  "homes.offline": "오프라인",
+  "homes.forget": "잊기",
+  "homes.rename": "이 홈 이름",
+  "homes.label.placeholder": "office-linux",
+  "homes.pasteUri": "페어링 링크 또는 공유된 연결",
+  "homes.pasteUri.placeholder": "envoy://pair?… — 또는 페어링된 휴대폰의 연결 공유 붙여넣기",
+  "homes.pasteUri.detail":
+    "홈의 envoy://pair 링크, 또는 페어링된 휴대폰이 연결 공유로 복사한 내용(링크, 호스트:포트 + 토큰, 또는 SSH)을 붙여 넣은 뒤 참가하세요.",
+  "homes.method.aria": "이 홈에 참가하는 방법",
+  "homes.method.link": "페어링 링크",
+  "homes.method.direct": "호스트:포트",
+  "homes.method.ssh": "SSH",
+  "homes.direct.endpoint": "홈 주소",
+  "homes.direct.endpoint.detail": "EnvoyDev 데몬의 host:port(휴대폰의 직접 TCP와 동일).",
+  "homes.direct.token": "페어링 토큰",
+  "homes.direct.token.placeholder": "홈 또는 휴대폰의 토큰",
+  "homes.direct.token.detail":
+    "페어링 코드의 비밀, 또는 페어링된 휴대폰이 이 홈용으로 공유한 토큰.",
+  "homes.ssh.host": "SSH 호스트",
+  "homes.ssh.user": "SSH 사용자(선택)",
+  "homes.ssh.port": "SSH 포트",
+  "homes.ssh.daemon": "원격 쪽 데몬",
+  "homes.ssh.daemon.detail": "홉 너머로 보이는 host:port — 흔히 127.0.0.1:4770.",
+  "homes.ssh.token.detail":
+    "인증에 필요합니다. 원격 데몬이 127.0.0.1이면 앱이 먼저 SSH 터널을 엽니다.",
+  "homes.join": "홈 참가",
+  "homes.joining": "참가 중…",
+  "homes.joined": "{label}에 참가했습니다.",
+  "homes.panel.title": "이 노트북의 페어링된 홈",
+  "homes.panel.detail":
+    "다른 EnvoyDev(서버나 사무실 기기)에 씬 클라이언트로 연결합니다. 에이전트와 키는 그 홈에 남습니다. 홈에서 새 코드를 만들 수 없을 때, 이미 페어링된 휴대폰이 연결 정보를 공유할 수 있습니다.",
+  "homes.sshHop": "SSH 홉(선택)",
+  "homes.sshHop.detail":
+    "이 노트북이 LAN으로 홈에 닿지 않을 때 user@host:port. 루프백 데몬으로 SSH 참가할 때는 이 홉으로 로컬 포워드를 연 뒤 연결합니다.",
   "sidebar.project.attention": "당신을 기다리는 작업",
   "sidebar.project.agent": "이 프로젝트의 새 작업이 시작하는 에이전트",
   "project.agent.picker.aria": "이 프로젝트의 코딩 에이전트: {agent}. 변경",
@@ -161,9 +203,16 @@ export const ko: Catalogue = {
   "task.diagram.blocked": "이 다이어그램은 그리지 않았습니다. 소스가 안전하지 않아 보입니다.",
   "task.diagram.failed": "이 다이어그램을 그릴 수 없습니다. 대신 소스를 보여 줍니다.",
   "task.approval.aria": "에이전트가 당신의 답변을 기다립니다",
+  "task.approval.takeover.aria": "에이전트가 당신의 답변을 기다립니다",
+  "task.approval.pendingInComposer": "아래 입력란에서 답하세요",
   "task.approval.answered": "답변함",
   "task.approval.answeredWith": "답변함: {option}",
   "task.approval.confirm": "확인",
+  "task.composer.queueStatus": "이 턴이 끝나면 보냅니다",
+  "task.tool.bucket.read": "읽기",
+  "task.tool.bucket.edit": "편집",
+  "task.tool.bucket.shell": "셸",
+  "task.tool.bucket.other": "도구",
   "task.composer.aria": "에이전트에게 메시지 보내기",
   "task.composer.commands": "명령",
   "task.remove": "작업 제거",
@@ -384,8 +433,45 @@ export const ko: Catalogue = {
   "settings.section.shortcuts.detail": "이 창이 듣고 있는 모든 키. 키보드 계층이 읽는 것과 같은 표에서 읽습니다.",
   "settings.section.machine.title": "이 컴퓨터",
   "settings.section.machine.detail": "이 창이 연결된 서비스와 그것이 시작된 정보.",
-  "settings.section.pairing.title": "모바일 페어링",
+  "settings.section.pairing.title": "기기 페어링",
   "settings.section.pairing.detail": "휴대폰에서 이 컴퓨터에 접속하게 합니다. 코드를 스캔하거나 주소를 입력하거나 SSH를 거칩니다.",
+  "settings.section.homes.title": "페어링된 홈",
+  "settings.section.homes.detail": "이 노트북에서 다른 EnvoyDev에 씬 클라이언트로 참가합니다.",
+  "settings.info.howHeading": "사용 방법",
+  "settings.section.agents.info.what":
+    "이 페이지는 EnvoyDev가 이 기기에서 구동할 수 있는 모든 코딩 에이전트를 나열합니다. 기본 제공, 직접 추가한 것, 가져올 수 있는 카탈로그 레시피입니다. 각 행의 준비됨/준비 안 됨은 데몬이 측정한 결과이며 추측이 아닙니다.",
+  "settings.section.agents.info.how.1":
+    "에이전트 목록을 살펴보세요. 행의 세부정보를 열면 기능, 모드, 모델을 볼 수 있습니다.",
+  "settings.section.agents.info.how.2":
+    "에이전트에 로그인이나 설치가 필요하면 해당 행의 동작을 사용하세요.",
+  "settings.section.agents.info.how.3":
+    "카탈로그에서 다른 CLI를 찾아보세요. 추가를 누르면 레시피가 에이전트 목록에 올라가 작업에서 쓸 수 있습니다.",
+  "settings.section.agents.info.how.4":
+    "새 작업은 사용 가능한 에이전트 중에서 고릅니다. 매번 같은 것을 쓰려면 새 작업에서 기본값을 설정하세요.",
+  "settings.section.llm.info.what":
+    "이 필드는 Envoy Harness(내장 에이전트 런타임)를 구성합니다. 기본 URL, 모델, API 키는 이 기기에 남으며, 저장 후 창이 키를 다시 불러오지 않습니다.",
+  "settings.section.llm.info.how.1":
+    "제공자가 요구하는 기본 URL을 설정하세요(또는 기본값을 유지).",
+  "settings.section.llm.info.how.2":
+    "모델 id를 입력하세요. 단독으로는 OpenAI 호환이 아니면 provider/model을 사용하세요.",
+  "settings.section.llm.info.how.3":
+    "API 키를 붙여넣어 저장하거나, 필요하면 키를 지우세요. 끝나면 저장하세요.",
+  "settings.section.pairing.info.what":
+    "페어링을 하면 EnvoyDev 휴대폰 앱이 이 기기의 데몬에 연결할 수 있습니다. 휴대폰은 에이전트를 실행하지 않고 제공자 키도 보관하지 않습니다. 실행을 시작하고 지켜보며 승인에 답합니다.",
+  "settings.section.pairing.info.how.1":
+    "코드 스캔을 우선하세요. 이 페이지에서 QR을 표시한 뒤 휴대폰 앱으로 스캔합니다.",
+  "settings.section.pairing.info.how.2":
+    "또는 휴대폰의 호스트 추가 폼에 host:port와 짧은 토큰을 입력하세요.",
+  "settings.section.pairing.info.how.3":
+    "다른 기기가 LAN으로 닿지 않으면 SSH를 사용하세요. 페어링은 이 기기에서 취소할 때까지 유지되며, 재시작 후 다시 페어링할 필요가 없습니다.",
+  "settings.section.homes.info.what":
+    "페어링된 홈은 이 노트북이 씬 클라이언트로 연결하는 다른 EnvoyDev입니다. 에이전트와 키는 그 홈에 남습니다. 자격 증명은 홈을 잊을 때까지 유지됩니다.",
+  "settings.section.homes.info.how.1":
+    "상대 기기에서 설정 → 기기 페어링으로 코드를 만들거나, 이미 그 홈과 페어링된 휴대폰에서 연결 공유(사용한 방법만)를 하세요.",
+  "settings.section.homes.info.how.2":
+    "페어링된 홈의 페어링 링크 탭에 링크나 공유 글을 붙여 넣거나(또는 호스트:포트 / SSH 입력) 이름을 정한 뒤 참가하세요. 레일의 Paired EnvoyDev 아래에 나타나며, 잊거나 취소하기 전까지 재시작 후에도 다시 연결됩니다.",
+  "settings.section.homes.info.how.3":
+    "잊기는 이 노트북의 자격 증명만 지웁니다. 접근을 끊으려면 홈에서 취소하세요.",
   "settings.section.service.title": "백그라운드 서비스",
   "settings.section.service.detail": "이 시스템의 서비스 관리자에서 데몬을 계속 실행하여, 창을 닫아도 페어링된 휴대폰이 이 컴퓨터에 접속할 수 있게 합니다.",
   "settings.section.about.title": "앱 정보",
@@ -635,7 +721,7 @@ export const ko: Catalogue = {
   "settings.machine.windows.detail": "이 창이 연결되었을 때 연결되어 있던 창 수입니다(이 창 포함).",
   "settings.machine.windows.one": "창 1개",
   "settings.machine.windows.many": "창 {count}개",
-  "settings.pairing.note": "페어링하면 휴대폰에서 이 컴퓨터에 접속할 수 있습니다. 코드에는 주소와 토큰이 들어 있으니 스캔하는 동안만 화면에 두세요.",
+  "settings.pairing.note": "페어링하면 휴대폰이나 다른 EnvoyDev에서 이 컴퓨터에 접속할 수 있습니다. 코드에는 주소와 토큰이 들어 있으니 상대가 스캔하거나 참가하는 동안만 화면에 두세요.",
   "settings.pairing.manage": "발급한 코드는 이 컴퓨터에 나열되며 거기서 폐기할 수 있습니다.",
   "settings.pairing.qr.title": "QR 코드 스캔",
   "settings.pairing.qr.primary": "권장",
@@ -697,7 +783,7 @@ export const ko: Catalogue = {
   "settings.machine.paired.active.one": "활성 기기 1대",
   "settings.machine.paired.active.many": "활성 기기 {count}대",
   "settings.machine.paired.state.active": "활성 · 마지막 사용 {when}",
-  "settings.machine.paired.state.unused": "아직 사용 안 함 · {when} 만료",
+  "settings.machine.paired.state.unused": "아직 사용 안 함 · {when} 발급",
   "settings.machine.paired.state.revoked": "취소됨 · {when}",
   "settings.machine.paired.state.expired": "만료됨 · {when}",
   "settings.machine.paired.revoke": "취소",

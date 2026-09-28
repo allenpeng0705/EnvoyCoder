@@ -14,6 +14,16 @@ export const teams = {
   "sidebar.project.menu.teamJob": "Team-Job",
   "settings.section.teams.title": "Teams",
   "settings.section.teams.detail": "Erstelle ein Team, teile ein Token und führe gemeinsame Jobs über Geräte hinweg aus.",
+  "settings.section.teams.info.what":
+    "Ein Team verbindet mehrere EnvoyDev-Maschinen mit einer Einladung. Team-Jobs teilen die Arbeit in Schritte mit Rollen — zum Beispiel Planen, Umsetzen und Prüfen — über diese Maschinen.",
+  "settings.section.teams.info.how.1":
+    "Erstelle ein Team auf einer Maschine (der Host), oder tritt mit einer von einer anderen eingefügten Einladung bei.",
+  "settings.section.teams.info.how.2":
+    "Kopiere die Einladung einmal und teile sie. Jeder, der beitritt, muss dieselbe Einladung einfügen.",
+  "settings.section.teams.info.how.3":
+    "Lege fest, welche Rollen diese Maschine anbietet. Der Host kann Rollen für Mitglieder zuweisen oder überschreiben.",
+  "settings.section.teams.info.how.4":
+    "Starte einen Team-Job aus einem Projekt (Git mit Remote). Öffne Jobs von dieser Seite oder der Projektleiste.",
   "settings.teams.label": "Teamname",
   "settings.teams.memberLabel": "Name dieser Maschine",
   "settings.teams.joinOk": "{label} beigetreten.",

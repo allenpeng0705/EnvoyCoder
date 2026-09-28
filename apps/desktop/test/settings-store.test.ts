@@ -112,6 +112,15 @@ describe("the settings patch, as the daemon reads it", () => {
     expect(reopened.settings().defaultProjectPath).toBeUndefined();
     expect(reopened.settings().defaults.harness).toBe(DEFAULT_CODER_SETTINGS.defaults.harness);
   });
+
+  it("stores the Appearance theme the picker chose", async () => {
+    const b = await bench();
+    expect(b.store.settings().theme).toBe("dark");
+    await b.store.updateSettings({ theme: "light" });
+    expect(b.store.settings().theme).toBe("light");
+    const reopened = await CoderStore.open({ paths: b.paths });
+    expect(reopened.settings().theme).toBe("light");
+  });
 });
 
 describe("where a new task's defaults come from", () => {

@@ -198,8 +198,9 @@ describe("a refused press is read where it was made", () => {
     const onClose = vi.fn();
     show();
 
-    // ⌘K is the shell's own binding; the rail carries the same action as a button.
-    fireEvent.click(screen.getByRole("button", { name: en["sidebar.command.title"] }));
+    // Command Center is Mod+K (no rail button) — open it the way a keyboard user does.
+    const mac = /mac|iphone|ipad/i.test(`${navigator.platform} ${navigator.userAgent}`);
+    fireEvent.keyDown(window, { key: "k", metaKey: mac, ctrlKey: !mac });
     fireEvent.click(screen.getByText(en["palette.addProject.title"]));
 
     // The placeholder rather than the label: in a window with no shell the stage appends *why* there is no
@@ -329,8 +330,10 @@ describe("a refused press is read where it was made", () => {
     expect(titlebar.textContent ?? "").not.toContain("▤");
     expect(screen.getByRole("button", { name: en["sidebar.pair"] })).toBeTruthy();
     expect(screen.getByRole("button", { name: en["sidebar.settings"] })).toBeTruthy();
+    expect(screen.getByTestId("sidebar-theme-toggle")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: en["sidebar.command.title"] }));
+    const mac = /mac|iphone|ipad/i.test(`${navigator.platform} ${navigator.userAgent}`);
+    fireEvent.keyDown(window, { key: "k", metaKey: mac, ctrlKey: !mac });
     expect(screen.queryByText("Toggle the project rail")).toBeNull();
   });
 

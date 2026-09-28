@@ -14,6 +14,16 @@ export const teams = {
   "sidebar.project.menu.teamJob": "Job di team",
   "settings.section.teams.title": "Team",
   "settings.section.teams.detail": "Crea un team, condividi un token ed esegui job collaborativi su più macchine.",
+  "settings.section.teams.info.what":
+    "Un team collega più macchine EnvoyDev con un invito. I job di team suddividono il lavoro in passi con ruoli — ad esempio pianificare, implementare e revisionare — su quelle macchine.",
+  "settings.section.teams.info.how.1":
+    "Crea un team su una macchina (l’host), oppure unisciti con un invito incollato da un’altra.",
+  "settings.section.teams.info.how.2":
+    "Copia l’invito una volta e condividilo. Chiunque si unisca deve incollare lo stesso invito.",
+  "settings.section.teams.info.how.3":
+    "Imposta i ruoli che questa macchina offre. L’host può assegnare o sovrascrivere i ruoli dei membri.",
+  "settings.section.teams.info.how.4":
+    "Avvia un job di team da un progetto (Git con un remoto). Apri i job da questa pagina o dalla barra del progetto.",
   "settings.teams.label": "Nome del team",
   "settings.teams.memberLabel": "Nome di questa macchina",
   "settings.teams.joinOk": "Entrato in {label}.",

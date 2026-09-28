@@ -141,6 +141,21 @@ class AppLocalizationsJa extends AppLocalizations {
   String get connectionsMenuForget => 'ホストを忘れる';
 
   @override
+  String get connectionsShareLink => 'ペアリングリンクを共有';
+
+  @override
+  String get connectionsShareDirect => 'ホスト:ポートとトークンを共有';
+
+  @override
+  String get connectionsShareSsh => 'SSH 接続を共有';
+
+  @override
+  String get connectionsShareSubtitle => 'ホームで新しいコードを発行できないノート向け';
+
+  @override
+  String get connectionsShareCopied => '接続情報をコピーしました — ノートの「ペア済みホーム」に貼り付けてください';
+
+  @override
   String get hostScanQr => 'QR を読み取る';
 
   @override
@@ -1282,7 +1297,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String teamJobCreateBlurb(String project) {
-    return project + ' で一緒に作業します。';
+    return '$project で一緒に作業します。';
   }
 
   @override
@@ -1305,7 +1320,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String teamJobCrewAllOffline(String machines) {
-    return machines + ' のオンラインを待っています。';
+    return '$machines のオンラインを待っています。';
   }
 
   @override
@@ -1316,12 +1331,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String jobPaneCrewAllOffline(String machines) {
-    return 'オンラインのマシンがありません。待機中：' + machines + '。';
+    return 'オンラインのマシンがありません。待機中：$machines。';
   }
 
   @override
   String jobPaneCrewMissingRoles(String roles) {
-    return 'オンラインのマシンが提供していません：' + roles + '。「チーム」で役割を直すか、適切なピアを待ってください。';
+    return 'オンラインのマシンが提供していません：$roles。「チーム」で役割を直すか、適切なピアを待ってください。';
   }
 
   @override
@@ -1337,7 +1352,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get teamJobGitPathMissing => 'プロジェクトフォルダがありません。';
 
   @override
-  String get teamJobGitNotARepo => 'このプロジェクトは Git リポジトリではありません。チームジョブはファイル共有に Git が必要です。';
+  String get teamJobGitNotARepo =>
+      'このプロジェクトは Git リポジトリではありません。チームジョブはファイル共有に Git が必要です。';
 
   @override
   String get teamJobGitNoRemote => 'チームジョブを開始する前に Git リモート（例：origin）を追加してください。';
@@ -1358,7 +1374,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get projectListTeamJob => 'チームジョブ';
 
   @override
-  String get teamJobCrewNoTeamDesktop => 'デスクトップの EnvoyDev でチームを作成してから、引っ張って更新してください。';
+  String get teamJobCrewNoTeamDesktop =>
+      'デスクトップの EnvoyDev でチームを作成してから、引っ張って更新してください。';
 
   @override
   String get teamJobNeedsDesktopHint => 'キック、トークン更新、再割り当てはデスクトップのジョブ画面で行います。';

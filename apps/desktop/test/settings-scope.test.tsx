@@ -81,7 +81,7 @@ import type { JSX } from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { CoderSettings, Project } from "@envoydev/protocol";
+import type { CoderSettings, Project, Task } from "@envoydev/protocol";
 
 import { CoderApp } from "../src/components/CoderApp.js";
 import { I18nProvider } from "../src/i18n/context.js";
@@ -127,6 +127,18 @@ const otherProject: Project = {
   label: "web",
   hostId: "local",
   addedAt: "2026-09-02T09:00:00.000Z",
+};
+
+const taskOnApi: Task = {
+  id: "local::/work/api::task::1",
+  projectId: project.id,
+  cwd: project.path,
+  title: "Add health check",
+  harness: "envoy-harness",
+  status: "idle",
+  createdAt: "2026-09-14T12:00:00.000Z",
+  updatedAt: "2026-09-14T12:00:00.000Z",
+  hostId: "local",
 };
 
 /** Two agents, so the scope's agent picker has something to switch between. */
@@ -207,6 +219,15 @@ function show(over: Partial<CoderState> = {}): {
     answerApproval: vi.fn(),
     updateSettings,
     clearError: vi.fn(),
+    // Safety → EnvoyDecisionPanel calls these when the default agent is envoy-harness.
+    getEnvoyDecision: vi.fn(async () => ({
+      ok: false as const,
+      message: "This test does not wire that action.",
+    })),
+    setEnvoyDecision: vi.fn(async () => ({
+      ok: false as const,
+      message: "This test does not wire that action.",
+    })),
   } as unknown as CoderStore;
 
   const view = (next: Partial<CoderState>): JSX.Element => (
@@ -679,6 +700,30 @@ describe("the projects page, and the count row that opens it", () => {
     expect(screen.queryByRole("button", { name: /^Project settings for / })).toBeNull();
   });
 
+  it("leaves settings when the rail opens a task or activates a project", () => {
+    // Settings covers the work column. A rail click that names work must dismiss it — otherwise the
+    // user has to find Close while the selection they made is invisible under the pane.
+    show({ tasks: [taskOnApi] });
+    openAppSettings();
+    expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId(`task-${taskOnApi.id}`));
+    expect(screen.queryByRole("navigation", { name: "Settings sections" })).toBeNull();
+    expect(screen.getByTestId("transcript")).toBeTruthy();
+    // Title is on the rail row and in the pane header — presence of the transcript is the work surface.
+    expect(screen.getAllByText("Add health check").length).toBeGreaterThan(0);
+
+    openAppSettings();
+    fireEvent.click(screen.getByRole("button", { name: "Safety" }));
+    expect(screen.getByRole("heading", { name: "Safety" })).toBeTruthy();
+
+    // Project header toggles expand/collapse and must also leave Settings.
+    const rail = screen.getByTestId("project-api");
+    fireEvent.click(within(rail).getByRole("button", { expanded: true }));
+    expect(screen.queryByRole("navigation", { name: "Settings sections" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Safety" })).toBeNull();
+  });
+
   it("says it could not read the list, rather than saying there is nothing in it", () => {
     // **The rail's own historical defect, in the new copy.** A window that never managed to read the
     // project list holds an empty array for a reason that is not "you have no projects" — and a count is a
@@ -729,7 +774,7 @@ describe("the projects page, and the count row that opens it", () => {
     // sentence interpolates the rail's own Add-project label, so it cannot end up pointing at a word that
     // is not on screen — which is what the second assertion pins.
     expect(screen.getByText(/No projects yet\. A project is a folder on this machine/)).toBeTruthy();
-    expect(screen.getByText(/add one with \+ Add project at the top of the rail/)).toBeTruthy();
+    expect(screen.getByText(/add one with \+ Project at the top of the rail/)).toBeTruthy();
     // And nothing to list means no list: not an empty box, and no rows.
     expect(screen.queryByRole("button", { name: /^Project settings for / })).toBeNull();
     // The page is still somewhere you can leave, with no projects to choose from.

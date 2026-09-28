@@ -53,6 +53,7 @@ export type SettingsSectionId =
   | "shortcuts"
   | "machine"
   | "pairing"
+  | "homes"
   | "teams"
   | "service"
   | "about";
@@ -104,11 +105,10 @@ export interface SettingsSection {
  * The order is the question a user arrives with, most-settled-first: what this app does by default,
  * what a new task starts with, what an agent may do without asking, what the agents on this machine
  * can actually do, how a phone reaches it, which folders this machine works in, what the keyboard
- * does, what this window is attached to, and which build it is. Mobile pairing sits above Projects
- * because pairing is how another device reaches this machine — a setup step, not a project default —
- * and **Background service** sits directly under it because it is the other half of that same answer:
- * pairing says *who may reach this machine*, and the service says *whether the machine answers while
- * the window is closed*.
+ * does, what this window is attached to, and which build it is. **Pairing** (devices that reach *this*
+ * daemon) sits above **Paired homes** (this laptop joining *other* EnvoyDev machines) — two jobs, two
+ * pages — then Teams, then **Background service** (whether the machine answers while the window is
+ * closed). Pairing and the service are the two halves of “who may reach this machine / when it answers”.
  * The reference product's order is not copied: its host sections are a per-machine fleet surface we
  * do not have (§5 of `docs/settings-parity.md`).
  */
@@ -142,8 +142,8 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
       },
       {
         file: "apps/desktop/src/main.tsx",
-        needle: "state.settings.theme",
-        because: "Root applies the stored preference through applyTheme whenever it changes",
+        needle: "localSettings.theme",
+        because: "Root applies this machine's theme preference through applyTheme whenever it changes",
       },
     ],
   },
@@ -270,6 +270,23 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
         file: "apps/desktop/src/components/settings/PairPhone.tsx",
         needle: "coder.mintPairing",
         because: "the shared module itself, which the section reuses rather than reimplements",
+      },
+    ],
+  },
+  {
+    id: "homes",
+    titleKey: "settings.section.homes.title",
+    band: { kind: "sentence", key: "settings.section.homes.detail" },
+    content: [
+      {
+        file: "apps/desktop/src/components/settings/PairedHomesPanel.tsx",
+        needle: "joinFromUri",
+        because: "this laptop joins a remote home by pasting the same envoy://pair link a phone uses",
+      },
+      {
+        file: "apps/desktop/src/components/settings/PairedHomesPanel.tsx",
+        needle: "forgetHome",
+        because: "forgetting a home drops local credentials only; the home must revoke on its side",
       },
     ],
   },

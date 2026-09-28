@@ -48,9 +48,10 @@ export const en = {
   "layout.resize.rail": "Resize the project list",
   "layout.resize.settingsNav": "Resize the settings sections list",
   "layout.resize.explorer": "Resize the file explorer",
-  "sidebar.add": "+ Add project",
+  "sidebar.add": "+ Project",
   "sidebar.add.title": "Register a directory as a project",
-  "sidebar.command.title": "Open the Command Center",
+  "sidebar.theme.toLight": "Switch to light mode",
+  "sidebar.theme.toDark": "Switch to dark mode",
   "sidebar.search.placeholder": "Search tasks, repos, paths",
   "sidebar.search.aria": "Search tasks, repositories and paths",
   "sidebar.view.groupBy": "Group by project",
@@ -66,6 +67,47 @@ export const en = {
   "sidebar.empty.cannotLoadTitle": "Could not read your projects",
   "sidebar.empty.cannotLoadBody": "This list is unknown, not empty — EnvoyDev could not ask its daemon for it.",
   "sidebar.section.tasks": "Tasks",
+  "sidebar.section.thisMachine": "This machine",
+  "sidebar.section.pairedHomes": "Paired EnvoyDev",
+  "homes.add": "+ Home",
+  "homes.add.title": "Pair with another EnvoyDev machine",
+  "homes.empty": "No paired homes yet. Add one from Settings → Paired homes.",
+  "homes.workingOn": "Working on {label}",
+  "homes.online": "Online",
+  "homes.offline": "Offline",
+  "homes.forget": "Forget",
+  "homes.rename": "Name for this home",
+  "homes.label.placeholder": "office-linux",
+  "homes.pasteUri": "Pairing link or shared connection",
+  "homes.pasteUri.placeholder": "envoy://pair?… — or paste Share connection from a paired phone",
+  "homes.pasteUri.detail":
+    "Paste an envoy://pair link from the home, or the text a paired phone copied with Share connection (link, host:port + token, or SSH). Then Join.",
+  "homes.method.aria": "How to join this home",
+  "homes.method.link": "Pairing link",
+  "homes.method.direct": "Host:port",
+  "homes.method.ssh": "SSH",
+  "homes.direct.endpoint": "Home address",
+  "homes.direct.endpoint.detail": "host:port of the EnvoyDev daemon (same as the phone’s Direct TCP).",
+  "homes.direct.token": "Pairing token",
+  "homes.direct.token.placeholder": "Token from the home or phone",
+  "homes.direct.token.detail":
+    "The secret from a pairing code, or the token a paired phone shares for this home.",
+  "homes.ssh.host": "SSH host",
+  "homes.ssh.user": "SSH user (optional)",
+  "homes.ssh.port": "SSH port",
+  "homes.ssh.daemon": "Daemon on the far side",
+  "homes.ssh.daemon.detail": "host:port as seen through the hop — often 127.0.0.1:4770.",
+  "homes.ssh.token.detail":
+    "Required so this laptop can authenticate. When the daemon is 127.0.0.1 on the far side, the app opens an SSH tunnel first.",
+  "homes.join": "Join home",
+  "homes.joining": "Joining…",
+  "homes.joined": "Joined {label}.",
+  "homes.panel.title": "Paired homes on this laptop",
+  "homes.panel.detail":
+    "Reach another EnvoyDev (a server or office machine) as a thin client. Agents and keys stay on that home. A phone already paired with that home can share its connection info when you cannot mint a new code on the home.",
+  "homes.sshHop": "SSH hop (optional)",
+  "homes.sshHop.detail":
+    "user@host:port when this laptop cannot reach the home on the LAN. For SSH joins with a loopback daemon address, EnvoyDev opens a local-forward through this hop before connecting.",
   "sidebar.project.attention": "Tasks waiting on you",
   "sidebar.project.agent": "The agent new tasks in this project start with",
   "project.agent.picker.aria": "Coding agent for this project: {agent}. Change",
@@ -513,11 +555,61 @@ export const en = {
   "settings.section.machine.title": "This machine",
   "settings.section.machine.detail":
     "The daemon this window is attached to, and what it was started with.",
-  "settings.section.pairing.title": "Mobile Pairing",
+  "settings.section.pairing.title": "Pair devices",
   "settings.section.pairing.detail":
-    "Let a phone reach this machine: scan a code, type its address, or go through SSH.",
+    "Let a phone or another EnvoyDev reach this machine’s daemon.",
+  "settings.section.homes.title": "Paired homes",
+  "settings.section.homes.detail":
+    "Join another EnvoyDev from this laptop as a thin client.",
   "settings.section.teams.title": "Teams",
   "settings.section.teams.detail": "Host a team, share an invite, run jobs across machines.",
+
+  /* Settings section Info — orientation for the complex pages (inline at the top). */
+  "settings.info.howHeading": "How to use it",
+  "settings.section.agents.info.what":
+    "This page lists every coding agent EnvoyDev can drive on this machine: the ones we ship, ones you added, and catalogue recipes you can bring in. Each row shows Ready or Not ready from what the daemon measured — not a guess.",
+  "settings.section.agents.info.how.1":
+    "Scan the Agents list. Open Details on a row for capabilities, modes, and models.",
+  "settings.section.agents.info.how.2":
+    "If an agent needs sign-in or install, use the action on that row.",
+  "settings.section.agents.info.how.3":
+    "Browse Catalogue for other CLIs. Press Add to put a recipe on the Agents list so tasks can use it.",
+  "settings.section.agents.info.how.4":
+    "New tasks pick from agents that are available. Set a default under New tasks if you want one every time.",
+  "settings.section.llm.info.what":
+    "These fields configure Envoy Harness — the built-in agent runtime. Base URL, model, and API key stay on this machine; the window never reloads the key after you save it.",
+  "settings.section.llm.info.how.1":
+    "Set the base URL your provider expects (or leave the default).",
+  "settings.section.llm.info.how.2":
+    "Enter the model id. Use provider/model when it is not OpenAI-compatible alone.",
+  "settings.section.llm.info.how.3":
+    "Paste an API key to store it, or clear the key if you need to remove it. Save when finished.",
+  "settings.section.pairing.info.what":
+    "Pairing lets a phone or another EnvoyDev reach this machine’s daemon as a thin client. Thin clients never run agents or hold provider keys — they start runs, watch them, and answer approvals. To join a different machine from this laptop, use Paired homes.",
+  "settings.section.pairing.info.how.1":
+    "Prefer Scan a code, then scan or paste the link on the phone or other EnvoyDev.",
+  "settings.section.pairing.info.how.2":
+    "Or type host:port and a short token on that device’s join form.",
+  "settings.section.pairing.info.how.3":
+    "Use SSH when the other device cannot reach this machine on the LAN. Pairings stay until you revoke them under This machine — no need to pair again after a restart.",
+  "settings.section.homes.info.what":
+    "Paired homes are other EnvoyDev machines this laptop reaches as a thin client. Agents and provider keys stay on that home — you start runs, watch them, and answer approvals from here. Credentials stay on this laptop until you forget the home.",
+  "settings.section.homes.info.how.1":
+    "On the other machine, open Settings → Pair devices and mint a code — or on a phone already paired with that home, use Share connection (it only shares the method it used).",
+  "settings.section.homes.info.how.2":
+    "Under Paired homes, paste the link or shared text on the Pairing link tab (or type host:port / SSH on those tabs). Name the home, then Join. It appears under Paired EnvoyDev and reconnects after restart until you forget or revoke it.",
+  "settings.section.homes.info.how.3":
+    "Forget removes credentials on this laptop only. Revoke on the home if you want to cut access.",
+  "settings.section.teams.info.what":
+    "A team links several EnvoyDev machines with one invite. Team jobs split work into steps with roles — for example plan, implement, and review — across those machines.",
+  "settings.section.teams.info.how.1":
+    "Create a team on one machine (the host), or join with an invite pasted from another.",
+  "settings.section.teams.info.how.2":
+    "Copy the invite once and share it. Everyone who joins must paste the same invite.",
+  "settings.section.teams.info.how.3":
+    "Set the roles this machine offers. The host can assign or override roles for members.",
+  "settings.section.teams.info.how.4":
+    "Start a team job from a project (Git with a remote). Open jobs from this page or the project rail.",
   "settings.teams.title": "Teams",
   "settings.teams.blurb": "Host a team, or join with an invite.",
   "settings.teams.start": "Get started",
@@ -700,9 +792,8 @@ export const en = {
      `settings.projects.title` is deliberately one string used three times — the level-1 row's label, the
      level-2 page title, and level 3's back label — because all three name the same place, and a name
      that is stored once cannot drift between them.
-     `{add}` is the rail's own Add-project label (`sidebar.add`) rather than the word "Add"
-     repeated here, so the sentence keeps naming the control it means when the control is renamed or
-     translated. */
+     `{add}` is the rail's own project button label (`sidebar.add`) so the sentence keeps naming the
+     control it means when the control is renamed or translated. */
   "settings.projects.title": "Projects",
   "settings.projects.count": "{count} projects",
   "settings.projects.count.one": "1 project",
@@ -1106,7 +1197,7 @@ export const en = {
      code, the same values typed, and an SSH hop that the code does not carry — so each gets its own
      heading instead of sharing one paragraph. */
   "settings.pairing.note":
-    "Pairing lets a phone reach this machine. The code carries the address and a token, so keep it on screen only while the phone is scanning.",
+    "Pairing lets a phone or another EnvoyDev reach this machine. The code carries the address and a token — keep it on screen only while the other device is scanning or joining.",
   "settings.pairing.manage": "Codes you have issued are listed under This machine, where you can revoke one.",
   "settings.pairing.qr.title": "Scan a QR code",
   // The primary route, marked rather than merely listed first: a user reading the three headings has to be
@@ -1185,7 +1276,7 @@ export const en = {
   // One key per state, because the difference is the fix: an issued code nobody scanned, a withdrawn
   // token, an expired one, and a device that really reached this machine must not share words.
   "settings.machine.paired.state.active": "Active · last used {when}",
-  "settings.machine.paired.state.unused": "Not used yet · expires {when}",
+  "settings.machine.paired.state.unused": "Not used yet · minted {when}",
   "settings.machine.paired.state.revoked": "Revoked · {when}",
   "settings.machine.paired.state.expired": "Expired · {when}",
   "settings.machine.paired.revoke": "Revoke",

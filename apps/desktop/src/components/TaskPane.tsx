@@ -301,7 +301,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
 
   const transcript = buildTranscript(events);
   const approvalOpen = transcript.pendingApprovalId !== undefined;
-  const pendingApproval = transcript.entries.find(
+  const pendingApprovalEntry = transcript.entries.find(
     (entry): entry is Extract<TranscriptEntry, { kind: "approval" }> =>
       entry.kind === "approval" &&
       entry.resolvedWith === undefined &&
@@ -344,6 +344,17 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   const agent = isHarnessId(task.harness)
     ? agentFor(task.harness, summary)
     : agentForProvider(task.harness, provider);
+
+  /**
+   * Takeover when there is a pending approval and the agent is known to support them — or when we
+   * have no harness summary yet (the pending event itself is the evidence). An explicit
+   * `approvals: false` keeps choices on the transcript card instead of inventing a surface.
+   */
+  const approvalsCatalogueKnown = summary !== undefined || provider !== undefined;
+  const takeoverActive =
+    pendingApprovalEntry !== undefined &&
+    (!approvalsCatalogueKnown || agent.capabilities.approvals === true);
+  const pendingApproval = takeoverActive ? pendingApprovalEntry : undefined;
 
   /**
    * Both controls, in one call: they branch on the same two facts (what the agent publishes, and
@@ -457,10 +468,13 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   }, [probe.ask, task.harness]);
 
   // Pending approval owns the composer — keep the related transcript row in view.
+  // Guard the call: jsdom's elements have no `scrollIntoView` implementation.
   useLayoutEffect(() => {
-    if (!pendingApproval) return;
-    approvalAnchorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [pendingApproval?.requestId]);
+    if (!takeoverActive) return;
+    const node = approvalAnchorRef.current;
+    if (node === null || typeof node.scrollIntoView !== "function") return;
+    node.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [takeoverActive, pendingApproval?.requestId]);
 
   // `hasShellPicker()` is synchronous on purpose (see `folder-picker.ts`): a control that decides after
   // an `await` looks like a dead click, and a disabled one can say why in the same tick as the render.
@@ -776,9 +790,11 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                   entry={entry}
                   streaming={streaming}
                   onAnswer={props.onAnswer}
-                  pendingApprovalId={transcript.pendingApprovalId}
+                  takeoverRequestId={pendingApproval?.requestId}
                   approvalAnchorRef={
-                    entry.kind === "approval" && entry.requestId === transcript.pendingApprovalId
+                    entry.kind === "approval" &&
+                    pendingApproval !== undefined &&
+                    entry.requestId === pendingApproval.requestId
                       ? approvalAnchorRef
                       : undefined
                   }
@@ -829,7 +845,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
         <div
           className={dropping ? "composer__card composer__card--drop" : "composer__card"}
           onDragOver={(event) => {
-            if (approvalOpen || !event.dataTransfer.types.includes("Files")) return;
+            if (takeoverActive || approvalOpen || !event.dataTransfer.types.includes("Files")) return;
             event.preventDefault();
             setDropping(true);
           }}
@@ -837,10 +853,11 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
           onDrop={(event) => {
             event.preventDefault();
             setDropping(false);
+            if (takeoverActive) return;
             addFiles([...event.dataTransfer.files]);
           }}
         >
-          {pendingApproval ? (
+          {takeoverActive && pendingApproval ? (
             <div
               className="composer__takeover approval approval--takeover"
               role="alertdialog"
@@ -857,7 +874,8 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                 <ApprovalChoices entry={pendingApproval} onAnswer={props.onAnswer} />
               </div>
             </div>
-          ) : null}
+          ) : (
+            <>
           {running && !approvalOpen ? (
             <p className="composer__queue-status" role="status" data-testid="composer-queue-status">
               {t("task.composer.queueStatus")}
@@ -1065,6 +1083,8 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
             ) : null}
             </div>
           </div>
+            </>
+          )}
         </div>
       </footer>
       )}
@@ -1078,7 +1098,7 @@ function TranscriptRow(props: {
   entry: TranscriptEntry;
   streaming?: boolean;
   onAnswer: (requestId: string, choice: string | readonly string[] | { text: string }) => void | Promise<void>;
-  pendingApprovalId?: string;
+  takeoverRequestId?: string;
   approvalAnchorRef?: RefObject<HTMLLIElement | null>;
 }): JSX.Element | null {
   const t = useT();
@@ -1149,7 +1169,9 @@ function TranscriptRow(props: {
 
     case "approval": {
       const pendingHere =
-        entry.resolvedWith === undefined && entry.requestId === props.pendingApprovalId;
+        entry.resolvedWith === undefined &&
+        props.takeoverRequestId !== undefined &&
+        entry.requestId === props.takeoverRequestId;
       return (
         <li
           className="row row--approval"

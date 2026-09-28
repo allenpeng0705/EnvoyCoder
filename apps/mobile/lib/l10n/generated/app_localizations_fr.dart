@@ -144,6 +144,23 @@ class AppLocalizationsFr extends AppLocalizations {
   String get connectionsMenuForget => 'Oublier l\'hôte';
 
   @override
+  String get connectionsShareLink => 'Partager le lien d’association';
+
+  @override
+  String get connectionsShareDirect => 'Partager hôte:port + jeton';
+
+  @override
+  String get connectionsShareSsh => 'Partager la connexion SSH';
+
+  @override
+  String get connectionsShareSubtitle =>
+      'Pour un portable qui ne peut pas générer un code sur la machine d’accueil';
+
+  @override
+  String get connectionsShareCopied =>
+      'Connexion copiée — collez-la sous Homes associés sur le portable';
+
+  @override
   String get hostScanQr => 'Scanner un QR';
 
   @override
@@ -1333,7 +1350,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String teamJobCreateBlurb(String project) {
-    return 'Travaillez ensemble sur ' + project + '.';
+    return 'Travaillez ensemble sur $project.';
   }
 
   @override
@@ -1349,30 +1366,34 @@ class AppLocalizationsFr extends AppLocalizations {
   String get teamJobCreateSubmit => 'Créer un brouillon';
 
   @override
-  String get teamJobCreateDraftHint => 'Démarrez plus tard quand l’équipe est en ligne.';
+  String get teamJobCreateDraftHint =>
+      'Démarrez plus tard quand l’équipe est en ligne.';
 
   @override
-  String get teamJobCrewNoJoiners => 'Invitez une autre machine. Vous pouvez encore créer un brouillon.';
+  String get teamJobCrewNoJoiners =>
+      'Invitez une autre machine. Vous pouvez encore créer un brouillon.';
 
   @override
   String teamJobCrewAllOffline(String machines) {
-    return 'En attente que ' + machines + ' soient en ligne.';
+    return 'En attente que $machines soient en ligne.';
   }
 
   @override
-  String get jobPaneCrewNoSteps => 'Ajoutez des étapes avant de démarrer (utilisez un modèle d’étapes).';
+  String get jobPaneCrewNoSteps =>
+      'Ajoutez des étapes avant de démarrer (utilisez un modèle d’étapes).';
 
   @override
-  String get jobPaneCrewNoMembers => 'Cette équipe n’a encore aucune machine. Invitez quelqu’un depuis Équipes.';
+  String get jobPaneCrewNoMembers =>
+      'Cette équipe n’a encore aucune machine. Invitez quelqu’un depuis Équipes.';
 
   @override
   String jobPaneCrewAllOffline(String machines) {
-    return 'Aucune machine en ligne. En attente de : ' + machines + '.';
+    return 'Aucune machine en ligne. En attente de : $machines.';
   }
 
   @override
   String jobPaneCrewMissingRoles(String roles) {
-    return 'Aucune machine en ligne ne propose : ' + roles + '. Corrigez les rôles dans Équipes, ou attendez le bon pair.';
+    return 'Aucune machine en ligne ne propose : $roles. Corrigez les rôles dans Équipes, ou attendez le bon pair.';
   }
 
   @override
@@ -1388,10 +1409,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get teamJobGitPathMissing => 'Le dossier du projet est manquant.';
 
   @override
-  String get teamJobGitNotARepo => 'Ce projet n’est pas un dépôt Git. Les jobs d’équipe ont besoin de Git pour partager les fichiers.';
+  String get teamJobGitNotARepo =>
+      'Ce projet n’est pas un dépôt Git. Les jobs d’équipe ont besoin de Git pour partager les fichiers.';
 
   @override
-  String get teamJobGitNoRemote => 'Ajoutez un remote Git (p. ex. origin) avant de démarrer un job d’équipe.';
+  String get teamJobGitNoRemote =>
+      'Ajoutez un remote Git (p. ex. origin) avant de démarrer un job d’équipe.';
 
   @override
   String get teamJobGitMissing => 'Git n’est pas disponible sur cette machine.';
@@ -1400,22 +1423,27 @@ class AppLocalizationsFr extends AppLocalizations {
   String get teamJobGitChecking => 'Vérification de Git…';
 
   @override
-  String get errorJobNotDrafting => 'Seul un job en rédaction peut être démarré.';
+  String get errorJobNotDrafting =>
+      'Seul un job en rédaction peut être démarré.';
 
   @override
-  String get errorOriginClientOnly => 'Cela nécessite EnvoyDev sur cette machine ou un téléphone qui y est associé.';
+  String get errorOriginClientOnly =>
+      'Cela nécessite EnvoyDev sur cette machine ou un téléphone qui y est associé.';
 
   @override
   String get projectListTeamJob => 'Job d’équipe';
 
   @override
-  String get teamJobCrewNoTeamDesktop => 'Créez une équipe dans EnvoyDev sur le bureau, puis tirez pour actualiser.';
+  String get teamJobCrewNoTeamDesktop =>
+      'Créez une équipe dans EnvoyDev sur le bureau, puis tirez pour actualiser.';
 
   @override
-  String get teamJobNeedsDesktopHint => 'Expulser, faire tourner le jeton et réassigner restent dans le volet Job du bureau.';
+  String get teamJobNeedsDesktopHint =>
+      'Expulser, faire tourner le jeton et réassigner restent dans le volet Job du bureau.';
 
   @override
-  String get teamJobReadyToStart => 'Équipe et Git sont prêts — vous pouvez démarrer.';
+  String get teamJobReadyToStart =>
+      'Équipe et Git sont prêts — vous pouvez démarrer.';
 
   @override
   String get teamJobWatchTitle => 'Job d’équipe';
@@ -1448,7 +1476,8 @@ class AppLocalizationsFr extends AppLocalizations {
   String get jobPaneDeny => 'Ne pas autoriser';
 
   @override
-  String get jobPaneNeedsApproval => 'En attente d’approbation pour cette étape';
+  String get jobPaneNeedsApproval =>
+      'En attente d’approbation pour cette étape';
 
   @override
   String get teamJobExistingHeading => 'Jobs d’équipe sur ce projet';

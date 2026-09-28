@@ -10,6 +10,8 @@ coverage/
 .DS_Store
 .env
 .env.local
+# Apple Developer ID credentials for notarized DMGs (see scripts/sign-macos-release.env.example)
+scripts/sign-macos-release.env
 # Tauri
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/

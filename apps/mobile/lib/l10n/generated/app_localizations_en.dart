@@ -143,6 +143,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get connectionsMenuForget => 'Forget host';
 
   @override
+  String get connectionsShareLink => 'Share pairing link';
+
+  @override
+  String get connectionsShareDirect => 'Share host:port + token';
+
+  @override
+  String get connectionsShareSsh => 'Share SSH connection';
+
+  @override
+  String get connectionsShareSubtitle =>
+      'For a laptop that cannot reach the home to mint a code';
+
+  @override
+  String get connectionsShareCopied =>
+      'Connection copied — paste it under Paired homes on the laptop';
+
+  @override
   String get hostScanQr => 'Scan QR';
 
   @override
@@ -1314,7 +1331,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String teamJobCreateBlurb(String project) {
-    return 'Work together on ' + project + '.';
+    return 'Work together on $project.';
   }
 
   @override
@@ -1333,27 +1350,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get teamJobCreateDraftHint => 'Start later when the crew is online.';
 
   @override
-  String get teamJobCrewNoJoiners => 'Invite another machine. You can still create a draft.';
+  String get teamJobCrewNoJoiners =>
+      'Invite another machine. You can still create a draft.';
 
   @override
   String teamJobCrewAllOffline(String machines) {
-    return 'Waiting for ' + machines + ' to come online.';
+    return 'Waiting for $machines to come online.';
   }
 
   @override
-  String get jobPaneCrewNoSteps => 'Add steps before starting (use a step template).';
+  String get jobPaneCrewNoSteps =>
+      'Add steps before starting (use a step template).';
 
   @override
-  String get jobPaneCrewNoMembers => 'This team has no machines yet. Invite someone from Teams.';
+  String get jobPaneCrewNoMembers =>
+      'This team has no machines yet. Invite someone from Teams.';
 
   @override
   String jobPaneCrewAllOffline(String machines) {
-    return 'No machines online. Waiting for: ' + machines + '.';
+    return 'No machines online. Waiting for: $machines.';
   }
 
   @override
   String jobPaneCrewMissingRoles(String roles) {
-    return 'No online machine offers: ' + roles + '. Fix roles on Teams, or wait for the right peer.';
+    return 'No online machine offers: $roles. Fix roles on Teams, or wait for the right peer.';
   }
 
   @override
@@ -1369,10 +1389,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get teamJobGitPathMissing => 'Project folder is missing.';
 
   @override
-  String get teamJobGitNotARepo => 'This project is not a Git repository. Team jobs need Git to share files.';
+  String get teamJobGitNotARepo =>
+      'This project is not a Git repository. Team jobs need Git to share files.';
 
   @override
-  String get teamJobGitNoRemote => 'Add a Git remote (e.g. origin) before starting a Team job.';
+  String get teamJobGitNoRemote =>
+      'Add a Git remote (e.g. origin) before starting a Team job.';
 
   @override
   String get teamJobGitMissing => 'Git is not available on this machine.';
@@ -1384,16 +1406,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get errorJobNotDrafting => 'Only a drafting job can be started.';
 
   @override
-  String get errorOriginClientOnly => 'This needs EnvoyDev on this machine or a phone paired to it.';
+  String get errorOriginClientOnly =>
+      'This needs EnvoyDev on this machine or a phone paired to it.';
 
   @override
   String get projectListTeamJob => 'Team job';
 
   @override
-  String get teamJobCrewNoTeamDesktop => 'Create a team on desktop EnvoyDev, then pull to refresh.';
+  String get teamJobCrewNoTeamDesktop =>
+      'Create a team on desktop EnvoyDev, then pull to refresh.';
 
   @override
-  String get teamJobNeedsDesktopHint => 'Kick, rotate token, and reassign stay on the desktop Job pane.';
+  String get teamJobNeedsDesktopHint =>
+      'Kick, rotate token, and reassign stay on the desktop Job pane.';
 
   @override
   String get teamJobReadyToStart => 'Crew and Git are ready — you can Start.';

@@ -13,7 +13,14 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CoderSidebar } from "../src/components/CoderSidebar.js";
-import type { HarnessSummary, Project, Task } from "@envoydev/protocol";
+import {
+  DEFAULT_FAILURE_POLICY,
+  DEFAULT_STALL_POLICY,
+  type HarnessSummary,
+  type Job,
+  type Project,
+  type Task,
+} from "@envoydev/protocol";
 
 /**
  * Fixtures, local to this test.
@@ -123,9 +130,9 @@ function renderSidebar(over: Partial<Parameters<typeof CoderSidebar>[0]> = {}) {
       onRenameTask={onRenameTask}
       onRemoveTask={onRemoveTask}
       onChangeTaskHarness={onChangeTaskHarness}
-      onOpenCommandCenter={vi.fn()}
       onOpenSettings={vi.fn()}
       onShowPairing={vi.fn()}
+      onSetTheme={vi.fn()}
       {...over}
     />,
   );
@@ -183,6 +190,45 @@ describe("CoderSidebar", () => {
     for (const label of ["envoymesh", "payments-api", "site"]) {
       expect(screen.getByText(label)).toBeTruthy();
     }
+  });
+
+  it("offers a theme toggle on the rail instead of a Command Center button", () => {
+    const onSetTheme = vi.fn();
+    renderSidebar({ onSetTheme });
+    expect(screen.queryByRole("button", { name: /Command Center/i })).toBeNull();
+    const toggle = screen.getByTestId("sidebar-theme-toggle");
+    fireEvent.click(toggle);
+    // Default paint is dark (applyTheme("dark") at boot) → first press asks for light.
+    expect(onSetTheme).toHaveBeenCalledWith("light");
+  });
+
+  it("hides the Team jobs section until a project has at least one job", () => {
+    renderSidebar({ onTeamJob: vi.fn() });
+    expect(screen.queryByTestId("project-team-jobs-local::/Users/dev/work/envoymesh")).toBeNull();
+    expect(screen.queryByText("Team jobs")).toBeNull();
+
+    const job: Job = {
+      id: "job-1",
+      teamId: "team-1",
+      projectId: "local::/Users/dev/work/envoymesh",
+      title: "Ship attach",
+      goal: "Land the change",
+      status: "drafting",
+      steps: [],
+      policy: { ...DEFAULT_FAILURE_POLICY },
+      stallPolicy: { ...DEFAULT_STALL_POLICY },
+      ledger: [],
+      createdAt: "2026-09-14T12:00:00.000Z",
+      updatedAt: "2026-09-14T12:00:00.000Z",
+    };
+    cleanup();
+    renderSidebar({ jobs: [job], onTeamJob: vi.fn() });
+    const group = screen.getByTestId("project-envoymesh");
+    expect(within(group).getByTestId("project-team-jobs-local::/Users/dev/work/envoymesh")).toBeTruthy();
+    expect(within(group).getByText("Team jobs")).toBeTruthy();
+    expect(within(group).getByText("Ship attach")).toBeTruthy();
+    // Other projects still have no section.
+    expect(screen.queryByTestId("project-team-jobs-local::/Users/dev/work/payments-api")).toBeNull();
   });
 
   it("counts what needs a human, once, in the rail", () => {
@@ -658,5 +704,90 @@ describe("renaming a task from its row", () => {
     expect(onRenameTask).not.toHaveBeenCalled();
     // …and the row is still there under the name it had, rather than showing a blank title.
     expect(screen.getByText("Review the migration diff")).toBeTruthy();
+  });
+});
+
+describe("CoderSidebar paired EnvoyDev homes", () => {
+  const remoteProject: Project = {
+    id: "local::/srv/app",
+    path: "/srv/app",
+    label: "server-app",
+    hostId: "local",
+    addedAt: "2026-09-20T09:00:00.000Z",
+    defaults: { harness: "envoy-harness" },
+  };
+  const remoteTask: Task = {
+    id: "remote-t1",
+    projectId: remoteProject.id,
+    cwd: "/srv/app",
+    title: "Fix deploy script",
+    harness: "envoy-harness",
+    status: "idle",
+    createdAt: "2026-09-20T10:00:00.000Z",
+    updatedAt: "2026-09-20T10:00:00.000Z",
+  };
+
+  it("shows This machine and an empty Paired EnvoyDev teaching state", () => {
+    renderSidebar({ onAddPairedHome: vi.fn() });
+    expect(screen.getByText("This machine")).toBeTruthy();
+    const paired = screen.getByTestId("sidebar-paired-homes");
+    expect(within(paired).getByText("Paired EnvoyDev")).toBeTruthy();
+    expect(within(paired).getByText(/No paired homes yet/i)).toBeTruthy();
+    expect(within(paired).getByRole("button", { name: "+ Home" })).toBeTruthy();
+  });
+
+  it("lists an online home's projects and selects a remote task", () => {
+    const onSelectPairedTask = vi.fn();
+    const onFocusPairedHome = vi.fn();
+    const onForgetPairedHome = vi.fn();
+    renderSidebar({
+      pairedHomes: [
+        {
+          record: { id: "home-1", label: "office-linux", host: "10.0.0.5", port: 4770 },
+          state: {
+            projects: [remoteProject],
+            tasks: [remoteTask],
+            connection: { state: "connected" },
+          },
+        },
+      ],
+      activeHomeId: "home-1",
+      workingOnLabel: "office-linux",
+      onSelectPairedTask,
+      onFocusPairedHome,
+      onForgetPairedHome,
+      onAddPairedHome: vi.fn(),
+    });
+
+    expect(screen.getByText("Working on office-linux")).toBeTruthy();
+    const home = screen.getByTestId("paired-home-home-1");
+    expect(within(home).getByText("Online")).toBeTruthy();
+    expect(within(home).getByText("server-app")).toBeTruthy();
+    fireEvent.click(within(home).getByText("Fix deploy script"));
+    expect(onSelectPairedTask).toHaveBeenCalledWith("home-1", "remote-t1");
+    fireEvent.click(within(home).getByRole("button", { name: "Forget" }));
+    expect(onForgetPairedHome).toHaveBeenCalledWith("home-1");
+  });
+
+  it("marks an unreachable home offline and focuses it for retry", () => {
+    const onFocusPairedHome = vi.fn();
+    renderSidebar({
+      pairedHomes: [
+        {
+          record: { id: "home-2", label: "lab", host: "10.0.0.9", port: 4770 },
+          state: {
+            projects: [],
+            tasks: [],
+            connection: { state: "disconnected" },
+          },
+        },
+      ],
+      activeHomeId: "local",
+      onFocusPairedHome,
+    });
+    const home = screen.getByTestId("paired-home-home-2");
+    expect(within(home).getByText("Offline")).toBeTruthy();
+    fireEvent.click(within(home).getByText("lab"));
+    expect(onFocusPairedHome).toHaveBeenCalledWith("home-2");
   });
 });

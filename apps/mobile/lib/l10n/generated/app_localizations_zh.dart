@@ -141,6 +141,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectionsMenuForget => '忘掉主机';
 
   @override
+  String get connectionsShareLink => '分享配对链接';
+
+  @override
+  String get connectionsShareDirect => '分享主机:端口与令牌';
+
+  @override
+  String get connectionsShareSsh => '分享 SSH 连接';
+
+  @override
+  String get connectionsShareSubtitle => '供无法在家中电脑上生成配对码的笔记本使用';
+
+  @override
+  String get connectionsShareCopied => '已复制连接信息 — 在笔记本的「配对主机」中粘贴';
+
+  @override
   String get hostScanQr => '扫描二维码';
 
   @override
@@ -1267,7 +1282,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String teamJobCreateBlurb(String project) {
-    return '一起处理 ' + project + '。';
+    return '一起处理 $project。';
   }
 
   @override
@@ -1290,7 +1305,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String teamJobCrewAllOffline(String machines) {
-    return '等待 ' + machines + ' 上线。';
+    return '等待 $machines 上线。';
   }
 
   @override
@@ -1301,12 +1316,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String jobPaneCrewAllOffline(String machines) {
-    return '没有在线机器。等待中：' + machines + '。';
+    return '没有在线机器。等待中：$machines。';
   }
 
   @override
   String jobPaneCrewMissingRoles(String roles) {
-    return '没有在线机器提供这些角色：' + roles + '。请在「团队」中修正角色，或等待合适的对等机。';
+    return '没有在线机器提供这些角色：$roles。请在「团队」中修正角色，或等待合适的对等机。';
   }
 
   @override

@@ -235,6 +235,63 @@ describe("the window's connection", () => {
     fake.push("whatever", undefined);
     expect(client.status.state).toBe("connected");
   });
+
+  it("puts the pairing token on the WebSocket URL for a remote home", () => {
+    const urls: string[] = [];
+    socket = new FakeSocket();
+    connection = new CoderConnection({
+      endpoint: { host: "10.0.0.5", port: 4770, path: "/ws" },
+      token: "pair-secret",
+      socketFactory: (url) => {
+        urls.push(url);
+        return socket as FakeSocket;
+      },
+      minDelayMs: 1,
+      maxDelayMs: 2,
+    });
+    connection.start();
+    expect(urls).toEqual(["ws://10.0.0.5:4770/ws?token=pair-secret"]);
+  });
+
+  it("sends install-stable client id and platform on hello for paired homes", async () => {
+    socket = new FakeSocket();
+    connection = new CoderConnection({
+      endpoint: { host: "127.0.0.1", port: 4770, path: "/ws", instanceId: "instance-1" },
+      token: "tok",
+      client: { name: "office-linux", platform: "darwin", id: "envoydev-desktop-abc", version: "0.1.0" },
+      socketFactory: () => socket as FakeSocket,
+      minDelayMs: 1,
+      maxDelayMs: 2,
+    });
+    connection.start();
+    socket.open();
+    expect(socket.sent[0]?.method).toBe("coder.hello");
+    expect(socket.sent[0]?.params.client).toEqual({
+      name: "office-linux",
+      version: "0.1.0",
+      platform: "darwin",
+      id: "envoydev-desktop-abc",
+    });
+    socket.reply(socket.idFor("coder.hello"), HERO);
+    await settle();
+    expect(connection.status.state).toBe("connected");
+  });
+
+  it("leaves the local loopback URL without a token query", () => {
+    const urls: string[] = [];
+    socket = new FakeSocket();
+    connection = new CoderConnection({
+      endpoint: { host: "127.0.0.1", port: 4770, path: "/ws" },
+      socketFactory: (url) => {
+        urls.push(url);
+        return socket as FakeSocket;
+      },
+      minDelayMs: 1,
+      maxDelayMs: 2,
+    });
+    connection.start();
+    expect(urls).toEqual(["ws://127.0.0.1:4770/ws"]);
+  });
 });
 
 /** Let the microtask queue drain: `hello` is awaited inside an event handler. */

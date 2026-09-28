@@ -166,7 +166,8 @@ describe("the pane's header", () => {
   it("teaches a new user what will happen, rather than showing a blank panel", () => {
     renderPane([]);
     const transcript = screen.getByTestId("transcript");
-    expect(within(transcript).getByText("Nothing yet")).toBeTruthy();
+    expect(within(transcript).getByTestId("task-empty-hero")).toBeTruthy();
+    expect(within(transcript).getByText("Start this task")).toBeTruthy();
     expect(within(transcript).getByText(/the agent works in/i)).toBeTruthy();
   });
 });
@@ -249,7 +250,7 @@ describe("the transcript", () => {
   });
 });
 
-describe("an approval, inline", () => {
+describe("an approval, composer takeover", () => {
   const approval = event({
     kind: "run.approval-requested",
     requestId: "req-1",
@@ -260,75 +261,97 @@ describe("an approval, inline", () => {
       { id: "reject-once", label: "Reject", destructive: true },
     ],
   });
+  const withApprovals = { harnesses: [harnessFor("deepseek-harness")] };
 
-  it("is a card in the transcript, with the agent's own options and no modal", () => {
-    renderPane([approval]);
+  it("owns the composer chrome with the agent's options — not a modal, not stacked on the field", () => {
+    renderPane([approval], withApprovals);
 
-    const card = screen.getByRole("alertdialog", { name: "The agent needs your answer" });
-    // In the transcript, next to the call that raised it — a modal would block the window and hide
-    // the context the user needs to decide (`docs/envoydev-ui.md` §6).
-    expect(within(screen.getByTestId("transcript")).getByRole("alertdialog")).toBeTruthy();
-    expect(within(card).getByText("Allow the agent to run “shell”?")).toBeTruthy();
-    // The labels are the agent's, not ones we invented: two surfaces wording one decision
-    // differently is how a user comes to trust neither.
-    expect(within(card).getByRole("button", { name: "Allow once" })).toBeTruthy();
-    expect(within(card).getByRole("button", { name: "Reject" })).toBeTruthy();
+    const takeover = screen.getByTestId("approval-takeover");
+    expect(takeover.getAttribute("role")).toBe("alertdialog");
+    expect(within(takeover).getByText("Allow the agent to run “shell”?")).toBeTruthy();
+    expect(within(takeover).getByRole("button", { name: "Allow once" })).toBeTruthy();
+    expect(within(takeover).getByRole("button", { name: "Reject" })).toBeTruthy();
+    // Transcript keeps a deferred marker — no second set of choices.
+    expect(within(screen.getByTestId("transcript")).queryByRole("button", { name: "Allow once" })).toBeNull();
+    expect(screen.getByText("Answer in the composer below")).toBeTruthy();
+    // Field and Send are replaced, not merely disabled on top of the takeover.
+    expect(screen.queryByLabelText("Message the agent")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
   });
 
   it("answers with the option the agent offered, by id", () => {
-    const pane = renderPane([approval]);
-    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Allow once" }));
-    // The id, not the label: the label is for the user, and the protocol speaks in ids.
+    const pane = renderPane([approval], withApprovals);
+    fireEvent.click(
+      within(screen.getByTestId("approval-takeover")).getByRole("button", { name: "Allow once" }),
+    );
     expect(pane.onAnswer).toHaveBeenCalledWith("req-1", "allow-once");
   });
 
   it("lets you tick several options and confirm them together", () => {
-    const pane = renderPane([
-      event({
-        kind: "run.approval-requested",
-        requestId: "req-2",
-        question: "Which files?",
-        selection: "many",
-        options: [
-          { id: "0", label: "App" },
-          { id: "1", label: "Tests" },
-        ],
-      }),
-    ]);
-    const card = screen.getByRole("alertdialog");
-    const confirm = within(card).getByRole("button", { name: "Confirm" }) as HTMLButtonElement;
+    const pane = renderPane(
+      [
+        event({
+          kind: "run.approval-requested",
+          requestId: "req-2",
+          question: "Which files?",
+          selection: "many",
+          options: [
+            { id: "0", label: "App" },
+            { id: "1", label: "Tests" },
+          ],
+        }),
+      ],
+      withApprovals,
+    );
+    const takeover = screen.getByTestId("approval-takeover");
+    const confirm = within(takeover).getByRole("button", { name: "Confirm" }) as HTMLButtonElement;
     expect(confirm.disabled).toBe(true);
-    fireEvent.click(within(card).getByRole("checkbox", { name: "App" }));
-    fireEvent.click(within(card).getByRole("checkbox", { name: "Tests" }));
+    fireEvent.click(within(takeover).getByRole("checkbox", { name: "App" }));
+    fireEvent.click(within(takeover).getByRole("checkbox", { name: "Tests" }));
     expect(confirm.disabled).toBe(false);
     fireEvent.click(confirm);
     expect(pane.onAnswer).toHaveBeenCalledWith("req-2", ["0", "1"]);
   });
 
   it("stops being a question once it is answered, and stays where it was", () => {
-    renderPane([
-      approval,
-      event({ kind: "run.approval-resolved", requestId: "req-1", optionId: "allow-once", by: "you" }),
-      event({ kind: "run.output", stream: "assistant", text: "done", messageId: "m1" }),
-    ]);
+    renderPane(
+      [
+        approval,
+        event({ kind: "run.approval-resolved", requestId: "req-1", optionId: "allow-once", by: "you" }),
+        event({ kind: "run.output", stream: "assistant", text: "done", messageId: "m1" }),
+      ],
+      withApprovals,
+    );
 
+    expect(screen.queryByTestId("approval-takeover")).toBeNull();
     expect(screen.queryByRole("alertdialog")).toBeNull();
-    // In place, showing what was chosen — an answered card that vanished would take the reader's
-    // place in a long transcript with it.
     expect(screen.getByText("Answered: Allow once")).toBeTruthy();
+    expect(screen.getByLabelText("Message the agent")).toBeTruthy();
   });
 
-  it("refuses to send a message while the agent is waiting on an answer", () => {
-    renderPane([approval]);
-    // Queueing behind a prompt strands the words, so the composer says so rather than accepting
-    // them and dropping them behind a decision that has not been made. The button exists because there is text in
-    // the field — that is the rule the icon follows (`resolvePrimaryActionKind`'s shape) — and it is disabled.
-    fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "and now the tests" } });
-    const send = screen.getByRole("button", { name: "Send" });
-    expect((send as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByLabelText("Message the agent").getAttribute("placeholder")).toMatch(
-      /Answer the request above/,
-    );
+  it("does not invent a takeover when the agent cannot do approvals", () => {
+    renderPane([approval], {
+      harnesses: [
+        harnessFor("deepseek-harness", {
+          capabilities: {
+            resume: true,
+            cancel: true,
+            approvals: false,
+            structuredTools: true,
+            streaming: true,
+            images: false,
+            agentMode: false,
+            model: false,
+            thinking: false,
+            approvalPolicy: false,
+          },
+        }),
+      ],
+    });
+    expect(screen.queryByTestId("approval-takeover")).toBeNull();
+    // Choices stay on the transcript card — the only honest surface without the capability.
+    const card = within(screen.getByTestId("transcript")).getByRole("alertdialog");
+    expect(within(card).getByRole("button", { name: "Allow once" })).toBeTruthy();
   });
 });
 

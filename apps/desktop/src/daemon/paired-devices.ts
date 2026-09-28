@@ -63,7 +63,16 @@ export interface PairedSession {
   caller: { kind: "owner-device"; deviceId: string; label: string };
 }
 
-/** How long a newly minted pairing stays valid unless revoked. */
+/**
+ * Written into `expiresAt` for schema/protocol compatibility.
+ *
+ * Pairings do **not** auto-expire. A token stays valid across restarts and days until the owner
+ * revokes it (or the thin client forgets its copy). The field remains because the RPC surface and
+ * on-disk records already carry it.
+ */
+export const PAIRING_NEVER_EXPIRES_AT = "9999-12-31T23:59:59.000Z";
+
+/** @deprecated Use {@link PAIRING_NEVER_EXPIRES_AT}; kept so older tests/imports resolve. */
 export const DEFAULT_PAIRING_TTL_MS = 1000 * 60 * 60 * 24 * 365;
 
 export interface PairedDeviceRecord {
@@ -139,11 +148,10 @@ function publicOf(record: PairedDeviceRecord): PairedDevicePublic {
   };
 }
 
-function isActive(record: PairedDeviceRecord, now: Date): boolean {
-  if (record.revokedAt) return false;
-  const expires = Date.parse(record.expiresAt);
-  if (Number.isNaN(expires)) return false;
-  return expires > now.getTime();
+function isActive(record: PairedDeviceRecord, _now?: Date): boolean {
+  // Only an explicit revoke ends access — not calendar time. Phones and paired homes must reconnect
+  // after reboot without minting again (docs/envoydev-paired-homes.md §2–3).
+  return record.revokedAt === undefined;
 }
 
 /**
@@ -280,12 +288,10 @@ export class PairedDeviceStore {
   list(): Promise<PairedDevicePublic[]> {
     return this.enqueue(async () => {
       await this.ensureLoaded();
-      // Opening *This machine* should not show a graveyard of codes minted every time Pairing opened
-      // and never scanned — keep at most one unused QR, drop the rest (and expired unused QR).
       // Two cleanups before the owner sees the list: unused QR codes (a graveyard of codes minted every time
-      // Pairing opened), and **rows that are the same device** — a phone paired repeatedly before this store
-      // recorded identities. The newest row is kept; the older ones are revoked, not deleted, so a phone still
-      // holding one of those tokens is refused rather than quietly working.
+      // Pairing opened — keep at most one), and **rows that are the same device** — a phone paired repeatedly
+      // before this store recorded identities. The newest row is kept; the older ones are revoked, not deleted,
+      // so a phone still holding one of those tokens is refused rather than quietly working.
       const prunedCodes = this.pruneUnusedQrCodes({ keepNewest: true });
       const collapsed = this.collapseSameDevice();
       // Reinstalling the phone mints a new install id, so same-id collapse never sees the old rows.
@@ -297,7 +303,7 @@ export class PairedDeviceStore {
   }
 
   mint(
-    input: { deviceLabel?: string; ttlMs?: number; token?: string; fresh?: boolean } = {},
+    input: { deviceLabel?: string; token?: string; fresh?: boolean } = {},
   ): Promise<{ record: PairedDeviceRecord; public: PairedDevicePublic }> {
     return this.enqueue(async () => {
       await this.ensureLoaded();
@@ -335,13 +341,12 @@ export class PairedDeviceStore {
         this.pruneUnusedQrCodes({ keepId: null });
         token = randomBytes(24).toString("base64url");
       }
-      const ttl = input.ttlMs ?? DEFAULT_PAIRING_TTL_MS;
       const record: PairedDeviceRecord = {
         id: `pad_${randomBytes(8).toString("hex")}`,
         token,
         deviceLabel: (input.deviceLabel?.trim() || "Phone").slice(0, 80),
         createdAt: now.toISOString(),
-        expiresAt: new Date(now.getTime() + ttl).toISOString(),
+        expiresAt: PAIRING_NEVER_EXPIRES_AT,
       };
       this.devices = [...this.devices, record];
       await this.persist();
@@ -469,7 +474,10 @@ export class PairedDeviceStore {
       if (key === undefined) continue;
       const keep = newestLive.get(key);
       if (keep === undefined || keep.id === device.id) continue;
-      if (device.revokedAt !== undefined && device.createdAt >= keep.createdAt) continue;
+      // Strict `>`: equal timestamps mean the live `keep` already won the collapse tie-break (later
+      // row in the store). Keeping `>=` left that revoked sibling in the list forever when two
+      // pairings landed in the same millisecond — common in tests and phone retries.
+      if (device.revokedAt !== undefined && device.createdAt > keep.createdAt) continue;
       drop.add(device.id);
     }
     if (drop.size === 0) return false;
@@ -531,8 +539,8 @@ export class PairedDeviceStore {
    * explicit. The store never prunes on its own for the same reason: an automatic delete would make the
    * evidence disappear without the owner deciding that it should.
    *
-   * Expiry needs no special case here: an expired but unrevoked record is still not `revokedAt` set, so
-   * it is refused on the same terms and can be revoked (or left to read as expired) first.
+   * Calendar `expiresAt` is not a standing of its own: an unrevoked record is refused here on the
+   * same terms until the owner revokes it first.
    */
   forget(id: string): Promise<ForgetPairedDeviceOutcome> {
     return this.enqueue(async () => {
@@ -547,7 +555,7 @@ export class PairedDeviceStore {
   }
 
   /**
-   * Resolve a bearer token into a host session, or `null` when it is unknown / expired / revoked.
+   * Resolve a bearer token into a host session, or `null` when it is unknown or revoked.
    *
    * Side effect: updates `lastSeenAt` for an active match (best-effort; failure does not refuse).
    */

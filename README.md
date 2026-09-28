@@ -32,6 +32,8 @@ EnvoyDev is built on **[EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh)**
 - **Cancel, queue, or steer.** Queue waits for the turn. Steer interrupts it. The transcript records which one happened.
 - **Git where the work is.** Branch, fetch, pull, stash, merge — and hand a conflicted merge to an agent when you want help resolving it.
 - **Keep the daemon reachable.** App-managed by default; optionally run it as an OS service so the phone can reach a machine with no window open.
+- **Pair once, stay paired.** Codes and links last until you revoke them under This machine (or Forget on the thin client) — no calendar expiry after a restart.
+- **Reach another home from this laptop.** Settings → **Paired homes** joins a server or office machine as a thin client — see [Paired homes](#paired-homes--another-machine-from-this-laptop) below.
 - **Team jobs across machines.** Host a team, invite another EnvoyDev, and run collaborative steps on the same Git project — see [Team jobs](#team-jobs--work-across-machines) below.
 - **Resume after a disconnect.** Your work is on your machine — pick it up where you left off.
 - **macOS, Windows, and Linux.** All three are first-class. Version `0.1.0` — Settings → About compares this window with the service.
@@ -40,6 +42,23 @@ EnvoyDev is built on **[EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh)**
   <img src="project.png" alt="EnvoyDev project view" width="800">
 </p>
 <p align="center"><em>The project view — one task, one transcript, every agent.</em></p>
+
+### Paired homes — another machine from this laptop
+
+A **paired home** is a different EnvoyDev (a server, an office desktop, a box at home) that this laptop reaches as a **thin client**. Agents and provider keys stay on that home; you start runs, watch them, and answer approvals from here. Everyday work on *this* machine is unchanged — Paired homes are for when the code and the daemon live elsewhere.
+
+#### How to join
+
+1. **Mint a code on the home** — Settings → **Pair devices**, or copy a pairing link. Pairings stay until you revoke them.
+2. **Or share from a phone already paired with that home** — on the phone, open the host → **Share connection**. It copies only the method that phone used (link, `host:port` + token, or SSH). Use this when you are away and cannot open Settings on the home to mint a new code.
+3. **On this laptop** — Settings → **Paired homes**. Name the home, then paste on the **Pairing link** tab (link or shared text), or fill **Host:port** / **SSH**. **Join**.
+4. **Switch homes** from the rail under Paired EnvoyDev. The window reconnects after restart until you **Forget** (credentials on this laptop only) or revoke on the home.
+
+**SSH note:** if the daemon address is loopback on the far side (`127.0.0.1:…`), EnvoyDev opens a local-forward through the SSH hop before connecting — it does not dial loopback on the laptop.
+
+Paired homes are a thin-client join. For collaborative steps on the same Git project across members, use [Team jobs](#team-jobs--work-across-machines).
+
+---
 
 ### Team jobs — work across machines
 
@@ -79,8 +98,9 @@ npx vitest run apps/desktop/test/m5-two-daemon.test.ts
 
 ### Phone (EnvoyDev Mobile)
 
-- **Pair with any desktop.** Scan a QR code, paste `host:port`, or use an SSH hop — your choice. Same protocol, same security.
+- **Pair with any desktop.** Scan a QR code, paste `host:port`, or use an SSH hop — your choice. Same protocol, same security. Pairings last until you Forget or revoke — no need to re-pair after a restart.
 - **Continue on the go.** The desktop runs the agent; the phone is a window into the same task. Browse projects, read the live transcript, answer approvals, queue a follow-up, or steer the run.
+- **Share a home with a laptop.** **Share connection** copies the method this phone used so a travel laptop can join under Settings → Paired homes without minting a new code on the home.
 - **Git from the phone.** Branch, stash, and resolve merge conflicts with the same daemon the desktop uses.
 - **Reach your own machines from anywhere.** Home network, office LAN, or a server on the other side of the world — if you can SSH to a host that can see the desktop, the phone can talk to it. No public IP required.
 - **Thin client by design.** Your model keys never leave the desktop. The phone never runs an agent.
@@ -125,9 +145,11 @@ The **EnvoyDev Mobile** app is the phone-side companion to your desktop. It pair
 
 ### Three ways to pair your phone
 
-- **📷 Scan a QR code** — the fastest path. Open the desktop (Settings → Mobile Pairing, or the rail), show the QR, point the phone. Done.
+- **📷 Scan a QR code** — the fastest path. Open the desktop (Settings → Pair devices, or the rail), show the QR, point the phone. Done.
 - **🔌 Paste `host:port`** — type something like `devbox.local:4770` and paste a token. Direct TCP for when you're on the same network or VPN.
 - **🔐 Use an SSH hop** — point the phone at any SSH-reachable box that can see the desktop. The tunnel terminates on the daemon's loopback, no public IP needed.
+
+Pairings stay until you Forget the host on the phone or revoke the device under Settings → This machine on the desktop.
 
 ### What you can do from the phone
 
@@ -135,6 +157,7 @@ The **EnvoyDev Mobile** app is the phone-side companion to your desktop. It pair
 - Read the live transcript
 - Answer approval cards
 - Watch a **Team job** and answer its approvals (create team / Start stay on the desktop)
+- **Share connection** so a laptop can join that home under Paired homes (only the method this phone used)
 - Queue a follow-up or steer the run
 - Stop a run
 - Branch, stash, and resolve git conflicts (with an agent when you want)
@@ -170,6 +193,8 @@ cd EnvoyCoder
 npm install
 npm run tauri:dev   # the desktop app (Tauri shell + daemon)
 ```
+
+macOS release DMG (`npm run tauri:build:mac` / `bash scripts/build-dmg.sh`): copy `scripts/sign-macos-release.env.example` → `scripts/sign-macos-release.env` and fill the four Apple Developer ID fields (same values as EnvoyMesh work). Without that file the DMG is unsigned; with it, nested resources and `EnvoyDev.app` are signed and Tauri notarizes when Apple accepts the ticket. Operator notes live in the EnvoyMesh sibling as `docs/macos-mirror-signing.md`.
 
 Useful gates from the repo root:
 

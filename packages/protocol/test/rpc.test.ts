@@ -89,6 +89,17 @@ describe("the method table", () => {
     expect(() => parseRpcParams("coder.listTasks", undefined)).not.toThrow();
     expect(() => parseRpcParams("coder.getSettings", undefined)).not.toThrow();
   });
+
+  it("accepts theme on coder.updateSettings — the Appearance picker patches it", () => {
+    // The stored document already had `theme`; the wire patch schema must list it too, or Light/Dark
+    // dies at parse with "Unrecognized key(s) in object: 'theme'" before the store runs.
+    expect(() =>
+      parseRpcParams("coder.updateSettings", { settings: { theme: "light" } }),
+    ).not.toThrow();
+    expect(
+      parseRpcParams("coder.updateSettings", { settings: { theme: "system" } }),
+    ).toEqual({ settings: { theme: "system" } });
+  });
 });
 
 describe("errors on the wire", () => {

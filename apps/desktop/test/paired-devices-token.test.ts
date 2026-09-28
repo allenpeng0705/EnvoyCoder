@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { coderPaths } from "@envoydev/host-bridge";
 
 import {
-  DEFAULT_PAIRING_TTL_MS,
+  PAIRING_NEVER_EXPIRES_AT,
   PairedDeviceStore,
   pairedDevicesFile,
 } from "../src/daemon/paired-devices.js";
@@ -30,16 +30,14 @@ describe("PairedDeviceStore.mint tokens", () => {
     const devices = await store();
     const { record } = await devices.mint({ deviceLabel: "Phone" });
     expect(record.token.length).toBeGreaterThan(16);
-    const ttl = Date.parse(record.expiresAt) - Date.parse(record.createdAt);
-    expect(ttl).toBe(DEFAULT_PAIRING_TTL_MS);
+    expect(record.expiresAt).toBe(PAIRING_NEVER_EXPIRES_AT);
   });
 
-  it("stores a user-chosen short token with the same long TTL as QR", async () => {
+  it("stores a user-chosen short token with the same no-auto-expiry sentinel as QR", async () => {
     const devices = await store();
     const { record } = await devices.mint({ token: "MyPhone99" });
     expect(record.token).toBe("MyPhone99");
-    const ttl = Date.parse(record.expiresAt) - Date.parse(record.createdAt);
-    expect(ttl).toBe(DEFAULT_PAIRING_TTL_MS);
+    expect(record.expiresAt).toBe(PAIRING_NEVER_EXPIRES_AT);
   });
 
   it("refuses a duplicate active user token", async () => {

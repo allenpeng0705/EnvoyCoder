@@ -141,6 +141,21 @@ class AppLocalizationsKo extends AppLocalizations {
   String get connectionsMenuForget => '호스트 잊기';
 
   @override
+  String get connectionsShareLink => '페어링 링크 공유';
+
+  @override
+  String get connectionsShareDirect => '호스트:포트 + 토큰 공유';
+
+  @override
+  String get connectionsShareSsh => 'SSH 연결 공유';
+
+  @override
+  String get connectionsShareSubtitle => '홈에서 새 코드를 만들 수 없는 노트북용';
+
+  @override
+  String get connectionsShareCopied => '연결 정보를 복사했습니다 — 노트북의 페어링된 홈에 붙여넣으세요';
+
+  @override
   String get hostScanQr => 'QR 스캔';
 
   @override
@@ -1280,7 +1295,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String teamJobCreateBlurb(String project) {
-    return project + '에서 함께 작업합니다.';
+    return '$project에서 함께 작업합니다.';
   }
 
   @override
@@ -1303,7 +1318,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String teamJobCrewAllOffline(String machines) {
-    return machines + '이(가) 온라인될 때까지 기다리는 중.';
+    return '$machines이(가) 온라인될 때까지 기다리는 중.';
   }
 
   @override
@@ -1314,12 +1329,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String jobPaneCrewAllOffline(String machines) {
-    return '온라인 기기가 없습니다. 대기 중: ' + machines + '.';
+    return '온라인 기기가 없습니다. 대기 중: $machines.';
   }
 
   @override
   String jobPaneCrewMissingRoles(String roles) {
-    return '온라인 기기가 제공하지 않음: ' + roles + '. 팀에서 역할을 고치거나 맞는 피어를 기다리세요.';
+    return '온라인 기기가 제공하지 않음: $roles. 팀에서 역할을 고치거나 맞는 피어를 기다리세요.';
   }
 
   @override
@@ -1335,7 +1350,8 @@ class AppLocalizationsKo extends AppLocalizations {
   String get teamJobGitPathMissing => '프로젝트 폴더가 없습니다.';
 
   @override
-  String get teamJobGitNotARepo => '이 프로젝트는 Git 저장소가 아닙니다. 팀 작업은 파일 공유에 Git이 필요합니다.';
+  String get teamJobGitNotARepo =>
+      '이 프로젝트는 Git 저장소가 아닙니다. 팀 작업은 파일 공유에 Git이 필요합니다.';
 
   @override
   String get teamJobGitNoRemote => '팀 작업을 시작하기 전에 Git 원격(예: origin)을 추가하세요.';

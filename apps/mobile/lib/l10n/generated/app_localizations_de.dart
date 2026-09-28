@@ -143,6 +143,23 @@ class AppLocalizationsDe extends AppLocalizations {
   String get connectionsMenuForget => 'Host vergessen';
 
   @override
+  String get connectionsShareLink => 'Kopplungslink teilen';
+
+  @override
+  String get connectionsShareDirect => 'Host:Port + Token teilen';
+
+  @override
+  String get connectionsShareSsh => 'SSH-Verbindung teilen';
+
+  @override
+  String get connectionsShareSubtitle =>
+      'Für einen Laptop, der zu Hause keinen neuen Code erzeugen kann';
+
+  @override
+  String get connectionsShareCopied =>
+      'Verbindung kopiert — unter Gekoppelte Homes auf dem Laptop einfügen';
+
+  @override
   String get hostScanQr => 'QR scannen';
 
   @override
@@ -1332,7 +1349,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String teamJobCreateBlurb(String project) {
-    return 'Gemeinsam an ' + project + ' arbeiten.';
+    return 'Gemeinsam an $project arbeiten.';
   }
 
   @override
@@ -1348,30 +1365,34 @@ class AppLocalizationsDe extends AppLocalizations {
   String get teamJobCreateSubmit => 'Entwurf erstellen';
 
   @override
-  String get teamJobCreateDraftHint => 'Später starten, wenn die Crew online ist.';
+  String get teamJobCreateDraftHint =>
+      'Später starten, wenn die Crew online ist.';
 
   @override
-  String get teamJobCrewNoJoiners => 'Eine andere Maschine einladen. Entwurf geht trotzdem.';
+  String get teamJobCrewNoJoiners =>
+      'Eine andere Maschine einladen. Entwurf geht trotzdem.';
 
   @override
   String teamJobCrewAllOffline(String machines) {
-    return 'Warte, bis ' + machines + ' online kommt.';
+    return 'Warte, bis $machines online kommt.';
   }
 
   @override
-  String get jobPaneCrewNoSteps => 'Vor dem Start Schritte hinzufügen (Schrittvorlage nutzen).';
+  String get jobPaneCrewNoSteps =>
+      'Vor dem Start Schritte hinzufügen (Schrittvorlage nutzen).';
 
   @override
-  String get jobPaneCrewNoMembers => 'Dieses Team hat noch keine Geräte. Lade jemanden unter Teams ein.';
+  String get jobPaneCrewNoMembers =>
+      'Dieses Team hat noch keine Geräte. Lade jemanden unter Teams ein.';
 
   @override
   String jobPaneCrewAllOffline(String machines) {
-    return 'Keine Geräte online. Warte auf: ' + machines + '.';
+    return 'Keine Geräte online. Warte auf: $machines.';
   }
 
   @override
   String jobPaneCrewMissingRoles(String roles) {
-    return 'Kein online Gerät bietet: ' + roles + '. Rollen unter Teams korrigieren oder auf den richtigen Peer warten.';
+    return 'Kein online Gerät bietet: $roles. Rollen unter Teams korrigieren oder auf den richtigen Peer warten.';
   }
 
   @override
@@ -1387,10 +1408,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get teamJobGitPathMissing => 'Projektordner fehlt.';
 
   @override
-  String get teamJobGitNotARepo => 'Dieses Projekt ist kein Git-Repository. Team-Jobs brauchen Git zum Teilen von Dateien.';
+  String get teamJobGitNotARepo =>
+      'Dieses Projekt ist kein Git-Repository. Team-Jobs brauchen Git zum Teilen von Dateien.';
 
   @override
-  String get teamJobGitNoRemote => 'Vor dem Start eines Team-Jobs ein Git-Remote hinzufügen (z. B. origin).';
+  String get teamJobGitNoRemote =>
+      'Vor dem Start eines Team-Jobs ein Git-Remote hinzufügen (z. B. origin).';
 
   @override
   String get teamJobGitMissing => 'Git ist auf diesem Gerät nicht verfügbar.';
@@ -1399,22 +1422,27 @@ class AppLocalizationsDe extends AppLocalizations {
   String get teamJobGitChecking => 'Git wird geprüft…';
 
   @override
-  String get errorJobNotDrafting => 'Nur ein Job im Entwurf kann gestartet werden.';
+  String get errorJobNotDrafting =>
+      'Nur ein Job im Entwurf kann gestartet werden.';
 
   @override
-  String get errorOriginClientOnly => 'Das braucht EnvoyDev auf dieser Maschine oder ein damit gekoppeltes Telefon.';
+  String get errorOriginClientOnly =>
+      'Das braucht EnvoyDev auf dieser Maschine oder ein damit gekoppeltes Telefon.';
 
   @override
   String get projectListTeamJob => 'Team-Job';
 
   @override
-  String get teamJobCrewNoTeamDesktop => 'Erstelle ein Team in EnvoyDev auf dem Desktop, dann zum Aktualisieren ziehen.';
+  String get teamJobCrewNoTeamDesktop =>
+      'Erstelle ein Team in EnvoyDev auf dem Desktop, dann zum Aktualisieren ziehen.';
 
   @override
-  String get teamJobNeedsDesktopHint => 'Entfernen, Token rotieren und neu zuweisen bleiben in der Desktop-Job-Ansicht.';
+  String get teamJobNeedsDesktopHint =>
+      'Entfernen, Token rotieren und neu zuweisen bleiben in der Desktop-Job-Ansicht.';
 
   @override
-  String get teamJobReadyToStart => 'Besetzung und Git sind bereit — Start ist möglich.';
+  String get teamJobReadyToStart =>
+      'Besetzung und Git sind bereit — Start ist möglich.';
 
   @override
   String get teamJobWatchTitle => 'Team-Job';

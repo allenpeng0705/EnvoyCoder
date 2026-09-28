@@ -97,7 +97,7 @@ export type NotReadyReason = "connector" | "absent" | "env" | "our-gap" | "unloo
  * removed rather than recoloured.
  */
 export const VERDICT_CHIP = {
-  ready: { key: "settings.agent.verdict.ready", className: "chip--live" },
+  ready: { key: "settings.agent.verdict.ready", className: "chip--ok" },
   "not-ready": { key: "settings.agent.verdict.notReady", className: "chip--danger" },
 } as const satisfies Record<Verdict, { key: MessageKey; className: string }>;
 

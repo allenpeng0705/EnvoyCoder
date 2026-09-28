@@ -1,44 +1,55 @@
 /**
  * The window's data, as React sees it.
  *
- * One hook over one store (`coderStore.ts`), which is why the components stayed the same shape while
- * the data source changed from `data/sample.ts` to a running daemon: they were always given plain
- * arrays, and where those arrays come from was always somebody else's problem.
- *
- * `useSyncExternalStore` is React's own primitive for exactly this — an external store with a
- * `subscribe` and a snapshot — so there is no state library here and no effect that copies the store
- * into component state (which is how two copies of one list start to disagree).
- *
- * ## `start()` happens once per window, and its failure is visible
- *
- * A window that cannot reach its daemon must **say so**, not render an empty rail: "no projects yet"
- * and "I could not ask" are different sentences, and showing the first for the second is how a user
- * concludes the app lost their work. So the connection state is part of the state the UI renders,
- * and the components branch on it.
+ * Local daemon work goes through the active home when focus is **This machine**; paired homes each
+ * have their own `CoderStore` behind `HomeRegistry` (`docs/envoydev-paired-homes.md`).
  */
 
 import { useEffect, useSyncExternalStore } from "react";
 
+import { getHomeRegistry, type HomeRegistry } from "./home-registry.js";
+import { PairedHomeStore } from "./paired-homes.js";
+import { defaultPairedHomesStorage } from "./paired-homes-storage.js";
 import { getCoderStore, type CoderState, type CoderStore } from "./coderStore.js";
 
 export type { CoderState, MeshStatus } from "./coderStore.js";
 
-/** The whole state. Consumers re-render on any change — fine at this size, see the store's doc. */
-export function useCoderState(): CoderState {
-  const store = getCoderStore();
-  const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
-
-  useEffect(() => {
-    void store.start();
-    // Deliberately no `dispose()` on unmount: this store is a per-window singleton, and a React
-    // strict-mode double-mount would otherwise close the socket it had just opened. The window's
-    // lifetime is the store's lifetime.
-  }, [store]);
-
-  return state;
+function ensureRegistry(): HomeRegistry {
+  try {
+    return getHomeRegistry();
+  } catch {
+    return getHomeRegistry(new PairedHomeStore(defaultPairedHomesStorage()));
+  }
 }
 
-/** The store itself, for components that need to call actions rather than read state. */
+/** Active home's state — what the work surface (task pane, composer) binds to. */
+export function useCoderState(): CoderState {
+  const registry = ensureRegistry();
+  useEffect(() => {
+    void registry.start();
+  }, [registry]);
+  const tree = useSyncExternalStore(registry.subscribe, registry.getSnapshot, registry.getSnapshot);
+  if (tree.activeHomeId === "local") return tree.local;
+  const remote = tree.homes.find((h) => h.record.id === tree.activeHomeId);
+  return remote?.state ?? tree.local;
+}
+
+/** Active home's store — createTask / startRun / approvals for the focused home. */
 export function useCoderActions(): CoderStore {
+  const registry = ensureRegistry();
+  useSyncExternalStore(registry.subscribe, registry.getSnapshot, registry.getSnapshot);
+  return registry.activeStore();
+}
+
+/** Always the laptop daemon — Settings mint/pairing, local Agents/LLM. */
+export function useLocalCoderActions(): CoderStore {
+  ensureRegistry();
   return getCoderStore();
+}
+
+/** Rail + home switcher. */
+export function useHomeRegistry(): HomeRegistry {
+  const registry = ensureRegistry();
+  useSyncExternalStore(registry.subscribe, registry.getSnapshot, registry.getSnapshot);
+  return registry;
 }

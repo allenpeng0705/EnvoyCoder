@@ -225,11 +225,9 @@ const fixReport: Report = enabled
 /**
  * The same page in the **light** palette — the one nobody had measured.
  *
- * `styles.css` owns a second set of colour names (`--bg`, `--text*`, `--ok/--warn/--danger/--live`) beside the token
- * sheet's families, and it defined them once, dark. So the light theme was half-applied: surfaces turned white while
- * the text over them kept dark-mode greys, and the elements drawn with `--foreground` on a `--bg` background landed
- * near 1:1. This measurement is what turned that from a sentence in a doc into a number, and the leg below is what
- * keeps it fixed.
+ * Legacy aliases (`--bg`, `--text*`, chip `--ok/--warn/--danger/--live`) now resolve to the token sheet
+ * (`docs/envoydev-visual-system.md`). Light theme used to half-apply: surfaces went white while text kept
+ * dark-mode greys. This measurement is what keeps that regression from returning.
  */
 const lightReport: Report = enabled ? await measure(["--theme", "light"]) : (undefined as unknown as Report);
 

@@ -5,6 +5,17 @@
 /// not be presented to another.
 library;
 
+/// How this phone joined the home — the only shape it may share with another EnvoyDev.
+///
+/// A laptop away from the home cannot mint a fresh QR; it needs whatever this phone already holds.
+/// Sharing invents nothing: link → rebuild the pairing URI; direct → host:port + token; ssh → hop
+/// fields. Never offer a method this install did not use.
+enum HostJoinMethod {
+  link,
+  direct,
+  ssh,
+}
+
 class CoderHost {
   const CoderHost({
     required this.id,
@@ -22,6 +33,7 @@ class CoderHost {
     this.relayWsUrls,
     this.bootstrapPeers,
     this.lastSeenAt,
+    this.joinMethod,
   });
 
   /// Stable id for the host list: owner + endpoint, so re-pairing updates rather than duplicates.
@@ -61,6 +73,13 @@ class CoderHost {
   final List<String>? bootstrapPeers;
   final DateTime? lastSeenAt;
 
+  /// How this phone paired — drives Share. Null on hosts saved before this field existed; [inferredJoinMethod]
+  /// recovers a best effort from id / ssh.
+  final HostJoinMethod? joinMethod;
+
+  /// Effective join method for share / UI (persisted value, or inferred for older rows).
+  HostJoinMethod get effectiveJoinMethod => joinMethod ?? inferredJoinMethod(this);
+
   Uri get wsUri => Uri.parse(
         '${secure ? 'wss' : 'ws'}://$endpoint/ws?token=${Uri.encodeComponent(token)}',
       );
@@ -83,6 +102,7 @@ class CoderHost {
     List<String>? bootstrapPeers,
     DateTime? lastSeenAt,
     String? token,
+    HostJoinMethod? joinMethod,
   }) =>
       CoderHost(
         id: id,
@@ -100,7 +120,15 @@ class CoderHost {
         relayWsUrls: relayWsUrls ?? this.relayWsUrls,
         bootstrapPeers: bootstrapPeers ?? this.bootstrapPeers,
         lastSeenAt: lastSeenAt ?? this.lastSeenAt,
+        joinMethod: joinMethod ?? this.joinMethod,
       );
+}
+
+/// Best-effort join method for rows saved before [CoderHost.joinMethod] was persisted.
+HostJoinMethod inferredJoinMethod(CoderHost host) {
+  if (host.ssh != null) return HostJoinMethod.ssh;
+  if (host.id.startsWith('tcp::')) return HostJoinMethod.direct;
+  return HostJoinMethod.link;
 }
 
 /// An SSH hop to a machine that is not directly reachable.

@@ -53,9 +53,10 @@ export const de: Catalogue = {
   "layout.resize.rail": "Projektliste verbreitern oder verschmälern",
   "layout.resize.settingsNav": "Einstellungsbereiche verbreitern oder verschmälern",
   "layout.resize.explorer": "Dateiexplorer verbreitern oder verschmälern",
-  "sidebar.add": "+ Projekt hinzufügen",
+  "sidebar.add": "+ Projekt",
   "sidebar.add.title": "Ein Verzeichnis als Projekt registrieren",
-  "sidebar.command.title": "Command Center öffnen",
+  "sidebar.theme.toLight": "Zum hellen Design wechseln",
+  "sidebar.theme.toDark": "Zum dunklen Design wechseln",
   "sidebar.search.placeholder": "Aufgaben, Repos, Pfade durchsuchen",
   "sidebar.search.aria": "Aufgaben, Repositories und Pfade durchsuchen",
   "sidebar.view.groupBy": "Nach Projekt gruppieren",
@@ -70,6 +71,47 @@ export const de: Catalogue = {
   "sidebar.empty.cannotLoadTitle": "Deine Projekte konnten nicht gelesen werden",
   "sidebar.empty.cannotLoadBody": "Diese Liste ist unbekannt, nicht leer — EnvoyDev konnte den Daemon nicht danach fragen.",
   "sidebar.section.tasks": "Aufgaben",
+  "sidebar.section.thisMachine": "Dieser Computer",
+  "sidebar.section.pairedHomes": "Gekoppelte EnvoyDev",
+  "homes.add": "+ Home",
+  "homes.add.title": "Mit einem anderen EnvoyDev koppeln",
+  "homes.empty": "Noch keine gekoppelten Homes. Unter Einstellungen → Gekoppelte Homes hinzufügen.",
+  "homes.workingOn": "Arbeitet auf {label}",
+  "homes.online": "Online",
+  "homes.offline": "Offline",
+  "homes.forget": "Vergessen",
+  "homes.rename": "Name für dieses Home",
+  "homes.label.placeholder": "office-linux",
+  "homes.pasteUri": "Kopplungslink oder geteilte Verbindung",
+  "homes.pasteUri.placeholder": "envoy://pair?… — oder „Verbindung teilen“ vom gekoppelten Telefon",
+  "homes.pasteUri.detail":
+    "Füge einen envoy://pair-Link vom Home ein, oder den Text, den ein gekoppeltes Telefon unter Verbindung teilen kopiert hat (Link, Host:Port + Token oder SSH). Dann Beitreten.",
+  "homes.method.aria": "Wie du diesem Home beitrittst",
+  "homes.method.link": "Kopplungslink",
+  "homes.method.direct": "Host:Port",
+  "homes.method.ssh": "SSH",
+  "homes.direct.endpoint": "Home-Adresse",
+  "homes.direct.endpoint.detail": "host:port des EnvoyDev-Dienstes (wie Direktes TCP am Telefon).",
+  "homes.direct.token": "Kopplungstoken",
+  "homes.direct.token.placeholder": "Token vom Home oder Telefon",
+  "homes.direct.token.detail":
+    "Das Geheimnis aus einem Kopplungscode, oder das Token, das ein gekoppeltes Telefon für dieses Home teilt.",
+  "homes.ssh.host": "SSH-Host",
+  "homes.ssh.user": "SSH-Benutzer (optional)",
+  "homes.ssh.port": "SSH-Port",
+  "homes.ssh.daemon": "Dienst auf der Gegenseite",
+  "homes.ssh.daemon.detail": "host:port hinter dem Hop — oft 127.0.0.1:4770.",
+  "homes.ssh.token.detail":
+    "Erforderlich zur Anmeldung. Ist der Dienst 127.0.0.1 auf der Gegenseite, öffnet die App zuerst einen SSH-Tunnel.",
+  "homes.join": "Home beitreten",
+  "homes.joining": "Beitreten…",
+  "homes.joined": "{label} beigetreten.",
+  "homes.panel.title": "Gekoppelte Homes auf diesem Laptop",
+  "homes.panel.detail":
+    "Erreiche ein anderes EnvoyDev (Server oder Bürorechner) als Thin Client. Agenten und Schlüssel bleiben auf dem Home. Ein bereits gekoppeltes Telefon kann seine Verbindungsdaten teilen, wenn du keinen neuen Code am Home erzeugen kannst.",
+  "homes.sshHop": "SSH-Hop (optional)",
+  "homes.sshHop.detail":
+    "user@host:port, wenn dieser Laptop das Home nicht im LAN erreicht. Bei SSH-Beitritt mit Loopback-Dienst öffnet EnvoyDev zuerst einen Local-Forward über diesen Hop.",
   "sidebar.project.attention": "Aufgaben, die auf dich warten",
   "sidebar.project.agent": "Der Agent, mit dem neue Aufgaben in diesem Projekt starten",
   "project.agent.picker.aria": "Coding-Agent für dieses Projekt: {agent}. Ändern",
@@ -161,9 +203,16 @@ export const de: Catalogue = {
   "task.diagram.blocked": "Dieses Diagramm wurde nicht gezeichnet — die Quelle sah unsicher aus.",
   "task.diagram.failed": "Dieses Diagramm konnte nicht gezeichnet werden. Stattdessen wird die Quelle gezeigt.",
   "task.approval.aria": "Der Agent braucht deine Antwort",
+  "task.approval.takeover.aria": "Der Agent braucht deine Antwort",
+  "task.approval.pendingInComposer": "Antworte unten im Eingabefeld",
   "task.approval.answered": "Beantwortet",
   "task.approval.answeredWith": "Beantwortet: {option}",
   "task.approval.confirm": "Bestätigen",
+  "task.composer.queueStatus": "Wird gesendet, wenn dieser Zug endet",
+  "task.tool.bucket.read": "Lesen",
+  "task.tool.bucket.edit": "Bearbeiten",
+  "task.tool.bucket.shell": "Shell",
+  "task.tool.bucket.other": "Werkzeug",
   "task.composer.aria": "Dem Agenten schreiben",
   "task.composer.commands": "Befehle",
   "task.remove": "Aufgabe entfernen",
@@ -384,8 +433,45 @@ export const de: Catalogue = {
   "settings.section.shortcuts.detail": "Jede Taste, auf die dieses Fenster hört — gelesen aus derselben Tabelle, die die Tastaturschicht liest.",
   "settings.section.machine.title": "Dieser Computer",
   "settings.section.machine.detail": "Der Dienst, mit dem dieses Fenster verbunden ist, und womit er gestartet wurde.",
-  "settings.section.pairing.title": "Mobile Kopplung",
-  "settings.section.pairing.detail": "Ein Telefon zu diesem Rechner lassen: Code scannen, Adresse eintippen oder über SSH gehen.",
+  "settings.section.pairing.title": "Geräte koppeln",
+  "settings.section.pairing.detail": "Ein Telefon oder ein anderes EnvoyDev an diesen Daemon anbinden.",
+  "settings.section.homes.title": "Gekoppelte Homes",
+  "settings.section.homes.detail": "Von diesem Laptop als Thin Client einem anderen EnvoyDev beitreten.",
+  "settings.info.howHeading": "So nutzt du es",
+  "settings.section.agents.info.what":
+    "Diese Seite listet jeden Coding-Agenten, den EnvoyDev auf diesem Rechner steuern kann: die mitgelieferten, die du hinzugefügt hast und Katalogrezepte, die du übernehmen kannst. Jede Zeile zeigt Bereit oder Nicht bereit anhand der Messung des Dienstes — nicht als Vermutung.",
+  "settings.section.agents.info.how.1":
+    "Scanne die Agentenliste. Öffne Details einer Zeile für Fähigkeiten, Modi und Modelle.",
+  "settings.section.agents.info.how.2":
+    "Wenn ein Agent Anmeldung oder Installation braucht, nutze die Aktion in dieser Zeile.",
+  "settings.section.agents.info.how.3":
+    "Durchsuche den Katalog nach weiteren CLIs. Mit Hinzufügen kommt ein Rezept in die Agentenliste, damit Aufgaben es nutzen können.",
+  "settings.section.agents.info.how.4":
+    "Neue Aufgaben wählen aus verfügbaren Agenten. Unter Neue Aufgaben kannst du einen Standard festlegen.",
+  "settings.section.llm.info.what":
+    "Diese Felder konfigurieren Envoy Harness — die eingebaute Agentenlaufzeit. Basis-URL, Modell und API-Schlüssel bleiben auf diesem Rechner; das Fenster lädt den Schlüssel nach dem Speichern nicht erneut.",
+  "settings.section.llm.info.how.1":
+    "Setze die Basis-URL, die dein Anbieter erwartet (oder behalte die Voreinstellung).",
+  "settings.section.llm.info.how.2":
+    "Gib die Modell-ID ein. Nutze Anbieter/Modell, wenn es allein nicht OpenAI-kompatibel ist.",
+  "settings.section.llm.info.how.3":
+    "Füge einen API-Schlüssel ein, um ihn zu speichern, oder lösche den Schlüssel bei Bedarf. Speichern nicht vergessen.",
+  "settings.section.pairing.info.what":
+    "Kopplung lässt die EnvoyDev-Telefon-App den Dienst dieses Rechners erreichen. Das Telefon führt keine Agenten aus und speichert keine Anbieter-Schlüssel — es startet Läufe, beobachtet sie und beantwortet Freigaben.",
+  "settings.section.pairing.info.how.1":
+    "Bevorzuge Code scannen: zeige den QR-Code auf dieser Seite und scanne ihn in der Telefon-App.",
+  "settings.section.pairing.info.how.2":
+    "Oder tippe host:port und ein kurzes Token im Formular Host hinzufügen auf dem Telefon ein.",
+  "settings.section.pairing.info.how.3":
+    "Nutze SSH, wenn das andere Gerät den Rechner im LAN nicht erreicht. Kopplungen bleiben, bis du sie unter Dieser Rechner widerrufst — nach einem Neustart nicht erneut koppeln.",
+  "settings.section.homes.info.what":
+    "Gekoppelte Homes sind andere EnvoyDev-Maschinen, die dieser Laptop als Thin Client erreicht. Agenten und Schlüssel bleiben auf dem Home. Zugangsdaten bleiben, bis du das Home vergisst.",
+  "settings.section.homes.info.how.1":
+    "Auf der anderen Maschine: Einstellungen → Geräte koppeln und Code erzeugen — oder auf einem schon gekoppelten Telefon Verbindung teilen (nur die Methode, die das Telefon genutzt hat).",
+  "settings.section.homes.info.how.2":
+    "Unter Gekoppelte Homes den Link oder geteilten Text im Reiter Kopplungslink einfügen (oder Host:Port / SSH tippen). Benennen, dann Beitreten. Erscheint unter Paired EnvoyDev und verbindet nach Neustart neu, bis du vergisst oder widerrufst.",
+  "settings.section.homes.info.how.3":
+    "Vergessen entfernt nur die Zugangsdaten auf diesem Laptop. Widerrufen auf dem Home schneidet den Zugang ab.",
   "settings.section.service.title": "Hintergrunddienst",
   "settings.section.service.detail": "Hält den Dienst im Dienstmanager dieses Systems am Laufen, damit ein gekoppeltes Telefon ihn auch bei geschlossenem Fenster erreicht.",
   "settings.section.about.title": "Über",
@@ -637,7 +723,7 @@ export const de: Catalogue = {
   "settings.machine.windows.detail": "Wie viele Fenster verbunden waren, als dieses Fenster sich verbunden hat — dieses eingeschlossen.",
   "settings.machine.windows.one": "1 Fenster",
   "settings.machine.windows.many": "{count} Fenster",
-  "settings.pairing.note": "Kopplung lässt ein Telefon diesen Rechner erreichen. Der Code trägt die Adresse und ein Token — zeig ihn nur, solange das Telefon scannt.",
+  "settings.pairing.note": "Kopplung lässt ein Telefon oder ein anderes EnvoyDev diesen Rechner erreichen. Der Code trägt Adresse und Token — zeig ihn nur, solange das andere Gerät scannt oder beitritt.",
   "settings.pairing.manage": "Ausgegebene Codes stehen unter „Dieser Computer“, wo du sie widerrufen kannst.",
   "settings.pairing.qr.title": "QR-Code scannen",
   "settings.pairing.qr.primary": "Empfohlen",
@@ -699,7 +785,7 @@ export const de: Catalogue = {
   "settings.machine.paired.active.one": "1 aktives Gerät",
   "settings.machine.paired.active.many": "{count} aktive Geräte",
   "settings.machine.paired.state.active": "Aktiv · zuletzt verwendet {when}",
-  "settings.machine.paired.state.unused": "Noch nicht verwendet · läuft ab {when}",
+  "settings.machine.paired.state.unused": "Noch nicht verwendet · erstellt {when}",
   "settings.machine.paired.state.revoked": "Widerrufen · {when}",
   "settings.machine.paired.state.expired": "Abgelaufen · {when}",
   "settings.machine.paired.revoke": "Widerrufen",

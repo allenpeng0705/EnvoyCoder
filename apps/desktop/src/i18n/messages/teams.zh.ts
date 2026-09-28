@@ -14,6 +14,12 @@ export const teams = {
   "sidebar.project.menu.teamJob": "团队任务",
   "settings.section.teams.title": "团队",
   "settings.section.teams.detail": "创建团队、共享一个令牌，并在多台机器上运行协作任务。",
+  "settings.section.teams.info.what":
+    "团队用一份邀请把多台 EnvoyDev 机器连在一起。团队任务把工作拆成带角色的步骤（例如规划、实现、评审），并在这些机器上协作完成。",
+  "settings.section.teams.info.how.1": "在一台机器上创建团队（主持方），或粘贴另一台机器的邀请加入。",
+  "settings.section.teams.info.how.2": "复制一次邀请并分享。加入的每个人都必须粘贴同一份邀请。",
+  "settings.section.teams.info.how.3": "设置本机提供的角色。主持方可以为成员分配或覆盖角色。",
+  "settings.section.teams.info.how.4": "从项目开始团队任务（需带远程的 Git）。可从此页或项目栏打开任务。",
   "settings.teams.label": "团队名称",
   "settings.teams.memberLabel": "本机名称",
   "settings.teams.joinOk": "已加入 {label}。",

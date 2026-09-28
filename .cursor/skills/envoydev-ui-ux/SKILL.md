@@ -10,8 +10,9 @@ description: >-
 # EnvoyDev desktop UI/UX
 
 Judgment that lint and typecheck cannot make. Design authority:
-[`docs/envoydev-ui.md`](../../../docs/envoydev-ui.md) and
-[`docs/envoydev-ui-polish.md`](../../../docs/envoydev-ui-polish.md). Tokens:
+[`docs/envoydev-ui.md`](../../../docs/envoydev-ui.md),
+[`docs/envoydev-ui-polish.md`](../../../docs/envoydev-ui-polish.md), and
+[`docs/envoydev-visual-system.md`](../../../docs/envoydev-visual-system.md). Tokens:
 [`docs/design-tokens.md`](../../../docs/design-tokens.md) /
 `apps/desktop/src/design/tokens.css`.
 
@@ -20,8 +21,12 @@ Borrow judgment, not their stack or brand.
 
 ## Visual foundation
 
+- Follow **`envoydev-visual-system.md`**: one token vocabulary, three control heights, one button
+  family, two select skins, one focus ring, one selection grammar, intentional region planes.
 - **Use existing EnvoyDev tokens** for colour, radius, spacing, and type. Before a literal,
-  find the nearest sibling page and reuse its token.
+  find the nearest sibling page and reuse its token. No new hex in feature CSS.
+- Quiet icon controls are `.button.button--ghost.button--icon` — never a parallel `.icon-button`.
+- Form closed selects use `.select`; toolbar chips use `.composer__chip-field`; ban unclassed `<select>`.
 - **Verify light and dark** for every ink/background pair you touch.
 - **Font sizes from the sheet** (`--font-size-*`). Parallel content shares one size; keep the
   number of sizes on a page small. Settings row titles may use content + semibold (600) as

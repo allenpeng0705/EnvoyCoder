@@ -7,4 +7,11 @@
 [[permission]]
 identifier = "allow-daemon-shell"
 description = "Ask the shell where the coding daemon is, and read shell diagnostics paths."
-commands.allow = ["daemon_endpoint", "daemon_status", "coder_paths"]
+commands.allow = [
+  "daemon_endpoint",
+  "daemon_status",
+  "coder_paths",
+  "paired_homes_read",
+  "paired_homes_write",
+  "paired_home_ssh_forward",
+]

@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
@@ -14,6 +16,14 @@ import react from "@vitejs/plugin-react";
  */
 const { version } = JSON.parse(readFileSync(new URL("package.json", import.meta.url), "utf8"));
 
+const desktopRoot = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(desktopRoot, "../..");
+/** Sibling EnvoyMesh — pairing-token only (never the reuse-host / harness barrel). */
+const meshPairingToken = path.resolve(
+  repoRoot,
+  "../EnvoyMesh/packages/api/dist/pairing-token.js",
+);
+
 /**
  * The desktop UI is a plain Vite app, served from disk by the Tauri shell and by `vite dev` in a
  * browser during development. `strictPort` matters for the shell: the supervisor is told where the
@@ -25,6 +35,15 @@ export default defineConfig({
   plugins: [react()],
   define: { __ENVOYDEV_VERSION__: JSON.stringify(version) },
   clearScreen: false,
+  resolve: {
+    alias: {
+      /**
+       * Compressed `pairing=` decode without importing `@envoydev/host-bridge` / `@envoymesh/reuse-host`,
+       * which pull native `.node` addons into Vite and blank the window.
+       */
+      "@envoydev/window-pairing-token": meshPairingToken,
+    },
+  },
   server: {
     /**
      * **6173, not 5173.** 5173 is Vite's default and therefore already spoken for on a machine that
@@ -39,6 +58,14 @@ export default defineConfig({
     port: 6173,
     strictPort: true,
     host: "127.0.0.1",
+    fs: {
+      // pairing-token lives in the sibling EnvoyMesh checkout.
+      allow: [repoRoot, path.dirname(meshPairingToken)],
+    },
+  },
+  optimizeDeps: {
+    // Never prebundle the daemon/mesh barrels into the window.
+    exclude: ["@envoydev/host-bridge", "@envoymesh/reuse-host", "@envoymesh/harness"],
   },
   build: {
     outDir: "dist",

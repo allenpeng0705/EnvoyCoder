@@ -14,6 +14,16 @@ export const teams = {
   "sidebar.project.menu.teamJob": "チームジョブ",
   "settings.section.teams.title": "チーム",
   "settings.section.teams.detail": "チームを作成し、1つのトークンを共有して、複数のマシンで共同ジョブを実行します。",
+  "settings.section.teams.info.what":
+    "チームは 1 つの招待で複数の EnvoyDev マシンをつなぎます。チームジョブは、計画・実装・レビューなどの役割付きステップに作業を分け、それらのマシンで進めます。",
+  "settings.section.teams.info.how.1":
+    "1 台のマシン（ホスト）でチームを作成するか、別のマシンから貼り付けた招待で参加します。",
+  "settings.section.teams.info.how.2":
+    "招待を一度コピーして共有します。参加する人は全員、同じ招待を貼り付ける必要があります。",
+  "settings.section.teams.info.how.3":
+    "このマシンが提供する役割を設定します。ホストはメンバーの役割を割り当てたり上書きしたりできます。",
+  "settings.section.teams.info.how.4":
+    "プロジェクトからチームジョブを開始します（リモート付きの Git）。このページまたはプロジェクトレールからジョブを開けます。",
   "settings.teams.label": "チーム名",
   "settings.teams.memberLabel": "このマシンの名前",
   "settings.teams.joinOk": "{label} に参加しました。",

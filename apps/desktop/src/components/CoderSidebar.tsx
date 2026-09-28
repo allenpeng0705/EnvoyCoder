@@ -33,7 +33,8 @@
 
 import type { JSX } from "react";
 
-import { GearIcon, QrIcon } from "./icons.js";
+import { isDarkTheme } from "../design/applyTheme.js";
+import { GearIcon, MoonIcon, QrIcon, SunIcon } from "./icons.js";
 import { RowMenu } from "./RowMenu.js";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
@@ -77,6 +78,11 @@ export interface CoderSidebarProps {
   activeTaskId?: string | undefined;
   /** Called when the user picks a task. */
   onSelect: (taskId: string) => void;
+  /**
+   * Called when the user activates a project on the rail (header click — expand/collapse).
+   * The shell uses this to leave Settings so the work column is visible again.
+   */
+  onActivateProject?: (projectId: string) => void;
   /** Called when the user asks for a new task inside a project. */
   onNewTask: (projectId: string) => void;
   /** Called when the user asks for a Team job inside a project (§13). */
@@ -158,10 +164,16 @@ export interface CoderSidebarProps {
    * the confirmation says.
    */
   onRemoveTask: (taskId: string) => void;
-  onOpenCommandCenter: () => void;
   onOpenSettings: () => void;
-  /** Mint and open Pairing — the rail-top QR beside ⌘K. */
+  /** Mint and open Pairing — the rail-top QR beside Settings / theme. */
   onShowPairing: () => void;
+  /**
+   * Appearance toggle on the rail. Writes an explicit `"light"` / `"dark"` (not `"system"`) so the
+   * press always changes what is painted. Command Center stays on Mod+K — not a rail button.
+   */
+  onSetTheme: (theme: "light" | "dark") => void;
+  /** Stored preference — drives the toggle icon so it flips with settings state, not only `data-theme`. */
+  theme?: "light" | "dark" | "system";
   /** Search box contents, owned by the shell so the Command Center can drive it too. */
   query?: string | undefined;
   onQueryChange?: ((query: string) => void) | undefined;
@@ -201,6 +213,17 @@ export interface CoderSidebarProps {
    * lands on the path it was given.
    */
   focusProjectId?: string | undefined;
+  /** Paired EnvoyDev homes (`docs/envoydev-paired-homes.md`). */
+  pairedHomes?: readonly {
+    record: { id: string; label: string; host: string; port: number };
+    state: { projects: readonly Project[]; tasks: readonly Task[]; connection: { state: string } };
+  }[];
+  activeHomeId?: string | undefined;
+  workingOnLabel?: string | undefined;
+  onSelectPairedTask?: (homeId: string, taskId: string) => void;
+  onFocusPairedHome?: (homeId: string) => void;
+  onAddPairedHome?: () => void;
+  onForgetPairedHome?: (homeId: string) => void;
 }
 
 /** The mark beside a project name: the first letter, upper case. */
@@ -272,7 +295,7 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
         </button>
         <button
           type="button"
-          className="icon-button"
+          className="button button--ghost button--icon"
           onClick={props.onShowPairing}
           title={t("sidebar.pair")}
         >
@@ -281,22 +304,32 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
         </button>
         <button
           type="button"
-          className="icon-button"
+          className="button button--ghost button--icon"
           onClick={props.onOpenSettings}
           title={t("sidebar.settings")}
           aria-label={t("sidebar.settings")}
         >
           <GearIcon />
         </button>
-        <button
-          type="button"
-          className="button button--ghost sidebar__command"
-          onClick={props.onOpenCommandCenter}
-          title={t("sidebar.command.title")}
-          aria-label={t("sidebar.command.title")}
-        >
-          ⌘K
-        </button>
+        {(() => {
+          // Prefer the stored preference so the icon flips with settings state; `"system"` falls back
+          // to the resolved paint (`data-theme` / OS).
+          const dark =
+            props.theme === "light" ? false : props.theme === "dark" ? true : isDarkTheme();
+          const label = dark ? t("sidebar.theme.toLight") : t("sidebar.theme.toDark");
+          return (
+            <button
+              type="button"
+              className="button button--ghost button--icon"
+              onClick={() => props.onSetTheme(dark ? "light" : "dark")}
+              title={label}
+              aria-label={label}
+              data-testid="sidebar-theme-toggle"
+            >
+              {dark ? <SunIcon /> : <MoonIcon />}
+            </button>
+          );
+        })()}
       </div>
 
       <div className="sidebar__search">
@@ -350,6 +383,10 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
         );
       })()}
 
+      <div className="sidebar__home-section" data-testid="sidebar-this-machine-label">
+        <span className="sidebar__home-heading">{t("sidebar.section.thisMachine")}</span>
+      </div>
+
       <div className="sidebar__list" data-testid="task-list">
         {groups.length === 0 ? (
           <div className="sidebar__empty">
@@ -372,6 +409,9 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
         ) : (
           groups.map((group) => {
             const isCollapsed = collapsed.includes(group.project.id);
+            // Secondary surface: hide until this project has at least one job. Starting a team job
+            // stays on the project `…` menu so the rail stays quiet for projects that never use it.
+            const projectJobs = (props.jobs ?? []).filter((job) => job.projectId === group.project.id);
             return (
               <section
                 key={group.project.id}
@@ -384,13 +424,14 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                     className="project__header"
                     aria-expanded={!isCollapsed}
                     title={group.project.path}
-                    onClick={() =>
+                    onClick={() => {
+                      props.onActivateProject?.(group.project.id);
                       setCollapsed((current) =>
                         current.includes(group.project.id)
                           ? current.filter((id) => id !== group.project.id)
                           : [...current, group.project.id],
-                      )
-                    }
+                      );
+                    }}
                   >
                     <span className="project__chevron" aria-hidden>
                       {isCollapsed ? "▶" : "▼"}
@@ -537,43 +578,146 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                     {group.rows.length === 0 && props.tasksUnknown !== true ? (
                       <p className="project__empty">{t("sidebar.tasks.empty")}</p>
                     ) : null}
-                    <div className="project__tasks-bar" data-testid={`project-team-jobs-${group.project.id}`}>
-                      <span className="project__tasks-title">{t("sidebar.section.teamJobs")}</span>
-                      {props.onTeamJob ? (
-                        <button
-                          type="button"
-                          className="button button--ghost button--small"
-                          data-testid={`team-job-${group.project.id}`}
-                          onClick={() => props.onTeamJob?.(group.project.id)}
-                          title={t("sidebar.project.teamJob.title", { project: group.project.label })}
+                    {projectJobs.length === 0 ? null : (
+                      <>
+                        <div
+                          className="project__tasks-bar"
+                          data-testid={`project-team-jobs-${group.project.id}`}
                         >
-                          {t("sidebar.project.teamJob")}
-                        </button>
-                      ) : null}
-                    </div>
-                    <ul className="sidebar__job-rows" data-testid={`job-list-${group.project.id}`}>
-                      {(props.jobs ?? [])
-                        .filter((job) => job.projectId === group.project.id)
-                        .map((job) => (
-                          <li key={job.id}>
+                          <span className="project__tasks-title">{t("sidebar.section.teamJobs")}</span>
+                          {props.onTeamJob ? (
                             <button
                               type="button"
-                              className={
-                                props.activeJobId === job.id
-                                  ? "sidebar__task sidebar__task--active"
-                                  : "sidebar__task"
-                              }
-                              onClick={() => props.onSelectJob?.(job.id)}
+                              className="button button--ghost button--small"
+                              data-testid={`team-job-${group.project.id}`}
+                              onClick={() => props.onTeamJob?.(group.project.id)}
+                              title={t("sidebar.project.teamJob.title", {
+                                project: group.project.label,
+                              })}
                             >
-                              <span className="dot" data-status={job.status} aria-hidden />
-                              <span className="sidebar__task-title">{job.title}</span>
-                              <span className="sidebar__task-meta">{job.status}</span>
+                              {t("sidebar.project.teamJob")}
                             </button>
-                          </li>
-                        ))}
-                    </ul>
+                          ) : null}
+                        </div>
+                        <ul className="sidebar__job-rows" data-testid={`job-list-${group.project.id}`}>
+                          {projectJobs.map((job) => (
+                            <li key={job.id}>
+                              <button
+                                type="button"
+                                className={
+                                  props.activeJobId === job.id
+                                    ? "sidebar__task sidebar__task--active"
+                                    : "sidebar__task"
+                                }
+                                onClick={() => props.onSelectJob?.(job.id)}
+                              >
+                                <span className="dot" data-status={job.status} aria-hidden />
+                                <span className="sidebar__task-title">{job.title}</span>
+                                <span className="sidebar__task-meta">{job.status}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
                   </>
                 )}
+              </section>
+            );
+          })
+        )}
+      </div>
+
+      <div className="sidebar__paired" data-testid="sidebar-paired-homes">
+        <div className="sidebar__home-section">
+          <span className="sidebar__home-heading">{t("sidebar.section.pairedHomes")}</span>
+          {props.onAddPairedHome ? (
+            <button
+              type="button"
+              className="button button--ghost button--small"
+              onClick={props.onAddPairedHome}
+              title={t("homes.add.title")}
+            >
+              {t("homes.add")}
+            </button>
+          ) : null}
+        </div>
+        {props.workingOnLabel ? (
+          <p className="sidebar__working-on" role="status">
+            {t("homes.workingOn", { label: props.workingOnLabel })}
+          </p>
+        ) : null}
+        {(props.pairedHomes ?? []).length === 0 ? (
+          <p className="sidebar__paired-empty">{t("homes.empty")}</p>
+        ) : (
+          (props.pairedHomes ?? []).map((home) => {
+            const online = home.state.connection.state === "connected";
+            const focused = props.activeHomeId === home.record.id;
+            return (
+              <section
+                key={home.record.id}
+                className={`sidebar__paired-home${focused ? " sidebar__paired-home--active" : ""}`}
+                data-testid={`paired-home-${home.record.id}`}
+              >
+                <div className="sidebar__paired-home-head">
+                  <button
+                    type="button"
+                    className="sidebar__paired-home-label"
+                    onClick={() => props.onFocusPairedHome?.(home.record.id)}
+                    title={`${home.record.host}:${home.record.port}`}
+                  >
+                    <span
+                      className={`dot ${online ? "dot--ok" : "dot--quiet"}`}
+                      aria-hidden
+                    />
+                    <span>{home.record.label}</span>
+                    <span className="sidebar__paired-home-status">
+                      {online ? t("homes.online") : t("homes.offline")}
+                    </span>
+                  </button>
+                  {props.onForgetPairedHome ? (
+                    <button
+                      type="button"
+                      className="button button--ghost button--small"
+                      onClick={() => props.onForgetPairedHome?.(home.record.id)}
+                      title={t("homes.forget")}
+                    >
+                      {t("homes.forget")}
+                    </button>
+                  ) : null}
+                </div>
+                {online && home.state.projects.length > 0 ? (
+                  <ul className="sidebar__paired-projects">
+                    {home.state.projects.map((project) => {
+                      const projectTasks = home.state.tasks.filter((task) => task.projectId === project.id);
+                      return (
+                        <li key={project.id}>
+                          <span className="sidebar__paired-project-label">{project.label}</span>
+                          <ul className="sidebar__task-list">
+                            {projectTasks.map((task) => (
+                              <li key={task.id}>
+                                <button
+                                  type="button"
+                                  className={
+                                    focused && props.activeTaskId === task.id
+                                      ? "sidebar__task sidebar__task--active"
+                                      : "sidebar__task"
+                                  }
+                                  onClick={() => props.onSelectPairedTask?.(home.record.id, task.id)}
+                                >
+                                  <span className={`dot ${dotClassFor(task.status)}`} aria-hidden />
+                                  <span className="sidebar__task-title">
+                                    {task.title || t("task.untitled")}
+                                  </span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
               </section>
             );
           })

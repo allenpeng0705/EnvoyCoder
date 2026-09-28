@@ -17,93 +17,47 @@
  * (Windows) and WebKitGTK (Linux), which all support this and nothing here needs a build step.
  */
 
-/* Paseo's dark palette ("paseo" variant), mapped onto the names this sheet already uses.
-   Values from `packages/app/src/styles/theme.ts` (v0.8.0, Apache-2.0); the derivation and the full
-   token set are in `docs/design-tokens.md`. Names are deliberately unchanged: a value change is
-   reviewable, a rename is not. */
+/* Legacy names → token sheet (`design/tokens.css`). Theme values live on the token sheet;
+   this block only aliases so older rules keep compiling. See `docs/envoydev-visual-system.md`. */
 :root {
-  --bg: #181b1a;
-  --bg-raised: #1e2120;
-  --bg-hover: #272a29;
-  --bg-active: #434645;
-  --border: #252b2a;
-  --border-strong: #2f3534;
+  --bg: var(--surface-0);
+  --bg-raised: var(--surface-1);
+  --bg-hover: var(--surface-2);
+  --bg-active: var(--surface-3);
+  --border-strong: var(--border-accent);
 
-  --text: #fafafa;
-  --text-muted: #a1a5a4;
-  /* **Measured, not chosen.** `#717574` is 3.72:1 on `--bg`, **3.48:1 on `--bg-raised`** (the status bar) and
-     3.10:1 on `--bg-hover` — under the 4.5:1 floor this family holds small text to, on every fill it is drawn
-     on. It went unnoticed because the contrast scan only walked the settings pane, so the rail, the status bar
-     and the palette were never measured in this palette: widening the scan to the whole window
-     (`scripts/measure-settings.mjs`'s `contrastAll`) reported the status bar's own detail line at 3.48:1 as the
-     worst text in the window. This value is 5.71 / 5.34 / 4.76 on the same three fills, and still a step below
-     `--text-muted` (6.97 / 6.52 / 5.82), so the three-band hierarchy the sheet draws with survived the fix. */
-  --text-faint: #909593;
-  /* Used by the newer sections; defined here so they stop falling back to the old pre-Paseo hex. */
-  --text-dim: #a1a5a4;
+  --text: var(--foreground);
+  --text-muted: var(--foreground-muted);
+  --text-faint: var(--foreground-extra-muted);
+  --text-dim: var(--foreground-muted);
 
-  /* One accent. */
-  --accent: #20744a;
-  --accent-text: #ffffff;
+  --accent-text: var(--accent-foreground);
 
-  --ok: #6cb17b;
-  --warn: #c09664;
-  --danger: #d8847b;
-  --live: #5caaf6;
+  /* Chip/status inks: dark theme matches the status band; light overrides below are chip-safe. */
+  --ok: var(--status-success);
+  --warn: var(--status-warning);
+  --danger: var(--status-danger);
+  --live: var(--status-dot-running);
 
-  --dot-queued: #a1a5a4;
-  --dot-quiet: #717574;
+  --dot-queued: var(--foreground-muted);
+  --dot-quiet: var(--foreground-extra-muted);
 
-  /* Paseo's `lg` (8) and `md` (6): the radii this app already used, now on purpose. */
-  --radius: 8px;
-  --radius-sm: 6px;
   --row-height: 34px;
   --rail-width: 300px;
   --settings-nav-width: 280px;
   --explorer-width: 288px;
   --panel-resize-hit: 5px;
 
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --font: var(--font-ui);
+  --mono: var(--font-mono);
 }
 
 /**
- * **The light palette — the aliases this sheet owns, given values for it.**
- *
- * `design/tokens.css` already switches its own families (`--surface-*`, `--foreground-*`, `--border*`, `--status-*`)
- * on `data-theme`, and this sheet defines a **second set of names** — `--bg`, `--bg-raised`, `--text`,
- * `--text-muted`, `--text-dim`, `--text-faint`, `--ok`, `--warn`, `--danger`, `--live` — once, dark, at the top of
- * this file. So the light theme was half-applied: surfaces from the token sheet turned white while the text drawn
- * over them kept dark-mode greys, and the elements that use `--foreground` *on* a `--bg` background landed at a
- * contrast of about 1.0 — the pane title being the one that was reported.
- *
- * The aliases are mapped to the token sheet's light values rather than re-invented, because two palettes that
- * disagree about what "muted" is are two palettes, and the token sheet is where the family's palette is derived
- * from Paseo and documented (`docs/design-tokens.md`).
+ * Light theme: surface/ink aliases already follow the token sheet. Only chip-safe status inks
+ * stay here — `.chip--*` draws `color` on a 16% tint of the same hue, and the page-level
+ * `--status-*` lights fail that contrast floor (measured; see prior `contrastAll` notes).
  */
 :root[data-theme="light"] {
-  --bg: #ffffff;
-  --bg-raised: #fafafa;
-  --bg-hover: #f4f4f5;
-  --bg-active: #e4e4e7;
-  --border: #e4e4e7;
-  --border-strong: #d4d4d8;
-
-  --text: #1a1a1e;
-  --text-muted: #52525b;
-  /* Deliberately **not** `#a1a1aa`: `--text-faint` is used for the smallest print this sheet has, and the light
-     value that reads at the same weight as the dark one is a step darker. Measured, not chosen by eye — the
-     whole-page scan (`scripts/measure-settings.mjs --theme light`) is the assertion. */
-  --text-faint: #71717a;
-  --text-dim: #52525b;
-
-  /**
-   * **These four are chip text as well as status colour**, and that is why they are not the token sheet's light
-   * values verbatim: `.chip--live` and `.chip--danger` draw `color: var(--live|--danger)` on a **16% tint of the
-   * same colour**, so the value that reads as a status colour on a page can be unreadable on its own tint. Measured:
-   * the token sheet's `#268ae0` gives 3.04:1 there against a 4.5 floor, while the values below give 6.9:1 and 5.1:1
-   * — and `--ok`/`--warn` are darkened with them so the four keep the relationship they have in dark mode.
-   */
   --ok: #2f6139;
   --warn: #6b4f2c;
   --danger: #9d433b;
@@ -132,20 +86,9 @@
   color-scheme: light;
 }
 
-/* Follow the OS when the user has not chosen, exactly as the token sheet does. */
+/* Follow the OS when the user has not chosen — chip-safe inks only (aliases follow tokens). */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
-    --bg: #ffffff;
-    --bg-raised: #fafafa;
-    --bg-hover: #f4f4f5;
-    --bg-active: #e4e4e7;
-    --border: #e4e4e7;
-    --border-strong: #d4d4d8;
-    --text: #1a1a1e;
-    --text-muted: #52525b;
-    --text-faint: #71717a;
-    --text-dim: #52525b;
-    /* The same four values as the explicit light block above, and for the reason given there. */
     --ok: #2f6139;
     --warn: #6b4f2c;
     --danger: #9d433b;
@@ -185,10 +128,10 @@ body,
 }
 
 body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font);
-  font-size: 13px;
+  background: var(--surface-0);
+  color: var(--foreground);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-base);
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
@@ -254,10 +197,11 @@ body {
   align-items: center;
   gap: 8px;
   flex: none;
+  /* Chrome exception — not a content control height (`docs/envoydev-visual-system.md` §2). */
   height: 38px;
   padding: 0 8px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg-raised);
+  background: var(--surface-1);
   /* **The drag region is `data-tauri-drag-region` on the element, set in `CoderApp`.** The
      `-webkit-app-region` pair that used to live here is Electron's mechanism: Tauri ignores it, so the
      window could not be moved by this bar, and on the engines that *do* honour it a drag region swallows
@@ -300,18 +244,23 @@ body {
 /* ── controls ──────────────────────────────────────────────────────────── */
 
 .button {
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  height: var(--control-compact);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
   background: transparent;
-  color: var(--text);
+  color: var(--foreground);
   font: inherit;
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
 }
 
 .button:hover {
-  background: var(--bg-hover);
+  background: var(--surface-2);
 }
 
 .button:disabled {
@@ -322,44 +271,46 @@ body {
 .button--primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: var(--accent-text);
-  font-weight: 600;
+  color: var(--accent-foreground);
+  font-weight: var(--font-weight-semibold);
 }
 
 .button--primary:hover {
   background: var(--accent-bright);
   border-color: var(--accent-bright);
-  color: var(--accent-text);
+  color: var(--accent-foreground);
 }
 
 .button--secondary {
-  background: var(--bg-active);
+  background: var(--surface-3);
 }
 
 .button--danger {
-  border-color: var(--danger);
-  color: var(--danger);
+  border-color: var(--status-danger);
+  color: var(--status-danger);
 }
 
 .button--ghost {
   border-color: transparent;
-  color: var(--text-muted);
+  color: var(--foreground-muted);
 }
 
 .button--ghost:hover {
-  color: var(--text);
+  color: var(--foreground);
 }
 
 .button--icon {
-  width: 28px;
+  width: var(--control-tight);
+  height: var(--control-tight);
+  min-width: var(--control-tight);
   padding: 0;
   font-size: 16px;
   line-height: 1;
 }
 
 .button--icon[aria-pressed="true"] {
-  color: var(--text);
-  background: var(--bg-active);
+  color: var(--foreground);
+  background: var(--surface-3);
 }
 
 /* The name of an icon button, shown as soon as the pointer or keyboard is on it.
@@ -407,32 +358,25 @@ body {
   left: 0;
 }
 
+/* Dense rows: keep the button family, use tight height + sm type. */
 .button--small {
-  height: 24px;
-  font-size: 12px;
+  height: var(--control-tight);
+  padding: 0 var(--space-2);
+  font-size: var(--font-size-sm);
 }
 
 .input,
 .select {
-  height: 28px;
-  padding: 0 8px;
+  height: var(--control-tight);
+  padding: 0 var(--space-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--text);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+  color: var(--foreground);
   font: inherit;
 }
 
-.input:focus-visible,
-.select:focus-visible,
-.button:focus-visible,
-.task-row:focus-visible,
-.task-row__select:focus-visible,
-.row-menu__item:focus-visible,
-.project__header:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
+/* Focus ring lives in `tokens.css` (`:focus-visible` + `--focus-ring-*`). */
 
 /* ── sidebar ───────────────────────────────────────────────────────────── */
 
@@ -446,7 +390,8 @@ body {
   flex-direction: column;
   min-height: 0;
   border-right: 1px solid var(--border);
-  background: var(--bg-raised);
+  /* Own plane — darker than the page in dark mode (`docs/design-tokens.md` rail rule). */
+  background: var(--surface-sidebar);
 }
 
 .sidebar__top,
@@ -493,6 +438,116 @@ body {
   font-size: 12px;
 }
 
+.sidebar__home-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 4px;
+}
+
+.sidebar__home-heading {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sidebar__paired {
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  padding-bottom: 12px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.sidebar__paired-empty {
+  margin: 0;
+  padding: 4px 12px 8px;
+  font-size: var(--font-size-sm);
+  color: var(--text-faint);
+  line-height: 1.4;
+}
+
+.sidebar__working-on {
+  margin: 0;
+  padding: 0 12px 8px;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.sidebar__paired-home {
+  padding: 4px 8px 8px;
+}
+
+.sidebar__paired-home--active {
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+}
+
+.sidebar__paired-home-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar__paired-home-label {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 4px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sidebar__paired-home-status {
+  margin-left: auto;
+  font-weight: 400;
+  color: var(--text-faint);
+  font-size: var(--font-size-sm);
+}
+
+.sidebar__paired-projects {
+  margin: 0;
+  padding: 0 0 0 12px;
+  list-style: none;
+}
+
+.sidebar__paired-project-label {
+  display: block;
+  padding: 4px 6px 2px;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.settings__paired-homes {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings__paired-homes-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .sidebar__list {
   /* The one row that grows: everything above it is intrinsic, the footer is pinned. */
   flex: 1 1 auto;
@@ -527,33 +582,7 @@ body {
   overflow-wrap: anywhere;
 }
 
-/* An icon button: the 28px control height from the token sheet, square, quiet until hovered.
-   Used in the title bar (Pair / Settings) and elsewhere — not a rail-footer-only control. */
-.icon-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 28px;
-  min-width: 28px;
-  padding: 0 6px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  cursor: pointer;
-}
-
-.icon-button:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-.icon-button:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
+/* Quiet icon controls: use `.button.button--ghost.button--icon` (visual system §3). */
 
 /* ── project group ─────────────────────────────────────────────────────── */
 
@@ -1008,22 +1037,27 @@ button.project__agent:hover {
 }
 
 .chip--quiet {
-  background: var(--bg-active);
+  background: var(--surface-3);
   color: var(--foreground);
 }
 
+.chip--ok {
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+  color: var(--ok);
+}
+
 .chip--warn {
-  background: rgba(210, 153, 34, 0.16);
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
   color: var(--warn);
 }
 
 .chip--danger {
-  background: rgba(248, 81, 73, 0.16);
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
   color: var(--danger);
 }
 
 .chip--live {
-  background: rgba(88, 166, 255, 0.16);
+  background: color-mix(in srgb, var(--live) 16%, transparent);
   color: var(--live);
 }
 
@@ -1136,7 +1170,7 @@ button.project__agent:hover {
   align-items: flex-end;
   gap: 4px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg-raised);
+  background: var(--surface-1);
   padding: 8px 10px 0;
 }
 
@@ -1160,7 +1194,7 @@ button.project__agent:hover {
 }
 
 .work__tab-wrap:has(.work__tab[aria-selected="true"]) {
-  background: var(--bg);
+  background: var(--surface-0);
   border-color: var(--border);
   margin-bottom: -1px;
 }
@@ -1184,11 +1218,11 @@ button.project__agent:hover {
 }
 
 .work__tab[aria-selected="true"] {
-  background: var(--bg);
+  background: var(--surface-0);
   border-color: var(--border);
   margin-bottom: -1px;
-  color: var(--text);
-  font-weight: 600;
+  color: var(--foreground);
+  font-weight: var(--font-weight-semibold);
 }
 
 .work__tab-wrap .work__tab {
@@ -1532,7 +1566,7 @@ button.pane__meta-link:disabled {
   min-height: 0;
   overflow: hidden;
   border-left: 1px solid var(--border);
-  background: var(--bg-raised);
+  background: var(--surface-sidebar);
 }
 
 /* Same 40px as the left sidebar's top row (6px padding + 28px control), so Files / Changes
@@ -1550,20 +1584,23 @@ button.pane__meta-link:disabled {
   height: auto;
   border: none;
   background: none;
-  color: var(--text-muted);
+  color: var(--foreground-muted);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
 }
 
+/* Selection grammar: surface tint + weight — same rule as work tabs / settings nav. */
 .explorer__tab[aria-selected="true"] {
-  color: var(--text);
-  box-shadow: inset 0 -2px 0 var(--text);
+  color: var(--foreground);
+  background: var(--surface-2);
+  font-weight: var(--font-weight-semibold);
 }
 
 .explorer__tab:hover {
-  color: var(--text);
-  background: var(--bg-hover);
+  color: var(--foreground);
+  background: var(--surface-2);
 }
 
 .explorer__tools {
@@ -2024,9 +2061,9 @@ button.explorer__change:hover {
   margin-inline-end: var(--space-2);
 }
 
-.row__tool-path {
-  display: block;
-  margin-top: var(--space-1);
+.row__tool-path,
+.row__tool-diff {
+  margin: var(--space-1) 0 0;
   font-size: var(--font-size-sm);
   color: var(--foreground-muted);
   overflow: hidden;
@@ -2034,8 +2071,17 @@ button.explorer__change:hover {
   white-space: nowrap;
 }
 
+.row__tool-diff {
+  font-variant-numeric: tabular-nums;
+}
+
 .row__code--cmd {
   color: var(--foreground);
+}
+
+/* Takeover replaces the field and toolbar — not stacked above a disabled composer. */
+.composer__takeover.approval--takeover {
+  margin-bottom: 0;
 }
 
 /* The card is the field: a second ring inside a bordered card is two focus indicators for one
@@ -2444,9 +2490,9 @@ button.explorer__change:hover {
   flex-direction: column;
   min-width: 180px;
   padding: var(--space-1);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--bg-raised);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
   box-shadow: 0 8px 24px var(--interaction-highlight);
 }
 
@@ -2482,8 +2528,8 @@ button.explorer__change:hover {
 }
 
 .row-menu__confirm:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
 }
 
 /* ── command center ────────────────────────────────────────────────────── */
@@ -2566,12 +2612,13 @@ button.explorer__change:hover {
   align-items: center;
   flex: none;
   gap: 8px;
+  /* Chrome exception — not a content control height (`docs/envoydev-visual-system.md` §2). */
   height: 24px;
   padding: 0 10px;
   border-top: 1px solid var(--border);
-  background: var(--bg-raised);
-  color: var(--text-muted);
-  font-size: 11px;
+  background: var(--surface-1);
+  color: var(--foreground-muted);
+  font-size: var(--font-size-sm);
 }
 
 .statusbar__detail {
@@ -2713,7 +2760,7 @@ button.explorer__change:hover {
   overflow-y: auto;
   padding: var(--space-3) var(--space-2);
   border-right: 1px solid var(--border);
-  background: var(--bg-raised);
+  background: var(--surface-sidebar);
 }
 
 .settings-nav__list {
@@ -2761,8 +2808,8 @@ button.explorer__change:hover {
    `.task-row--active` uses), so the bar reads as part of this app rather than as a second navigation
    with its own idea of "selected". */
 .settings-nav__item--current {
-  background: var(--bg-active);
-  color: var(--text);
+  background: var(--surface-sidebar-selected);
+  color: var(--foreground);
 }
 
 .settings-nav__label {
@@ -3060,6 +3107,45 @@ button.explorer__change:hover {
   margin: 0;
   font-size: 12px;
   color: var(--text-dim, #8b8f98);
+}
+
+/* Section Info — quiet orientation at the top of complex Settings pages (no card, no dialog). */
+.settings-info {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-info__what {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.settings-info__heading {
+  margin: 2px 0 0;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.settings-info__steps {
+  margin: 0;
+  padding-left: 1.25em;
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-info__steps li::marker {
+  color: var(--text-faint);
 }
 
 .settings__agents,
@@ -3808,7 +3894,7 @@ button.explorer__change:hover {
   padding-bottom: var(--space-2);
   border-bottom: 1px solid var(--border);
   font-size: 1.6em;
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-semibold);
 }
 
 .md h2 {
@@ -3816,7 +3902,7 @@ button.explorer__change:hover {
   padding-bottom: var(--space-2);
   border-bottom: 1px solid var(--border);
   font-size: 1.35em;
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-semibold);
 }
 
 .md h3 {
@@ -4399,6 +4485,9 @@ button.explorer__change:hover {
   border: 1px solid var(--border, #333);
   border-radius: 10px;
   background: color-mix(in srgb, var(--surface, #111) 80%, transparent);
+}
+.settings__homes-method {
+  grid-template-columns: 1fr 1fr 1fr;
 }
 .settings__teams-mode-btn {
   appearance: none;

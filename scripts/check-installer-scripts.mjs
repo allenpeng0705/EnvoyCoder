@@ -23,7 +23,12 @@ import { promisify } from "node:util";
 const run = promisify(execFile);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-const SHELL_SCRIPTS = ["scripts/build-dmg.sh", "scripts/build-linux.sh"];
+const SHELL_SCRIPTS = [
+  "scripts/build-dmg.sh",
+  "scripts/build-linux.sh",
+  "scripts/sign-macos-app-bundle.sh",
+  "scripts/sign-macos-staged-resources.sh",
+];
 const POWERSHELL_SCRIPTS = ["scripts/build-exe.ps1"];
 
 /** Run a parser whose absence is a *skip*, not a failure. */

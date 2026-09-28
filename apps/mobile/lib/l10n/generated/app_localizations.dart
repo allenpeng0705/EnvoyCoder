@@ -330,6 +330,36 @@ abstract class AppLocalizations {
   /// **'Forget host'**
   String get connectionsMenuForget;
 
+  /// connections.shareLink — Copy the rebuilt envoy://pair URI (QR/paste method).
+  ///
+  /// In en, this message translates to:
+  /// **'Share pairing link'**
+  String get connectionsShareLink;
+
+  /// connections.shareDirect — Copy Direct TCP fields for another EnvoyDev.
+  ///
+  /// In en, this message translates to:
+  /// **'Share host:port + token'**
+  String get connectionsShareDirect;
+
+  /// connections.shareSsh — Copy SSH hop + daemon + token for another EnvoyDev.
+  ///
+  /// In en, this message translates to:
+  /// **'Share SSH connection'**
+  String get connectionsShareSsh;
+
+  /// connections.shareSubtitle — Why Share exists (away-from-home laptop).
+  ///
+  /// In en, this message translates to:
+  /// **'For a laptop that cannot reach the home to mint a code'**
+  String get connectionsShareSubtitle;
+
+  /// connections.shareCopied — SnackBar after Share copies the clipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection copied — paste it under Paired homes on the laptop'**
+  String get connectionsShareCopied;
+
   /// host.scanQr — Add-host row: scan the pairing code.
   ///
   /// In en, this message translates to:
@@ -2325,7 +2355,7 @@ abstract class AppLocalizations {
   /// teamJob.create.blurb — Explains peers need a Git clone.
   ///
   /// In en, this message translates to:
-  /// **'Collaborative work in {project}. Peers need a local Git clone of this project.'**
+  /// **'Work together on {project}.'**
   String teamJobCreateBlurb(String project);
 
   /// teamJob.create.team — Team picker label.
@@ -2349,19 +2379,19 @@ abstract class AppLocalizations {
   /// teamJob.create.submit — Create draft button.
   ///
   /// In en, this message translates to:
-  /// **'Create team job'**
+  /// **'Create draft'**
   String get teamJobCreateSubmit;
 
   /// teamJob.create.draftHint — Draft ok; Start gated.
   ///
   /// In en, this message translates to:
-  /// **'You can draft now. Start is blocked until the crew is online with the roles you need.'**
+  /// **'Start later when the crew is online.'**
   String get teamJobCreateDraftHint;
 
   /// teamJob.crew.noJoiners — Solo origin guidance.
   ///
   /// In en, this message translates to:
-  /// **'Share the team invite so another machine can join. You can still create a draft.'**
+  /// **'Invite another machine. You can still create a draft.'**
   String get teamJobCrewNoJoiners;
 
   /// teamJob.crew.allOffline — Waiting for machines.

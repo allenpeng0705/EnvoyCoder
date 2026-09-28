@@ -63,10 +63,27 @@ export type ConnectionStatus =
   | { state: "connected"; endpoint: DaemonEndpoint }
   | { state: "disconnected"; reason: string; code?: string };
 
+export interface CoderConnectionClient {
+  name: string;
+  version?: string;
+  /** OS / platform string the daemon stores on the paired-device row. */
+  platform?: string;
+  /**
+   * Install-stable id (paired homes / phone). Lets the home collapse re-pairs into one device row.
+   * See `coder.hello` in `@envoydev/protocol`.
+   */
+  id?: string;
+}
+
 export interface CoderConnectionOptions {
   endpoint: DaemonEndpoint;
   /** The client's own name and version, sent in `hello` so the daemon can log who called. */
-  client?: { name: string; version?: string };
+  client?: CoderConnectionClient;
+  /**
+   * Pairing token for a remote home. Appended as `?token=` on the WebSocket URL (same as the phone).
+   * Absent for the local loopback window, which the daemon trusts without a token.
+   */
+  token?: string;
   /** Injected in tests; defaults to the global WebSocket. */
   socketFactory?: (url: string) => WebSocketLike;
   /** Backoff bounds. Defaults are chosen so a restart is invisible and a dead daemon is not a spin. */
@@ -217,7 +234,11 @@ export class CoderConnection {
 
   private url(): string {
     const { host, port, path } = this.options.endpoint;
-    return `ws://${host}:${port}${path}`;
+    const base = `ws://${host}:${port}${path}`;
+    const token = this.options.token?.trim();
+    if (!token) return base;
+    const sep = path.includes("?") ? "&" : "?";
+    return `${base}${sep}token=${encodeURIComponent(token)}`;
   }
 
   private open(): void {
@@ -253,8 +274,14 @@ export class CoderConnection {
 
   private async onOpen(): Promise<void> {
     try {
+      const client = this.options.client;
       const hello = await this.callTyped<HelloResult>("coder.hello", {
-        client: { name: this.options.client?.name ?? "EnvoyDev window", ...(this.options.client?.version ? { version: this.options.client.version } : {}) },
+        client: {
+          name: client?.name ?? "EnvoyDev window",
+          ...(client?.version ? { version: client.version } : {}),
+          ...(client?.platform ? { platform: client.platform } : {}),
+          ...(client?.id ? { id: client.id } : {}),
+        },
       });
       this.verifyIdentity(hello);
       this.helloValue = hello;

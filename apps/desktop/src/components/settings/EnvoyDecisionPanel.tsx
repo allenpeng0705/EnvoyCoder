@@ -65,6 +65,7 @@ export function EnvoyDecisionPanel(props: { agents: AgentActions }): JSX.Element
       <label className="setting">
         <span className="setting__title">{t("settings.agents.envoyDecision.mode")}</span>
         <select
+          className="select"
           value={mode}
           onChange={(e) =>
             setMode(e.target.value as "off" | "shadow" | "enforce")
@@ -80,6 +81,7 @@ export function EnvoyDecisionPanel(props: { agents: AgentActions }): JSX.Element
       <label className="setting">
         <span className="setting__title">{t("settings.agents.envoyDecision.backend")}</span>
         <select
+          className="select"
           value={backend}
           disabled={mode === "off"}
           onChange={(e) =>

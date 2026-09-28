@@ -302,7 +302,7 @@ describe("the name is the row's most prominent text", () => {
     );
     const lineSize = px(token(declared(ruleBody(STYLES, ".settings__agent-line"), "font-size").slice(4, -1)));
     const chipSize = px(token(declared(ruleBody(STYLES, ".chip"), "font-size").slice(4, -1)));
-    const bodySize = px(declared(ruleBody(STYLES, "body"), "font-size"));
+    const bodySize = px(token(declared(ruleBody(STYLES, "body"), "font-size").slice(4, -1)));
     const labelWeight = Number(
       token(declared(ruleBody(STYLES, ".settings-nav__label"), "font-weight").slice(4, -1)),
     );

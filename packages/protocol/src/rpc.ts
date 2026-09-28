@@ -4198,6 +4198,11 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
              * stored and rendered as a language nobody has.
              */
             language: CoderLanguageSchema.optional(),
+            /**
+             * How this window is painted. Same closed list as `CoderSettings.theme` — light, dark,
+             * or follow the OS. Absent from older clients; refused here if unknown rather than stored.
+             */
+            theme: z.enum(["light", "dark", "system"]).optional(),
           })
           .strict(),
       })

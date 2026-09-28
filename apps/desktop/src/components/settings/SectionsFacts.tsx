@@ -67,7 +67,6 @@ import type { SettingsSectionProps } from "./SectionProps.js";
  */
 const STATE_KEYS = {
   revoked: "settings.machine.paired.state.revoked",
-  expired: "settings.machine.paired.state.expired",
   active: "settings.machine.paired.state.active",
   unused: "settings.machine.paired.state.unused",
 } as const satisfies Record<PairedDeviceState, MessageKey>;
@@ -176,8 +175,8 @@ export function MachineSection(props: SettingsSectionProps): JSX.Element {
     return <p className="settings__note">{t("settings.machine.noDaemon")}</p>;
   }
 
-  // One clock reading for the whole render, so the chip and every row's state agree even when the render
-  // straddles an expiry boundary.
+  // One clock reading for the whole render so chip and rows share a single `now` (standing ignores it
+  // today; kept so call sites stay stable if a future state needs wall time again).
   const now = new Date();
   const activeCount = devices === null ? null : countActiveDevices(devices, now);
 

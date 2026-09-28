@@ -102,9 +102,12 @@ Future<CoderHost?> addHostFlow(BuildContext context, HostStore store) async {
     // Cancel (or the barrier) at the naming step aborts the whole pairing: nothing has been written
     // yet, so there is no host to leave behind.
     if (name == null) return null;
-    host = parsed.host!.copyWith(label: name);
+    host = parsed.host!.copyWith(label: name, joinMethod: HostJoinMethod.link);
   } else if (result.host != null) {
-    host = result.host!;
+    final drafted = result.host!;
+    host = drafted.copyWith(
+      joinMethod: drafted.ssh != null ? HostJoinMethod.ssh : HostJoinMethod.direct,
+    );
   } else {
     return null;
   }
