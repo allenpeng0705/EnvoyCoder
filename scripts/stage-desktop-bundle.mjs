@@ -53,16 +53,17 @@ function fail(line) {
 function spawnTool(cmd, args, options = {}) {
   const cwd = options.cwd;
   const stdio = options.stdio ?? "inherit";
+  const env = options.env;
 
   if (process.platform !== "win32") {
-    return spawnSync(cmd, args, { cwd, stdio });
+    return spawnSync(cmd, args, { cwd, stdio, env });
   }
 
   const bare = path.basename(cmd).replace(/\.(cmd|exe|bat)$/i, "").toLowerCase();
   if (bare === "npm") {
     const cli = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
     if (existsSync(cli)) {
-      return spawnSync(process.execPath, [cli, ...args], { cwd, stdio });
+      return spawnSync(process.execPath, [cli, ...args], { cwd, stdio, env });
     }
   }
 
@@ -79,6 +80,7 @@ function spawnTool(cmd, args, options = {}) {
   return spawnSync(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", line], {
     cwd,
     stdio,
+    env,
     windowsVerbatimArguments: true,
   });
 }
@@ -393,7 +395,9 @@ function ensureWorkspaceInstalled() {
 function stageDaemon() {
   ensureWorkspaceInstalled();
   say("Building the daemon so it can run without this checkout…");
-  run("npm", ["run", "daemon:build", "-w", "@envoydev/desktop"], {
+  // Prefer `daemon:package` (--package) over ENVOYDEV_DAEMON_PACKAGE alone: the
+  // flag travels with argv; env can be dropped by a Windows spawn helper.
+  run("npm", ["run", "daemon:package", "-w", "@envoydev/desktop"], {
     cwd: root,
     env: { ...process.env, ENVOYDEV_DAEMON_PACKAGE: "1" },
   });
