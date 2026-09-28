@@ -82,8 +82,12 @@ function externalNpmPlugin() {
   return {
     name: "external-npm",
     setup(build) {
+      // `[^./]` was meant to skip relative imports; on Windows the entry is an absolute
+      // `D:\...` path, which also matches and must not be marked external.
       build.onResolve({ filter: /^[^./]/ }, (args) => {
+        if (args.kind === "entry-point") return undefined;
         if (args.path.startsWith("node:")) return undefined;
+        if (/^[A-Za-z]:[\\/]/.test(args.path) || args.path.includes("\\")) return undefined;
         if (args.path.startsWith("@envoydev/") || args.path.startsWith("@envoymesh/")) return undefined;
         return { path: args.path, external: true };
       });
