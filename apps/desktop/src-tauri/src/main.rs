@@ -643,6 +643,7 @@ fn stop_child(pid: u32) {
                 .creation_flags(CREATE_NO_WINDOW)
                 .status();
         }
+    }
 }
 
 /* ────────────────────────────── the shell's state ────────────────────────────── */
