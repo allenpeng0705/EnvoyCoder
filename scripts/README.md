@@ -7,6 +7,10 @@ Desktop product version is the one-line root **`VERSION`** file
 (`npm run version:desktop -- 0.2.0`). Installers land in **`release/`**
 (override with `OUT_DIR`).
 
+```bash
+npm install   # required once per checkout (esbuild, Tauri CLI, workspace links)
+```
+
 ## Desktop installers
 
 Each script stages the daemon, a Node sidecar, and Envoy Harness, then runs the

@@ -375,7 +375,23 @@ function stageLaunchers() {
   );
 }
 
+function ensureWorkspaceInstalled() {
+  const markers = [
+    path.join(root, "node_modules", "esbuild"),
+    path.join(root, "apps", "desktop", "node_modules", "esbuild"),
+  ];
+  if (markers.some((p) => existsSync(p))) return;
+  say("Workspace deps missing (no esbuild); running npm install at the EnvoyCoder root…");
+  run("npm", ["install"], { cwd: root });
+  if (!markers.some((p) => existsSync(p))) {
+    fail(
+      "npm install finished, but esbuild is still missing. From the EnvoyCoder root run `npm install` and try again.",
+    );
+  }
+}
+
 function stageDaemon() {
+  ensureWorkspaceInstalled();
   say("Building the daemon so it can run without this checkout…");
   run("npm", ["run", "daemon:build", "-w", "@envoydev/desktop"], {
     cwd: root,
