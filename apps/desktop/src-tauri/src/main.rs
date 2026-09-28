@@ -905,12 +905,12 @@ fn new_window(
         .title("EnvoyDev")
         .inner_size(1280.0, 820.0)
         .min_inner_size(900.0, 560.0)
-        .resizable(true)
-        .hidden_title(true);
+        .resizable(true);
 
+    // hidden_title + Overlay title bar are macOS-only APIs on WebviewWindowBuilder.
     #[cfg(target_os = "macos")]
     {
-        builder = builder.title_bar_style(tauri::TitleBarStyle::Overlay);
+        builder = builder.hidden_title(true).title_bar_style(tauri::TitleBarStyle::Overlay);
     }
 
     // Record the landing project *before* the webview can ask for it — otherwise a fast mount
