@@ -55,6 +55,27 @@ if (-not (Test-Path $Tauri)) {
   Write-Error "The Tauri CLI is not installed. Run npm install in this checkout, then try again."
   exit 1
 }
+# npm often skips optional platform packages when node_modules was copied from
+# another OS or install was interrupted — Tauri then fails with "Cannot find
+# native binding" / missing @tauri-apps/cli-win32-*-msvc.
+$tauriNative = @(
+  (Join-Path $Root "node_modules\@tauri-apps\cli-win32-x64-msvc"),
+  (Join-Path $Root "node_modules\@tauri-apps\cli-win32-arm64-msvc")
+) | Where-Object { Test-Path $_ }
+if (-not $tauriNative) {
+  Write-Error @"
+The Tauri CLI native binding for Windows is missing (@tauri-apps/cli-win32-*-msvc).
+npm's optional-deps bug: https://github.com/npm/cli/issues/4828
+
+Fix from the EnvoyCoder root (PowerShell):
+  Remove-Item -Recurse -Force node_modules
+  npm install
+Or the lighter repair:
+  npm install @tauri-apps/cli-win32-x64-msvc --no-save
+Then re-run this script.
+"@
+  exit 1
+}
 Push-Location (Join-Path $Root "apps\desktop")
 try {
   & $Tauri build --config src-tauri/tauri.conf.bundle.json --bundles nsis

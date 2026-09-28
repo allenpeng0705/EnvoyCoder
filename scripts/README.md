@@ -56,7 +56,10 @@ Other env knobs (see `stage-desktop-bundle.mjs`): `ENVOY_HARNESS_COMMIT`,
 - Node.js ≥ 22, git, Rust toolchain
 - pnpm or corepack (harness build)
 - **macOS:** Xcode CLT; for a Gatekeeper-friendly DMG see signing below
-- **Windows:** Visual Studio C++ build tools; run `build-exe.ps1` in PowerShell
+- **Windows:** Visual Studio C++ build tools; run `build-exe.ps1` in PowerShell.
+  If Tauri fails with `Cannot find native binding` / `@tauri-apps/cli-win32-*-msvc`,
+  reinstall platform optionals (`Remove-Item -Recurse -Force node_modules; npm install`,
+  or `npm install @tauri-apps/cli-win32-x64-msvc --no-save`).
 - **Linux:** usual Tauri Linux deps for your distro
 
 ### macOS signing / notarization
