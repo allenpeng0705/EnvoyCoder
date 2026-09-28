@@ -203,6 +203,8 @@ npm run version:desktop:check      # gates also run this
 
 macOS release DMG (`npm run tauri:build:mac` / `bash scripts/build-dmg.sh`): copy `scripts/sign-macos-release.env.example` → `scripts/sign-macos-release.env` and fill the four Apple Developer ID fields (same values as EnvoyMesh work). Without that file the DMG is unsigned; with it, nested resources and `EnvoyDev.app` are signed and Tauri notarizes when Apple accepts the ticket. Installers land in `release/` (override with `OUT_DIR=…`). Operator notes live in the EnvoyMesh sibling as `docs/macos-mirror-signing.md`.
 
+**Packaging index** (Windows EXE, Linux, harness dir, mobile pointers): [`scripts/README.md`](scripts/README.md).
+
 Useful gates from the repo root:
 
 ```bash

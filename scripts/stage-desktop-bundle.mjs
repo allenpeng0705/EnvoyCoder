@@ -45,7 +45,17 @@ function fail(line) {
 }
 
 function run(cmd, args, options = {}) {
-  const result = spawnSync(cmd, args, { stdio: "inherit", ...options });
+  // Windows: `npm` / `npx` / `tar` are often `.cmd` shims; spawn without shell or
+  // without resolving beside node.exe yields ENOENT even when the shell finds them.
+  const resolved =
+    process.platform === "win32" && !/[\\/]/.test(cmd) && !/\.(cmd|exe|bat)$/i.test(cmd)
+      ? (besideNode(cmd) ?? whichOnPath(cmd) ?? cmd)
+      : cmd;
+  const result = spawnSync(resolved, args, {
+    stdio: "inherit",
+    ...options,
+    shell: options.shell ?? process.platform === "win32",
+  });
   if (result.error) fail(`${cmd} failed to start: ${result.error.message}`);
   if (result.status !== 0) fail(`${cmd} ${args.join(" ")} exited ${result.status}`);
 }
