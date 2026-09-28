@@ -79,6 +79,9 @@ export const ko: Catalogue = {
   "homes.workingOn": "{label}에서 작업 중",
   "homes.online": "온라인",
   "homes.offline": "오프라인",
+  "homes.reaching": "{label}에 연결 중…",
+  "homes.homeOffline": "{label}이(가) 오프라인입니다",
+  "homes.homeOnline": "{label}에 연결됨",
   "homes.forget": "잊기",
   "homes.rename": "이 홈 이름",
   "homes.label.placeholder": "office-linux",
@@ -435,7 +438,7 @@ export const ko: Catalogue = {
   "settings.section.machine.detail": "이 창이 연결된 서비스와 그것이 시작된 정보.",
   "settings.section.pairing.title": "기기 페어링",
   "settings.section.pairing.detail": "휴대폰에서 이 컴퓨터에 접속하게 합니다. 코드를 스캔하거나 주소를 입력하거나 SSH를 거칩니다.",
-  "settings.section.homes.title": "페어링된 홈",
+  "settings.section.homes.title": "홈 페어링",
   "settings.section.homes.detail": "이 노트북에서 다른 EnvoyDev에 씬 클라이언트로 참가합니다.",
   "settings.info.howHeading": "사용 방법",
   "settings.section.agents.info.what":

@@ -376,6 +376,23 @@ body {
   font: inherit;
 }
 
+/* Pairing links are long — `.input`'s fixed control height crushes a textarea on Windows. */
+.input.input--multiline,
+textarea.input--multiline {
+  display: block;
+  width: 100%;
+  min-height: calc(var(--control-tight) * 6);
+  height: auto;
+  padding: var(--space-2);
+  line-height: 1.4;
+  resize: vertical;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  box-sizing: border-box;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: var(--font-size-sm);
+}
+
 /* Focus ring lives in `tokens.css` (`:focus-visible` + `--focus-ring-*`). */
 
 /* ── sidebar ───────────────────────────────────────────────────────────── */

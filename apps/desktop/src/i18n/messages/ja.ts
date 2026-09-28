@@ -79,6 +79,9 @@ export const ja: Catalogue = {
   "homes.workingOn": "{label} で作業中",
   "homes.online": "オンライン",
   "homes.offline": "オフライン",
+  "homes.reaching": "{label} に接続中…",
+  "homes.homeOffline": "{label} はオフラインです",
+  "homes.homeOnline": "{label} に接続済み",
   "homes.forget": "忘れる",
   "homes.rename": "このホームの名前",
   "homes.label.placeholder": "office-linux",
@@ -435,7 +438,7 @@ export const ja: Catalogue = {
   "settings.section.machine.detail": "このウィンドウが接続しているサービスと、その起動時の情報。",
   "settings.section.pairing.title": "デバイスをペアリング",
   "settings.section.pairing.detail": "スマートフォンからこのマシンに接続させます。コードを読み取るか、アドレスを入力するか、SSH 経由で接続します。",
-  "settings.section.homes.title": "ペア済みホーム",
+  "settings.section.homes.title": "ホームをペア",
   "settings.section.homes.detail": "このノートから別の EnvoyDev にシンクライアントとして参加します。",
   "settings.info.howHeading": "使い方",
   "settings.section.agents.info.what":

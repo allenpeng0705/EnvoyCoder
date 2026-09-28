@@ -141,4 +141,22 @@ describe("dialPairedHome", () => {
     expect(result.route).toBe("direct-fallback");
     expect(result.endpoint.host).toBe("192.168.1.9");
   });
+
+  it("skips a loopback lanWsUrl on exhausted-ladder fallback", async () => {
+    const result = await dialPairedHome(
+      record({
+        lanWsUrl: "ws://127.0.0.1:4770/ws",
+        wsUrl: "ws://192.168.1.9:4770/ws",
+        bootstrapPeers: undefined,
+        homeNodePeerId: undefined,
+      }),
+      {
+        timeoutMs: 50,
+        probe: async () => false,
+        socketFactory: () => fakeSocket({ fail: true }),
+      },
+    );
+    expect(result.route).toBe("direct-fallback");
+    expect(result.endpoint.host).toBe("192.168.1.9");
+  });
 });

@@ -195,12 +195,15 @@ export function PairedHomesPanel(props: { homes: HomeRegistry }): JSX.Element {
           <label className="setting">
             <span className="setting__title">{t("homes.pasteUri")}</span>
             <textarea
-              className="input"
-              rows={3}
+              className="input input--multiline"
+              rows={8}
               value={connectionPaste}
               onChange={(event) => setConnectionPaste(event.target.value)}
               placeholder={t("homes.pasteUri.placeholder")}
               aria-label={t("homes.pasteUri")}
+              spellCheck={false}
+              autoComplete="off"
+              data-testid="homes-paste-uri"
             />
             <span className="setting__detail">{t("homes.pasteUri.detail")}</span>
           </label>

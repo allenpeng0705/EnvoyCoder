@@ -79,6 +79,9 @@ export const de: Catalogue = {
   "homes.workingOn": "Arbeitet auf {label}",
   "homes.online": "Online",
   "homes.offline": "Offline",
+  "homes.reaching": "{label} wird erreicht…",
+  "homes.homeOffline": "{label} ist offline",
+  "homes.homeOnline": "Verbunden mit {label}",
   "homes.forget": "Vergessen",
   "homes.rename": "Name für dieses Home",
   "homes.label.placeholder": "office-linux",
@@ -435,7 +438,7 @@ export const de: Catalogue = {
   "settings.section.machine.detail": "Der Dienst, mit dem dieses Fenster verbunden ist, und womit er gestartet wurde.",
   "settings.section.pairing.title": "Geräte koppeln",
   "settings.section.pairing.detail": "Ein Telefon oder ein anderes EnvoyDev an diesen Daemon anbinden.",
-  "settings.section.homes.title": "Gekoppelte Homes",
+  "settings.section.homes.title": "Homes koppeln",
   "settings.section.homes.detail": "Von diesem Laptop als Thin Client einem anderen EnvoyDev beitreten.",
   "settings.info.howHeading": "So nutzt du es",
   "settings.section.agents.info.what":

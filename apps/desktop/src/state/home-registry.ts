@@ -224,11 +224,14 @@ export class HomeRegistry {
     }
     const clientId = this.homes.clientId();
     const openSshForward = this.openSshForward;
+    const homeId = record.id;
     const store = createCoderStore({
       resolveEndpoint: async (): Promise<ResolvedEndpoint> => {
+        // Always re-read the store so token / ladder fields updated after join stay current.
+        const current = this.homes.get(homeId) ?? record;
         // Walk LAN → public → P2P → bootstrap → relay (family order). SSH local-forward when the
         // stored daemon is loopback behind a hop — same alternate as the phone, not a product relay.
-        const dialed = await dialPairedHome(record, { openSshForward });
+        const dialed = await dialPairedHome(current, { openSshForward });
         return {
           endpoint: dialed.endpoint,
           verifiedBy: "none",
@@ -236,21 +239,23 @@ export class HomeRegistry {
           route: dialed.route,
         };
       },
-      connect: (resolved) =>
-        new CoderConnection({
+      connect: (resolved) => {
+        const current = this.homes.get(homeId) ?? record;
+        return new CoderConnection({
           endpoint: resolved.endpoint,
           // Token rides the candidate URL (and client-proxy handshake) when openSocket won; keep it
           // on the connection for the rare fallback that builds `ws://host:port?token=` itself.
-          ...(resolved.openSocket ? {} : { token: record.token }),
+          ...(resolved.openSocket ? {} : { token: current.token }),
           client: {
-            name: record.label || "EnvoyDev",
+            name: current.label || "EnvoyDev",
             platform: clientPlatform(),
             id: clientId,
           },
           ...(resolved.openSocket
             ? { socketFactory: () => resolved.openSocket!() }
             : {}),
-        }),
+        });
+      },
     });
     this.remote.set(record.id, store);
     this.unsubs.push(store.subscribe(() => this.emit()));

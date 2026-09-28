@@ -180,9 +180,9 @@ describe("the sections bar, in the same language", () => {
     "Sicherheit",
     "Agenten",
     "LLM",
-    // Pair devices (inbound), then Paired homes (this laptop → other machines).
+    // Pair devices (inbound), then Pair homes (this laptop → other machines).
     "Geräte koppeln",
-    "Gekoppelte Homes",
+    "Homes koppeln",
     "Teams",
     // …and the background service is the other half of that answer, so it sits directly under it.
     "Hintergrunddienst",

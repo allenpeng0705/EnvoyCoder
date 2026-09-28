@@ -79,6 +79,9 @@ export const fr: Catalogue = {
   "homes.workingOn": "Travail sur {label}",
   "homes.online": "En ligne",
   "homes.offline": "Hors ligne",
+  "homes.reaching": "Connexion à {label}…",
+  "homes.homeOffline": "{label} est hors ligne",
+  "homes.homeOnline": "Connecté à {label}",
   "homes.forget": "Oublier",
   "homes.rename": "Nom de ce home",
   "homes.label.placeholder": "office-linux",
@@ -435,7 +438,7 @@ export const fr: Catalogue = {
   "settings.section.machine.detail": "Le service auquel cette fenêtre est connectée, et avec quoi il a démarré.",
   "settings.section.pairing.title": "Appairer des appareils",
   "settings.section.pairing.detail": "Laisser un téléphone ou un autre EnvoyDev joindre le démon de cette machine.",
-  "settings.section.homes.title": "Homes associés",
+  "settings.section.homes.title": "Associer des homes",
   "settings.section.homes.detail": "Rejoindre un autre EnvoyDev depuis ce portable en client léger.",
   "settings.info.howHeading": "Comment s’en servir",
   "settings.section.agents.info.what":

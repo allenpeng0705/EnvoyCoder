@@ -71,10 +71,13 @@ export const en = {
   "sidebar.section.pairedHomes": "Paired EnvoyDev",
   "homes.add": "+ Home",
   "homes.add.title": "Pair with another EnvoyDev machine",
-  "homes.empty": "No paired homes yet. Add one from Settings → Paired homes.",
+  "homes.empty": "No paired homes yet. Add one from Settings → Pair homes.",
   "homes.workingOn": "Working on {label}",
   "homes.online": "Online",
   "homes.offline": "Offline",
+  "homes.reaching": "Reaching {label}…",
+  "homes.homeOffline": "{label} is offline",
+  "homes.homeOnline": "Connected to {label}",
   "homes.forget": "Forget",
   "homes.rename": "Name for this home",
   "homes.label.placeholder": "office-linux",
@@ -102,7 +105,7 @@ export const en = {
   "homes.join": "Join home",
   "homes.joining": "Joining…",
   "homes.joined": "Joined {label}.",
-  "homes.panel.title": "Paired homes on this laptop",
+  "homes.panel.title": "Pair homes on this laptop",
   "homes.panel.detail":
     "Reach another EnvoyDev (a server or office machine) as a thin client. Agents and keys stay on that home. A phone already paired with that home can share its connection info when you cannot mint a new code on the home.",
   "homes.sshHop": "SSH hop (optional)",
@@ -558,7 +561,7 @@ export const en = {
   "settings.section.pairing.title": "Pair devices",
   "settings.section.pairing.detail":
     "Let a phone or another EnvoyDev reach this machine’s daemon.",
-  "settings.section.homes.title": "Paired homes",
+  "settings.section.homes.title": "Pair homes",
   "settings.section.homes.detail":
     "Join another EnvoyDev from this laptop as a thin client.",
   "settings.section.teams.title": "Teams",
@@ -585,7 +588,7 @@ export const en = {
   "settings.section.llm.info.how.3":
     "Paste an API key to store it, or clear the key if you need to remove it. Save when finished.",
   "settings.section.pairing.info.what":
-    "Pairing lets a phone or another EnvoyDev reach this machine’s daemon as a thin client. Thin clients never run agents or hold provider keys — they start runs, watch them, and answer approvals. To join a different machine from this laptop, use Paired homes.",
+    "Pairing lets a phone or another EnvoyDev reach this machine’s daemon as a thin client. Thin clients never run agents or hold provider keys — they start runs, watch them, and answer approvals. To join a different machine from this laptop, use Pair homes.",
   "settings.section.pairing.info.how.1":
     "Prefer Scan a code, then scan or paste the link on the phone or other EnvoyDev.",
   "settings.section.pairing.info.how.2":
@@ -593,11 +596,11 @@ export const en = {
   "settings.section.pairing.info.how.3":
     "Use SSH when the other device cannot reach this machine on the LAN. Pairings stay until you revoke them under This machine — no need to pair again after a restart.",
   "settings.section.homes.info.what":
-    "Paired homes are other EnvoyDev machines this laptop reaches as a thin client. Agents and provider keys stay on that home — you start runs, watch them, and answer approvals from here. Credentials stay on this laptop until you forget the home.",
+    "Pair homes lets this laptop reach other EnvoyDev machines as a thin client. Agents and provider keys stay on that home — you start runs, watch them, and answer approvals from here. Credentials stay on this laptop until you forget the home.",
   "settings.section.homes.info.how.1":
     "On the other machine, open Settings → Pair devices and mint a code — or on a phone already paired with that home, use Share connection (it only shares the method it used).",
   "settings.section.homes.info.how.2":
-    "Under Paired homes, paste the link or shared text on the Pairing link tab (or type host:port / SSH on those tabs). Name the home, then Join. It appears under Paired EnvoyDev and reconnects after restart until you forget or revoke it.",
+    "Under Pair homes, paste the link or shared text on the Pairing link tab (or type host:port / SSH on those tabs). Name the home, then Join. It appears under Paired EnvoyDev and reconnects after restart until you forget or revoke it.",
   "settings.section.homes.info.how.3":
     "Forget removes credentials on this laptop only. Revoke on the home if you want to cut access.",
   "settings.section.teams.info.what":

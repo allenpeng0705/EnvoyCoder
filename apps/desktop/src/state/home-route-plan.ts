@@ -10,6 +10,7 @@ import {
   type HomeRemoteCandidate,
   type StoredHomeNode,
 } from "./candidate-resolver.js";
+import { isLoopbackHost } from "./home-ssh-forward.js";
 import type { PairedHomeRecord } from "./paired-homes.js";
 
 /** Build `ws(s)://host:port/path` from the record's primary endpoint. */
@@ -43,9 +44,9 @@ function peerListFor(record: PairedHomeRecord): string[] {
 }
 
 export function storedNodeFor(record: PairedHomeRecord): StoredHomeNode {
-  // Prefer an explicit LAN URL; else the primary address. Never invent a publicHost — the family's
-  // public builder hardcodes `ws://` and would downgrade `wss://`.
-  const lanIp = record.lanWsUrl?.trim() || record.wsUrl?.trim() || directWsUrl(record);
+  // Prefer an explicit non-loopback LAN URL; else primary / host:port. Never invent a publicHost —
+  // the family's public builder hardcodes `ws://` and would downgrade `wss://`.
+  const lanIp = pickDirectWsUrl(record);
   return {
     id: record.id,
     name: record.label,
@@ -55,6 +56,22 @@ export function storedNodeFor(record: PairedHomeRecord): StoredHomeNode {
     relayWsUrl: record.relayWsUrl,
     bootstrapPeers: peerListFor(record),
   };
+}
+
+/** Prefer lan / ws / host:port, skipping loopback so dial never sticks on this laptop. */
+export function pickDirectWsUrl(record: PairedHomeRecord): string {
+  const candidates = [record.lanWsUrl, record.wsUrl, directWsUrl(record)];
+  for (const raw of candidates) {
+    const trimmed = raw?.trim();
+    if (!trimmed) continue;
+    try {
+      const host = new URL(trimmed).hostname;
+      if (!isLoopbackHost(host)) return trimmed;
+    } catch {
+      /* try next */
+    }
+  }
+  return directWsUrl(record);
 }
 
 /**

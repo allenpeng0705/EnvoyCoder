@@ -190,6 +190,12 @@ export async function homeFromPairingUri(uri: string, label?: string): Promise<H
   if (!host || !Number.isFinite(port)) return { error: "That link's address is incomplete." };
   const path = parsed.pathname && parsed.pathname.length > 0 ? parsed.pathname : "/ws";
   const fromOwner = check.ownerId.replace(/^envoy:owner:/, "") || host;
+  // Never keep a loopback lanWsUrl for dial — join may have chosen non-loopback `host`, but the
+  // ladder prefers lanWsUrl first and would stick on 127.0.0.1 (this laptop's daemon).
+  const lanWsUrl = nonLoopbackWs(check.lanWsUrl);
+  // Rebuild with the *chosen* scheme so a wss:// join is not silently downgraded to ws://.
+  const scheme = parsed.protocol === "wss:" ? "wss" : "ws";
+  const wsUrl = nonLoopbackWs(check.wsUrl) ?? `${scheme}://${host}:${port}${path}`;
   return {
     host,
     port,
@@ -197,8 +203,8 @@ export async function homeFromPairingUri(uri: string, label?: string): Promise<H
     token: check.token,
     label: (label?.trim() || fromOwner || host).slice(0, 64),
     ...ladderFieldsFrom({
-      lanWsUrl: check.lanWsUrl,
-      wsUrl: check.wsUrl,
+      lanWsUrl,
+      wsUrl,
       homeNodePeerId: check.homeNodePeerId,
       bootstrapPeers: check.bootstrapPeers,
       relayWsUrl: check.relayWsUrl,
@@ -206,6 +212,22 @@ export async function homeFromPairingUri(uri: string, label?: string): Promise<H
       relayPeerId: check.relayPeerId,
     }),
   };
+}
+
+function nonLoopbackWs(url: string | undefined): string | undefined {
+  const trimmed = url?.trim();
+  if (!trimmed) return undefined;
+  const hostname = safeHostname(trimmed);
+  if (!hostname || isLoopbackHost(hostname)) return undefined;
+  return trimmed;
+}
+
+function safeHostname(url: string): string | undefined {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return undefined;
+  }
 }
 
 export class PairedHomeStore {

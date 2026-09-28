@@ -79,6 +79,9 @@ export const it: Catalogue = {
   "homes.workingOn": "Lavoro su {label}",
   "homes.online": "Online",
   "homes.offline": "Offline",
+  "homes.reaching": "Raggiungimento di {label}…",
+  "homes.homeOffline": "{label} è offline",
+  "homes.homeOnline": "Connesso a {label}",
   "homes.forget": "Dimentica",
   "homes.rename": "Nome per questo home",
   "homes.label.placeholder": "office-linux",
@@ -435,7 +438,7 @@ export const it: Catalogue = {
   "settings.section.machine.detail": "Il servizio a cui questa finestra è collegata, e con cosa è stato avviato.",
   "settings.section.pairing.title": "Abbina dispositivi",
   "settings.section.pairing.detail": "Consenti a un telefono di raggiungere questa macchina: scansiona un codice, digita l'indirizzo o passa da SSH.",
-  "settings.section.homes.title": "Home abbinati",
+  "settings.section.homes.title": "Abbina home",
   "settings.section.homes.detail": "Unisciti a un altro EnvoyDev da questo laptop come thin client.",
   "settings.info.howHeading": "Come usarlo",
   "settings.section.agents.info.what":

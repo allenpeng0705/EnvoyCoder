@@ -3,6 +3,10 @@
  *
  * SSH local-forward (when configured for a loopback daemon) stays an alternate transport for the
  * home's own address — same story as the phone — and is tried before the network ladder.
+ *
+ * **CSP:** the packaged window must allow `ws:` / `wss:` in `tauri.conf.json` `connect-src` so this
+ * dialer can reach LAN hosts and the community relay. That is broader than loopback-only (XSS can
+ * dial arbitrary sockets); a shell-side WebSocket proxy would restore tighter CSP later.
  */
 
 import type { DaemonEndpoint, WebSocketLike } from "../client/connection.js";
@@ -13,7 +17,7 @@ import {
   type SocketFactory,
 } from "./client-proxy-socket.js";
 import type { HomeRemoteCandidate } from "./candidate-resolver.js";
-import { candidatesFor, directWsUrl } from "./home-route-plan.js";
+import { candidatesFor, pickDirectWsUrl } from "./home-route-plan.js";
 import {
   isLoopbackHost,
   type HomeSshForwardOpener,
@@ -199,10 +203,10 @@ export async function dialPairedHome(
     };
   }
 
-  // Nothing answered — fall back to the stored host:port so CoderConnection still dials something
-  // and surfaces the usual unreachable state (same as today's single-shot dial).
+  // Nothing answered — fall back to a non-loopback stored address so CoderConnection still dials
+  // something and surfaces unreachable (never this laptop's 127.0.0.1 when the record named a LAN).
   const fallbackUrl = (() => {
-    const base = record.lanWsUrl?.trim() || record.wsUrl?.trim() || directWsUrl(record);
+    const base = pickDirectWsUrl(record);
     const token = record.token.trim();
     if (!token) return base;
     if (base.includes("token=")) return base;

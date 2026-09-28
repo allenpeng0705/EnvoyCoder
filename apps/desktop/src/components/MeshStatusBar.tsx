@@ -6,32 +6,38 @@
  * hosting its own. That single line decides whether "run it on the workstation" is even possible,
  * and a user who has to open Settings to find out will instead assume the feature is broken.
  *
- * The wording rule is the family's: a sentence a user can act on, with the developer detail
- * (scope key, owner id, the shared mesh network's connection count) only in the tooltip. That last one
- * is load-bearing: `peerCount` is how many connections libp2p holds — relays, DHT peers, other families'
- * nodes — and a headline that called them "machines connected" told every standalone daemon's owner that
- * dozens of machines were attached to them when they had paired nothing (`describe`, below).
+ * When the window is focused on a **paired home** (thin client), the line names that home's
+ * reachability instead of the laptop's local "Standalone" mesh state — Join used to look like it
+ * flipped the machine to Standalone because the remote store has no mesh until hello succeeds.
  */
 
 import type { JSX } from "react";
 
+import type { ConnectionStatus } from "../client/connection.js";
 import { useT } from "../i18n/context.js";
 import { localizeText } from "../i18n/notice.js";
 import type { Translator } from "../i18n/translate.js";
 import type { MeshStatus } from "../state/useCoderState.js";
 
-export function MeshStatusBar(props: { mesh: MeshStatus }): JSX.Element {
+export function MeshStatusBar(props: {
+  mesh: MeshStatus;
+  /** When set, the window is working on a paired home — show that home's dial state. */
+  pairedHome?: { label: string; connection: ConnectionStatus };
+}): JSX.Element {
   const t = useT();
-  const { mesh } = props;
-  // `hosting` is healthy, not a fallback: our own peer is listening, which is exactly what a phone
-  // needs. Only `refused` is a warning; `no-node` is quiet — nothing is wrong, there is simply no node.
-  const tone =
-    mesh.kind === "attached" || mesh.kind === "hosting"
+  const { mesh, pairedHome } = props;
+  const line = pairedHome ? describePairedHome(t, pairedHome) : describe(t, mesh);
+  const tone = pairedHome
+    ? pairedHome.connection.state === "connected"
+      ? "ok"
+      : pairedHome.connection.state === "connecting"
+        ? "quiet"
+        : "warn"
+    : mesh.kind === "attached" || mesh.kind === "hosting"
       ? "ok"
       : mesh.kind === "refused"
         ? "warn"
         : "quiet";
-  const line = describe(t, mesh);
   return (
     <footer className="statusbar">
       <span className={`dot dot--${tone}`} aria-hidden />
@@ -63,6 +69,22 @@ interface MeshLine {
   detail?: string;
   /** A count shown beside the line — only when it is a count of *this* window's mesh. */
   badge?: { text: string; title?: string };
+}
+
+function describePairedHome(
+  t: Translator["t"],
+  home: { label: string; connection: ConnectionStatus },
+): MeshLine {
+  const label = home.label;
+  if (home.connection.state === "connected") {
+    return { text: t("homes.homeOnline", { label }) };
+  }
+  if (home.connection.state === "connecting") {
+    return { text: t("homes.reaching", { label }) };
+  }
+  const detail =
+    home.connection.state === "disconnected" ? home.connection.reason : undefined;
+  return { text: t("homes.homeOffline", { label }), detail };
 }
 
 /**

@@ -64,6 +64,8 @@ A **paired home** is a different EnvoyDev (a server, an office desktop, a box at
 4. **WAN:** the relay rung covers many cases; you can also use **SSH** (Settings → Paired homes → SSH), or put both machines on Tailscale/VPN. Pure libp2p multiaddr dials still need a window transport (phone has one; desktop skips those rungs and continues to relay).
 5. On the laptop, **Retry** the home from the rail after network changes, or re-join with **Host:port** + token when you are on that LAN.
 
+**Packaged-app CSP:** Pair homes dials LAN and community-relay WebSockets from the window, so `connect-src` allows `ws:` / `wss:` (not only `127.0.0.1`). That is intentional for reachability; a compromised webview could open arbitrary WebSockets. A future shell-side proxy could tighten CSP again.
+
 Paired homes are a thin-client join. For collaborative steps on the same Git project across members, use [Team jobs](#team-jobs--work-across-machines).
 
 ---

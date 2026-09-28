@@ -1064,7 +1064,14 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
         </main>
       </div>
 
-      <MeshStatusBar mesh={state.mesh} />
+      <MeshStatusBar
+        mesh={state.mesh}
+        pairedHome={
+          workingOnLabel
+            ? { label: workingOnLabel, connection: state.connection }
+            : undefined
+        }
+      />
 
       <CommandCenter
         open={paletteOpen}

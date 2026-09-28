@@ -137,6 +137,26 @@ describe("homeFromPairingUri", () => {
       }),
     );
     expect(parsed).toMatchObject({ host: "10.0.0.8", port: 4770, token: "preferlan1" });
+    if ("error" in parsed) return;
+    // Loopback lanWsUrl must not be kept — the dial ladder prefers it and would stick on localhost.
+    expect(parsed.lanWsUrl).toBeUndefined();
+    expect(parsed.wsUrl).toBe("ws://10.0.0.8:4770/ws");
+  });
+
+  it("keeps wss when rebuilding wsUrl after scrubbing a loopback primary", async () => {
+    const parsed = await homeFromPairingUri(
+      legacyUri({
+        wsUrl: "ws://127.0.0.1:4770/ws",
+        lanWsUrl: "wss://10.0.0.8:443/ws",
+        token: "keepwss01",
+      }),
+    );
+    expect("error" in parsed).toBe(false);
+    if ("error" in parsed) return;
+    expect(parsed.host).toBe("10.0.0.8");
+    expect(parsed.port).toBe(443);
+    expect(parsed.lanWsUrl).toBe("wss://10.0.0.8:443/ws");
+    expect(parsed.wsUrl).toMatch(/^wss:\/\//);
   });
 
   it("keeps homeNodePeerId and bootstrapPeers for the dial ladder", async () => {

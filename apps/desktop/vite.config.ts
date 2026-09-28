@@ -62,6 +62,14 @@ export default defineConfig({
       // pairing-token lives in the sibling EnvoyMesh checkout.
       allow: [repoRoot, path.dirname(meshPairingToken)],
     },
+    watch: {
+      // Cargo writes locked `.exe` build scripts under `src-tauri/target` while `tauri dev` compiles.
+      // On Windows, Vite's FSWatcher on those paths throws EBUSY and kills `beforeDevCommand` (vite).
+      ignored: [
+        "**/src-tauri/target/**",
+        path.resolve(desktopRoot, "src-tauri/target"),
+      ],
+    },
   },
   optimizeDeps: {
     // Never prebundle the daemon/mesh barrels into the window.
