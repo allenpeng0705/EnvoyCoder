@@ -99,7 +99,7 @@ export function createCoderEventBus(): CoderEventBus {
  */
 export function createNodeService(bus: CoderEventBus): HostNodeService {
   return {
-    on(event, listener) {
+    on(event: string, listener: (data: unknown) => void) {
       bus.on(event, listener);
     },
     onCallEvent() {
@@ -148,7 +148,7 @@ export function createCoderSocketMethods(bus: CoderEventBus): SocketMethodPort {
   const perConnection = new WeakMap<object, () => void>();
 
   return {
-    async handle(context) {
+    async handle(context: Parameters<SocketMethodPort["handle"]>[0]) {
       if (context.method !== CODER_SUBSCRIBE_METHOD) return false;
 
       const requested = (context.params as { events?: unknown }).events;
@@ -186,7 +186,7 @@ export function createCoderSocketMethods(bus: CoderEventBus): SocketMethodPort {
       return true;
     },
 
-    closed(connection) {
+    closed(connection: object) {
       perConnection.get(connection)?.();
       perConnection.delete(connection);
     },

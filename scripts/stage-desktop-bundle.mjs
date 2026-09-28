@@ -396,8 +396,27 @@ function ensureWorkspaceInstalled() {
  * Package mode resolves `@envoydev/*` through each package's `exports` → `./dist/…`.
  * A fresh Windows clone often has `npm install` but never `tsc -b`, so dist is empty
  * and esbuild reports "Could not resolve @envoydev/protocol".
+ *
+ * EnvoyMesh is a linked sibling: its packages must also have `dist/` or `@envoymesh/*`
+ * types collapse and `tsc -b` reports implicit-any on every callback parameter.
  */
 function ensureWorkspaceBuilt() {
+  const meshReuseHostDts = path.join(
+    root,
+    "node_modules",
+    "@envoymesh",
+    "reuse-host",
+    "dist",
+    "src",
+    "index.d.ts",
+  );
+  if (!existsSync(meshReuseHostDts)) {
+    fail(
+      "EnvoyMesh packages are linked but not built (missing @envoymesh/reuse-host dist).\n" +
+        "  From the EnvoyMesh sibling: npm install && npx tsc -b\n" +
+        "  Then back here: npm install && npx tsc -b",
+    );
+  }
   const tscJs = path.join(root, "node_modules", "typescript", "bin", "tsc");
   if (!existsSync(tscJs)) {
     fail("typescript is not installed. From the EnvoyCoder root run `npm install`, then try again.");

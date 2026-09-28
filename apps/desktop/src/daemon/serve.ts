@@ -493,7 +493,7 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
   // without minting a phone pairing. Team sessions may only call COLLAB_PRE_AUTH_METHODS.
   const collabMethodSet = new Set<string>(COLLAB_PRE_AUTH_METHODS);
   const sessionIdentity = coderSessionIdentity({
-    resolveSession: async (token) => {
+    resolveSession: async (token: string) => {
       const paired = await pairedDevices.resolveSession(token);
       if (paired) return paired;
       const team = await findActiveTeamByToken(paths.teamsFile, token);

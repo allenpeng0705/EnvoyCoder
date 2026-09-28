@@ -27,6 +27,7 @@ import {
 import {
   type FramedDuplex,
   type HostRpcDispatcher,
+  type MeshHostTransportOptions,
   type SessionIdentityResolver,
   createMeshHostTransport,
   createProxyCloseRegistry,
@@ -202,7 +203,7 @@ function createProxyServe(
   ports: CoderMeshProxyPorts,
   registry: ProxyCloseRegistry,
 ): (duplex: FramedDuplex) => Promise<void> {
-  return createMeshHostTransport<unknown>((duplex) => {
+  return createMeshHostTransport<unknown>((duplex: FramedDuplex): MeshHostTransportOptions<unknown> => {
     // Per-connection state. `unregister` is assigned once this connection's session is resolved; a
     // shared options object would leave every connection pointing at the last one's handle.
     let unregister: () => void = () => undefined
@@ -213,7 +214,7 @@ function createProxyServe(
     return {
       sessionIdentity: {
         localScopeKey: ports.sessionIdentity.localScopeKey,
-        resolveSession: async (token) => {
+        resolveSession: async (token: string) => {
           const session = await ports.sessionIdentity.resolveSession(token)
           if (!session) return null
           const caller =
@@ -234,7 +235,7 @@ function createProxyServe(
       // returned cleanup when `subscribe` is present, and that cleanup is what releases this
       // connection's registry slot. Without it a closed connection would stay "revocable" forever
       // and the registry would grow one dead duplex per connection.
-      subscribe: (send) => {
+      subscribe: (send: (event: string, data: unknown) => void) => {
         if (sessionKind === "team-member") {
           return () => {
             unregister()
