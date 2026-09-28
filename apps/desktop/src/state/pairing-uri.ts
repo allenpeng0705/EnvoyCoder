@@ -16,6 +16,11 @@ export type PairingUriFields = {
   ownerId: string;
   lanWsUrl?: string;
   app?: string;
+  homeNodePeerId?: string;
+  bootstrapPeers?: string[];
+  relayWsUrl?: string;
+  relayWsUrls?: string[];
+  relayPeerId?: string;
 };
 
 export type PairingUriCheck =
@@ -23,7 +28,8 @@ export type PairingUriCheck =
   | { ok: false; code: string; message: string };
 
 /**
- * Same job as `checkPairingCode` in host-bridge, scoped for the webview.
+ * Same job as `checkPairingCode` in host-bridge, scoped for the webview — and keeps the mesh /
+ * relay fields the phone walks, which the older window reader dropped.
  *
  * Accepts compressed `pairing=` (QR) and the legacy query-string form.
  */
@@ -44,6 +50,15 @@ export async function readPairingUri(
         ownerId: decoded.ownerId,
         ...(decoded.app ? { app: decoded.app } : {}),
         ...(decoded.lanWsUrl ? { lanWsUrl: decoded.lanWsUrl } : {}),
+        ...(decoded.homeNodePeerId ? { homeNodePeerId: decoded.homeNodePeerId } : {}),
+        ...(decoded.bootstrapPeers && decoded.bootstrapPeers.length > 0
+          ? { bootstrapPeers: decoded.bootstrapPeers }
+          : {}),
+        ...(decoded.relayWsUrl ? { relayWsUrl: decoded.relayWsUrl } : {}),
+        ...(decoded.relayWsUrls && decoded.relayWsUrls.length > 0
+          ? { relayWsUrls: decoded.relayWsUrls }
+          : {}),
+        ...(decoded.relayPeerId ? { relayPeerId: decoded.relayPeerId } : {}),
       };
     } catch (error) {
       failReason = error instanceof Error ? error.message : String(error);
@@ -106,13 +121,32 @@ function parseLegacyPairingUri(input: string): PairingUriFields | null {
   if (!wsUrl || !token || !ownerId || !ownerPublicKey) return null;
   const lanWsUrl = url.searchParams.get("lanWsUrl")?.trim() || undefined;
   const app = url.searchParams.get("app")?.trim() || undefined;
+  const homeNodePeerId = url.searchParams.get("homeNodePeerId")?.trim() || undefined;
+  const relayWsUrl = url.searchParams.get("relayWsUrl")?.trim() || undefined;
+  const relayPeerId = url.searchParams.get("relayPeerId")?.trim() || undefined;
+  const bootstrapPeers = splitList(url.searchParams.get("bootstrapPeers"));
+  const relayWsUrls = splitList(url.searchParams.get("relayWsUrls") ?? url.searchParams.get("rels"));
   return {
     wsUrl,
     token,
     ownerId,
     ...(lanWsUrl ? { lanWsUrl } : {}),
     ...(app ? { app } : {}),
+    ...(homeNodePeerId ? { homeNodePeerId } : {}),
+    ...(bootstrapPeers ? { bootstrapPeers } : {}),
+    ...(relayWsUrl ? { relayWsUrl } : {}),
+    ...(relayWsUrls ? { relayWsUrls } : {}),
+    ...(relayPeerId ? { relayPeerId } : {}),
   };
+}
+
+function splitList(raw: string | null | undefined): string[] | undefined {
+  if (!raw?.trim()) return undefined;
+  const parts = raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  return parts.length > 0 ? parts : undefined;
 }
 
 /**

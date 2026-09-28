@@ -735,6 +735,7 @@ export const it: Catalogue = {
   "settings.pairing.qr.action": "Mostra il codice di abbinamento",
   "settings.pairing.qr.busy": "Preparazione del codice di abbinamento…",
   "settings.pairing.qr.alt": "Codice di abbinamento",
+  "settings.pairing.qr.renderFailed": "Impossibile disegnare il codice di abbinamento. Mostra un nuovo codice, oppure copia il link sotto.",
   "settings.pairing.uriLabel": "Link di abbinamento",
   "settings.pairing.copy": "Copia il link di abbinamento",
   "settings.pairing.field.copy": "Copia",

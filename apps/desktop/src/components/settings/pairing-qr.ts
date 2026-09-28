@@ -42,9 +42,16 @@
  * ## Bitmap and display
  *
  * `width: 512` fixes the *image* at 512 px; the panel must display it at exactly that size, because a
- * bitmap scaled up by CSS is interpolated and stays unscannable. `PairPhone.tsx` sets the `<img>` width
- * and height inline from {@link RenderedPairingQr.sizePx}, and `.settings__pairing-qr` deliberately carries
- * no width/height of its own so no stylesheet can resample it.
+ * bitmap scaled up by CSS is interpolated and stays unscannable. `PairPhone.tsx` sets the container
+ * width and height inline from {@link RenderedPairingQr.sizePx}, and `.settings__pairing-qr` deliberately
+ * carries no width/height of its own so no stylesheet can resample it.
+ *
+ * ## Why the window draws inline SVG (not `<img src="data:…">`)
+ *
+ * Tauri's CSP is `default-src 'self'` (see `tauri.conf.json`). Without an explicit `img-src … data:`,
+ * a data-URL `<img>` is blocked — Mac and Windows both show only the white CSS pad. The panel therefore
+ * injects the SVG markup into the DOM. Canvas PNGs under `color-scheme: dark` can also invert to
+ * white-on-white; SVG paths do not. Node tests still use PNG via `pngjs` so `jsQR` can decode bytes.
  *
  * ## Error correction
  *
@@ -69,7 +76,12 @@ export const PAIRING_QR_MIN_PX_PER_MODULE = 4;
 
 /** One rendered code: what to show, and the arithmetic that decided how big that is. */
 export interface RenderedPairingQr {
-  /** The PNG data URL, at exactly {@link sizePx} pixels square. */
+  /**
+   * SVG markup for the window panel (preferred). Absent under Node, where {@link dataUrl} is a PNG
+   * for the regression suite.
+   */
+  readonly svgMarkup?: string;
+  /** PNG data URL under Node; unused in the window when {@link svgMarkup} is set. */
   readonly dataUrl: string;
   /** Symbol modules across, **quiet zone excluded** (`17 + 4 × version`). */
   readonly modules: number;
@@ -77,16 +89,18 @@ export interface RenderedPairingQr {
   readonly quietZoneModules: number;
   /** Effective pixels per module: `sizePx / (modules + 2 × quietZone)`. */
   readonly pxPerModule: number;
-  /** The image's real pixel size — what the `<img>` must be displayed at. */
+  /** The image's real pixel size — what the panel must be displayed at. */
   readonly sizePx: number;
 }
+
+const PAIRING_QR_COLORS = { dark: "#000000", light: "#ffffff" } as const;
 
 /**
  * Encode one pairing URI and report the dimensions the panel must honor.
  *
  * The `modules` count comes from `QRCode.create` — the encoder's own answer for *this* URI — and `sizePx`
  * from the same arithmetic `qrcode`'s renderer uses for `width` (`renderer/utils.js`'s `getImageWidth`, an
- * integer floor of `width`), so the reported size and the emitted PNG cannot disagree. The regression test
+ * integer floor of `width`), so the reported size and the emitted image cannot disagree. The regression test
  * checks that against the actual PNG bytes rather than trusting this function.
  */
 export async function renderPairingQr(uri: string): Promise<RenderedPairingQr> {
@@ -97,14 +111,27 @@ export async function renderPairingQr(uri: string): Promise<RenderedPairingQr> {
   // own size it falls back to its default scale of 4. Mirrored here so `sizePx` is the real output size.
   const scale = PAIRING_QR_WIDTH_PX >= totalModules ? PAIRING_QR_WIDTH_PX / totalModules : 4;
   const sizePx = Math.floor(totalModules * scale);
-  const dataUrl = await QRCode.toDataURL(uri, {
+  const shared = {
     errorCorrectionLevel: PAIRING_QR_ERROR_CORRECTION,
     margin: PAIRING_QR_MARGIN_MODULES,
     width: PAIRING_QR_WIDTH_PX,
-    // A white (not transparent) background: a scanner reads the light modules, and a transparent PNG over
-    // a dark settings pane is a QR with no light modules at all.
-    color: { dark: "#000000ff", light: "#ffffffff" },
-  });
+    color: PAIRING_QR_COLORS,
+  };
+
+  if (typeof document !== "undefined") {
+    const svgMarkup = await QRCode.toString(uri, { type: "svg", ...shared });
+    return {
+      svgMarkup,
+      // Kept for callers that still expect a URL; CSP-safe path is svgMarkup in the panel.
+      dataUrl: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`,
+      modules,
+      quietZoneModules: PAIRING_QR_MARGIN_MODULES,
+      pxPerModule: sizePx / totalModules,
+      sizePx,
+    };
+  }
+
+  const dataUrl = await QRCode.toDataURL(uri, shared);
   return {
     dataUrl,
     modules,

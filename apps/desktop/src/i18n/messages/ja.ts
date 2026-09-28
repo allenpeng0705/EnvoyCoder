@@ -733,6 +733,7 @@ export const ja: Catalogue = {
   "settings.pairing.qr.action": "ペアリングコードを表示",
   "settings.pairing.qr.busy": "ペアリングコードを準備しています…",
   "settings.pairing.qr.alt": "ペアリングコード",
+  "settings.pairing.qr.renderFailed": "ペアリングコードを描画できませんでした。「新しいコードを表示」するか、下のリンクをコピーしてください。",
   "settings.pairing.uriLabel": "ペアリングリンク",
   "settings.pairing.copy": "ペアリングリンクをコピー",
   "settings.pairing.field.copy": "コピー",

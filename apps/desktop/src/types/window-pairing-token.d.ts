@@ -9,5 +9,10 @@ declare module "@envoydev/window-pairing-token" {
     ownerId: string;
     lanWsUrl?: string;
     app?: string;
+    homeNodePeerId?: string;
+    bootstrapPeers?: string[];
+    relayWsUrl?: string;
+    relayWsUrls?: string[];
+    relayPeerId?: string;
   }>;
 }

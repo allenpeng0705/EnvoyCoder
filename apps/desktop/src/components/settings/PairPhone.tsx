@@ -98,6 +98,7 @@ export interface PairPhonePanelProps {
 export function PairPhonePanel(props: PairPhonePanelProps): JSX.Element {
   const { t } = useI18n();
   const [qr, setQr] = useState<RenderedPairingQr | null>(null);
+  const [qrError, setQrError] = useState<string | undefined>(undefined);
   const [copied, setCopied] = useState(false);
   // Read once, outside the callbacks: the discriminant narrows `props.outcome` here but not inside a
   // handler that may run later, and re-checking it in every branch is how the two halves of this panel
@@ -109,19 +110,28 @@ export function PairPhonePanel(props: PairPhonePanelProps): JSX.Element {
     // clearing when there is none) is what keeps a superseded QR from sitting beside a new one.
     if (uri === null) {
       setQr(null);
+      setQrError(undefined);
       return;
     }
     let cancelled = false;
+    setQrError(undefined);
     // `renderPairingQr` owns the dimensions (module count read back from the encoder, integer px per
-    // module, four-module quiet zone); the panel's only job is to display the result at exactly the size
+    // module, quiet zone); the panel's only job is to display the result at exactly the size
     // that was generated, which the inline width/height below guarantee.
-    void renderPairingQr(uri).then((rendered) => {
-      if (!cancelled) setQr(rendered);
-    });
+    void renderPairingQr(uri)
+      .then((rendered) => {
+        if (!cancelled) setQr(rendered);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setQr(null);
+          setQrError(t("settings.pairing.qr.renderFailed"));
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, [uri]);
+  }, [uri, t]);
 
   if (!props.outcome.ok) {
     return <p className="settings__note">{props.outcome.message}</p>;
@@ -131,17 +141,35 @@ export function PairPhonePanel(props: PairPhonePanelProps): JSX.Element {
   return (
     <div className="settings__pairing" data-testid="pairing-panel">
       {qr ? (
-        <img
-          className="settings__pairing-qr"
-          src={qr.dataUrl}
-          alt={t("settings.pairing.qr.alt")}
-          data-qr-modules={qr.modules}
-          data-qr-px-per-module={qr.pxPerModule}
-          data-qr-size={qr.sizePx}
-          // Inline rather than in the stylesheet: the bitmap is `sizePx` square, and a CSS rule that
-          // resized it would resample the modules — the exact failure this replaced.
-          style={{ width: qr.sizePx, height: qr.sizePx }}
-        />
+        qr.svgMarkup !== undefined ? (
+          <div
+            className="settings__pairing-qr"
+            role="img"
+            aria-label={t("settings.pairing.qr.alt")}
+            data-qr-modules={qr.modules}
+            data-qr-px-per-module={qr.pxPerModule}
+            data-qr-size={qr.sizePx}
+            // Inline rather than in the stylesheet: the symbol is `sizePx` square, and a CSS rule that
+            // resized it would resample the modules — the exact failure this replaced.
+            style={{ width: qr.sizePx, height: qr.sizePx }}
+            // Markup is produced by `qrcode` from our own minted URI — not user HTML.
+            dangerouslySetInnerHTML={{ __html: qr.svgMarkup }}
+          />
+        ) : (
+          <img
+            className="settings__pairing-qr"
+            src={qr.dataUrl}
+            alt={t("settings.pairing.qr.alt")}
+            data-qr-modules={qr.modules}
+            data-qr-px-per-module={qr.pxPerModule}
+            data-qr-size={qr.sizePx}
+            style={{ width: qr.sizePx, height: qr.sizePx }}
+          />
+        )
+      ) : qrError !== undefined ? (
+        <p className="settings__note" role="alert" data-qr-error="">
+          {qrError}
+        </p>
       ) : null}
       <label className="settings__pairing-label">
         {t("settings.pairing.uriLabel")}

@@ -25,12 +25,19 @@ import { withMessageRef } from "@envoydev/protocol";
 
 import { messageRef } from "../i18n/notice.js";
 
-import type { DaemonEndpoint } from "./connection.js";
+import type { DaemonEndpoint, WebSocketLike } from "./connection.js";
 
 export interface ResolvedEndpoint {
   endpoint: DaemonEndpoint;
   /** How the endpoint was decided, and therefore how much its identity can be trusted. */
   verifiedBy: "shell" | "none";
+  /**
+   * Paired-home dial: reopen the winning ladder rung (LAN / relay client-proxy / SSH).
+   * When set, `CoderConnection` must use this instead of building `ws://host:port` alone.
+   */
+  openSocket?: () => WebSocketLike;
+  /** Family candidate name that won (`lan`, `community-relay`, `ssh`, …). */
+  route?: string;
 }
 
 /** The Tauri bridge, as this window uses it. Declared rather than pulled from a package. */

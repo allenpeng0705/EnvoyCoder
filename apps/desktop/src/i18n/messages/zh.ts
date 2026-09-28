@@ -716,6 +716,7 @@ export const zh: Catalogue = {
   "settings.pairing.qr.busy": "正在准备配对码…",
   "settings.pairing.qr.action": "显示新配对码",
   "settings.pairing.qr.alt": "配对码",
+  "settings.pairing.qr.renderFailed": "无法绘制配对码。请点“显示新代码”，或复制下方链接。",
   "settings.pairing.uriLabel": "配对链接",
   "settings.pairing.copy": "复制配对链接",
   "settings.pairing.field.copy": "复制",

@@ -735,6 +735,7 @@ export const de: Catalogue = {
   "settings.pairing.qr.busy": "Kopplungscode wird vorbereitet…",
   "settings.pairing.qr.action": "Neuen Code anzeigen",
   "settings.pairing.qr.alt": "Kopplungscode",
+  "settings.pairing.qr.renderFailed": "Der Kopplungscode konnte nicht gezeichnet werden. Zeige einen neuen Code, oder kopiere den Link darunter.",
   "settings.pairing.uriLabel": "Kopplungslink",
   "settings.pairing.copy": "Kopplungslink kopieren",
   "settings.pairing.field.copy": "Kopieren",

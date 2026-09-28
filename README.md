@@ -56,6 +56,14 @@ A **paired home** is a different EnvoyDev (a server, an office desktop, a box at
 
 **SSH note:** if the daemon address is loopback on the far side (`127.0.0.1:…`), EnvoyDev opens a local-forward through the SSH hop before connecting — it does not dial loopback on the laptop.
 
+**If the home stays Offline** after Join:
+
+1. Desktop Paired homes walk the **same family ladder as the phone** — LAN → public → P2P → bootstrap → **relay** last — from the pairing link's addresses and mesh fields (`homeNodePeerId` / `bootstrapPeers`). Off-LAN, the community relay rung is tried after direct addresses fail (not a product-specific relay).
+2. On the **home**, prefer a **LAN or public IP** in the link, not only `127.0.0.1`. Mint with Host:port using the machine's LAN IP if needed.
+3. **LAN:** same Wi-Fi/subnet, and allow EnvoyDev inbound on the home firewall (daemon port, default **4770**).
+4. **WAN:** the relay rung covers many cases; you can also use **SSH** (Settings → Paired homes → SSH), or put both machines on Tailscale/VPN. Pure libp2p multiaddr dials still need a window transport (phone has one; desktop skips those rungs and continues to relay).
+5. On the laptop, **Retry** the home from the rail after network changes, or re-join with **Host:port** + token when you are on that LAN.
+
 Paired homes are a thin-client join. For collaborative steps on the same Git project across members, use [Team jobs](#team-jobs--work-across-machines).
 
 ---

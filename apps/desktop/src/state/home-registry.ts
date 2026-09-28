@@ -16,10 +16,10 @@ import {
   type CoderState,
   type CoderStore,
 } from "./coderStore.js";
+import { dialPairedHome } from "./home-dial.js";
 import { homeFromDirect, homeFromSsh } from "./home-join.js";
 import {
   defaultHomeSshForwardOpener,
-  isLoopbackHost,
   type HomeSshForwardOpener,
 } from "./home-ssh-forward.js";
 import {
@@ -167,6 +167,13 @@ export class HomeRegistry {
       path: string;
       token: string;
       sshHop?: string;
+      lanWsUrl?: string;
+      wsUrl?: string;
+      homeNodePeerId?: string;
+      bootstrapPeers?: string[];
+      relayWsUrl?: string;
+      relayWsUrls?: string[];
+      relayPeerId?: string;
     },
   ): Promise<PairedHomeRecord> {
     const record = await this.homes.add(parsed);
@@ -219,38 +226,30 @@ export class HomeRegistry {
     const openSshForward = this.openSshForward;
     const store = createCoderStore({
       resolveEndpoint: async (): Promise<ResolvedEndpoint> => {
-        // SSH join stores the far-side daemon (often 127.0.0.1). Dialling that on *this* laptop is a
-        // lie — open a local-forward through the saved hop first (shell), same story as the phone.
-        if (record.sshHop && isLoopbackHost(record.host)) {
-          const local = await openSshForward(record.sshHop, record.port, record.path);
-          return {
-            endpoint: {
-              host: local.host,
-              port: local.port,
-              path: local.path,
-            },
-            verifiedBy: "none",
-          };
-        }
+        // Walk LAN → public → P2P → bootstrap → relay (family order). SSH local-forward when the
+        // stored daemon is loopback behind a hop — same alternate as the phone, not a product relay.
+        const dialed = await dialPairedHome(record, { openSshForward });
         return {
-          endpoint: {
-            host: record.host,
-            port: record.port,
-            path: record.path,
-          },
-          // Pairing token authenticates; there is no shell claim file for a remote home.
+          endpoint: dialed.endpoint,
           verifiedBy: "none",
+          openSocket: dialed.openSocket,
+          route: dialed.route,
         };
       },
       connect: (resolved) =>
         new CoderConnection({
           endpoint: resolved.endpoint,
-          token: record.token,
+          // Token rides the candidate URL (and client-proxy handshake) when openSocket won; keep it
+          // on the connection for the rare fallback that builds `ws://host:port?token=` itself.
+          ...(resolved.openSocket ? {} : { token: record.token }),
           client: {
             name: record.label || "EnvoyDev",
             platform: clientPlatform(),
             id: clientId,
           },
+          ...(resolved.openSocket
+            ? { socketFactory: () => resolved.openSocket!() }
+            : {}),
         }),
     });
     this.remote.set(record.id, store);

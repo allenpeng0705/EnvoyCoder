@@ -735,6 +735,7 @@ export const fr: Catalogue = {
   "settings.pairing.qr.action": "Afficher le code d'association",
   "settings.pairing.qr.busy": "Préparation du code d'association…",
   "settings.pairing.qr.alt": "Code d'association",
+  "settings.pairing.qr.renderFailed": "Le code d’association n’a pas pu être dessiné. Affichez un nouveau code, ou copiez le lien ci-dessous.",
   "settings.pairing.uriLabel": "Lien d'association",
   "settings.pairing.copy": "Copier le lien d'association",
   "settings.pairing.field.copy": "Copier",

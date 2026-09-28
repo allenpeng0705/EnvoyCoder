@@ -733,6 +733,7 @@ export const ko: Catalogue = {
   "settings.pairing.qr.action": "페어링 코드 표시",
   "settings.pairing.qr.busy": "페어링 코드를 준비하는 중…",
   "settings.pairing.qr.alt": "페어링 코드",
+  "settings.pairing.qr.renderFailed": "페어링 코드를 그릴 수 없습니다. 새 코드를 표시하거나 아래 링크를 복사하세요.",
   "settings.pairing.uriLabel": "페어링 링크",
   "settings.pairing.copy": "페어링 링크 복사",
   "settings.pairing.field.copy": "복사",

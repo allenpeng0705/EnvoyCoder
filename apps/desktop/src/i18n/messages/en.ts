@@ -1212,6 +1212,7 @@ export const en = {
   "settings.pairing.qr.busy": "Preparing pairing code…",
   "settings.pairing.qr.action": "Show a new code",
   "settings.pairing.qr.alt": "Pairing code",
+  "settings.pairing.qr.renderFailed": "The pairing code could not be drawn. Use Show a new code, or copy the link below.",
   "settings.pairing.uriLabel": "Pairing link",
   "settings.pairing.copy": "Copy pairing link",
   "settings.pairing.field.copy": "Copy",

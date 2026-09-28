@@ -4351,10 +4351,18 @@ button.explorer__change:hover {
      interpolated and stays unscannable however large it looks. `pixelated` is the belt to that braces:
      if anything ever does scale it, modules stay square instead of blurring. */
   align-self: center;
+  /* Keep the quiet zone white even if a theme tries to invert embedded images. */
+  color-scheme: only light;
   background: #fff;
   border-radius: 4px;
   image-rendering: pixelated;
   max-width: none;
+  overflow: hidden;
+}
+.settings__pairing-qr > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 .settings__pairing-label {
   display: flex;

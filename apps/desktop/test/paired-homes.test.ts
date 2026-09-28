@@ -36,6 +36,8 @@ function legacyUri(opts: {
   token: string;
   ownerId?: string;
   app?: string;
+  homeNodePeerId?: string;
+  bootstrapPeers?: string[];
 }): string {
   const params = new URLSearchParams({
     wsUrl: opts.wsUrl,
@@ -45,6 +47,8 @@ function legacyUri(opts: {
     app: opts.app ?? "EnvoyDev",
   });
   if (opts.lanWsUrl) params.set("lanWsUrl", opts.lanWsUrl);
+  if (opts.homeNodePeerId) params.set("homeNodePeerId", opts.homeNodePeerId);
+  if (opts.bootstrapPeers?.length) params.set("bootstrapPeers", opts.bootstrapPeers.join(","));
   return `envoy://pair?${params.toString()}`;
 }
 
@@ -56,12 +60,14 @@ describe("homeFromPairingUri", () => {
       token: "secret-token",
     });
     const parsed = await homeFromPairingUri(uri, "office");
-    expect(parsed).toEqual({
+    expect(parsed).toMatchObject({
       host: "192.168.1.20",
       port: 4770,
       path: "/ws",
       token: "secret-token",
       label: "office",
+      lanWsUrl: "ws://192.168.1.20:4770/ws",
+      wsUrl: "ws://10.0.0.2:4770/ws",
     });
   });
 
@@ -89,7 +95,7 @@ describe("homeFromPairingUri", () => {
       });
       expect(uri.startsWith("envoy://pair?pairing=")).toBe(true);
       const parsed = await homeFromPairingUri(uri, "qr-home");
-      expect(parsed).toEqual({
+      expect(parsed).toMatchObject({
         host: "10.0.0.5",
         port: host.port,
         path: "/ws",
@@ -111,6 +117,44 @@ describe("homeFromPairingUri", () => {
     expect("error" in parsed).toBe(true);
     if (!("error" in parsed)) return;
     expect(parsed.error).toMatch(/EnvoyMesh|EnvoyDev/);
+  });
+
+  it("refuses a link that only has a loopback address", async () => {
+    const parsed = await homeFromPairingUri(
+      legacyUri({ wsUrl: "ws://127.0.0.1:4770/ws", token: "localonly1" }),
+    );
+    expect("error" in parsed).toBe(true);
+    if (!("error" in parsed)) return;
+    expect(parsed.error).toMatch(/loopback|127\.0\.0\.1|LAN/i);
+  });
+
+  it("prefers a non-loopback wsUrl when lanWsUrl is loopback", async () => {
+    const parsed = await homeFromPairingUri(
+      legacyUri({
+        wsUrl: "ws://10.0.0.8:4770/ws",
+        lanWsUrl: "ws://127.0.0.1:4770/ws",
+        token: "preferlan1",
+      }),
+    );
+    expect(parsed).toMatchObject({ host: "10.0.0.8", port: 4770, token: "preferlan1" });
+  });
+
+  it("keeps homeNodePeerId and bootstrapPeers for the dial ladder", async () => {
+    const peer = "12D3KooWHomePeer";
+    const addr = `/ip4/10.0.0.9/tcp/4001/p2p/${peer}`;
+    const parsed = await homeFromPairingUri(
+      legacyUri({
+        wsUrl: "ws://10.0.0.9:4770/ws",
+        token: "meshfields1",
+        homeNodePeerId: peer,
+        bootstrapPeers: [addr],
+      }),
+    );
+    expect(parsed).toMatchObject({
+      host: "10.0.0.9",
+      homeNodePeerId: peer,
+      bootstrapPeers: [addr],
+    });
   });
 
   it("refuses a link without a token", async () => {
@@ -364,7 +408,7 @@ describe("HomeRegistry", () => {
     const homes = new PairedHomeStore(storage);
     await homes.load();
     const registry = new HomeRegistry(homes);
-    const uri = legacyUri({ wsUrl: "ws://127.0.0.1:4770/ws", token: "abc12345" });
+    const uri = legacyUri({ wsUrl: "ws://10.0.0.7:4770/ws", token: "abc12345" });
     const joined = await registry.joinFromUri(uri, "lab");
     expect("error" in joined).toBe(false);
     if ("error" in joined) {
