@@ -9,9 +9,9 @@ Desktop product version is the one-line root **`VERSION`** file
 
 ```bash
 npm install   # required once per checkout (esbuild, Tauri CLI, workspace links)
-# EnvoyMesh sibling must be built first (file: links):
-#   cd ../EnvoyMesh && npm install && npx tsc -b
-# packaging runs `tsc -b` itself before the daemon bundle; or do it by hand:
+# EnvoyMesh sibling — build only the packages EnvoyDev links (not apps/node or apps/social):
+#   cd ../EnvoyMesh && npm install && npx tsc -b packages/protocol packages/identity packages/vault packages/network packages/api packages/node-core packages/harness packages/host-connect packages/reuse-host
+# packaging runs EnvoyCoder's `tsc -b` itself before the daemon bundle; or do it by hand:
 npx tsc -b
 ```
 

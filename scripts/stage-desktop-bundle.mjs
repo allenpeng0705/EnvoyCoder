@@ -413,8 +413,10 @@ function ensureWorkspaceBuilt() {
   if (!existsSync(meshReuseHostDts)) {
     fail(
       "EnvoyMesh packages are linked but not built (missing @envoymesh/reuse-host dist).\n" +
-        "  From the EnvoyMesh sibling: npm install && npx tsc -b\n" +
-        "  Then back here: npm install && npx tsc -b",
+        "  From the EnvoyMesh sibling, build only the packages EnvoyDev links (skip apps/*):\n" +
+        "    npx tsc -b packages/protocol packages/identity packages/vault packages/network packages/api packages/node-core packages/harness packages/host-connect packages/reuse-host\n" +
+        "  Then back here: npm install && npx tsc -b\n" +
+        "  (A plain `npx tsc -b` in EnvoyMesh also typechecks apps/node and apps/social — not required for EnvoyDev.)",
     );
   }
   const tscJs = path.join(root, "node_modules", "typescript", "bin", "tsc");
