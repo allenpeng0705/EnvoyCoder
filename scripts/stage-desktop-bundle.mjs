@@ -93,9 +93,41 @@ async function stageNode() {
 }
 
 /**
- * Run a PATH command. On Windows, Node's spawn without a shell does not apply
- * PATHEXT, so `pnpm` / `corepack` (which are `.cmd` shims) look missing even
- * when `Get-Command pnpm` works — same trap as packages/platform findBinary.
+ * Absolute path of a Node-toolchain shim sitting next to `node` (Windows:
+ * `corepack.cmd` / `pnpm.cmd`). Official Node installs put them there even when
+ * the shell PATH is incomplete.
+ */
+function besideNode(base) {
+  const dir = path.dirname(process.execPath);
+  const names =
+    process.platform === "win32" ? [`${base}.cmd`, `${base}.exe`, base] : [base];
+  for (const name of names) {
+    const candidate = path.join(dir, name);
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+/** First hit from `where.exe` (Windows) or `command -v` (POSIX). */
+function whichOnPath(base) {
+  if (process.platform === "win32") {
+    const result = spawnSync("where.exe", [base], { encoding: "utf8" });
+    if (result.status !== 0) return null;
+    const hit = (result.stdout ?? "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line.length > 0);
+    return hit ?? null;
+  }
+  const result = spawnSync("sh", ["-c", `command -v ${base}`], { encoding: "utf8" });
+  if (result.status !== 0) return null;
+  const hit = (result.stdout ?? "").trim();
+  return hit.length > 0 ? hit : null;
+}
+
+/**
+ * Run a PATH / Node-adjacent command. On Windows, `.cmd` shims need `shell`
+ * (Node spawn does not apply PATHEXT — same trap as packages/platform findBinary).
  */
 function spawnPath(cmd, args, cwd) {
   return spawnSync(cmd, args, {
@@ -106,14 +138,47 @@ function spawnPath(cmd, args, cwd) {
 }
 
 function pnpm(args, cwd) {
-  const corepack = spawnPath("corepack", ["pnpm", ...args], cwd);
-  if (corepack.status === 0) return;
-  const direct = spawnPath("pnpm", args, cwd);
-  if (direct.status === 0) return;
-  if (corepack.error?.code === "ENOENT" && direct.error?.code === "ENOENT") {
-    fail("pnpm is required to build Envoy Harness. Install it (`corepack enable`, or `npm install -g pnpm`) and run this again.");
+  const corepackBin = besideNode("corepack") ?? whichOnPath("corepack");
+  const pnpmBin = besideNode("pnpm") ?? whichOnPath("pnpm");
+
+  // Activate the packageManager pin (pnpm@10) when corepack is present but unused.
+  if (corepackBin) {
+    spawnPath(corepackBin, ["enable"], cwd);
   }
-  fail(`pnpm ${args.join(" ")} failed (exit ${direct.status ?? corepack.status}).`);
+
+  const attempts = [];
+  if (corepackBin) attempts.push([corepackBin, ["pnpm", ...args]]);
+  if (pnpmBin) attempts.push([pnpmBin, args]);
+  // Bare names last — covers POSIX and a PATH that `where` missed.
+  attempts.push(["corepack", ["pnpm", ...args]]);
+  attempts.push(["pnpm", args]);
+
+  /** @type {import("node:child_process").SpawnSyncReturns<Buffer> | null} */
+  let lastReal = null;
+  const tried = [];
+  for (const [cmd, cmdArgs] of attempts) {
+    const key = `${cmd} ${cmdArgs.join(" ")}`;
+    if (tried.includes(key)) continue;
+    tried.push(key);
+    const result = spawnPath(cmd, cmdArgs, cwd);
+    if (result.status === 0) return;
+    // Keep going: corepack may be present but inactive while `pnpm.cmd` works.
+    if (!result.error || result.error.code !== "ENOENT") lastReal = result;
+  }
+
+  if (lastReal) {
+    fail(`pnpm ${args.join(" ")} failed (exit ${lastReal.status ?? "?"}).`);
+  }
+
+  const pathEnv = process.env.PATH ?? process.env.Path ?? "(empty)";
+  fail(
+    "pnpm is required to build Envoy Harness. Install it (`corepack enable`, or `npm install -g pnpm`) and run this again.\n" +
+      `  node:     ${process.execPath}\n` +
+      `  corepack: ${corepackBin ?? "(not found beside node or on PATH)"}\n` +
+      `  pnpm:     ${pnpmBin ?? "(not found beside node or on PATH)"}\n` +
+      `  tried:    ${tried.join(" | ")}\n` +
+      `  PATH:     ${pathEnv}`,
+  );
 }
 
 /**
