@@ -61,6 +61,7 @@ void main() {
       'relay-1',
       'relay-2',
       'community-relay',
+      'community-relay-us',
     ]);
   });
 

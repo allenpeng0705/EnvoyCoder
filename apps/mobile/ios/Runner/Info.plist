@@ -28,6 +28,13 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>EnvoyDev uses the camera to scan the pairing code shown on your computer.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>EnvoyDev uses the local network to reach your computer on the same Wi‑Fi when you pair.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_dartVmService._tcp</string>
+		<string>_p2p._udp</string>
+	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>EnvoyDev uses your photos so you can attach a picture to a message.</string>
 	<key>UIApplicationSceneManifest</key>

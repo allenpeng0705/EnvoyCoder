@@ -21,9 +21,11 @@ import { DEFAULT_ENVOY_COMMUNITY_RELAY_BOOTSTRAP_ADDRS } from "@envoymesh/api/co
 import {
   CLIENT_PROXY_PROTOCOL,
   EnvoyMesh,
+  buildEnvoyUserAgent,
   meshStreamAsDuplex,
   type EnvoyMeshOptions,
 } from "@envoymesh/network"
+import { ENVOYMESH_VERSION } from "@envoymesh/protocol"
 import {
   type FramedDuplex,
   type HostRpcDispatcher,
@@ -113,6 +115,8 @@ export function coderMeshOptions(identity?: CoderMeshPrivateKey): EnvoyMeshOptio
     enableRelay: true,
     configuredRelayAddrs: [...DEFAULT_ENVOY_COMMUNITY_RELAY_BOOTSTRAP_ADDRS],
     enableDcutr: true,
+    // Identify label so community-relay admin can tell EnvoyDev homes from swarm fill.
+    userAgent: buildEnvoyUserAgent("envoydev", ENVOYMESH_VERSION),
     ...(identity ? { libp2pPrivateKey: identity } : {}),
   }
 }

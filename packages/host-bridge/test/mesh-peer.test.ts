@@ -202,6 +202,8 @@ describe("the relay hints", () => {
     // edit that refills it from the hints would re-join the public swarm (see the pinning test below).
     expect(options.bootstrapPeers).toEqual([])
     expect(options.enableRelay).toBe(true)
+    // Identify label for community-relay ops (family product, not anonymous swarm).
+    expect(options.userAgent).toMatch(/^envoymesh\/envoydev\//)
     // No identity argument, no key: an ephemeral node is a caller's explicit choice, never a
     // default. `start()` supplies the persisted key, which the tests above and below assert.
     expect(options.libp2pPrivateKey).toBeUndefined()

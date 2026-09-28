@@ -33,9 +33,12 @@ export interface HomeRemoteCandidate {
 }
 
 const COMMUNITY_RELAY_HOST = "47.93.11.212";
+const COMMUNITY_US_RELAY_HOST = "47.251.91.97";
 const COMMUNITY_RELAY_WS_PORT = 15432;
 const COMMUNITY_RELAY_LIBP2P =
   "/ip4/47.93.11.212/tcp/4001/p2p/12D3KooWLNR4WYWHBswe8ux5zWsy6cuGywnYPJbdbaAbbpmJMjbo";
+const COMMUNITY_US_RELAY_LIBP2P =
+  "/ip4/47.251.91.97/tcp/4001/p2p/12D3KooWAWiVSpsCjpjauz83ijLugxwScRJi89N4PA1VQ1Czsncb";
 
 let communityHomePeerId: string | null | undefined;
 
@@ -70,6 +73,9 @@ export class CandidateResolver {
           break;
         case "cn-relay":
           result.push(COMMUNITY_RELAY_LIBP2P);
+          break;
+        case "us-relay":
+          result.push(COMMUNITY_US_RELAY_LIBP2P);
           break;
         default:
           break;
@@ -120,7 +126,9 @@ export class CandidateResolver {
     const addBase = (raw: string | undefined) => {
       if (!raw?.trim()) return;
       const base = stripTokenParam(raw.trim());
-      if (!base || base.includes(COMMUNITY_RELAY_HOST)) return;
+      if (!base || base.includes(COMMUNITY_RELAY_HOST) || base.includes(COMMUNITY_US_RELAY_HOST)) {
+        return;
+      }
       if (lanBase && base === lanBase) return;
       if (!bases.includes(base)) bases.push(base);
     };
@@ -160,29 +168,20 @@ export class CandidateResolver {
     ) {
       return [];
     }
-    const wsUrl = `ws://${COMMUNITY_RELAY_HOST}:${COMMUNITY_RELAY_WS_PORT}/ws`;
-    if (communityHomePeerId) {
-      let url = `${wsUrl}?target=${communityHomePeerId}`;
-      if (sessionToken) url += `&token=${sessionToken}`;
-      return [
-        {
-          name: "community-relay",
-          url,
-          homePeerId: communityHomePeerId,
-          sessionToken,
-        },
-      ];
-    }
-    let relayUrl = wsUrl;
-    if (sessionToken) relayUrl += `?token=${sessionToken}`;
-    return [
-      {
-        name: "community-relay",
-        url: relayUrl,
-        homePeerId: communityHomePeerId,
-        sessionToken,
-      },
-    ];
+    const peerId = communityHomePeerId;
+    const add = (host: string, name: string): HomeRemoteCandidate => {
+      const wsUrl = `ws://${host}:${COMMUNITY_RELAY_WS_PORT}/ws`;
+      if (peerId) {
+        let url = `${wsUrl}?target=${peerId}`;
+        if (sessionToken) url += `&token=${sessionToken}`;
+        return { name, url, homePeerId: peerId, sessionToken };
+      }
+      let relayUrl = wsUrl;
+      if (sessionToken) relayUrl += `?token=${sessionToken}`;
+      return { name, url: relayUrl, homePeerId: peerId, sessionToken };
+    };
+    // CN first (Asia latency), US second so a saturated CN proxy still leaves a walk rung.
+    return [add(COMMUNITY_RELAY_HOST, "community-relay"), add(COMMUNITY_US_RELAY_HOST, "community-relay-us")];
   }
 
   private buildLibp2pCandidates(node: StoredHomeNode, sessionToken?: string): HomeRemoteCandidate[] {
@@ -193,6 +192,8 @@ export class CandidateResolver {
     const directAddrs: string[] = [];
     const advertisedCircuits = new Map<string, string>();
     const relayMultiaddrs = new Map<string, string>([["cn-relay", COMMUNITY_RELAY_LIBP2P]]);
+    // US is not seeded here: QR bootstrapPeers carry its circuit when reserved,
+    // and `community-relay-us` covers the WebSocket client-proxy fallback.
 
     for (const peer of node.bootstrapPeers) {
       if (peer.startsWith("/")) {
@@ -339,6 +340,7 @@ function extractRelayName(multiaddr: string): string {
   if (multiaddr.includes("am7.bootstrap")) return "am7";
   if (multiaddr.includes("bootstrap.libp2p.io")) return "bootstrap-libp2p";
   if (multiaddr.includes("47.93.11.212")) return "cn-relay";
+  if (multiaddr.includes("47.251.91.97")) return "us-relay";
   const p2pIdx = multiaddr.lastIndexOf("/p2p/");
   if (p2pIdx >= 0) {
     const peerId = multiaddr.slice(p2pIdx + 5);

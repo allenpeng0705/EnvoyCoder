@@ -43,9 +43,9 @@ describe("candidatesFor (paired-home route plan)", () => {
       "relay-1",
       "relay-2",
       "community-relay",
+      "community-relay-us",
     ]);
   });
-
   it("puts the primary address on the LAN rung when lanWsUrl is absent", () => {
     const first = candidatesFor(record()).at(0);
     expect(first?.name).toBe("lan");
