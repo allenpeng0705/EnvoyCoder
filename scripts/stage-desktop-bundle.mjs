@@ -97,7 +97,99 @@ function pnpm(args, cwd) {
   if (corepack.status === 0) return;
   const direct = spawnSync("pnpm", args, { cwd, stdio: "inherit" });
   if (direct.status === 0) return;
-  fail("pnpm is required to build Envoy Harness. Install it (`corepack enable`, or `npm install -g pnpm`) and run this again.");
+  if (corepack.error?.code === "ENOENT" && direct.error?.code === "ENOENT") {
+    fail("pnpm is required to build Envoy Harness. Install it (`corepack enable`, or `npm install -g pnpm`) and run this again.");
+  }
+  fail(`pnpm ${args.join(" ")} failed (exit ${direct.status ?? corepack.status}).`);
+}
+
+/**
+ * Pack a runnable envoy-harness tree without `pnpm deploy`.
+ *
+ * pnpm 10+ only allows `deploy` when the workspace was installed with
+ * `inject-workspace-packages=true`. The harness sibling does not use that
+ * setting (and we must not rewrite its `.npmrc`), so we copy `dist/`, install
+ * the npm-registry production deps into the staged tree, and vendor the one
+ * workspace dependency (`@envoymesh/envoy-process`) beside them.
+ */
+function packHarnessForInstaller(source, dest) {
+  const pkgRoot = path.join(source, "packages", "envoy-harness");
+  const processRoot = path.join(source, "packages", "envoy-process");
+  const distCli = path.join(pkgRoot, "dist", "cli", "index.js");
+  if (!existsSync(distCli)) {
+    fail("Envoy Harness built, but dist/cli/index.js is missing. The package layout changed.");
+  }
+  if (!existsSync(path.join(processRoot, "dist", "index.js"))) {
+    fail("envoy-process built, but dist/index.js is missing.");
+  }
+
+  rmSync(dest, { recursive: true, force: true });
+  mkdirSync(dest, { recursive: true });
+  cpSync(path.join(pkgRoot, "dist"), path.join(dest, "dist"), { recursive: true });
+
+  const pkg = JSON.parse(readFileSync(path.join(pkgRoot, "package.json"), "utf8"));
+  const registryDeps = {};
+  for (const [name, range] of Object.entries(pkg.dependencies ?? {})) {
+    if (typeof range !== "string") continue;
+    if (range.startsWith("file:") || range.startsWith("link:") || range.startsWith("workspace:")) continue;
+    registryDeps[name] = range;
+  }
+  writeFileSync(
+    path.join(dest, "package.json"),
+    `${JSON.stringify(
+      {
+        name: pkg.name,
+        version: pkg.version ?? "0.0.0",
+        type: "module",
+        private: true,
+        dependencies: registryDeps,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
+  say("Installing Envoy Harness production deps into the staged tree…");
+  run("npm", ["install", "--omit=dev", "--no-package-lock", "--ignore-scripts"], { cwd: dest });
+
+  const processPkg = JSON.parse(readFileSync(path.join(processRoot, "package.json"), "utf8"));
+  const processDest = path.join(dest, "node_modules", "@envoymesh", "envoy-process");
+  mkdirSync(processDest, { recursive: true });
+  cpSync(path.join(processRoot, "dist"), path.join(processDest, "dist"), { recursive: true });
+  writeFileSync(
+    path.join(processDest, "package.json"),
+    `${JSON.stringify(
+      {
+        name: processPkg.name,
+        version: processPkg.version ?? "0.0.0",
+        type: "module",
+        main: "./dist/index.js",
+        exports: processPkg.exports ?? { ".": { import: "./dist/index.js" } },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
+  const launcher = path.join(dest, "bin", "envoy-harness.mjs");
+  mkdirSync(path.dirname(launcher), { recursive: true });
+  writeFileSync(
+    launcher,
+    [
+      "import { CliError, run } from \"../dist/cli/index.js\";",
+      "try {",
+      "  await run();",
+      "} catch (error) {",
+      "  if (error instanceof CliError) {",
+      "    process.stderr.write(`envoy-harness: ${error.message}\\n`);",
+      "    process.exit(error.exitCode);",
+      "  }",
+      "  process.stderr.write(`envoy-harness: ${error instanceof Error ? error.message : String(error)}\\n`);",
+      "  process.exit(1);",
+      "}",
+      "",
+    ].join("\n"),
+  );
 }
 
 function stageHarness() {
@@ -132,33 +224,8 @@ function stageHarness() {
   pnpm(["-r", "run", "build"], source);
 
   const dest = path.join(resources, "envoy-harness");
-  rmSync(dest, { recursive: true, force: true });
-  mkdirSync(path.dirname(dest), { recursive: true });
   say("Packing Envoy Harness for the installer…");
-  pnpm(["--filter", "@envoymesh/envoy-harness", "deploy", dest], source);
-
-  const launcher = path.join(dest, "bin", "envoy-harness.mjs");
-  mkdirSync(path.dirname(launcher), { recursive: true });
-  writeFileSync(
-    launcher,
-    [
-      "import { CliError, run } from \"../dist/cli/index.js\";",
-      "try {",
-      "  await run();",
-      "} catch (error) {",
-      "  if (error instanceof CliError) {",
-      "    process.stderr.write(`envoy-harness: ${error.message}\\n`);",
-      "    process.exit(error.exitCode);",
-      "  }",
-      "  process.stderr.write(`envoy-harness: ${error instanceof Error ? error.message : String(error)}\\n`);",
-      "  process.exit(1);",
-      "}",
-      "",
-    ].join("\n"),
-  );
-  if (!existsSync(path.join(dest, "dist", "cli", "index.js"))) {
-    fail("Envoy Harness built, but dist/cli/index.js is missing. The package layout changed.");
-  }
+  packHarnessForInstaller(source, dest);
   say(`Envoy Harness staged at ${path.relative(root, dest)}.`);
 }
 

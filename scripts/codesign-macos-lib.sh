@@ -41,8 +41,12 @@ codesign_macos_remove_signature() {
 codesign_macos_sign_without_timestamp() {
   local f="$1"
   local err=""
+  local ent_args=()
+  if [ -n "${CODESIGN_FILE_ENTITLEMENTS:-}" ] && [ -f "${CODESIGN_FILE_ENTITLEMENTS}" ]; then
+    ent_args=(--entitlements "${CODESIGN_FILE_ENTITLEMENTS}")
+  fi
   codesign_macos_remove_signature "$f"
-  if err=$(codesign --force --sign "$CODESIGN_IDENTITY" --options runtime --timestamp=none "$f" 2>&1); then
+  if err=$(codesign --force --sign "$CODESIGN_IDENTITY" --options runtime --timestamp=none ${ent_args[@]+"${ent_args[@]}"} "$f" 2>&1); then
     return 0
   fi
   printf '%s\n' "$err" >&2
@@ -53,8 +57,12 @@ codesign_macos_sign_one() {
   local f="$1"
   local attempt=1
   local err=""
+  local ent_args=()
+  if [ -n "${CODESIGN_FILE_ENTITLEMENTS:-}" ] && [ -f "${CODESIGN_FILE_ENTITLEMENTS}" ]; then
+    ent_args=(--entitlements "${CODESIGN_FILE_ENTITLEMENTS}")
+  fi
   while [ "$attempt" -le "$CODESIGN_MAX_ATTEMPTS" ]; do
-    if err=$(codesign --force --sign "$CODESIGN_IDENTITY" --options runtime --timestamp "$f" 2>&1); then
+    if err=$(codesign --force --sign "$CODESIGN_IDENTITY" --options runtime --timestamp ${ent_args[@]+"${ent_args[@]}"} "$f" 2>&1); then
       return 0
     fi
     if codesign_macos_is_timestamp_flake "$err"; then
@@ -85,7 +93,6 @@ codesign_macos_sign_one() {
   fi
   return 1
 }
-
 codesign_macos_sign_file() {
   local f="$1"
   if codesign_macos_sign_one "$f"; then

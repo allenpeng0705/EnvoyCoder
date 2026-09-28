@@ -39,6 +39,12 @@ fi
 codesign_macos_init
 codesign_macos_unlock_keychain
 
+# Node (V8) needs JIT entitlements under hardened runtime; without them the
+# sidecar dies at pthread_jit_write_protect_np and the window shows "Daemon unreachable".
+# macos-node.entitlements must be comment-free XML — codesign silently embeds
+# an empty entitlement set when the plist contains <!-- --> comments.
+NODE_ENTITLEMENTS="${SCRIPT_DIR}/macos-node.entitlements"
+
 candidate_paths() {
   find "$RESOURCES" -depth -type f \( \
     -name '*.node' -o -name '*.dylib' -o -name 'spawn-helper' \
@@ -49,7 +55,15 @@ candidate_paths() {
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   codesign_macos_is_macho "$f" || continue
-  codesign_macos_sign_file "$f" || true
+  case "$(basename "$f")" in
+    node)
+      CODESIGN_FILE_ENTITLEMENTS="$NODE_ENTITLEMENTS" codesign_macos_sign_file "$f" || true
+      ;;
+    *)
+      unset CODESIGN_FILE_ENTITLEMENTS
+      codesign_macos_sign_file "$f" || true
+      ;;
+  esac
 done < <(candidate_paths)
 
 codesign_macos_print_summary "nested Mach-O file(s) under resources/" || exit 1

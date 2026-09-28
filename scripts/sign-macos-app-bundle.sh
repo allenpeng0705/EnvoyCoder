@@ -32,12 +32,23 @@ fi
 
 echo "  Signing Mach-O inside $(basename "$APP") (inner → outer)…"
 
+# Comment-free plist — codesign drops entitlements if the file has XML comments.
+NODE_ENTITLEMENTS="${SCRIPT_DIR}/macos-node.entitlements"
+
 # Inner binaries first (depth-first). Skip the bundle root until last.
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   [ "$f" = "$APP" ] && continue
   codesign_macos_is_macho "$f" || continue
-  codesign_macos_sign_file "$f" || true
+  case "$(basename "$f")" in
+    node)
+      CODESIGN_FILE_ENTITLEMENTS="$NODE_ENTITLEMENTS" codesign_macos_sign_file "$f" || true
+      ;;
+    *)
+      unset CODESIGN_FILE_ENTITLEMENTS
+      codesign_macos_sign_file "$f" || true
+      ;;
+  esac
 done < <(find "$APP" -depth -type f -print 2>/dev/null)
 
 echo "  Signing app bundle container…"
