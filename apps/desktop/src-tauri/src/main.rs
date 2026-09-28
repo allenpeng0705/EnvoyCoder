@@ -281,8 +281,11 @@ fn is_alive(pid: u32) -> bool {
     if pid == 0 {
         return false;
     }
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     Command::new("tasklist")
         .args(["/FI", &format!("PID eq {pid}"), "/NH"])
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .map(|output| String::from_utf8_lossy(&output.stdout).contains(&pid.to_string()))
         .unwrap_or(false)
@@ -523,8 +526,13 @@ fn spawn_daemon(port: u16) -> Result<(DaemonClaim, Child), String> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
+        // CREATE_NEW_PROCESS_GROUP: same ownership rule as Unix `process_group(0)`.
+        // CREATE_NO_WINDOW: `node.exe` is a console subsystem binary. Spawning it from a GUI app
+        // without this flag opens a blank console beside the window — macOS has no equivalent.
+        // Same flag as the in-app terminal (`terminal.rs`).
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-        command.creation_flags(CREATE_NEW_PROCESS_GROUP);
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
     }
 
     let mut child = command
@@ -597,6 +605,8 @@ fn stop_child(pid: u32) {
         // shutdown that was going perfectly well.
         let ask_grace = Duration::from_secs(15);
         if let Ok(entry) = resolve_daemon_entry() {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
             let asked = Command::new(resolve_node_exe())
                 .arg(&entry)
                 .arg("stop")
@@ -604,6 +614,7 @@ fn stop_child(pid: u32) {
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
+                .creation_flags(CREATE_NO_WINDOW)
                 .spawn();
             if let Ok(mut ask) = asked {
                 let deadline = Instant::now() + ask_grace;
@@ -624,10 +635,14 @@ fn stop_child(pid: u32) {
             }
         }
         // The last resort, and only that: whatever is still alive here was not stopped by asking.
-        let _ = Command::new("taskkill")
-            .args(["/PID", &pid.to_string(), "/T", "/F"])
-            .status();
-    }
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            let _ = Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/T", "/F"])
+                .creation_flags(CREATE_NO_WINDOW)
+                .status();
+        }
 }
 
 /* ────────────────────────────── the shell's state ────────────────────────────── */
