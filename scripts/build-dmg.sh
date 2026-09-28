@@ -24,15 +24,29 @@
 #   Set TAURI_DEFER_APP_SIGN=0 to let Tauri codesign the .app inline instead.
 #   Family guide: ../EnvoyMesh/docs/macos-mirror-signing.md
 #
-# Output: dist/desktop/*.dmg
+# Output: release/envoydev-desktop-{version}-macos-{arch}.dmg
+# Override the folder with OUT_DIR=… (default: release).
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-OUT="$ROOT/dist/desktop"
+OUT="$ROOT/${OUT_DIR:-release}"
 TAURI_TARGET="$ROOT/apps/desktop/src-tauri/target"
 UNSIGNED_CONF="src-tauri/tauri.conf.unsigned-build.json"
 BUNDLE_CONF="src-tauri/tauri.conf.bundle.json"
+if [ -f "$ROOT/VERSION" ]; then
+  VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
+else
+  VERSION="$(node -p "require('$ROOT/package.json').version" 2>/dev/null || echo 0.0.0)"
+fi
+
+desktop_arch() {
+  case "$(uname -m)" in
+    arm64|aarch64) echo "arm64" ;;
+    x86_64|amd64) echo "x64" ;;
+    *) echo "unknown" ;;
+  esac
+}
 
 if [ "$(uname -s)" != "Darwin" ]; then
   echo "This script builds a Mac DMG. Run it on a Mac." >&2
@@ -136,14 +150,16 @@ else
   "$TAURI" build --config "$BUNDLE_CONF" --bundles dmg,app
 fi
 
-echo "[4/4] Copying the DMG to dist/desktop…"
+echo "[4/4] Publishing the DMG to ${OUT#$ROOT/}/…"
 mkdir -p "$OUT"
 shopt -s nullglob
 copied=0
+arch="$(desktop_arch)"
+versioned="envoydev-desktop-${VERSION}-macos-${arch}.dmg"
 for dmg in "$TAURI_TARGET"/*/release/bundle/dmg/*.dmg \
            "$TAURI_TARGET"/release/bundle/dmg/*.dmg; do
-  cp -f "$dmg" "$OUT/"
-  echo "  $(basename "$dmg")"
+  cp -f "$dmg" "$OUT/$versioned"
+  echo "  $versioned"
   copied=$((copied + 1))
 done
 if [ "$copied" -eq 0 ]; then
@@ -152,7 +168,7 @@ if [ "$copied" -eq 0 ]; then
 fi
 
 if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
-  echo "Done. Signed (and notarized when Apple accepted the ticket) DMG is in $OUT"
+  echo "Done. Signed (and notarized when Apple accepted the ticket) DMG is in $OUT/$versioned"
 else
-  echo "Done. The DMG is in $OUT (unsigned — add scripts/sign-macos-release.env to sign)"
+  echo "Done. The DMG is in $OUT/$versioned (unsigned — add scripts/sign-macos-release.env to sign)"
 fi

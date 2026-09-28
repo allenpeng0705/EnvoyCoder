@@ -1,5 +1,6 @@
 node_modules/
 dist/
+release/
 dist-types/
 # The bundled daemon the Tauri shell spawns (`npm run daemon:build`)
 dist-daemon/

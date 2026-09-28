@@ -36,7 +36,7 @@ EnvoyDev is built on **[EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh)**
 - **Reach another home from this laptop.** Settings → **Paired homes** joins a server or office machine as a thin client — see [Paired homes](#paired-homes--another-machine-from-this-laptop) below.
 - **Team jobs across machines.** Host a team, invite another EnvoyDev, and run collaborative steps on the same Git project — see [Team jobs](#team-jobs--work-across-machines) below.
 - **Resume after a disconnect.** Your work is on your machine — pick it up where you left off.
-- **macOS, Windows, and Linux.** All three are first-class. Version `0.1.0` — Settings → About compares this window with the service.
+- **macOS, Windows, and Linux.** All three are first-class. Desktop version is the one-line `VERSION` file at the repo root (`npm run version:desktop`) — Settings → About compares this window with the service.
 
 <p align="center">
   <img src="project.png" alt="EnvoyDev project view" width="800">
@@ -185,7 +185,7 @@ State is per-product: EnvoyDev keeps its project and task tree under `<home>/Env
 
 ## Download / build
 
-Current product version: **0.1.0** (desktop window, daemon, and Tauri package; mobile `0.1.0+1` in `apps/mobile/pubspec.yaml`).
+Current desktop product version: see the one-line **`VERSION`** file at the repo root (bump with `npm run version:desktop -- 0.2.0`). Mobile is separate: `0.1.0+1` in `apps/mobile/pubspec.yaml`.
 
 ```bash
 git clone https://github.com/allenpeng0705/EnvoyCoder.git
@@ -194,7 +194,14 @@ npm install
 npm run tauri:dev   # the desktop app (Tauri shell + daemon)
 ```
 
-macOS release DMG (`npm run tauri:build:mac` / `bash scripts/build-dmg.sh`): copy `scripts/sign-macos-release.env.example` → `scripts/sign-macos-release.env` and fill the four Apple Developer ID fields (same values as EnvoyMesh work). Without that file the DMG is unsigned; with it, nested resources and `EnvoyDev.app` are signed and Tauri notarizes when Apple accepts the ticket. Operator notes live in the EnvoyMesh sibling as `docs/macos-mirror-signing.md`.
+To bump the desktop version before packaging:
+
+```bash
+npm run version:desktop -- 0.2.0   # writes VERSION and syncs package.json / daemon / Tauri / Cargo
+npm run version:desktop:check      # gates also run this
+```
+
+macOS release DMG (`npm run tauri:build:mac` / `bash scripts/build-dmg.sh`): copy `scripts/sign-macos-release.env.example` → `scripts/sign-macos-release.env` and fill the four Apple Developer ID fields (same values as EnvoyMesh work). Without that file the DMG is unsigned; with it, nested resources and `EnvoyDev.app` are signed and Tauri notarizes when Apple accepts the ticket. Installers land in `release/` (override with `OUT_DIR=…`). Operator notes live in the EnvoyMesh sibling as `docs/macos-mirror-signing.md`.
 
 Useful gates from the repo root:
 
