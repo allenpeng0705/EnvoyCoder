@@ -44,18 +44,47 @@ function fail(line) {
   process.exit(1);
 }
 
-function run(cmd, args, options = {}) {
-  // Windows: `npm` / `npx` / `tar` are often `.cmd` shims; spawn without shell or
-  // without resolving beside node.exe yields ENOENT even when the shell finds them.
-  const resolved =
-    process.platform === "win32" && !/[\\/]/.test(cmd) && !/\.(cmd|exe|bat)$/i.test(cmd)
-      ? (besideNode(cmd) ?? whichOnPath(cmd) ?? cmd)
-      : cmd;
-  const result = spawnSync(resolved, args, {
-    stdio: "inherit",
-    ...options,
-    shell: options.shell ?? process.platform === "win32",
+/**
+ * Spawn a toolchain command. On Windows, never pass an unquoted
+ * `C:\Program Files\...` path to `shell: true` — cmd.exe splits on the space
+ * (`'C:\Program' is not recognized`). Prefer `node npm-cli.js` for npm; otherwise
+ * build one quoted command line for `cmd.exe /d /s /c`.
+ */
+function spawnTool(cmd, args, options = {}) {
+  const cwd = options.cwd;
+  const stdio = options.stdio ?? "inherit";
+
+  if (process.platform !== "win32") {
+    return spawnSync(cmd, args, { cwd, stdio });
+  }
+
+  const bare = path.basename(cmd).replace(/\.(cmd|exe|bat)$/i, "").toLowerCase();
+  if (bare === "npm") {
+    const cli = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
+    if (existsSync(cli)) {
+      return spawnSync(process.execPath, [cli, ...args], { cwd, stdio });
+    }
+  }
+
+  let resolved = cmd;
+  if (!/[\\/]/.test(cmd) && !/\.(cmd|exe|bat)$/i.test(cmd)) {
+    resolved = besideNode(cmd) ?? whichOnPath(cmd) ?? cmd;
+  }
+
+  const quote = (value) => {
+    if (!/[ \t"]/.test(value)) return value;
+    return `"${String(value).replace(/"/g, '""')}"`;
+  };
+  const line = [resolved, ...args].map(quote).join(" ");
+  return spawnSync(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", line], {
+    cwd,
+    stdio,
+    windowsVerbatimArguments: true,
   });
+}
+
+function run(cmd, args, options = {}) {
+  const result = spawnTool(cmd, args, options);
   if (result.error) fail(`${cmd} failed to start: ${result.error.message}`);
   if (result.status !== 0) fail(`${cmd} ${args.join(" ")} exited ${result.status}`);
 }
@@ -136,15 +165,10 @@ function whichOnPath(base) {
 }
 
 /**
- * Run a PATH / Node-adjacent command. On Windows, `.cmd` shims need `shell`
- * (Node spawn does not apply PATHEXT — same trap as packages/platform findBinary).
+ * Run a PATH / Node-adjacent command (see spawnTool for the Windows quoting rules).
  */
 function spawnPath(cmd, args, cwd) {
-  return spawnSync(cmd, args, {
-    cwd,
-    stdio: "inherit",
-    shell: process.platform === "win32",
-  });
+  return spawnTool(cmd, args, { cwd });
 }
 
 function pnpm(args, cwd) {

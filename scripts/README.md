@@ -36,8 +36,9 @@ $env:ENVOY_HARNESS_DIR = "..\envoy-harness"
 
 Needs **pnpm** (or Node’s **corepack**) on `PATH`. On Windows, prefer
 `corepack enable` then `corepack prepare pnpm@10.0.0 --activate` so the shim sits
-next to `node.exe` — the stager resolves `pnpm` / `npm` / `corepack` beside
-`node.exe` as well as on `PATH` (Node’s spawn does not apply `PATHEXT`).
+next to `node.exe`. The stager resolves `pnpm` / `npm` / `corepack` beside
+`node.exe` and runs them without the `shell: true` + `C:\Program Files` split
+(`'C:\Program' is not recognized`).
 
 Other env knobs (see `stage-desktop-bundle.mjs`): `ENVOY_HARNESS_COMMIT`,
 `ENVOY_HARNESS_REPO_URL`, `ENVOYDEV_NODE_VERSION`, `FETCH_NODE_SIDECAR=1`.
