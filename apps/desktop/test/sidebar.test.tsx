@@ -736,35 +736,38 @@ describe("CoderSidebar paired EnvoyDev homes", () => {
     expect(within(paired).getByRole("button", { name: "+ Home" })).toBeTruthy();
   });
 
-  it("lists an online home's projects and selects a remote task", () => {
-    const onSelectPairedTask = vi.fn();
+  it("lists an online home and shows its projects in the main rail", () => {
     const onFocusPairedHome = vi.fn();
     const onForgetPairedHome = vi.fn();
+    const onSelect = vi.fn();
     renderSidebar({
+      projects: [remoteProject],
+      tasks: [remoteTask],
       pairedHomes: [
         {
           record: { id: "home-1", label: "office-linux", host: "10.0.0.5", port: 4770 },
           state: {
-            projects: [remoteProject],
-            tasks: [remoteTask],
             connection: { state: "connected" },
           },
         },
       ],
       activeHomeId: "home-1",
       workingOnLabel: "office-linux",
-      onSelectPairedTask,
+      onSelect,
       onFocusPairedHome,
       onForgetPairedHome,
+      onFocusLocalHome: vi.fn(),
       onAddPairedHome: vi.fn(),
     });
 
-    expect(screen.getByText("Working on office-linux")).toBeTruthy();
+    expect(screen.getByTestId("sidebar-working-on").textContent).toMatch(/office-linux/);
     const home = screen.getByTestId("paired-home-home-1");
     expect(within(home).getByText("Online")).toBeTruthy();
-    expect(within(home).getByText("server-app")).toBeTruthy();
-    fireEvent.click(within(home).getByText("Fix deploy script"));
-    expect(onSelectPairedTask).toHaveBeenCalledWith("home-1", "remote-t1");
+    // Same project chrome as This machine — not a nested mini-list under the home row.
+    expect(within(home).queryByText("server-app")).toBeNull();
+    expect(screen.getByTestId("project-server-app")).toBeTruthy();
+    fireEvent.click(screen.getByText("Fix deploy script"));
+    expect(onSelect).toHaveBeenCalledWith("remote-t1");
     fireEvent.click(within(home).getByRole("button", { name: "Forget" }));
     expect(onForgetPairedHome).toHaveBeenCalledWith("home-1");
   });
@@ -776,8 +779,6 @@ describe("CoderSidebar paired EnvoyDev homes", () => {
         {
           record: { id: "home-2", label: "lab", host: "10.0.0.9", port: 4770 },
           state: {
-            projects: [],
-            tasks: [],
             connection: { state: "disconnected" },
           },
         },

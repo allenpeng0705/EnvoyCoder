@@ -472,12 +472,33 @@ textarea.input--multiline {
   letter-spacing: 0.04em;
 }
 
+.sidebar__home-heading--active {
+  color: var(--text);
+}
+
+.sidebar__home-heading--button {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.sidebar__home-heading--button:hover {
+  color: var(--text);
+}
+
 .sidebar__paired {
   border-top: 1px solid var(--border);
   margin-top: 8px;
   padding-bottom: 12px;
-  overflow-y: auto;
-  min-height: 0;
+  flex: 0 0 auto;
 }
 
 .sidebar__paired-empty {
@@ -496,7 +517,7 @@ textarea.input--multiline {
 }
 
 .sidebar__paired-home {
-  padding: 4px 8px 8px;
+  padding: 2px 8px;
 }
 
 .sidebar__paired-home--active {
@@ -525,6 +546,7 @@ textarea.input--multiline {
   font-weight: 600;
   cursor: pointer;
   text-align: left;
+  min-width: 0;
 }
 
 .sidebar__paired-home-status {
@@ -532,19 +554,7 @@ textarea.input--multiline {
   font-weight: 400;
   color: var(--text-faint);
   font-size: var(--font-size-sm);
-}
-
-.sidebar__paired-projects {
-  margin: 0;
-  padding: 0 0 0 12px;
-  list-style: none;
-}
-
-.sidebar__paired-project-label {
-  display: block;
-  padding: 4px 6px 2px;
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .settings__paired-homes {

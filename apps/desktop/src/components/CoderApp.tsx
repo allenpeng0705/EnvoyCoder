@@ -191,7 +191,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
     // should not leave two unnamed rows behind. Only an unnamed task with nothing running counts — a task
     // that has been talked to is work, and the next press is asking for more work.
     if (title === "") {
-      const draft = homeTree.local.tasks.find(
+      const draft = state.tasks.find(
         (task) => task.projectId === projectId && task.title === "" && task.runId === undefined,
       );
       if (draft) {
@@ -199,14 +199,14 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
         return undefined;
       }
     }
-    // Local rail always talks to this machine's daemon (not a paired home that happens to be focused).
-    const created = await localActions.createTask({ projectId, title });
+    // Active home's daemon — local when focused on This machine, paired home when that home is active.
+    const created = await props.actions.createTask({ projectId, title });
     if (!created.ok) return created;
     // Selected first: the rail shows the new row and the pane shows its chat, in one paint. A task
     // created but not opened would look like the button had done nothing.
     setActiveId(created.task.id);
     if (title === "") return undefined;
-    const started = await localActions.startRun(created.task.id, title);
+    const started = await props.actions.startRun(created.task.id, title);
     return started.ok ? undefined : started;
   };
 
@@ -217,8 +217,8 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    * not spawn another draft every time: only a path that was not listed yet gets the automatic task.
    */
   const addProjectAndOpenDraft = async (path: string): Promise<WriteFailure> => {
-    const knownIds = new Set(homeTree.local.projects.map((project) => project.id));
-    const result = await localActions.addProject(path);
+    const knownIds = new Set(state.projects.map((project) => project.id));
+    const result = await props.actions.addProject(path);
     if (!result.ok) return result;
     if (!knownIds.has(result.project.id)) {
       return startNewTask(result.project.id);
@@ -241,7 +241,9 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
    * screen.
    */
   const addProjectFromRail = (): void => {
-    if (!hasShellPicker()) {
+    // Shell folder picker is this laptop's filesystem. On a paired home, ask for a path the home
+    // can see (palette typed path) — never a Windows path for a Mac daemon.
+    if (!hasShellPicker() || homeTree.activeHomeId !== LOCAL_HOME_ID) {
       openPalette({ commandId: "project.add" });
       return;
     }
@@ -253,8 +255,8 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
         openPalette({ commandId: "project.add" });
         return;
       }
-      const knownIds = new Set(homeTree.local.projects.map((project) => project.id));
-      const added = await localActions.addProject(picked.path);
+      const knownIds = new Set(state.projects.map((project) => project.id));
+      const added = await props.actions.addProject(picked.path);
       if (!added.ok) {
         openPalette({
           commandId: "project.add",
@@ -708,10 +710,10 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
 
       <div className="shell__body">
         <CoderSidebar
-            projects={homeTree.local.projects}
-            tasks={homeTree.local.tasks}
-            jobs={railJobs}
-            activeJobId={activeJobId}
+            projects={state.projects}
+            tasks={state.tasks}
+            jobs={homeTree.activeHomeId === LOCAL_HOME_ID ? railJobs : []}
+            activeJobId={homeTree.activeHomeId === LOCAL_HOME_ID ? activeJobId : undefined}
             onSelectJob={(jobId) => {
               homes?.setActiveHome(LOCAL_HOME_ID);
               setTeamJobProjectId(undefined);
@@ -719,9 +721,8 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               setSettingsScope(undefined);
               setActiveId(undefined);
             }}
-            activeTaskId={homeTree.activeHomeId === LOCAL_HOME_ID ? activeId : undefined}
+            activeTaskId={activeId}
             onSelect={(taskId) => {
-              homes?.setActiveHome(LOCAL_HOME_ID);
               setTeamJobProjectId(undefined);
               setActiveId(taskId);
               setActiveJobId(undefined);
@@ -729,13 +730,11 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               setSettingsScope(undefined);
             }}
             onActivateProject={() => {
-              homes?.setActiveHome(LOCAL_HOME_ID);
               // Expanding / focusing a project on the rail while Settings is open must not leave the
               // settings pane sitting on top of the work column with no way out but Close.
               setSettingsScope(undefined);
             }}
             onNewTask={(projectId) => {
-              homes?.setActiveHome(LOCAL_HOME_ID);
               // "+ New" on a project header names the project, so there is nothing left to ask: the task
               // is created and opened, and the composer is the form. A refusal answers under that project's
               // own row — including the one the ⌘N shortcut produces, which has no row of its own to speak in.
@@ -751,32 +750,36 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
             onAddProject={addProjectFromRail}
             onOpenProjectSettings={openProjectSettings}
             onChangeProjectAgent={async (project, defaults) => {
-              const result = await localActions.updateProject({ id: project.id, defaults });
+              const result = await props.actions.updateProject({ id: project.id, defaults });
               if (!result.ok) return result;
               return { ok: true as const };
             }}
-            git={homeTree.local.git}
-            onReadGit={(projectId) => localActions.readGit(projectId)}
-            onGitCheckout={(projectId, branch) => localActions.gitCheckout(projectId, branch)}
-            onGitCreateBranch={(projectId, name) => localActions.gitCreateBranch(projectId, name)}
-            onGitMerge={(projectId, branch) => localActions.gitMerge(projectId, branch)}
-            onGitFetch={(projectId) => localActions.gitFetch(projectId)}
-            onGitPull={(projectId) => localActions.gitPull(projectId)}
+            git={state.git}
+            onReadGit={(projectId) => props.actions.readGit(projectId)}
+            onGitCheckout={(projectId, branch) => props.actions.gitCheckout(projectId, branch)}
+            onGitCreateBranch={(projectId, name) => props.actions.gitCreateBranch(projectId, name)}
+            onGitMerge={(projectId, branch) => props.actions.gitMerge(projectId, branch)}
+            onGitFetch={(projectId) => props.actions.gitFetch(projectId)}
+            onGitPull={(projectId) => props.actions.gitPull(projectId)}
             // The conflict path: a merge that keeps its conflict for an agent, and the two ways out of the
             // repository that leaves behind.
-            onGitResolveMerge={(projectId, branch) => localActions.gitMergeResolve(projectId, branch)}
-            onGitMergeContinue={(projectId) => localActions.gitMergeContinue(projectId)}
-            onGitMergeAbort={(projectId) => localActions.gitMergeAbort(projectId)}
-            harnesses={homeTree.local.harnesses}
-            providers={homeTree.local.providers}
-            catalog={homeTree.local.catalog}
-            appHarness={homeTree.local.settings.defaults.harness ?? "envoy-harness"}
-            onOpenProjectInNewWindow={canOpenProjectInNewWindow() ? openProjectWindow : undefined}
+            onGitResolveMerge={(projectId, branch) => props.actions.gitMergeResolve(projectId, branch)}
+            onGitMergeContinue={(projectId) => props.actions.gitMergeContinue(projectId)}
+            onGitMergeAbort={(projectId) => props.actions.gitMergeAbort(projectId)}
+            harnesses={state.harnesses}
+            providers={state.providers}
+            catalog={state.catalog}
+            appHarness={state.settings.defaults.harness ?? "envoy-harness"}
+            onOpenProjectInNewWindow={
+              homeTree.activeHomeId === LOCAL_HOME_ID && canOpenProjectInNewWindow()
+                ? openProjectWindow
+                : undefined
+            }
             onRemoveProject={(projectId) => void removeProjectRow(projectId).then((f) => toRail(projectId, f))}
             focusProjectId={focusProjectId}
             onRenameTask={(taskId, title) => void renameTaskRow(taskId, title).then((f) => toRail(taskId, f))}
             onChangeTaskHarness={(taskId, harness) => {
-              void localActions.updateTask({ id: taskId, harness }).then((result) => {
+              void props.actions.updateTask({ id: taskId, harness }).then((result) => {
                 toRail(taskId, result.ok ? undefined : result);
               });
             }}
@@ -791,15 +794,24 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
                 showShellToast(localize(t, result) ?? result.message, { tone: "error" });
               });
             }}
-            unavailable={projectsUnavailable}
-            tasksUnknown={!homeTree.local.tasksKnown}
-            pairedHomes={homeTree.homes}
+            unavailable={
+              homeTree.activeHomeId === LOCAL_HOME_ID
+                ? projectsUnavailable
+                : state.connection.state === "connected"
+                  ? undefined
+                  : t("homes.homeOffline", { label: workingOnLabel ?? t("sidebar.section.pairedHomes") })
+            }
+            tasksUnknown={!state.tasksKnown}
+            pairedHomes={homeTree.homes.map((home) => ({
+              record: home.record,
+              state: { connection: home.state.connection },
+            }))}
             activeHomeId={homeTree.activeHomeId}
             workingOnLabel={workingOnLabel}
-            onSelectPairedTask={(homeId, taskId) => {
-              homes?.setActiveHome(homeId);
+            onFocusLocalHome={() => {
+              homes?.setActiveHome(LOCAL_HOME_ID);
               setTeamJobProjectId(undefined);
-              setActiveId(taskId);
+              setActiveId(undefined);
               setActiveJobId(undefined);
               setSettingsScope(undefined);
             }}

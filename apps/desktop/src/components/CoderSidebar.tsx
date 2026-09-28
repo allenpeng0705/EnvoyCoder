@@ -213,15 +213,15 @@ export interface CoderSidebarProps {
    * lands on the path it was given.
    */
   focusProjectId?: string | undefined;
-  /** Paired EnvoyDev homes (`docs/envoydev-paired-homes.md`). */
+  /** Paired EnvoyDev homes — switcher only; projects/tasks for the active home use the main list. */
   pairedHomes?: readonly {
     record: { id: string; label: string; host: string; port: number };
-    state: { projects: readonly Project[]; tasks: readonly Task[]; connection: { state: string } };
+    state: { connection: { state: string } };
   }[];
   activeHomeId?: string | undefined;
   workingOnLabel?: string | undefined;
-  onSelectPairedTask?: (homeId: string, taskId: string) => void;
   onFocusPairedHome?: (homeId: string) => void;
+  onFocusLocalHome?: () => void;
   onAddPairedHome?: () => void;
   onForgetPairedHome?: (homeId: string) => void;
 }
@@ -384,8 +384,29 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
       })()}
 
       <div className="sidebar__home-section" data-testid="sidebar-this-machine-label">
-        <span className="sidebar__home-heading">{t("sidebar.section.thisMachine")}</span>
+        {props.onFocusLocalHome && props.activeHomeId !== undefined && props.activeHomeId !== "local" ? (
+          <button
+            type="button"
+            className="sidebar__home-heading sidebar__home-heading--button"
+            onClick={props.onFocusLocalHome}
+            title={t("sidebar.section.thisMachine")}
+          >
+            {t("sidebar.section.thisMachine")}
+          </button>
+        ) : (
+          <span
+            className={`sidebar__home-heading${props.activeHomeId === undefined || props.activeHomeId === "local" ? " sidebar__home-heading--active" : ""}`}
+          >
+            {t("sidebar.section.thisMachine")}
+          </span>
+        )}
       </div>
+
+      {props.workingOnLabel ? (
+        <p className="sidebar__working-on" role="status" data-testid="sidebar-working-on">
+          {t("homes.workingOn", { label: props.workingOnLabel })}
+        </p>
+      ) : null}
 
       <div className="sidebar__list" data-testid="task-list">
         {groups.length === 0 ? (
@@ -642,11 +663,6 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
             </button>
           ) : null}
         </div>
-        {props.workingOnLabel ? (
-          <p className="sidebar__working-on" role="status">
-            {t("homes.workingOn", { label: props.workingOnLabel })}
-          </p>
-        ) : null}
         {(props.pairedHomes ?? []).length === 0 ? (
           <p className="sidebar__paired-empty">{t("homes.empty")}</p>
         ) : (
@@ -686,38 +702,6 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                     </button>
                   ) : null}
                 </div>
-                {online && home.state.projects.length > 0 ? (
-                  <ul className="sidebar__paired-projects">
-                    {home.state.projects.map((project) => {
-                      const projectTasks = home.state.tasks.filter((task) => task.projectId === project.id);
-                      return (
-                        <li key={project.id}>
-                          <span className="sidebar__paired-project-label">{project.label}</span>
-                          <ul className="sidebar__task-list">
-                            {projectTasks.map((task) => (
-                              <li key={task.id}>
-                                <button
-                                  type="button"
-                                  className={
-                                    focused && props.activeTaskId === task.id
-                                      ? "sidebar__task sidebar__task--active"
-                                      : "sidebar__task"
-                                  }
-                                  onClick={() => props.onSelectPairedTask?.(home.record.id, task.id)}
-                                >
-                                  <span className={`dot ${dotClassFor(task.status)}`} aria-hidden />
-                                  <span className="sidebar__task-title">
-                                    {task.title || t("task.untitled")}
-                                  </span>
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : null}
               </section>
             );
           })
