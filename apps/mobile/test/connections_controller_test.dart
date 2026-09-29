@@ -12,6 +12,7 @@ import 'package:envoydev_mobile/models/host.dart';
 import 'package:envoydev_mobile/services/connections_controller.dart';
 import 'package:envoydev_mobile/services/host_client.dart';
 import 'package:envoydev_mobile/services/host_store.dart';
+import 'package:envoydev_mobile/services/pairing_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -157,6 +158,59 @@ void main() {
     await controller.setActive(_host('b', 'beta'));
     expect(controller.activeHost?.id, 'b');
     expect(await store.loadActiveHostId(), 'b');
+  });
+
+  test('re-pairing with a new token retires the stale PairingStore grant', () async {
+    SharedPreferences.setMockInitialValues({});
+    final secure = MemorySecureStorage();
+    final hostStore = HostStore(secure: secure);
+    final pairings = PairingStore(secure: secure);
+    final host = CoderHost(
+      id: 'owner::alpha:4770',
+      label: 'alpha',
+      endpoint: 'alpha:4770',
+      ownerId: 'owner',
+      app: 'EnvoyDev',
+      token: 'old-grant',
+    );
+    await hostStore.upsert(host);
+    final key = daemonKeyFor(endpoint: host.endpoint, owner: host.ownerId);
+    await pairings.record(key, 'old-grant', instanceId: 'inst-1');
+
+    final controller = ConnectionsController(hostStore, pairings: pairings)
+      ..clientFactory = (h) => _SilentClient(h);
+    addTearDown(controller.dispose);
+    await controller.load();
+    expect(await pairings.tokenFor(key), 'old-grant');
+
+    await controller.upsertHost(host.copyWith(token: 'fresh-qr-token'));
+    // The QR token must win on the next dial — not the revoked/replaced grant.
+    expect(await pairings.tokenFor(key), isNull);
+  });
+
+  test('forgetting a host retires its PairingStore grant', () async {
+    SharedPreferences.setMockInitialValues({});
+    final secure = MemorySecureStorage();
+    final hostStore = HostStore(secure: secure);
+    final pairings = PairingStore(secure: secure);
+    final host = CoderHost(
+      id: 'owner::alpha:4770',
+      label: 'alpha',
+      endpoint: 'alpha:4770',
+      ownerId: 'owner',
+      app: 'EnvoyDev',
+      token: 'grant',
+    );
+    await hostStore.upsert(host);
+    final key = daemonKeyFor(endpoint: host.endpoint, owner: host.ownerId);
+    await pairings.record(key, 'grant');
+
+    final controller = ConnectionsController(hostStore, pairings: pairings)
+      ..clientFactory = (h) => _SilentClient(h);
+    addTearDown(controller.dispose);
+    await controller.load();
+    await controller.forget(host);
+    expect(await pairings.tokenFor(key), isNull);
   });
 
   test('adding a host makes it active; forgetting it moves to the next one', () async {

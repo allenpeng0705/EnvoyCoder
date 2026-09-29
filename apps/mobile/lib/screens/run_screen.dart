@@ -425,12 +425,17 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
       }
       final taskId = _taskId;
       if (taskId == null) return;
+      // Do **not** force `resume: true`. Desktop only resumes when the user
+      // chooses Resume; mobile used to always ask, which calls `session/resume`
+      // against envoy-harness. That method was missing on shipped builds, so
+      // every follow-up from the phone failed immediately while a fresh start
+      // from the desktop window worked. A later idle send opens a new session
+      // (same as desktop without Resume). Live turns still use `coder.sendToRun`.
       final started = await widget.client.call(
         'coder.startRun',
         {
           'taskId': taskId,
           'prompt': turn.prompt,
-          'resume': true,
           if (_selection.agentModeId != null) 'agentModeId': _selection.agentModeId,
           if (_selection.model != null && _selection.model!.isNotEmpty) 'model': _selection.model,
           if (_selection.thinkingLevel != null && _selection.thinkingLevel!.isNotEmpty)

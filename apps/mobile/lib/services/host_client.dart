@@ -118,6 +118,12 @@ class HostClient {
         onHomeOnlineChange: _onHomeOnlineChange,
         onActiveTransportChange: _onActiveTransportChange,
         onCandidateTrying: _onCandidateTrying,
+        // After a silent transport upgrade (relay → LAN), online never dips, so
+        // re-run hello/subscribe and let screens refresh — otherwise listTasks
+        // can hang on the retired socket until timeout.
+        onReconnect: () {
+          unawaited(_announceOnline());
+        },
         perCandidateTimeoutMs: budget.perCandidateTimeoutMs,
         initialReconnectDelayMs: minDelay.inMilliseconds,
       ),

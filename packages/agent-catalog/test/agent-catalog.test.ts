@@ -147,10 +147,11 @@ describe("invocation", () => {
       { prompt: "x", cwd: "/repo" },
       { platform: "linux", binaryPath: "/usr/local/bin/envoy-harness" },
     );
-    expect(invocation.args).toEqual(["run", "--acp"]);
+    expect(invocation.args).toEqual(["--acp"]);
     // The prompt travels over the protocol, never in argv: an argv prompt is visible to every other
     // process on the machine, and ACP has a field for it.
     expect(invocation.args).not.toContain("x");
+    expect(invocation.args).not.toContain("run");
   });
 
   it("puts the chosen model into the built-in harness's argv, as the pair its dispatch reads", () => {
@@ -165,7 +166,6 @@ describe("invocation", () => {
       binaryPath: "/usr/local/bin/envoy-harness",
     });
     expect(installed.args).toEqual([
-      "run",
       "--acp",
       "--provider",
       "anthropic",
@@ -197,7 +197,7 @@ describe("invocation", () => {
         platform: "linux",
         binaryPath: "/usr/local/bin/envoy-harness",
       }).args,
-    ).toEqual(["run", "--acp"]);
+    ).toEqual(["--acp"]);
 
     // And a model we cannot turn into a pair throws here rather than emitting a bare `--model`, which
     // the harness parses and then ignores — a run on a model the user did not choose.
@@ -390,8 +390,8 @@ describe("probing", () => {
     // is read from the probe rather than guessed from the file extension.
     expect(resolved.command).toBe(process.execPath);
     expect(resolved.args[0]).toBe(probe.binaryPath);
-    // **Not** `run --acp`: the checkout entry *is* the ACP server and strips a duplicate flag, so
-    // handing it the installed CLI's argv would be a different, wrong launch.
+    // Checkout entry *is* the ACP server and strips a duplicate `--acp`, so the installed CLI's
+    // flags must not be copied onto it — only the script path travels.
     expect(resolved.args.slice(1)).toEqual([]);
     expect(resolved.args).not.toContain("run");
   });
@@ -400,7 +400,7 @@ describe("probing", () => {
     const probe = probeHarness("envoy-harness", { find: () => "/usr/local/bin/envoy-harness", fileExists: () => false });
     const resolved = resolveHarnessCommand("envoy-harness", probe, { prompt: "", cwd: "/repo" });
     expect(resolved.command).toBe("/usr/local/bin/envoy-harness");
-    expect(resolved.args).toEqual(["run", "--acp"]);
+    expect(resolved.args).toEqual(["--acp"]);
   });
 
   it("refuses to build a command for a harness that is not there, quoting the reason", () => {

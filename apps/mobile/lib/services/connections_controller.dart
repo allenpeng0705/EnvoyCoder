@@ -192,6 +192,7 @@ class ConnectionsController extends ChangeNotifier {
   /// Add or replace a host, then make it active — the rule a fresh pairing follows too.
   Future<void> upsertHost(CoderHost host) async {
     final index = _hosts.indexWhere((h) => h.id == host.id);
+    final previous = index >= 0 ? _hosts[index] : null;
     if (index >= 0) {
       _hosts[index] = host;
       // The host changed under a live client (a re-pairing, a new token): the old socket was dialled
@@ -199,6 +200,15 @@ class ConnectionsController extends ChangeNotifier {
       await _dropClient(host.id);
     } else {
       _hosts.add(host);
+    }
+    // A scanned QR writes the new token on the host row, but [PairingCredential.offered] prefers
+    // whatever PairingStore still holds for this daemon. After a desktop reinstall / revoke / new
+    // mint, that grant is dead: the dial presents it, the daemon never emits `connected`, and every
+    // rung (lan, cn-relay, us-relay) times out as a "network" failure. Clear on a new pairing so
+    // the QR token is what goes on the wire until hello re-records a live grant.
+    final key = daemonKeyFor(endpoint: host.endpoint, owner: host.ownerId);
+    if (previous == null || previous.token != host.token) {
+      await pairings.clear(key);
     }
     _activeId = host.id;
     _persistedUsedId = host.id;
@@ -241,6 +251,9 @@ class ConnectionsController extends ChangeNotifier {
   /// goes in the background — the same split `dispose` uses for its stream controllers.
   Future<void> forget(CoderHost host) async {
     await store.remove(host.id);
+    // Retire the daemon-keyed grant too — otherwise a later re-pair to the same address would
+    // still prefer the forgotten token in [PairingCredential.offered].
+    await pairings.clear(daemonKeyFor(endpoint: host.endpoint, owner: host.ownerId));
     _hosts.removeWhere((h) => h.id == host.id);
     unawaited(_dropClient(host.id));
     if (_activeId == host.id) {

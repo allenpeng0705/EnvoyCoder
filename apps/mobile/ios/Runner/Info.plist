@@ -35,6 +35,12 @@
 		<string>_dartVmService._tcp</string>
 		<string>_p2p._udp</string>
 	</array>
+	<!-- Cleartext ws:// to the Mac on LAN (pairing / dial). Without this, ATS can block local IPs. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>EnvoyDev uses your photos so you can attach a picture to a message.</string>
 	<key>UIApplicationSceneManifest</key>

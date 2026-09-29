@@ -394,8 +394,13 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       // (`../envoy-harness/packages/envoy-harness/src/cli/run/acp.ts:99-111`), so `--model` alone is
       // parsed, dropped and then reported to the user as the model they chose. `modelArgs` emits the
       // pair or nothing at all, and throws rather than dropping one — see `./models.ts`.
+      // `--acp` only — never the bare subcommand word `run`. The harness's
+      // default subcommand parser historically treated `run` as a positional
+      // prompt, so `envoy-harness run --acp` exited before any session with
+      // "--acp takes no positional prompt". Flags alone are the form
+      // `acp-stdio` already uses, and they stay valid after the harness
+      // strips an explicit `run` as well.
       buildArgs: ({ extraArgs, model }) => [
-        "run",
         "--acp",
         ...modelArgs(model, "envoy-harness"),
         ...splitArgs(extraArgs),
@@ -449,7 +454,7 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
     // (EnvoyMesh design D4). EnvoyDev clones or copies the harness itself.
     evidence:
       "Verified from source in ../envoy-harness (peer checkout): the ACP stdio mode is " +
-      "`run --acp` (src/cli/argv-help.ts:45 documents `--acp`; src/cli/run.ts:123-124 dispatches " +
+      "`--acp` (src/cli/argv-help.ts:45 documents `--acp`; src/cli/run.ts:123-124 dispatches " +
       "`subcommand === \"run\" && acp` to the ACP server; src/protocol/acp-server.ts implements " +
       "the dialect). UNVERIFIED at runtime: no `envoy-harness` binary resolves on the machine this " +
       "was written on, and the package has no exported ACP entry, so a spawn-and-handshake has not " +

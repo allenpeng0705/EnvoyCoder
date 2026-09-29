@@ -6,7 +6,7 @@
  * ACP is a JSON-RPC session lifecycle over stdio — `initialize`, `session/new`, `session/prompt`,
  * `session/cancel`, `session/resume`, `session/close` — with `session/update` for streaming and
  * `session/request_permission` for approvals. Both of our native harnesses speak it
- * (`envoy-harness run --acp`, `dsh --profile acp`), and several external CLIs do too, so this one
+ * (`envoy-harness --acp`, `dsh --profile acp`), and several external CLIs do too, so this one
  * client covers them. That is the whole point of the catalogue recording a *dialect* rather than a
  * client class per agent (`docs/envoydev-harness.md` §2), and it is why an agent that merely
  * "probably works" is not added here: `capabilities.approvals` is a statement about the protocol we
@@ -179,6 +179,7 @@ type Pending = {
 
 /** JSON-RPC `invalid params`. The only failure this client retries, and only for one reason. */
 const INVALID_PARAMS = -32602;
+const METHOD_NOT_FOUND = -32601;
 
 /**
  * One agent process, and one session on it.
@@ -483,11 +484,18 @@ export class AcpClient {
   }
 
   private async resume(sessionId: string): Promise<void> {
-    await this.request(
-      "session/resume",
-      { sessionId, cwd: this.options.launch.cwd, mcpServers: [] },
-      this.options.handshakeTimeoutMs ?? 30_000,
-    );
+    const params = { sessionId, cwd: this.options.launch.cwd, mcpServers: [] as unknown[] };
+    const timeoutMs = this.options.handshakeTimeoutMs ?? 30_000;
+    try {
+      await this.request("session/resume", params, timeoutMs);
+    } catch (error) {
+      // `envoy-harness` advertises resume but historically only handled
+      // `session/load` for the same backend hook. Fall back once so a
+      // follow-up from mobile (which always asks to resume) does not die
+      // on "method not found: session/resume" against an older binary.
+      if (!(error instanceof AcpRequestError) || !isMethodNotFound(error)) throw error;
+      await this.request("session/load", params, timeoutMs);
+    }
     this.sessionIdValue = sessionId;
   }
 
@@ -884,6 +892,12 @@ export class AcpClient {
 function isPromptShapeRefusal(error: unknown): boolean {
   if (!(error instanceof AcpRequestError) || error.code !== INVALID_PARAMS) return false;
   return /text|content|prompt/i.test(error.message);
+}
+
+/** JSON-RPC "method not found", including agents that omit the numeric code. */
+function isMethodNotFound(error: AcpRequestError): boolean {
+  if (error.code === METHOD_NOT_FOUND) return true;
+  return /method not found/i.test(error.message);
 }
 
 /**
