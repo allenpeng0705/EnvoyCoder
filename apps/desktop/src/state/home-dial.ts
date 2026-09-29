@@ -115,6 +115,8 @@ function openRelaySocket(candidate: HomeRemoteCandidate, factory: SocketFactory)
       relayWsUrl: relayBaseFromCandidateUrl(candidate.url),
       homePeerId: peerId,
       sessionToken: token,
+      // Community-relay family allowlist (same product id as Identify userAgent).
+      product: "envoydev",
     },
     factory,
   );

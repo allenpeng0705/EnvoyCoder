@@ -27,6 +27,12 @@ export function openClientProxySocket(
     homePeerId: string;
     sessionToken: string;
     handshakeTimeoutMs?: number;
+    /**
+     * Ops label for community-relay `?product=` (family allowlist). Default
+     * `envoydev` matches Identify on the desktop mesh peer. Required once
+     * relays set ENVOYMESH_RELAY_REQUIRE_FAMILY_PRODUCT=1.
+     */
+    product?: string;
   },
   socketFactory?: SocketFactory,
 ): WebSocketLike {
@@ -35,9 +41,12 @@ export function openClientProxySocket(
     ? input.relayWsUrl.slice(0, input.relayWsUrl.indexOf("?"))
     : input.relayWsUrl;
   const encodedPeerId = encodeURIComponent(input.homePeerId);
+  const product = (input.product ?? "envoydev").trim();
+  const productQuery =
+    product.length > 0 ? `&product=${encodeURIComponent(product)}` : "";
   const url = input.sessionToken
-    ? `${baseUrl}?target=${encodedPeerId}&token=${encodeURIComponent(input.sessionToken)}`
-    : `${baseUrl}?target=${encodedPeerId}`;
+    ? `${baseUrl}?target=${encodedPeerId}&token=${encodeURIComponent(input.sessionToken)}${productQuery}`
+    : `${baseUrl}?target=${encodedPeerId}${productQuery.replace(/^&/, "?")}`;
 
   const factory =
     socketFactory ?? ((u: string) => new WebSocket(u) as unknown as WebSocketLike);
