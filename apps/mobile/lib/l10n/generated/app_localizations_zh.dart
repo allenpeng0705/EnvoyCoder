@@ -1422,4 +1422,110 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get teamJobPeerOffline => '离线';
+
+  @override
+  String get welcomeSkip => '跳过';
+
+  @override
+  String get welcomeNext => '下一步';
+
+  @override
+  String get welcomeSlide1Title => '欢迎使用 EnvoyDev';
+
+  @override
+  String get welcomeSlide1Body =>
+      'EnvoyDev 是电脑上编程智能体的手机伴侣。随时查看任务、批准工具调用，并保持同步。';
+
+  @override
+  String get welcomeSlide2Title => '工作在电脑上完成';
+
+  @override
+  String get welcomeSlide2Body =>
+      '在 Mac 或 Windows 电脑上安装 EnvoyDev。智能体、项目与设置都留在那台电脑上——手机只是远程窗口。';
+
+  @override
+  String get welcomeSlide3Title => '用二维码配对';
+
+  @override
+  String get welcomeSlide3Body =>
+      '在电脑上打开 EnvoyDev 并显示配对二维码。在本手机上点「立即配对」（或稍后点「添加主机」）并扫描，也可粘贴配对链接。';
+
+  @override
+  String get welcomeSlideRequiredTitle => '先完成配对';
+
+  @override
+  String get welcomeSlideRequiredBody =>
+      'EnvoyDev 需要一台运行桌面版的电脑。智能体在那台电脑上运行——请先将本手机与该电脑配对后再继续。';
+
+  @override
+  String get setupGuideTitle => 'EnvoyDev 使用说明';
+
+  @override
+  String get setupGuideIntro =>
+      '手机上的 EnvoyDev 连接电脑上的 EnvoyDev。安装桌面版、配对一次后，即可随时查看智能体。';
+
+  @override
+  String get setupGuidePairRequiredTitle => '配对后继续';
+
+  @override
+  String get setupGuidePairRequiredBody =>
+      'EnvoyDev 是电脑的随身端。没有配对的电脑时，这里还无法显示任何内容。';
+
+  @override
+  String get setupGuideStep1Title => '准备一台电脑';
+
+  @override
+  String get setupGuideStep1Body =>
+      '需要一台 Mac 或 Windows 电脑。它将成为你的 EnvoyDev 主机——智能体在那里运行。';
+
+  @override
+  String get setupGuideStep2Title => '下载并安装 EnvoyDev';
+
+  @override
+  String get setupGuideStep2Body => '打开下载页，在那台电脑上安装 EnvoyDev，启动并保持运行。';
+
+  @override
+  String get setupGuideDownloadCta => '打开 EnvoyDev 下载页';
+
+  @override
+  String get setupGuideStep3Title => '显示配对二维码';
+
+  @override
+  String get setupGuideStep3Body => '在桌面版 EnvoyDev 中打开「配对手机」，保持二维码显示在屏幕上。';
+
+  @override
+  String get setupGuideStep4Title => '用本手机扫描';
+
+  @override
+  String get setupGuideStep4Body =>
+      '点下方「立即配对」（或稍后点「添加主机」）。允许相机权限后扫描二维码，也可粘贴 envoy:// 配对链接。';
+
+  @override
+  String get setupGuideStep5Title => '连接完成';
+
+  @override
+  String get setupGuideStep5Body =>
+      '配对成功后，本手机会显示那台电脑上的项目与任务。无论手机是否连接，智能体都会继续运行。';
+
+  @override
+  String get setupGuideNoHomeTitle => '稍后配对也可以';
+
+  @override
+  String get setupGuideNoHomeBody =>
+      '现在可以先继续，随时通过「添加主机」完成配对。没有配对的电脑时，这里还无法显示内容。';
+
+  @override
+  String get setupGuidePairCta => '立即配对';
+
+  @override
+  String get setupGuidePairLaterCta => '暂不配对';
+
+  @override
+  String get setupGuideSkipCta => '先看看';
+
+  @override
+  String get setupGuideDoneCta => '知道了';
+
+  @override
+  String get settingsSetupGuideSubtitle => '如何安装桌面版并与本手机配对。';
 }

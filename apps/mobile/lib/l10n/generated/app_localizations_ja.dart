@@ -1439,4 +1439,113 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get teamJobPeerOffline => 'オフライン';
+
+  @override
+  String get welcomeSkip => 'スキップ';
+
+  @override
+  String get welcomeNext => '次へ';
+
+  @override
+  String get welcomeSlide1Title => 'EnvoyDev へようこそ';
+
+  @override
+  String get welcomeSlide1Body =>
+      'EnvoyDev はパソコン上のコーディングエージェント向けのスマートフォンコンパニオンです。タスクの確認、ツール承認、どこからでも状況把握ができます。';
+
+  @override
+  String get welcomeSlide2Title => '作業はパソコン側で行う';
+
+  @override
+  String get welcomeSlide2Body =>
+      'Mac または Windows PC に EnvoyDev をインストールします。エージェント・プロジェクト・設定はそのマシンに残り、スマートフォンはリモートの窓です。';
+
+  @override
+  String get welcomeSlide3Title => 'QR でペアリング';
+
+  @override
+  String get welcomeSlide3Body =>
+      'パソコンで EnvoyDev を開き、ペアリング QR を表示します。このスマートフォンで「今すぐペアリング」（または後で「ホストを追加」）をタップしてスキャン。ペアリングリンクの貼り付けもできます。';
+
+  @override
+  String get welcomeSlideRequiredTitle => 'ペアリングして開始';
+
+  @override
+  String get welcomeSlideRequiredBody =>
+      'EnvoyDev にはデスクトップアプリを実行するコンピューターが必要です。エージェントはそこで動きます。続けるにはこのスマートフォンとそのコンピューターをペアリングしてください。';
+
+  @override
+  String get setupGuideTitle => 'EnvoyDev の使い方';
+
+  @override
+  String get setupGuideIntro =>
+      'スマートフォンの EnvoyDev はパソコンの EnvoyDev と通信します。デスクトップをインストールし、一度ペアリングすれば、どこからでもエージェントを確認できます。';
+
+  @override
+  String get setupGuidePairRequiredTitle => 'ペアリングして続行';
+
+  @override
+  String get setupGuidePairRequiredBody =>
+      'EnvoyDev はコンピューターの携帯コンパニオンです。ペアリングされたコンピューターがないと、ここに表示できるものがありません。';
+
+  @override
+  String get setupGuideStep1Title => 'パソコンを用意する';
+
+  @override
+  String get setupGuideStep1Body =>
+      'Mac または Windows PC が必要です。それが EnvoyDev ホストになり、エージェントはそこで動きます。';
+
+  @override
+  String get setupGuideStep2Title => 'EnvoyDev をダウンロードしてインストール';
+
+  @override
+  String get setupGuideStep2Body =>
+      'ダウンロードページを開き、そのパソコンに EnvoyDev をインストールして起動し、起動したままにします。';
+
+  @override
+  String get setupGuideDownloadCta => 'EnvoyDev のダウンロードを開く';
+
+  @override
+  String get setupGuideStep3Title => 'ペアリング QR を表示';
+
+  @override
+  String get setupGuideStep3Body =>
+      'デスクトップ版 EnvoyDev で「スマートフォンをペアリング」を開き、QR を画面に表示したままにします。';
+
+  @override
+  String get setupGuideStep4Title => 'このスマートフォンでスキャン';
+
+  @override
+  String get setupGuideStep4Body =>
+      '下の「今すぐペアリング」（または後で「ホストを追加」）をタップ。カメラを許可して QR をスキャン。envoy:// リンクの貼り付けもできます。';
+
+  @override
+  String get setupGuideStep5Title => '接続できました';
+
+  @override
+  String get setupGuideStep5Body =>
+      'ペアリングが終わると、このスマートフォンにそのパソコンのプロジェクトとタスクが表示されます。スマートフォンの接続の有無にかかわらずエージェントは動き続けます。';
+
+  @override
+  String get setupGuideNoHomeTitle => 'あとでペアリングしても大丈夫です';
+
+  @override
+  String get setupGuideNoHomeBody =>
+      '今は続けて、あとから「ホストを追加」でいつでもペアリングできます。ペアリングされたコンピューターがないと、ここに表示できるものがありません。';
+
+  @override
+  String get setupGuidePairCta => '今すぐペアリング';
+
+  @override
+  String get setupGuidePairLaterCta => 'あとでペアリング';
+
+  @override
+  String get setupGuideSkipCta => 'まずは見る';
+
+  @override
+  String get setupGuideDoneCta => '了解';
+
+  @override
+  String get settingsSetupGuideSubtitle =>
+      'デスクトップアプリのインストールとこのスマートフォンのペアリング方法。';
 }

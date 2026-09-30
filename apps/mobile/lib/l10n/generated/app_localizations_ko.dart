@@ -1436,4 +1436,112 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get teamJobPeerOffline => '오프라인';
+
+  @override
+  String get welcomeSkip => '건너뛰기';
+
+  @override
+  String get welcomeNext => '다음';
+
+  @override
+  String get welcomeSlide1Title => 'EnvoyDev에 오신 것을 환영합니다';
+
+  @override
+  String get welcomeSlide1Body =>
+      'EnvoyDev는 컴퓨터에서 실행되는 코딩 에이전트를 위한 휴대폰 동반 앱입니다. 작업을 확인하고 도구를 승인하며 어디서든 상황을 파악하세요.';
+
+  @override
+  String get welcomeSlide2Title => '작업은 컴퓨터에서 진행됩니다';
+
+  @override
+  String get welcomeSlide2Body =>
+      'Mac 또는 Windows PC에 EnvoyDev를 설치하세요. 에이전트·프로젝트·설정은 그 기기에 남고, 휴대폰은 원격 창입니다.';
+
+  @override
+  String get welcomeSlide3Title => 'QR로 페어링';
+
+  @override
+  String get welcomeSlide3Body =>
+      '컴퓨터에서 EnvoyDev를 열고 페어링 QR을 표시하세요. 이 휴대폰에서 지금 페어링(또는 나중에 호스트 추가)을 누른 뒤 스캔하세요. 페어링 링크를 붙여넣을 수도 있습니다.';
+
+  @override
+  String get welcomeSlideRequiredTitle => '시작하려면 페어링';
+
+  @override
+  String get welcomeSlideRequiredBody =>
+      'EnvoyDev에는 데스크톱 앱이 실행 중인 컴퓨터가 필요합니다. 에이전트는 거기에서 실행됩니다. 계속하려면 이 휴대폰을 그 컴퓨터와 페어링하세요.';
+
+  @override
+  String get setupGuideTitle => 'EnvoyDev 사용 방법';
+
+  @override
+  String get setupGuideIntro =>
+      '휴대폰의 EnvoyDev는 컴퓨터의 EnvoyDev와 통신합니다. 데스크톱을 설치하고 한 번 페어링하면 어디서든 에이전트를 확인할 수 있습니다.';
+
+  @override
+  String get setupGuidePairRequiredTitle => '계속하려면 페어링';
+
+  @override
+  String get setupGuidePairRequiredBody =>
+      'EnvoyDev는 컴퓨터의 휴대폰 동반 앱입니다. 페어링된 컴퓨터가 없으면 여기에 표시할 내용이 없습니다.';
+
+  @override
+  String get setupGuideStep1Title => '컴퓨터 준비';
+
+  @override
+  String get setupGuideStep1Body =>
+      'Mac 또는 Windows PC가 필요합니다. 그 기기가 EnvoyDev 호스트가 되며 에이전트가 거기에서 실행됩니다.';
+
+  @override
+  String get setupGuideStep2Title => 'EnvoyDev 다운로드 및 설치';
+
+  @override
+  String get setupGuideStep2Body =>
+      '다운로드 페이지를 열고 그 컴퓨터에 EnvoyDev를 설치한 뒤 실행을 유지하세요.';
+
+  @override
+  String get setupGuideDownloadCta => 'EnvoyDev 다운로드 열기';
+
+  @override
+  String get setupGuideStep3Title => '페어링 QR 표시';
+
+  @override
+  String get setupGuideStep3Body =>
+      '데스크톱 EnvoyDev에서 휴대폰 페어링을 열고 QR을 화면에 유지하세요.';
+
+  @override
+  String get setupGuideStep4Title => '이 휴대폰으로 스캔';
+
+  @override
+  String get setupGuideStep4Body =>
+      '아래 지금 페어링(또는 나중에 호스트 추가)을 탭하세요. 카메라 권한을 허용한 뒤 QR을 스캔합니다. envoy:// 링크를 붙여넣을 수도 있습니다.';
+
+  @override
+  String get setupGuideStep5Title => '연결되었습니다';
+
+  @override
+  String get setupGuideStep5Body =>
+      '페어링이 끝나면 이 휴대폰에 그 컴퓨터의 프로젝트와 작업이 표시됩니다. 휴대폰 연결 여부와 관계없이 에이전트는 계속 실행됩니다.';
+
+  @override
+  String get setupGuideNoHomeTitle => '나중에 페어링해도 됩니다';
+
+  @override
+  String get setupGuideNoHomeBody =>
+      '지금은 계속하고 언제든지 호스트 추가에서 페어링할 수 있습니다. 페어링된 컴퓨터가 없으면 여기에 표시할 내용이 없습니다.';
+
+  @override
+  String get setupGuidePairCta => '지금 페어링';
+
+  @override
+  String get setupGuidePairLaterCta => '나중에 페어링';
+
+  @override
+  String get setupGuideSkipCta => '먼저 둘러보기';
+
+  @override
+  String get setupGuideDoneCta => '확인';
+
+  @override
+  String get settingsSetupGuideSubtitle => '데스크톱 앱 설치 및 이 휴대폰 페어링 방법.';
 }

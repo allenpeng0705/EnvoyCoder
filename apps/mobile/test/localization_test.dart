@@ -11,6 +11,7 @@ import 'package:envoydev_mobile/l10n/l10n.dart';
 import 'package:envoydev_mobile/l10n/locale_controller.dart';
 import 'package:envoydev_mobile/main.dart';
 import 'package:envoydev_mobile/screens/no_hosts_screen.dart';
+import 'package:envoydev_mobile/services/onboarding_preferences.dart';
 import 'package:envoydev_mobile/widgets/composer_attach.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -102,7 +103,11 @@ void main() {
 
   group('Settings → Language', () {
     testWidgets('changes the phone UI and persists the preference', (tester) async {
-      SharedPreferences.setMockInitialValues({});
+      SharedPreferences.setMockInitialValues({
+        OnboardingPreferences.slidesKey: true,
+        OnboardingPreferences.guideKey: true,
+        OnboardingPreferences.introducedKey: true,
+      });
       final preferences = await SharedPreferences.getInstance();
       final controller = LocaleController(preferences: preferences);
 

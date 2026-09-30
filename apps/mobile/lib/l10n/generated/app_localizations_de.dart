@@ -1500,4 +1500,113 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get teamJobPeerOffline => 'Offline';
+
+  @override
+  String get welcomeSkip => 'Überspringen';
+
+  @override
+  String get welcomeNext => 'Weiter';
+
+  @override
+  String get welcomeSlide1Title => 'Willkommen bei EnvoyDev';
+
+  @override
+  String get welcomeSlide1Body =>
+      'EnvoyDev ist der Telefon-Begleiter für Coding-Agenten auf deinem Computer. Aufgaben prüfen, Tools freigeben und überall auf dem Laufenden bleiben.';
+
+  @override
+  String get welcomeSlide2Title => 'Dein Computer erledigt die Arbeit';
+
+  @override
+  String get welcomeSlide2Body =>
+      'Installiere EnvoyDev auf einem Mac oder Windows-PC. Agenten, Projekte und Einstellungen bleiben dort — das Telefon ist ein Remote-Fenster.';
+
+  @override
+  String get welcomeSlide3Title => 'Mit QR-Code koppeln';
+
+  @override
+  String get welcomeSlide3Body =>
+      'Öffne EnvoyDev am Computer und zeige den Kopplungs-QR. Tippe auf diesem Telefon auf Jetzt koppeln (oder später auf Host hinzufügen) und scanne. Du kannst auch einen Kopplungslink einfügen.';
+
+  @override
+  String get welcomeSlideRequiredTitle => 'Zum Starten koppeln';
+
+  @override
+  String get welcomeSlideRequiredBody =>
+      'EnvoyDev braucht einen Computer mit der Desktop-App. Agenten laufen dort — koppel dieses Telefon mit dem Computer, um fortzufahren.';
+
+  @override
+  String get setupGuideTitle => 'So funktioniert EnvoyDev';
+
+  @override
+  String get setupGuideIntro =>
+      'EnvoyDev auf dem Telefon spricht mit EnvoyDev auf dem Computer. Desktop installieren, einmal koppeln, dann Agenten von überall prüfen.';
+
+  @override
+  String get setupGuidePairRequiredTitle => 'Zum Fortfahren koppeln';
+
+  @override
+  String get setupGuidePairRequiredBody =>
+      'EnvoyDev ist der mobile Begleiter für deinen Computer. Ohne gekoppelten Computer gibt es hier noch nichts anzuzeigen.';
+
+  @override
+  String get setupGuideStep1Title => 'Computer bereithalten';
+
+  @override
+  String get setupGuideStep1Body =>
+      'Du brauchst einen Mac oder Windows-PC. Der wird dein EnvoyDev-Host — dort laufen die Agenten.';
+
+  @override
+  String get setupGuideStep2Title => 'EnvoyDev herunterladen und installieren';
+
+  @override
+  String get setupGuideStep2Body =>
+      'Öffne die Downloadseite und installiere EnvoyDev auf diesem Computer. Starte ihn und lass ihn laufen.';
+
+  @override
+  String get setupGuideDownloadCta => 'EnvoyDev-Downloads öffnen';
+
+  @override
+  String get setupGuideStep3Title => 'Kopplungs-QR anzeigen';
+
+  @override
+  String get setupGuideStep3Body =>
+      'Öffne in Desktop-EnvoyDev „Telefon koppeln“. Lass den QR sichtbar.';
+
+  @override
+  String get setupGuideStep4Title => 'Mit diesem Telefon scannen';
+
+  @override
+  String get setupGuideStep4Body =>
+      'Tippe unten auf Jetzt koppeln (oder später auf Host hinzufügen). Kamerazugriff erlauben, dann QR scannen. Du kannst auch einen envoy://-Link einfügen.';
+
+  @override
+  String get setupGuideStep5Title => 'Du bist verbunden';
+
+  @override
+  String get setupGuideStep5Body =>
+      'Nach der Kopplung zeigt dieses Telefon Projekte und Aufgaben auf dem Computer. Agenten laufen weiter, ob das Telefon verbunden ist oder nicht.';
+
+  @override
+  String get setupGuideNoHomeTitle => 'Später koppeln ist in Ordnung';
+
+  @override
+  String get setupGuideNoHomeBody =>
+      'Du kannst jetzt fortfahren und jederzeit unter Host hinzufügen koppeln. Ohne gekoppelten Computer gibt es hier noch nichts anzuzeigen.';
+
+  @override
+  String get setupGuidePairCta => 'Jetzt koppeln';
+
+  @override
+  String get setupGuidePairLaterCta => 'Später koppeln';
+
+  @override
+  String get setupGuideSkipCta => 'Erst entdecken';
+
+  @override
+  String get setupGuideDoneCta => 'Verstanden';
+
+  @override
+  String get settingsSetupGuideSubtitle =>
+      'So installierst du die Desktop-App und koppelst dieses Telefon.';
 }

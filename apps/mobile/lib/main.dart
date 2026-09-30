@@ -39,6 +39,8 @@ import 'l10n/locale_controller.dart';
 import 'screens/connections_sheet.dart';
 import 'screens/network_status_screen.dart';
 import 'screens/no_hosts_screen.dart';
+import 'screens/onboarding/setup_guide_screen.dart';
+import 'screens/onboarding/welcome_slides_screen.dart';
 import 'screens/project_list_screen.dart';
 import 'screens/settings_screen.dart';
 import 'models/harness.dart';
@@ -46,6 +48,7 @@ import 'services/connections_controller.dart';
 import 'services/host_client.dart';
 import 'services/host_pairing_flow.dart';
 import 'services/host_store.dart';
+import 'services/onboarding_preferences.dart';
 import 'services/pairing_store.dart';
 import 'theme/tokens.dart';
 
@@ -104,8 +107,98 @@ class _EnvoyDevAppState extends State<EnvoyDevApp> {
         theme: const CoderTheme(CoderColors.light).toThemeData(),
         darkTheme: const CoderTheme(CoderColors.dark).toThemeData(),
         themeMode: ThemeMode.system,
-        home: AppShell(store: widget.store, localeController: _locales),
+        home: AppEntry(store: widget.store, localeController: _locales),
       ),
+    );
+  }
+}
+
+/// First-launch gate: welcome slides → setup guide → [AppShell].
+///
+/// Pairing is not forced forever — [NoHostsScreen] still offers Add host — but the first launch
+/// walks through download + pair so a new phone is not dumped into an empty shell with no context.
+class AppEntry extends StatefulWidget {
+  const AppEntry({
+    super.key,
+    this.store,
+    this.pairings,
+    required this.localeController,
+  });
+
+  final HostStore? store;
+  final PairingStore? pairings;
+  final LocaleController localeController;
+
+  @override
+  State<AppEntry> createState() => _AppEntryState();
+}
+
+class _AppEntryState extends State<AppEntry> {
+  late final HostStore _store = widget.store ?? HostStore();
+
+  bool _loading = true;
+  bool _showSlides = false;
+  bool _showGuide = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    await OnboardingPreferences.migrateExistingInstallIfNeeded();
+    final slidesDone = await OnboardingPreferences.hasCompletedSlides();
+    final guideDone = await OnboardingPreferences.hasCompletedGuide();
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _showSlides = !slidesDone;
+      _showGuide = slidesDone && !guideDone;
+    });
+  }
+
+  void _onSlidesFinished() {
+    if (!mounted) return;
+    setState(() {
+      _showSlides = false;
+      _showGuide = true;
+    });
+  }
+
+  Future<bool> _pairNow() async {
+    final added = await addHostFlow(context, _store);
+    if (!mounted) return false;
+    if (added == null) return false;
+    setState(() => _showGuide = false);
+    return true;
+  }
+
+  void _enterShell() {
+    if (!mounted) return;
+    setState(() => _showGuide = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (_showSlides) {
+      return WelcomeSlidesScreen(onFinished: _onSlidesFinished);
+    }
+    if (_showGuide) {
+      return SetupGuideScreen(
+        isFirstLaunch: true,
+        requirePairing: true,
+        onPairLater: _enterShell,
+        onPairNow: _pairNow,
+      );
+    }
+    return AppShell(
+      store: _store,
+      pairings: widget.pairings,
+      localeController: widget.localeController,
     );
   }
 }
@@ -181,12 +274,13 @@ class _AppShellState extends State<AppShell> {
     super.dispose();
   }
 
-  Future<void> _addHost() async {
+  Future<bool> _addHost() async {
     final added = await addHostFlow(context, _connections.store);
-    if (added == null) return;
+    if (added == null) return false;
     // `upsertHost` reconnects the client for a replaced host and makes the new one active, which is
     // what makes a just-paired desktop the one the user lands on.
     await _connections.upsertHost(added);
+    return true;
   }
 
   void _openSettings(HostClient client, List<HarnessInfo> harnesses) {
@@ -213,7 +307,10 @@ class _AppShellState extends State<AppShell> {
     // actually rendered even on the first build.
     _shown = (loading: false, hostId: host?.id, label: host?.label);
     if (host == null || client == null) {
-      return NoHostsScreen(onAddHost: () => unawaited(_addHost()));
+      return NoHostsScreen(
+        onAddHost: () => unawaited(_addHost()),
+        onPairFromGuide: _addHost,
+      );
     }
 
     return ProjectListScreen(

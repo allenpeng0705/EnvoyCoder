@@ -1980,5 +1980,133 @@
   "teamJobPeerOffline": "Offline",
   "@teamJobPeerOffline": {
     "description": "Phone: peer offline."
+  },
+  "welcomeSkip": "Skip",
+  "@welcomeSkip": {
+    "description": "First-launch: skip welcome slides."
+  },
+  "welcomeNext": "Next",
+  "@welcomeNext": {
+    "description": "First-launch: go to the next welcome slide."
+  },
+  "welcomeSlide1Title": "Welcome to EnvoyDev",
+  "@welcomeSlide1Title": {
+    "description": "Welcome slide 1 title."
+  },
+  "welcomeSlide1Body": "EnvoyDev is the phone companion for coding agents running on your computer. Check on tasks, approve tools, and stay in the loop from anywhere.",
+  "@welcomeSlide1Body": {
+    "description": "Welcome slide 1 body."
+  },
+  "welcomeSlide2Title": "Your computer does the work",
+  "@welcomeSlide2Title": {
+    "description": "Welcome slide 2 title."
+  },
+  "welcomeSlide2Body": "Install EnvoyDev on a Mac or Windows PC. Agents, projects, and settings stay on that machine — the phone is a remote window.",
+  "@welcomeSlide2Body": {
+    "description": "Welcome slide 2 body."
+  },
+  "welcomeSlide3Title": "Pair with a QR code",
+  "@welcomeSlide3Title": {
+    "description": "Welcome slide 3 title."
+  },
+  "welcomeSlide3Body": "On the computer, open EnvoyDev and show the pairing QR. On this phone, tap Pair now (or Add host later) and scan it. You can also paste a pairing link.",
+  "@welcomeSlide3Body": {
+    "description": "Welcome slide 3 body."
+  },
+  "welcomeSlideRequiredTitle": "Pair to get started",
+  "@welcomeSlideRequiredTitle": {
+    "description": "Welcome last slide: pairing required title."
+  },
+  "welcomeSlideRequiredBody": "EnvoyDev needs a computer running the desktop app. Agents run there — pair this phone with that computer to continue.",
+  "@welcomeSlideRequiredBody": {
+    "description": "Welcome last slide: pairing required body."
+  },
+  "setupGuideTitle": "How EnvoyDev works",
+  "@setupGuideTitle": {
+    "description": "Setup guide screen title."
+  },
+  "setupGuideIntro": "EnvoyDev on your phone talks to EnvoyDev on your computer. Install the desktop app, pair once, then check on agents from anywhere.",
+  "@setupGuideIntro": {
+    "description": "Setup guide intro paragraph."
+  },
+  "setupGuidePairRequiredTitle": "Pair to continue",
+  "@setupGuidePairRequiredTitle": {
+    "description": "Setup guide banner title when pairing is required."
+  },
+  "setupGuidePairRequiredBody": "EnvoyDev is the phone companion for your computer. Without a paired computer there is nothing to show here yet.",
+  "@setupGuidePairRequiredBody": {
+    "description": "Setup guide banner body when pairing is required."
+  },
+  "setupGuideStep1Title": "Get a computer ready",
+  "@setupGuideStep1Title": {
+    "description": "Setup guide step 1 title."
+  },
+  "setupGuideStep1Body": "You need a Mac or Windows PC. That machine becomes your EnvoyDev host — where agents run.",
+  "@setupGuideStep1Body": {
+    "description": "Setup guide step 1 body."
+  },
+  "setupGuideStep2Title": "Download and install EnvoyDev",
+  "@setupGuideStep2Title": {
+    "description": "Setup guide step 2 title."
+  },
+  "setupGuideStep2Body": "Open the download page and install EnvoyDev on that computer. Launch it and keep it running.",
+  "@setupGuideStep2Body": {
+    "description": "Setup guide step 2 body."
+  },
+  "setupGuideDownloadCta": "Open EnvoyDev downloads",
+  "@setupGuideDownloadCta": {
+    "description": "Opens the desktop download page."
+  },
+  "setupGuideStep3Title": "Show the pairing QR",
+  "@setupGuideStep3Title": {
+    "description": "Setup guide step 3 title."
+  },
+  "setupGuideStep3Body": "In desktop EnvoyDev, open Pair a phone. Keep the QR on screen.",
+  "@setupGuideStep3Body": {
+    "description": "Setup guide step 3 body."
+  },
+  "setupGuideStep4Title": "Scan with this phone",
+  "@setupGuideStep4Title": {
+    "description": "Setup guide step 4 title."
+  },
+  "setupGuideStep4Body": "Tap Pair now below (or Add host later). Allow camera access, then scan the QR. You can also paste an envoy:// pair link.",
+  "@setupGuideStep4Body": {
+    "description": "Setup guide step 4 body."
+  },
+  "setupGuideStep5Title": "You’re connected",
+  "@setupGuideStep5Title": {
+    "description": "Setup guide step 5 title."
+  },
+  "setupGuideStep5Body": "When pairing finishes, this phone shows the projects and tasks on that computer. Agents keep running whether or not the phone is connected.",
+  "@setupGuideStep5Body": {
+    "description": "Setup guide step 5 body."
+  },
+  "setupGuideNoHomeTitle": "Pairing later is fine",
+  "@setupGuideNoHomeTitle": {
+    "description": "Setup guide note title about pairing later."
+  },
+  "setupGuideNoHomeBody": "You can continue now and pair any time from Add host. Without a paired computer, there is nothing to show here yet.",
+  "@setupGuideNoHomeBody": {
+    "description": "Setup guide note body about pairing later."
+  },
+  "setupGuidePairCta": "Pair now",
+  "@setupGuidePairCta": {
+    "description": "Primary CTA: start pairing."
+  },
+  "setupGuidePairLaterCta": "Pair later",
+  "@setupGuidePairLaterCta": {
+    "description": "Secondary CTA: defer pairing."
+  },
+  "setupGuideSkipCta": "Explore first",
+  "@setupGuideSkipCta": {
+    "description": "Secondary CTA on first launch when pairing is optional."
+  },
+  "setupGuideDoneCta": "Got it",
+  "@setupGuideDoneCta": {
+    "description": "Dismiss the guide when reopened later."
+  },
+  "settingsSetupGuideSubtitle": "How to install the desktop app and pair this phone.",
+  "@settingsSetupGuideSubtitle": {
+    "description": "Settings row subtitle: opens the setup guide again."
   }
 }

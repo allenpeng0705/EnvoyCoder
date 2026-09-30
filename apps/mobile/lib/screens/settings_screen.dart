@@ -9,6 +9,7 @@ import '../l10n/l10n.dart';
 import '../l10n/locale_controller.dart';
 import '../models/harness.dart';
 import '../services/host_client.dart';
+import '../screens/onboarding/setup_guide_screen.dart';
 import '../theme/tokens.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -319,6 +320,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                   ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: Text(l10n.setupGuideTitle),
+                  subtitle: Text(l10n.settingsSetupGuideSubtitle),
+                  onTap: () => unawaited(showSetupGuide(context)),
+                ),
               ],
             ),
     );

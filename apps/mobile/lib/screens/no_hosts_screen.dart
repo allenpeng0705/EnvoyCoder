@@ -11,18 +11,32 @@ import 'package:flutter/material.dart';
 
 import '../l10n/l10n.dart';
 import '../theme/tokens.dart';
+import '../widgets/setup_guide_button.dart';
 
 class NoHostsScreen extends StatelessWidget {
-  const NoHostsScreen({super.key, required this.onAddHost});
+  const NoHostsScreen({
+    super.key,
+    required this.onAddHost,
+    this.onPairFromGuide,
+  });
 
   final VoidCallback onAddHost;
+
+  /// When the setup guide's "Pair now" is pressed — same flow as [onAddHost], returning whether
+  /// pairing succeeded so the guide can dismiss only then.
+  final Future<bool> Function()? onPairFromGuide;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final colors = CoderTheme.of(context);
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.appName)),
+      appBar: AppBar(
+        title: Text(l10n.appName),
+        actions: [
+          SetupGuideButton(onPairNow: onPairFromGuide),
+        ],
+      ),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(CoderSpace.xl2),

@@ -1479,4 +1479,113 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get teamJobPeerOffline => 'Offline';
+
+  @override
+  String get welcomeSkip => 'Skip';
+
+  @override
+  String get welcomeNext => 'Next';
+
+  @override
+  String get welcomeSlide1Title => 'Welcome to EnvoyDev';
+
+  @override
+  String get welcomeSlide1Body =>
+      'EnvoyDev is the phone companion for coding agents running on your computer. Check on tasks, approve tools, and stay in the loop from anywhere.';
+
+  @override
+  String get welcomeSlide2Title => 'Your computer does the work';
+
+  @override
+  String get welcomeSlide2Body =>
+      'Install EnvoyDev on a Mac or Windows PC. Agents, projects, and settings stay on that machine — the phone is a remote window.';
+
+  @override
+  String get welcomeSlide3Title => 'Pair with a QR code';
+
+  @override
+  String get welcomeSlide3Body =>
+      'On the computer, open EnvoyDev and show the pairing QR. On this phone, tap Pair now (or Add host later) and scan it. You can also paste a pairing link.';
+
+  @override
+  String get welcomeSlideRequiredTitle => 'Pair to get started';
+
+  @override
+  String get welcomeSlideRequiredBody =>
+      'EnvoyDev needs a computer running the desktop app. Agents run there — pair this phone with that computer to continue.';
+
+  @override
+  String get setupGuideTitle => 'How EnvoyDev works';
+
+  @override
+  String get setupGuideIntro =>
+      'EnvoyDev on your phone talks to EnvoyDev on your computer. Install the desktop app, pair once, then check on agents from anywhere.';
+
+  @override
+  String get setupGuidePairRequiredTitle => 'Pair to continue';
+
+  @override
+  String get setupGuidePairRequiredBody =>
+      'EnvoyDev is the phone companion for your computer. Without a paired computer there is nothing to show here yet.';
+
+  @override
+  String get setupGuideStep1Title => 'Get a computer ready';
+
+  @override
+  String get setupGuideStep1Body =>
+      'You need a Mac or Windows PC. That machine becomes your EnvoyDev host — where agents run.';
+
+  @override
+  String get setupGuideStep2Title => 'Download and install EnvoyDev';
+
+  @override
+  String get setupGuideStep2Body =>
+      'Open the download page and install EnvoyDev on that computer. Launch it and keep it running.';
+
+  @override
+  String get setupGuideDownloadCta => 'Open EnvoyDev downloads';
+
+  @override
+  String get setupGuideStep3Title => 'Show the pairing QR';
+
+  @override
+  String get setupGuideStep3Body =>
+      'In desktop EnvoyDev, open Pair a phone. Keep the QR on screen.';
+
+  @override
+  String get setupGuideStep4Title => 'Scan with this phone';
+
+  @override
+  String get setupGuideStep4Body =>
+      'Tap Pair now below (or Add host later). Allow camera access, then scan the QR. You can also paste an envoy:// pair link.';
+
+  @override
+  String get setupGuideStep5Title => 'You’re connected';
+
+  @override
+  String get setupGuideStep5Body =>
+      'When pairing finishes, this phone shows the projects and tasks on that computer. Agents keep running whether or not the phone is connected.';
+
+  @override
+  String get setupGuideNoHomeTitle => 'Pairing later is fine';
+
+  @override
+  String get setupGuideNoHomeBody =>
+      'You can continue now and pair any time from Add host. Without a paired computer, there is nothing to show here yet.';
+
+  @override
+  String get setupGuidePairCta => 'Pair now';
+
+  @override
+  String get setupGuidePairLaterCta => 'Pair later';
+
+  @override
+  String get setupGuideSkipCta => 'Explore first';
+
+  @override
+  String get setupGuideDoneCta => 'Got it';
+
+  @override
+  String get settingsSetupGuideSubtitle =>
+      'How to install the desktop app and pair this phone.';
 }

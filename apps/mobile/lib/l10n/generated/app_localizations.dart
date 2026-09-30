@@ -2621,6 +2621,198 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Offline'**
   String get teamJobPeerOffline;
+
+  /// First-launch: skip welcome slides.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip'**
+  String get welcomeSkip;
+
+  /// First-launch: go to the next welcome slide.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get welcomeNext;
+
+  /// Welcome slide 1 title.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome to EnvoyDev'**
+  String get welcomeSlide1Title;
+
+  /// Welcome slide 1 body.
+  ///
+  /// In en, this message translates to:
+  /// **'EnvoyDev is the phone companion for coding agents running on your computer. Check on tasks, approve tools, and stay in the loop from anywhere.'**
+  String get welcomeSlide1Body;
+
+  /// Welcome slide 2 title.
+  ///
+  /// In en, this message translates to:
+  /// **'Your computer does the work'**
+  String get welcomeSlide2Title;
+
+  /// Welcome slide 2 body.
+  ///
+  /// In en, this message translates to:
+  /// **'Install EnvoyDev on a Mac or Windows PC. Agents, projects, and settings stay on that machine — the phone is a remote window.'**
+  String get welcomeSlide2Body;
+
+  /// Welcome slide 3 title.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair with a QR code'**
+  String get welcomeSlide3Title;
+
+  /// Welcome slide 3 body.
+  ///
+  /// In en, this message translates to:
+  /// **'On the computer, open EnvoyDev and show the pairing QR. On this phone, tap Pair now (or Add host later) and scan it. You can also paste a pairing link.'**
+  String get welcomeSlide3Body;
+
+  /// Welcome last slide: pairing required title.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair to get started'**
+  String get welcomeSlideRequiredTitle;
+
+  /// Welcome last slide: pairing required body.
+  ///
+  /// In en, this message translates to:
+  /// **'EnvoyDev needs a computer running the desktop app. Agents run there — pair this phone with that computer to continue.'**
+  String get welcomeSlideRequiredBody;
+
+  /// Setup guide screen title.
+  ///
+  /// In en, this message translates to:
+  /// **'How EnvoyDev works'**
+  String get setupGuideTitle;
+
+  /// Setup guide intro paragraph.
+  ///
+  /// In en, this message translates to:
+  /// **'EnvoyDev on your phone talks to EnvoyDev on your computer. Install the desktop app, pair once, then check on agents from anywhere.'**
+  String get setupGuideIntro;
+
+  /// Setup guide banner title when pairing is required.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair to continue'**
+  String get setupGuidePairRequiredTitle;
+
+  /// Setup guide banner body when pairing is required.
+  ///
+  /// In en, this message translates to:
+  /// **'EnvoyDev is the phone companion for your computer. Without a paired computer there is nothing to show here yet.'**
+  String get setupGuidePairRequiredBody;
+
+  /// Setup guide step 1 title.
+  ///
+  /// In en, this message translates to:
+  /// **'Get a computer ready'**
+  String get setupGuideStep1Title;
+
+  /// Setup guide step 1 body.
+  ///
+  /// In en, this message translates to:
+  /// **'You need a Mac or Windows PC. That machine becomes your EnvoyDev host — where agents run.'**
+  String get setupGuideStep1Body;
+
+  /// Setup guide step 2 title.
+  ///
+  /// In en, this message translates to:
+  /// **'Download and install EnvoyDev'**
+  String get setupGuideStep2Title;
+
+  /// Setup guide step 2 body.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the download page and install EnvoyDev on that computer. Launch it and keep it running.'**
+  String get setupGuideStep2Body;
+
+  /// Opens the desktop download page.
+  ///
+  /// In en, this message translates to:
+  /// **'Open EnvoyDev downloads'**
+  String get setupGuideDownloadCta;
+
+  /// Setup guide step 3 title.
+  ///
+  /// In en, this message translates to:
+  /// **'Show the pairing QR'**
+  String get setupGuideStep3Title;
+
+  /// Setup guide step 3 body.
+  ///
+  /// In en, this message translates to:
+  /// **'In desktop EnvoyDev, open Pair a phone. Keep the QR on screen.'**
+  String get setupGuideStep3Body;
+
+  /// Setup guide step 4 title.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan with this phone'**
+  String get setupGuideStep4Title;
+
+  /// Setup guide step 4 body.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap Pair now below (or Add host later). Allow camera access, then scan the QR. You can also paste an envoy:// pair link.'**
+  String get setupGuideStep4Body;
+
+  /// Setup guide step 5 title.
+  ///
+  /// In en, this message translates to:
+  /// **'You’re connected'**
+  String get setupGuideStep5Title;
+
+  /// Setup guide step 5 body.
+  ///
+  /// In en, this message translates to:
+  /// **'When pairing finishes, this phone shows the projects and tasks on that computer. Agents keep running whether or not the phone is connected.'**
+  String get setupGuideStep5Body;
+
+  /// Setup guide note title about pairing later.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing later is fine'**
+  String get setupGuideNoHomeTitle;
+
+  /// Setup guide note body about pairing later.
+  ///
+  /// In en, this message translates to:
+  /// **'You can continue now and pair any time from Add host. Without a paired computer, there is nothing to show here yet.'**
+  String get setupGuideNoHomeBody;
+
+  /// Primary CTA: start pairing.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair now'**
+  String get setupGuidePairCta;
+
+  /// Secondary CTA: defer pairing.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair later'**
+  String get setupGuidePairLaterCta;
+
+  /// Secondary CTA on first launch when pairing is optional.
+  ///
+  /// In en, this message translates to:
+  /// **'Explore first'**
+  String get setupGuideSkipCta;
+
+  /// Dismiss the guide when reopened later.
+  ///
+  /// In en, this message translates to:
+  /// **'Got it'**
+  String get setupGuideDoneCta;
+
+  /// Settings row subtitle: opens the setup guide again.
+  ///
+  /// In en, this message translates to:
+  /// **'How to install the desktop app and pair this phone.'**
+  String get settingsSetupGuideSubtitle;
 }
 
 class _AppLocalizationsDelegate

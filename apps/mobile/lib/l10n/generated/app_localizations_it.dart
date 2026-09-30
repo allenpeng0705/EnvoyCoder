@@ -1497,4 +1497,113 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get teamJobPeerOffline => 'Offline';
+
+  @override
+  String get welcomeSkip => 'Salta';
+
+  @override
+  String get welcomeNext => 'Avanti';
+
+  @override
+  String get welcomeSlide1Title => 'Benvenuto in EnvoyDev';
+
+  @override
+  String get welcomeSlide1Body =>
+      'EnvoyDev è il compagno sul telefono per gli agenti di coding sul computer. Controlla le attività, approva gli strumenti e resta aggiornato ovunque.';
+
+  @override
+  String get welcomeSlide2Title => 'Il lavoro avviene sul computer';
+
+  @override
+  String get welcomeSlide2Body =>
+      'Installa EnvoyDev su un Mac o PC Windows. Agenti, progetti e impostazioni restano su quella macchina — il telefono è una finestra remota.';
+
+  @override
+  String get welcomeSlide3Title => 'Abbina con un codice QR';
+
+  @override
+  String get welcomeSlide3Body =>
+      'Sul computer apri EnvoyDev e mostra il QR di abbinamento. Su questo telefono tocca Abbina ora (o Aggiungi host più tardi) e scansiona. Puoi anche incollare un link di abbinamento.';
+
+  @override
+  String get welcomeSlideRequiredTitle => 'Abbina per iniziare';
+
+  @override
+  String get welcomeSlideRequiredBody =>
+      'EnvoyDev richiede un computer con l’app desktop. Gli agenti girano lì — abbina questo telefono a quel computer per continuare.';
+
+  @override
+  String get setupGuideTitle => 'Come funziona EnvoyDev';
+
+  @override
+  String get setupGuideIntro =>
+      'EnvoyDev sul telefono parla con EnvoyDev sul computer. Installa il desktop, abbina una volta, poi controlla gli agenti da ovunque.';
+
+  @override
+  String get setupGuidePairRequiredTitle => 'Abbina per continuare';
+
+  @override
+  String get setupGuidePairRequiredBody =>
+      'EnvoyDev è il compagno sul telefono del tuo computer. Senza un computer abbinato non c’è ancora nulla da mostrare qui.';
+
+  @override
+  String get setupGuideStep1Title => 'Prepara un computer';
+
+  @override
+  String get setupGuideStep1Body =>
+      'Serve un Mac o PC Windows. Quella macchina diventa l’host EnvoyDev — dove girano gli agenti.';
+
+  @override
+  String get setupGuideStep2Title => 'Scarica e installa EnvoyDev';
+
+  @override
+  String get setupGuideStep2Body =>
+      'Apri la pagina di download e installa EnvoyDev su quel computer. Avvialo e lascialo in esecuzione.';
+
+  @override
+  String get setupGuideDownloadCta => 'Apri i download di EnvoyDev';
+
+  @override
+  String get setupGuideStep3Title => 'Mostra il QR di abbinamento';
+
+  @override
+  String get setupGuideStep3Body =>
+      'In EnvoyDev desktop apri Abbina un telefono. Tieni il QR a schermo.';
+
+  @override
+  String get setupGuideStep4Title => 'Scansiona con questo telefono';
+
+  @override
+  String get setupGuideStep4Body =>
+      'Tocca Abbina ora qui sotto (o Aggiungi host più tardi). Consenti la fotocamera, poi scansiona il QR. Puoi anche incollare un link envoy://.';
+
+  @override
+  String get setupGuideStep5Title => 'Sei connesso';
+
+  @override
+  String get setupGuideStep5Body =>
+      'Dopo l’abbinamento, questo telefono mostra progetti e attività di quel computer. Gli agenti continuano anche se il telefono non è connesso.';
+
+  @override
+  String get setupGuideNoHomeTitle => 'Abbinare più tardi va bene';
+
+  @override
+  String get setupGuideNoHomeBody =>
+      'Puoi continuare ora e abbinare in qualsiasi momento da Aggiungi host. Senza un computer abbinato non c’è ancora nulla da mostrare qui.';
+
+  @override
+  String get setupGuidePairCta => 'Abbina ora';
+
+  @override
+  String get setupGuidePairLaterCta => 'Abbina più tardi';
+
+  @override
+  String get setupGuideSkipCta => 'Esplora prima';
+
+  @override
+  String get setupGuideDoneCta => 'Ho capito';
+
+  @override
+  String get settingsSetupGuideSubtitle =>
+      'Come installare l’app desktop e abbinare questo telefono.';
 }

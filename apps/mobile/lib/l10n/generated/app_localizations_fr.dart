@@ -1502,4 +1502,113 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get teamJobPeerOffline => 'Hors ligne';
+
+  @override
+  String get welcomeSkip => 'Ignorer';
+
+  @override
+  String get welcomeNext => 'Suivant';
+
+  @override
+  String get welcomeSlide1Title => 'Bienvenue dans EnvoyDev';
+
+  @override
+  String get welcomeSlide1Body =>
+      'EnvoyDev est le compagnon téléphone des agents de code sur votre ordinateur. Suivez les tâches, approuvez les outils et restez informé où que vous soyez.';
+
+  @override
+  String get welcomeSlide2Title => 'Le travail se fait sur l’ordinateur';
+
+  @override
+  String get welcomeSlide2Body =>
+      'Installez EnvoyDev sur un Mac ou un PC Windows. Agents, projets et réglages restent sur cette machine — le téléphone est une fenêtre à distance.';
+
+  @override
+  String get welcomeSlide3Title => 'Associer avec un QR code';
+
+  @override
+  String get welcomeSlide3Body =>
+      'Sur l’ordinateur, ouvrez EnvoyDev et affichez le QR d’association. Sur ce téléphone, touchez Associer maintenant (ou Ajouter un hôte plus tard) et scannez. Vous pouvez aussi coller un lien d’association.';
+
+  @override
+  String get welcomeSlideRequiredTitle => 'Associez pour commencer';
+
+  @override
+  String get welcomeSlideRequiredBody =>
+      'EnvoyDev a besoin d’un ordinateur avec l’app de bureau. Les agents y tournent — associez ce téléphone à cet ordinateur pour continuer.';
+
+  @override
+  String get setupGuideTitle => 'Comment fonctionne EnvoyDev';
+
+  @override
+  String get setupGuideIntro =>
+      'EnvoyDev sur le téléphone parle à EnvoyDev sur l’ordinateur. Installez le bureau, associez une fois, puis suivez les agents de n’importe où.';
+
+  @override
+  String get setupGuidePairRequiredTitle => 'Associez pour continuer';
+
+  @override
+  String get setupGuidePairRequiredBody =>
+      'EnvoyDev est le compagnon téléphone de votre ordinateur. Sans ordinateur associé, il n’y a encore rien à afficher ici.';
+
+  @override
+  String get setupGuideStep1Title => 'Préparez un ordinateur';
+
+  @override
+  String get setupGuideStep1Body =>
+      'Il vous faut un Mac ou un PC Windows. Cette machine devient votre hôte EnvoyDev — là où tournent les agents.';
+
+  @override
+  String get setupGuideStep2Title => 'Téléchargez et installez EnvoyDev';
+
+  @override
+  String get setupGuideStep2Body =>
+      'Ouvrez la page de téléchargement et installez EnvoyDev sur cet ordinateur. Lancez-le et laissez-le tourner.';
+
+  @override
+  String get setupGuideDownloadCta => 'Ouvrir les téléchargements EnvoyDev';
+
+  @override
+  String get setupGuideStep3Title => 'Affichez le QR d’association';
+
+  @override
+  String get setupGuideStep3Body =>
+      'Dans EnvoyDev bureau, ouvrez Associer un téléphone. Gardez le QR à l’écran.';
+
+  @override
+  String get setupGuideStep4Title => 'Scannez avec ce téléphone';
+
+  @override
+  String get setupGuideStep4Body =>
+      'Touchez Associer maintenant ci-dessous (ou Ajouter un hôte plus tard). Autorisez la caméra, puis scannez le QR. Vous pouvez aussi coller un lien envoy://.';
+
+  @override
+  String get setupGuideStep5Title => 'Vous êtes connecté';
+
+  @override
+  String get setupGuideStep5Body =>
+      'Une fois associé, ce téléphone affiche les projets et tâches de cet ordinateur. Les agents continuent qu’il soit connecté ou non.';
+
+  @override
+  String get setupGuideNoHomeTitle => 'Associer plus tard convient';
+
+  @override
+  String get setupGuideNoHomeBody =>
+      'Vous pouvez continuer maintenant et associer à tout moment via Ajouter un hôte. Sans ordinateur associé, il n’y a encore rien à afficher ici.';
+
+  @override
+  String get setupGuidePairCta => 'Associer maintenant';
+
+  @override
+  String get setupGuidePairLaterCta => 'Plus tard';
+
+  @override
+  String get setupGuideSkipCta => 'Explorer d’abord';
+
+  @override
+  String get setupGuideDoneCta => 'Compris';
+
+  @override
+  String get settingsSetupGuideSubtitle =>
+      'Comment installer l’app de bureau et associer ce téléphone.';
 }
