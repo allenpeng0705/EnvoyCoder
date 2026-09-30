@@ -1,0 +1,7 @@
+# Copy to key.properties (same folder) and fill in. Never commit key.properties or the .jks.
+# Sister apps (EnvoyGo / EnvoyDev) may share one Play *upload* keystore — different
+# applicationIds still get separate Play App Signing keys in Console.
+storePassword=YOUR_STORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=upload
+storeFile=upload-keystore.jks

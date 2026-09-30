@@ -229,20 +229,23 @@ Does this app contain ads? **No**
 
 Play uses **Play App Signing**: you sign the AAB with an **upload key**; Google re-signs with the **app signing key** for devices.
 
-1. **Create a keystore once** (store passwords in a password manager):
+`android/app/build.gradle.kts` loads `android/key.properties` the same way EnvoyGo does. Sister apps may **share one upload keystore** (different `applicationId`s still get separate Play App Signing keys).
+
+1. **Reuse EnvoyGo’s upload key** (recommended for this family), or create a new one:
 
 ```bash
 cd apps/mobile/android
-keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+# Option A — same cert as EnvoyGo:
+cp ../../../../EnvoyMesh/apps/envoygo/android/upload-keystore.jks .
+cp ../../../../EnvoyMesh/apps/envoygo/android/key.properties .
+# ensure storeFile=upload-keystore.jks in key.properties
+
+# Option B — new keystore:
+# keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+# cp key.properties.example key.properties   # then fill passwords
 ```
 
-2. **Configure Gradle** (keep secrets out of git):
-
-```bash
-# Create android/key.properties with storePassword, keyPassword, keyAlias=upload, storeFile=…
-```
-
-3. **Build the Play bundle**:
+2. **Build the Play bundle** (prefer AAB over a raw APK):
 
 ```bash
 cd apps/mobile
@@ -251,7 +254,7 @@ flutter build appbundle --release
 # → build/app/outputs/bundle/release/app-release.aab
 ```
 
-4. **Play Console**
+3. **Play Console**
    - Create the app (`com.envoymesh.envoydev`) if needed
    - First upload: enable **Play App Signing** → upload `app-release.aab`
    - Keep `upload-keystore.jks` offline
