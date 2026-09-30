@@ -103,8 +103,8 @@ Initial public release of EnvoyDev Mobile.
 | Field | Value |
 |-------|--------|
 | Support URL | `https://github.com/allenpeng0705/EnvoyCoder/issues` |
-| Marketing URL | `https://www.homeclaw.cn/envoy` |
-| Privacy Policy URL | `https://www.homeclaw.cn/envoy/privacy` |
+| Marketing URL | `https://www.envoymesh.cn` |
+| Privacy Policy URL | `https://www.envoymesh.cn/privacy.html` |
 
 Suggested privacy policy topics (covered on the family privacy page under **EnvoyDev**):
 

@@ -96,8 +96,8 @@ Initial public release of EnvoyDev Mobile.
 |-------|--------|
 | Email | `shilei.peng@qq.com` (alternate: `shileipeng@gmail.com`) |
 | Phone | optional |
-| Website | `https://www.homeclaw.cn/envoy` |
-| Privacy policy | `https://www.homeclaw.cn/envoy/privacy` |
+| Website | `https://www.envoymesh.cn` |
+| Privacy policy | `https://www.envoymesh.cn/privacy.html` |
 
 ---
 

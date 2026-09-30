@@ -17,7 +17,7 @@ EnvoyDev is a desktop app that drives coding agents on the computer where your c
 
 Your code never leaves your machine. Your model keys stay with the agent that uses them. EnvoyDev never asks for an account.
 
-EnvoyDev is built on **[EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh)** — part of the apps group that shares the mesh (identity, discovery, relay) and the pairing experience with the rest of the family, while keeping its own project and task state. Product page: [homeclaw.cn/envoy](https://www.homeclaw.cn/envoy).
+EnvoyDev is built on **[EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh)** — part of the apps group that shares the mesh (identity, discovery, relay) and the pairing experience with the rest of the family, while keeping its own project and task state. Product page: [www.envoymesh.cn](https://www.envoymesh.cn).
 
 ---
 
@@ -189,7 +189,7 @@ EnvoyDev is a member of the **[EnvoyMesh](https://github.com/allenpeng0705/Envoy
 State is per-product: EnvoyDev keeps its project and task tree under `<home>/EnvoyDev/`. EnvoyMesh's mesh, peer list, and identity are shared.
 
 - Source → [github.com/allenpeng0705/EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh)
-- Product / downloads → [www.homeclaw.cn/envoy](https://www.homeclaw.cn/envoy)
+- Product / downloads → [www.envoymesh.cn](https://www.envoymesh.cn)
 
 ---
 
@@ -237,6 +237,6 @@ flutter run         # device or emulator; daemon reachable (same machine, LAN, o
 ## Links
 
 - EnvoyMesh (source) → [github.com/allenpeng0705/EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh)
-- EnvoyMesh (product) → [www.homeclaw.cn/envoy](https://www.homeclaw.cn/envoy)
+- EnvoyMesh (product) → [www.envoymesh.cn](https://www.envoymesh.cn)
 - envoy-harness (the built-in agent runtime) → [github.com/allenpeng0705/envoy-harness](https://github.com/allenpeng0705/envoy-harness)
 - Collaborative Team jobs → [`docs/envoydev-collaboration.md`](docs/envoydev-collaboration.md)

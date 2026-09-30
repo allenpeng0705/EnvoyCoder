@@ -32,8 +32,8 @@ play-store-assets/            ← convenience copies of Play graphics (EnvoyGo l
 | Category (suggested) | Developer Tools / Productivity |
 | Price | Free |
 | Age rating (suggested) | 4+ / Everyone |
-| Marketing / Website | https://www.homeclaw.cn/envoy |
-| Privacy Policy | https://www.homeclaw.cn/envoy/privacy |
+| Marketing / Website | https://www.envoymesh.cn |
+| Privacy Policy | https://www.envoymesh.cn/privacy.html |
 | Support | https://github.com/allenpeng0705/EnvoyCoder/issues |
 | Play contact email | `shilei.peng@qq.com` (alternate `shileipeng@gmail.com`) |
 
@@ -49,12 +49,12 @@ Thin-client companion for the **EnvoyDev** desktop control plane — pair by QR,
 | Play Store `512×512` | present | Opaque RGB (Play rejects transparency). |
 | Play feature graphic `1024×500` | present | Logo + wordmark on brand charcoal. |
 | Screenshots (reference) | present | `appstore/screenshots/` + `googleplay/screenshots/` — projects, live run, connection. **Re-capture on device** at each store’s required resolutions before upload. |
-| Privacy Policy URL | filled | Family page now includes an **EnvoyDev** section (`EnvoyMesh/sites/privacy.html`). Deploy that file to homeclaw before store submit if the live page still omits EnvoyDev. |
+| Privacy Policy URL | filled | Family page now includes an **EnvoyDev** section (`EnvoyMesh/sites/privacy.html`). Deploy that file to www.envoymesh.cn before store submit if the live page still omits EnvoyDev. |
 | Support / Marketing URLs | filled | See listing.md files. |
 
 ## Suggested next steps
 
-1. Deploy updated `EnvoyMesh/sites/privacy.html` to https://www.homeclaw.cn/envoy/privacy so the live page matches source.
+1. Deploy updated `EnvoyMesh/sites/privacy.html` to https://www.envoymesh.cn/privacy.html so the live page matches source.
 2. Re-capture **screenshots** at App Store / Play pixel sizes (checklists in each `listing.md`).
 3. Configure **release signing** for Android (upload keystore + `key.properties`).
 4. Spin up a **demo EnvoyDev desktop** with a long-lived pairing QR — see `apple_google_reviewing.md` — and paste the URI into store review notes.
