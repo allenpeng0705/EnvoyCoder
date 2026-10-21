@@ -40,6 +40,7 @@ import 'libp2p_transport.dart';
 import 'net_diagnostics.dart';
 import 'pairing_credential.dart';
 import 'pairing_store.dart';
+import 'lan_reachability.dart';
 import 'route_plan.dart';
 import 'route_walk.dart';
 import 'ssh_tunnel.dart';
@@ -48,6 +49,17 @@ import 'ssh_tunnel.dart';
 // names this library has always exported are re-exported here so the screens and tests that import
 // `host_client.dart` keep compiling and cannot end up with a second copy of either.
 export 'pairing_credential.dart' show kUnauthorizedErrorCode, isCredentialRefusal;
+
+/// True when [error] is the family's signal that the active socket was retired under an in-flight
+/// RPC (transport upgrade, reconnect, brief drop) — not that the daemon refused the work.
+///
+/// Screens that already show data must not paint this as a red "could not load": the next
+/// `connected` refresh will refill, and the projects on screen are still the last good answer.
+bool isTransientHomeRemoteDrop(Object error) {
+  final text = error.toString();
+  return text.contains('homeRemote.disconnected') ||
+      text.contains('homeRemote.notConnected');
+}
 
 enum HostConnectionState { idle, connecting, connected, reconnecting, failed }
 
@@ -105,6 +117,11 @@ class HostClient {
     this.budget = const DialBudget(),
     this.minDelay = const Duration(seconds: 1),
     this.maxDelay = const Duration(seconds: 20),
+    /// Live Wi‑Fi reading for the family's p2p cap. Null / false → off-Wi‑Fi cap.
+    this.isOnWifi,
+    /// Override for "phone shares the desktop's LAN". Production leaves this null and uses
+    /// [phoneSharesLanWith]; tests that need a private `p2p-direct` on loopback set it.
+    this.sameLan,
   }) : pairing = PairingCredential(
           endpoint: host.endpoint,
           owner: host.ownerId,
@@ -126,6 +143,9 @@ class HostClient {
         },
         perCandidateTimeoutMs: budget.perCandidateTimeoutMs,
         initialReconnectDelayMs: minDelay.inMilliseconds,
+        // Sweep stays on. When not on the home LAN, private rungs are already stripped so the
+        // active circuit sits at index 0 and the sweep is a no-op. When [sameLan] is true, `lan`
+        // returns to the plan and the sweep can move circuit → LAN without a full reconnect.
       ),
     );
     _eventUnsub = _client.onAny(
@@ -140,6 +160,12 @@ class HostClient {
   final DialBudget budget;
   final Duration minDelay;
   final Duration maxDelay;
+
+  /// Optional live Wi‑Fi check; see constructor.
+  final bool Function()? isOnWifi;
+
+  /// Optional same-LAN override; see constructor.
+  final bool Function()? sameLan;
 
   /// This daemon's credential: which token to present, and what to do when the daemon refuses it.
   ///
@@ -421,7 +447,17 @@ class HostClient {
     }
     // The record owns the plan: which rungs this pass may dial, and the ladder the panel shows. A
     // **held** walk plans nothing and leaves the ladder as it was — see `route_walk.dart`.
-    return _walk.plan(candidatesFor(host, token: token));
+    // Private LAN rungs only when this phone shares a site with the desktop — 5G and foreign Wi‑Fi
+    // skip them entirely (`route_plan.dart` / `lan_reachability.dart`).
+    final onWifi = isOnWifi?.call() ?? false;
+    final onSameLan = sameLan?.call() ??
+        (onWifi && await phoneSharesLanWith(host.lanWsUrl ?? host.directWsUrl));
+    return _walk.plan(candidatesFor(
+      host,
+      token: token,
+      isOnWifi: onWifi,
+      sameLan: onSameLan,
+    ));
   }
 
   /// The transport factory the walk calls, wrapped so a rung that never opens is recorded.

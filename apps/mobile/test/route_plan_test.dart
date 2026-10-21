@@ -38,17 +38,22 @@ CoderHost host({
       ssh: ssh,
     );
 
-List<String> namesFor(CoderHost h) => candidatesFor(h).map((c) => c.name).toList();
+List<String> namesFor(CoderHost h, {bool isOnWifi = false, bool sameLan = false}) =>
+    candidatesFor(h, isOnWifi: isOnWifi, sameLan: sameLan).map((c) => c.name).toList();
 
 void main() {
-  test('a QR host walks the family order, relay last', () {
-    final names = namesFor(host(
-      lanWsUrl: 'ws://192.168.1.9:4770/ws',
-      homePeerId: home,
-      bootstrapPeers: [directAddr, 'ws://relay-b.example/ws'],
-      relayWsUrl: 'wss://relay.example/ws',
-      relayWsUrls: ['wss://relay-c.example/ws'],
-    ));
+  test('on the home LAN a QR host walks the family order, relay last', () {
+    final names = namesFor(
+      host(
+        lanWsUrl: 'ws://192.168.1.9:4770/ws',
+        homePeerId: home,
+        bootstrapPeers: [directAddr, 'ws://relay-b.example/ws'],
+        relayWsUrl: 'wss://relay.example/ws',
+        relayWsUrls: ['wss://relay-c.example/ws'],
+      ),
+      isOnWifi: true,
+      sameLan: true,
+    );
 
     expect(names, [
       'lan',
@@ -65,6 +70,52 @@ void main() {
     ]);
   });
 
+  test('5G / off-LAN drops private LAN rungs so the circuit is first', () {
+    final names = namesFor(host(
+      lanWsUrl: 'ws://192.168.1.9:4770/ws',
+      homePeerId: home,
+      bootstrapPeers: [directAddr, 'ws://relay-b.example/ws'],
+      relayWsUrl: 'wss://relay.example/ws',
+      relayWsUrls: ['wss://relay-c.example/ws'],
+    ));
+
+    expect(names.first, 'p2p-cn-relay');
+    expect(names, isNot(contains('lan')));
+    expect(names, isNot(contains('p2p-direct')));
+  });
+
+  test('Wi‑Fi that is not the home LAN also drops private LAN rungs', () {
+    // Cafe Wi‑Fi: isOnWifi true, sameLan false — must not dial 192.168.x.
+    final names = namesFor(
+      host(
+        lanWsUrl: 'ws://192.168.1.9:4770/ws',
+        homePeerId: home,
+        bootstrapPeers: [directAddr],
+      ),
+      isOnWifi: true,
+      sameLan: false,
+    );
+    expect(names, isNot(contains('lan')));
+    expect(names, isNot(contains('p2p-direct')));
+    expect(names, contains('p2p-cn-relay'));
+  });
+
+  test('a public direct address is kept off-LAN', () {
+    // Typed public host:port lives in the lan slot; dropping every `lan` name would strand it.
+    final names = namesFor(
+      host(endpoint: '203.0.113.7:4770', homePeerId: home, bootstrapPeers: [directAddr]),
+    );
+    expect(names.first, 'lan');
+  });
+
+  test('an SSH host keeps its private lan rung off-LAN', () {
+    final names = namesFor(host(
+      lanWsUrl: 'ws://192.168.1.9:4770/ws',
+      ssh: const SshHop(host: 'bastion.example', user: 'u'),
+    ));
+    expect(names, contains('lan'));
+  });
+
   test('a LAN pairing still offers the circuit once the phone leaves the network', () {
     const loopback = '/ip4/127.0.0.1/tcp/49204/p2p/$home';
     const circuit =
@@ -78,23 +129,31 @@ void main() {
   });
 
   test('the primary address becomes the LAN rung when the code carried no LAN URL', () {
-    final candidates = candidatesFor(host());
+    final candidates = candidatesFor(host(), isOnWifi: true, sameLan: true);
     expect(candidates.first.name, 'lan');
     expect(candidates.first.url, 'ws://192.168.1.9:4770/ws?token=tok');
   });
 
   test('a secure primary address is not downgraded to ws', () {
     // `publicHost` hardcodes `ws://`; the mapping must not route a `wss://` host through it.
-    final candidates = candidatesFor(host(endpoint: 'desk.example:4770', secure: true));
+    final candidates = candidatesFor(
+      host(endpoint: 'desk.example:4770', secure: true),
+      isOnWifi: true,
+      sameLan: true,
+    );
     expect(candidates.first.url, startsWith('wss://desk.example:4770/ws'));
   });
 
   test('the token is attached once per WebSocket candidate', () {
-    final candidates = candidatesFor(host(
-      lanWsUrl: 'ws://192.168.1.9:4770/ws',
-      relayWsUrl: 'wss://relay.example/ws',
-      relayWsUrls: ['wss://relay-c.example/ws'],
-    ));
+    final candidates = candidatesFor(
+      host(
+        lanWsUrl: 'ws://192.168.1.9:4770/ws',
+        relayWsUrl: 'wss://relay.example/ws',
+        relayWsUrls: ['wss://relay-c.example/ws'],
+      ),
+      isOnWifi: true,
+      sameLan: true,
+    );
     for (final candidate in candidates.where((c) => c.url.startsWith('ws'))) {
       expect('token='.allMatches(candidate.url).length, 1, reason: candidate.url);
     }
@@ -115,8 +174,11 @@ void main() {
   });
 
   test('the direct address is dialled as-is, not as its own relay', () {
-    final p2p = candidatesFor(host(homePeerId: home, bootstrapPeers: [directAddr]))
-        .firstWhere((c) => c.name == 'p2p-direct');
+    final p2p = candidatesFor(
+      host(homePeerId: home, bootstrapPeers: [directAddr]),
+      isOnWifi: true,
+      sameLan: true,
+    ).firstWhere((c) => c.name == 'p2p-direct');
     expect(p2p.url, directAddr);
     expect(p2p.libp2pRelayAddr, directAddr);
     expect(p2p.sessionToken, 'tok');

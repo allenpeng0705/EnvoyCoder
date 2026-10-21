@@ -45,15 +45,25 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/host.dart';
+import 'connectivity_observer.dart';
 import 'host_client.dart';
 import 'host_store.dart';
 import 'pairing_store.dart';
 
 class ConnectionsController extends ChangeNotifier {
-  ConnectionsController(this.store, {PairingStore? pairings})
-      : pairings = pairings ?? PairingStore();
+  ConnectionsController(
+    this.store, {
+    PairingStore? pairings,
+    ConnectivityObserver? connectivity,
+  })  : pairings = pairings ?? PairingStore(),
+        _connectivity = connectivity;
 
   final HostStore store;
+
+  /// Wi‑Fi vs cellular for every client's dial ladder. Null in tests that do not dial.
+  final ConnectivityObserver? _connectivity;
+  StreamSubscription<void>? _onlineSub;
+  StreamSubscription<void>? _typeSub;
 
   /// The pairings this phone holds, keyed by daemon identity.
   ///
@@ -125,7 +135,12 @@ class ConnectionsController extends ChangeNotifier {
   /// Every host gets a client, not only the active one: the Connections view's whole value is that
   /// it says how the *others* are doing before you switch to them, and a status that only appears
   /// after the switch would be a spinner where a fact should be.
+  ///
+  /// Dial order matters on cellular: every client shares one libp2p node and the community relay
+  /// resets a stream when two circuit dials land together. The **active** host dials first; the
+  /// others follow one at a time after it settles (or after a short grace if it never does).
   Future<void> load() async {
+    await _ensureConnectivity();
     final hosts = await store.load();
     final stored = await store.loadActiveHostId();
     if (_disposed) return;
@@ -138,15 +153,110 @@ class ConnectionsController extends ChangeNotifier {
     _persistedUsedId = stored;
     _loading = false;
     notifyListeners();
+    // Build every client now (Connections sheet reads them) but dial one at a time: concurrent
+    // circuit dials through the shared libp2p node reset each other on the community relay.
     for (final host in hosts) {
-      _ensureClient(host);
+      _ensureClient(host, dial: false);
+    }
+    final active = activeHost;
+    final rest = <CoderHost>[
+      for (final host in hosts)
+        if (host.id != active?.id) host,
+    ];
+    if (active != null) {
+      _startDial(active.id);
+      unawaited(_dialOthersAfterActive(active.id, rest));
+    } else {
+      for (final host in rest) {
+        _startDial(host.id);
+      }
     }
     notifyListeners();
   }
 
-  void _ensureClient(CoderHost host) {
+  Future<void> _ensureConnectivity() async {
+    final observer = _connectivity;
+    if (observer == null || _onlineSub != null) return;
+    try {
+      await observer.start();
+    } catch (_) {
+      // Platform channel missing in some test/bindings — treat as unknown (off-LAN plan).
+    }
+    _onlineSub = observer.onBecameOnline.listen((_) => _redialAll());
+    _typeSub = observer.onNetworkTypeChanged.listen((_) => _redialAll());
+  }
+
+  /// Wi‑Fi ↔ cellular (or offline → online): re-walk with a fresh plan.
+  ///
+  /// Must stay sequential — the same relay-reset reason as [load]. Firing every client at once
+  /// undoes that guard exactly when the radio is already flapping.
+  void _redialAll() {
+    if (_disposed) return;
+    final active = activeHost;
+    final rest = <CoderHost>[
+      for (final host in _hosts)
+        if (host.id != active?.id) host,
+    ];
+    if (active != null) {
+      _startDial(active.id);
+      unawaited(_dialOthersAfterActive(active.id, rest));
+    } else {
+      unawaited(_dialOthersAfterActive('', rest));
+    }
+  }
+
+  /// Wait for the active host to leave `connecting`, then start the others one by one.
+  Future<void> _dialOthersAfterActive(String activeId, List<CoderHost> others) async {
+    final activeClient = _clients[activeId];
+    if (activeClient != null) {
+      await _waitUntilSettled(activeClient).timeout(
+        const Duration(seconds: 45),
+        onTimeout: () {},
+      );
+    }
+    if (_disposed) return;
+    for (final host in others) {
+      if (_disposed) return;
+      _startDial(host.id);
+      final client = _clients[host.id];
+      if (client != null) {
+        await _waitUntilSettled(client).timeout(
+          const Duration(seconds: 45),
+          onTimeout: () {},
+        );
+      }
+    }
+  }
+
+  void _startDial(String hostId) {
+    final client = _clients[hostId];
+    if (client == null || _disposed) return;
+    _states[hostId] = HostConnectionState.connecting;
+    unawaited(client.connectBest());
+  }
+
+  Future<void> _waitUntilSettled(HostClient client) async {
+    // Wait only while a dial is in flight. Idle test doubles never leave `idle`; a live client
+    // that reached the daemon is `connected`; `failed` is unused (retries stay on `reconnecting`).
+    if (client.state != HostConnectionState.connecting &&
+        client.state != HostConnectionState.reconnecting) {
+      return;
+    }
+    await client.states.firstWhere(
+      (state) =>
+          state != HostConnectionState.connecting &&
+          state != HostConnectionState.reconnecting,
+    );
+  }
+
+  void _ensureClient(CoderHost host, {bool dial = true}) {
     if (_disposed || _clients.containsKey(host.id)) return;
-    final client = clientFactory?.call(host) ?? HostClient(host, pairingStore: pairings);
+    final client = clientFactory?.call(host) ??
+        HostClient(
+          host,
+          pairingStore: pairings,
+          isOnWifi: () => _connectivity?.isOnWifi ?? false,
+        );
     _clients[host.id] = client;
     _subs[host.id] = client.states.listen((state) {
       if (_disposed) return;
@@ -157,8 +267,8 @@ class ConnectionsController extends ChangeNotifier {
       if (state == HostConnectionState.connected) _persistUsed(host.id);
       notifyListeners();
     });
-    _states[host.id] = HostConnectionState.connecting;
-    unawaited(client.connectBest());
+    _states[host.id] = dial ? HostConnectionState.connecting : HostConnectionState.idle;
+    if (dial) unawaited(client.connectBest());
   }
 
   /// Remember [hostId] as the machine the app actually reached — the *used* half of "last used".
@@ -214,7 +324,8 @@ class ConnectionsController extends ChangeNotifier {
     _persistedUsedId = host.id;
     notifyListeners();
     await store.saveActiveHostId(host.id);
-    _ensureClient(host);
+    _ensureClient(host, dial: false);
+    _startDial(host.id);
     notifyListeners();
   }
 
@@ -275,6 +386,11 @@ class ConnectionsController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    unawaited(_onlineSub?.cancel());
+    unawaited(_typeSub?.cancel());
+    _onlineSub = null;
+    _typeSub = null;
+    unawaited(_connectivity?.dispose());
     for (final sub in _subs.values) {
       unawaited(sub.cancel());
     }

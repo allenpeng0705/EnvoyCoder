@@ -64,7 +64,8 @@ Future<void> _serveHome(P2PStream<dynamic> stream, String token) async {
 }
 
 void main() {
-  test('the walk wins on the direct libp2p rung and carries RPCs over it', () async {    final port = await _freePort();
+  test('the walk wins on the direct libp2p rung and carries RPCs over it', () async {
+    final port = await _freePort();
     final home = Libp2pNode(seedStore: MemoryLibp2pSeedStore());
     await home.start(
       listenAddrs: ['/ip4/127.0.0.1/tcp/$port'],
@@ -96,6 +97,9 @@ void main() {
       ),
       dialer: (url) async => throw const SocketException('nothing at the direct address'),
       libp2pDialer: Libp2pTransport(node: () async => phone).dial,
+      // Loopback harness: force the same-LAN plan so private `p2p-direct` is kept.
+      isOnWifi: () => true,
+      sameLan: () => true,
       budget: const DialBudget(
         perCandidateTimeout: Duration(seconds: 5),
         maxAttemptsPerWalk: 2,
@@ -106,8 +110,8 @@ void main() {
     addTearDown(client.dispose);
 
     await client.connectBest();
-
-    expect(client.state, HostConnectionState.connected);
+    expect(client.state, HostConnectionState.connected,
+        reason: 'lastWalkError=${client.lastWalkError}');
     expect(client.activeRoute, 'p2p-direct');
 
     final hello = await client.call('coder.hello', {});

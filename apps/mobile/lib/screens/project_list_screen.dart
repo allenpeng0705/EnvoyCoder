@@ -90,6 +90,9 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
   StreamSubscription<HostConnectionState>? _stateSub;
   StreamSubscription<Map<String, dynamic>>? _eventSub;
 
+  /// Bumps on every [_refresh] start so a late failure from a superseded call cannot paint a banner.
+  int _refreshGen = 0;
+
   @override
   void initState() {
     super.initState();
@@ -111,11 +114,13 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
       if (mounted) {
         setState(() {
           _loading = false;
-          _error = null;
+          // Keep projects on screen while reconnecting; only clear a banner if we have nothing yet.
+          if (_projects.isEmpty) _error = null;
         });
       }
       return;
     }
+    final gen = ++_refreshGen;
     try {
       final projectsResult = await widget.client.call('coder.listProjects', {});
       final tasksResult = await widget.client.call('coder.listTasks', {});
@@ -129,7 +134,7 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
       } catch (_) {}
       // `context.l10n` only after an await: this runs from `initState`, and an inherited lookup
       // before the first build would assert.
-      if (!mounted) return;
+      if (!mounted || gen != _refreshGen) return;
       final l10n = context.l10n;
       final projects = _asMapList(projectsResult['projects']).map(ProjectInfo.fromJson).toList();
       final tasks = _asMapList(tasksResult['tasks']).map((e) => TaskInfo.fromJson(e, l10n: l10n)).toList();
@@ -162,7 +167,7 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
         final defaults = settings['defaults'];
         if (defaults is Map) appHarness = defaults['harness'] as String?;
       }
-      if (!mounted) return;
+      if (!mounted || gen != _refreshGen) return;
       setState(() {
         _projects = projects;
         _tasks = tasks;
@@ -173,7 +178,21 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
         _error = null;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || gen != _refreshGen) return;
+      // Transport upgrade / brief drop retires the socket under this call. Projects already shown
+      // stay; the next `connected` (or the soft retry below) refills. Do not flash
+      // `Exception: homeRemote.disconnected` as a load failure.
+      if (isTransientHomeRemoteDrop(error)) {
+        setState(() {
+          _loading = false;
+          if (_projects.isNotEmpty) _error = null;
+        });
+        unawaited(Future<void>.delayed(const Duration(milliseconds: 400), () {
+          if (!mounted || gen != _refreshGen) return;
+          if (widget.client.state == HostConnectionState.connected) unawaited(_refresh());
+        }));
+        return;
+      }
       final l10n = context.l10n;
       setState(() {
         _loading = false;

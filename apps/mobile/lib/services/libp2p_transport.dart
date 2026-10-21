@@ -34,6 +34,26 @@ typedef Libp2pDialer = Future<WebSocketLike> Function(HomeRemoteCandidate candid
 /// Persisting it in secure storage is an optimisation to make later, not a correctness requirement.
 Libp2pNode? _sharedNode;
 
+/// One dial at a time across every [Libp2pTransport] in the process.
+///
+/// The shared node talks to the community relay over one TCP session. Two hosts (or a reconnect
+/// racing an upgrade probe) dialling that relay together made it reset the first stream —
+/// `Connection reset by peer` — which is the green→orange flap after a circuit just came up. The
+/// walk is already sequential per client; this gate serialises the radio across clients.
+Future<void> _dialTail = Future<void>.value();
+
+Future<T> _serializedDial<T>(Future<T> Function() open) {
+  final done = Completer<T>();
+  _dialTail = _dialTail.then((_) async {
+    try {
+      done.complete(await open());
+    } catch (error, stack) {
+      done.completeError(error, stack);
+    }
+  });
+  return done.future;
+}
+
 Future<Libp2pNode> _sharedLibp2pNode() async {
   final node = _sharedNode ??= Libp2pNode(seedStore: MemoryLibp2pSeedStore());
   if (!node.isStarted) {
@@ -165,7 +185,11 @@ class Libp2pTransport {
 
   final Future<Libp2pNode> Function() _node;
 
-  Future<WebSocketLike> dial(HomeRemoteCandidate candidate) async {
+  Future<WebSocketLike> dial(HomeRemoteCandidate candidate) {
+    return _serializedDial(() => _dialUnlocked(candidate));
+  }
+
+  Future<WebSocketLike> _dialUnlocked(HomeRemoteCandidate candidate) async {
     final address = libp2pDialTarget(candidate);
     final token = candidate.sessionToken ?? '';
     final node = await _node();

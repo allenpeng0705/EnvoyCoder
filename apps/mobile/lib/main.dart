@@ -38,6 +38,7 @@ import 'l10n/l10n.dart';
 import 'l10n/locale_controller.dart';
 import 'screens/connections_sheet.dart';
 import 'screens/network_status_screen.dart';
+import 'services/connectivity_observer.dart';
 import 'screens/no_hosts_screen.dart';
 import 'screens/onboarding/setup_guide_screen.dart';
 import 'screens/onboarding/welcome_slides_screen.dart';
@@ -227,8 +228,11 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  late final ConnectionsController _connections =
-      ConnectionsController(widget.store ?? HostStore(), pairings: widget.pairings);
+  late final ConnectionsController _connections = ConnectionsController(
+    widget.store ?? HostStore(),
+    pairings: widget.pairings,
+    connectivity: RealConnectivityObserver(),
+  );
 
   /// What the last build put on screen — the loading flag, the active host, and its name — so
   /// [_onConnectionsChanged] can tell a real change from a connection heartbeat.

@@ -24,6 +24,7 @@ library;
 import 'package:envoy_thin_client/envoy_thin_client.dart' as thin;
 
 import '../models/host.dart';
+import 'lan_reachability.dart';
 
 /// Turn the phone's host record into the family's [thin.StoredNode].
 ///
@@ -87,11 +88,18 @@ String _dialablePeerId(CoderHost host) {
 
 /// The ordered candidates for [host], in the family's priority, with the family's names.
 ///
-/// `isOnWifi` only caps how many expensive libp2p candidates are kept (3 on Wi‑Fi, 2 otherwise); the
-/// app has no connectivity observer yet, so it takes the off-LAN cap. That cap still keeps the
-/// circuit: a private direct address must not be the only peer-to-peer rung, or a phone that paired
-/// on the LAN cannot reach the desktop from cellular. [DialBudget] at the call site is what bounds
-/// the walk further.
+/// [isOnWifi] only caps how many expensive libp2p candidates the family keeps (3 on Wi‑Fi, 2
+/// otherwise). It does **not** decide whether LAN is dialled.
+///
+/// [sameLan] gates **private** LAN addresses only. When false (5G, cafe Wi‑Fi, subnet mismatch):
+///
+///   * private `lan` WebSocket and private/loopback `p2p-direct` are dropped — not tried;
+///   * a **public** address in the `lan` slot is kept (typed `host:port` over the internet);
+///   * an **SSH** host keeps its `lan` rung even when private — the tunnel is what makes that
+///     address reachable from off-LAN (`HostClient` opens the hop before the socket).
+///
+/// Trying unreachable private addresses is what black-holes the SYN and lets the upgrade sweep
+/// retire a working circuit (green → orange).
 ///
 /// [token] is the credential every candidate must carry, and it is a parameter rather than
 /// `host.token` on purpose: the token this daemon issued (`PairingStore`) is the one that proves the
@@ -101,7 +109,12 @@ String _dialablePeerId(CoderHost host) {
 /// `setCommunityHomePeerId` is process-wide state on the resolver (the family's own design). Setting
 /// it here, on every resolve, is what stops one host's peer id being used to build another host's
 /// relay candidate.
-List<thin.HomeRemoteCandidate> candidatesFor(CoderHost host, {bool isOnWifi = false, String? token}) {
+List<thin.HomeRemoteCandidate> candidatesFor(
+  CoderHost host, {
+  bool isOnWifi = false,
+  bool sameLan = false,
+  String? token,
+}) {
   final node = storedNodeFor(host);
   final peerId = node.homePeerId.trim();
   thin.CandidateResolver.setCommunityHomePeerId(peerId.isEmpty ? null : peerId);
@@ -109,5 +122,57 @@ List<thin.HomeRemoteCandidate> candidatesFor(CoderHost host, {bool isOnWifi = fa
   // candidate without one is a dial at shared infrastructure with nothing to route to. The default
   // (a token-only fallback) is EnvoyGo's and is left alone.
   const resolver = thin.CandidateResolver(communityRelayRequiresPeerId: true);
-  return resolver.resolve(node, sessionToken: token ?? host.token, isOnWifi: isOnWifi);
+  final resolved = resolver.resolve(node, sessionToken: token ?? host.token, isOnWifi: isOnWifi);
+  if (sameLan) return resolved;
+  final keepPrivateLanForSsh = host.ssh != null;
+  return resolved.where((c) => _usableOffLan(c, keepPrivateLanForSsh: keepPrivateLanForSsh)).toList();
+}
+
+/// Rungs that can answer when the phone is not on the desktop's private LAN.
+bool _usableOffLan(
+  thin.HomeRemoteCandidate candidate, {
+  required bool keepPrivateLanForSsh,
+}) {
+  if (candidate.name == 'lan') {
+    if (keepPrivateLanForSsh) return true;
+    // Drop only private/loopback targets; a public IP in this slot is a real off-LAN path.
+    return !_wsUrlIsPrivateOrLoopback(candidate.url);
+  }
+  if (candidate.name.startsWith('p2p-direct') && _multiaddrIsLanOnly(candidate.url)) {
+    return false;
+  }
+  return true;
+}
+
+bool _wsUrlIsPrivateOrLoopback(String url) {
+  final host = ipv4HostOf(url);
+  if (host == null) {
+    // Hostname (e.g. `desk.local`): not provably public — treat as LAN-only off-site.
+    return true;
+  }
+  if (host.startsWith('127.')) return true;
+  final parts = host.split('.').map(int.parse).toList();
+  final a = parts[0];
+  final b = parts[1];
+  if (a == 0 || a == 10) return true;
+  if (a == 169 && b == 254) return true;
+  if (a == 192 && b == 168) return true;
+  if (a == 172 && b >= 16 && b <= 31) return true;
+  if (a == 100 && b >= 64 && b <= 127) return true;
+  return false;
+}
+
+bool _multiaddrIsLanOnly(String multiaddr) {
+  if (multiaddr.startsWith('/ip4/127.') || multiaddr.startsWith('/ip6/::1/')) return true;
+  final match =
+      RegExp(r'^/ip4/(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}/').firstMatch(multiaddr);
+  if (match == null) return false;
+  final a = int.parse(match.group(1)!);
+  final b = int.parse(match.group(2)!);
+  if (a == 0 || a == 10 || a == 127) return true;
+  if (a == 169 && b == 254) return true;
+  if (a == 192 && b == 168) return true;
+  if (a == 172 && b >= 16 && b <= 31) return true;
+  if (a == 100 && b >= 64 && b <= 127) return true;
+  return false;
 }
