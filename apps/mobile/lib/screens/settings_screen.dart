@@ -219,6 +219,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _PairingTile(pairing: _pairing, hostLabel: widget.client.host.label),
                 SwitchListTile(
                   title: Text(l10n.settingsApprovals),
+                  subtitle: Text(l10n.settingsApprovalsDetail),
                   value: _requireApproval,
                   onChanged: (v) => setState(() => _requireApproval = v),
                 ),

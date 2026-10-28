@@ -364,7 +364,11 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get settingsApprovals => 'Vor allem Destruktiven fragen';
+  String get settingsApprovals => 'Vor riskanten Schritten fragen';
+
+  @override
+  String get settingsApprovalsDetail =>
+      'Bei Envoy Harness: wenn an, vor Befehlen und Änderungen außerhalb des Projekts fragen — nicht bei gewöhnlichen Änderungen im Projekt. Aus heißt auf diesem Rechner nie fragen, auch unter Projektänderung. Voller Zugriff fragt ebenfalls nie.';
 
   @override
   String get settingsTranscripts =>
@@ -758,6 +762,15 @@ class AppLocalizationsDe extends AppLocalizations {
   String get runThoughtTitle => 'Wie es darüber nachgedacht hat';
 
   @override
+  String get runStepsSummary => 'Schritte';
+
+  @override
+  String get runStepsWorking => 'Arbeitet…';
+
+  @override
+  String get runToolDetails => 'Details';
+
+  @override
   String get runAnswered => 'Beantwortet';
 
   @override
@@ -769,8 +782,20 @@ class AppLocalizationsDe extends AppLocalizations {
   String get runNeedsAnswer => 'Der Agent braucht deine Antwort';
 
   @override
+  String get runApprovalStopAsking =>
+      'Erlauben und auf diesem Gerät nicht mehr fragen';
+
+  @override
+  String get runApprovalAnswerBelow => 'Antworte unten im Eingabefeld';
+
+  @override
   String approvalQuestionTool(String tool) {
     return 'Dem Agenten erlauben, „$tool“ auszuführen?';
+  }
+
+  @override
+  String approvalQuestionStep(String step) {
+    return '„$step“ erlauben?';
   }
 
   @override
@@ -782,6 +807,10 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get approvalDetail =>
       'Er hat vor diesem Schritt angehalten und macht erst weiter, wenn du antwortest. Erlaubst du ihn, läuft derselbe Schritt in diesem Projekt danach ohne Nachfrage.';
+
+  @override
+  String get approvalDetailRemember =>
+      'Erlaubst du diesen Schritt, läuft er in diesem Projekt danach ohne Nachfrage.';
 
   @override
   String get approvalDetailPick =>

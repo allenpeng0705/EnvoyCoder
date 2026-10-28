@@ -23,6 +23,7 @@ import {
   cataloguedInstall,
   cataloguedProviderInput,
   cataloguedRecipe,
+  cataloguedSessionModes,
   overlappingAgentIds,
   probeRecipe,
   resolveAgentEntry,
@@ -258,14 +259,13 @@ describe("what an entry states about the dialect it speaks", () => {
     expect(ACP_AGENT_CATALOG.filter((entry) => entry.transport === "acp")).toHaveLength(38);
   });
 
-  it("states **nothing** about the two dialect facts guessing gets silently wrong", () => {
+  it("states dialect facts only when the mode audit recorded evidence", () => {
     // `modeParam` and `authMethodId` are the pair that produces *silent* wrongness: a peer that does not
-    // recognise the field name it was sent ignores it and reports success. No entry has evidence for
-    // either, so neither may appear on the wire an entry produces — this is the test that fails the day
-    // somebody "helpfully" defaults one.
+    // recognise the field name it was sent ignores it and reports success. `authMethodId` is never
+    // invented. `modeParam` appears only with a cited fixed `sessionModes` list (`docs/catalog-mode-audit.md`).
     for (const entry of ACP_AGENT_CATALOG) {
       const input: Record<string, unknown> = { ...cataloguedProviderInput(entry) };
-      expect(Object.keys(input), `${entry.id} input keys`).toEqual([
+      const expectedKeys = [
         "id",
         "label",
         "command",
@@ -276,12 +276,36 @@ describe("what an entry states about the dialect it speaks", () => {
         // environment constants without a value crossing this boundary. It is listed here so that a field
         // added to this projection has to be a deliberate decision rather than a drift.
         "catalogEntryId",
-      ]);
-      expect(input.modeParam, `${entry.id} must not invent a modeParam`).toBeUndefined();
+        ...(entry.modeParam !== undefined &&
+        entry.sessionModes !== undefined &&
+        entry.sessionModes.length > 0
+          ? (["modeParam"] as const)
+          : []),
+      ];
+      expect(Object.keys(input), `${entry.id} input keys`).toEqual(expectedKeys);
       expect(input.authMethodId, `${entry.id} must not invent an authMethodId`).toBeUndefined();
-      expect(entry).not.toHaveProperty("modeParam");
       expect(entry).not.toHaveProperty("authMethodId");
+      if (entry.sessionModes !== undefined && entry.sessionModes.length > 0) {
+        expect(entry.modeParam, `${entry.id} modes need a modeParam`).toMatch(/^(mode|modeId)$/);
+        expect(entry.modesEvidence, `${entry.id} modes need a citation`).toBeTruthy();
+        expect(input.modeParam).toBe(entry.modeParam);
+      } else {
+        expect(input.modeParam, `${entry.id} must not invent a modeParam`).toBeUndefined();
+        expect(entry).not.toHaveProperty("modeParam");
+      }
     }
+  });
+
+  it("wires gemini and qwen-code with the audited session mode lists", () => {
+    const gemini = cataloguedSessionModes("gemini");
+    expect(gemini?.modeParam).toBe("modeId");
+    expect(gemini?.modes.map((mode) => mode.id)).toEqual(["default", "auto_edit", "yolo"]);
+    expect(cataloguedProviderInput(acpAgent("gemini")!).modeParam).toBe("modeId");
+
+    const qwen = cataloguedSessionModes("qwen-code");
+    expect(qwen?.modeParam).toBe("modeId");
+    expect(qwen?.modes.map((mode) => mode.id)).toEqual(["default", "auto-edit", "yolo", "plan"]);
+    expect(cataloguedSessionModes("goose")).toBeUndefined();
   });
 
   it("carries the command, the args and the environment **names**, and no value", () => {

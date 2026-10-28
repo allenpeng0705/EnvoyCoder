@@ -33,6 +33,7 @@
  */
 
 import {
+  cataloguedSessionModes,
   harnessDefinition,
   harnessModelDelivery,
   mapRetiredEnvoyMode,
@@ -85,6 +86,36 @@ export function resolveAgentMode(harness: HarnessId, requested: string | undefin
     );
   }
   return mode;
+}
+
+/**
+ * Catalogue / user providers: apply a documented `session/set_mode` id when the catalogue entry
+ * cites fixed modes (`docs/catalog-mode-audit.md`). `modeParam` may live on the provider config or
+ * only on the catalogue entry (so a provider added before the audit still gets the picker).
+ */
+export function resolveCataloguedProviderMode(
+  provider: { label: string; modeParam?: "mode" | "modeId"; catalogEntryId?: string; id: string } | undefined,
+  requested: string | undefined,
+): string | undefined {
+  if (requested === undefined || provider === undefined) return undefined;
+  // Only `catalogEntryId` may supply catalogue evidence — a hand-typed provider id must not invent modes.
+  const documented = cataloguedSessionModes(provider.catalogEntryId);
+  const modeParam = provider.modeParam ?? documented?.modeParam;
+  if (modeParam === undefined || documented === undefined) {
+    throw coderError(
+      ENVOYDEV_ERRORS.harnessUnsupported,
+      `${provider.label} cannot be put into a mode over the protocol EnvoyDev speaks to it, so the run was not started. Leave the mode unset to run ${provider.label} in its own default.`,
+      ref("error.agentModeUnsupported", { harness: provider.label }),
+    );
+  }
+  if (!documented.modes.some((entry) => entry.id === requested)) {
+    throw coderError(
+      ENVOYDEV_ERRORS.badRequest,
+      `${provider.label} does not offer a mode called "${requested}", so the run was not started. Pick one of its modes and try again.`,
+      ref("error.agentModeUnknown", { harness: provider.label, mode: requested }),
+    );
+  }
+  return requested;
 }
 
 /**
@@ -233,12 +264,12 @@ export function resolveThinkingDelivery(
  *
  * ## Which value for which state
  *
- *   * `requireApprovalForDestructive: true` → **`safe-only`**: reads and a single safe lookup run;
- *     a write, an edit, and any other command stop and ask. `always-confirm` asked before every
- *     tool, including `read_file`, which is why a task could not get past the first look at the
- *     project. The `git` tool this value auto-allows is read-only (`status` / `diff` / `log`); a
- *     commit is `bash`, and a mutating git command is not in the safe list.
- *   * `false` → **`off`**: never ask. A task mode of Full access says the same thing on its own.
+ *   * `requireApprovalForDestructive: true` → **`safe-only`**: reads, safe bash, and in-workspace
+ *     writes/edits run; other commands and out-of-project mutations stop and ask. `always-confirm`
+ *     asked before every tool, including `read_file`, which is why a task could not get past the
+ *     first look at the project.
+ *   * `false` → **`off`**: never ask. For Envoy Harness, the mode still sets the sandbox; this switch
+ *     only changes how often we ask (see `envoyPermissionPolicy`).
  */
 export function resolveApprovalPolicy(
   harness: HarnessId,

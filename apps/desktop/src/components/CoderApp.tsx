@@ -1145,9 +1145,22 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
                 if (!active.runId) return;
                 toPane(active.id, asFailure(await props.actions.cancelRun(active.runId)));
               }}
-              onAnswer={async (requestId, choice) => {
+              canStopAskingApprovals={
+                // Key off the *live run's* agent, not the task's next-run pick — a mid-turn
+                // harness change must not offer stop-asking for an agent that cannot take a policy.
+                state.harnesses.find(
+                  (h) => h.id === (activeRun?.run.harness ?? active.harness),
+                )?.capabilities.approvalPolicy === true &&
+                state.settings.requireApprovalForDestructive === true
+              }
+              onAnswer={async (requestId, choice, options) => {
                 if (!active.runId) return;
-                toPane(active.id, asFailure(await props.actions.answerApproval(active.runId, requestId, choice)));
+                toPane(
+                  active.id,
+                  asFailure(
+                    await props.actions.answerApproval(active.runId, requestId, choice, options),
+                  ),
+                );
               }}
             />
           ) : (

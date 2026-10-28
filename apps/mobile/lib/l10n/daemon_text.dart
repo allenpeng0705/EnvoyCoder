@@ -140,9 +140,11 @@ String daemonErrorText(AppLocalizations l10n, String raw) {
 /// than an English sentence on a German phone.
 const Map<String, DaemonRefRenderer> daemonRefRenderers = {
   'approval.question.tool': DaemonRefRenderer('approvalQuestionTool', _questionTool),
+  'approval.question.step': DaemonRefRenderer('approvalQuestionStep', _questionStep),
   'approval.question.generic': DaemonRefRenderer('approvalQuestionGeneric', _questionGeneric),
   'approval.question.ask': DaemonRefRenderer('approvalQuestionAsk', _questionAsk),
   'approval.detail': DaemonRefRenderer('approvalDetail', _detail),
+  'approval.detail.remember': DaemonRefRenderer('approvalDetailRemember', _detailRemember),
   'approval.detail.pick': DaemonRefRenderer('approvalDetailPick', _detailPick),
   'approval.detail.multiple': DaemonRefRenderer('approvalDetailMultiple', _detailMultiple),
   'approval.detail.text': DaemonRefRenderer('approvalDetailText', _detailText),
@@ -173,11 +175,16 @@ const Map<String, DaemonRefRenderer> daemonRefRenderers = {
 String _questionTool(AppLocalizations l10n, Map<String, Object> values) =>
     l10n.approvalQuestionTool('${values['tool'] ?? ''}');
 
+String _questionStep(AppLocalizations l10n, Map<String, Object> values) =>
+    l10n.approvalQuestionStep('${values['step'] ?? ''}');
+
 String _questionGeneric(AppLocalizations l10n, Map<String, Object> _) => l10n.approvalQuestionGeneric;
 
 String _questionAsk(AppLocalizations l10n, Map<String, Object> _) => l10n.approvalQuestionAsk;
 
 String _detail(AppLocalizations l10n, Map<String, Object> _) => l10n.approvalDetail;
+
+String _detailRemember(AppLocalizations l10n, Map<String, Object> _) => l10n.approvalDetailRemember;
 
 String _detailPick(AppLocalizations l10n, Map<String, Object> _) => l10n.approvalDetailPick;
 

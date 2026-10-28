@@ -55,6 +55,7 @@ import {
   cataloguedEnvValues,
   cataloguedInstall,
   cataloguedProviderInput,
+  cataloguedSessionModes,
   harnessAvailability,
 } from "@envoydev/agent-catalog";
 import {
@@ -133,6 +134,7 @@ export function catalogEntries(probe: (entry: AcpAgentEntry) => ProbeFinding): C
 function rowOf(entry: AcpAgentEntry, finding: ProbeFinding): CatalogEntry {
   const input = cataloguedProviderInput(entry);
   const availability: HarnessAvailability = harnessAvailability(finding);
+  const documented = cataloguedSessionModes(entry.id);
   return {
     id: entry.id,
     title: entry.title,
@@ -159,5 +161,16 @@ function rowOf(entry: AcpAgentEntry, finding: ProbeFinding): CatalogEntry {
     // leads with; an `npx -y …` entry arrives as `ready` because `npx` resolved, and the window says on the
     // row that its package is fetched on the first run rather than presenting that as a problem.
     availability,
+    ...(documented !== undefined
+      ? {
+          agentMode: true as const,
+          modes: documented.modes.map((mode) => ({
+            id: mode.id,
+            label: mode.label,
+            ...(mode.description !== undefined ? { description: mode.description } : {}),
+            ...(mode.unattended !== undefined ? { unattended: mode.unattended } : {}),
+          })),
+        }
+      : {}),
   };
 }

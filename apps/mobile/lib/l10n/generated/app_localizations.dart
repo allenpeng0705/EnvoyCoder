@@ -711,8 +711,14 @@ abstract class AppLocalizations {
   /// settings.approvals — The approval switch.
   ///
   /// In en, this message translates to:
-  /// **'Ask before anything destructive'**
+  /// **'Ask before risky steps'**
   String get settingsApprovals;
+
+  /// settings.approvals.detail — Explains the approvals switch.
+  ///
+  /// In en, this message translates to:
+  /// **'On Envoy Harness: when on, ask before commands and changes outside the project — not for ordinary in-project edits. Off means never ask for this machine, even under Project change. Full access also never asks.'**
+  String get settingsApprovalsDetail;
 
   /// settings.transcripts — The transcript switch.
   ///
@@ -1428,6 +1434,24 @@ abstract class AppLocalizations {
   /// **'How it thought about this'**
   String get runThoughtTitle;
 
+  /// run.stepsSummary — Collapsed thought/tool segment.
+  ///
+  /// In en, this message translates to:
+  /// **'Steps'**
+  String get runStepsSummary;
+
+  /// run.stepsWorking — Steps segment while a tool is running.
+  ///
+  /// In en, this message translates to:
+  /// **'Working…'**
+  String get runStepsWorking;
+
+  /// run.toolDetails — Expand tool input/output.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get runToolDetails;
+
   /// run.answered — An approval that has an answer.
   ///
   /// In en, this message translates to:
@@ -1446,11 +1470,29 @@ abstract class AppLocalizations {
   /// **'The agent needs your answer'**
   String get runNeedsAnswer;
 
+  /// On an Envoy Harness approval: allow this step and turn off Ask before risky steps.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow and don\'t ask again on this machine'**
+  String get runApprovalStopAsking;
+
+  /// run.approvalAnswerBelow — Transcript stub while sticky chrome owns the choices.
+  ///
+  /// In en, this message translates to:
+  /// **'Answer in the composer below'**
+  String get runApprovalAnswerBelow;
+
   /// approvalquestiontool — The permission the agent is asking for, naming the tool.
   ///
   /// In en, this message translates to:
   /// **'Allow the agent to run “{tool}”?'**
   String approvalQuestionTool(String tool);
+
+  /// approvalquestionstep — Permission question naming the command or path.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow “{step}”?'**
+  String approvalQuestionStep(String step);
 
   /// approvalquestiongeneric — The permission question when no tool name is known.
   ///
@@ -1469,6 +1511,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'It has stopped before this step and will not continue until you answer. Allowing it lets this same step run again in this project without asking.'**
   String get approvalDetail;
+
+  /// approvaldetailremember — Under a step-named permission question.
+  ///
+  /// In en, this message translates to:
+  /// **'Allowing this step lets it run again in this project without asking.'**
+  String get approvalDetailRemember;
 
   /// approvaldetailpick — Under a single-choice question.
   ///

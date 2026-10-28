@@ -11,6 +11,7 @@ import '../models/composer_attachment.dart';
 import '../models/harness.dart';
 import '../models/text_reveal.dart';
 import '../models/transcript.dart';
+import '../models/transcript_steps.dart';
 import '../services/attachment_pickers.dart';
 import '../services/host_client.dart';
 import '../theme/tokens.dart';
@@ -62,6 +63,9 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   String? _taskId;
   String? _cwd;
   List<HarnessInfo> _harnesses = [];
+  bool _requireApproval = true;
+  /// Agent on the live run (prefer over composer selection for stop-asking).
+  String? _runHarnessId;
   ComposerSelection _selection = const ComposerSelection();
   List<_SlashCommand> _commands = const [];
   StreamSubscription<Map<String, dynamic>>? _eventSub;
@@ -83,52 +87,8 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   }
 
   Future<void> _bootstrap() async {
-    if (_harnesses.isEmpty) {
-      try {
-        final result = await widget.client.call('coder.listHarnesses', {});
-        final list = result['harnesses'];
-        if (list is List) {
-          _harnesses = list
-              .whereType<Map>()
-              .map((e) => HarnessInfo.fromJson(Map<String, dynamic>.from(e)))
-              .toList();
-        }
-        try {
-          final providers = await widget.client.call('coder.listProviders', {});
-          final added = providers['providers'];
-          if (added is List) {
-            final taken = _harnesses.map((h) => h.id).toSet();
-            final extra = <HarnessInfo>[];
-            for (final raw in added.whereType<Map>()) {
-              final h = HarnessInfo.fromJson(Map<String, dynamic>.from(raw));
-              if (!h.ready || !taken.add(h.id)) continue;
-              extra.add(h);
-            }
-            _harnesses = [..._harnesses, ...extra];
-          }
-        } catch (_) {}
-        try {
-          final catalog = await widget.client.call('coder.listCatalog', {});
-          final entries = catalog['entries'];
-          if (entries is List) {
-            final taken = _harnesses.map((h) => h.id).toSet();
-            final extra = <HarnessInfo>[];
-            for (final raw in entries.whereType<Map>()) {
-              if (raw['builtIn'] == true) continue;
-              final id = raw['id'] as String?;
-              if (id == null || id.isEmpty || taken.contains(id)) continue;
-              final mapped = Map<String, dynamic>.from(raw);
-              mapped['label'] = raw['title'] ?? id;
-              final h = HarnessInfo.fromJson(mapped);
-              if (!h.ready) continue;
-              taken.add(id);
-              extra.add(h);
-            }
-            _harnesses = [..._harnesses, ...extra];
-          }
-        } catch (_) {}
-      } catch (_) {}
-    }
+    await _loadAgents();
+    await _loadApprovalSetting();
     if (_taskId != null) {
       try {
         final tasks = await widget.client.call('coder.listTasks', {});
@@ -178,6 +138,10 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
             }
             lastId = id;
             lastLive = snap['live'] == true;
+            final run = snap['run'];
+            if (run is Map && run['harness'] is String && (run['harness'] as String).isNotEmpty) {
+              _runHarnessId = run['harness'] as String;
+            }
           }
           if (!mounted) return;
           if (lastId != null) {
@@ -220,6 +184,10 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
         if (_taskId == null && snap['taskId'] is String) {
           _taskId = snap['taskId'] as String;
         }
+        final run = snap['run'];
+        if (run is Map && run['harness'] is String && (run['harness'] as String).isNotEmpty) {
+          _runHarnessId = run['harness'] as String;
+        }
       });
       _syncReveal();
       _scrollToEnd();
@@ -235,7 +203,14 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   }
 
   void _onEventFrame(Map<String, dynamic> frame) {
-    if (frame['event'] != 'coder:run-event') return;
+    final name = frame['event'];
+    // Auto-Add / settings flips: refresh agents (modes) and the ask-before-risky switch.
+    if (name == 'coder:state-changed') {
+      unawaited(_loadAgents());
+      unawaited(_loadApprovalSetting());
+      return;
+    }
+    if (name != 'coder:run-event') return;
     final data = frame['data'];
     if (data is! Map) return;
     final event = Map<String, dynamic>.from(data);
@@ -246,6 +221,65 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
       _syncReveal();
       _scrollToEnd();
     }
+  }
+
+  /// Keep stop-asking in sync with Settings / other clients.
+  Future<void> _loadApprovalSetting() async {
+    try {
+      final settings = await widget.client.call('coder.getSettings', {});
+      final body = settings['settings'];
+      if (body is Map && mounted) {
+        setState(() {
+          _requireApproval = body['requireApprovalForDestructive'] != false;
+        });
+      }
+    } catch (_) {}
+  }
+
+  /// Shipped harnesses + added providers + ready catalogue recipes (with documented modes).
+  Future<void> _loadAgents() async {
+    try {
+      final result = await widget.client.call('coder.listHarnesses', {});
+      final list = result['harnesses'];
+      var next = <HarnessInfo>[];
+      if (list is List) {
+        next = list
+            .whereType<Map>()
+            .map((e) => HarnessInfo.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+      }
+      try {
+        final providers = await widget.client.call('coder.listProviders', {});
+        final added = providers['providers'];
+        if (added is List) {
+          final taken = next.map((h) => h.id).toSet();
+          for (final raw in added.whereType<Map>()) {
+            final h = HarnessInfo.fromJson(Map<String, dynamic>.from(raw));
+            if (!h.ready || !taken.add(h.id)) continue;
+            next.add(h);
+          }
+        }
+      } catch (_) {}
+      try {
+        final catalog = await widget.client.call('coder.listCatalog', {});
+        final entries = catalog['entries'];
+        if (entries is List) {
+          final taken = next.map((h) => h.id).toSet();
+          for (final raw in entries.whereType<Map>()) {
+            if (raw['builtIn'] == true) continue;
+            final id = raw['id'] as String?;
+            if (id == null || id.isEmpty || taken.contains(id)) continue;
+            final mapped = Map<String, dynamic>.from(raw);
+            mapped['label'] = raw['title'] ?? id;
+            final h = HarnessInfo.fromJson(mapped);
+            if (!h.ready) continue;
+            taken.add(id);
+            next.add(h);
+          }
+        }
+      } catch (_) {}
+      if (mounted) setState(() => _harnesses = next);
+    } catch (_) {}
   }
 
   void _applyEvent(Map<String, dynamic> event) {
@@ -349,6 +383,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     String? optionId,
     List<String>? optionIds,
     String? text,
+    bool stopAsking = false,
   }) async {
     final params = <String, Object>{
       'runId': _runId,
@@ -364,14 +399,23 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     } else {
       return;
     }
+    if (stopAsking) params['stopAsking'] = true;
     try {
       await widget.client.call('coder.answerApproval', params);
+      if (stopAsking && mounted) setState(() => _requireApproval = false);
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.l10n.runCouldNotAnswer)),
       );
     }
+  }
+
+  bool get _canStopAsking {
+    if (!_requireApproval) return false;
+    final id = _runHarnessId ?? _selection.harnessId;
+    final harness = harnessById(_harnesses, id);
+    return harness?.approvalPolicy == true;
   }
 
   Future<void> _persistSelection(ComposerSelection next) async {
@@ -451,10 +495,13 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
       }
       _transcript.beginRun();
       if (!mounted) return;
+      final harness = run is Map ? run['harness'] as String? : null;
       setState(() {
         _runId = id;
         _live = true;
         _error = null;
+        // Prefer the live run's harness immediately — don't wait for _loadTail.
+        if (harness != null && harness.isNotEmpty) _runHarnessId = harness;
       });
       await _loadTail();
     } catch (_) {
@@ -573,7 +620,8 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final colors = CoderTheme.of(context);
-    final approvalOpen = _transcript.pendingApproval != null;
+    final pendingApproval = _transcript.pendingApproval;
+    final approvalOpen = pendingApproval != null;
     final lastAssistantIndex = _transcript.entries.lastIndexWhere((e) => e.kind == 'assistant');
 
     return Scaffold(
@@ -630,160 +678,206 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : ListView.builder(
-                    controller: _scroll,
-                    reverse: true,
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-                    itemCount: _transcript.entries.length,
-                    itemBuilder: (context, index) {
-                      final realIndex = _transcript.entries.length - 1 - index;
-                      final entry = _transcript.entries[realIndex];
-                      final streaming = _live && realIndex == lastAssistantIndex && entry.kind == 'assistant';
-                      final display = streaming
-                          ? TranscriptEntry(
-                              kind: entry.kind,
-                              id: entry.id,
-                              text: visibleRevealedText(_reveal),
-                              tone: entry.tone,
-                              callId: entry.callId,
-                              status: entry.status,
-                              delivered: entry.delivered,
-                              toolInput: entry.toolInput,
-                              toolOutput: entry.toolOutput,
-                              approval: entry.approval,
-                            )
-                          : entry;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: TranscriptRow(
-                          entry: display,
-                          colors: colors,
-                          onAnswer: _answer,
-                          streaming: streaming,
-                        ),
+                : Builder(
+                    builder: (context) {
+                      final items = segmentTranscriptSteps(
+                        _transcript.entries,
+                        runLive: _live,
+                      );
+                      return ListView.builder(
+                        controller: _scroll,
+                        reverse: true,
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+                        itemCount: items.length,
+                        itemBuilder: (context, index) {
+                          final item = items[items.length - 1 - index];
+                          if (item is TranscriptStepsItem) {
+                            return Padding(
+                              key: ValueKey(item.segment.id),
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: TranscriptStepsBlock(
+                                storageId: item.segment.id,
+                                entries: item.segment.entries,
+                                live: item.segment.live,
+                                colors: colors,
+                              ),
+                            );
+                          }
+                          final entry = (item as TranscriptEntryItem).entry;
+                          final entryIndex = _transcript.entries.indexWhere((e) => identical(e, entry) || e.id == entry.id);
+                          final streaming = _live &&
+                              entryIndex == lastAssistantIndex &&
+                              entry.kind == 'assistant';
+                          final display = streaming
+                              ? TranscriptEntry(
+                                  kind: entry.kind,
+                                  id: entry.id,
+                                  text: visibleRevealedText(_reveal),
+                                  tone: entry.tone,
+                                  callId: entry.callId,
+                                  status: entry.status,
+                                  delivered: entry.delivered,
+                                  toolInput: entry.toolInput,
+                                  toolOutput: entry.toolOutput,
+                                  approval: entry.approval,
+                                )
+                              : entry;
+                          return Padding(
+                            key: ValueKey('${entry.kind}-${entry.id}'),
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: TranscriptRow(
+                              entry: display,
+                              colors: colors,
+                              onAnswer: _answer,
+                              streaming: streaming,
+                              canStopAsking: _canStopAsking,
+                              actionsDeferred: approvalOpen &&
+                                  entry.kind == 'approval' &&
+                                  entry.approval?.requestId == pendingApproval?.requestId,
+                            ),
+                          );
+                        },
                       );
                     },
                   ),
           ),
-          SafeArea(
-            top: false,
-            child: Material(
-              color: colors.surface0,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (_harnesses.isNotEmpty) ...[
-                      ComposerControls(
-                        harnesses: _harnesses,
-                        selection: _selection,
-                        enabled: !approvalOpen,
-                        onChanged: (next) => unawaited(_persistSelection(next)),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                    if (_live)
-                      Row(
-                        children: [
-                          ChoiceChip(
-                            label: Text(l10n.runQueue),
-                            selected: _sendMode == 'queue',
-                            onSelected: approvalOpen ? null : (_) => setState(() => _sendMode = 'queue'),
-                          ),
-                          const SizedBox(width: 8),
-                          ChoiceChip(
-                            label: Text(l10n.runSteer),
-                            selected: _sendMode == 'steer',
-                            onSelected: approvalOpen ? null : (_) => setState(() => _sendMode = 'steer'),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _sendMode == 'steer'
-                                  ? l10n.runJoinsTurn
-                                  : l10n.runWaitsTurn,
-                              style: TextStyle(color: colors.foregroundMuted, fontSize: 11),
+          // Sticky approval owns the bottom chrome — hide the composer (controller
+          // stays mounted on State) so the card is not stacked on a disabled field.
+          if (approvalOpen && pendingApproval != null)
+            SafeArea(
+              top: false,
+              child: Material(
+                color: colors.surface0,
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                  child: ApprovalCard(
+                    approval: pendingApproval,
+                    colors: colors,
+                    onAnswer: _answer,
+                    canStopAsking: _canStopAsking,
+                  ),
+                ),
+              ),
+            )
+          else
+            SafeArea(
+              top: false,
+              child: Material(
+                color: colors.surface0,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_harnesses.isNotEmpty) ...[
+                        ComposerControls(
+                          harnesses: _harnesses,
+                          selection: _selection,
+                          enabled: true,
+                          onChanged: (next) => unawaited(_persistSelection(next)),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      if (_live)
+                        Row(
+                          children: [
+                            ChoiceChip(
+                              label: Text(l10n.runQueue),
+                              selected: _sendMode == 'queue',
+                              onSelected: (_) => setState(() => _sendMode = 'queue'),
                             ),
+                            const SizedBox(width: 8),
+                            ChoiceChip(
+                              label: Text(l10n.runSteer),
+                              selected: _sendMode == 'steer',
+                              onSelected: (_) => setState(() => _sendMode = 'steer'),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _sendMode == 'steer'
+                                    ? l10n.runJoinsTurn
+                                    : l10n.runWaitsTurn,
+                                style: TextStyle(color: colors.foregroundMuted, fontSize: 11),
+                              ),
+                            ),
+                          ],
+                        ),
+                      if (_live) const SizedBox(height: 8),
+                      if (_commandMatches.isNotEmpty)
+                        ..._commandMatches.map(
+                          (command) => ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text('/${command.name}${command.argumentHint == null ? '' : ' ${command.argumentHint}'}'),
+                            subtitle: command.description.isEmpty ? null : Text(command.description),
+                            onTap: () {
+                              final next = '/${command.name} ';
+                              _composer.value = TextEditingValue(
+                                text: next,
+                                selection: TextSelection.collapsed(offset: next.length),
+                              );
+                              setState(() {});
+                            },
+                          ),
+                        ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          AttachMenuButton(
+                            enabled: _canSend,
+                            onImage: () => unawaited(_attach(pickGalleryImages)),
+                            onPaste: () => unawaited(_attach(pasteClipboardImage)),
+                            onFile: () => unawaited(_attach(pickDocuments)),
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                AttachmentTray(
+                                  attachments: _attachments,
+                                  notice: _attachNotice,
+                                  onRemove: (id) => setState(() {
+                                    _attachments = [
+                                      for (final attachment in _attachments)
+                                        if (attachment.id != id) attachment,
+                                    ];
+                                    _attachNotice = null;
+                                  }),
+                                ),
+                                TextField(
+                                  controller: _composer,
+                                  enabled: _canSend,
+                                  minLines: 1,
+                                  maxLines: 4,
+                                  decoration: InputDecoration(
+                                    hintText: _live
+                                        ? l10n.runPlaceholderFollowUp
+                                        : l10n.runPlaceholderContinue,
+                                    border: const OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                  onChanged: (_) => setState(() {}),
+                                  onSubmitted: (_) => unawaited(_send()),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton.filled(
+                            onPressed: _canSend && canSendComposer(_composer.text, _attachments)
+                                ? () => unawaited(_send())
+                                : null,
+                            icon: const Icon(Icons.send),
                           ),
                         ],
                       ),
-                    const SizedBox(height: 8),
-                    if (_commandMatches.isNotEmpty)
-                      ..._commandMatches.map(
-                        (command) => ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          title: Text('/${command.name}${command.argumentHint == null ? '' : ' ${command.argumentHint}'}'),
-                          subtitle: command.description.isEmpty ? null : Text(command.description),
-                          onTap: () {
-                            final next = '/${command.name} ';
-                            _composer.value = TextEditingValue(
-                              text: next,
-                              selection: TextSelection.collapsed(offset: next.length),
-                            );
-                            setState(() {});
-                          },
-                        ),
-                      ),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        AttachMenuButton(
-                          enabled: _canSend,
-                          onImage: () => unawaited(_attach(pickGalleryImages)),
-                          onPaste: () => unawaited(_attach(pasteClipboardImage)),
-                          onFile: () => unawaited(_attach(pickDocuments)),
-                        ),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              AttachmentTray(
-                                attachments: _attachments,
-                                notice: _attachNotice,
-                                onRemove: (id) => setState(() {
-                                  _attachments = [
-                                    for (final attachment in _attachments)
-                                      if (attachment.id != id) attachment,
-                                  ];
-                                  _attachNotice = null;
-                                }),
-                              ),
-                              TextField(
-                                controller: _composer,
-                                enabled: _canSend,
-                                minLines: 1,
-                                maxLines: 4,
-                                decoration: InputDecoration(
-                                  hintText: approvalOpen && _live
-                                      ? l10n.runPlaceholderAnswer
-                                      : _live
-                                          ? l10n.runPlaceholderFollowUp
-                                          : l10n.runPlaceholderContinue,
-                                  border: const OutlineInputBorder(),
-                                  isDense: true,
-                                ),
-                                onChanged: (_) => setState(() {}),
-                                onSubmitted: (_) => unawaited(_send()),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton.filled(
-                          onPressed: _canSend && canSendComposer(_composer.text, _attachments)
-                              ? () => unawaited(_send())
-                              : null,
-                          icon: const Icon(Icons.send),
-                        ),
-                      ],
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );

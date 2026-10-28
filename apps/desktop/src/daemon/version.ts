@@ -9,4 +9,4 @@
  *
  * Do not edit this string by hand for a release — bump `VERSION` (or `npm run version:desktop -- x.y.z`).
  */
-export const DAEMON_VERSION = "0.2.0";
+export const DAEMON_VERSION = "0.3.0";

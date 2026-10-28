@@ -4,6 +4,9 @@
  * One exclusive choice is a button: that is a permission, or a question with a single pick.
  * Several choices are checkboxes plus Confirm. A typed answer is a field plus Confirm.
  * The labels are the agent's own words, except the Confirm button, which is ours.
+ *
+ * When the agent accepts an approval policy (`approvalPolicy`), exclusive permission cards
+ * also offer "Allow and don't ask again" — flips Settings and the live session.
  */
 
 import { useState, type JSX } from "react";
@@ -13,9 +16,18 @@ import { localizeText } from "../i18n/notice.js";
 import type { TranscriptEntry } from "../state/transcript.js";
 
 type ApprovalEntry = Extract<TranscriptEntry, { kind: "approval" }>;
-type Answer = (requestId: string, choice: string | readonly string[] | { text: string }) => void | Promise<void>;
+type Answer = (
+  requestId: string,
+  choice: string | readonly string[] | { text: string },
+  options?: { stopAsking?: boolean },
+) => void | Promise<void>;
 
-export function ApprovalChoices(props: { entry: ApprovalEntry; onAnswer: Answer }): JSX.Element {
+export function ApprovalChoices(props: {
+  entry: ApprovalEntry;
+  onAnswer: Answer;
+  /** Envoy Harness (and any agent with `approvalPolicy`) — show stop-asking. */
+  canStopAsking?: boolean;
+}): JSX.Element {
   const t = useT();
   const { entry } = props;
   const chosen = entry.resolvedWithIds ?? (entry.resolvedWith !== undefined ? [entry.resolvedWith] : undefined);
@@ -32,19 +44,33 @@ export function ApprovalChoices(props: { entry: ApprovalEntry; onAnswer: Answer 
   if (entry.selection === "many") return <ManyChoices entry={entry} onAnswer={props.onAnswer} />;
   if (entry.selection === "text") return <TextAnswer entry={entry} onAnswer={props.onAnswer} />;
 
+  const allowId = entry.options.find((option) => option.destructive !== true)?.id;
+
   return (
-    <>
-      {entry.options.map((option) => (
+    <div className="approval__choice-stack">
+      <div className="approval__choice-row">
+        {entry.options.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className={`button ${option.destructive ? "button--danger" : "button--primary"}`}
+            onClick={() => void props.onAnswer(entry.requestId, option.id)}
+          >
+            {localizeText(t, option.label) ?? option.label}
+          </button>
+        ))}
+      </div>
+      {props.canStopAsking === true && allowId !== undefined ? (
         <button
-          key={option.id}
           type="button"
-          className={`button ${option.destructive ? "button--danger" : "button--primary"}`}
-          onClick={() => void props.onAnswer(entry.requestId, option.id)}
+          className="button button--ghost approval__stop-asking"
+          data-testid="approval-stop-asking"
+          onClick={() => void props.onAnswer(entry.requestId, allowId, { stopAsking: true })}
         >
-          {localizeText(t, option.label) ?? option.label}
+          {t("task.approval.stopAsking")}
         </button>
-      ))}
-    </>
+      ) : null}
+    </div>
   );
 }
 

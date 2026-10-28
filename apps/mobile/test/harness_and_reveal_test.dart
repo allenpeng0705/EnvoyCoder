@@ -31,6 +31,23 @@ void main() {
       expect(harness.modelOptions.single.id, 'anthropic/claude');
       expect(harness.agentModeApplicable, isTrue);
     });
+
+    test('parses catalogue-provider modes from top-level agentMode', () {
+      final harness = HarnessInfo.fromJson({
+        'id': 'gemini',
+        'label': 'Gemini CLI',
+        'modes': [
+          {'id': 'default', 'label': 'Default'},
+          {'id': 'yolo', 'label': 'YOLO'},
+        ],
+        'agentMode': true,
+        'transport': 'acp',
+        'availability': {'state': 'ready'},
+      });
+      expect(harness.ready, isTrue);
+      expect(harness.agentModeApplicable, isTrue);
+      expect(harness.modes.map((m) => m.id).toList(), ['default', 'yolo']);
+    });
   });
 
   group('text reveal', () {

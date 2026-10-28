@@ -30,11 +30,11 @@
  * ## Adding one
  *
  * Append an entry — and **state its `transport`**, which the type will not let you leave out. That field
- * is the one dialect fact a recipe carries; `modeParam` and `authMethodId` are not here at all, and
- * nothing built from an entry may write one down (see `AcpAgentEntry.transport`). Or let a user declare
- * their own ACP provider in settings (same shape: a command, optional `env` names, and a transport).
- * Nothing here is compiled into the daemon's dispatch — it is a menu of recipes, and the daemon drives
- * whichever one the user chose.
+ * is the one dialect fact a recipe always carries. `authMethodId` is never invented here. `modeParam` /
+ * `sessionModes` appear only with a citation (`docs/catalog-mode-audit.md`) — never as a guess. Or let a
+ * user declare their own ACP provider in settings (same shape: a command, optional `env` names, and a
+ * transport). Nothing here is compiled into the daemon's dispatch — it is a menu of recipes, and the
+ * daemon drives whichever one the user chose.
  *
  * **Both halves of that sentence are now real, including the surface.** The user's half is
  * `AgentProviderConfig` in `@envoydev/protocol` — reached by `coder.listProviders` /
@@ -112,16 +112,31 @@ export interface AcpAgentEntry {
    * because `sigit` (`command: ["sigit"]`) says nothing whatsoever about a protocol and is here only
    * because the catalogue it came from says it speaks ACP.
    *
-   * ## The dialect facts that are deliberately **not** here
+   * ## Dialect facts beyond transport
    *
-   * `AgentLaunch` records two more: `modeParam` (`"mode"` vs `"modeId"`) and `authMethodId`
-   * (`cursor_login`). **No entry states either**, so nothing built from an entry may write one down.
-   * Guessing them fails in the direction that cannot be detected: a peer that does not recognise the
-   * field name it was sent ignores it and reports success, so a wrong `modeParam` produces a mode picker
-   * that appears to work and changes nothing. A catalogue-added provider therefore carries a transport
-   * and no other dialect fact, and the probe is what tells the truth about whether the program runs.
+   * `modeParam` / `sessionModes` are **optional and citation-backed** (`docs/catalog-mode-audit.md`).
+   * Guessing `mode` vs `modeId` fails silently (peer ignores the wrong field), so an entry states them
+   * only when vendor docs or schema tests name both the parameter and the fixed mode ids. `authMethodId`
+   * is still never invented here.
    */
   transport: "acp" | "cli";
+  /**
+   * Which JSON-RPC field `session/set_mode` reads — only when `sessionModes` is also set from evidence.
+   * See `docs/catalog-mode-audit.md`.
+   */
+  modeParam?: "mode" | "modeId";
+  /**
+   * Fixed session modes the vendor documents for this ACP server (asking / tool posture).
+   * Absent for most entries: discover-at-runtime agents must not invent a list.
+   */
+  sessionModes?: readonly {
+    readonly id: string;
+    readonly label: string;
+    readonly description?: string;
+    readonly unattended?: boolean;
+  }[];
+  /** Where the mode list and `modeParam` were taken from (URL or `file:line`). */
+  modesEvidence?: string;
   /**
    * Environment the agent needs to behave correctly (auto-update off, ACP mode on, …), as **name →
    * constant** — the one place a value is allowed to exist.
@@ -391,6 +406,26 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     installLink: "https://geminicli.com",
     command: ["npx","-y","@google/gemini-cli@0.52.0","--acp"],
     transport: "acp",
+    // https://geminicli.com/docs/cli/acp-mode/ (setSessionMode) + gemini-cli PR #18891 / buildAvailableModes
+    modeParam: "modeId",
+    modesEvidence:
+      "https://geminicli.com/docs/cli/acp-mode/ ; https://github.com/google-gemini/gemini-cli/pull/18891",
+    // Omit `plan`: gemini-cli only advertises it when plan mode is enabled; offering it always
+    // makes `session/set_mode` fail the run when the agent has plan off.
+    sessionModes: [
+      { id: "default", label: "Default", description: "Prompts for approval before tool calls." },
+      {
+        id: "auto_edit",
+        label: "Auto edit",
+        description: "Auto-approves edits; still prompts for riskier tools.",
+      },
+      {
+        id: "yolo",
+        label: "YOLO",
+        description: "Accepts tool permissions without asking.",
+        unattended: true,
+      },
+    ],
   },
   {
     id: "gjc",
@@ -552,6 +587,30 @@ export const ACP_AGENT_CATALOG: readonly AcpAgentEntry[] = [
     installLink: "https://qwenlm.github.io/qwen-code-docs/en/users/overview",
     command: ["npx","-y","@qwen-code/qwen-code@0.20.1","--acp","--experimental-skills"],
     transport: "acp",
+    // packages/cli/src/acp-integration/schema.ts approvalModeValueSchema + integration-tests/acp-integration.test.ts
+    modeParam: "modeId",
+    modesEvidence:
+      "https://github.com/QwenLM/qwen-code/blob/407a66c9/packages/cli/src/acp-integration/schema.ts ; https://github.com/QwenLM/qwen-code/blob/407a66c9/integration-tests/acp-integration.test.ts",
+    sessionModes: [
+      { id: "default", label: "Default", description: "Prompts for approval before tool calls." },
+      {
+        id: "auto-edit",
+        label: "Auto edit",
+        description: "Auto-approves edits; still prompts for riskier tools.",
+      },
+      {
+        id: "yolo",
+        label: "YOLO",
+        description: "Automatically approves all tool calls.",
+        unattended: true,
+      },
+      {
+        id: "plan",
+        label: "Plan",
+        description: "Read-only / analysis; write tools are blocked until you leave plan.",
+        unattended: false,
+      },
+    ],
   },
   {
     id: "sigit",
@@ -785,10 +844,10 @@ export function cataloguedRecipe(entry: AcpAgentEntry): ProbeRecipe {
  *     be reinterpreted on the way to a spawn.
  *   * `transport` — `entry.transport`, passed through. The entry states it (`AcpAgentEntry.transport`);
  *     nothing here infers it, and nothing downstream may default it.
- *   * **`modeParam` and `authMethodId` are not set**, because no entry states either. See
- *     `AcpAgentEntry.transport` for why writing a plausible one is worse than writing nothing.
- *
- * ## `env` is names, and `catalogEntryId` is what carries the recipe's constants
+   *   * **`modeParam`** — set when the entry cites fixed session modes (`AcpAgentEntry.modeParam`).
+   *   * **`authMethodId` is not set** — still never invented from a catalogue recipe.
+   *
+   * ## `env` is names, and `catalogEntryId` is what carries the recipe's constants
  *
  * The entry's own `env` carries **values** — `AUGMENT_DISABLE_AUTO_UPDATE: "1"`, `VT_ACP_ENABLED: "1"` —
  * because those are constants of a recipe *we* publish. A provider config cannot carry a value (its `env`
@@ -817,6 +876,8 @@ export interface CataloguedProviderInput {
    * is what lets the launch resolve the entry's constants without a value ever crossing the wire.
    */
   readonly catalogEntryId: string;
+  /** Present when the entry documents controllable ACP session modes. */
+  readonly modeParam?: "mode" | "modeId";
 }
 
 /** The environment variable **names** an entry's recipe sets. Never the values — see above. */
@@ -847,5 +908,27 @@ export function cataloguedProviderInput(entry: AcpAgentEntry): CataloguedProvide
     env: cataloguedEnvNames(entry),
     transport: entry.transport,
     catalogEntryId: entry.id,
+    ...(entry.modeParam !== undefined && entry.sessionModes !== undefined && entry.sessionModes.length > 0
+      ? { modeParam: entry.modeParam }
+      : {}),
   };
+}
+
+/**
+ * Documented ACP session modes for a catalogue id, when the audit recorded a fixed list.
+ */
+export function cataloguedSessionModes(entryId: string | undefined): {
+  modeParam: "mode" | "modeId";
+  modes: NonNullable<AcpAgentEntry["sessionModes"]>;
+} | undefined {
+  if (entryId === undefined || entryId === "") return undefined;
+  const entry = acpAgent(entryId);
+  if (
+    entry?.modeParam === undefined ||
+    entry.sessionModes === undefined ||
+    entry.sessionModes.length === 0
+  ) {
+    return undefined;
+  }
+  return { modeParam: entry.modeParam, modes: entry.sessionModes };
 }

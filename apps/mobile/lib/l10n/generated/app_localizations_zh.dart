@@ -340,7 +340,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get settingsApprovals => '执行任何破坏性操作前先询问';
+  String get settingsApprovals => '执行有风险的步骤前先询问';
+
+  @override
+  String get settingsApprovalsDetail =>
+      '对 Envoy Harness：开启时，命令和项目外的更改会询问，项目内的普通编辑不会。关闭表示这台机器上从不询问，即使在「项目更改」模式下也是如此。「完全访问」也从不询问。';
 
   @override
   String get settingsTranscripts => '任务结束后保留对话记录';
@@ -713,6 +717,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get runThoughtTitle => '它是如何思考的';
 
   @override
+  String get runStepsSummary => '步骤';
+
+  @override
+  String get runStepsWorking => '进行中…';
+
+  @override
+  String get runToolDetails => '详情';
+
+  @override
   String get runAnswered => '已答复';
 
   @override
@@ -724,8 +737,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get runNeedsAnswer => '智能体需要你的答复';
 
   @override
+  String get runApprovalStopAsking => '允许，并在本机不再询问';
+
+  @override
+  String get runApprovalAnswerBelow => '请在下方输入区回答';
+
+  @override
   String approvalQuestionTool(String tool) {
     return '允许智能体运行“$tool”吗？';
+  }
+
+  @override
+  String approvalQuestionStep(String step) {
+    return '允许“$step”吗？';
   }
 
   @override
@@ -736,6 +760,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get approvalDetail => '它已在此步骤前停下，在你答复之前不会继续。允许之后，同样的操作在这个项目里不会再询问。';
+
+  @override
+  String get approvalDetailRemember => '允许这一步后，同样的操作在这个项目里不会再询问。';
 
   @override
   String get approvalDetailPick => '请选一个。这个回答只针对这个问题。';

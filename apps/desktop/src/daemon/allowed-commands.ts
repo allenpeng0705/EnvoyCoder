@@ -30,6 +30,29 @@ export function permissionMemoryKey(input: { toolName?: string; args?: unknown }
   return undefined;
 }
 
+const APPROVAL_SUBJECT_MAX = 240;
+
+/**
+ * Concrete command or path for an approval card. Truncated so a huge write
+ * payload never floods the takeover / sticky chrome.
+ */
+export function approvalSubject(args: unknown): string | undefined {
+  const record = asRecord(args);
+  if (record === undefined) return undefined;
+  if (typeof record.command === "string") {
+    const command = normalizeCommand(record.command);
+    if (command !== "") return truncateSubject(command);
+  }
+  const path = firstPath(record);
+  if (path !== undefined) return truncateSubject(path);
+  return undefined;
+}
+
+function truncateSubject(value: string): string {
+  if (value.length <= APPROVAL_SUBJECT_MAX) return value;
+  return `${value.slice(0, APPROVAL_SUBJECT_MAX - 1)}…`;
+}
+
 /** The option id that means allow, or nothing when this request has no allow choice. */
 export function allowChoiceId(
   options: readonly { optionId?: string; kind?: string }[] | undefined,

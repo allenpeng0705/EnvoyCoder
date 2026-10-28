@@ -386,8 +386,8 @@ describe("approvals", () => {
     expect(requested.options.map((option) => option.label)).toEqual(["Allow once", "Reject"]);
     // …and which one refuses is the protocol's own `kind`, not a guess from the label.
     expect(requested.options.find((option) => option.id === "reject-once")?.destructive).toBe(true);
-    // The card names the call we already streamed, so the user knows what they are allowing.
-    expect(requested.question).toContain("shell");
+    // Prefer the concrete command when present — the tool id alone is secondary.
+    expect(requested.question).toContain("rm -rf build");
 
     // The run is blocked: a human decision, not progress. This is the whole reason
     // `needs-attention` is not folded into `running` (`docs/envoydev-ui.md` §4).
@@ -446,6 +446,39 @@ describe("approvals", () => {
     expect(await b.manager.answerApproval(runId, requested.requestId, "allow-once")).toBe(true);
     expect(await b.manager.answerApproval(runId, requested.requestId, "reject-once")).toBe(false);
     expect(await b.manager.answerApproval(runId, "not-a-request", "allow-once")).toBe(false);
+  });
+
+  it("ignores stopAsking when the chosen option is a deny", async () => {
+    const b = await bench();
+    expect(b.store.settings().requireApprovalForDestructive).toBe(true);
+    await b.manager.start({ taskId: b.taskId, prompt: "please approve this" });
+    await b.until((events) => kinds(events, "run.approval-requested").length === 1, "the approval card");
+    const requested = kinds(b.events, "run.approval-requested")[0];
+    if (requested?.kind !== "run.approval-requested") throw new Error("unreachable");
+
+    // RPC could send stopAsking with deny; machine approvals must stay on.
+    expect(
+      await b.manager.answerApproval(requested.runId, requested.requestId, "reject-once", {
+        stopAsking: true,
+      }),
+    ).toBe(true);
+    expect(b.store.settings().requireApprovalForDestructive).toBe(true);
+  });
+
+  it("honours stopAsking only with an allow choice", async () => {
+    const b = await bench();
+    expect(b.store.settings().requireApprovalForDestructive).toBe(true);
+    await b.manager.start({ taskId: b.taskId, prompt: "please approve this" });
+    await b.until((events) => kinds(events, "run.approval-requested").length === 1, "the approval card");
+    const requested = kinds(b.events, "run.approval-requested")[0];
+    if (requested?.kind !== "run.approval-requested") throw new Error("unreachable");
+
+    expect(
+      await b.manager.answerApproval(requested.runId, requested.requestId, "allow-once", {
+        stopAsking: true,
+      }),
+    ).toBe(true);
+    expect(b.store.settings().requireApprovalForDestructive).toBe(false);
   });
 
   it("refuses a message while an approval is open, naming why", async () => {
@@ -772,7 +805,7 @@ describe("the agent's own mode", () => {
 });
 
 /**
- * "Ask before anything destructive", end to end — the row settings slice 1 exists for.
+ * "Ask before risky steps", end to end — the row settings slice 1 exists for.
  *
  * ## Why this belongs in the daemon's own tests rather than beside the settings object
  *

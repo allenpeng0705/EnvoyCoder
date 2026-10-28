@@ -216,9 +216,10 @@ describe("the transcript", () => {
       ],
       { runLive: true },
     );
+    // Live chat-only turns sit inside open Steps; the fence label stays visible as source.
     const transcript = screen.getByTestId("transcript");
+    expect(within(transcript).getByTestId("transcript-steps")).toBeTruthy();
     expect(within(transcript).getByText("mermaid")).toBeTruthy();
-    expect(within(transcript).getByText(/Diagram appears when/)).toBeTruthy();
   });
 
   it("puts reasoning behind a summary instead of in the reader's way", () => {
@@ -226,11 +227,11 @@ describe("the transcript", () => {
       event({ kind: "run.thought", text: "perhaps the parser is wrong", messageId: "m1" }),
       event({ kind: "run.output", stream: "assistant", text: "The parser is wrong.", messageId: "m2" }),
     ]);
-    // Present, but collapsed: long reasoning in front of the answer is how a transcript becomes
-    // unreadable at exactly the moment it matters.
-    const summary = screen.getByText("How it thought about this");
-    expect(summary).toBeTruthy();
-    expect(summary.closest("details")?.open).toBe(false);
+    // Thoughts fold into Steps; the settled answer stays the hero outside.
+    const steps = screen.getByTestId("transcript-steps");
+    expect(within(steps).getByText(/perhaps the parser is wrong/)).toBeTruthy();
+    expect(within(screen.getByTestId("transcript")).getByText("The parser is wrong.")).toBeTruthy();
+    expect(steps.querySelector("details")).toBeTruthy();
   });
 
   it("says when the history is incomplete rather than rendering a plausible lie", () => {
@@ -274,8 +275,10 @@ describe("an approval, composer takeover", () => {
     // Transcript keeps a deferred marker — no second set of choices.
     expect(within(screen.getByTestId("transcript")).queryByRole("button", { name: "Allow once" })).toBeNull();
     expect(screen.getByText("Answer in the composer below")).toBeTruthy();
-    // Field and Send are replaced, not merely disabled on top of the takeover.
-    expect(screen.queryByLabelText("Message the agent")).toBeNull();
+    // Field stays mounted but inert so a draft survives; Send is gone under takeover.
+    const field = screen.getByLabelText("Message the agent");
+    expect(field.getAttribute("aria-hidden")).toBe("true");
+    expect(field.className).toContain("composer__input--inert");
     expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
   });
 
@@ -285,6 +288,20 @@ describe("an approval, composer takeover", () => {
       within(screen.getByTestId("approval-takeover")).getByRole("button", { name: "Allow once" }),
     );
     expect(pane.onAnswer).toHaveBeenCalledWith("req-1", "allow-once");
+  });
+
+  it("offers Allow and don't ask again when the agent accepts an approval policy", () => {
+    const pane = renderPane([approval], {
+      harnesses: [harnessFor("envoy-harness")],
+      canStopAskingApprovals: true,
+    });
+    fireEvent.click(within(screen.getByTestId("approval-takeover")).getByTestId("approval-stop-asking"));
+    expect(pane.onAnswer).toHaveBeenCalledWith("req-1", "allow-once", { stopAsking: true });
+  });
+
+  it("hides stop-asking when the agent has no approval policy", () => {
+    renderPane([approval], withApprovals);
+    expect(screen.queryByTestId("approval-stop-asking")).toBeNull();
   });
 
   it("lets you tick several options and confirm them together", () => {

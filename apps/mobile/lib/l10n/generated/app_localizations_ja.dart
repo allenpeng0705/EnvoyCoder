@@ -344,7 +344,11 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get settingsApprovals => '破壊的な操作の前に確認する';
+  String get settingsApprovals => 'リスクのある操作の前に確認する';
+
+  @override
+  String get settingsApprovalsDetail =>
+      'Envoy Harness では、オンのときコマンドとプロジェクト外の変更の前に確認し、通常のプロジェクト内の編集では確認しません。オフにすると、プロジェクト変更モードでもこのマシンでは確認しません。フルアクセスも確認しません。';
 
   @override
   String get settingsTranscripts => 'タスク終了後も記録を残す';
@@ -721,6 +725,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get runThoughtTitle => 'どのように考えたか';
 
   @override
+  String get runStepsSummary => '手順';
+
+  @override
+  String get runStepsWorking => '作業中…';
+
+  @override
+  String get runToolDetails => '詳細';
+
+  @override
   String get runAnswered => '回答済み';
 
   @override
@@ -732,8 +745,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get runNeedsAnswer => 'エージェントがあなたの回答を待っています';
 
   @override
+  String get runApprovalStopAsking => '許可し、このマシンでは今後確認しない';
+
+  @override
+  String get runApprovalAnswerBelow => '下の入力欄で回答してください';
+
+  @override
   String approvalQuestionTool(String tool) {
     return 'エージェントに「$tool」の実行を許可しますか？';
+  }
+
+  @override
+  String approvalQuestionStep(String step) {
+    return '「$step」を許可しますか？';
   }
 
   @override
@@ -745,6 +769,9 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get approvalDetail =>
       'この手順の前で止まっており、あなたが答えるまで続けません。許可すると、同じ操作はこのプロジェクトではもう尋ねません。';
+
+  @override
+  String get approvalDetailRemember => '許可すると、同じ操作はこのプロジェクトではもう尋ねません。';
 
   @override
   String get approvalDetailPick => '一つ選んでください。この回答はこの質問だけに対するものです。';

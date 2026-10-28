@@ -679,7 +679,7 @@ describe("the projects page, and the count row that opens it", () => {
     expect(rowFor("web")).toBeTruthy();
     // And no section's own rows came with it: this page is a list, not the app scope wearing a list's
     // title.
-    expect(screen.queryByLabelText("Ask before anything destructive")).toBeNull();
+    expect(screen.queryByLabelText("Ask before risky steps")).toBeNull();
 
     // Level 2 → leave settings. The section bar already lists every section, so this control exits.
     const backToWork = screen.getByRole("button", { name: "Back to work" });
@@ -695,7 +695,7 @@ describe("the projects page, and the count row that opens it", () => {
     openAppSettings();
     fireEvent.click(screen.getByRole("button", { name: "Safety" }));
     expect(screen.getByRole("heading", { name: "Safety" })).toBeTruthy();
-    expect(screen.getByLabelText("Ask before anything destructive")).toBeTruthy();
+    expect(screen.getByLabelText("Ask before risky steps")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Safety", current: "page" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Project settings for / })).toBeNull();
   });

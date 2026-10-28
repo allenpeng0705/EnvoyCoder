@@ -31,6 +31,7 @@
  * `rowVerdict` — one function over those facts, in one place, for all three lists.
  */
 
+import { acpAgent, cataloguedProviderInput } from "@envoydev/agent-catalog";
 import type {
   CatalogEntry,
   HarnessSummary,
@@ -119,7 +120,8 @@ export function catalogRows(
  * `"acp"` on behalf of a program we cannot see, and the failure mode of getting it wrong is that a peer
  * ignores a field it does not recognise and reports success.
  *
- * `modeParam` and `authMethodId` are absent because the row has no such field — see `CatalogEntry`.
+ * `authMethodId` is absent (never invented). `modeParam` is taken from the catalogue entry when the
+ * audit recorded fixed session modes (`docs/catalog-mode-audit.md`).
  *
  * ## `catalogEntryId`, and the one thing this function still does not send
  *
@@ -131,6 +133,8 @@ export function catalogRows(
  * by putting a real-looking key in the row.
  */
 export function addInputFor(entry: CatalogEntry): AddProviderInput {
+  const catalogued = acpAgent(entry.id);
+  const documented = catalogued !== undefined ? cataloguedProviderInput(catalogued) : undefined;
   return {
     // Catalogue id = provider id = what a task names. Auto-Add and an explicit Add share this shape.
     id: entry.id,
@@ -140,6 +144,7 @@ export function addInputFor(entry: CatalogEntry): AddProviderInput {
     env: entry.env.map((constant) => constant.name),
     transport: entry.transport,
     catalogEntryId: entry.id,
+    ...(documented?.modeParam !== undefined ? { modeParam: documented.modeParam } : {}),
   };
 }
 

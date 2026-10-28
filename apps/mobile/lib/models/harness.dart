@@ -13,6 +13,7 @@ class HarnessInfo {
     required this.agentModeApplicable,
     required this.modelApplicable,
     required this.thinkingApplicable,
+    required this.approvalPolicy,
     required this.ready,
   });
 
@@ -28,6 +29,8 @@ class HarnessInfo {
   final bool agentModeApplicable;
   final bool modelApplicable;
   final bool thinkingApplicable;
+  /// Can EnvoyDev flip "Ask before risky steps" for this agent?
+  final bool approvalPolicy;
   final bool ready;
 
   factory HarnessInfo.fromJson(Map<String, dynamic> json) {
@@ -99,9 +102,13 @@ class HarnessInfo {
       modelOptions: modelOptions,
       thinkingKind: thinkingKind,
       thinkingOptions: thinkingOptions,
-      agentModeApplicable: caps is Map && caps['agentMode'] == true,
+      // Shipped harnesses nest this under `capabilities`; catalogue providers put
+      // `agentMode` at the top level when `docs/catalog-mode-audit.md` recorded modes.
+      agentModeApplicable:
+          (caps is Map && caps['agentMode'] == true) || json['agentMode'] == true,
       modelApplicable: caps is Map && caps['model'] == true,
       thinkingApplicable: caps is Map && caps['thinking'] == true,
+      approvalPolicy: caps is Map && caps['approvalPolicy'] == true,
       ready: ready,
     );
   }

@@ -9,9 +9,9 @@
  *      on the wire for other clients (`docs/envoydev-ui-polish.md` §2).
  *   3. **Approvals take over the composer**, not a modal. Transcript keeps history; the pending
  *      decision owns the composer chrome so it cannot scroll away (`docs/envoydev-ui-polish.md` §1).
- *   4. **The transcript is rendered from events, and this component does no folding.** Joining
- *      chunks, pairing a tool call with its result and attaching an approval to its call all happen
- *      in `state/transcript.ts`, which is pure and tested. This file turns rows into elements.
+ *   4. **Event folding lives in `state/transcript.ts`.** This file turns rows into elements and, at
+ *      render time, wraps process rows in Steps (`segmentTranscriptSteps`) so the final answer stays
+ *      the focus.
  *
  * ## Where "Remove task" went, and why it is not here any more
  *
@@ -86,6 +86,10 @@ import {
   statusKey,
 } from "../i18n/notice.js";
 import { buildTranscript, type TranscriptEntry } from "../state/transcript.js";
+import {
+  segmentTranscriptSteps,
+  type StepsSegment,
+} from "../state/transcript-steps.js";
 import { toolGroupSummary } from "../state/tool-group-summary.js";
 import { ApprovalChoices } from "./ApprovalChoices.js";
 import { ComposerControls } from "./ComposerControls.js";
@@ -126,7 +130,11 @@ export interface TaskPaneProps {
     images?: PromptImage[],
   ) => WriteFailure | Promise<WriteFailure>;
   onCancel: () => void | Promise<void>;
-  onAnswer: (requestId: string, choice: string | readonly string[] | { text: string }) => void | Promise<void>;
+  onAnswer: (
+    requestId: string,
+    choice: string | readonly string[] | { text: string },
+    options?: { stopAsking?: boolean },
+  ) => void | Promise<void>;
   /**
    * Start this task's run with the first message.
    *
@@ -175,6 +183,11 @@ export interface TaskPaneProps {
   harnesses?: readonly HarnessSummary[];
   providers?: readonly AgentProviderSummary[];
   catalog?: readonly CatalogEntry[];
+  /**
+   * Show "Allow and don't ask again" on permission cards — only when this
+   * agent accepts an approval policy and Settings still asks.
+   */
+  canStopAskingApprovals?: boolean;
   /**
    * Change this *task's* coding agent. Applies to the next run.
    *
@@ -777,24 +790,36 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
           </div>
         ) : (
           <ol className="transcript__list">
-            {transcript.entries.map((entry, index) => {
+            {segmentTranscriptSteps(transcript.entries, { runLive: props.runLive }).map((item) => {
+              if (item.kind === "steps") {
+                return (
+                  <StepsRow
+                    key={item.id}
+                    segment={item}
+                    onAnswer={props.onAnswer}
+                    takeoverRequestId={pendingApproval?.requestId}
+                  />
+                );
+              }
+              const index = transcript.entries.indexOf(item);
               const streaming =
-                entry.kind === "assistant" &&
+                item.kind === "assistant" &&
                 props.runLive &&
                 !transcript.entries
                   .slice(index + 1)
                   .some((later) => later.kind === "assistant");
               return (
                 <TranscriptRow
-                  key={`${entry.kind}-${entry.id}`}
-                  entry={entry}
+                  key={`${item.kind}-${item.id}`}
+                  entry={item}
                   streaming={streaming}
                   onAnswer={props.onAnswer}
                   takeoverRequestId={pendingApproval?.requestId}
+                  canStopAsking={props.canStopAskingApprovals === true}
                   approvalAnchorRef={
-                    entry.kind === "approval" &&
+                    item.kind === "approval" &&
                     pendingApproval !== undefined &&
-                    entry.requestId === pendingApproval.requestId
+                    item.requestId === pendingApproval.requestId
                       ? approvalAnchorRef
                       : undefined
                   }
@@ -871,17 +896,21 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                 ) : null}
               </div>
               <div className="approval__actions">
-                <ApprovalChoices entry={pendingApproval} onAnswer={props.onAnswer} />
+                <ApprovalChoices
+                  entry={pendingApproval}
+                  onAnswer={props.onAnswer}
+                  canStopAsking={props.canStopAskingApprovals === true}
+                />
               </div>
             </div>
-          ) : (
-            <>
-          {running && !approvalOpen ? (
+          ) : null}
+          {/* Field stays mounted under takeover so a draft survives the pause (polish §1). */}
+          {running && !approvalOpen && !takeoverActive ? (
             <p className="composer__queue-status" role="status" data-testid="composer-queue-status">
               {t("task.composer.queueStatus")}
             </p>
           ) : null}
-          {commandMatches.length > 0 ? (
+          {!takeoverActive && commandMatches.length > 0 ? (
             <SlashCommandList
               commands={commandMatches}
               active={commandActive}
@@ -889,30 +918,41 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               onPick={(command) => pickCommand(command.name)}
             />
           ) : null}
-          <AttachmentTray
-            attachments={attachments}
-            onRemove={(id) => {
-              setAttachments((current) => current.filter((attachment) => attachment.id !== id));
-              setAttachNotice(undefined);
-            }}
-          />
+          {!takeoverActive ? (
+            <AttachmentTray
+              attachments={attachments}
+              onRemove={(id) => {
+                setAttachments((current) => current.filter((attachment) => attachment.id !== id));
+                setAttachNotice(undefined);
+              }}
+            />
+          ) : null}
           <textarea
             ref={inputRef}
-            className="composer__input"
+            className={`composer__input${takeoverActive ? " composer__input--inert" : ""}`}
             rows={2}
             value={text}
             disabled={approvalOpen}
+            aria-hidden={takeoverActive ? true : undefined}
             onChange={(event) => {
               setText(event.target.value);
               setCommandIndex(0);
             }}
             onPaste={(event) => {
+              if (takeoverActive) {
+                event.preventDefault();
+                return;
+              }
               const images = pastedImages(event.clipboardData);
               if (images.length === 0) return;
               event.preventDefault();
               addFiles(images);
             }}
             onKeyDown={(event) => {
+              if (takeoverActive) {
+                event.preventDefault();
+                return;
+              }
               if (commandMatches.length > 0) {
                 if (event.key === "ArrowDown") {
                   event.preventDefault();
@@ -954,13 +994,14 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
             // The keyboard contract, where a user looks for it: on the field they are typing into.
             title={t("task.composer.hint")}
           />
-          {attachNotice ? <p className="composer__notice">{attachNotice}</p> : null}
-          {props.notice ? <p className="composer__notice">{props.notice}</p> : null}
+          {!takeoverActive && attachNotice ? <p className="composer__notice">{attachNotice}</p> : null}
+          {!takeoverActive && props.notice ? <p className="composer__notice">{props.notice}</p> : null}
           {/* **The row under the field: agent settings on the left, the action on the right.**
               Paseo's composer is a field with one button row beneath it — the attach button and the agent's
               controls at the left, send at the right (`composer/input/input.tsx`, the `buttonRow`) — and this is
               that shape now. It used to draw a second row *above* the field holding three labelled form controls,
               which is what the owner read as *"too ugly and nosing"*. */}
+          {!takeoverActive ? (
           <div className="composer__toolbar">
             <AttachButton
               disabled={approvalOpen}
@@ -1083,8 +1124,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
             ) : null}
             </div>
           </div>
-            </>
-          )}
+          ) : null}
         </div>
       </footer>
       )}
@@ -1094,12 +1134,82 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
 
 /* ────────────────────────────── rows ────────────────────────────── */
 
+function stepsSummaryLabel(
+  t: ReturnType<typeof useT>,
+  segment: StepsSegment,
+): string {
+  if (segment.live) return t("task.steps.working");
+  const hasTools =
+    segment.counts.edited +
+      segment.counts.ran +
+      segment.counts.searched +
+      segment.counts.other >
+    0;
+  if (hasTools) return toolGroupSummary(t, segment.counts);
+  if (segment.thoughtCount > 0) return t("task.thought.summary");
+  return t("task.steps.summary");
+}
+
+function StepsRow(props: {
+  segment: StepsSegment;
+  onAnswer: (
+    requestId: string,
+    choice: string | readonly string[] | { text: string },
+    options?: { stopAsking?: boolean },
+  ) => void | Promise<void>;
+  takeoverRequestId?: string;
+}): JSX.Element {
+  const t = useT();
+  const { segment } = props;
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  // Start false so the first layout pass opens when already live on mount.
+  const wasLive = useRef(false);
+  // Suggest open when tools start running; never force-close when they finish.
+  useLayoutEffect(() => {
+    const node = detailsRef.current;
+    if (node !== null && segment.live && !wasLive.current) node.open = true;
+    wasLive.current = segment.live;
+  }, [segment.live]);
+
+  return (
+    <li
+      className={`row row--steps${segment.live ? " row--steps-live" : ""}`}
+      data-testid="transcript-steps"
+    >
+      <details ref={detailsRef}>
+        <summary className="row__steps-summary">
+          <span className={`dot dot--${segment.live ? "live" : "quiet"}`} aria-hidden />
+          {stepsSummaryLabel(t, segment)}
+        </summary>
+        <ol className="row__steps-list">
+          {segment.entries.map((entry) => (
+            <TranscriptRow
+              key={`${entry.kind}-${entry.id}`}
+              entry={entry}
+              onAnswer={props.onAnswer}
+              takeoverRequestId={props.takeoverRequestId}
+              nestedInSteps
+            />
+          ))}
+        </ol>
+      </details>
+    </li>
+  );
+}
+
 function TranscriptRow(props: {
   entry: TranscriptEntry;
   streaming?: boolean;
-  onAnswer: (requestId: string, choice: string | readonly string[] | { text: string }) => void | Promise<void>;
+  onAnswer: (
+    requestId: string,
+    choice: string | readonly string[] | { text: string },
+    options?: { stopAsking?: boolean },
+  ) => void | Promise<void>;
   takeoverRequestId?: string;
   approvalAnchorRef?: RefObject<HTMLLIElement | null>;
+  /** Inside a Steps disclosure — tools group stays nested, not a second Steps. */
+  nestedInSteps?: boolean;
+  canStopAsking?: boolean;
 }): JSX.Element | null {
   const t = useT();
   const { entry } = props;
@@ -1117,23 +1227,30 @@ function TranscriptRow(props: {
       );
 
     case "assistant":
-      // Markdown for the answer (GFM + fenced code + Mermaid). Streaming uses paced
-      // reveal and block-split re-parse so finished paragraphs stay put.
+      // Interim narration inside Steps is muted; the turn's last assistant stays the hero outside.
       return (
-        <li className="row row--assistant">
+        <li
+          className={`row row--assistant${props.nestedInSteps ? " row--assistant-interim" : ""}`}
+        >
           <div className="row__markdown">
             <MessageMarkdown
               text={entry.text}
-              phase={props.streaming ? "streaming" : "complete"}
+              phase={props.nestedInSteps ? "complete" : props.streaming ? "streaming" : "complete"}
             />
           </div>
         </li>
       );
 
     case "thought":
-      // Collapsed by default: reasoning is usually long and often irrelevant, and hiding it behind a
-      // summary is what keeps the answer readable (`docs/envoydev-ui.md` §7). Kept as plain text —
-      // Paseo does the same; partial markdown in a streaming thought flickers more than it helps.
+      // Inside Steps the outer disclosure already hides process work — no second chevron.
+      if (props.nestedInSteps) {
+        return (
+          <li className="row row--thought row--thought-flat">
+            <p className="row__meta">{t("task.thought.summary")}</p>
+            <p className="row__text">{entry.text}</p>
+          </li>
+        );
+      }
       return (
         <li className="row row--thought">
           <details>
@@ -1144,12 +1261,28 @@ function TranscriptRow(props: {
       );
 
     case "tool":
-      return <ToolCard entry={entry} />;
+      return <ToolCard entry={entry} nested={props.nestedInSteps} />;
 
     case "tools": {
       const anyRunning = entry.tools.some((tool) => tool.status === "running");
       const anyFailed = entry.tools.some((tool) => tool.status === "failed");
       const tone = anyRunning ? "live" : anyFailed ? "danger" : "quiet";
+      // Inside Steps the outer disclosure owns collapse; list tools without a second details.
+      if (props.nestedInSteps) {
+        return (
+          <li className={`row row--tools row--tools-flat${anyRunning ? " row--tools-live" : ""}`}>
+            <p className="row__tool-head">
+              <span className={`dot dot--${tone}`} aria-hidden />
+              {toolGroupSummary(t, entry.counts)}
+            </p>
+            <ol className="row__tool-list">
+              {entry.tools.map((tool) => (
+                <ToolCard key={tool.id} entry={tool} nested />
+              ))}
+            </ol>
+          </li>
+        );
+      }
       return (
         <li className={`row row--tools${anyRunning ? " row--tools-live" : ""}`}>
           <details open={anyRunning}>
@@ -1181,6 +1314,7 @@ function TranscriptRow(props: {
             entry={entry}
             onAnswer={props.onAnswer}
             actionsInComposer={pendingHere}
+            canStopAsking={props.canStopAsking === true}
           />
         </li>
       );
@@ -1203,9 +1337,14 @@ function TranscriptRow(props: {
  */
 function ApprovalCard(props: {
   entry: Extract<TranscriptEntry, { kind: "approval" }>;
-  onAnswer: (requestId: string, choice: string | readonly string[] | { text: string }) => void | Promise<void>;
+  onAnswer: (
+    requestId: string,
+    choice: string | readonly string[] | { text: string },
+    options?: { stopAsking?: boolean },
+  ) => void | Promise<void>;
   /** Pending — actions are in the composer; show a pointer, not a second set of buttons. */
   actionsInComposer?: boolean;
+  canStopAsking?: boolean;
 }): JSX.Element {
   const t = useT();
   const { entry } = props;
@@ -1232,7 +1371,11 @@ function ApprovalCard(props: {
       </div>
       {!inComposer ? (
         <div className="approval__actions">
-          <ApprovalChoices entry={entry} onAnswer={props.onAnswer} />
+          <ApprovalChoices
+            entry={entry}
+            onAnswer={props.onAnswer}
+            canStopAsking={props.canStopAsking === true}
+          />
         </div>
       ) : null}
     </div>

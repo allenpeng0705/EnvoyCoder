@@ -37,6 +37,7 @@ import {
 import {
   canApplyModel,
   canApplyThinking,
+  cataloguedSessionModes,
   harnessAvailability,
   harnessDefinition,
   providerEnvState,
@@ -202,10 +203,9 @@ export function authOf(record: AgentAuthObservation | undefined): HarnessAuth {
  * provider adds are its command line — so a user can see what the row would run — and the environment
  * variables it names, each with whether this daemon has it.
  *
- * There is no `models`, `modes`, `thinking` or `capabilities` here, and their absence is a statement rather
- * than an omission: we have never opened a session with this program, so every one of them would be the
- * user's guess handed back as our fact. The composer's pickers stay off for a provider, with the reason on
- * screen, until a session exists to ask.
+ * There is no `models` / `thinking` until a session exists. **Modes** may appear when the provider
+ * was added from a catalogue entry that cites a fixed `session/set_mode` list
+ * (`docs/catalog-mode-audit.md`) — recipe evidence, not a live probe.
  */
 export function summarizeProvider(
   provider: AgentProviderConfig,
@@ -214,6 +214,10 @@ export function summarizeProvider(
   auth: AgentAuthObservation | undefined = undefined,
 ): AgentProviderSummary {
   const result = probe(provider);
+  // Catalogue evidence via `catalogEntryId` only (never a colliding bare provider id).
+  // Stored `modeParam` may be absent for providers added before the audit — launch falls back.
+  const documented = cataloguedSessionModes(provider.catalogEntryId);
+  const canSetMode = documented !== undefined && provider.transport === "acp";
   return {
     id: provider.id,
     label: provider.label,
@@ -224,6 +228,17 @@ export function summarizeProvider(
     ...(provider.catalogEntryId !== undefined ? { catalogEntryId: provider.catalogEntryId } : {}),
     availability: harnessAvailability(result),
     ...(auth !== undefined ? { auth: authOf(auth) } : {}),
+    ...(canSetMode
+      ? {
+          modes: documented.modes.map((mode) => ({
+            id: mode.id,
+            label: mode.label,
+            ...(mode.description !== undefined ? { description: mode.description } : {}),
+            ...(mode.unattended !== undefined ? { unattended: mode.unattended } : {}),
+          })),
+          agentMode: true,
+        }
+      : {}),
     detail:
       result.state === "ready"
         ? `Ready to run${result.binaryPath ? ` (${result.binaryPath})` : ""}.`

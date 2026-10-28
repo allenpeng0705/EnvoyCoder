@@ -38,14 +38,15 @@ export function permissionModes(preferredId?: PermissionModeId): AgentMode[] {
       id: "workspace-write",
       label: "Project change",
       labelKey: "task.agentMode.workspace.label",
-      description: "Change files in this project. Ask only before a command or a change outside it.",
+      description:
+        "Change files in this project without asking. Ask only before a command or a change outside it.",
       descriptionKey: "task.agentMode.workspace.description",
     },
     {
       id: "danger-full-access",
       label: "Full access",
       labelKey: "task.agentMode.fullAccess.label",
-      description: "The whole computer, without asking.",
+      description: "The whole computer — never ask.",
       descriptionKey: "task.agentMode.fullAccess.description",
       unattended: true,
     },
@@ -119,8 +120,10 @@ export interface PermissionPolicy {
 /**
  * `session/set_policy` for an Envoy Harness permission level.
  *
- * Read only and Workspace change ask only for a command or a write (`safe-only`). Reads and a
- * single safe lookup do not stop the turn. Full access is the one that stops asking.
+ * Sandbox comes from the mode. How often we ask (`autoRun`) also respects the machine
+ * Settings switch: when `requireApprovalForDestructive` is false, never ask — even under
+ * Project change / Read only. Full access never asks. Otherwise `safe-only`: reads, safe
+ * bash, and in-workspace writes/edits do not stop the turn.
  *
  * `approval` is deliberately absent. The harness's `setApprovalPolicy` replaces the host handler
  * that receives Allow, so a card the person answered still came back denied. The sandbox is what
@@ -129,11 +132,12 @@ export interface PermissionPolicy {
 export function envoyPermissionPolicy(
   harness: HarnessId,
   modeId: string | undefined,
+  requireApprovalForDestructive: boolean = true,
 ): PermissionPolicy | undefined {
   if (harness !== "envoy-harness" || modeId === undefined || !isPermissionModeId(modeId)) {
     return undefined
   }
-  if (modeId === "danger-full-access") {
+  if (modeId === "danger-full-access" || requireApprovalForDestructive === false) {
     return { sandbox: modeId, autoRun: "off" }
   }
   return { sandbox: modeId, autoRun: "safe-only" }

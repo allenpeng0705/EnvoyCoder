@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest"
 
 import {
   allowChoiceId,
+  approvalSubject,
   choiceAllows,
   isCommandAllowed,
   permissionMemoryKey,
@@ -40,6 +41,14 @@ describe("a command the person already allowed", () => {
     expect(await isCommandAllowed(stateDir, "/repo", key)).toBe(true)
     expect(await isCommandAllowed(stateDir, "/other", key)).toBe(false)
     expect(await isCommandAllowed(stateDir, "/repo", "command\tnpm run build")).toBe(false)
+  })
+
+  it("surfaces the command or path for an approval card", () => {
+    expect(approvalSubject({ command: "  npm   test  " })).toBe("npm test")
+    expect(approvalSubject({ path: "src/a.ts", content: "x".repeat(500) })).toBe("src/a.ts")
+    expect(approvalSubject({ file_path: "/tmp/out" })).toBe("/tmp/out")
+    expect(approvalSubject({})).toBeUndefined()
+    expect(approvalSubject({ command: "x".repeat(300) })?.endsWith("…")).toBe(true)
   })
 
   it("treats Allow once as allow, and Reject as not", () => {

@@ -210,6 +210,9 @@ export const en = {
   "task.tool.bucket.edit": "Edit",
   "task.tool.bucket.shell": "Shell",
   "task.tool.bucket.other": "Tool",
+  "task.tool.details": "Details",
+  "task.steps.summary": "Steps",
+  "task.steps.working": "Working…",
   "task.you": "You",
   "task.delivered.steered": "joined the turn",
   "task.delivered.queued": "waited for the turn",
@@ -227,6 +230,7 @@ export const en = {
   "task.approval.answered": "Answered",
   "task.approval.answeredWith": "Answered: {option}",
   "task.approval.confirm": "Confirm",
+  "task.approval.stopAsking": "Allow and don't ask again on this machine",
 
   /* ── the composer ── */
   "task.composer.aria": "Message the agent",
@@ -455,9 +459,10 @@ export const en = {
   "task.agentMode.readOnly.label": "Read only",
   "task.agentMode.readOnly.description": "Read files. Do not change them, and do not ask before each read.",
   "task.agentMode.workspace.label": "Project change",
-  "task.agentMode.workspace.description": "Change files in this project. Ask only before a command or a change outside it.",
+  "task.agentMode.workspace.description":
+    "Change files in this project without asking. Ask only before a command or a change outside it.",
   "task.agentMode.fullAccess.label": "Full access",
-  "task.agentMode.fullAccess.description": "The whole computer, without asking.",
+  "task.agentMode.fullAccess.description": "The whole computer — never ask.",
 
   /* ── a status, in the words a user reads ── */
   "status.queued": "Waiting to start",
@@ -763,8 +768,9 @@ export const en = {
   "settings.extraArgs.title": "Extra arguments for the agent",
   "settings.extraArgs.detail": "Added to the agent's command line for every task.",
   "settings.extraArgs.placeholder": "--verbose",
-  "settings.approvals.title": "Ask before anything destructive",
-  "settings.approvals.detail": "Ask before commands and changes, not reads. A task's mode can allow more.",
+  "settings.approvals.title": "Ask before risky steps",
+  "settings.approvals.detail":
+    "On Envoy Harness: when on, ask before commands and changes outside the project — not for ordinary in-project edits. Off means never ask for this machine, even under Project change. Full access also never asks.",
   "settings.approvals.reaches":
     "Handed to {agent} as its own policy for every run, so the asking happens where the work does.",
   "settings.approvals.unsupported":
@@ -1651,9 +1657,12 @@ export const en = {
 
   /* ── an approval, in the daemon's own words ── */
   "approval.question.tool": "Allow the agent to run “{tool}”?",
+  "approval.question.step": "Allow “{step}”?",
   "approval.question.generic": "Allow the agent to continue?",
   "approval.detail":
     "It has stopped before this step and will not continue until you answer. Allowing it lets this same step run again in this project without asking.",
+  "approval.detail.remember":
+    "Allowing this step lets it run again in this project without asking.",
   "approval.allow": "Allow",
   "approval.deny": "Don't allow",
   "approval.question.ask": "The agent asked a question.",

@@ -330,7 +330,7 @@ describe("the bar, as navigation", () => {
     fireEvent.click(within(nav()).getByRole("button", { name: "Safety" }));
 
     expect(screen.getByRole("heading", { name: "Safety" })).toBeTruthy();
-    expect(screen.getByLabelText("Ask before anything destructive")).toBeTruthy();
+    expect(screen.getByLabelText("Ask before risky steps")).toBeTruthy();
     // The section that was on screen is gone, all of it: not only its heading.
     expect(screen.queryByRole("heading", { name: "General" })).toBeNull();
     expect(screen.queryByLabelText("Language")).toBeNull();

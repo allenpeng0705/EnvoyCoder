@@ -1827,11 +1827,10 @@ export type CatalogEnvConstant = z.infer<typeof CatalogEnvConstantSchema>;
  *     the same agreement rules — a provider is probed, never believed. What a user typed is a command to
  *     look for, not a claim that it is there, so a provider whose program is missing reads
  *     `not-installed` with the command that fixes it, exactly as a catalogue entry does.
- *   * there is no `capabilities`, no `modes`, no `models` and no `thinking` until a session has been
- *     opened — those stay off the row because we have not asked. `auth` is the exception: a sign-in is
- *     a fact about whether a session opened, and once a task can run on this provider the same probe
- *     that records it for a shipped agent records it here. Absent means nobody has looked, which the
- *     window renders as `unknown` rather than as a sign-in button.
+ *   * there is no `models` / `thinking` until a session has been opened. **`modes` may appear** when the
+ *     provider was added from a catalogue entry whose vendor docs name a fixed `session/set_mode` list
+ *     (`docs/catalog-mode-audit.md`) — that is a documented recipe fact, not a live probe. `auth` is the
+ *     exception for session observations: a sign-in is a fact about whether a session opened.
  *
  * The two tiers used to be required to agree on one further field, a stored `hidden` preference over the
  * pickers. It is **gone from both**, and the removal is the point rather than a tidy-up: a preference that
@@ -1885,6 +1884,17 @@ export interface AgentProviderSummary {
    * recipe already on the Agents list. `addedProviderIds` keys on this and on the provider id.
    */
   catalogEntryId?: string;
+  /**
+   * Documented ACP session modes from the catalogue entry (when present). Empty/absent means the
+   * composer mode picker stays off for this provider.
+   */
+  modes?: readonly AgentMode[];
+  /**
+   * True when `modes` came from catalogue evidence (`catalogEntryId` → audited session modes), so the
+   * daemon can apply a chosen mode via `session/set_mode`. Stored `modeParam` is preferred at launch;
+   * the catalogue entry supplies it when the provider predates the audit.
+   */
+  agentMode?: boolean;
 
 }
 
@@ -1900,6 +1910,8 @@ export const AgentProviderSummarySchema = z
     detail: z.string(),
     auth: HarnessAuthSchema.optional(),
     catalogEntryId: z.string().min(1).optional(),
+    modes: z.array(AgentModeSchema).readonly().optional(),
+    agentMode: z.boolean().optional(),
   })
   .strict();
 
@@ -1927,8 +1939,9 @@ export const AgentProviderSummarySchema = z
  * (`AcpAgentEntry.transport`), and a window that defaulted it would produce a provider whose launch fails
  * in a way nobody can see (the trap: a peer ignores an unknown field name and reports success).
  *
- * `modeParam` and `authMethodId` are **absent, on purpose**, and their absence is a statement: no entry has
- * evidence for either, so no client may invent one.
+ * `authMethodId` is **absent, on purpose** — no entry has evidence for one, so no client may invent it.
+ * Citation-backed session modes may appear on this row (`modes` + `agentMode`) so a picker can offer
+ * them before Add; after Add they also travel on `AgentProviderSummary` (`docs/catalog-mode-audit.md`).
  *
  * ## `env` is the recipe's own constants, and the value is part of the row
  *
@@ -2031,6 +2044,13 @@ export const CatalogEntrySchema = z
      * carrying the time they were observed — never as a row state the user has to trigger in order to learn.
      */
     availability: HarnessAvailabilitySchema,
+    /**
+     * Citation-backed ACP session modes when the audit recorded a fixed list
+     * (`docs/catalog-mode-audit.md`). Absent for most rows.
+     */
+    modes: z.array(AgentModeSchema).readonly().optional(),
+    /** True when `modes` is present and the daemon can apply one via `session/set_mode`. */
+    agentMode: z.boolean().optional(),
   })
   .strict();
 
@@ -2970,6 +2990,11 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
         text: z.string().min(1).optional(),
         /** The user left the question without picking. Not a permission decision. */
         skipped: z.literal(true).optional(),
+        /**
+         * Also turn off "Ask before risky steps" for this machine and push
+         * `autoRun: off` onto the live Envoy Harness session when it accepts one.
+         */
+        stopAsking: z.literal(true).optional(),
       })
       .strict()
       .refine(

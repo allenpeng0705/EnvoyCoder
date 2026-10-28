@@ -363,8 +363,11 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
-  String get settingsApprovals =>
-      'Chiedi prima di qualsiasi azione distruttiva';
+  String get settingsApprovals => 'Chiedi prima dei passi rischiosi';
+
+  @override
+  String get settingsApprovalsDetail =>
+      'Su Envoy Harness: se attivo, chiedere prima di comandi e modifiche fuori dal progetto — non per le modifiche ordinarie nel progetto. Disattivo significa non chiedere mai su questo computer, anche in Modifica del progetto. L\'accesso completo non chiede mai.';
 
   @override
   String get settingsTranscripts =>
@@ -753,6 +756,15 @@ class AppLocalizationsIt extends AppLocalizations {
   String get runThoughtTitle => 'Come ci ha riflettuto';
 
   @override
+  String get runStepsSummary => 'Passi';
+
+  @override
+  String get runStepsWorking => 'In corso…';
+
+  @override
+  String get runToolDetails => 'Dettagli';
+
+  @override
   String get runAnswered => 'Risposto';
 
   @override
@@ -764,8 +776,20 @@ class AppLocalizationsIt extends AppLocalizations {
   String get runNeedsAnswer => 'L\'agente attende la tua risposta';
 
   @override
+  String get runApprovalStopAsking =>
+      'Consenti e non chiedere più su questo computer';
+
+  @override
+  String get runApprovalAnswerBelow => 'Rispondi nel campo sotto';
+
+  @override
   String approvalQuestionTool(String tool) {
     return 'Consentire all\'agente di eseguire «$tool»?';
+  }
+
+  @override
+  String approvalQuestionStep(String step) {
+    return 'Consentire «$step»?';
   }
 
   @override
@@ -777,6 +801,10 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get approvalDetail =>
       'Si è fermato prima di questo passo e non proseguirà finché non rispondi. Autorizzarlo fa ripetere lo stesso passo in questo progetto senza chiedere di nuovo.';
+
+  @override
+  String get approvalDetailRemember =>
+      'Autorizzarlo fa ripetere lo stesso passo in questo progetto senza chiedere di nuovo.';
 
   @override
   String get approvalDetailPick =>

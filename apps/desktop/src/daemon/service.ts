@@ -787,11 +787,13 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         optionId?: string;
         optionIds?: string[];
         text?: string;
+        stopAsking?: true;
       };
       const runs = requireRuns(deps);
       const resolved = await runs.answerApproval(input.runId, input.requestId, input.optionId, {
         ...(input.optionIds !== undefined ? { optionIds: input.optionIds } : {}),
         ...(input.text !== undefined ? { text: input.text } : {}),
+        ...(input.stopAsking === true ? { stopAsking: true } : {}),
       });
       return { runId: input.runId, requestId: input.requestId, resolved };
     },

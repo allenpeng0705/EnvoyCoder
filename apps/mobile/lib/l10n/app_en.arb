@@ -444,9 +444,13 @@
   "@settingsPairingLastSeenOn": {
     "description": "settings.pairing.LastSeenOn — Last connected {date}. Recorded on this phone, from this phone's clock."
   },
-  "settingsApprovals": "Ask before anything destructive",
+  "settingsApprovals": "Ask before risky steps",
   "@settingsApprovals": {
     "description": "settings.approvals — The approval switch."
+  },
+  "settingsApprovalsDetail": "On Envoy Harness: when on, ask before commands and changes outside the project — not for ordinary in-project edits. Off means never ask for this machine, even under Project change. Full access also never asks.",
+  "@settingsApprovalsDetail": {
+    "description": "settings.approvals.detail — Explains the approvals switch."
   },
   "settingsTranscripts": "Keep transcripts after a task ends",
   "@settingsTranscripts": {
@@ -955,6 +959,19 @@
   "@runThoughtTitle": {
     "description": "run.thoughtTitle — Collapsed reasoning row."
   },
+  "runStepsSummary": "Steps",
+  "@runStepsSummary": {
+    "description": "run.stepsSummary — Collapsed thought/tool segment."
+  },
+  "runStepsWorking": "Working…",
+  "@runStepsWorking": {
+    "description": "run.stepsWorking — Steps segment while a tool is running."
+  },
+  "runToolDetails": "Details",
+  "@runToolDetails": {
+    "description": "run.toolDetails — Expand tool input/output."
+  },
+
   "runAnswered": "Answered",
   "@runAnswered": {
     "description": "run.answered — An approval that has an answer."
@@ -972,11 +989,28 @@
   "@runNeedsAnswer": {
     "description": "run.needsAnswer — An approval that is still open."
   },
+  "runApprovalStopAsking": "Allow and don't ask again on this machine",
+  "@runApprovalStopAsking": {
+    "description": "On an Envoy Harness approval: allow this step and turn off Ask before risky steps."
+  },
+  "runApprovalAnswerBelow": "Answer in the composer below",
+  "@runApprovalAnswerBelow": {
+    "description": "run.approvalAnswerBelow — Transcript stub while sticky chrome owns the choices."
+  },
   "approvalQuestionTool": "Allow the agent to run “{tool}”?",
   "@approvalQuestionTool": {
     "description": "approvalquestiontool — The permission the agent is asking for, naming the tool.",
     "placeholders": {
       "tool": {
+        "type": "String"
+      }
+    }
+  },
+  "approvalQuestionStep": "Allow “{step}”?",
+  "@approvalQuestionStep": {
+    "description": "approvalquestionstep — Permission question naming the command or path.",
+    "placeholders": {
+      "step": {
         "type": "String"
       }
     }
@@ -992,6 +1026,10 @@
   "approvalDetail": "It has stopped before this step and will not continue until you answer. Allowing it lets this same step run again in this project without asking.",
   "@approvalDetail": {
     "description": "approvaldetail — Under a permission question: what answering does."
+  },
+  "approvalDetailRemember": "Allowing this step lets it run again in this project without asking.",
+  "@approvalDetailRemember": {
+    "description": "approvaldetailremember — Under a step-named permission question."
   },
   "approvalDetailPick": "Pick one. This answer is only for this question.",
   "@approvalDetailPick": {

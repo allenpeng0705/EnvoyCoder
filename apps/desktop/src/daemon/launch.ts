@@ -61,6 +61,7 @@ import {
   isHarnessId,
 } from "@envoydev/protocol";
 import {
+  cataloguedSessionModes,
   harnessAcpFacts,
   harnessDefinition,
   harnessRecipe,
@@ -267,6 +268,10 @@ export function launchForHarness(input: LaunchInput): AcpLaunch {
  */
 export function launchForProvider(input: ProviderLaunchInput): AcpLaunch {
   const { provider } = input;
+  // Prefer the stored fact; fall back to catalogue evidence for providers added before the audit.
+  // `catalogEntryId` only — a hand-typed id that happens to match a recipe must not invent modeParam.
+  const modeParam =
+    provider.modeParam ?? cataloguedSessionModes(provider.catalogEntryId)?.modeParam;
   return resolveLaunch(
     {
       label: provider.label,
@@ -292,7 +297,7 @@ export function launchForProvider(input: ProviderLaunchInput): AcpLaunch {
       }),
       acp: {
         ...(provider.authMethodId !== undefined ? { authMethodId: provider.authMethodId } : {}),
-        ...(provider.modeParam !== undefined ? { modeParam: provider.modeParam } : {}),
+        ...(modeParam !== undefined ? { modeParam } : {}),
       },
       env: {},
       /**

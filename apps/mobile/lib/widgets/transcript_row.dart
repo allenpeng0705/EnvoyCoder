@@ -16,12 +16,23 @@ class TranscriptRow extends StatelessWidget {
     required this.colors,
     this.onAnswer,
     this.streaming = false,
+    this.actionsDeferred = false,
+    this.canStopAsking = false,
   });
 
   final TranscriptEntry entry;
   final CoderColors colors;
-  final Future<void> Function(String requestId, {String? optionId, List<String>? optionIds, String? text})? onAnswer;
+  final Future<void> Function(
+    String requestId, {
+    String? optionId,
+    List<String>? optionIds,
+    String? text,
+    bool stopAsking,
+  })? onAnswer;
   final bool streaming;
+  /// Pending — choices live in the sticky chrome above the composer.
+  final bool actionsDeferred;
+  final bool canStopAsking;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +51,8 @@ class TranscriptRow extends StatelessWidget {
           approval: entry.approval!,
           colors: colors,
           onAnswer: onAnswer,
+          actionsDeferred: actionsDeferred,
+          canStopAsking: canStopAsking,
         );
       case 'note':
         return Padding(
@@ -107,6 +120,178 @@ class _UserBubble extends StatelessWidget {
   }
 }
 
+/// Steps disclosure wrapping thought / tool / interim assistant rows.
+class TranscriptStepsBlock extends StatefulWidget {
+  const TranscriptStepsBlock({
+    super.key,
+    required this.storageId,
+    required this.entries,
+    required this.live,
+    required this.colors,
+  });
+
+  /// Stable id for [PageStorageKey] so expand/collapse survives list recycling.
+  final String storageId;
+  final List<TranscriptEntry> entries;
+  final bool live;
+  final CoderColors colors;
+
+  @override
+  State<TranscriptStepsBlock> createState() => _TranscriptStepsBlockState();
+}
+
+class _TranscriptStepsBlockState extends State<TranscriptStepsBlock>
+    with AutomaticKeepAliveClientMixin {
+  final ExpansionTileController _controller = ExpansionTileController();
+  var _wasLive = false;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _wasLive = widget.live;
+  }
+
+  @override
+  void didUpdateWidget(TranscriptStepsBlock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Suggest expand when tools start; never force-collapse when they finish.
+    if (widget.live && !_wasLive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _controller.expand();
+      });
+    }
+    _wasLive = widget.live;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    final l10n = context.l10n;
+    final title = widget.live
+        ? l10n.runStepsWorking
+        : widget.entries.any((e) => e.kind == 'tool')
+            ? l10n.runStepsSummary
+            : l10n.runThoughtTitle;
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: widget.colors.surface1,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: widget.live ? widget.colors.accent : widget.colors.border),
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            // storageId keeps the State (and expand/collapse) stable across rebuilds.
+            key: ValueKey<String>(widget.storageId),
+            controller: _controller,
+            initiallyExpanded: widget.live,
+            tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+            childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            title: Row(
+              children: [
+                Icon(
+                  Icons.circle,
+                  size: 8,
+                  color: widget.live
+                      ? widget.colors.statusDotRunning
+                      : widget.colors.foregroundMuted,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(color: widget.colors.foregroundMuted, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+            children: [
+              for (final entry in widget.entries) ...[
+                if (entry.kind == 'thought')
+                  _FlatThought(text: entry.text, colors: widget.colors)
+                else if (entry.kind == 'assistant')
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Opacity(
+                      opacity: 0.85,
+                      child: AssistantMarkdown(
+                        text: entry.text,
+                        colors: widget.colors,
+                        streaming: false,
+                      ),
+                    ),
+                  )
+                else if (entry.kind == 'tool')
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: _ToolCard(entry: entry, colors: widget.colors),
+                  )
+                else if (entry.kind == 'note')
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      _noteText(context.l10n, entry),
+                      style: TextStyle(
+                        color: widget.colors.foregroundMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Thought body without a nested chevron — Steps already collapses the stretch.
+class _FlatThought extends StatelessWidget {
+  const _FlatThought({required this.text, required this.colors});
+
+  final String text;
+  final CoderColors colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            context.l10n.runThoughtTitle,
+            style: TextStyle(color: colors.foregroundMuted, fontSize: 12),
+          ),
+          const SizedBox(height: 4),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 120),
+            child: SingleChildScrollView(
+              child: Text(
+                text,
+                style: TextStyle(color: colors.foregroundMuted, fontSize: 13, height: 1.4),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ThoughtTile extends StatelessWidget {
   const _ThoughtTile({required this.text, required this.colors});
 
@@ -115,7 +300,6 @@ class _ThoughtTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Collapsed by default — same rule as desktop `<details>`.
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
@@ -138,15 +322,58 @@ class _ThoughtTile extends StatelessWidget {
     );
   }
 }
-
-class _ToolCard extends StatelessWidget {
+class _ToolCard extends StatefulWidget {
   const _ToolCard({required this.entry, required this.colors});
 
   final TranscriptEntry entry;
   final CoderColors colors;
 
   @override
+  State<_ToolCard> createState() => _ToolCardState();
+}
+
+class _ToolCardState extends State<_ToolCard> with AutomaticKeepAliveClientMixin {
+  late final ExpansionTileController _details = ExpansionTileController();
+  String? _lastStatus;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _lastStatus = widget.entry.status;
+    // Suggest open while the tool is live — same one-shot rule as desktop ToolCard / Steps.
+    if (widget.entry.status == 'running') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _details.expand();
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _ToolCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final status = widget.entry.status;
+    if (status == 'running' && _lastStatus != 'running') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _details.expand();
+      });
+    }
+    _lastStatus = status;
+  }
+
+  @override
+  void dispose() {
+    _details.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
+    final entry = widget.entry;
+    final colors = widget.colors;
     final status = entry.status ?? '';
     final borderColor = status == 'running'
         ? colors.accent
@@ -159,6 +386,9 @@ class _ToolCard extends StatelessWidget {
             ? colors.statusDotDanger
             : colors.foregroundMuted;
     final title = entry.text.isEmpty ? context.l10n.runToolFallback : entry.text;
+    final hasPayload =
+        (entry.toolInput != null && entry.toolInput!.isNotEmpty) ||
+        (entry.toolOutput != null && entry.toolOutput!.isNotEmpty);
 
     return Container(
       width: double.infinity,
@@ -190,14 +420,32 @@ class _ToolCard extends StatelessWidget {
                 Text(status, style: TextStyle(color: colors.foregroundMuted, fontSize: 11)),
             ],
           ),
-          if (entry.toolInput != null) ...[
-            const SizedBox(height: 8),
-            _CodeBlock(text: entry.toolInput!, colors: colors),
-          ],
-          if (entry.toolOutput != null) ...[
-            const SizedBox(height: 8),
-            _CodeBlock(text: entry.toolOutput!, colors: colors),
-          ],
+          if (hasPayload)
+            Material(
+              type: MaterialType.transparency,
+              child: Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  controller: _details,
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  title: Text(
+                    context.l10n.runToolDetails,
+                    style: TextStyle(color: colors.foregroundMuted, fontSize: 12),
+                  ),
+                  children: [
+                    if (entry.toolInput != null && entry.toolInput!.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      _CodeBlock(text: entry.toolInput!, colors: colors),
+                    ],
+                    if (entry.toolOutput != null && entry.toolOutput!.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      _CodeBlock(text: entry.toolOutput!, colors: colors),
+                    ],
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -237,17 +485,30 @@ class ApprovalCard extends StatelessWidget {
     required this.approval,
     required this.colors,
     this.onAnswer,
+    this.actionsDeferred = false,
+    this.canStopAsking = false,
   });
 
   final TranscriptApproval approval;
   final CoderColors colors;
-  final Future<void> Function(String requestId, {String? optionId, List<String>? optionIds, String? text})? onAnswer;
+  final Future<void> Function(
+    String requestId, {
+    String? optionId,
+    List<String>? optionIds,
+    String? text,
+    bool stopAsking,
+  })? onAnswer;
+  /// Pending — actions live in sticky chrome above the composer.
+  final bool actionsDeferred;
+  /// Envoy Harness (approvalPolicy) while Settings still asks.
+  final bool canStopAsking;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final answered = approval.resolvedWith;
     final closed = approval.closed;
+    final deferred = actionsDeferred && answered == null && !closed;
 
     // **The accent is a stripe, not a border.** A `Border` whose left side is wider than the others
     // cannot carry a `borderRadius`: Flutter asserts "A borderRadius can only be given for a uniform
@@ -282,10 +543,17 @@ class ApprovalCard extends StatelessWidget {
                 : daemonText(l10n, approval.question),
             style: TextStyle(color: colors.foreground, fontWeight: FontWeight.w600),
           ),
-          if (approval.detail != null && approval.detail!.isNotEmpty) ...[
+          if (!deferred && approval.detail != null && approval.detail!.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
               daemonText(l10n, approval.detail!),
+              style: TextStyle(color: colors.foregroundMuted, fontSize: 13),
+            ),
+          ],
+          if (deferred) ...[
+            const SizedBox(height: 4),
+            Text(
+              l10n.runApprovalAnswerBelow,
               style: TextStyle(color: colors.foregroundMuted, fontSize: 13),
             ),
           ],
@@ -297,11 +565,13 @@ class ApprovalCard extends StatelessWidget {
             )
           else if (closed)
             Text(l10n.runNoLongerWaiting, style: TextStyle(color: colors.foregroundMuted, fontSize: 12))
+          else if (deferred)
+            const SizedBox.shrink()
           else if (approval.selection == 'many')
             _ManyChoices(approval: approval, colors: colors, onAnswer: onAnswer)
           else if (approval.selection == 'text')
             _TextAnswer(approval: approval, colors: colors, onAnswer: onAnswer)
-          else
+          else ...[
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -320,6 +590,13 @@ class ApprovalCard extends StatelessWidget {
                   ),
               ],
             ),
+            if (canStopAsking)
+              _StopAskingButton(
+                approval: approval,
+                onAnswer: onAnswer,
+                label: l10n.runApprovalStopAsking,
+              ),
+          ],
               ],
             ),
           ),
@@ -379,7 +656,13 @@ class _ManyChoices extends StatefulWidget {
 
   final TranscriptApproval approval;
   final CoderColors colors;
-  final Future<void> Function(String requestId, {String? optionId, List<String>? optionIds, String? text})? onAnswer;
+  final Future<void> Function(
+    String requestId, {
+    String? optionId,
+    List<String>? optionIds,
+    String? text,
+    bool stopAsking,
+  })? onAnswer;
 
   @override
   State<_ManyChoices> createState() => _ManyChoicesState();
@@ -437,10 +720,58 @@ class _TextAnswer extends StatefulWidget {
 
   final TranscriptApproval approval;
   final CoderColors colors;
-  final Future<void> Function(String requestId, {String? optionId, List<String>? optionIds, String? text})? onAnswer;
+  final Future<void> Function(
+    String requestId, {
+    String? optionId,
+    List<String>? optionIds,
+    String? text,
+    bool stopAsking,
+  })? onAnswer;
 
   @override
   State<_TextAnswer> createState() => _TextAnswerState();
+}
+
+class _StopAskingButton extends StatelessWidget {
+  const _StopAskingButton({
+    required this.approval,
+    required this.label,
+    this.onAnswer,
+  });
+
+  final TranscriptApproval approval;
+  final String label;
+  final Future<void> Function(
+    String requestId, {
+    String? optionId,
+    List<String>? optionIds,
+    String? text,
+    bool stopAsking,
+  })? onAnswer;
+
+  @override
+  Widget build(BuildContext context) {
+    if (onAnswer == null) return const SizedBox.shrink();
+    String? allowId;
+    for (final option in approval.options) {
+      if (!option.destructive) {
+        allowId = option.id;
+        break;
+      }
+    }
+    if (allowId == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: TextButton(
+        onPressed: () => onAnswer!(
+          approval.requestId,
+          optionId: allowId,
+          stopAsking: true,
+        ),
+        child: Text(label),
+      ),
+    );
+  }
 }
 
 class _TextAnswerState extends State<_TextAnswer> {

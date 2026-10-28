@@ -587,6 +587,35 @@ describe("the controls follow the agent's capabilities", () => {
     const controls = composerControls(provider, working);
     expect(controls.controls.find((c) => c.kind === "cancel")?.enabled).toBe(false);
     expect(controls.controls.find((c) => c.kind === "approvals")?.enabled).toBe(false);
+    expect(provider.modesApplicable).toBe(false);
+  });
+
+  it("offers modes for a provider when the summary carries catalogue-documented ones", async () => {
+    const { agentForProvider } = await import("../src/composer/agent-for.js");
+    const provider = agentForProvider("gemini", {
+      label: "Gemini CLI",
+      availability: { state: "ready" },
+      agentMode: true,
+      modes: [
+        { id: "default", label: "Default" },
+        { id: "yolo", label: "YOLO", unattended: true },
+      ],
+    });
+    expect(provider.modesApplicable).toBe(true);
+    expect(provider.modes.map((mode) => mode.id)).toEqual(["default", "yolo"]);
+  });
+
+  it("offers catalogue modes before the provider is stored (first pick)", async () => {
+    const { agentForProvider } = await import("../src/composer/agent-for.js");
+    const beforeAdd = agentForProvider("gemini", undefined);
+    expect(beforeAdd.modesApplicable).toBe(true);
+    expect(beforeAdd.modes.map((mode) => mode.id)).toEqual(["default", "auto_edit", "yolo"]);
+    // A stored hand-typed provider must not invent modes from a colliding id.
+    const handTyped = agentForProvider("gemini", {
+      label: "My gemini",
+      availability: { state: "ready" },
+    });
+    expect(handTyped.modesApplicable).toBe(false);
   });
 
   it("explains a control the agent cannot do, rather than leaving it blank", () => {

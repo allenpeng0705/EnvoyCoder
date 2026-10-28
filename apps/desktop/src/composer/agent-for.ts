@@ -20,6 +20,7 @@
  * the class of drift this repository keeps paying for.
  */
 
+import { cataloguedSessionModes } from "@envoydev/agent-catalog";
 import type {
   HarnessAvailability,
   HarnessId,
@@ -263,21 +264,36 @@ export function agentFor(
 }
 
 /**
- * A provider the user added, as the composer needs it.
+ * A provider the user added — or a catalogue recipe chosen before Add.
  *
- * No modes, models, thinking, or claimed capabilities: we have not opened a session with this program,
- * and inventing any of them would be a claim about somebody else's product. The pills stay off with the
- * existing "unknown" sentences; Stop / Approvals stay off until a session observation says otherwise.
- * Availability is the probe's, so a missing program still reads as missing.
+ * Models / thinking stay unknown until a session. Modes come from the provider summary when it carries
+ * catalogue-documented session modes, or — when there is not yet a stored provider — from the catalogue
+ * entry whose id was picked (`docs/catalog-mode-audit.md`). A stored provider without `catalogEntryId`
+ * never gets modes from a bare id collision.
  */
 export function agentForProvider(
   id: string,
-  summary: { label: string; availability?: HarnessAvailability } | undefined,
+  summary:
+    | {
+        label: string;
+        availability?: HarnessAvailability;
+        modes?: readonly { id: string; label: string; description?: string; unattended?: boolean }[];
+        agentMode?: boolean;
+        catalogEntryId?: string;
+      }
+    | undefined,
 ): ComposerAgent {
+  const fromSummary = summary?.modes ?? [];
+  const fromCatalogue =
+    fromSummary.length === 0 && summary === undefined ? cataloguedSessionModes(id) : undefined;
+  const modes = fromSummary.length > 0 ? [...fromSummary] : [...(fromCatalogue?.modes ?? [])];
+  const modesApplicable =
+    (summary?.agentMode === true && fromSummary.length > 0) ||
+    (summary === undefined && fromCatalogue !== undefined);
   return {
     id,
     label: summary?.label ?? id,
-    modes: [],
+    modes,
     capabilities: {
       resume: false,
       cancel: false,
@@ -287,7 +303,7 @@ export function agentForProvider(
       images: false,
     },
     availability: availabilityOf(summary),
-    modesApplicable: false,
+    modesApplicable,
     modelApplicable: false,
     thinkingApplicable: false,
   };

@@ -91,12 +91,20 @@ import { keyed, ref } from "./messages.js";
 import {
   resolveAgentMode,
   resolveApprovalPolicy,
+  resolveCataloguedProviderMode,
   resolveModelDelivery,
   resolveThinkingDelivery,
 } from "./run-options.js";
 import type { CoderStore } from "./store.js";
 import { ensureRunnableAgent, findRunnableProvider } from "./runnable-agent.js";
-import { allowChoiceId, choiceAllows, isCommandAllowed, permissionMemoryKey, rememberCommand } from "./allowed-commands.js";
+import {
+  allowChoiceId,
+  approvalSubject,
+  choiceAllows,
+  isCommandAllowed,
+  permissionMemoryKey,
+  rememberCommand,
+} from "./allowed-commands.js";
 import {
   agentRunFromTranscript,
   readTranscript,
@@ -226,6 +234,11 @@ interface LiveRun {
   approval: {
     requestId: string;
     settle: (choice: string | AcpUserQuestionChoice | null) => void;
+    /**
+     * Option ids that mean allow for this card. `stopAsking` may only run when the answer is one of
+     * these — otherwise a deny over RPC would flip machine approvals off.
+     */
+    allowOptionIds: readonly string[];
   } | undefined;
   stderr: string[];
   settled: boolean;
@@ -399,14 +412,27 @@ export class RunManager {
     // user did not ask for. The second is not a smaller version of the first — a user who chose
     // `plan` and got an unrestricted agent has been told something false about what is running.
     const requestedMode = input.agentModeId ?? task.agentModeId;
-    const agentModeId = shipped ? resolveAgentMode(shipped, requestedMode) : undefined;
+    if (!shipped) await ensureRunnableAgent(this.deps.store, runHarness);
+    const provider = shipped ? undefined : findRunnableProvider(this.deps.store, runHarness);
+    const agentModeId = shipped
+      ? resolveAgentMode(shipped, requestedMode)
+      : resolveCataloguedProviderMode(provider, requestedMode);
     // A permission level is not `session/set_mode`. DeepSeek takes it as `DSH_PERMISSION_MODE` on the
     // process; Envoy Harness takes it as `session/set_policy`. `default` / `plan` / `review` stay on
     // `session/set_mode`, and those runs still get the settings switch as `autoRun`.
     const permissionEnv = shipped ? modeLaunchEnv(shipped, agentModeId) : undefined;
-    const permissionPolicy = shipped ? envoyPermissionPolicy(shipped, agentModeId) : undefined;
+    const permissionPolicy = shipped
+      ? envoyPermissionPolicy(
+          shipped,
+          agentModeId,
+          this.settings().requireApprovalForDestructive,
+        )
+      : undefined;
     const planMode = task.planMode === true || (shipped === "envoy-harness" && requestedMode === "plan");
-    const modeToSet = shipped ? collaborationModeToSet(shipped, agentModeId, planMode) : undefined;
+    // Catalogue providers with documented modes use `session/set_mode` directly (modeToSet = agentModeId).
+    const modeToSet = shipped
+      ? collaborationModeToSet(shipped, agentModeId, planMode)
+      : agentModeId;
     // The model, on exactly the same terms and for a failure that is easier to miss: `envoy-harness`
     // parses `--model` whether or not `--provider` is there and *then ignores it*
     // (`../envoy-harness/packages/envoy-harness/src/cli/run/acp.ts:99-111`), so a model we could not
@@ -445,8 +471,6 @@ export class RunManager {
       (shipped
         ? resolveApprovalPolicy(shipped, this.settings().requireApprovalForDestructive)
         : undefined);
-    if (!shipped) await ensureRunnableAgent(this.deps.store, runHarness);
-    const provider = shipped ? undefined : findRunnableProvider(this.deps.store, runHarness);
     const launch =
       shipped && this.deps.resolveLaunch
         ? this.deps.resolveLaunch({
@@ -904,6 +928,9 @@ export class RunManager {
       (typeof request.toolCall?.title === "string" && request.toolCall.title !== ""
         ? request.toolCall.title
         : undefined);
+    const step = approvalSubject(
+      request.args ?? this.toolInput(live, request.toolCall?.toolCallId ?? ""),
+    );
     return new Promise<string | null>((resolve) => {
       const settle = (choice: string | AcpUserQuestionChoice | null): void => {
         if (live.approval?.requestId !== requestId) return;
@@ -917,7 +944,11 @@ export class RunManager {
           else resolve(choice?.optionIds?.[0] ?? null);
         })();
       };
-      live.approval = { requestId, settle };
+      live.approval = {
+        requestId,
+        settle,
+        allowOptionIds: options.filter((option) => option.destructive !== true).map((option) => option.id),
+      };
 
       void (async () => {
         await this.setStatus(live, "needs-attention");
@@ -927,13 +958,23 @@ export class RunManager {
           // The family's wording rule: the headline is what is about to happen, in the user's words.
           // ACP gives us a tool id and the agent's own label for the call; "the agent is asking" is
           // the part that is always true, so it is what the card leads with when there is no label.
-          question: named
-            ? keyed("approval.question.tool", `Allow the agent to run “${named}”?`, { tool: named })
-            : keyed("approval.question.generic", "Allow the agent to continue?"),
-          detail: keyed(
-            "approval.detail",
-            "It has stopped before this step and will not continue until you answer. Allowing it lets this same step run again in this project without asking.",
-          ),
+          // Lead with the concrete command or path when we have one — the tool id is secondary.
+          question:
+            step !== undefined
+              ? keyed("approval.question.step", `Allow “${step}”?`, { step })
+              : named
+                ? keyed("approval.question.tool", `Allow the agent to run “${named}”?`, { tool: named })
+                : keyed("approval.question.generic", "Allow the agent to continue?"),
+          detail:
+            step !== undefined
+              ? keyed(
+                  "approval.detail.remember",
+                  "Allowing this step lets it run again in this project without asking.",
+                )
+              : keyed(
+                  "approval.detail",
+                  "It has stopped before this step and will not continue until you answer. Allowing it lets this same step run again in this project without asking.",
+                ),
           options,
         });
       })();
@@ -968,7 +1009,8 @@ export class RunManager {
         }
         resolve(choice);
       };
-      live.approval = { requestId, settle };
+      // Questions never offer stop-asking — only permission allows may flip the machine setting.
+      live.approval = { requestId, settle, allowOptionIds: [] };
       void (async () => {
         await this.setStatus(live, "needs-attention");
         await this.record(live, {
@@ -1106,7 +1148,7 @@ export class RunManager {
     runId: string,
     requestId: string,
     optionId: string | undefined,
-    extra?: { optionIds?: readonly string[]; text?: string },
+    extra?: { optionIds?: readonly string[]; text?: string; stopAsking?: boolean },
   ): Promise<boolean> {
     const live = this.active.get(runId);
     if (!live?.approval || live.approval.requestId !== requestId) return false;
@@ -1114,6 +1156,10 @@ export class RunManager {
     const text = extra?.text?.trim() ?? "";
     const primary = ids[0] ?? (text !== "" ? text : undefined);
     if (primary === undefined) return false;
+    // RPC/mesh can send stopAsking with any choice; only an allow may flip machine approvals off.
+    if (extra?.stopAsking === true && live.approval.allowOptionIds.includes(primary)) {
+      await this.stopAskingApprovals(live);
+    }
     const settle = live.approval.settle;
     await this.record(live, {
       kind: "run.approval-resolved",
@@ -1127,6 +1173,28 @@ export class RunManager {
     else if (ids.length > 1) settle({ optionIds: ids });
     else settle(primary);
     return true;
+  }
+
+  /**
+   * Flip the machine setting off and push `autoRun: off` onto this live session.
+   * Only for agents that accept an approval policy (`capabilities.approvalPolicy`).
+   * Best-effort on the live push: a refusal still leaves Settings off for the next run.
+   */
+  private async stopAskingApprovals(live: LiveRun): Promise<void> {
+    if (
+      !isHarnessId(live.run.harness) ||
+      !harnessDefinition(live.run.harness).capabilities.approvalPolicy
+    ) {
+      return;
+    }
+    await this.deps.store.updateSettings({ requireApprovalForDestructive: false });
+    const next: AcpSessionPolicy = { autoRun: "off" };
+    try {
+      await live.client?.applySessionPolicy(next);
+      live.sessionPolicy = { ...(live.sessionPolicy ?? {}), ...next };
+    } catch {
+      // Settings already flipped — next Envoy Harness run starts with autoRun off.
+    }
   }
 
   /**

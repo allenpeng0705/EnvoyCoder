@@ -1,9 +1,12 @@
 /**
  * Typed tool presentation — read / edit / shell, with a generic fallback.
  * Derives from transcript ToolEntry only; drawing never invents session-log kinds.
+ *
+ * Default view is a one-liner (bucket, name, path / command / ±). Long payloads
+ * sit behind a closed Details disclosure so the answer stays readable.
  */
 
-import type { ReactElement } from "react";
+import { useLayoutEffect, useRef, type ReactElement } from "react";
 
 import { useT } from "../../i18n/context.js";
 import {
@@ -107,9 +110,25 @@ function bucketKey(
   }
 }
 
+function shortCommand(command: string, limit = 80): string {
+  const oneLine = command.replace(/\s+/g, " ").trim();
+  if (oneLine.length <= limit) return oneLine;
+  return `${oneLine.slice(0, limit - 1)}…`;
+}
+
 export function ToolCard(props: { entry: ToolEntry; nested?: boolean }): ReactElement {
   const t = useT();
   const { entry } = props;
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  // Suggest open when the tool starts running; never force-close when it finishes (Steps pattern).
+  const wasRunning = useRef(false);
+  useLayoutEffect(() => {
+    const running = entry.status === "running";
+    const node = detailsRef.current;
+    if (node !== null && running && !wasRunning.current) node.open = true;
+    wasRunning.current = running;
+  }, [entry.status]);
+
   const bucket = toolBucket(entry.name);
   const path = pathFromToolInput(entry.input);
   const command = bucket === "ran" ? commandFromInput(entry.input) : undefined;
@@ -120,6 +139,22 @@ export function ToolCard(props: { entry: ToolEntry; nested?: boolean }): ReactEl
       : bucket === "ran"
         ? excerptFromOutput(entry.output, 320)
         : undefined;
+
+  const detailBlocks: string[] = [];
+  if (excerpt) detailBlocks.push(excerpt);
+  if (bucket === "other" && entry.input !== undefined) detailBlocks.push(summarize(entry.input));
+  if (bucket === "other" && entry.output !== undefined) detailBlocks.push(summarize(entry.output));
+  if (bucket === "edited" && !editSummary && !path && entry.input !== undefined) {
+    detailBlocks.push(summarize(entry.input));
+  }
+  // Shell / read already surface a short command or path on the head; keep full
+  // output (and long commands) behind Details.
+  if (bucket === "ran" && command !== undefined && command.length > 80) {
+    detailBlocks.unshift(command);
+  }
+  if (bucket === "searched" && entry.output !== undefined && !excerpt) {
+    detailBlocks.push(summarize(entry.output));
+  }
 
   const tone =
     entry.status === "running" ? "live" : entry.status === "failed" ? "danger" : "quiet";
@@ -135,23 +170,27 @@ export function ToolCard(props: { entry: ToolEntry; nested?: boolean }): ReactEl
         <span className={`dot dot--${tone}`} aria-hidden />
         <span className="row__tool-kind">{t(bucketKey(bucket))}</span>
         <span className="row__tool-name">{entry.name}</span>
+        {path ? (
+          <span className="row__tool-path" title={path}>
+            {path}
+          </span>
+        ) : null}
+        {editSummary ? <span className="row__tool-diff">{editSummary}</span> : null}
+        {command ? (
+          <span className="row__tool-cmd" title={command}>
+            {shortCommand(command)}
+          </span>
+        ) : null}
       </div>
-      {path ? (
-        <p className="row__tool-path" title={path}>
-          {path}
-        </p>
-      ) : null}
-      {editSummary ? <p className="row__tool-diff">{editSummary}</p> : null}
-      {command ? <pre className="row__code row__code--cmd">{command}</pre> : null}
-      {excerpt ? <pre className="row__code">{excerpt}</pre> : null}
-      {bucket === "other" && entry.input !== undefined ? (
-        <pre className="row__code">{summarize(entry.input)}</pre>
-      ) : null}
-      {bucket === "other" && entry.output !== undefined ? (
-        <pre className="row__code">{summarize(entry.output)}</pre>
-      ) : null}
-      {bucket === "edited" && !editSummary && !path && entry.input !== undefined ? (
-        <pre className="row__code">{summarize(entry.input)}</pre>
+      {detailBlocks.length > 0 ? (
+        <details ref={detailsRef} className="row__tool-details">
+          <summary>{t("task.tool.details")}</summary>
+          {detailBlocks.map((block, index) => (
+            <pre key={index} className="row__code">
+              {block}
+            </pre>
+          ))}
+        </details>
       ) : null}
     </li>
   );

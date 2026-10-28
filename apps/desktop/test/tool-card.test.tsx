@@ -25,7 +25,7 @@ describe("editDiffSummary", () => {
 });
 
 describe("ToolCard", () => {
-  it("renders a read card with path outside the head", () => {
+  it("keeps path on the head and hides output behind Details", () => {
     render(
       <I18nProvider preference="en">
         <ul>
@@ -45,7 +45,10 @@ describe("ToolCard", () => {
     );
     expect(screen.getByTestId("tool-card-searched")).toBeTruthy();
     expect(screen.getByText("/work/api/src/main.ts")).toBeTruthy();
-    expect(screen.getByText("export function main() {}")).toBeTruthy();
+    const details = screen.getByText("Details").closest("details");
+    expect(details).toBeTruthy();
+    expect(details?.open).toBe(false);
+    expect(details?.textContent).toContain("export function main() {}");
   });
 
   it("renders an edit card with path and diff summary", () => {
@@ -74,7 +77,7 @@ describe("ToolCard", () => {
     expect(screen.getByText("−1 / +2")).toBeTruthy();
   });
 
-  it("renders a shell card with command", () => {
+  it("renders a shell card with command on the head and output in Details", () => {
     render(
       <I18nProvider preference="en">
         <ul>
@@ -94,5 +97,50 @@ describe("ToolCard", () => {
     );
     expect(screen.getByTestId("tool-card-ran")).toBeTruthy();
     expect(screen.getByText("npm test")).toBeTruthy();
+    const details = screen.getByText("Details").closest("details");
+    expect(details?.open).toBe(false);
+    expect(details?.textContent).toContain("ok");
+  });
+
+  it("opens Details when a shell tool starts running, without forcing it closed later", () => {
+    const { rerender } = render(
+      <I18nProvider preference="en">
+        <ul>
+          <ToolCard
+            entry={{
+              kind: "tool",
+              id: "4",
+              callId: "4",
+              name: "Bash",
+              status: "running",
+              input: { command: "npm test" },
+              output: "…",
+            }}
+          />
+        </ul>
+      </I18nProvider>,
+    );
+    const details = screen.getByText("Details").closest("details");
+    expect(details?.open).toBe(true);
+
+    rerender(
+      <I18nProvider preference="en">
+        <ul>
+          <ToolCard
+            entry={{
+              kind: "tool",
+              id: "4",
+              callId: "4",
+              name: "Bash",
+              status: "completed",
+              input: { command: "npm test" },
+              output: "ok",
+            }}
+          />
+        </ul>
+      </I18nProvider>,
+    );
+    // One-shot open: finishing the tool must not slam Details shut.
+    expect(screen.getByText("Details").closest("details")?.open).toBe(true);
   });
 });

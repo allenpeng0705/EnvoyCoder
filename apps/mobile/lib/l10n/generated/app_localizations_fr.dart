@@ -366,7 +366,11 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get settingsApprovals => 'Demander avant toute action destructrice';
+  String get settingsApprovals => 'Demander avant les étapes risquées';
+
+  @override
+  String get settingsApprovalsDetail =>
+      'Sur Envoy Harness : si activé, demander avant les commandes et les modifications hors projet — pas pour les edits ordinaires dans le projet. Désactivé signifie ne jamais demander sur cette machine, même en Modification du projet. L\'accès complet ne demande jamais non plus.';
 
   @override
   String get settingsTranscripts =>
@@ -757,6 +761,15 @@ class AppLocalizationsFr extends AppLocalizations {
   String get runThoughtTitle => 'Comment il y a réfléchi';
 
   @override
+  String get runStepsSummary => 'Étapes';
+
+  @override
+  String get runStepsWorking => 'En cours…';
+
+  @override
+  String get runToolDetails => 'Détails';
+
+  @override
   String get runAnswered => 'Répondu';
 
   @override
@@ -768,8 +781,20 @@ class AppLocalizationsFr extends AppLocalizations {
   String get runNeedsAnswer => 'L\'agent attend votre réponse';
 
   @override
+  String get runApprovalStopAsking =>
+      'Autoriser et ne plus demander sur cette machine';
+
+  @override
+  String get runApprovalAnswerBelow => 'Répondez dans le champ ci-dessous';
+
+  @override
   String approvalQuestionTool(String tool) {
     return 'Autoriser l\'agent à exécuter « $tool » ?';
+  }
+
+  @override
+  String approvalQuestionStep(String step) {
+    return 'Autoriser « $step » ?';
   }
 
   @override
@@ -781,6 +806,10 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get approvalDetail =>
       'Il s\'est arrêté avant cette étape et ne continuera pas avant votre réponse. L\'autoriser permet de refaire cette même étape dans ce projet sans redemander.';
+
+  @override
+  String get approvalDetailRemember =>
+      'L\'autoriser permet de refaire cette même étape dans ce projet sans redemander.';
 
   @override
   String get approvalDetailPick =>

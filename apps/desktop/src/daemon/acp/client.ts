@@ -573,6 +573,17 @@ export class AcpClient {
    * "safe-only"` so a read does not stop the turn. Full access sends `autoRun: "off"`. `approval`
    * is not one of these fields: sending it replaces the handler that receives Allow.
    */
+  /**
+   * Push a session policy while the session is open.
+   *
+   * Used at session start and again from an approval card ("don't ask again"):
+   * envoy-harness accepts `autoRun`-only updates even while a turn is blocked on
+   * a permission ask; sandbox / approval still need an idle session.
+   */
+  async applySessionPolicy(policy: AcpSessionPolicy): Promise<void> {
+    await this.setPolicy(policy);
+  }
+
   private async setPolicy(policy: AcpSessionPolicy): Promise<void> {
     const sessionId = this.requireSession();
     await this.request(

@@ -260,6 +260,8 @@ export interface AddProviderInput {
    * unless the recipe above is that entry's — see `AgentProviderConfig.catalogEntryId`.
    */
   catalogEntryId?: string;
+  /** Documented `session/set_mode` parameter name, when the catalogue entry cites fixed modes. */
+  modeParam?: "mode" | "modeId";
 }
 
 export interface CoderStoreOptions {
@@ -911,6 +913,7 @@ export class CoderStore {
     // accepts it directly rather than making every caller wrap it as `{ optionIds }` — the adapter that
     // used to be missing is why `tsc -b` failed on `CoderApp`'s `onAnswer` handler.
     choice: string | readonly string[] | { optionIds: readonly string[] } | { text: string },
+    options?: { stopAsking?: boolean },
   ): Promise<{ ok: true } | Refusal> {
     const params =
       typeof choice === "string"
@@ -920,7 +923,14 @@ export class CoderStore {
           : "text" in choice
             ? { runId, requestId, text: choice.text }
             : { runId, requestId, optionId: choice.optionIds[0], optionIds: [...choice.optionIds] };
-    return this.mutate("coder.answerApproval", params, () => ({ ok: true as const }));
+    return this.mutate(
+      "coder.answerApproval",
+      {
+        ...params,
+        ...(options?.stopAsking === true ? { stopAsking: true as const } : {}),
+      },
+      () => ({ ok: true as const }),
+    );
   }
 
   /**
@@ -1596,6 +1606,7 @@ export class CoderStore {
         // absence. The daemon's parameter schema is `.strict()`, so this is the *only* field about a
         // catalogue recipe that can cross — there is no `envDefaults` to accidentally fill in.
         ...(input.catalogEntryId !== undefined ? { catalogEntryId: input.catalogEntryId } : {}),
+        ...(input.modeParam !== undefined ? { modeParam: input.modeParam } : {}),
       },
       () => ({ ok: true as const }),
     );

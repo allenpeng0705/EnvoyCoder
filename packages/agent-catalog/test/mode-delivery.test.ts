@@ -64,6 +64,12 @@ describe("permission levels", () => {
       sandbox: "danger-full-access",
       autoRun: "off",
     })
+    expect(
+      envoyPermissionPolicy("envoy-harness", "workspace-write", false),
+    ).toEqual({
+      sandbox: "workspace-write",
+      autoRun: "off",
+    })
     expect(envoyPermissionPolicy("envoy-harness", "plan")).toBeUndefined()
     expect(envoyPermissionPolicy("deepseek-harness", "read-only")).toBeUndefined()
   })

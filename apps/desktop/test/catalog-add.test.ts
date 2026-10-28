@@ -101,4 +101,13 @@ describe("adding a catalogue row", () => {
       expect(input.id, row.id).toBe(row.id);
     }
   });
+
+  it("stores modeParam when adding an audited catalogue agent", async () => {
+    const rows = await catalogRows(await handlersOverCatalogue());
+    const gemini = rows.find((row) => row.id === "gemini");
+    const goose = rows.find((row) => row.id === "goose");
+    expect(gemini).toBeDefined();
+    expect(addInputFor(gemini!).modeParam).toBe("modeId");
+    expect(addInputFor(goose!).modeParam).toBeUndefined();
+  });
 });

@@ -1,7 +1,7 @@
 {
   "name": "envoydev",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "EnvoyDev — the control plane for coding agents, in the EnvoyMesh apps group",
   "license": "UNLICENSED",
   "type": "module",

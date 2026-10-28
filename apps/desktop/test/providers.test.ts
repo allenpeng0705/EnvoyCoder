@@ -338,6 +338,27 @@ describe("a provider launches through the same path as a catalogue entry", () =>
     expect(launch.authMethodId).toBe("cursor_login");
     expect(launch.modeParam).toBe("modeId");
   });
+
+  it("falls back to catalogue-documented modeParam for gemini without a stored dialect fact", () => {
+    // Providers added before the mode audit have no modeParam on disk; launch must still speak modeId.
+    const dir = tempDir("envoydev-provider-gemini-mode-");
+    const binary = join(dir, "gemini");
+    writeFileSync(binary, "#!/bin/sh\nexit 0\n");
+    chmodSync(binary, 0o755);
+    const launch = launchForProvider({
+      provider: provider({
+        id: "gemini",
+        label: "Gemini CLI",
+        command: binary,
+        args: ["--acp"],
+        catalogEntryId: "gemini",
+      }),
+      cwd: dir,
+      paths: coderPaths(dir),
+      searchDirs: [dir],
+    });
+    expect(launch.modeParam).toBe("modeId");
+  });
 });
 
 /* ────────────────────────────── the environment ────────────────────────────── */

@@ -37,7 +37,7 @@
 
 import type { AgentProviderConfig, AgentProviderEnvState } from "@envoydev/protocol";
 
-import { acpAgent, cataloguedEnvNames, type AcpAgentEntry } from "./acp-catalog.js";
+import { acpAgent, cataloguedEnvNames, cataloguedSessionModes, type AcpAgentEntry } from "./acp-catalog.js";
 import { splitArgs } from "./args.js";
 import { probeRecipe, type ProbeFinding, type ProbeHarnessOptions, type ProbeRecipe } from "./probe.js";
 // Type-only, and therefore erased: this module is re-exported *by* `index.ts` (`export *`), so a value
@@ -61,6 +61,10 @@ import type { AgentLaunch, RunInput } from "./index.js";
  *     the six catalogued CLIs look ready.)
  */
 export function providerLaunch(provider: AgentProviderConfig): AgentLaunch {
+  // Catalogue-documented modes may supply `modeParam` when the stored provider predates the audit.
+  // Only via `catalogEntryId` — never invent from a colliding bare provider id.
+  const modeParam =
+    provider.modeParam ?? cataloguedSessionModes(provider.catalogEntryId)?.modeParam;
   return {
     kind: "child-process",
     binaries: [provider.command],
@@ -68,7 +72,7 @@ export function providerLaunch(provider: AgentProviderConfig): AgentLaunch {
     stream: provider.transport === "acp" ? "jsonl" : "text",
     transport: provider.transport,
     ...(provider.authMethodId !== undefined ? { authMethodId: provider.authMethodId } : {}),
-    ...(provider.modeParam !== undefined ? { modeParam: provider.modeParam } : {}),
+    ...(modeParam !== undefined ? { modeParam } : {}),
   };
 }
 

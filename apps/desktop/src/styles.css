@@ -2003,6 +2003,24 @@ button.explorer__change:hover {
   line-height: 1.5;
 }
 
+.approval__choice-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.approval__choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.approval__stop-asking {
+  font-size: var(--font-size-sm);
+}
+
 .approval__actions {
   display: flex;
   gap: var(--space-2);
@@ -2096,27 +2114,61 @@ button.explorer__change:hover {
   margin-inline-end: var(--space-2);
 }
 
-.row__tool-path,
-.row__tool-diff {
-  margin: var(--space-1) 0 0;
+.row__tool-head .row__tool-path,
+.row__tool-head .row__tool-diff,
+.row__tool-head .row__tool-cmd {
+  margin: 0;
+  margin-inline-start: var(--space-1);
   font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-regular);
   color: var(--foreground-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .row__tool-diff {
   font-variant-numeric: tabular-nums;
 }
 
+.row__tool-details {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--foreground-muted);
+}
+
+.row__tool-details > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.row__tool-details > summary::-webkit-details-marker {
+  display: none;
+}
+
 .row__code--cmd {
   color: var(--foreground);
 }
 
-/* Takeover replaces the field and toolbar — not stacked above a disabled composer. */
+/* Takeover owns choices; the field stays mounted but visually quiet so drafts survive. */
 .composer__takeover.approval--takeover {
-  margin-bottom: 0;
+  margin-bottom: var(--space-2);
+}
+
+/* Keep the field mounted for draft survival, but do not show a ghost under takeover. */
+.composer__input--inert {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* The card is the field: a second ring inside a bordered card is two focus indicators for one
@@ -4267,6 +4319,50 @@ button.explorer__change:hover {
   font-size: var(--font-size-sm);
 }
 
+/* Steps: thoughts + tools tucked behind one line so the assistant answer stays the focus. */
+.row--steps {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  color: var(--foreground-muted);
+}
+
+.row--steps-live {
+  border-color: var(--accent);
+}
+
+.row--steps > details > summary.row__steps-summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-muted);
+}
+
+.row--steps > details > summary.row__steps-summary::-webkit-details-marker {
+  display: none;
+}
+
+.row__steps-list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.row--tools-flat > .row__tool-head {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
 .row--thought {
   color: var(--foreground-muted);
 }
@@ -4279,6 +4375,23 @@ button.explorer__change:hover {
 .row--thought .row__text {
   margin-top: var(--space-1);
   font-size: var(--font-size-base);
+}
+
+.row--thought-flat .row__meta {
+  margin: 0;
+  font-size: var(--font-size-sm);
+}
+
+.row--thought-flat .row__text {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-sm);
+  max-height: 8rem;
+  overflow: auto;
+}
+
+.row--assistant-interim {
+  opacity: 0.85;
+  font-size: var(--font-size-sm);
 }
 
 /* A tool call is a card: it is a distinct *kind* of thing in the conversation, and the status has to

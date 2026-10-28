@@ -358,7 +358,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get settingsApprovals => 'Ask before anything destructive';
+  String get settingsApprovals => 'Ask before risky steps';
+
+  @override
+  String get settingsApprovalsDetail =>
+      'On Envoy Harness: when on, ask before commands and changes outside the project — not for ordinary in-project edits. Off means never ask for this machine, even under Project change. Full access also never asks.';
 
   @override
   String get settingsTranscripts => 'Keep transcripts after a task ends';
@@ -743,6 +747,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get runThoughtTitle => 'How it thought about this';
 
   @override
+  String get runStepsSummary => 'Steps';
+
+  @override
+  String get runStepsWorking => 'Working…';
+
+  @override
+  String get runToolDetails => 'Details';
+
+  @override
   String get runAnswered => 'Answered';
 
   @override
@@ -754,8 +767,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get runNeedsAnswer => 'The agent needs your answer';
 
   @override
+  String get runApprovalStopAsking =>
+      'Allow and don\'t ask again on this machine';
+
+  @override
+  String get runApprovalAnswerBelow => 'Answer in the composer below';
+
+  @override
   String approvalQuestionTool(String tool) {
     return 'Allow the agent to run “$tool”?';
+  }
+
+  @override
+  String approvalQuestionStep(String step) {
+    return 'Allow “$step”?';
   }
 
   @override
@@ -767,6 +792,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get approvalDetail =>
       'It has stopped before this step and will not continue until you answer. Allowing it lets this same step run again in this project without asking.';
+
+  @override
+  String get approvalDetailRemember =>
+      'Allowing this step lets it run again in this project without asking.';
 
   @override
   String get approvalDetailPick =>
