@@ -105,6 +105,8 @@ class _EnvoyDevAppState extends State<EnvoyDevApp> {
         locale: _locales.locale,
         // The explicit English fallback for a system language we do not ship (see `l10n.dart`).
         localeResolutionCallback: resolveAppLocale,
+        // Simulator cannot run Flutter Release; hide the Debug ribbon for App Store screenshots.
+        debugShowCheckedModeBanner: false,
         theme: const CoderTheme(CoderColors.light).toThemeData(),
         darkTheme: const CoderTheme(CoderColors.dark).toThemeData(),
         themeMode: ThemeMode.system,

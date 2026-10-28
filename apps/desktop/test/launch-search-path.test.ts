@@ -495,7 +495,8 @@ describe("a connector that is fetched rather than installed", () => {
       extraEnv: { DSH_PERMISSION_MODE: "danger-full-access" },
     });
     expect(launch.env?.DSH_PERMISSION_MODE).toBe("danger-full-access");
-    expect(launch.env?.DSH_HOME).toBe(join(coderPaths(home).stateDir, "agents", "dsh"));
+    // DeepSeek Harness uses the user's standalone `~/.dsh` — EnvoyDev must not override DSH_HOME.
+    expect(launch.env?.DSH_HOME).toBeUndefined();
     resetSearchPathCacheForTests();
   });
 });

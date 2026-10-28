@@ -142,7 +142,8 @@ describe.skipIf(!dsh)("the ACP client, against the real dsh binary", () => {
     expect(fromProvider.args).toEqual(fromCatalogue.args);
     // The value travelled through the copy and nowhere else.
     expect(fromProvider.env?.DSH_HOME).toBe(dshHome);
-    expect(fromCatalogue.env?.DSH_HOME).toBe(join(paths.stateDir, "agents", "dsh"));
+    // Catalogue deepseek-harness shares the user's standalone home; it does not set DSH_HOME.
+    expect(fromCatalogue.env?.DSH_HOME).toBeUndefined();
 
     const catalogueClient = await AcpClient.start({ launch: fromCatalogue, requestTimeoutMs: 60_000 });
     cleanups.push(async () => catalogueClient.stop());
@@ -458,8 +459,8 @@ describe("the probe, against the real agents", () => {
     cleanups.push(async () => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     const store = await CoderStore.open({ paths });
     // No `resolveLaunch`, on purpose: this is the production path — `launchForHarness`, the same function
-    // `RunManager` calls — so the probe is proved to start the real binary with the real argv, including the
-    // `DSH_HOME` of its own that keeps EnvoyDev out of the user's `dsh` state.
+    // `RunManager` calls — so the probe is proved to start the real binary with the real argv, sharing the
+    // user's standalone DeepSeek Harness home (no EnvoyDev-private `DSH_HOME`).
     const probe = new SessionProbe({ paths, store });
     cleanups.push(async () => probe.stopAll());
     return { probe, store, stateFile: paths.sessionOptionsFile };

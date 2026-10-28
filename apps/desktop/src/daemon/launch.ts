@@ -32,8 +32,10 @@
  *     we would spawn them and wait for a handshake that can never come — after the picker had already
  *     offered them as ready. A provider says which dialect it speaks, and a `"cli"` one is refused for
  *     exactly the same reason rather than for a new one.
- *   * **A home of its own**, per agent, so EnvoyDev never writes into the state a user's own `dsh`
- *     install owns.
+ *   * **Catalogued agents reuse standalone auth** — no EnvoyDev-private home, no second API-key form.
+ *     Ambient fill (`./ambient-agent-env.ts`) copies login-shell / DeepSeek-home keys a Dock-launched
+ *     daemon would otherwise miss. Session isolation for those CLIs is the agent's own concern.
+ *     **Envoy Harness** is the exception: sessions under EnvoyDev state and keys from the Agents LLM panel.
  *   * **The same `PATH` the probe searched.** This is the newest decision here and it is a consequence of
  *     the resize: the daemon's inherited `PATH` is not the user's (`./search-path.ts`), so the probe asks a
  *     question about a resolved list. If the spawn then handed the agent the *inherited* one, a bridge that
@@ -41,8 +43,8 @@
  *     spawns `claude`) — a program that shows as installed and cannot run, which is worse than one reported
  *     missing. So the list is read once, at the top, and used for both halves.
  *   * **Which of the user's own environment variables travel.** A provider names variables; their **values**
- *     are read from this daemon's environment at spawn and never from disk, never from the wire and never
- *     logged. A name that is unset is a refusal, not a silent omission — see `providerEnv`.
+ *     are read from this daemon's environment at spawn (after the same ambient fill), and never from the
+ *     wire and never logged. A name that is still unset after ambient fill is a refusal — see `providerEnv`.
  *
  * Every refusal is a `coderError` carrying a catalogue key, because a translated window has to be able
  * to render them. The *sentence* also carries the install link, which is what makes it actionable.
@@ -77,6 +79,7 @@ import { capabilitiesFor, currentSearchPath, detectPlatform, type PlatformId } f
 import type { CoderPaths } from "@envoydev/host-bridge";
 
 import type { AcpLaunch } from "./acp/client.js";
+import { ambientAgentLaunchEnv, withAmbientProviderEnv } from "./ambient-agent-env.js";
 import { envoyDecisionLaunchEnv } from "./envoy-decision.js";
 import { envoyLlmBaseUrlArgs, envoyLlmLaunchEnv } from "./envoy-llm.js";
 import { ref } from "./messages.js";
@@ -226,13 +229,10 @@ export function launchForHarness(input: LaunchInput): AcpLaunch {
       // Both of these are **protocol** facts about the agent rather than ways to start it, and they travel
       // on this one channel because this is the only one the daemon and the catalogue share.
       acp: harnessAcpFacts(harness),
-      // A home of our own per agent, so EnvoyDev never writes into the state a user's own `dsh` install
-      // owns — and so sessions the control plane starts are separable from the ones they started by hand.
-      // Envoy Harness also receives a stored API key from the Agents LLM panel when the run's provider matches.
+      // Catalogued agents: ambient credentials from standalone installs / login shell.
+      // Envoy Harness: sessions under our state + API key from the Agents LLM panel when the provider matches.
       env: {
-        ...(definition.id === "deepseek-harness"
-          ? { DSH_HOME: join(input.paths.stateDir, "agents", "dsh") }
-          : {}),
+        ...(definition.tier === "catalogued" ? ambientAgentLaunchEnv() : {}),
         // `~/.local/state` is often root-owned on this machine, so the harness cannot create
         // its default folder there. Sessions stay under EnvoyDev's own state instead.
         ...(definition.id === "envoy-harness"
@@ -485,7 +485,10 @@ function providerEnv(
   provider: AgentProviderConfig,
   from: NodeJS.ProcessEnv,
 ): Record<string, string> {
-  const resolved = resolveProviderEnv(provider, from);
+  // Same ambient fill catalogued harnesses get: a Dock-launched daemon often
+  // lacks interactive-shell exports the provider already works with in a terminal.
+  const ambient = withAmbientProviderEnv(provider.env, from);
+  const resolved = resolveProviderEnv(provider, ambient);
   const missing = resolved.missing;
   if (missing.length === 0) return resolved.values;
 
