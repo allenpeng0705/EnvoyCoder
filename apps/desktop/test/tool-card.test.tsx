@@ -32,7 +32,9 @@ describe("miniDiffLines", () => {
   it("caps removed and added lines", () => {
     const lines = miniDiffLines("a\nb\nc\nd\ne", "x\ny", 2);
     expect(lines.filter((l) => l.kind === "remove")).toHaveLength(2);
-    expect(lines.some((l) => l.kind === "more" && l.text.includes("removed"))).toBe(true);
+    expect(lines.some((l) => l.kind === "more" && l.direction === "removed" && l.count === 3)).toBe(
+      true,
+    );
     expect(lines.filter((l) => l.kind === "add")).toHaveLength(2);
   });
 });

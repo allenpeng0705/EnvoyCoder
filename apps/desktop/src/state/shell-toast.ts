@@ -2,7 +2,8 @@
  * Shell toast — ephemeral success/failure that outlives Settings / sheets.
  *
  * Lives outside any pane’s local state so closing a panel does not swallow “Invite copied”.
- * Refusals stay on the banner strip; form validation stays in-place (`docs/envoydev-ui-polish.md` §3).
+ * Write refusals and window read failures toast here; form validation stays in-place
+ * (`docs/envoydev-ui-polish.md` §3). There is no sticky top banner.
  */
 
 export type ShellToastTone = "ok" | "error";

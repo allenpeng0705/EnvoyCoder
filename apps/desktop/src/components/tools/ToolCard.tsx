@@ -104,9 +104,11 @@ export function editDiffSummary(input: unknown): string | undefined {
   return undefined;
 }
 
-export type MiniDiffLine = { kind: "add" | "remove" | "more"; text: string };
+export type MiniDiffLine =
+  | { kind: "add" | "remove"; text: string }
+  | { kind: "more"; direction: "removed" | "added"; count: number };
 
-/** Compact preview lines for an edit (capped) — not a full LCS. */
+/** Compact preview lines for an edit (capped) — not a full LCS. “More” rows are localized at render. */
 export function miniDiffLines(
   oldText: string | undefined,
   newText: string | undefined,
@@ -119,11 +121,11 @@ export function miniDiffLines(
   const showNew = newLines.slice(0, maxEach);
   for (const text of showOld) lines.push({ kind: "remove", text });
   if (oldLines.length > maxEach) {
-    lines.push({ kind: "more", text: `… ${oldLines.length - maxEach} more removed` });
+    lines.push({ kind: "more", direction: "removed", count: oldLines.length - maxEach });
   }
   for (const text of showNew) lines.push({ kind: "add", text });
   if (newLines.length > maxEach) {
-    lines.push({ kind: "more", text: `… ${newLines.length - maxEach} more added` });
+    lines.push({ kind: "more", direction: "added", count: newLines.length - maxEach });
   }
   return lines;
 }
@@ -285,14 +287,22 @@ export function ToolCard(props: {
         ) : null}
       </div>
       {preview.length > 0 ? (
-        <pre className="row__tool-mini-diff" data-testid="tool-card-mini-diff" aria-hidden>
+        <pre
+          className="row__tool-mini-diff"
+          data-testid="tool-card-mini-diff"
+          aria-label={editSummary ? t("task.tool.miniDiff.aria", { summary: editSummary }) : t("task.tool.miniDiff.ariaPlain")}
+        >
           {preview.map((line, index) => (
             <span
               key={`${line.kind}-${index}`}
               className={`row__tool-mini-diff-line row__tool-mini-diff-line--${line.kind}`}
             >
               {line.kind === "add" ? "+" : line.kind === "remove" ? "−" : " "}
-              {line.text}
+              {line.kind === "more"
+                ? line.direction === "removed"
+                  ? t("task.tool.miniDiff.moreRemoved", { count: line.count })
+                  : t("task.tool.miniDiff.moreAdded", { count: line.count })
+                : line.text}
               {"\n"}
             </span>
           ))}
