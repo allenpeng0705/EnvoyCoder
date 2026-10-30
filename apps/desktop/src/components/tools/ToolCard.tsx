@@ -108,15 +108,41 @@ export type MiniDiffLine =
   | { kind: "add" | "remove"; text: string }
   | { kind: "more"; direction: "removed" | "added"; count: number };
 
-/** Compact preview lines for an edit (capped) — not a full LCS. “More” rows are localized at render. */
+/**
+ * Compact preview lines for an edit (capped).
+ *
+ * Strips a shared line prefix and suffix so the card shows the changed middle —
+ * not a full LCS, but avoids dumping unchanged head/tail as fake ± noise.
+ * “More” rows are localized at render.
+ */
 export function miniDiffLines(
   oldText: string | undefined,
   newText: string | undefined,
   maxEach = 4,
 ): MiniDiffLine[] {
   const lines: MiniDiffLine[] = [];
-  const oldLines = oldText !== undefined ? oldText.split("\n") : [];
-  const newLines = newText !== undefined ? newText.split("\n") : [];
+  let oldLines = oldText !== undefined ? oldText.split("\n") : [];
+  let newLines = newText !== undefined ? newText.split("\n") : [];
+
+  let prefix = 0;
+  while (
+    prefix < oldLines.length &&
+    prefix < newLines.length &&
+    oldLines[prefix] === newLines[prefix]
+  ) {
+    prefix += 1;
+  }
+  let suffix = 0;
+  while (
+    suffix < oldLines.length - prefix &&
+    suffix < newLines.length - prefix &&
+    oldLines[oldLines.length - 1 - suffix] === newLines[newLines.length - 1 - suffix]
+  ) {
+    suffix += 1;
+  }
+  oldLines = oldLines.slice(prefix, oldLines.length - suffix);
+  newLines = newLines.slice(prefix, newLines.length - suffix);
+
   const showOld = oldLines.slice(0, maxEach);
   const showNew = newLines.slice(0, maxEach);
   for (const text of showOld) lines.push({ kind: "remove", text });

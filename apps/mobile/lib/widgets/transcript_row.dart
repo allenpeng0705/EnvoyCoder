@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 
 import '../l10n/daemon_text.dart';
 import '../l10n/l10n.dart';
+import '../models/tool_buckets.dart';
+import '../models/tool_group_summary.dart';
 import '../models/transcript.dart';
 import '../models/transcript_steps.dart';
 import '../theme/tokens.dart';
@@ -46,6 +48,8 @@ class TranscriptRow extends StatelessWidget {
         return _ThoughtTile(text: entry.text, colors: colors);
       case 'tool':
         return _ToolCard(entry: entry, colors: colors);
+      case 'tools':
+        return _ToolsGroupCard(entry: entry, colors: colors, nestedInSteps: false);
       case 'approval':
         if (entry.approval == null) return const SizedBox.shrink();
         return ApprovalCard(
@@ -134,6 +138,8 @@ class TranscriptStepsBlock extends StatefulWidget {
     required this.entries,
     required this.live,
     required this.colors,
+    required this.counts,
+    required this.thoughtCount,
   });
 
   /// Stable id for [PageStorageKey] so expand/collapse survives list recycling.
@@ -141,6 +147,8 @@ class TranscriptStepsBlock extends StatefulWidget {
   final List<TranscriptEntry> entries;
   final bool live;
   final CoderColors colors;
+  final ToolCounts counts;
+  final int thoughtCount;
 
   @override
   State<TranscriptStepsBlock> createState() => _TranscriptStepsBlockState();
@@ -190,9 +198,11 @@ class _TranscriptStepsBlockState extends State<TranscriptStepsBlock>
     final streamText = live ? stepsLiveStreamText(widget.entries) : '';
     final title = live
         ? l10n.runStepsWorking
-        : widget.entries.any((e) => e.kind == 'tool')
-            ? l10n.runStepsSummary
-            : l10n.runThoughtTitle;
+        : widget.counts.total > 0
+            ? toolGroupSummary(l10n, widget.counts)
+            : widget.thoughtCount > 0
+                ? l10n.runThoughtTitle
+                : l10n.runStepsSummary;
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -257,6 +267,15 @@ class _TranscriptStepsBlockState extends State<TranscriptStepsBlock>
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: _ToolCard(entry: entry, colors: widget.colors),
+                  )
+                else if (entry.kind == 'tools')
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: _ToolsGroupCard(
+                      entry: entry,
+                      colors: widget.colors,
+                      nestedInSteps: true,
+                    ),
                   )
                 else if (entry.kind == 'note')
                   Padding(
@@ -387,6 +406,86 @@ class _ThoughtTile extends StatelessWidget {
     );
   }
 }
+/// Consecutive tools collapsed under a bucket summary (desktop `ToolsGroupRow` twin).
+class _ToolsGroupCard extends StatelessWidget {
+  const _ToolsGroupCard({
+    required this.entry,
+    required this.colors,
+    required this.nestedInSteps,
+  });
+
+  final TranscriptEntry entry;
+  final CoderColors colors;
+  final bool nestedInSteps;
+
+  @override
+  Widget build(BuildContext context) {
+    final tools = entry.tools ?? const <TranscriptEntry>[];
+    final summary = toolGroupSummary(context.l10n, entry.toolCounts);
+    final anyRunning = tools.any((t) => t.status == 'running');
+    final anyFailed = tools.any((t) => t.status == 'failed');
+    final tone = anyRunning
+        ? colors.statusDotRunning
+        : anyFailed
+            ? colors.statusDotDanger
+            : colors.foregroundMuted;
+
+    final head = Row(
+      children: [
+        Icon(Icons.circle, size: 8, color: tone),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            summary,
+            style: TextStyle(color: colors.foregroundMuted, fontSize: 13),
+          ),
+        ),
+      ],
+    );
+
+    final list = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final tool in tools)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: _ToolCard(entry: tool, colors: colors),
+          ),
+      ],
+    );
+
+    // Inside Steps the outer disclosure owns collapse — flat list under the summary.
+    if (nestedInSteps) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          head,
+          list,
+        ],
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: colors.surface1,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: anyRunning ? colors.accent : colors.border),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: anyRunning,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          title: head,
+          children: [list],
+        ),
+      ),
+    );
+  }
+}
+
 class _ToolCard extends StatefulWidget {
   const _ToolCard({required this.entry, required this.colors});
 

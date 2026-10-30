@@ -1446,6 +1446,120 @@ abstract class AppLocalizations {
   /// **'Working…'**
   String get runStepsWorking;
 
+  /// run.tools.edited.one — Bucket summary: one file edit.
+  ///
+  /// In en, this message translates to:
+  /// **'edited 1 file'**
+  String get runToolsEditedOne;
+
+  /// run.tools.edited.many — Bucket summary: N file edits.
+  ///
+  /// In en, this message translates to:
+  /// **'edited {count} files'**
+  String runToolsEditedMany(int count);
+
+  /// run.tools.ran.one — Bucket summary: one command.
+  ///
+  /// In en, this message translates to:
+  /// **'ran 1 command'**
+  String get runToolsRanOne;
+
+  /// run.tools.ran.many — Bucket summary: N commands.
+  ///
+  /// In en, this message translates to:
+  /// **'ran {count} commands'**
+  String runToolsRanMany(int count);
+
+  /// run.tools.searched.one — Bucket summary: one search.
+  ///
+  /// In en, this message translates to:
+  /// **'searched once'**
+  String get runToolsSearchedOne;
+
+  /// run.tools.searched.many — Bucket summary: N searches.
+  ///
+  /// In en, this message translates to:
+  /// **'searched {count} times'**
+  String runToolsSearchedMany(int count);
+
+  /// run.tools.other.one — Bucket summary: one other tool.
+  ///
+  /// In en, this message translates to:
+  /// **'used 1 tool'**
+  String get runToolsOtherOne;
+
+  /// run.tools.other.many — Bucket summary: N other tools.
+  ///
+  /// In en, this message translates to:
+  /// **'used {count} tools'**
+  String runToolsOtherMany(int count);
+
+  /// run.tools.summary.empty — Fallback when counts are empty.
+  ///
+  /// In en, this message translates to:
+  /// **'Tools'**
+  String get runToolsSummaryEmpty;
+
+  /// run.tools.summary.two — Join two bucket phrases.
+  ///
+  /// In en, this message translates to:
+  /// **'{a} and {b}'**
+  String runToolsSummaryTwo(String a, String b);
+
+  /// run.tools.summary.many — Join three+ bucket phrases.
+  ///
+  /// In en, this message translates to:
+  /// **'{head}, and {last}'**
+  String runToolsSummaryMany(String head, String last);
+
+  /// run.tools.summary.comma — Separator between bucket phrases.
+  ///
+  /// In en, this message translates to:
+  /// **', '**
+  String get runToolsSummaryComma;
+
+  /// task.transcript.empty.title — Empty-task hero title.
+  ///
+  /// In en, this message translates to:
+  /// **'Start this task'**
+  String get runEmptyTitle;
+
+  /// task.transcript.empty.body — Empty-task hero body with folder name.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent works in {cwd}. Describe what you want below — tool calls, approvals, and diffs appear here.'**
+  String runEmptyBody(String cwd);
+
+  /// task.empty.suggestion.one — Suggestion chip; fills composer.
+  ///
+  /// In en, this message translates to:
+  /// **'Explain what this project does'**
+  String get runEmptySuggestionOne;
+
+  /// task.empty.suggestion.two — Suggestion chip; fills composer.
+  ///
+  /// In en, this message translates to:
+  /// **'Find and fix the failing test'**
+  String get runEmptySuggestionTwo;
+
+  /// task.empty.suggestion.three — Suggestion chip; fills composer.
+  ///
+  /// In en, this message translates to:
+  /// **'Add tests for the last change'**
+  String get runEmptySuggestionThree;
+
+  /// task.transcript.loading — Empty list while a live run has no events yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading this turn…'**
+  String get runTranscriptLoading;
+
+  /// task.composer.queueStatus — Quiet status while send queues.
+  ///
+  /// In en, this message translates to:
+  /// **'Will send when this turn finishes'**
+  String get runComposerQueueStatus;
+
   /// run.toolDetails — Expand tool input/output.
   ///
   /// In en, this message translates to:

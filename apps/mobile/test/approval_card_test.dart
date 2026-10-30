@@ -148,6 +148,25 @@ void main() {
     expectNoWireFormat(tester);
   });
 
+  testWidgets('deferred actions point at the composer takeover', (tester) async {
+    await pumpLocalized(
+      tester,
+      Scaffold(
+        body: ApprovalCard(
+          approval: approval(
+            question: keyed('approval.question.generic', 'Allow the agent to continue?'),
+          ),
+          colors: CoderColors.light,
+          actionsDeferred: true,
+        ),
+      ),
+    );
+    final en = lookupAppLocalizations(const Locale('en'));
+    expect(find.text(en.runApprovalAnswerBelow), findsOneWidget);
+    expect(find.text(en.approvalAllow), findsNothing);
+    expectNoWireFormat(tester);
+  });
+
   testWidgets('a daemon note is read in the user\'s language', (tester) async {
     // The note rows carry daemon prose too, and a failure note is where a user meets the sentence that
     // explains what went wrong.

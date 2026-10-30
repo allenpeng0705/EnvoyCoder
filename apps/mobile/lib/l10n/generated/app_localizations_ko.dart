@@ -730,6 +730,77 @@ class AppLocalizationsKo extends AppLocalizations {
   String get runStepsWorking => '작업 중…';
 
   @override
+  String get runToolsEditedOne => '파일 1개 편집';
+
+  @override
+  String runToolsEditedMany(int count) {
+    return '파일 $count개 편집';
+  }
+
+  @override
+  String get runToolsRanOne => '명령 1회 실행';
+
+  @override
+  String runToolsRanMany(int count) {
+    return '명령 $count회 실행';
+  }
+
+  @override
+  String get runToolsSearchedOne => '검색 1회';
+
+  @override
+  String runToolsSearchedMany(int count) {
+    return '검색 $count회';
+  }
+
+  @override
+  String get runToolsOtherOne => '도구 1회 사용';
+
+  @override
+  String runToolsOtherMany(int count) {
+    return '도구 $count회 사용';
+  }
+
+  @override
+  String get runToolsSummaryEmpty => '도구';
+
+  @override
+  String runToolsSummaryTwo(String a, String b) {
+    return '$a 및 $b';
+  }
+
+  @override
+  String runToolsSummaryMany(String head, String last) {
+    return '$head 및 $last';
+  }
+
+  @override
+  String get runToolsSummaryComma => ', ';
+
+  @override
+  String get runEmptyTitle => '아직 아무것도 없습니다';
+
+  @override
+  String runEmptyBody(String cwd) {
+    return '무언가를 요청하면 에이전트가 $cwd에서 작업합니다. 도구 호출, 승인, 변경 내역이 일어나는 대로 여기에 나타납니다.';
+  }
+
+  @override
+  String get runEmptySuggestionOne => '이 프로젝트가 무엇을 하는지 설명해줘';
+
+  @override
+  String get runEmptySuggestionTwo => '실패하는 테스트를 찾아 고쳐줘';
+
+  @override
+  String get runEmptySuggestionThree => '최근 변경에 테스트를 추가해줘';
+
+  @override
+  String get runTranscriptLoading => '이 턴을 불러오는 중…';
+
+  @override
+  String get runComposerQueueStatus => '이 턴이 끝나면 보냅니다';
+
+  @override
   String get runToolDetails => '세부 정보';
 
   @override

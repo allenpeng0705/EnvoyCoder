@@ -37,6 +37,14 @@ describe("miniDiffLines", () => {
     );
     expect(lines.filter((l) => l.kind === "add")).toHaveLength(2);
   });
+
+  it("strips a shared prefix and suffix so unchanged context is not fake ± noise", () => {
+    const lines = miniDiffLines("keep\nold\nend", "keep\nnew\nend", 4);
+    expect(lines.map((l) => ("text" in l ? `${l.kind}:${l.text}` : l.kind))).toEqual([
+      "remove:old",
+      "add:new",
+    ]);
+  });
 });
 
 describe("ToolCard", () => {

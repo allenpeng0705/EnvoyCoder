@@ -28,6 +28,8 @@
 ///      transcript that silently skips the sentence explaining a change is worse than saying so.
 library;
 
+import 'tool_buckets.dart';
+
 /// One row of a transcript. `kind` is a string rather than an enum so a new server-side kind does not
 /// crash an older app: an unrecognised event is dropped, and never renders as a blank row.
 class TranscriptEntry {
@@ -41,6 +43,8 @@ class TranscriptEntry {
     this.delivered,
     this.toolInput,
     this.toolOutput,
+    this.tools,
+    this.toolKind,
     this.approval,
     this.noteKind,
     this.noteCount,
@@ -51,7 +55,7 @@ class TranscriptEntry {
     this.planMarkdown,
   });
 
-  /// `user` | `assistant` | `thought` | `tool` | `approval` | `plan` | `note`.
+  /// `user` | `assistant` | `thought` | `tool` | `tools` | `approval` | `plan` | `note`.
   final String kind;
 
   /// Identity within the transcript: a message id, a call id, a request id, or `kind:seq`.
@@ -82,7 +86,22 @@ class TranscriptEntry {
   String? toolInput;
   String? toolOutput;
 
+  /// Nested tool rows when [kind] is `tools` (render-time group of consecutive tools).
+  List<TranscriptEntry>? tools;
+
+  /// Optional ACP tool kind (`edit` / `execute` / …) for bucket classification.
+  final String? toolKind;
+
   TranscriptApproval? approval;
+
+  /// Bucket counts when [kind] is `tools`.
+  ToolCounts get toolCounts {
+    final nested = tools;
+    if (nested == null || nested.isEmpty) return emptyToolCounts();
+    return countToolBuckets([
+      for (final tool in nested) (name: tool.text, kind: tool.toolKind),
+    ]);
+  }
 
   /// ACP plan checklist (`run.plan`), when [kind] is `plan`.
   String? planId;
@@ -509,4 +528,40 @@ class Transcript {
     }
     return _anonymousKey;
   }
+}
+
+/// Collapse runs of two or more tool rows into one `tools` group with bucket counts.
+///
+/// Approvals, messages and notes break a run — an approval must stay a first-class card.
+/// A single tool stays a `tool` row. Call at render time (desktop `groupConsecutiveTools`).
+List<TranscriptEntry> groupConsecutiveTools(List<TranscriptEntry> entries) {
+  final out = <TranscriptEntry>[];
+  var pending = <TranscriptEntry>[];
+
+  void flush() {
+    if (pending.isEmpty) return;
+    if (pending.length == 1) {
+      out.add(pending.first);
+    } else {
+      out.add(
+        TranscriptEntry(
+          kind: 'tools',
+          id: 'tools-${pending.first.id}',
+          tools: List<TranscriptEntry>.from(pending),
+        ),
+      );
+    }
+    pending = [];
+  }
+
+  for (final entry in entries) {
+    if (entry.kind == 'tool') {
+      pending.add(entry);
+      continue;
+    }
+    flush();
+    out.add(entry);
+  }
+  flush();
+  return out;
 }

@@ -9,6 +9,7 @@ import 'package:flutter/scheduler.dart';
 import '../l10n/l10n.dart';
 import '../models/composer_attachment.dart';
 import '../models/harness.dart';
+import '../models/run_transcript_view.dart';
 import '../models/text_reveal.dart';
 import '../models/transcript.dart';
 import '../models/transcript_steps.dart';
@@ -20,6 +21,15 @@ import '../widgets/composer_controls.dart';
 import '../widgets/confirm_dialog.dart';
 import '../widgets/transcript_row.dart';
 import 'explorer_screen.dart';
+
+String _cwdBasename(String? cwd) {
+  if (cwd == null || cwd.isEmpty) return '…';
+  final parts = cwd.split(RegExp(r'[/\\]'));
+  for (var i = parts.length - 1; i >= 0; i--) {
+    if (parts[i].isNotEmpty) return parts[i];
+  }
+  return cwd;
+}
 
 class RunScreen extends StatefulWidget {
   const RunScreen({
@@ -58,7 +68,6 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   bool _cancelling = false;
   bool _archiving = false;
   String _runId = '';
-  String _sendMode = 'queue';
   String? _error;
   String? _taskId;
   String? _cwd;
@@ -165,6 +174,16 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   }
 
   Future<void> _loadTail() async {
+    // No run yet (empty-task hero) — nothing to tail; composer starts the first run.
+    if (_runId.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _live = false;
+        _error = null;
+      });
+      return;
+    }
     try {
       final snap = await widget.client.call('coder.tailRun', {
         'runId': _runId,
@@ -418,6 +437,17 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     return harness?.approvalPolicy == true;
   }
 
+  /// Composer takeover when pending and the agent supports approvals — or when
+  /// the catalogue has not answered yet. Explicit `approvals: false` keeps
+  /// choices on the transcript card (desktop twin).
+  bool get _takeoverActive {
+    if (_transcript.pendingApproval == null) return false;
+    final id = _runHarnessId ?? _selection.harnessId;
+    final harness = harnessById(_harnesses, id);
+    if (harness == null) return true;
+    return harness.approvals;
+  }
+
   Future<void> _persistSelection(ComposerSelection next) async {
     setState(() => _selection = next);
     final taskId = _taskId;
@@ -438,10 +468,15 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     }
   }
 
-  bool get _canSend {
-    if (_transcript.pendingApproval != null && _live) return false;
-    return _live || _taskId != null;
-  }
+  /// Any open approval blocks send — including when choices stay on the
+  /// transcript card (`approvals: false`). Desktop: `disabled={approvalOpen}`.
+  bool get _approvalOpen => _transcript.pendingApproval != null;
+
+  bool get _canSend => composerSendable(
+        approvalOpen: _approvalOpen,
+        live: _live,
+        hasTask: _taskId != null,
+      );
 
   Future<void> _send() async {
     final turn = composeTurn(_composer.text, _attachments, context.l10n);
@@ -460,7 +495,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
           {
             'runId': _runId,
             'text': turn.prompt,
-            'mode': _sendMode,
+            'mode': 'queue',
             if (turn.images.isNotEmpty) 'images': turn.images,
           },
           turn.images.isEmpty ? const Duration(seconds: 15) : const Duration(seconds: 60),
@@ -621,8 +656,16 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     final l10n = context.l10n;
     final colors = CoderTheme.of(context);
     final pendingApproval = _transcript.pendingApproval;
-    final approvalOpen = pendingApproval != null;
-    final lastAssistantIndex = _transcript.entries.lastIndexWhere((e) => e.kind == 'assistant');
+    final approvalOpen = _approvalOpen;
+    final takeover = _takeoverActive;
+    final displayEntries = groupConsecutiveTools(_transcript.entries);
+    final emptyChrome = emptyTranscriptChrome(
+      bootstrapLoading: _loading,
+      transcriptEmpty: displayEntries.isEmpty,
+      runId: _runId,
+    );
+    final showEmptyHero = emptyChrome.showHero;
+    final showTranscriptLoading = emptyChrome.showLoading;
 
     return Scaffold(
       appBar: AppBar(
@@ -678,163 +721,169 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : Builder(
-                    builder: (context) {
-                      final items = segmentTranscriptSteps(
-                        _transcript.entries,
-                        runLive: _live,
-                      );
-                      return ListView.builder(
-                        controller: _scroll,
-                        reverse: true,
-                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-                        itemCount: items.length,
-                        itemBuilder: (context, index) {
-                          final item = items[items.length - 1 - index];
-                          if (item is TranscriptStepsItem) {
-                            return Padding(
-                              key: ValueKey(item.segment.id),
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: TranscriptStepsBlock(
-                                storageId: item.segment.id,
-                                entries: item.segment.entries,
-                                live: item.segment.live,
-                                colors: colors,
-                              ),
-                            );
-                          }
-                          final entry = (item as TranscriptEntryItem).entry;
-                          final entryIndex = _transcript.entries.indexWhere((e) => identical(e, entry) || e.id == entry.id);
-                          final streaming = _live &&
-                              entryIndex == lastAssistantIndex &&
-                              entry.kind == 'assistant';
-                          final display = streaming
-                              ? TranscriptEntry(
-                                  kind: entry.kind,
-                                  id: entry.id,
-                                  text: visibleRevealedText(_reveal),
-                                  tone: entry.tone,
-                                  callId: entry.callId,
-                                  status: entry.status,
-                                  delivered: entry.delivered,
-                                  toolInput: entry.toolInput,
-                                  toolOutput: entry.toolOutput,
-                                  approval: entry.approval,
-                                )
-                              : entry;
-                          return Padding(
-                            key: ValueKey('${entry.kind}-${entry.id}'),
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: TranscriptRow(
-                              entry: display,
-                              colors: colors,
-                              onAnswer: _answer,
-                              streaming: streaming,
-                              canStopAsking: _canStopAsking,
-                              actionsDeferred: approvalOpen &&
-                                  entry.kind == 'approval' &&
-                                  entry.approval?.requestId == pendingApproval?.requestId,
-                            ),
+                : showEmptyHero
+                    ? _EmptyTaskHero(
+                        colors: colors,
+                        cwdLabel: _cwdBasename(_cwd),
+                        onSuggestion: (text) {
+                          _composer.value = TextEditingValue(
+                            text: text,
+                            selection: TextSelection.collapsed(offset: text.length),
                           );
+                          setState(() {});
                         },
-                      );
-                    },
-                  ),
-          ),
-          // Sticky approval owns the bottom chrome — hide the composer (controller
-          // stays mounted on State) so the card is not stacked on a disabled field.
-          if (approvalOpen && pendingApproval != null)
-            SafeArea(
-              top: false,
-              child: Material(
-                color: colors.surface0,
-                elevation: 2,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                  child: ApprovalCard(
-                    approval: pendingApproval,
-                    colors: colors,
-                    onAnswer: _answer,
-                    canStopAsking: _canStopAsking,
-                  ),
-                ),
-              ),
-            )
-          else
-            SafeArea(
-              top: false,
-              child: Material(
-                color: colors.surface0,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (_harnesses.isNotEmpty) ...[
-                        ComposerControls(
-                          harnesses: _harnesses,
-                          selection: _selection,
-                          enabled: true,
-                          onChanged: (next) => unawaited(_persistSelection(next)),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      if (_live)
-                        Row(
-                          children: [
-                            ChoiceChip(
-                              label: Text(l10n.runQueue),
-                              selected: _sendMode == 'queue',
-                              onSelected: (_) => setState(() => _sendMode = 'queue'),
+                      )
+                    : showTranscriptLoading
+                        ? Center(
+                            child: Text(
+                              l10n.runTranscriptLoading,
+                              style: TextStyle(color: colors.foregroundMuted),
                             ),
-                            const SizedBox(width: 8),
-                            ChoiceChip(
-                              label: Text(l10n.runSteer),
-                              selected: _sendMode == 'steer',
-                              onSelected: (_) => setState(() => _sendMode = 'steer'),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _sendMode == 'steer'
-                                    ? l10n.runJoinsTurn
-                                    : l10n.runWaitsTurn,
-                                style: TextStyle(color: colors.foregroundMuted, fontSize: 11),
-                              ),
-                            ),
-                          ],
-                        ),
-                      if (_live) const SizedBox(height: 8),
-                      if (_commandMatches.isNotEmpty)
-                        ..._commandMatches.map(
-                          (command) => ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            title: Text('/${command.name}${command.argumentHint == null ? '' : ' ${command.argumentHint}'}'),
-                            subtitle: command.description.isEmpty ? null : Text(command.description),
-                            onTap: () {
-                              final next = '/${command.name} ';
-                              _composer.value = TextEditingValue(
-                                text: next,
-                                selection: TextSelection.collapsed(offset: next.length),
+                          )
+                        : Builder(
+                            builder: (context) {
+                              final items = segmentTranscriptSteps(
+                                displayEntries,
+                                runLive: _live,
                               );
-                              setState(() {});
+                              return ListView.builder(
+                                controller: _scroll,
+                                reverse: true,
+                                padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+                                itemCount: items.length,
+                                itemBuilder: (context, index) {
+                                  final item = items[items.length - 1 - index];
+                                  if (item is TranscriptStepsItem) {
+                                    return Padding(
+                                      key: ValueKey(item.segment.id),
+                                      padding: const EdgeInsets.only(bottom: 12),
+                                      child: TranscriptStepsBlock(
+                                        storageId: item.segment.id,
+                                        entries: item.segment.entries,
+                                        live: item.segment.live,
+                                        colors: colors,
+                                        counts: item.segment.counts,
+                                        thoughtCount: item.segment.thoughtCount,
+                                      ),
+                                    );
+                                  }
+                                  final entry = (item as TranscriptEntryItem).entry;
+                                  final entryIndex = displayEntries.indexWhere(
+                                    (e) => identical(e, entry) || e.id == entry.id,
+                                  );
+                                  final streaming = isStreamingAssistant(
+                                    runLive: _live,
+                                    displayEntries: displayEntries,
+                                    entry: entry,
+                                    entryIndex: entryIndex,
+                                  );
+                                  final display = streaming
+                                      ? TranscriptEntry(
+                                          kind: entry.kind,
+                                          id: entry.id,
+                                          text: visibleRevealedText(_reveal),
+                                          tone: entry.tone,
+                                          callId: entry.callId,
+                                          status: entry.status,
+                                          delivered: entry.delivered,
+                                          toolInput: entry.toolInput,
+                                          toolOutput: entry.toolOutput,
+                                          tools: entry.tools,
+                                          toolKind: entry.toolKind,
+                                          approval: entry.approval,
+                                        )
+                                      : entry;
+                                  return Padding(
+                                    key: ValueKey('${entry.kind}-${entry.id}'),
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: TranscriptRow(
+                                      entry: display,
+                                      colors: colors,
+                                      onAnswer: _answer,
+                                      streaming: streaming,
+                                      canStopAsking: _canStopAsking,
+                                      actionsDeferred: takeover &&
+                                          entry.kind == 'approval' &&
+                                          entry.approval?.requestId ==
+                                              pendingApproval?.requestId,
+                                    ),
+                                  );
+                                },
+                              );
                             },
                           ),
+          ),
+          // Composer stays mounted under takeover so a draft survives the pause
+          // (desktop polish §1). Sticky approval body sits above the inert field.
+          SafeArea(
+            top: false,
+            child: Material(
+              color: colors.surface0,
+              elevation: takeover ? 2 : 0,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (takeover && pendingApproval != null) ...[
+                      ApprovalCard(
+                        approval: pendingApproval,
+                        colors: colors,
+                        onAnswer: _answer,
+                        canStopAsking: _canStopAsking,
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    if (!takeover && _harnesses.isNotEmpty) ...[
+                      ComposerControls(
+                        harnesses: _harnesses,
+                        selection: _selection,
+                        enabled: true,
+                        onChanged: (next) => unawaited(_persistSelection(next)),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    if (_live && !approvalOpen)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          l10n.runComposerQueueStatus,
+                          style: TextStyle(color: colors.foregroundMuted, fontSize: 11),
                         ),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          AttachMenuButton(
-                            enabled: _canSend,
-                            onImage: () => unawaited(_attach(pickGalleryImages)),
-                            onPaste: () => unawaited(_attach(pasteClipboardImage)),
-                            onFile: () => unawaited(_attach(pickDocuments)),
+                      ),
+                    if (!takeover && !approvalOpen && _commandMatches.isNotEmpty)
+                      ..._commandMatches.map(
+                        (command) => ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            '/${command.name}${command.argumentHint == null ? '' : ' ${command.argumentHint}'}',
                           ),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
+                          subtitle: command.description.isEmpty ? null : Text(command.description),
+                          onTap: () {
+                            final next = '/${command.name} ';
+                            _composer.value = TextEditingValue(
+                              text: next,
+                              selection: TextSelection.collapsed(offset: next.length),
+                            );
+                            setState(() {});
+                          },
+                        ),
+                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        AttachMenuButton(
+                          enabled: _canSend,
+                          onImage: () => unawaited(_attach(pickGalleryImages)),
+                          onPaste: () => unawaited(_attach(pasteClipboardImage)),
+                          onFile: () => unawaited(_attach(pickDocuments)),
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (!approvalOpen)
                                 AttachmentTray(
                                   attachments: _attachments,
                                   notice: _attachNotice,
@@ -846,40 +895,90 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                                     _attachNotice = null;
                                   }),
                                 ),
-                                TextField(
-                                  controller: _composer,
-                                  enabled: _canSend,
-                                  minLines: 1,
-                                  maxLines: 4,
-                                  decoration: InputDecoration(
-                                    hintText: _live
-                                        ? l10n.runPlaceholderFollowUp
-                                        : l10n.runPlaceholderContinue,
-                                    border: const OutlineInputBorder(),
-                                    isDense: true,
-                                  ),
-                                  onChanged: (_) => setState(() {}),
-                                  onSubmitted: (_) => unawaited(_send()),
+                              TextField(
+                                controller: _composer,
+                                enabled: _canSend,
+                                minLines: 1,
+                                maxLines: 4,
+                                decoration: InputDecoration(
+                                  hintText: approvalOpen
+                                      ? l10n.runPlaceholderAnswer
+                                      : _live
+                                          ? l10n.runPlaceholderFollowUp
+                                          : l10n.runPlaceholderContinue,
+                                  border: const OutlineInputBorder(),
+                                  isDense: true,
                                 ),
-                              ],
-                            ),
+                                onChanged: (_) => setState(() {}),
+                                onSubmitted: (_) => unawaited(_send()),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          IconButton.filled(
-                            onPressed: _canSend && canSendComposer(_composer.text, _attachments)
-                                ? () => unawaited(_send())
-                                : null,
-                            icon: const Icon(Icons.send),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton.filled(
+                          onPressed: _canSend && canSendComposer(_composer.text, _attachments)
+                              ? () => unawaited(_send())
+                              : null,
+                          icon: const Icon(Icons.send),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _EmptyTaskHero extends StatelessWidget {
+  const _EmptyTaskHero({
+    required this.colors,
+    required this.cwdLabel,
+    required this.onSuggestion,
+  });
+
+  final CoderColors colors;
+  final String cwdLabel;
+  final void Function(String text) onSuggestion;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final suggestions = [
+      l10n.runEmptySuggestionOne,
+      l10n.runEmptySuggestionTwo,
+      l10n.runEmptySuggestionThree,
+    ];
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
+      children: [
+        Text(
+          l10n.runEmptyTitle,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(color: colors.foreground),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          l10n.runEmptyBody(cwdLabel),
+          style: TextStyle(color: colors.foregroundMuted, height: 1.4),
+        ),
+        const SizedBox(height: 24),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final suggestion in suggestions)
+              ActionChip(
+                label: Text(suggestion),
+                onPressed: () => onSuggestion(suggestion),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }

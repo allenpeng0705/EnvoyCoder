@@ -753,6 +753,77 @@ class AppLocalizationsEn extends AppLocalizations {
   String get runStepsWorking => 'Working…';
 
   @override
+  String get runToolsEditedOne => 'edited 1 file';
+
+  @override
+  String runToolsEditedMany(int count) {
+    return 'edited $count files';
+  }
+
+  @override
+  String get runToolsRanOne => 'ran 1 command';
+
+  @override
+  String runToolsRanMany(int count) {
+    return 'ran $count commands';
+  }
+
+  @override
+  String get runToolsSearchedOne => 'searched once';
+
+  @override
+  String runToolsSearchedMany(int count) {
+    return 'searched $count times';
+  }
+
+  @override
+  String get runToolsOtherOne => 'used 1 tool';
+
+  @override
+  String runToolsOtherMany(int count) {
+    return 'used $count tools';
+  }
+
+  @override
+  String get runToolsSummaryEmpty => 'Tools';
+
+  @override
+  String runToolsSummaryTwo(String a, String b) {
+    return '$a and $b';
+  }
+
+  @override
+  String runToolsSummaryMany(String head, String last) {
+    return '$head, and $last';
+  }
+
+  @override
+  String get runToolsSummaryComma => ', ';
+
+  @override
+  String get runEmptyTitle => 'Start this task';
+
+  @override
+  String runEmptyBody(String cwd) {
+    return 'The agent works in $cwd. Describe what you want below — tool calls, approvals, and diffs appear here.';
+  }
+
+  @override
+  String get runEmptySuggestionOne => 'Explain what this project does';
+
+  @override
+  String get runEmptySuggestionTwo => 'Find and fix the failing test';
+
+  @override
+  String get runEmptySuggestionThree => 'Add tests for the last change';
+
+  @override
+  String get runTranscriptLoading => 'Loading this turn…';
+
+  @override
+  String get runComposerQueueStatus => 'Will send when this turn finishes';
+
+  @override
   String get runToolDetails => 'Details';
 
   @override

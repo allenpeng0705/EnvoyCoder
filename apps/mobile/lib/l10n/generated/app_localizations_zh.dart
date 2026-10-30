@@ -723,6 +723,77 @@ class AppLocalizationsZh extends AppLocalizations {
   String get runStepsWorking => '进行中…';
 
   @override
+  String get runToolsEditedOne => '编辑了 1 个文件';
+
+  @override
+  String runToolsEditedMany(int count) {
+    return '编辑了 $count 个文件';
+  }
+
+  @override
+  String get runToolsRanOne => '运行了 1 条命令';
+
+  @override
+  String runToolsRanMany(int count) {
+    return '运行了 $count 条命令';
+  }
+
+  @override
+  String get runToolsSearchedOne => '搜索了 1 次';
+
+  @override
+  String runToolsSearchedMany(int count) {
+    return '搜索了 $count 次';
+  }
+
+  @override
+  String get runToolsOtherOne => '使用了 1 个工具';
+
+  @override
+  String runToolsOtherMany(int count) {
+    return '使用了 $count 个工具';
+  }
+
+  @override
+  String get runToolsSummaryEmpty => '工具';
+
+  @override
+  String runToolsSummaryTwo(String a, String b) {
+    return '$a和$b';
+  }
+
+  @override
+  String runToolsSummaryMany(String head, String last) {
+    return '$head，以及$last';
+  }
+
+  @override
+  String get runToolsSummaryComma => '，';
+
+  @override
+  String get runEmptyTitle => '还没有内容';
+
+  @override
+  String runEmptyBody(String cwd) {
+    return '提出请求后，智能体就在 $cwd 中工作。工具调用、批准和差异会在此实时出现。';
+  }
+
+  @override
+  String get runEmptySuggestionOne => '说明这个项目是做什么的';
+
+  @override
+  String get runEmptySuggestionTwo => '找出并修复失败的测试';
+
+  @override
+  String get runEmptySuggestionThree => '为最近的改动补充测试';
+
+  @override
+  String get runTranscriptLoading => '正在加载本轮…';
+
+  @override
+  String get runComposerQueueStatus => '本轮结束后发送';
+
+  @override
   String get runToolDetails => '详情';
 
   @override

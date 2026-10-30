@@ -5,6 +5,7 @@
 /// including while it streams — so the reader does not hunt inside Working….
 library;
 
+import 'tool_buckets.dart';
 import 'transcript.dart';
 
 /// One Steps disclosure wrapping process rows for a stretch of the turn.
@@ -13,6 +14,8 @@ class TranscriptStepsSegment {
     required this.id,
     required this.entries,
     required this.live,
+    required this.counts,
+    required this.thoughtCount,
   });
 
   final String id;
@@ -21,9 +24,10 @@ class TranscriptStepsSegment {
   /// Latest Steps segment while the run is open, or any segment with a running tool.
   final bool live;
 
-  int get thoughtCount => entries.where((e) => e.kind == 'thought').length;
+  final ToolCounts counts;
+  final int thoughtCount;
 
-  int get toolCount => entries.where((e) => e.kind == 'tool').length;
+  int get toolCount => counts.total;
 }
 
 /// Either a normal transcript row or a Steps segment.
@@ -41,9 +45,35 @@ class TranscriptStepsItem extends TranscriptRenderItem {
   final TranscriptStepsSegment segment;
 }
 
-bool _isToolish(TranscriptEntry entry) => entry.kind == 'tool';
+List<TranscriptEntry> _toolsFromEntry(TranscriptEntry entry) {
+  if (entry.kind == 'tool') return [entry];
+  if (entry.kind == 'tools') return List<TranscriptEntry>.from(entry.tools ?? const []);
+  return const [];
+}
+
+bool _isToolish(TranscriptEntry entry) => entry.kind == 'tool' || entry.kind == 'tools';
 
 bool _isQuietNote(TranscriptEntry entry) => entry.kind == 'note' && entry.tone == 'quiet';
+
+({ToolCounts counts, int thoughtCount, bool toolsRunning}) _segmentMeta(
+  List<TranscriptEntry> entries,
+) {
+  final tools = <TranscriptEntry>[];
+  var thoughtCount = 0;
+  for (final entry in entries) {
+    if (entry.kind == 'thought') thoughtCount += 1;
+    tools.addAll(_toolsFromEntry(entry));
+  }
+  return (
+    counts: tools.isEmpty
+        ? emptyToolCounts()
+        : countToolBuckets([
+            for (final tool in tools) (name: tool.text, kind: tool.toolKind),
+          ]),
+    thoughtCount: thoughtCount,
+    toolsRunning: tools.any((t) => t.status == 'running'),
+  );
+}
 
 void _promoteHeroInTurn(List<TranscriptEntry> turn, Set<String> heroes) {
   String? heroId;
@@ -72,14 +102,17 @@ Set<String> heroAssistantIds(List<TranscriptEntry> entries) {
 }
 
 bool _foldsIntoSteps(TranscriptEntry entry, Set<String> heroes) {
-  if (entry.kind == 'thought' || entry.kind == 'tool') return true;
+  if (entry.kind == 'thought' || entry.kind == 'tool' || entry.kind == 'tools') {
+    return true;
+  }
   if (_isQuietNote(entry)) return true;
   if (entry.kind == 'assistant') return !heroes.contains(entry.id);
   return false;
 }
 
-bool _toolsRunning(List<TranscriptEntry> entries) =>
-    entries.any((e) => e.kind == 'tool' && e.status == 'running');
+bool _toolsRunning(List<TranscriptEntry> entries) => entries.any(
+      (e) => _toolsFromEntry(e).any((tool) => tool.status == 'running'),
+    );
 
 /// Only the latest Steps segment is live while the run is open (thought-only
 /// included). Older segments stay quiet so prior turns do not flip back to Working….
@@ -98,6 +131,8 @@ List<TranscriptRenderItem> _applyLiveFlags(
           TranscriptStepsSegment(
             id: steps.segment.id,
             entries: steps.segment.entries,
+            counts: steps.segment.counts,
+            thoughtCount: steps.segment.thoughtCount,
             live: _toolsRunning(steps.segment.entries) ||
                 (runLive && i == lastSteps && steps.segment.entries.isNotEmpty),
           ),
@@ -117,12 +152,15 @@ List<TranscriptRenderItem> segmentTranscriptSteps(
 
   void flush() {
     if (pending.isEmpty) return;
+    final meta = _segmentMeta(pending);
     out.add(
       TranscriptStepsItem(
         TranscriptStepsSegment(
           id: 'steps-${pending.first.id}',
           entries: List<TranscriptEntry>.from(pending),
           live: false,
+          counts: meta.counts,
+          thoughtCount: meta.thoughtCount,
         ),
       ),
     );

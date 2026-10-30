@@ -14,6 +14,8 @@ class HarnessInfo {
     required this.modelApplicable,
     required this.thinkingApplicable,
     required this.approvalPolicy,
+    required this.approvals,
+    required this.approvalsKnown,
     required this.ready,
   });
 
@@ -31,6 +33,10 @@ class HarnessInfo {
   final bool thinkingApplicable;
   /// Can EnvoyDev flip "Ask before risky steps" for this agent?
   final bool approvalPolicy;
+  /// Agent publishes `capabilities.approvals` (composer takeover).
+  final bool approvals;
+  /// True when the catalogue included an `approvals` capability bit.
+  final bool approvalsKnown;
   final bool ready;
 
   factory HarnessInfo.fromJson(Map<String, dynamic> json) {
@@ -94,6 +100,7 @@ class HarnessInfo {
         ? availability['state'] == 'ready'
         : json['available'] == true;
 
+    final approvalsKnown = caps is Map && caps.containsKey('approvals');
     return HarnessInfo(
       id: (json['id'] as String?) ?? '',
       label: (json['label'] as String?) ?? (json['id'] as String?) ?? 'agent',
@@ -109,6 +116,9 @@ class HarnessInfo {
       modelApplicable: caps is Map && caps['model'] == true,
       thinkingApplicable: caps is Map && caps['thinking'] == true,
       approvalPolicy: caps is Map && caps['approvalPolicy'] == true,
+      // Unknown → treat as true so a pending event can still take over (desktop twin).
+      approvals: !approvalsKnown || (caps is Map && caps['approvals'] == true),
+      approvalsKnown: approvalsKnown,
       ready: ready,
     );
   }

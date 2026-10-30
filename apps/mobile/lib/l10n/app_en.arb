@@ -967,6 +967,105 @@
   "@runStepsWorking": {
     "description": "run.stepsWorking — Steps segment while a tool is running."
   },
+  "runToolsEditedOne": "edited 1 file",
+  "@runToolsEditedOne": {
+    "description": "run.tools.edited.one — Bucket summary: one file edit."
+  },
+  "runToolsEditedMany": "edited {count} files",
+  "@runToolsEditedMany": {
+    "description": "run.tools.edited.many — Bucket summary: N file edits.",
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "runToolsRanOne": "ran 1 command",
+  "@runToolsRanOne": {
+    "description": "run.tools.ran.one — Bucket summary: one command."
+  },
+  "runToolsRanMany": "ran {count} commands",
+  "@runToolsRanMany": {
+    "description": "run.tools.ran.many — Bucket summary: N commands.",
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "runToolsSearchedOne": "searched once",
+  "@runToolsSearchedOne": {
+    "description": "run.tools.searched.one — Bucket summary: one search."
+  },
+  "runToolsSearchedMany": "searched {count} times",
+  "@runToolsSearchedMany": {
+    "description": "run.tools.searched.many — Bucket summary: N searches.",
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "runToolsOtherOne": "used 1 tool",
+  "@runToolsOtherOne": {
+    "description": "run.tools.other.one — Bucket summary: one other tool."
+  },
+  "runToolsOtherMany": "used {count} tools",
+  "@runToolsOtherMany": {
+    "description": "run.tools.other.many — Bucket summary: N other tools.",
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "runToolsSummaryEmpty": "Tools",
+  "@runToolsSummaryEmpty": {
+    "description": "run.tools.summary.empty — Fallback when counts are empty."
+  },
+  "runToolsSummaryTwo": "{a} and {b}",
+  "@runToolsSummaryTwo": {
+    "description": "run.tools.summary.two — Join two bucket phrases.",
+    "placeholders": {
+      "a": { "type": "String" },
+      "b": { "type": "String" }
+    }
+  },
+  "runToolsSummaryMany": "{head}, and {last}",
+  "@runToolsSummaryMany": {
+    "description": "run.tools.summary.many — Join three+ bucket phrases.",
+    "placeholders": {
+      "head": { "type": "String" },
+      "last": { "type": "String" }
+    }
+  },
+  "runToolsSummaryComma": ", ",
+  "@runToolsSummaryComma": {
+    "description": "run.tools.summary.comma — Separator between bucket phrases."
+  },
+  "runEmptyTitle": "Start this task",
+  "@runEmptyTitle": {
+    "description": "task.transcript.empty.title — Empty-task hero title."
+  },
+  "runEmptyBody": "The agent works in {cwd}. Describe what you want below — tool calls, approvals, and diffs appear here.",
+  "@runEmptyBody": {
+    "description": "task.transcript.empty.body — Empty-task hero body with folder name.",
+    "placeholders": {
+      "cwd": { "type": "String" }
+    }
+  },
+  "runEmptySuggestionOne": "Explain what this project does",
+  "@runEmptySuggestionOne": {
+    "description": "task.empty.suggestion.one — Suggestion chip; fills composer."
+  },
+  "runEmptySuggestionTwo": "Find and fix the failing test",
+  "@runEmptySuggestionTwo": {
+    "description": "task.empty.suggestion.two — Suggestion chip; fills composer."
+  },
+  "runEmptySuggestionThree": "Add tests for the last change",
+  "@runEmptySuggestionThree": {
+    "description": "task.empty.suggestion.three — Suggestion chip; fills composer."
+  },
+  "runTranscriptLoading": "Loading this turn…",
+  "@runTranscriptLoading": {
+    "description": "task.transcript.loading — Empty list while a live run has no events yet."
+  },
+  "runComposerQueueStatus": "Will send when this turn finishes",
+  "@runComposerQueueStatus": {
+    "description": "task.composer.queueStatus — Quiet status while send queues."
+  },
   "runToolDetails": "Details",
   "@runToolDetails": {
     "description": "run.toolDetails — Expand tool input/output."

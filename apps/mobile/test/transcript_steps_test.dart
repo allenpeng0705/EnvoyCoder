@@ -1,4 +1,5 @@
 import 'package:envoydev_mobile/l10n/l10n.dart';
+import 'package:envoydev_mobile/models/tool_buckets.dart';
 import 'package:envoydev_mobile/models/transcript.dart';
 import 'package:envoydev_mobile/models/transcript_steps.dart';
 import 'package:envoydev_mobile/theme/tokens.dart';
@@ -174,6 +175,8 @@ void main() {
           storageId: 'steps-test',
           live: false,
           colors: CoderColors.light,
+          counts: const ToolCounts(ran: 1),
+          thoughtCount: 1,
           entries: [
             TranscriptEntry(kind: 'thought', id: 'th1', text: 'hmm'),
             TranscriptEntry(kind: 'tool', id: 't1', text: 'Bash', status: 'completed'),
@@ -182,9 +185,9 @@ void main() {
       ),
     );
     final en = lookupAppLocalizations(const Locale('en'));
-    expect(find.text(en.runStepsSummary), findsOneWidget);
+    expect(find.text(en.runToolsRanOne), findsOneWidget);
 
-    await tester.tap(find.text(en.runStepsSummary));
+    await tester.tap(find.text(en.runToolsRanOne));
     await tester.pumpAndSettle();
     // Flat thought — body visible without a nested expand control.
     expect(find.text(en.runThoughtTitle), findsOneWidget);
@@ -215,6 +218,8 @@ void main() {
               storageId: 'steps-live',
               live: live,
               colors: CoderColors.light,
+              counts: const ToolCounts(searched: 1),
+              thoughtCount: 1,
               entries: live ? liveEntries : settledEntries,
             );
           },
@@ -229,8 +234,33 @@ void main() {
     setOuter(() => live = false);
     await tester.pump();
     await tester.pump(); // post-frame collapse
-    expect(find.text(en.runStepsSummary), findsOneWidget);
+    expect(find.text(en.runToolsSearchedOne), findsOneWidget);
     // Collapsed: stream pane gone; thought body not visible until reopen.
     expect(find.text('planning the fix'), findsNothing);
+  });
+
+  test('folds a tools group into Steps like a single tool', () {
+    final entries = [
+      TranscriptEntry(kind: 'user', id: 'u1', text: 'hi'),
+      TranscriptEntry(
+        kind: 'tools',
+        id: 'tools-t1',
+        tools: [
+          TranscriptEntry(kind: 'tool', id: 't1', text: 'Read', status: 'completed'),
+          TranscriptEntry(kind: 'tool', id: 't2', text: 'Edit', status: 'completed'),
+        ],
+      ),
+      TranscriptEntry(kind: 'assistant', id: 'a1', text: 'done'),
+    ];
+    final items = segmentTranscriptSteps(entries);
+    expect(items.map((i) => i.runtimeType).toList(), [
+      TranscriptEntryItem,
+      TranscriptStepsItem,
+      TranscriptEntryItem,
+    ]);
+    final steps = (items[1] as TranscriptStepsItem).segment;
+    expect(steps.toolCount, 2);
+    expect(steps.counts.searched, 1);
+    expect(steps.counts.edited, 1);
   });
 }

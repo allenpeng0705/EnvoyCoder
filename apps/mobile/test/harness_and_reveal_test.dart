@@ -30,6 +30,19 @@ void main() {
       expect(harness.modelsKind, 'listed');
       expect(harness.modelOptions.single.id, 'anthropic/claude');
       expect(harness.agentModeApplicable, isTrue);
+      expect(harness.approvalsKnown, isFalse);
+      expect(harness.approvals, isTrue);
+    });
+
+    test('honours an explicit approvals: false capability', () {
+      final harness = HarnessInfo.fromJson({
+        'id': 'other',
+        'label': 'Other',
+        'capabilities': {'approvals': false},
+        'availability': {'state': 'ready'},
+      });
+      expect(harness.approvalsKnown, isTrue);
+      expect(harness.approvals, isFalse);
     });
 
     test('parses catalogue-provider modes from top-level agentMode', () {

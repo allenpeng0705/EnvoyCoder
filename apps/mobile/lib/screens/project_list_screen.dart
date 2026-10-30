@@ -676,20 +676,9 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
   }
 
   Future<void> _openTask(TaskInfo task) async {
-    final runId = task.runId;
-    if (runId == null || runId.isEmpty) {
-      await showNewTaskSheet(
-        context: context,
-        client: widget.client,
-        projects: _projects,
-        harnesses: _harnesses,
-        initialProjectId: task.projectId,
-        // Same resolution as `_newTaskFor`: the project's agent, else the app default.
-        appHarness: _appHarness,
-      );
-      await _refresh();
-      return;
-    }
+    // Empty runId → empty-task hero on the run screen (desktop TaskPane twin).
+    // Creating a brand-new task still goes through the new-task sheet (+ FAB).
+    final runId = task.runId ?? '';
     // The run screen can archive the task it is showing, and it pops `true` when it does. Refreshing
     // on that answer is what keeps the list under it from still offering a task that is now archived;
     // any other way back (back button, a plain close) pops nothing and skips the refetch.

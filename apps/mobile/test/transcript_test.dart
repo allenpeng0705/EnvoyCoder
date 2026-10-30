@@ -302,4 +302,50 @@ void main() {
       expect(transcript.entries, isEmpty);
     });
   });
+
+  group('groupConsecutiveTools', () {
+    test('leaves a single tool alone', () {
+      final entries = [
+        TranscriptEntry(kind: 'tool', id: 't1', text: 'Read', status: 'completed'),
+      ];
+      final grouped = groupConsecutiveTools(entries);
+      expect(grouped, hasLength(1));
+      expect(grouped.single.kind, 'tool');
+    });
+
+    test('collapses consecutive tools into one tools row', () {
+      final entries = [
+        TranscriptEntry(kind: 'assistant', id: 'a1', text: 'hi'),
+        TranscriptEntry(kind: 'tool', id: 't1', text: 'Read', status: 'completed'),
+        TranscriptEntry(kind: 'tool', id: 't2', text: 'Edit', status: 'completed'),
+        TranscriptEntry(kind: 'tool', id: 't3', text: 'Bash', status: 'completed'),
+        TranscriptEntry(kind: 'assistant', id: 'a2', text: 'done'),
+      ];
+      final grouped = groupConsecutiveTools(entries);
+      expect(grouped.map((e) => e.kind).toList(), ['assistant', 'tools', 'assistant']);
+      final tools = grouped[1];
+      expect(tools.tools, hasLength(3));
+      expect(tools.toolCounts.searched, 1);
+      expect(tools.toolCounts.edited, 1);
+      expect(tools.toolCounts.ran, 1);
+    });
+
+    test('an approval breaks a tool run', () {
+      final entries = [
+        TranscriptEntry(kind: 'tool', id: 't1', text: 'Read', status: 'completed'),
+        TranscriptEntry(
+          kind: 'approval',
+          id: 'a1',
+          approval: TranscriptApproval(
+            requestId: 'r1',
+            question: 'Allow?',
+            options: const [],
+          ),
+        ),
+        TranscriptEntry(kind: 'tool', id: 't2', text: 'Edit', status: 'completed'),
+      ];
+      final grouped = groupConsecutiveTools(entries);
+      expect(grouped.map((e) => e.kind).toList(), ['tool', 'approval', 'tool']);
+    });
+  });
 }
