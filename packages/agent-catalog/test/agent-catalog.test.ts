@@ -147,7 +147,7 @@ describe("invocation", () => {
       { prompt: "x", cwd: "/repo" },
       { platform: "linux", binaryPath: "/usr/local/bin/envoy-harness" },
     );
-    expect(invocation.args).toEqual(["--acp"]);
+    expect(invocation.args).toEqual(["--acp", "--max-turns", "200"]);
     // The prompt travels over the protocol, never in argv: an argv prompt is visible to every other
     // process on the machine, and ACP has a field for it.
     expect(invocation.args).not.toContain("x");
@@ -171,6 +171,8 @@ describe("invocation", () => {
       "anthropic",
       "--model",
       "claude-sonnet-4-6",
+      "--max-turns",
+      "200",
     ]);
 
     const checkout = resolveHarnessCommand(
@@ -188,16 +190,18 @@ describe("invocation", () => {
       "anthropic",
       "--model",
       "claude-sonnet-4-6",
+      "--max-turns",
+      "200",
     ]);
 
-    // No model is no flags — **not** an empty `--provider`, which the harness would read as a provider
-    // named "" and then fail on before it ever started the agent.
+    // No model is still the long-run turn pin — **not** an empty `--provider`, which the harness would
+    // read as a provider named "" and then fail on before it ever started the agent.
     expect(
       buildHarnessInvocation("envoy-harness", { prompt: "x", cwd: "/repo" }, {
         platform: "linux",
         binaryPath: "/usr/local/bin/envoy-harness",
       }).args,
-    ).toEqual(["--acp"]);
+    ).toEqual(["--acp", "--max-turns", "200"]);
 
     // And a model we cannot turn into a pair throws here rather than emitting a bare `--model`, which
     // the harness parses and then ignores — a run on a model the user did not choose.
@@ -391,8 +395,8 @@ describe("probing", () => {
     expect(resolved.command).toBe(process.execPath);
     expect(resolved.args[0]).toBe(probe.binaryPath);
     // Checkout entry *is* the ACP server and strips a duplicate `--acp`, so the installed CLI's
-    // flags must not be copied onto it — only the script path travels.
-    expect(resolved.args.slice(1)).toEqual([]);
+    // `--acp` must not be copied onto it — model/turn flags from the checkout `args` still travel.
+    expect(resolved.args.slice(1)).toEqual(["--max-turns", "200"]);
     expect(resolved.args).not.toContain("run");
   });
 
@@ -400,7 +404,7 @@ describe("probing", () => {
     const probe = probeHarness("envoy-harness", { find: () => "/usr/local/bin/envoy-harness", fileExists: () => false });
     const resolved = resolveHarnessCommand("envoy-harness", probe, { prompt: "", cwd: "/repo" });
     expect(resolved.command).toBe("/usr/local/bin/envoy-harness");
-    expect(resolved.args).toEqual(["--acp"]);
+    expect(resolved.args).toEqual(["--acp", "--max-turns", "200"]);
   });
 
   it("refuses to build a command for a harness that is not there, quoting the reason", () => {

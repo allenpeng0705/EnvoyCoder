@@ -80,6 +80,11 @@
  * not in the observed list is **not** refused by the daemon (the list is a record of an earlier
  * session, not a promise), so the agent's own refusal is what a user meets, and it must be loud.
  *
+ * `FAKE_ACP_STOP_REASON=<reason>` replaces the normal `end_turn` on `session/prompt` answers (e.g.
+ * `max_iterations`) so the host can assert how non-success stop reasons are mapped.
+ * `FAKE_ACP_STOP_REASON_TIMES=<n>` limits how many prompts use that reason before falling back to
+ * `end_turn` (unset = forever).
+ *
  * The protocol shapes are the ones the real agent emits, taken from
  * `../deepseek-harness/packages/acp/acp/src/updates.ts`. The mode ids and the refusal sentence are
  * `envoy-harness`'s own (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:352-375`),
@@ -126,6 +131,25 @@ const REFUSED_MODEL = process.env.FAKE_ACP_REFUSE_MODEL;
 const REFUSED_THINKING = process.env.FAKE_ACP_REFUSE_THINKING;
 /** Whether this session publishes its options, and therefore accepts changes to them. */
 const PUBLISH = process.env.FAKE_ACP_PUBLISH_OPTIONS === "1";
+/** Override the normal `end_turn` so hosts can assert other ACP stop reasons. */
+const PROMPT_STOP_REASON = process.env.FAKE_ACP_STOP_REASON || "end_turn";
+/**
+ * How many `session/prompt` answers use `PROMPT_STOP_REASON` before falling back to `end_turn`.
+ * Unset = forever (host-continue exhaustion tests). `1` = one budget cliff then a clean finish.
+ */
+const STOP_REASON_TIMES =
+  process.env.FAKE_ACP_STOP_REASON_TIMES !== undefined &&
+  process.env.FAKE_ACP_STOP_REASON_TIMES !== ""
+    ? Number(process.env.FAKE_ACP_STOP_REASON_TIMES)
+    : Number.POSITIVE_INFINITY;
+let promptStopCount = 0;
+function promptStopReason() {
+  promptStopCount += 1;
+  if (PROMPT_STOP_REASON !== "end_turn" && promptStopCount <= STOP_REASON_TIMES) {
+    return PROMPT_STOP_REASON;
+  }
+  return "end_turn";
+}
 const pendingPrompts = new Map();
 
 /**
@@ -316,7 +340,7 @@ function handlePrompt(id, params) {
       content: [{ type: "content", content: { type: "text", text: "file-a\nfile-b" } }],
     });
     update({ sessionUpdate: "usage_update", used: 1200, size: 128_000 });
-    ok(id, { stopReason: "end_turn" });
+    ok(id, { stopReason: promptStopReason() });
     return;
   }
 
@@ -340,7 +364,7 @@ function handlePrompt(id, params) {
       rawInput: { file_path: "src/b.ts", old_string: "x", new_string: "y" },
     });
     update({ sessionUpdate: "tool_call_update", toolCallId: "edit-2", status: "completed" });
-    ok(id, { stopReason: "end_turn" });
+    ok(id, { stopReason: promptStopReason() });
     return;
   }
 
@@ -355,7 +379,7 @@ function handlePrompt(id, params) {
         { name: "", description: "dropped" },
       ],
     });
-    ok(id, { stopReason: "end_turn" });
+    ok(id, { stopReason: promptStopReason() });
     return;
   }
 
@@ -388,7 +412,7 @@ function handlePrompt(id, params) {
       messageId: "m-plan",
       content: { type: "text", text: "working the checklist" },
     });
-    ok(id, { stopReason: "end_turn" });
+    ok(id, { stopReason: promptStopReason() });
     return;
   }
 
@@ -431,7 +455,7 @@ function handlePrompt(id, params) {
         summary: "ok — file-a",
       },
     });
-    ok(id, { stopReason: "end_turn" });
+    ok(id, { stopReason: promptStopReason() });
     return;
   }
 
@@ -442,14 +466,14 @@ function handlePrompt(id, params) {
       sessionId,
       message: { role: "assistant", text: "<think>private</think>echoed back" },
     });
-    ok(id, { stopReason: "end_turn" });
+    ok(id, { stopReason: promptStopReason() });
     return;
   }
 
   if (text.includes("resume-me")) {
     // Proves *which* session answered, so a test can tell a resume from a fresh start.
     update({ sessionUpdate: "agent_message_chunk", messageId: "m-r", content: { type: "text", text: `session ${sessionId}` } });
-    ok(id, { stopReason: "end_turn" });
+    ok(id, { stopReason: promptStopReason() });
     return;
   }
 
@@ -457,7 +481,7 @@ function handlePrompt(id, params) {
     // Proves which mode the session is *in*, which is the only way to tell a mode that reached the
     // agent from one a client merely believed it had sent.
     update({ sessionUpdate: "agent_message_chunk", messageId: "m-mode", content: { type: "text", text: `mode: ${collaborationMode}` } });
-    ok(id, { stopReason: "end_turn" });
+    ok(id, { stopReason: promptStopReason() });
     return;
   }
 
@@ -466,7 +490,7 @@ function handlePrompt(id, params) {
     // the agent from one a client merely believed it had sent. Reported as the raw config value,
     // because that is exactly what the agent stores: an opaque string it was handed and validated.
     update({ sessionUpdate: "agent_message_chunk", messageId: "m-model", content: { type: "text", text: `model: ${sessionConfig.model ?? "(none)"}` } });
-    ok(id, { stopReason: "end_turn" });
+    ok(id, { stopReason: promptStopReason() });
     return;
   }
 
@@ -475,7 +499,7 @@ function handlePrompt(id, params) {
     // a test that asserted both at once could not tell a level that reached the agent from one that was
     // dropped while the model arrived. Reported as the raw value, for the same reason as the model.
     update({ sessionUpdate: "agent_message_chunk", messageId: "m-thinking", content: { type: "text", text: `thinking: ${sessionConfig.reasoning_effort ?? "(none)"}` } });
-    ok(id, { stopReason: "end_turn" });
+    ok(id, { stopReason: promptStopReason() });
     return;
   }
 
@@ -485,19 +509,19 @@ function handlePrompt(id, params) {
     // agent from one that was dropped while the model arrived. `(none)` is the peer's own "no autoRun
     // has been set" state, and it is a different answer from any of the three values.
     update({ sessionUpdate: "agent_message_chunk", messageId: "m-policy", content: { type: "text", text: `autoRun: ${autoRunPolicy ?? "(none)"} sandbox: ${sandboxPolicy ?? "(none)"} approval: ${approvalPolicy ?? "(none)"}` } });
-    ok(id, { stopReason: "end_turn" });
+    ok(id, { stopReason: promptStopReason() });
     return;
   }
 
   if (text.includes("think")) {
     update({ sessionUpdate: "agent_thought_chunk", messageId: "m-1", content: { type: "text", text: "let me consider" } });
     update({ sessionUpdate: "agent_message_chunk", messageId: "m-1", content: { type: "text", text: "here is the answer" } });
-    ok(id, { stopReason: "end_turn" });
+    ok(id, { stopReason: promptStopReason() });
     return;
   }
 
   update({ sessionUpdate: "agent_message_chunk", messageId: "m-0", content: { type: "text", text: `echo: ${text}` } });
-  ok(id, { stopReason: "end_turn" });
+  ok(id, { stopReason: promptStopReason() });
 }
 
 function handle(message) {
@@ -540,7 +564,7 @@ function handle(message) {
         },
       });
     }
-    ok(promptId, { stopReason: "end_turn" });
+    ok(promptId, { stopReason: promptStopReason() });
     return;
   }
 
@@ -750,6 +774,11 @@ function handle(message) {
     case "session/prompt":
       handlePrompt(id, params);
       return;
+    case "session/compact": {
+      // Host may compact before a budget-continue; acknowledge like envoy-harness.
+      ok(id, { ok: true });
+      return;
+    }
     case "session/cancel": {
       // A real agent answers the in-flight prompt with `cancelled`, and that is what the run loop
       // distinguishes a steer from a cancel by.

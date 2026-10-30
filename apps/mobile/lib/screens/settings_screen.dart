@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/l10n.dart';
 import '../l10n/locale_controller.dart';
+import '../models/asking_control.dart';
 import '../models/harness.dart';
 import '../services/host_client.dart';
 import '../screens/onboarding/setup_guide_screen.dart';
@@ -217,9 +218,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: Text(l10n.settingsComputerDetail),
                 ),
                 _PairingTile(pairing: _pairing, hostLabel: widget.client.host.label),
-                SwitchListTile(
-                  title: Text(l10n.settingsApprovals),
-                  subtitle: Text(l10n.settingsApprovalsDetail),
+                _ApprovalsTile(
+                  harnesses: widget.harnesses,
+                  defaultHarness: _defaultHarness,
                   value: _requireApproval,
                   onChanged: (v) => setState(() => _requireApproval = v),
                 ),
@@ -415,4 +416,54 @@ String _pairingSeenLabel(BuildContext context, DateTime? seen) {
   return l10n.settingsPairingLastSeenOn(
     MaterialLocalizations.of(context).formatShortDate(seen),
   );
+}
+
+/// “Ask before risky steps” — enabled only when the default agent has a deliverable wire.
+///
+/// Same honesty as the window’s ApprovalRow: Copilot/OMP listing an unattended mode must not
+/// enable a preference nothing applies. Detail stays the general explanation; the note under
+/// the switch says how (or that) it reaches *this* default agent.
+class _ApprovalsTile extends StatelessWidget {
+  const _ApprovalsTile({
+    required this.harnesses,
+    required this.defaultHarness,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final List<HarnessInfo> harnesses;
+  final String? defaultHarness;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final id = defaultHarness;
+    final summary = harnessById(harnesses, id);
+    final agent = summary?.label ??
+        (id != null && id.isNotEmpty ? id : l10n.composerAgentBare);
+    final via = id != null && id.isNotEmpty ? askingControl(id) : AskingControl.none;
+    final supported = id != null && id.isNotEmpty && agentCanControlAsking(id);
+    final modeLabel = id != null ? modeLabelForAskingOff(id) : null;
+    final String note;
+    if (via == AskingControl.policy) {
+      note = l10n.settingsApprovalsReaches(agent);
+    } else if (via == AskingControl.unattendedMode && modeLabel != null) {
+      note = l10n.settingsApprovalsReachesMode(agent, modeLabel);
+    } else if (id == null ||
+        id.isEmpty ||
+        (!isShippedAskingAgent(id) && summary == null)) {
+      note = l10n.settingsApprovalsUnknown(agent);
+    } else {
+      note = l10n.settingsApprovalsUnsupported(agent);
+    }
+
+    return SwitchListTile(
+      title: Text(l10n.settingsApprovals),
+      subtitle: Text('${l10n.settingsApprovalsDetail}\n$note'),
+      value: value,
+      onChanged: supported ? onChanged : null,
+    );
+  }
 }

@@ -231,18 +231,26 @@ describe("the transcript", () => {
   });
 
   it("puts reasoning behind a summary instead of in the reader's way", () => {
-    renderPane([
-      event({ kind: "run.thought", text: "perhaps the parser is wrong", messageId: "m1" }),
-      event({ kind: "run.output", stream: "assistant", text: "The parser is wrong.", messageId: "m2" }),
-    ]);
-    // Thoughts fold into Steps; the settled answer stays the hero outside.
+    renderPane(
+      [
+        event({ kind: "run.thought", text: "perhaps the parser is wrong", messageId: "m1" }),
+        event({ kind: "run.output", stream: "assistant", text: "The parser is wrong.", messageId: "m2" }),
+      ],
+      { runLive: false },
+    );
+    // Thoughts fold into collapsed Steps; the settled answer stays the hero outside.
     const steps = screen.getByTestId("transcript-steps");
-    expect(within(steps).getByText(/perhaps the parser is wrong/)).toBeTruthy();
+    const outer = steps.querySelector("details");
+    expect(outer?.open).toBe(false);
     expect(within(screen.getByTestId("transcript")).getByText("The parser is wrong.")).toBeTruthy();
-    expect(steps.querySelector("details")).toBeTruthy();
+    fireEvent.click(within(steps).getByText("Thought", { selector: ".row__steps-summary" }));
+    expect(outer?.open).toBe(true);
+    // Nested Thought disclosure stays closed until asked.
+    fireEvent.click(within(steps).getAllByText("Thought")[1]!);
+    expect(within(steps).getByText(/perhaps the parser is wrong/)).toBeTruthy();
   });
 
-  it("streams Working… as muted markdown while the run is live", () => {
+  it("streams Working… as muted markdown when the reader opens live Steps", () => {
     renderPane(
       [
         event({
@@ -253,13 +261,16 @@ describe("the transcript", () => {
       ],
       { runLive: true },
     );
+    const steps = screen.getByTestId("transcript-steps");
+    expect(steps.querySelector("details")?.open).toBe(false);
+    fireEvent.click(within(steps).getByText("Working…"));
     const stream = screen.getByTestId("transcript-steps-live-stream");
     expect(stream.querySelector(".row__steps-live-stream-md")).toBeTruthy();
     expect(within(stream).getByRole("heading", { name: /Plan/ })).toBeTruthy();
     expect(within(stream).getByText(/check the parser/)).toBeTruthy();
   });
 
-  it("lets the user collapse live Steps so Working… does not pin open", () => {
+  it("keeps live Steps collapsed so chat history stays the focus", () => {
     renderPane(
       [
         event({
@@ -272,9 +283,9 @@ describe("the transcript", () => {
     );
     const steps = screen.getByTestId("transcript-steps");
     const details = steps.querySelector("details");
-    expect(details?.open).toBe(true);
-    fireEvent.click(within(steps).getByText("Working…"));
     expect(details?.open).toBe(false);
+    fireEvent.click(within(steps).getByText("Working…"));
+    expect(details?.open).toBe(true);
   });
 
   it("says when the history is incomplete rather than rendering a plausible lie", () => {

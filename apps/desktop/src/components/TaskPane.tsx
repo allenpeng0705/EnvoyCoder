@@ -60,6 +60,11 @@ import {
   taskLocationLabel,
   thinkingOffReason,
 } from "../composer/controls.js";
+import {
+  isPlanReviewAsk,
+  shouldOfferPlanGate,
+  withPlanFirstFraming,
+} from "../composer/plan-gate.js";
 import { canResumeRun } from "../composer/resume.js";
 import { harnessBadge, harnessLabel, modelAcceptsBareId } from "../composer/harness-label.js";
 import {
@@ -68,6 +73,7 @@ import {
   slashQuery,
 } from "../composer/slash-commands.js";
 import { probeAsk, publishesOnlyInSession, type ProbeState } from "../composer/probe.js";
+import { composerFeatures } from "@envoydev/agent-catalog/features";
 import { useT } from "../i18n/context.js";
 import {
   EXPLORER_WIDTH_DEFAULT,
@@ -181,6 +187,8 @@ export interface TaskPaneProps {
   onChangeThinking?: (level: string) => void | Promise<void>;
   /** Remember Fast or Plan for this task. The next run applies whichever the agent accepts. */
   onToggleFeature?: (id: "fast_mode" | "plan_mode", value: boolean) => void | Promise<void>;
+  /** Persist “don’t ask again” for the large-task plan gate on this task. */
+  onSkipPlanGate?: () => void | Promise<void>;
   /** Move this task to another folder. Applies to the next run — the agent keeps the one it started in. */
   onChangeFolder?: (path: string) => void | Promise<void>;
   /**
@@ -302,6 +310,35 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [attachNotice, setAttachNotice] = useState<string | undefined>(undefined);
   const [dropping, setDropping] = useState(false);
+  /**
+   * Words already sent, shown before the daemon's `run.message` lands (or forever, if an older
+   * daemon never echoes the opening prompt). Dropped when a matching user row appears after the
+   * point we recorded, or when the send is refused and the draft is restored.
+   */
+  const [localEchoes, setLocalEchoes] = useState<
+    readonly {
+      id: string;
+      text: string;
+      mode: "queue" | "steer";
+      delivered: "queued" | "steered";
+      afterCount: number;
+    }[]
+  >([]);
+  /**
+   * Large-task gate: hold the composed turn until the user picks Plan carefully /
+   * Start working / Don’t ask. Draft stays in the field until then.
+   */
+  const [planGate, setPlanGate] = useState<
+    | {
+        prompt: string;
+        images?: PromptImage[];
+        mode: string | undefined;
+        model: string | undefined;
+        thinking: string | undefined;
+        resume: boolean;
+      }
+    | undefined
+  >(undefined);
   /** A mode the user has just chosen, before the task's saved copy comes back. */
   const [pickedMode, setPickedMode] = useState<string | undefined>(undefined);
   /** A model the user has just chosen, for the same reason and with the same lifetime. */
@@ -367,6 +404,8 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     setPickerProblem(undefined);
     setAttachments([]);
     setAttachNotice(undefined);
+    setLocalEchoes([]);
+    setPlanGate(undefined);
     setDropping(false);
   }, [task.id, task.harness]);
 
@@ -557,33 +596,46 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     // catches that without waiting for another event.
     const frame = requestAnimationFrame(jump);
     return () => cancelAnimationFrame(frame);
-  }, [task.id, transcript.entries.length]);
+  }, [task.id, transcript.entries.length, localEchoes.length]);
 
   /**
-   * Send, **and keep the words until they land**.
-   *
-   * The field used to be cleared the moment the call was dispatched, so a refusal — the daemon saying the run is
-   * finished, or that an approval is in the way — erased what the user had written and answered with a sentence
-   * about a run. The answer decides now: cleared when it lands, kept when it does not, with the refusal rendered
-   * under the composer by the shell.
+   * Echo into the transcript as soon as Send is pressed, then clear the field. A refusal restores
+   * the draft and drops the echo — same shape as mobile — so a cleared composer never means the
+   * words vanished into a void while we wait for `run.message`.
    */
-  /** Keep the words unless the send lands — see `submit`, and `settle`'s two shapes. */
   const clearDraft = (): void => {
     setText("");
     setAttachments([]);
     setAttachNotice(undefined);
   };
 
-  const settle = (answer: WriteFailure | Promise<WriteFailure>): void => {
-    if (answer !== undefined && typeof (answer as Promise<WriteFailure>).then === "function") {
-      void (answer as Promise<WriteFailure>).then((failure) => {
-        if (failure === undefined) clearDraft();
+  // Promote: once the wire's user row catches up, the local echo is redundant.
+  useEffect(() => {
+    setLocalEchoes((prev) => {
+      if (prev.length === 0) return prev;
+      const next = prev.filter((echo) => {
+        const later = transcript.entries.slice(echo.afterCount);
+        return !later.some((entry) => entry.kind === "user" && entry.text === echo.text);
       });
-      return;
-    }
-    // A caller that answered **synchronously** has already landed: cleared now, in the same tick as the press.
-    if (answer === undefined) clearDraft();
-  };
+      return next.length === prev.length ? prev : next;
+    });
+  }, [transcript.entries]);
+
+  const displayEntries: readonly TranscriptEntry[] =
+    localEchoes.length === 0
+      ? transcript.entries
+      : [
+          ...transcript.entries,
+          ...localEchoes.map(
+            (echo): TranscriptEntry => ({
+              kind: "user",
+              id: echo.id,
+              text: echo.text,
+              mode: echo.mode,
+              delivered: echo.delivered,
+            }),
+          ),
+        ];
 
   const noticeFor = (reason: IngestNotice): string =>
     reason === "limit"
@@ -604,8 +656,66 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     });
   };
 
+  const dispatchStart = (
+    prompt: string,
+    images: PromptImage[] | undefined,
+    opts: {
+      mode: string | undefined;
+      model: string | undefined;
+      thinking: string | undefined;
+      resume: boolean;
+      echoText?: string;
+    },
+  ): void => {
+    const previousText = text;
+    const previousAttachments = attachments;
+    const echoId = `local:${Date.now()}`;
+    const afterCount = transcript.entries.length;
+    const echoLabel = opts.echoText ?? prompt;
+    setLocalEchoes((prev) => [
+      ...prev,
+      {
+        id: echoId,
+        text: echoLabel,
+        mode: "steer",
+        delivered: "steered",
+        afterCount,
+      },
+    ]);
+    clearDraft();
+    setPlanGate(undefined);
+
+    const track = (answer: WriteFailure | Promise<WriteFailure>): void => {
+      const restore = (): void => {
+        setLocalEchoes((prev) => prev.filter((echo) => echo.id !== echoId));
+        setText(previousText);
+        setAttachments(previousAttachments);
+      };
+      if (answer !== undefined && typeof (answer as Promise<WriteFailure>).then === "function") {
+        void (answer as Promise<WriteFailure>).then((failure) => {
+          if (failure !== undefined) restore();
+        });
+        return;
+      }
+      if (answer !== undefined) restore();
+    };
+
+    track(
+      images === undefined && !opts.resume
+        ? props.onStart(prompt, opts.mode, opts.model, opts.thinking)
+        : props.onStart(
+            prompt,
+            opts.mode,
+            opts.model,
+            opts.thinking,
+            images,
+            opts.resume ? true : undefined,
+          ),
+    );
+  };
+
   const submit = (): void => {
-    if (!canSend(text, attachments)) return;
+    if (!canSend(text, attachments) || planGate !== undefined) return;
     const turn = composeTurn(text, attachments, {
       imageOnly: t("task.composer.attach.imagesOnly"),
       imagesOnly: t("task.composer.attach.imagesOnlyMany"),
@@ -615,45 +725,105 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     });
     if (turn.prompt === "") return;
     const images = turn.images.length > 0 ? turn.images : undefined;
-    // **`queue`, always.** A message sent while the agent is working waits for the turn in flight and is
-    // delivered as the next prompt — the daemon's own default, and the one behaviour the window has a control
-    // for no longer. `steer` remains on the wire (`coder.sendToRun {mode}`) for a client that offers it.
+
     if (running) {
-      settle(images === undefined ? props.onSend(turn.prompt, "queue") : props.onSend(turn.prompt, "queue", images));
+      // **`queue`, always** while live — follow-ups never re-open the plan gate.
+      const previousText = text;
+      const previousAttachments = attachments;
+      const echoId = `local:${Date.now()}`;
+      const afterCount = transcript.entries.length;
+      setLocalEchoes((prev) => [
+        ...prev,
+        {
+          id: echoId,
+          text: turn.prompt,
+          mode: "queue",
+          delivered: "queued",
+          afterCount,
+        },
+      ]);
+      clearDraft();
+      const track = (answer: WriteFailure | Promise<WriteFailure>): void => {
+        const restore = (): void => {
+          setLocalEchoes((prev) => prev.filter((echo) => echo.id !== echoId));
+          setText(previousText);
+          setAttachments(previousAttachments);
+        };
+        if (answer !== undefined && typeof (answer as Promise<WriteFailure>).then === "function") {
+          void (answer as Promise<WriteFailure>).then((failure) => {
+            if (failure !== undefined) restore();
+          });
+          return;
+        }
+        if (answer !== undefined) restore();
+      };
+      track(images === undefined ? props.onSend(turn.prompt, "queue") : props.onSend(turn.prompt, "queue", images));
       return;
     }
-    // The mode travels only when the picker is on and something is chosen. Passing it always would
-    // mean inventing an "undefined mode" for the agents that have none, and the daemon already reads
-    // the task's stored mode when the argument is absent. The model travels on identical terms, and
-    // `""` — the control's "the agent's own default" — is not a model to pass, so it is dropped here
-    // and the daemon reads the task, which the `updateTask` that saved the clearing has just emptied.
-    else {
-      const chosenModel = selectedModelId !== undefined && selectedModelId !== "" ? selectedModelId : undefined;
-      // The thinking level travels on identical terms: only when the control works and something is
-      // chosen, so an agent with no thought-level method is never handed an "undefined level" it would
-      // have to interpret. `""` — the control's "the agent's own default" — is dropped here, and the
-      // daemon reads the task, whose stored level the `updateTask` that cleared it has just emptied.
-      const chosenThinking =
-        thinkingOff === undefined && selectedThinkingLevel !== undefined && selectedThinkingLevel !== ""
-          ? selectedThinkingLevel
-          : undefined;
-      settle(
-        (() => {
-          const mode = modeEnabled ? selectedModeId : undefined;
-          if (images === undefined && !canResume) {
-            return props.onStart(turn.prompt, mode, chosenModel, chosenThinking);
-          }
-          return props.onStart(
-            turn.prompt,
-            mode,
-            chosenModel,
-            chosenThinking,
-            images,
-            canResume ? true : undefined,
-          );
-        })(),
-      );
+
+    const chosenModel = selectedModelId !== undefined && selectedModelId !== "" ? selectedModelId : undefined;
+    const chosenThinking =
+      thinkingOff === undefined && selectedThinkingLevel !== undefined && selectedThinkingLevel !== ""
+        ? selectedThinkingLevel
+        : undefined;
+    const mode = modeEnabled ? selectedModeId : undefined;
+    const planCapable = composerFeatures(task.harness, chosenModel ?? task.model).some(
+      (feature) => feature.id === "plan_mode",
+    );
+    const planModeOn = task.planMode === true || task.agentModeId === "plan";
+    if (
+      shouldOfferPlanGate({
+        prompt: turn.prompt,
+        attachmentCount: attachments.length,
+        planMode: planModeOn,
+        skipPlanGate: task.skipPlanGate === true,
+        planCapable,
+        running: false,
+      })
+    ) {
+      setPlanGate({
+        prompt: turn.prompt,
+        ...(images !== undefined ? { images } : {}),
+        mode,
+        model: chosenModel,
+        thinking: chosenThinking,
+        resume: canResume,
+      });
+      return;
     }
+
+    dispatchStart(turn.prompt, images, {
+      mode,
+      model: chosenModel,
+      thinking: chosenThinking,
+      resume: canResume,
+    });
+  };
+
+  const resolvePlanGate = (choice: "plan" | "work" | "skip"): void => {
+    const pending = planGate;
+    if (pending === undefined) return;
+    const go = (prompt: string, echoText?: string): void => {
+      dispatchStart(prompt, pending.images, {
+        mode: pending.mode,
+        model: pending.model,
+        thinking: pending.thinking,
+        resume: pending.resume,
+        ...(echoText !== undefined ? { echoText } : {}),
+      });
+    };
+    if (choice === "skip") {
+      void props.onSkipPlanGate?.();
+      go(pending.prompt);
+      return;
+    }
+    if (choice === "plan") {
+      void Promise.resolve(props.onToggleFeature?.("plan_mode", true)).finally(() => {
+        go(withPlanFirstFraming(pending.prompt), pending.prompt);
+      });
+      return;
+    }
+    go(pending.prompt);
   };
 
   const explorer =
@@ -787,7 +957,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
           </p>
         ) : null}
 
-        {transcript.entries.length === 0 && task.runId === undefined ? (
+        {displayEntries.length === 0 && task.runId === undefined ? (
           <div className="transcript__empty transcript__hero" data-testid="task-empty-hero">
             <p className="transcript__empty-title">{t("task.transcript.empty.title")}</p>
             <p className="transcript__empty-body">
@@ -810,7 +980,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               ))}
             </ul>
           </div>
-        ) : transcript.entries.length === 0 ? (
+        ) : displayEntries.length === 0 ? (
           // A run exists but its events have not arrived yet (startRun just flipped `runId`,
           // or openRun is still in flight). Showing "Start this task" here is a lie — the user
           // already sent — and it is what made every send look like the chat had been wiped.
@@ -819,7 +989,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
           </p>
         ) : (
           <ol className="transcript__list">
-            {segmentTranscriptSteps(transcript.entries, { runLive: props.runLive }).map((item) => {
+            {segmentTranscriptSteps(displayEntries, { runLive: props.runLive }).map((item) => {
               if (item.kind === "steps") {
                 return (
                   <StepsRow
@@ -831,11 +1001,11 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                   />
                 );
               }
-              const index = transcript.entries.indexOf(item);
+              const index = displayEntries.indexOf(item);
               const streaming =
                 item.kind === "assistant" &&
                 props.runLive &&
-                !transcript.entries
+                !displayEntries
                   .slice(index + 1)
                   .some((later) => later.kind === "assistant");
               return (
@@ -922,20 +1092,88 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               data-testid="approval-takeover"
             >
               <ApprovalCopy
-                question={pendingApproval.question}
+                question={
+                  isPlanReviewAsk(pendingApproval.question, pendingApproval.detail)
+                    ? t("approval.question.planReview")
+                    : pendingApproval.question
+                }
                 detail={pendingApproval.detail}
                 askHint={askHintFor(pendingApproval.selection)}
               />
               <div className="approval__actions">
                 <ApprovalChoices
-                  entry={pendingApproval}
-                  onAnswer={props.onAnswer}
+                  entry={
+                    isPlanReviewAsk(pendingApproval.question, pendingApproval.detail)
+                      ? {
+                          ...pendingApproval,
+                          options: pendingApproval.options.map((option, index) => ({
+                            ...option,
+                            label:
+                              index === 0
+                                ? t("task.planReview.implement")
+                                : index === 1
+                                  ? t("task.planReview.revise")
+                                  : option.label,
+                          })),
+                        }
+                      : pendingApproval
+                  }
+                  onAnswer={(requestId, choice, options) => {
+                    const approveId = pendingApproval.options[0]?.id;
+                    if (
+                      isPlanReviewAsk(pendingApproval.question, pendingApproval.detail) &&
+                      typeof choice === "string" &&
+                      approveId !== undefined &&
+                      choice === approveId
+                    ) {
+                      // Leave the task's Plan toggle so the next send is implementation, not design.
+                      void props.onToggleFeature?.("plan_mode", false);
+                    }
+                    return props.onAnswer(requestId, choice, options);
+                  }}
                   canStopAsking={props.canStopAskingApprovals === true}
                 />
               </div>
             </div>
           ) : null}
           {/* Field stays mounted under takeover so a draft survives the pause (polish §1). */}
+          {planGate !== undefined && !takeoverActive ? (
+            <div
+              className="composer__plan-gate"
+              role="group"
+              aria-label={t("task.composer.planGate.title")}
+              data-testid="composer-plan-gate"
+            >
+              <p className="composer__plan-gate-title">{t("task.composer.planGate.title")}</p>
+              <p className="composer__plan-gate-body">{t("task.composer.planGate.body")}</p>
+              <div className="composer__plan-gate-actions">
+                <button
+                  type="button"
+                  className="button button--primary"
+                  data-testid="plan-gate-plan"
+                  onClick={() => resolvePlanGate("plan")}
+                >
+                  {t("task.composer.planGate.plan")}
+                </button>
+                <button
+                  type="button"
+                  className="button button--secondary"
+                  data-testid="plan-gate-work"
+                  onClick={() => resolvePlanGate("work")}
+                >
+                  {t("task.composer.planGate.work")}
+                </button>
+                <button
+                  type="button"
+                  className="button button--ghost"
+                  data-testid="plan-gate-skip"
+                  onClick={() => resolvePlanGate("skip")}
+                >
+                  {t("task.composer.planGate.skip")}
+                </button>
+              </div>
+            </div>
+          ) : null}
           {running && !approvalOpen && !takeoverActive ? (
             <p className="composer__queue-status" role="status" data-testid="composer-queue-status">
               {t("task.composer.queueStatus")}
@@ -1284,16 +1522,15 @@ function StepsRow(props: {
   const { segment } = props;
   const entries = coalesceStepsEntries(segment.entries);
   const live = segment.live;
-  // Default open while live so Working… shows the stream; user may collapse.
-  // When the run settles, collapse so the hero answer outside Steps stays the focus.
-  // `undefined` means “use the default for live/settled”; a boolean is an explicit choice.
+  // Stay closed by default so the chat is user + answer history; expand for Working…
+  // stream / tools / thoughts. An explicit toggle sticks until the live edge flips.
   const [userOpen, setUserOpen] = useState<boolean | undefined>(undefined);
   const wasLiveRef = useRef(live);
   const streamRef = useRef<HTMLDivElement | null>(null);
   const streamText = live ? stepsLiveStreamText(entries) : "";
 
   useEffect(() => {
-    if (wasLiveRef.current && !live) setUserOpen(undefined);
+    if (wasLiveRef.current !== live) setUserOpen(undefined);
     wasLiveRef.current = live;
   }, [live]);
 
@@ -1304,7 +1541,7 @@ function StepsRow(props: {
     el.scrollTop = el.scrollHeight;
   }, [live, streamText]);
 
-  const open = userOpen !== undefined ? userOpen : live;
+  const open = userOpen === true;
 
   return (
     <li

@@ -348,7 +348,27 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsApprovalsDetail =>
-      'Envoy Harness에서는 켜면 명령과 프로젝트 밖 변경 전에 묻고, 일반적인 프로젝트 안 편집은 묻지 않습니다. 끄면 프로젝트 변경 모드에서도 이 기기에서는 묻지 않습니다. 전체 접근도 묻지 않습니다.';
+      '켜면 에이전트가 위험한 단계 전에 묻습니다. 끄면 이 기기에서는 묻지 않습니다 — 정책이 있으면 정책으로, 카탈로그에 무인 모드가 있으면 그 모드로 전달합니다.';
+
+  @override
+  String settingsApprovalsReaches(String agent) {
+    return '실행할 때마다 $agent의 자체 정책으로 전달되므로, 확인은 실제 작업이 일어나는 곳에서 이루어집니다.';
+  }
+
+  @override
+  String settingsApprovalsReachesMode(String agent, String mode) {
+    return '끄면 $agent가 “$mode”로 시작하여 묻기 위해 멈추지 않습니다. 켜면 작업에서 고른 모드를 유지합니다.';
+  }
+
+  @override
+  String settingsApprovalsUnsupported(String agent) {
+    return 'EnvoyDev는 $agent에 대해 이 항목을 바꿀 수 없습니다. 이 에이전트는 설정을 받을 방법이 없고 자체 기준으로 확인합니다. EnvoyDev가 정책이나 무인 모드를 전달할 수 있는 에이전트를 고르거나, $agent 자체의 확인에 답하세요.';
+  }
+
+  @override
+  String settingsApprovalsUnknown(String agent) {
+    return 'EnvoyDev는 $agent가 무엇을 받아들이는지 아직 알지 못하므로, 아무도 읽지 않는 선택을 저장하는 대신 이 항목을 꺼 둡니다.';
+  }
 
   @override
   String get settingsTranscripts => '작업이 끝난 뒤에도 기록 유지';
@@ -715,10 +735,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get runYou => '나';
 
   @override
-  String get runYouSteered => '나 · 턴에 끼어들었습니다';
+  String get runYouSteered => '바로 보냄';
 
   @override
-  String get runYouQueued => '나 · 턴을 기다렸습니다';
+  String get runYouQueued => '대기 중';
 
   @override
   String get runThoughtTitle => '어떻게 생각했는지';
@@ -798,7 +818,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get runTranscriptLoading => '이 턴을 불러오는 중…';
 
   @override
-  String get runComposerQueueStatus => '이 턴이 끝나면 보냅니다';
+  String get runComposerQueueStatus => '에이전트가 이 답변을 마치면 보냅니다';
 
   @override
   String get runToolDetails => '세부 정보';
@@ -815,7 +835,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get runNeedsAnswer => '에이전트가 당신의 답변을 기다립니다';
 
   @override
-  String get runApprovalStopAsking => '허용하고 이 기기에서는 다시 묻지 않음';
+  String get runApprovalStopAsking => '다시 묻지 않음';
 
   @override
   String get runApprovalAnswerBelow => '아래 입력란에서 답하세요';

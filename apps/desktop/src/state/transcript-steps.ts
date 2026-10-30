@@ -16,7 +16,7 @@ export type StepsSegment = {
   kind: "steps";
   id: string;
   entries: readonly TranscriptEntry[];
-  /** True when tools in this segment are still running (summary hint only — Steps stay closed). */
+  /** True while this segment is the live Working… turn (summary hint; Steps stay closed until opened). */
   live: boolean;
   counts: ToolCounts;
   thoughtCount: number;

@@ -105,6 +105,32 @@ void main() {
       expect(transcript.entries.single.text, 'and then?');
       expect(transcript.entries.single.delivered, 'queued');
     });
+
+    test('shows a local echo until run.message promotes it', () {
+      final transcript = Transcript();
+      transcript.echoUser('fix this', delivered: 'steered');
+      expect(transcript.entries, hasLength(1));
+      expect(transcript.entries.single.id, startsWith('local:'));
+      expect(transcript.entries.single.text, 'fix this');
+
+      transcript.apply(at(1, {
+        'kind': 'run.message',
+        'text': 'fix this',
+        'mode': 'steer',
+        'delivered': 'steered',
+      }));
+
+      expect(transcript.entries, hasLength(1));
+      expect(transcript.entries.single.id, 'u1');
+      expect(transcript.entries.single.text, 'fix this');
+    });
+
+    test('drops a local echo when the send never landed', () {
+      final transcript = Transcript();
+      transcript.echoUser('gone');
+      transcript.dropLocalEcho('gone');
+      expect(transcript.entries, isEmpty);
+    });
   });
 
   group('tool calls', () {

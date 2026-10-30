@@ -163,19 +163,24 @@ describe("one run, end to end", () => {
     await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
 
     // The order is the contract: a client renders these in arrival order, and `seq` is what lets it
-    // detect a gap.
+    // detect a gap. `run.message` is the opening prompt — without it the chat shows only the agent.
     expect(b.events.map((event) => event.kind)).toEqual([
       "run.started",
+      "run.message",
       "run.session",
       "run.thought",
       "run.output",
       "run.ended",
     ]);
-    expect(b.events.map((event) => event.seq)).toEqual([1, 2, 3, 4, 5]);
+    expect(b.events.map((event) => event.seq)).toEqual([1, 2, 3, 4, 5, 6]);
     for (const event of b.events) {
       expect(event.runId).toBe(run.id);
       expect(event.taskId).toBe(b.taskId);
     }
+
+    const opening = kinds(b.events, "run.message")[0];
+    expect(opening && opening.kind === "run.message" ? opening.text : "").toBe("please think about it");
+    expect(opening && opening.kind === "run.message" ? opening.delivered : "").toBe("steered");
 
     const thought = kinds(b.events, "run.thought")[0];
     expect(thought && thought.kind === "run.thought" ? thought.text : "").toBe("let me consider");
@@ -203,6 +208,40 @@ describe("one run, end to end", () => {
     expect(end.status).toBe("completed");
     expect(start.name).toBe("shell");
     expect(start.input).toEqual({ command: "ls" });
+  });
+
+  it("continues the same session once after max_iterations, then finishes", async () => {
+    const b = await bench({
+      agentEnv: {
+        FAKE_ACP_STOP_REASON: "max_iterations",
+        FAKE_ACP_STOP_REASON_TIMES: "1",
+      },
+    });
+    await b.manager.start({ taskId: b.taskId, prompt: "hello" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const ended = kinds(b.events, "run.ended")[0] as Extract<RunEvent, { kind: "run.ended" }>;
+    expect(ended.status).toBe("done");
+    const notes = kinds(b.events, "run.status") as Extract<RunEvent, { kind: "run.status" }>[];
+    expect(notes.some((event) => event.note?.includes("Continuing after iteration budget"))).toBe(
+      true,
+    );
+  });
+
+  it("marks max_iterations as failed after host continues are spent", async () => {
+    const b = await bench({ agentEnv: { FAKE_ACP_STOP_REASON: "max_iterations" } });
+    await b.manager.start({ taskId: b.taskId, prompt: "hello" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const ended = kinds(b.events, "run.ended")[0] as Extract<RunEvent, { kind: "run.ended" }>;
+    expect(ended.status).toBe("failed");
+    const notes = kinds(b.events, "run.status") as Extract<RunEvent, { kind: "run.status" }>[];
+    expect(notes.filter((event) => event.note?.includes("Continuing after iteration budget"))).toHaveLength(
+      2,
+    );
+    expect(notes.some((event) => event.note?.includes("full iteration budget without finishing"))).toBe(
+      true,
+    );
   });
 
   it("emits run.diff for paths write tools named, before run.ended", async () => {
@@ -521,14 +560,30 @@ describe("approvals", () => {
     b.store.updateSettings = original;
   });
 
-  it("refuses a message while an approval is open, naming why", async () => {
+  it("queues while an approval is open, and refuses steer", async () => {
     const b = await bench();
     const run = await b.manager.start({ taskId: b.taskId, prompt: "please approve this" });
     await b.until((events) => kinds(events, "run.approval-requested").length === 1, "the approval card");
 
-    // Queueing behind a prompt strands the message: the prompt must be answered first, so accepting
-    // the words would be promising a delivery that cannot happen.
-    await expect(b.manager.send(run.id, "actually, stop", "queue")).rejects.toThrow(/waiting for an answer/);
+    // Codex-style: follow-ups wait behind the card; interrupting mid-approval races the waiter.
+    expect(await b.manager.send(run.id, "and then do this", "queue")).toBe("queued");
+    await expect(b.manager.send(run.id, "actually, stop", "steer")).rejects.toThrow(
+      /waiting for an answer/,
+    );
+
+    const requested = kinds(b.events, "run.approval-requested")[0] as Extract<
+      RunEvent,
+      { kind: "run.approval-requested" }
+    >;
+    await b.manager.answerApproval(requested.runId, requested.requestId, "allow-once");
+    await b.until(
+      (events) =>
+        kinds(events, "run.output").some(
+          (event) => event.kind === "run.output" && event.text.includes("and then do this"),
+        ),
+      "the queued follow-up to be answered",
+    );
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
   });
 });
 
@@ -555,7 +610,10 @@ describe("cancel and steer", () => {
     await b.until((events) => kinds(events, "run.output").length === 1, "the first chunk");
 
     expect(await b.manager.send(run.id, "and then do this", "queue")).toBe("queued");
-    const message = kinds(b.events, "run.message")[0];
+    // Index 0 is the opening `startRun` prompt (`steered`); the queued follow-up is next.
+    const message = kinds(b.events, "run.message").find(
+      (event) => event.kind === "run.message" && event.text === "and then do this",
+    );
     // The transcript records which mode was used, so "did it join or wait?" is answerable later.
     expect(message?.kind === "run.message" ? message.delivered : "").toBe("queued");
     expect(message?.kind === "run.message" ? message.mode : "").toBe("queue");
@@ -583,7 +641,10 @@ describe("cancel and steer", () => {
     // Steered, not cancelled: the run finished normally after the redirect.
     const ended = kinds(b.events, "run.ended")[0];
     expect(ended && ended.kind === "run.ended" ? ended.status : "").toBe("done");
-    expect(kinds(b.events, "run.message")[0]?.kind === "run.message" ? (kinds(b.events, "run.message")[0] as { delivered: string }).delivered : "").toBe("steered");
+    const steered = kinds(b.events, "run.message").find(
+      (event) => event.kind === "run.message" && event.text === "change of plan",
+    );
+    expect(steered?.kind === "run.message" ? steered.delivered : "").toBe("steered");
   });
 });
 

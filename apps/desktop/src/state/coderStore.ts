@@ -1601,6 +1601,7 @@ export class CoderStore {
       thinkingLevel?: string;
       fastMode?: boolean;
       planMode?: boolean;
+      skipPlanGate?: boolean;
     },
   ): Promise<{ ok: true; task: Task } | Refusal> {
     return this.mutate("coder.updateTask", input, (result) => ({

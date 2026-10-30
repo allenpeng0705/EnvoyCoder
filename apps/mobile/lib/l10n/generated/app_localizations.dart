@@ -717,8 +717,32 @@ abstract class AppLocalizations {
   /// settings.approvals.detail — Explains the approvals switch.
   ///
   /// In en, this message translates to:
-  /// **'On Envoy Harness: when on, ask before commands and changes outside the project — not for ordinary in-project edits. Off means never ask for this machine, even under Project change. Full access also never asks.'**
+  /// **'When on, the agent asks before risky steps. Off means don’t ask on this machine — via the agent’s policy when it has one, or its unattended mode when that is what the catalogue publishes.'**
   String get settingsApprovalsDetail;
+
+  /// settings.approvals.reaches — Policy wire note.
+  ///
+  /// In en, this message translates to:
+  /// **'Handed to {agent} as its own policy for every run, so the asking happens where the work does.'**
+  String settingsApprovalsReaches(String agent);
+
+  /// settings.approvals.reachesMode — Unattended mode wire note.
+  ///
+  /// In en, this message translates to:
+  /// **'Off starts {agent} in “{mode}” so it does not stop to ask. On keeps the mode you pick for the task.'**
+  String settingsApprovalsReachesMode(String agent, String mode);
+
+  /// settings.approvals.unsupported — No deliverable wire.
+  ///
+  /// In en, this message translates to:
+  /// **'EnvoyDev cannot change this for {agent}: it has no way to be told, and asks on its own terms. Pick an agent EnvoyDev can hand a policy or unattended mode to, or answer {agent}\'s own prompts.'**
+  String settingsApprovalsUnsupported(String agent);
+
+  /// settings.approvals.unknown — Agent capabilities unknown.
+  ///
+  /// In en, this message translates to:
+  /// **'EnvoyDev has not been told what {agent} accepts yet, so this stays off rather than storing a choice nothing reads.'**
+  String settingsApprovalsUnknown(String agent);
 
   /// settings.transcripts — The transcript switch.
   ///
@@ -1419,13 +1443,13 @@ abstract class AppLocalizations {
   /// run.youSteered — A message that joined the live turn.
   ///
   /// In en, this message translates to:
-  /// **'You · joined the turn'**
+  /// **'Sent now'**
   String get runYouSteered;
 
   /// run.youQueued — A message that waited for the turn.
   ///
   /// In en, this message translates to:
-  /// **'You · waited for the turn'**
+  /// **'Queued'**
   String get runYouQueued;
 
   /// run.thoughtTitle — Collapsed reasoning row.
@@ -1557,7 +1581,7 @@ abstract class AppLocalizations {
   /// task.composer.queueStatus — Quiet status while send queues.
   ///
   /// In en, this message translates to:
-  /// **'Will send when this turn finishes'**
+  /// **'Will send when the agent finishes this reply'**
   String get runComposerQueueStatus;
 
   /// run.toolDetails — Expand tool input/output.
@@ -1587,7 +1611,7 @@ abstract class AppLocalizations {
   /// On an Envoy Harness approval: allow this step and turn off Ask before risky steps.
   ///
   /// In en, this message translates to:
-  /// **'Allow and don\'t ask again on this machine'**
+  /// **'Don\'t ask again'**
   String get runApprovalStopAsking;
 
   /// run.approvalAnswerBelow — Transcript stub while sticky chrome owns the choices.

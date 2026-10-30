@@ -609,6 +609,30 @@ export class AcpClient {
   }
 
   /**
+   * Drop oldest context in the open session (Codex/Claude-style `/compact`).
+   *
+   * Harness agents implement `session/compact`; bridges that do not will refuse with
+   * method-not-found — callers treat that as a skip rather than a failed run.
+   */
+  async compact(options?: {
+    keep?: number;
+    budget?: number;
+    summarize?: boolean;
+  }): Promise<void> {
+    const sessionId = this.requireSession();
+    await this.request(
+      "session/compact",
+      {
+        sessionId,
+        ...(options?.keep !== undefined ? { keep: options.keep } : {}),
+        ...(options?.budget !== undefined ? { budget: options.budget } : {}),
+        ...(options?.summarize !== undefined ? { summarize: options.summarize } : {}),
+      },
+      this.options.handshakeTimeoutMs ?? 30_000,
+    );
+  }
+
+  /**
    * Send one turn and wait for it to finish.
    *
    * The updates arrive through `onUpdate` while this is in flight; the promise settles when the

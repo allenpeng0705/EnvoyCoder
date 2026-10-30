@@ -1,8 +1,10 @@
 /// Files and changes for the task that is open.
 ///
-/// The phone's version of the desktop explorer: a full screen, because a side
-/// column does not fit. Back closes it. Folders open; files are listed and not
-/// edited. `node_modules` and `.git` stay hidden.
+/// The phone's version of the desktop explorer. Standalone it is a full route
+/// (tests, older callers). From a live run it embeds above the composer so the
+/// field stays reachable — the window keeps TaskPane + WorkArea the same way.
+/// Folders open; files are listed and not edited. `node_modules` and `.git` stay
+/// hidden.
 library;
 
 import 'dart:async';
@@ -25,6 +27,7 @@ class ExplorerScreen extends StatefulWidget {
     required this.rpc,
     required this.root,
     this.projectId,
+    this.embedded = false,
   });
 
   final ExplorerRpc rpc;
@@ -36,6 +39,9 @@ class ExplorerScreen extends StatefulWidget {
   /// cannot name a directory for it to mutate. Absent means the Changes tab lists and diffs but offers no
   /// staging — an honest degradation for an embedded or older caller.
   final String? projectId;
+
+  /// When true, no Scaffold/AppBar — the run screen keeps its composer dock below.
+  final bool embedded;
 
   @override
   State<ExplorerScreen> createState() => _ExplorerScreenState();
@@ -145,24 +151,39 @@ class _ExplorerScreenState extends State<ExplorerScreen> with SingleTickerProvid
     final l10n = context.l10n;
     final colors = CoderTheme.of(context);
     final atRoot = _path == widget.root;
+    final tabs = TabBar(
+      controller: _tabs,
+      tabs: [
+        Tab(text: l10n.explorerFiles),
+        Tab(text: l10n.explorerChanges),
+      ],
+    );
+    final body = TabBarView(
+      controller: _tabs,
+      children: [
+        _filesBody(colors, atRoot),
+        _changesBody(colors),
+      ],
+    );
+    if (widget.embedded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Material(
+            color: Theme.of(context).appBarTheme.backgroundColor ??
+                Theme.of(context).colorScheme.surface,
+            child: tabs,
+          ),
+          Expanded(child: body),
+        ],
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.explorerTitle),
-        bottom: TabBar(
-          controller: _tabs,
-          tabs: [
-            Tab(text: l10n.explorerFiles),
-            Tab(text: l10n.explorerChanges),
-          ],
-        ),
+        bottom: tabs,
       ),
-      body: TabBarView(
-        controller: _tabs,
-        children: [
-          _filesBody(colors, atRoot),
-          _changesBody(colors),
-        ],
-      ),
+      body: body,
     );
   }
 

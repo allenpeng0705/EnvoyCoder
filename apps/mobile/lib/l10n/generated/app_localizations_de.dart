@@ -368,7 +368,27 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get settingsApprovalsDetail =>
-      'Bei Envoy Harness: wenn an, vor Befehlen und Änderungen außerhalb des Projekts fragen — nicht bei gewöhnlichen Änderungen im Projekt. Aus heißt auf diesem Rechner nie fragen, auch unter Projektänderung. Voller Zugriff fragt ebenfalls nie.';
+      'Wenn an, fragt der Agent vor riskanten Schritten. Aus heißt auf diesem Rechner nicht fragen — über die Agentenrichtlinie, wenn es eine gibt, sonst über den unbeaufsichtigten Modus aus dem Katalog.';
+
+  @override
+  String settingsApprovalsReaches(String agent) {
+    return 'Wird $agent bei jedem Lauf als eigene Richtlinie übergeben, damit das Nachfragen dort geschieht, wo die Arbeit geschieht.';
+  }
+
+  @override
+  String settingsApprovalsReachesMode(String agent, String mode) {
+    return 'Aus startet $agent in „$mode“, damit nicht nachgefragt wird. An behält den Modus, den du für die Aufgabe wählst.';
+  }
+
+  @override
+  String settingsApprovalsUnsupported(String agent) {
+    return 'EnvoyDev kann das für $agent nicht ändern: Dieser Agent kann nichts entgegennehmen und fragt nach eigenen Regeln. Wähle einen Agenten, dem EnvoyDev eine Richtlinie oder einen unbeaufsichtigten Modus übergeben kann, oder beantworte die Rückfragen von $agent selbst.';
+  }
+
+  @override
+  String settingsApprovalsUnknown(String agent) {
+    return 'EnvoyDev weiß noch nicht, was $agent akzeptiert; deshalb bleibt das aus, statt eine Wahl zu speichern, die niemand liest.';
+  }
 
   @override
   String get settingsTranscripts =>
@@ -753,10 +773,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get runYou => 'Du';
 
   @override
-  String get runYouSteered => 'Du · in den Durchgang gesprungen';
+  String get runYouSteered => 'Sofort gesendet';
 
   @override
-  String get runYouQueued => 'Du · wartete auf den Durchgang';
+  String get runYouQueued => 'In Warteschlange';
 
   @override
   String get runThoughtTitle => 'Wie es darüber nachgedacht hat';
@@ -837,7 +857,8 @@ class AppLocalizationsDe extends AppLocalizations {
   String get runTranscriptLoading => 'Dieser Zug wird geladen…';
 
   @override
-  String get runComposerQueueStatus => 'Wird gesendet, wenn dieser Zug endet';
+  String get runComposerQueueStatus =>
+      'Wird gesendet, wenn der Agent diese Antwort beendet';
 
   @override
   String get runToolDetails => 'Details';
@@ -854,8 +875,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get runNeedsAnswer => 'Der Agent braucht deine Antwort';
 
   @override
-  String get runApprovalStopAsking =>
-      'Erlauben und auf diesem Gerät nicht mehr fragen';
+  String get runApprovalStopAsking => 'Nicht mehr fragen';
 
   @override
   String get runApprovalAnswerBelow => 'Antworte unten im Eingabefeld';

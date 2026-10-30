@@ -344,7 +344,27 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsApprovalsDetail =>
-      '对 Envoy Harness：开启时，命令和项目外的更改会询问，项目内的普通编辑不会。关闭表示这台机器上从不询问，即使在「项目更改」模式下也是如此。「完全访问」也从不询问。';
+      '开启时，智能体在有风险的步骤前会询问。关闭表示本机不再询问——有策略的走策略，目录里标明无人值守模式的走该模式。';
+
+  @override
+  String settingsApprovalsReaches(String agent) {
+    return '每次运行都会作为 $agent 自己的策略交给它，因此询问发生在真正干活的地方。';
+  }
+
+  @override
+  String settingsApprovalsReachesMode(String agent, String mode) {
+    return '关闭时，$agent 会以「$mode」启动，从而不再停下询问。开启时保留你为任务选择的模式。';
+  }
+
+  @override
+  String settingsApprovalsUnsupported(String agent) {
+    return 'EnvoyDev 无法为 $agent 更改这一项：它没有办法接收这项设置，会按自己的方式询问。请选择一个 EnvoyDev 能把策略或无人值守模式交给它的智能体，或者直接回答 $agent 自己的询问。';
+  }
+
+  @override
+  String settingsApprovalsUnknown(String agent) {
+    return 'EnvoyDev 还不知道 $agent 接受什么，因此这一项保持关闭，而不是存下一个没人读取的选择。';
+  }
 
   @override
   String get settingsTranscripts => '任务结束后保留对话记录';
@@ -708,10 +728,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get runYou => '你';
 
   @override
-  String get runYouSteered => '你 · 已切入本轮';
+  String get runYouSteered => '已立即发送';
 
   @override
-  String get runYouQueued => '你 · 已排队等待本轮';
+  String get runYouQueued => '已排队';
 
   @override
   String get runThoughtTitle => '它是如何思考的';
@@ -791,7 +811,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get runTranscriptLoading => '正在加载本轮…';
 
   @override
-  String get runComposerQueueStatus => '本轮结束后发送';
+  String get runComposerQueueStatus => '智能体完成本次回复后发送';
 
   @override
   String get runToolDetails => '详情';
@@ -808,7 +828,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get runNeedsAnswer => '智能体需要你的答复';
 
   @override
-  String get runApprovalStopAsking => '允许，并在本机不再询问';
+  String get runApprovalStopAsking => '不再询问';
 
   @override
   String get runApprovalAnswerBelow => '请在下方输入区回答';

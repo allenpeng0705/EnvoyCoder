@@ -348,7 +348,27 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsApprovalsDetail =>
-      'Envoy Harness では、オンのときコマンドとプロジェクト外の変更の前に確認し、通常のプロジェクト内の編集では確認しません。オフにすると、プロジェクト変更モードでもこのマシンでは確認しません。フルアクセスも確認しません。';
+      'オンのとき、エージェントはリスクのある操作の前に確認します。オフはこのマシンでは確認しないという意味で、ポリシーがあるエージェントにはポリシーで、カタログに無人モードがある場合はそのモードで伝えます。';
+
+  @override
+  String settingsApprovalsReaches(String agent) {
+    return '実行のたびに $agent 自身のポリシーとして渡されるので、確認は実際に作業が行われる場所で行われます。';
+  }
+
+  @override
+  String settingsApprovalsReachesMode(String agent, String mode) {
+    return 'オフにすると $agent は「$mode」で始まり、確認のために止まりません。オンではタスクで選んだモードを保ちます。';
+  }
+
+  @override
+  String settingsApprovalsUnsupported(String agent) {
+    return 'EnvoyDev は $agent に対してこれを変更できません。このエージェントには設定を渡す方法がなく、独自の基準で確認します。EnvoyDev がポリシーまたは無人モードを渡せるエージェントを選ぶか、$agent 自身の確認に答えてください。';
+  }
+
+  @override
+  String settingsApprovalsUnknown(String agent) {
+    return 'EnvoyDev は $agent が何を受け付けるかまだ把握していないため、誰も読まない選択を保存せず、この項目はオフのままにします。';
+  }
 
   @override
   String get settingsTranscripts => 'タスク終了後も記録を残す';
@@ -716,10 +736,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get runYou => 'あなた';
 
   @override
-  String get runYouSteered => 'あなた · ターンに割り込みました';
+  String get runYouSteered => 'すぐに送信';
 
   @override
-  String get runYouQueued => 'あなた · ターンを待っています';
+  String get runYouQueued => '待機中';
 
   @override
   String get runThoughtTitle => 'どのように考えたか';
@@ -799,7 +819,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get runTranscriptLoading => 'このターンを読み込み中…';
 
   @override
-  String get runComposerQueueStatus => 'このターンが終わったら送信します';
+  String get runComposerQueueStatus => 'エージェントがこの返答を終えたら送信します';
 
   @override
   String get runToolDetails => '詳細';
@@ -816,7 +836,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get runNeedsAnswer => 'エージェントがあなたの回答を待っています';
 
   @override
-  String get runApprovalStopAsking => '許可し、このマシンでは今後確認しない';
+  String get runApprovalStopAsking => '今後確認しない';
 
   @override
   String get runApprovalAnswerBelow => '下の入力欄で回答してください';

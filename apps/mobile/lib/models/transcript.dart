@@ -185,6 +185,31 @@ class Transcript {
     _breakAnonymous();
   }
 
+  /// Show the user's words immediately — the wire's `run.message` later replaces this row.
+  void echoUser(String text, {String delivered = 'steered'}) {
+    if (text.trim().isEmpty) return;
+    _breakAnonymous();
+    entries.add(
+      TranscriptEntry(
+        kind: 'user',
+        id: 'local:${DateTime.now().microsecondsSinceEpoch}',
+        text: text,
+        delivered: delivered,
+      ),
+    );
+  }
+
+  /// Drop a trailing local echo (send failed before the daemon recorded it).
+  void dropLocalEcho(String text) {
+    for (var i = entries.length - 1; i >= 0; i--) {
+      final row = entries[i];
+      if (row.kind == 'user' && row.id.startsWith('local:') && row.text == text) {
+        entries.removeAt(i);
+        return;
+      }
+    }
+  }
+
   /// True once a sequence number has been seen to be missing.
   bool hasGap = false;
 
@@ -223,12 +248,29 @@ class Transcript {
     switch (event['kind'] as String? ?? '') {
       case 'run.message':
         _breakAnonymous();
+        final text = (event['text'] as String?) ?? '';
+        final delivered = event['delivered'] as String?;
+        // Promote a local echo (composer already showed the bubble) instead of duplicating.
+        for (var i = entries.length - 1; i >= 0; i--) {
+          final row = entries[i];
+          if (row.kind != 'user') continue;
+          if (row.id.startsWith('local:') && row.text == text) {
+            entries[i] = TranscriptEntry(
+              kind: 'user',
+              id: 'u${seq ?? entries.length}',
+              text: text,
+              delivered: delivered ?? row.delivered,
+            );
+            return;
+          }
+          break;
+        }
         entries.add(
           TranscriptEntry(
             kind: 'user',
             id: 'u${seq ?? entries.length}',
-            text: (event['text'] as String?) ?? '',
-            delivered: event['delivered'] as String?,
+            text: text,
+            delivered: delivered,
           ),
         );
         return;

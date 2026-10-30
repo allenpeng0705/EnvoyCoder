@@ -676,6 +676,7 @@ export const TaskSchema = z
     thinkingLevel: z.string().min(1).optional(),
     fastMode: z.boolean().optional(),
     planMode: z.boolean().optional(),
+    skipPlanGate: z.boolean().optional(),
     extraArgs: z.string().optional(),
     status: TaskStatusSchema,
     createdAt: z.string(),
@@ -2913,6 +2914,8 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
         fastMode: z.boolean().optional(),
         /** Codex Plan for the next run. Absent leaves the stored value alone. */
         planMode: z.boolean().optional(),
+        /** Skip the large-task “plan carefully?” gate for this task. Absent leaves the stored value alone. */
+        skipPlanGate: z.boolean().optional(),
         extraArgs: z.string().optional(),
       })
       .strict(),

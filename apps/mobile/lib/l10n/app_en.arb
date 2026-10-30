@@ -448,9 +448,48 @@
   "@settingsApprovals": {
     "description": "settings.approvals — The approval switch."
   },
-  "settingsApprovalsDetail": "On Envoy Harness: when on, ask before commands and changes outside the project — not for ordinary in-project edits. Off means never ask for this machine, even under Project change. Full access also never asks.",
+  "settingsApprovalsDetail": "When on, the agent asks before risky steps. Off means don’t ask on this machine — via the agent’s policy when it has one, or its unattended mode when that is what the catalogue publishes.",
   "@settingsApprovalsDetail": {
     "description": "settings.approvals.detail — Explains the approvals switch."
+  },
+  "settingsApprovalsReaches": "Handed to {agent} as its own policy for every run, so the asking happens where the work does.",
+  "@settingsApprovalsReaches": {
+    "description": "settings.approvals.reaches — Policy wire note.",
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsApprovalsReachesMode": "Off starts {agent} in “{mode}” so it does not stop to ask. On keeps the mode you pick for the task.",
+  "@settingsApprovalsReachesMode": {
+    "description": "settings.approvals.reachesMode — Unattended mode wire note.",
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      },
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsApprovalsUnsupported": "EnvoyDev cannot change this for {agent}: it has no way to be told, and asks on its own terms. Pick an agent EnvoyDev can hand a policy or unattended mode to, or answer {agent}'s own prompts.",
+  "@settingsApprovalsUnsupported": {
+    "description": "settings.approvals.unsupported — No deliverable wire.",
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsApprovalsUnknown": "EnvoyDev has not been told what {agent} accepts yet, so this stays off rather than storing a choice nothing reads.",
+  "@settingsApprovalsUnknown": {
+    "description": "settings.approvals.unknown — Agent capabilities unknown.",
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
   },
   "settingsTranscripts": "Keep transcripts after a task ends",
   "@settingsTranscripts": {
@@ -947,11 +986,11 @@
   "@runYou": {
     "description": "run.you — Marks the user's own message."
   },
-  "runYouSteered": "You · joined the turn",
+  "runYouSteered": "Sent now",
   "@runYouSteered": {
     "description": "run.youSteered — A message that joined the live turn."
   },
-  "runYouQueued": "You · waited for the turn",
+  "runYouQueued": "Queued",
   "@runYouQueued": {
     "description": "run.youQueued — A message that waited for the turn."
   },
@@ -1062,7 +1101,7 @@
   "@runTranscriptLoading": {
     "description": "task.transcript.loading — Empty list while a live run has no events yet."
   },
-  "runComposerQueueStatus": "Will send when this turn finishes",
+  "runComposerQueueStatus": "Will send when the agent finishes this reply",
   "@runComposerQueueStatus": {
     "description": "task.composer.queueStatus — Quiet status while send queues."
   },
@@ -1088,7 +1127,7 @@
   "@runNeedsAnswer": {
     "description": "run.needsAnswer — An approval that is still open."
   },
-  "runApprovalStopAsking": "Allow and don't ask again on this machine",
+  "runApprovalStopAsking": "Don't ask again",
   "@runApprovalStopAsking": {
     "description": "On an Envoy Harness approval: allow this step and turn off Ask before risky steps."
   },

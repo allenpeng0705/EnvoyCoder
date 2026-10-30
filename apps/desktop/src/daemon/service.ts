@@ -622,6 +622,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         thinkingLevel?: string;
         fastMode?: boolean;
         planMode?: boolean;
+        skipPlanGate?: boolean;
         extraArgs?: string;
       };
 

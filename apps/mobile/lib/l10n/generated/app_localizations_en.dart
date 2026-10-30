@@ -362,7 +362,27 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsApprovalsDetail =>
-      'On Envoy Harness: when on, ask before commands and changes outside the project — not for ordinary in-project edits. Off means never ask for this machine, even under Project change. Full access also never asks.';
+      'When on, the agent asks before risky steps. Off means don’t ask on this machine — via the agent’s policy when it has one, or its unattended mode when that is what the catalogue publishes.';
+
+  @override
+  String settingsApprovalsReaches(String agent) {
+    return 'Handed to $agent as its own policy for every run, so the asking happens where the work does.';
+  }
+
+  @override
+  String settingsApprovalsReachesMode(String agent, String mode) {
+    return 'Off starts $agent in “$mode” so it does not stop to ask. On keeps the mode you pick for the task.';
+  }
+
+  @override
+  String settingsApprovalsUnsupported(String agent) {
+    return 'EnvoyDev cannot change this for $agent: it has no way to be told, and asks on its own terms. Pick an agent EnvoyDev can hand a policy or unattended mode to, or answer $agent\'s own prompts.';
+  }
+
+  @override
+  String settingsApprovalsUnknown(String agent) {
+    return 'EnvoyDev has not been told what $agent accepts yet, so this stays off rather than storing a choice nothing reads.';
+  }
 
   @override
   String get settingsTranscripts => 'Keep transcripts after a task ends';
@@ -738,10 +758,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get runYou => 'You';
 
   @override
-  String get runYouSteered => 'You · joined the turn';
+  String get runYouSteered => 'Sent now';
 
   @override
-  String get runYouQueued => 'You · waited for the turn';
+  String get runYouQueued => 'Queued';
 
   @override
   String get runThoughtTitle => 'Thought';
@@ -821,7 +841,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get runTranscriptLoading => 'Loading this turn…';
 
   @override
-  String get runComposerQueueStatus => 'Will send when this turn finishes';
+  String get runComposerQueueStatus =>
+      'Will send when the agent finishes this reply';
 
   @override
   String get runToolDetails => 'Details';
@@ -838,8 +859,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get runNeedsAnswer => 'The agent needs your answer';
 
   @override
-  String get runApprovalStopAsking =>
-      'Allow and don\'t ask again on this machine';
+  String get runApprovalStopAsking => 'Don\'t ask again';
 
   @override
   String get runApprovalAnswerBelow => 'Answer in the composer below';

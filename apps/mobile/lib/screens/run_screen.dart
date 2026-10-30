@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../l10n/l10n.dart';
+import '../models/asking_control.dart';
 import '../models/composer_attachment.dart';
 import '../models/harness.dart';
 import '../models/run_transcript_view.dart';
@@ -67,6 +68,8 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   bool _loading = true;
   bool _cancelling = false;
   bool _archiving = false;
+  /// Files/Changes pane above the composer — not a pushed route, so the field stays.
+  bool _explorerOpen = false;
   String _runId = '';
   String? _error;
   String? _taskId;
@@ -433,8 +436,8 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   bool get _canStopAsking {
     if (!_requireApproval) return false;
     final id = _runHarnessId ?? _selection.harnessId;
-    final harness = harnessById(_harnesses, id);
-    return harness?.approvalPolicy == true;
+    // Catalogue policy wire only — matches the daemon and the window.
+    return id != null && askingControl(id) == AskingControl.policy;
   }
 
   /// Composer takeover when pending and the agent supports approvals — or when
@@ -483,11 +486,15 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     if (turn.prompt.isEmpty || !_canSend) return;
     final previousText = _composer.text;
     final previousAttachments = List<ComposerAttachment>.of(_attachments);
+    // Echo into the transcript before the wire answers — otherwise the composer
+    // clears and the bubble only appears if/when `run.message` arrives.
+    _transcript.echoUser(turn.prompt, delivered: _live ? 'queued' : 'steered');
     _composer.clear();
     setState(() {
       _attachments = [];
       _attachNotice = null;
     });
+    _scrollToEnd();
     try {
       if (_live) {
         await widget.client.call(
@@ -503,7 +510,11 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
         return;
       }
       final taskId = _taskId;
-      if (taskId == null) return;
+      if (taskId == null) {
+        _transcript.dropLocalEcho(turn.prompt);
+        if (mounted) setState(() {});
+        return;
+      }
       // Do **not** force `resume: true`. Desktop only resumes when the user
       // chooses Resume; mobile used to always ask, which calls `session/resume`
       // against envoy-harness. That method was missing on shipped builds, so
@@ -541,6 +552,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
       await _loadTail();
     } catch (_) {
       if (!mounted) return;
+      _transcript.dropLocalEcho(turn.prompt);
       _composer.text = previousText;
       setState(() => _attachments = previousAttachments);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -564,25 +576,15 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     );
   }
 
-  Future<void> _openExplorer() async {
+  void _toggleExplorer() {
     final cwd = _cwd;
-    if (cwd == null || cwd.isEmpty) {
+    if (!_explorerOpen && (cwd == null || cwd.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.l10n.runNoFolder)),
       );
       return;
     }
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ExplorerScreen(
-          rpc: (method, [params = const {}]) => widget.client.call(method, params),
-          root: cwd,
-          // The git writes act on the **project**, never on a path: the daemon resolves the folder itself, so
-          // a client cannot name a directory for it to mutate. The id comes from the task the screen is showing.
-          projectId: _projectId,
-        ),
-      ),
-    );
+    setState(() => _explorerOpen = !_explorerOpen);
   }
 
   Future<void> _cancel() async {
@@ -667,16 +669,28 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     final showEmptyHero = emptyChrome.showHero;
     final showTranscriptLoading = emptyChrome.showLoading;
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_explorerOpen,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _explorerOpen) setState(() => _explorerOpen = false);
+      },
+      child: Scaffold(
       appBar: AppBar(
-        title: Text(widget.title),
+        title: Text(_explorerOpen ? l10n.explorerTitle : widget.title),
+        leading: _explorerOpen
+            ? IconButton(
+                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+                onPressed: () => setState(() => _explorerOpen = false),
+                icon: const Icon(Icons.arrow_back),
+              )
+            : null,
         actions: [
-          if (_live)
+          if (_live && !_explorerOpen)
             TextButton(
               onPressed: _cancelling ? null : () => unawaited(_cancel()),
               child: Text(_cancelling ? l10n.runStopping : l10n.runStop),
             ),
-          if (_live)
+          if (_live && !_explorerOpen)
             Padding(
               padding: const EdgeInsets.only(right: 12),
               child: Center(
@@ -685,13 +699,14 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
             ),
           IconButton(
             tooltip: l10n.runToggleExplorer,
-            onPressed: () => unawaited(_openExplorer()),
-            icon: const Icon(Icons.view_sidebar_outlined),
+            onPressed: _toggleExplorer,
+            isSelected: _explorerOpen,
+            icon: Icon(_explorerOpen ? Icons.view_sidebar : Icons.view_sidebar_outlined),
           ),
           // Only when this run belongs to a task that exists in the list. A run opened without a
           // task id (an older daemon's snapshot) has nothing to archive, and showing the button
           // would offer an action that cannot be carried out.
-          if (_taskId != null && _taskId!.isNotEmpty)
+          if (_taskId != null && _taskId!.isNotEmpty && !_explorerOpen)
             Semantics(
               label: l10n.runRemoveTask,
               button: true,
@@ -710,7 +725,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
               padding: const EdgeInsets.all(16),
               child: Text(_error!, style: TextStyle(color: colors.statusDanger)),
             ),
-          if (_transcript.hasGap)
+          if (_transcript.hasGap && !_explorerOpen)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
               child: Text(
@@ -719,7 +734,14 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
               ),
             ),
           Expanded(
-            child: _loading
+            child: _explorerOpen
+                ? ExplorerScreen(
+                    rpc: (method, [params = const {}]) => widget.client.call(method, params),
+                    root: _cwd!,
+                    projectId: _projectId,
+                    embedded: true,
+                  )
+                : _loading
                 ? const Center(child: CircularProgressIndicator())
                 : showEmptyHero
                     ? _EmptyTaskHero(
@@ -931,6 +953,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
           ),
         ],
       ),
+    ),
     );
   }
 }

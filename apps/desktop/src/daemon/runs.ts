@@ -40,7 +40,8 @@
  *
  * Both are recorded in the transcript as `run.message` with a `delivered` field, so "did it join or
  * wait?" is answerable afterwards — the reason the distinction is a control rather than a hidden
- * policy (`docs/envoydev-ui.md` §5).
+ * policy (`docs/envoydev-ui.md` §5). The **opening** prompt of `startRun` is recorded the same way
+ * (`delivered: "steered"`) so the transcript shows what the human asked, not only the agent's reply.
  *
  * ## One run per task
  *
@@ -187,6 +188,21 @@ const EVENT_BUFFER_LIMIT = 2_000;
  */
 const TRANSCRIPT_LIMIT_BYTES = 8 * 1024 * 1024;
 
+/**
+ * Same-session re-prompts after the harness returns `max_iterations`.
+ * Codex/Claude keep going on large tasks; two host continues after the
+ * harness's own phases is enough to finish a summary without unbounded cost.
+ */
+const MAX_HOST_CONTINUES = 2;
+
+/** Fixed steer when the host continues a budget-exhausted turn. */
+const HOST_CONTINUE_PROMPT =
+  "Continue from where you left off — do not restart exploration. Finish open " +
+  "plan items; prefer the task tool for independent remaining slices; then " +
+  "deliver a complete answer from evidence gathered so far.";
+
+/** Compact before a host continue when context fill is at least this fraction. */
+const HOST_CONTINUE_COMPACT_RATIO = 0.85;
 
 /** An event before the daemon stamps it with its run, task, time and sequence. */
 type RunEventInput = DistributiveOmit<RunEvent, "runId" | "taskId" | "at" | "seq">;
@@ -253,6 +269,9 @@ interface LiveRun {
    * Added/removed stay 0 when we only know the path; the UI headline is the file count.
    */
   touchedFiles: Map<string, { added: number; removed: number }>;
+  /** Last `run.usage` pair — used to decide whether to compact before a host continue. */
+  lastContextUsed: number | undefined;
+  lastContextSize: number | undefined;
   /**
    * Resolves when the run has finished and every write it makes has been made.
    *
@@ -555,6 +574,8 @@ export class RunManager {
       stderr: [],
       settled: false,
       touchedFiles: new Map(),
+      lastContextUsed: undefined,
+      lastContextSize: undefined,
       done,
       markDone,
     };
@@ -580,6 +601,16 @@ export class RunManager {
         toId: handoff.toId,
         role: participant.role,
         ...(handoff.brief !== undefined && handoff.brief !== "" ? { brief: handoff.brief } : {}),
+      });
+    }
+    // Echo the opening prompt into the transcript. Follow-ups go through `send()` which records
+    // `run.message`; without this, a startRun's words reach the agent but never the chat UI.
+    if (input.prompt.trim() !== "") {
+      await this.record(live, {
+        kind: "run.message",
+        text: input.prompt,
+        mode: "steer",
+        delivered: "steered",
       });
     }
 
@@ -623,6 +654,8 @@ export class RunManager {
       stderr: [],
       settled: true,
       touchedFiles: new Map(),
+      lastContextUsed: undefined,
+      lastContextSize: undefined,
       done: Promise.resolve(),
       markDone: () => undefined,
     });
@@ -731,6 +764,8 @@ export class RunManager {
 
       let prompt = firstPrompt;
       let images = firstImages;
+      /** Same-session re-prompts after harness `max_iterations` (Codex-style keep-going). */
+      let hostContinues = 0;
       for (;;) {
         live.turn = client.prompt(prompt, images);
         const result = await live.turn;
@@ -750,6 +785,30 @@ export class RunManager {
           prompt = next.text;
           images = next.images;
           continue;
+        }
+        // Harness spent its internal phases — keep the ACP session and ask it to finish, instead of
+        // ending the run and hoping the user narrows the prompt (Codex/Claude keep going).
+        if (
+          result.stopReason === "max_iterations" &&
+          hostContinues < MAX_HOST_CONTINUES
+        ) {
+          hostContinues++;
+          await this.record(live, {
+            kind: "run.status",
+            status: "running",
+            note: `Continuing after iteration budget (${hostContinues}/${MAX_HOST_CONTINUES})…`,
+          });
+          await this.compactBeforeContinue(live, client);
+          prompt = HOST_CONTINUE_PROMPT;
+          images = undefined;
+          continue;
+        }
+        if (result.stopReason === "max_iterations") {
+          await this.record(live, {
+            kind: "run.status",
+            status: "failed",
+            note: "The agent used its full iteration budget without finishing.",
+          });
         }
         await this.finish(live, statusForStopReason(result.stopReason), null);
         return;
@@ -864,6 +923,8 @@ export class RunManager {
         return;
       }
       case "usage_update": {
+        if (typeof update.used === "number") live.lastContextUsed = update.used;
+        if (typeof update.size === "number") live.lastContextSize = update.size;
         void this.record(live, {
           kind: "run.usage",
           ...(typeof update.used === "number" ? { contextUsed: update.used } : {}),
@@ -1028,11 +1089,15 @@ export class RunManager {
     const prompt = typeof request.prompt === "string" ? request.prompt.trim() : "";
     // Headline vs body — never concatenate a keyed hint onto the body: localizeText would keep the
     // key and drop the plan. The pick/type hint is selection-keyed and the window renders it.
-    const { question: head, body } = splitAskPrompt(prompt);
+    const { question: head, body, kind } = splitAskPrompt(prompt);
     const question =
-      head !== ""
-        ? head
-        : keyed("approval.question.ask", "The agent asked a question.");
+      kind === "plan-review"
+        ? head !== ""
+          ? head
+          : keyed("approval.question.planReview", "Implement this plan?")
+        : head !== ""
+          ? head
+          : keyed("approval.question.ask", "The agent asked a question.");
     return new Promise<AcpUserQuestionChoice | null>((resolve) => {
       const settle = (choice: string | AcpUserQuestionChoice | null): void => {
         if (live.approval?.requestId !== requestId) return;
@@ -1099,11 +1164,46 @@ export class RunManager {
   /* ────────────────────────────── control ────────────────────────────── */
 
   /**
+   * Compact the ACP session when context is full (or unknown) before a host continue.
+   *
+   * Agents without `session/compact` refuse — that is a skip, not a failed run.
+   */
+  private async compactBeforeContinue(
+    live: LiveRun,
+    client: { compact: (options?: { keep?: number }) => Promise<void> },
+  ): Promise<void> {
+    const used = live.lastContextUsed;
+    const size = live.lastContextSize;
+    const ratio =
+      used !== undefined && size !== undefined && size > 0 ? used / size : undefined;
+    // Unknown usage after a long tool run still warrants a compact: better a shorter
+    // transcript than another budget cliff. Known low fill skips the round trip.
+    if (ratio !== undefined && ratio < HOST_CONTINUE_COMPACT_RATIO) return;
+    try {
+      await client.compact({ keep: 8 });
+      await this.record(live, {
+        kind: "run.status",
+        status: "running",
+        note:
+          ratio !== undefined
+            ? `Compacted context (${Math.round(ratio * 100)}% full) before continuing.`
+            : "Compacted context before continuing.",
+      });
+    } catch {
+      // Method missing or agent refusal — continue without compact.
+    }
+  }
+
+  /**
    * Say something to a run that is already going.
    *
    * `queue` waits for the turn in flight; `steer` interrupts it. See the module doc for why those
    * are the two things the protocol can actually do — and note that both are *delivered*, so neither
    * mode silently drops a message.
+   *
+   * While an approval or question is open, **queue still lands** (Codex-style async ask): the words
+   * wait until the card is answered, then become the next prompt. Steer is refused — interrupting
+   * mid-approval would race the agent's permission waiter.
    */
   async send(
     runId: string,
@@ -1119,12 +1219,10 @@ export class RunManager {
         ref("error.runFinished"),
       );
     }
-    if (live.approval) {
-      // Queueing behind an approval prompt strands the message: the prompt must be answered before
-      // anything else can happen, and the user would be waiting on words the agent never received.
+    if (live.approval && mode === "steer") {
       throw coderError(
         ENVOYDEV_ERRORS.harnessFailed,
-        "The agent is waiting for an answer before it can go on. Answer that first — a message sent now would sit behind it.",
+        "The agent is waiting for an answer before it can go on. Answer that first — interrupting now would race the prompt it is blocked on.",
         ref("error.approvalPending"),
       );
     }
@@ -1453,6 +1551,8 @@ function statusForStopReason(stopReason: string): TaskStatus {
     case "cancelled":
       return "cancelled";
     case "refusal":
+    case "max_iterations":
+      // Budget exhaustion after the harness's continuation phases — unfinished, not "Finished."
       return "failed";
     default:
       // `end_turn` and `max_tokens` both mean the turn is over and nothing went wrong. `max_tokens`

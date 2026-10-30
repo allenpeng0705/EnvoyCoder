@@ -92,10 +92,11 @@ class _UserBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final delivered = entry.delivered;
+    // Same composition as the window: "You · Sent now" / "You · Queued".
     final meta = delivered == 'steered'
-        ? l10n.runYouSteered
+        ? '${l10n.runYou} · ${l10n.runYouSteered}'
         : delivered == 'queued'
-            ? l10n.runYouQueued
+            ? '${l10n.runYou} · ${l10n.runYouQueued}'
             : l10n.runYou;
     return Align(
       alignment: Alignment.centerRight,
@@ -129,8 +130,8 @@ class _UserBubble extends StatelessWidget {
 
 /// Steps disclosure wrapping thought / tool / interim assistant rows.
 ///
-/// Matches desktop: while [live], auto-expand and show a multi-line auto-scrolling
-/// stream; when the turn settles, collapse so the hero answer stays the focus.
+/// Matches desktop: stays **closed** by default so the chat is user + answer
+/// history. Expand for the live Working… stream, tools, and nested thoughts.
 class TranscriptStepsBlock extends StatefulWidget {
   const TranscriptStepsBlock({
     super.key,
@@ -158,7 +159,7 @@ class _TranscriptStepsBlockState extends State<TranscriptStepsBlock>
     with AutomaticKeepAliveClientMixin {
   final ScrollController _streamScroll = ScrollController();
 
-  /// Bumped on live edges so [ExpansionTile] remounts open (Working…) or closed (settled).
+  /// Bumped on live edges so a remount resets to collapsed (chat stays the focus).
   var _liveEpoch = 0;
 
   @override
@@ -215,9 +216,9 @@ class _TranscriptStepsBlockState extends State<TranscriptStepsBlock>
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
-            // Epoch remounts on live edges so Working… opens and settles closed.
+            // Epoch remounts on live edges; always start collapsed so history stays readable.
             key: ValueKey<String>('${widget.storageId}-$_liveEpoch'),
-            initiallyExpanded: live,
+            initiallyExpanded: false,
             tilePadding: const EdgeInsets.symmetric(horizontal: 12),
             childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
             title: Row(
@@ -245,12 +246,12 @@ class _TranscriptStepsBlockState extends State<TranscriptStepsBlock>
                   colors: widget.colors,
                   scrollController: _streamScroll,
                 ),
-              for (final entry in widget.entries) ...[
+              for (final entry in _coalesceThoughts(widget.entries)) ...[
                 // Live stream already shows thought / interim assistant text.
                 if (live && (entry.kind == 'thought' || entry.kind == 'assistant'))
                   const SizedBox.shrink()
                 else if (entry.kind == 'thought')
-                  _FlatThought(text: entry.text, colors: widget.colors)
+                  _ThoughtTile(text: entry.text, colors: widget.colors)
                 else if (entry.kind == 'assistant')
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
@@ -342,40 +343,7 @@ class _LiveStreamPane extends StatelessWidget {
   }
 }
 
-/// Thought body without a nested chevron — Steps already collapses the stretch.
-class _FlatThought extends StatelessWidget {
-  const _FlatThought({required this.text, required this.colors});
-
-  final String text;
-  final CoderColors colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            context.l10n.runThoughtTitle,
-            style: TextStyle(color: colors.foregroundMuted, fontSize: 12),
-          ),
-          const SizedBox(height: 4),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 120),
-            child: SingleChildScrollView(
-              child: Text(
-                text,
-                style: TextStyle(color: colors.foregroundMuted, fontSize: 13, height: 1.4),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
+/// Nested Thought disclosure — closed until the reader asks (desktop twin).
 class _ThoughtTile extends StatelessWidget {
   const _ThoughtTile({required this.text, required this.colors});
 
@@ -387,6 +355,7 @@ class _ThoughtTile extends StatelessWidget {
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
+        initiallyExpanded: false,
         tilePadding: EdgeInsets.zero,
         childrenPadding: const EdgeInsets.only(bottom: 4),
         title: Text(
@@ -405,6 +374,25 @@ class _ThoughtTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Consecutive thought chunks → one disclosure (desktop `coalesceStepsEntries`).
+List<TranscriptEntry> _coalesceThoughts(List<TranscriptEntry> entries) {
+  final out = <TranscriptEntry>[];
+  for (final entry in entries) {
+    final prev = out.isEmpty ? null : out.last;
+    if (entry.kind == 'thought' && prev?.kind == 'thought') {
+      final gap = prev!.text.endsWith('\n') || entry.text.startsWith('\n') ? '' : '\n\n';
+      out[out.length - 1] = TranscriptEntry(
+        kind: 'thought',
+        id: prev.id,
+        text: '${prev.text}$gap${entry.text}',
+      );
+      continue;
+    }
+    out.add(entry);
+  }
+  return out;
 }
 /// Consecutive tools collapsed under a bucket summary (desktop `ToolsGroupRow` twin).
 class _ToolsGroupCard extends StatelessWidget {

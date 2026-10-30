@@ -324,4 +324,28 @@ void main() {
     // The stash is still listed: the refusal is about an attempt, not about the stash being gone.
     expect(find.text('WIP on work: 3c3a2b9 one'), findsOneWidget);
   });
+
+  testWidgets('embedded mode keeps tabs without a nested Scaffold/AppBar', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              Expanded(child: ExplorerScreen(rpc: _rpc, root: '/repo', embedded: true)),
+              // Stand-in for the run composer dock that must stay mounted.
+              SizedBox(
+                height: 48,
+                child: TextField(key: Key('composer-dock'), decoration: InputDecoration(hintText: 'composer')),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Scaffold), findsOneWidget);
+    expect(find.text('README.md'), findsOneWidget);
+    expect(find.byKey(const Key('composer-dock')), findsOneWidget);
+  });
 }

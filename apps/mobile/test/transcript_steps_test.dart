@@ -189,13 +189,16 @@ void main() {
 
     await tester.tap(find.text(en.runToolsRanOne));
     await tester.pumpAndSettle();
-    // Flat thought — body visible without a nested expand control.
+    // Nested Thought disclosure — title only until expanded.
     expect(find.text(en.runThoughtTitle), findsOneWidget);
-    expect(find.text('hmm'), findsOneWidget);
+    expect(find.text('hmm'), findsNothing);
     expect(find.text('Bash'), findsOneWidget);
+    await tester.tap(find.text(en.runThoughtTitle));
+    await tester.pumpAndSettle();
+    expect(find.text('hmm'), findsOneWidget);
   });
 
-  testWidgets('live Steps shows Working stream then collapses when settled', (tester) async {
+  testWidgets('live Steps stays collapsed; expand shows Working stream', (tester) async {
     final en = lookupAppLocalizations(const Locale('en'));
     var live = true;
     final liveEntries = [
@@ -228,14 +231,19 @@ void main() {
     );
     await tester.pump();
     expect(find.text(en.runStepsWorking), findsOneWidget);
+    // Collapsed by default — chat history stays the focus.
+    expect(find.text('planning the fix'), findsNothing);
+    expect(find.text('Read'), findsNothing);
+
+    await tester.tap(find.text(en.runStepsWorking));
+    await tester.pumpAndSettle();
     expect(find.text('planning the fix'), findsOneWidget);
     expect(find.text('Read'), findsOneWidget);
 
     setOuter(() => live = false);
     await tester.pump();
-    await tester.pump(); // post-frame collapse
+    await tester.pump(); // remount closed on settle
     expect(find.text(en.runToolsSearchedOne), findsOneWidget);
-    // Collapsed: stream pane gone; thought body not visible until reopen.
     expect(find.text('planning the fix'), findsNothing);
   });
 

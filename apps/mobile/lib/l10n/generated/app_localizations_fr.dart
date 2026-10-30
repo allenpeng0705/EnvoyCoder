@@ -370,7 +370,27 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get settingsApprovalsDetail =>
-      'Sur Envoy Harness : si activé, demander avant les commandes et les modifications hors projet — pas pour les edits ordinaires dans le projet. Désactivé signifie ne jamais demander sur cette machine, même en Modification du projet. L\'accès complet ne demande jamais non plus.';
+      'Si activé, l\'agent demande avant les étapes risquées. Désactivé signifie ne pas demander sur cette machine — via la politique de l\'agent quand il en a une, ou son mode sans surveillance publié dans le catalogue.';
+
+  @override
+  String settingsApprovalsReaches(String agent) {
+    return 'Transmis à $agent comme sa propre politique à chaque exécution, pour que la demande se fasse là où le travail se fait.';
+  }
+
+  @override
+  String settingsApprovalsReachesMode(String agent, String mode) {
+    return 'Désactivé démarre $agent en « $mode » pour qu\'il ne s\'arrête pas pour demander. Activé conserve le mode que vous choisissez pour la tâche.';
+  }
+
+  @override
+  String settingsApprovalsUnsupported(String agent) {
+    return 'EnvoyDev ne peut pas changer ceci pour $agent : il n\'a aucun moyen de le recevoir et demande selon ses propres règles. Choisissez un agent auquel EnvoyDev peut transmettre une politique ou un mode sans surveillance, ou répondez aux demandes de $agent lui-même.';
+  }
+
+  @override
+  String settingsApprovalsUnknown(String agent) {
+    return 'EnvoyDev ne sait pas encore ce que $agent accepte ; ce réglage reste donc désactivé plutôt que d\'enregistrer un choix que personne ne lit.';
+  }
 
   @override
   String get settingsTranscripts =>
@@ -752,10 +772,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get runYou => 'Vous';
 
   @override
-  String get runYouSteered => 'Vous · a rejoint le tour';
+  String get runYouSteered => 'Envoyé maintenant';
 
   @override
-  String get runYouQueued => 'Vous · a attendu le tour';
+  String get runYouQueued => 'En file';
 
   @override
   String get runThoughtTitle => 'Comment il y a réfléchi';
@@ -836,7 +856,8 @@ class AppLocalizationsFr extends AppLocalizations {
   String get runTranscriptLoading => 'Chargement de ce tour…';
 
   @override
-  String get runComposerQueueStatus => 'Envoi à la fin de ce tour';
+  String get runComposerQueueStatus =>
+      'Envoi quand l’agent aura fini cette réponse';
 
   @override
   String get runToolDetails => 'Détails';
@@ -853,8 +874,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get runNeedsAnswer => 'L\'agent attend votre réponse';
 
   @override
-  String get runApprovalStopAsking =>
-      'Autoriser et ne plus demander sur cette machine';
+  String get runApprovalStopAsking => 'Ne plus demander';
 
   @override
   String get runApprovalAnswerBelow => 'Répondez dans le champ ci-dessous';

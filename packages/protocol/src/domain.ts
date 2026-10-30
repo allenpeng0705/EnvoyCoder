@@ -525,6 +525,13 @@ export interface Task {
    * planning-only collaboration. Absent means the agent's own default (`default`).
    */
   planMode?: boolean;
+  /**
+   * Skip the “this looks large — plan carefully?” composer gate for this task.
+   *
+   * Set when the user chooses “Don’t ask again for this task”. Absent / false means the gate may
+   * still appear when the prompt looks large and the agent can plan.
+   */
+  skipPlanGate?: boolean;
   extraArgs?: string;
   status: TaskStatus;
   createdAt: string;
@@ -1198,11 +1205,15 @@ export type RunEvent =
        * It is an event rather than client-side state on purpose: Queue and Steer deliver the same
        * words differently, and the only way a user can see which happened is for the transcript
        * itself to record it — the mode is on the event, and it survives a reload, a second window
-       * and the phone.
+       * and the phone. The opening prompt of `coder.startRun` is also recorded here
+       * (`delivered: "steered"`) so the chat shows what was asked, not only the agent's reply.
        */
       text: string;
       mode: RunMode;
-      /** `queue` waits for the turn in flight; `steer` joins it. Set when the daemon delivered it. */
+      /**
+       * `queue` waits for the turn in flight; `steer` joins it — or marks the opening prompt of a
+       * new run, which starts the turn immediately (`"Sent now"` in the UI).
+       */
       delivered: "queued" | "steered";
     })
   | (RunEventBase & {

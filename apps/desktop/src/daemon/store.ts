@@ -133,6 +133,7 @@ export interface UpdateTaskInput {
   clearThinkingLevel?: boolean;
   fastMode?: boolean;
   planMode?: boolean;
+  skipPlanGate?: boolean;
   extraArgs?: string;
 }
 
@@ -553,6 +554,7 @@ export class CoderStore {
           : {}),
       ...(input.fastMode !== undefined ? { fastMode: input.fastMode } : {}),
       ...(input.planMode !== undefined ? { planMode: input.planMode } : {}),
+      ...(input.skipPlanGate !== undefined ? { skipPlanGate: input.skipPlanGate } : {}),
       ...(input.extraArgs !== undefined ? { extraArgs: input.extraArgs } : {}),
       updatedAt: this.now().toISOString(),
     };

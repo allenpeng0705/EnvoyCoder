@@ -400,9 +400,13 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       // "--acp takes no positional prompt". Flags alone are the form
       // `acp-stdio` already uses, and they stay valid after the harness
       // strips an explicit `run` as well.
+      // `--max-turns 200` pins the long-run per-phase budget even on an older
+      // harness that still defaults ACP to 50 (REPL already used 200).
       buildArgs: ({ extraArgs, model }) => [
         "--acp",
         ...modelArgs(model, "envoy-harness"),
+        "--max-turns",
+        "200",
         ...splitArgs(extraArgs),
       ],
       stream: "jsonl",
@@ -425,6 +429,8 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
         // `--provider`/`--model` flags it needs are read from the same argv parser.
         args: ({ extraArgs, model }) => [
           ...modelArgs(model, "envoy-harness"),
+          "--max-turns",
+          "200",
           ...splitArgs(extraArgs),
         ],
       },

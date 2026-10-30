@@ -155,8 +155,6 @@
   "runPlaceholderFollowUp",
   "runPlaceholderContinue",
   "runYou",
-  "runYouSteered",
-  "runYouQueued",
   "runNoLongerWaiting",
   "runYourAnswer",
   "runToolFallback",
