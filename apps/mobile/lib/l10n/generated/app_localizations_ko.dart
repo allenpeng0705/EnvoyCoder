@@ -750,6 +750,17 @@ class AppLocalizationsKo extends AppLocalizations {
   String get runApprovalAnswerBelow => '아래 입력란에서 답하세요';
 
   @override
+  String get runPlanTitle => '계획';
+
+  @override
+  String runPlanProgress(int done, int total) {
+    return '계획 · $done/$total';
+  }
+
+  @override
+  String get runPlanPriorityHigh => '높음';
+
+  @override
   String approvalQuestionTool(String tool) {
     return '에이전트가 “$tool”을(를) 실행하도록 허용할까요?';
   }

@@ -304,6 +304,20 @@ describe("one run, end to end", () => {
     ]);
   });
 
+  it("folds ACP plan_update into run.plan progress", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "plan-checklist please" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const plans = kinds(b.events, "run.plan");
+    expect(plans.length).toBeGreaterThanOrEqual(2);
+    const last = plans[plans.length - 1];
+    expect(last && last.kind === "run.plan" ? last.entries : []).toEqual([
+      { content: "Phase 0", priority: "high", status: "completed" },
+      { content: "Phase 1", status: "in_progress" },
+    ]);
+  });
+
   it("turns an agent error into a failed run rather than a rejected call", async () => {
     const b = await bench();
     // The real case this models: dsh with no API key answers `session/prompt` with a JSON-RPC error.
@@ -479,6 +493,32 @@ describe("approvals", () => {
       }),
     ).toBe(true);
     expect(b.store.settings().requireApprovalForDestructive).toBe(false);
+  });
+
+  it("settles allow even when stopAsking settings persistence fails", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "please approve this" });
+    await b.until((events) => kinds(events, "run.approval-requested").length === 1, "the approval card");
+    const requested = kinds(b.events, "run.approval-requested")[0];
+    if (requested?.kind !== "run.approval-requested") throw new Error("unreachable");
+
+    const original = b.store.updateSettings.bind(b.store);
+    b.store.updateSettings = (async () => {
+      throw new Error("disk full");
+    }) as typeof b.store.updateSettings;
+
+    expect(
+      await b.manager.answerApproval(requested.runId, requested.requestId, "allow-once", {
+        stopAsking: true,
+      }),
+    ).toBe(true);
+    // Approval must not hang when the Settings write fails — Allow already took.
+    expect(kinds(b.events, "run.approval-resolved")).toHaveLength(1);
+    expect(
+      await b.manager.answerApproval(requested.runId, requested.requestId, "allow-once"),
+    ).toBe(false);
+
+    b.store.updateSettings = original;
   });
 
   it("refuses a message while an approval is open, naming why", async () => {

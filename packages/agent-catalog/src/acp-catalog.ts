@@ -68,13 +68,10 @@
  *     this screen is entry data and is shown from the row rather than from the probe.
  */
 
-import {
-  probeRecipe,
-  type HarnessInstallHints,
-  type ProbeFinding,
-  type ProbeHarnessOptions,
-  type ProbeRecipe,
-} from "./probe.js";
+// Types only — this module is the browser-safe catalogue surface
+// (`@envoydev/agent-catalog/catalog`). A value import of `./probe.js` would
+// pull `@envoydev/platform` → `node:fs` into the Vite window and blank it.
+import type { HarnessInstallHints, ProbeRecipe } from "./probe.js";
 
 /** One ACP agent's recipe: how to start it, and where a user gets it. */
 export interface AcpAgentEntry {

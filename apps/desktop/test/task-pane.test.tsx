@@ -164,11 +164,19 @@ describe("the pane's header", () => {
   });
 
   it("teaches a new user what will happen, rather than showing a blank panel", () => {
-    renderPane([]);
+    // No run yet — the teaching hero is only for a task that has never started.
+    renderPane([], { task: { ...task, runId: undefined, status: "idle" } });
     const transcript = screen.getByTestId("transcript");
     expect(within(transcript).getByTestId("task-empty-hero")).toBeTruthy();
     expect(within(transcript).getByText("Start this task")).toBeTruthy();
     expect(within(transcript).getByText(/the agent works in/i)).toBeTruthy();
+  });
+
+  it("does not flash the empty hero while a turn's events are still loading", () => {
+    renderPane([], { task: { ...task, runId: "r-new" }, runLive: true });
+    const transcript = screen.getByTestId("transcript");
+    expect(within(transcript).queryByTestId("task-empty-hero")).toBeNull();
+    expect(within(transcript).getByTestId("task-transcript-loading")).toBeTruthy();
   });
 });
 
@@ -216,9 +224,9 @@ describe("the transcript", () => {
       ],
       { runLive: true },
     );
-    // Live chat-only turns sit inside open Steps; the fence label stays visible as source.
+    // Streaming answer stays outside Steps — the fence label is readable as source.
     const transcript = screen.getByTestId("transcript");
-    expect(within(transcript).getByTestId("transcript-steps")).toBeTruthy();
+    expect(within(transcript).queryByTestId("transcript-steps")).toBeNull();
     expect(within(transcript).getByText("mermaid")).toBeTruthy();
   });
 
@@ -232,6 +240,23 @@ describe("the transcript", () => {
     expect(within(steps).getByText(/perhaps the parser is wrong/)).toBeTruthy();
     expect(within(screen.getByTestId("transcript")).getByText("The parser is wrong.")).toBeTruthy();
     expect(steps.querySelector("details")).toBeTruthy();
+  });
+
+  it("streams Working… as muted markdown while the run is live", () => {
+    renderPane(
+      [
+        event({
+          kind: "run.thought",
+          text: "## Plan\n\n- check the parser",
+          messageId: "th1",
+        }),
+      ],
+      { runLive: true },
+    );
+    const stream = screen.getByTestId("transcript-steps-live-stream");
+    expect(stream.querySelector(".row__steps-live-stream-md")).toBeTruthy();
+    expect(within(stream).getByRole("heading", { name: /Plan/ })).toBeTruthy();
+    expect(within(stream).getByText(/check the parser/)).toBeTruthy();
   });
 
   it("says when the history is incomplete rather than rendering a plausible lie", () => {
@@ -302,6 +327,42 @@ describe("an approval, composer takeover", () => {
   it("hides stop-asking when the agent has no approval policy", () => {
     renderPane([approval], withApprovals);
     expect(screen.queryByTestId("approval-stop-asking")).toBeNull();
+  });
+
+  it("keeps a long plan review readable — body once in takeover, deferred transcript is a pointer", () => {
+    renderPane(
+      [
+        event({
+          kind: "run.approval-requested",
+          requestId: "req-plan",
+          question: "Approve this plan and leave plan mode?",
+          detail:
+            "# Veda — Make the memory work\n\n## Phase 0\n\n- Fix the suite\n\n## Phase 1\n\n- Wire RAG",
+          selection: "one",
+          options: [
+            { id: "0", label: "Approve plan and continue" },
+            { id: "1", label: "Reject" },
+          ],
+        }),
+      ],
+      withApprovals,
+    );
+
+    const takeover = screen.getByTestId("approval-takeover");
+    expect(takeover.className).toContain("approval--takeover-long");
+    expect(within(takeover).getByText("Approve this plan and leave plan mode?")).toBeTruthy();
+    expect(within(takeover).getByTestId("approval-detail")).toBeTruthy();
+    // Markdown heading, not the raw `#` source — only in the takeover.
+    expect(within(takeover).getByRole("heading", { name: /Veda/ })).toBeTruthy();
+    expect(within(takeover).getByText("Pick one. This answer is only for this question.")).toBeTruthy();
+    expect(
+      within(takeover).getByRole("button", { name: "Approve plan and continue" }),
+    ).toBeTruthy();
+    // Deferred transcript is a compact pointer — do not duplicate the plan body.
+    const transcript = screen.getByTestId("transcript");
+    expect(within(transcript).queryByRole("heading", { name: /Veda/ })).toBeNull();
+    expect(within(transcript).queryByTestId("approval-detail")).toBeNull();
+    expect(screen.getByText("Answer in the composer below")).toBeTruthy();
   });
 
   it("lets you tick several options and confirm them together", () => {

@@ -56,7 +56,7 @@ import { DEFAULT_CODER_SETTINGS, ENVOYDEV_ERRORS, coderErrorCode, missingMethods
 import type { AgentDelivery as AgentDeliveryWire, FixRunResult as FixRunResultWire } from "@envoydev/protocol";
 
 import { localNotice, noticeFromError, type Notice, type Refusal } from "../i18n/notice.js";
-import { buildTranscript, type Transcript } from "./transcript.js";
+import { buildTranscript, mergeRunEvents, type Transcript } from "./transcript.js";
 import type {
   DaemonLogAnswer,
   DaemonLogRead,
@@ -382,7 +382,7 @@ export class CoderStore {
     }
   }
 
-  /** Clear the attention-banner error (Dismiss). Notices are owned by the shell UI. */
+  /** Clear window-level `error` (empty-state / skew). The shell toasts it; there is no banner. */
   clearError(): void {
     this.set({ error: undefined });
   }
@@ -476,36 +476,12 @@ export class CoderStore {
         if (!existing) {
           // An event for a run this window has never heard of: it was started by another window (or
           // before this one connected). Fetch it rather than dropping the event — a transcript that
-          // silently begins mid-sentence is worse than a frame's delay.
-          void this.openRun(event.runId);
+          // silently begins mid-sentence is worse than a frame's delay. Re-apply this event after
+          // the tail lands so the first frame is not lost to the race.
+          void this.openRun(event.runId).then(() => this.applyRunEvent(event));
           return;
         }
-        if (existing.events.some((seen) => seen.seq === event.seq)) return;
-        /**
-         * **A run's own record moves with its events, and this is the bug the owner hit.**
-         *
-         * This handler used to append the event and leave `run` untouched — so `run.ended` never reached
-         * `run.endedAt`, and the composer, which branches on exactly that field (`runLive`), kept believing a
-         * finished run was live. The next message was sent to it and refused:
-         *
-         * > *"That run has already finished, so there is nothing to send to it. Start a new task instead."*
-         *
-         * The window was right and the state was wrong. `run.status` moves the same field for the same reason: a
-         * run that has become `needs-attention` is not a run whose status is whatever it was when the snapshot was
-         * fetched.
-         */
-        const run =
-          event.kind === "run.ended"
-            ? { ...existing.run, endedAt: event.at, status: event.status, exitCode: event.exitCode }
-            : event.kind === "run.status"
-              ? { ...existing.run, status: event.status }
-              : existing.run;
-        this.set({
-          runs: {
-            ...this.state.runs,
-            [event.runId]: { run, events: [...existing.events, event] },
-          },
-        });
+        this.applyRunEvent(event);
       }),
     );
 
@@ -754,6 +730,49 @@ export class CoderStore {
 
   /* ────────────────────────────── runs ────────────────────────────── */
 
+  /**
+   * Append one run event (and keep the task row's status in step with the run).
+   *
+   * The rail reads `tasks[].status`, while this handler used to update only `runs[id].run` —
+   * so a crash left "1 task needs you" / needs-attention stuck until a later list refetch.
+   */
+  private applyRunEvent(event: RunEvent): void {
+    const existing = this.state.runs[event.runId];
+    if (!existing) return;
+    if (existing.events.some((seen) => seen.seq === event.seq)) return;
+    const run =
+      event.kind === "run.ended"
+        ? { ...existing.run, endedAt: event.at, status: event.status, exitCode: event.exitCode }
+        : event.kind === "run.status"
+          ? { ...existing.run, status: event.status }
+          : existing.run;
+    const terminalStatus =
+      event.kind === "run.ended"
+        ? event.status
+        : event.kind === "run.status" &&
+            (event.status === "failed" ||
+              event.status === "done" ||
+              event.status === "cancelled" ||
+              event.status === "needs-attention" ||
+              event.status === "running" ||
+              event.status === "idle")
+          ? event.status
+          : undefined;
+    const tasks =
+      terminalStatus === undefined
+        ? this.state.tasks
+        : this.state.tasks.map((task) =>
+            task.runId === event.runId ? { ...task, status: terminalStatus } : task,
+          );
+    this.set({
+      runs: {
+        ...this.state.runs,
+        [event.runId]: { run, events: mergeRunEvents(existing.events, [event]) },
+      },
+      ...(tasks !== this.state.tasks ? { tasks } : {}),
+    });
+  }
+
   /** Load a run and its backlog, which is what a window does when it opens onto work in flight. */
   async openRun(runId: string): Promise<void> {
     const connection = this.connection;
@@ -763,7 +782,17 @@ export class CoderStore {
         run: AgentRun;
         events: RunEvent[];
       }>("coder.tailRun", { runId });
-      this.set({ runs: { ...this.state.runs, [runId]: { run: answer.run, events: answer.events } } });
+      // Merge with anything already streamed — a replace used to wipe events that beat the tail.
+      const prior = this.state.runs[runId];
+      this.set({
+        runs: {
+          ...this.state.runs,
+          [runId]: {
+            run: answer.run,
+            events: mergeRunEvents(prior?.events ?? [], answer.events),
+          },
+        },
+      });
     } catch (error) {
       /**
        * **A run this daemon does not have is not a failure of the window, and it must not be left unknown.**
@@ -809,6 +838,32 @@ export class CoderStore {
   }
 
   /**
+   * Load every remembered run of a task (oldest first), so a new send does not hide earlier turns.
+   * Same idea as mobile `_loadHistory` / `coder.listRuns`.
+   */
+  async openTaskHistory(taskId: string): Promise<void> {
+    const connection = this.connection;
+    if (!connection || connection.status.state !== "connected") return;
+    try {
+      const answer = await connection.callTyped<{ runs: readonly AgentRun[] }>("coder.listRuns", {
+        taskId,
+      });
+      for (const run of answer.runs) {
+        await this.openRun(run.id);
+      }
+    } catch {
+      // One run is still worth showing; a missing history must not raise the bar or lock the pane.
+    }
+  }
+
+  /** Runs of a task already in the window cache, oldest first. */
+  runsForTask(taskId: string): readonly { run: AgentRun; events: readonly RunEvent[] }[] {
+    return Object.values(this.state.runs)
+      .filter((entry) => entry.run.taskId === taskId)
+      .sort((a, b) => Date.parse(a.run.startedAt) - Date.parse(b.run.startedAt));
+  }
+
+  /**
    * Start a task.
    *
    * The run is loaded immediately after starting: the daemon answers `startRun` as soon as the run
@@ -849,7 +904,21 @@ export class CoderStore {
       (answer) => ({ ok: true as const, run: (answer as { run: AgentRun }).run }),
     );
     if (result.ok) {
-      await this.openRun(result.run.id);
+      // Bind the pane to this run *before* waiting on the wire. Otherwise `loadLists` (or a
+      // concurrent `coder:state-changed` refresh) can flip `task.runId` while `runs[id]` is still
+      // missing — the transcript goes empty and the empty-task hero ("Start this task") flashes
+      // on every send.
+      const run = result.run;
+      this.set({
+        runs: {
+          ...this.state.runs,
+          [run.id]: { run, events: this.state.runs[run.id]?.events ?? [] },
+        },
+        tasks: this.state.tasks.map((task) =>
+          task.id === taskId ? { ...task, runId: run.id, status: "running" as const } : task,
+        ),
+      });
+      await this.openRun(run.id);
       // The task's status changed, and the rail is rendered from the task list.
       await this.loadLists();
     }
@@ -2281,20 +2350,12 @@ export class CoderStore {
    * here resolves the language: whoever renders it does that at render time, so switching language
    * re-renders the refusal that is already on screen.
    *
-   * ## It raises nothing, and that is the whole point
+   * ## It raises nothing on the window strip
    *
-   * **A write's refusal belongs to the press, not to the window.** Until this changed, every write also
-   * stored the same sentence in `state.error`, which the shell renders in the bar across the top — so a
-   * press that already showed its refusal on the row it came from (the catalogue's *Add*, a fix run, a
-   * sign-in) showed it *twice*: once where the user was looking and once in a strip above everything. The
-   * owner read the second one and said what it was: *"After clicking 'Add', it will show the top bar which
-   * is ugly and useless"*.
-   *
-   * A strip that carries a row's failure is useless because it is in the wrong place: it says nothing about
-   * *which* control failed, it pushes the whole window down, and it has to be dismissed before the user can
-   * get on with the thing they were doing. So the store returns the refusal and the caller — the row, the
-   * composer, the palette — renders it where the press was. `state.error` is now only for what the *window*
-   * could not do: a read that failed, the connection, a daemon that is a build behind.
+   * **A write's refusal is returned to the caller** — settings rows and the palette keep in-place
+   * sinks; rail/composer presses toast via the shell. `state.error` is only for what the *window*
+   * could not do (a read that failed, a daemon that is a build behind): the shell toasts that once and
+   * empty-rail / connection chip keep durable context. No sticky top banner.
    *
    * **Nothing may go silent because of this.** Every one of these methods returns `T | Refusal`, so a caller
    * that ignores the answer has to write `void` to do it, and every call site in the window was given a sink

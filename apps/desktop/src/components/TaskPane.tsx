@@ -85,7 +85,11 @@ import {
   type WriteFailure,
   statusKey,
 } from "../i18n/notice.js";
-import { buildTranscript, type TranscriptEntry } from "../state/transcript.js";
+import {
+  buildTaskTranscript,
+  buildTranscript,
+  type TranscriptEntry,
+} from "../state/transcript.js";
 import {
   segmentTranscriptSteps,
   type StepsSegment,
@@ -94,7 +98,8 @@ import { toolGroupSummary } from "../state/tool-group-summary.js";
 import { ApprovalChoices } from "./ApprovalChoices.js";
 import { ComposerControls } from "./ComposerControls.js";
 import { AttachButton, AttachmentTray } from "./ComposerAttach.js";
-import { ToolCard } from "./tools/ToolCard.js";
+import { PlanCard } from "./PlanCard.js";
+import { ToolCard, type ToolOpenView } from "./tools/ToolCard.js";
 import {
   ExplorerSidebar,
   type ChangeListing,
@@ -114,6 +119,11 @@ export interface TaskPaneProps {
   project: Project | undefined;
   /** The events of the run this pane is showing, oldest first. */
   events: readonly RunEvent[];
+  /**
+   * Every cached run of this task (oldest first). When set, the pane folds each run on its own
+   * `seq` space then concatenates — so a new send does not hide earlier turns.
+   */
+  runSlices?: readonly { events: readonly RunEvent[] }[];
   /** The run's own status, which the header shows and the composer branches on. */
   runLive: boolean;
   /**
@@ -251,8 +261,6 @@ export interface TaskPaneProps {
     name: string,
     kind: "file" | "dir",
   ) => Promise<{ ok: true; path: string } | Refusal>;
-  /** Shown under the composer when a send was refused, in the daemon's words. */
-  notice?: string | undefined;
   /** Start another conversation in this project. The tab row's Task item. */
   onNewTask?: () => void;
 }
@@ -278,6 +286,17 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   const running = props.runLive;
   const [viewingFile, setViewingFile] = useState(false);
   const [openRequest, setOpenRequest] = useState<FileOpenRequest | undefined>(undefined);
+
+  /** Tool-card path → WorkArea file or diff tab (same request shape as the explorer). */
+  const openToolPath = (path: string, view: ToolOpenView): void => {
+    const name = path.split(/[/\\]/).pop() || path;
+    setOpenRequest({
+      path,
+      name,
+      nonce: Date.now(),
+      ...(view === "diff" ? { view: "diff" as const } : {}),
+    });
+  };
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [attachNotice, setAttachNotice] = useState<string | undefined>(undefined);
@@ -312,7 +331,10 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   const stickTask = useRef<string | undefined>(undefined);
   const approvalAnchorRef = useRef<HTMLLIElement | null>(null);
 
-  const transcript = buildTranscript(events);
+  const transcript =
+    props.runSlices !== undefined && props.runSlices.length > 0
+      ? buildTaskTranscript(props.runSlices)
+      : buildTranscript(events);
   const approvalOpen = transcript.pendingApprovalId !== undefined;
   const pendingApprovalEntry = transcript.entries.find(
     (entry): entry is Extract<TranscriptEntry, { kind: "approval" }> =>
@@ -765,7 +787,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
           </p>
         ) : null}
 
-        {transcript.entries.length === 0 ? (
+        {transcript.entries.length === 0 && task.runId === undefined ? (
           <div className="transcript__empty transcript__hero" data-testid="task-empty-hero">
             <p className="transcript__empty-title">{t("task.transcript.empty.title")}</p>
             <p className="transcript__empty-body">
@@ -788,6 +810,13 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               ))}
             </ul>
           </div>
+        ) : transcript.entries.length === 0 ? (
+          // A run exists but its events have not arrived yet (startRun just flipped `runId`,
+          // or openRun is still in flight). Showing "Start this task" here is a lie — the user
+          // already sent — and it is what made every send look like the chat had been wiped.
+          <p className="transcript__loading" data-testid="task-transcript-loading" role="status">
+            {t("task.transcript.loading")}
+          </p>
         ) : (
           <ol className="transcript__list">
             {segmentTranscriptSteps(transcript.entries, { runLive: props.runLive }).map((item) => {
@@ -798,6 +827,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                     segment={item}
                     onAnswer={props.onAnswer}
                     takeoverRequestId={pendingApproval?.requestId}
+                    onOpenPath={openToolPath}
                   />
                 );
               }
@@ -816,6 +846,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                   onAnswer={props.onAnswer}
                   takeoverRequestId={pendingApproval?.requestId}
                   canStopAsking={props.canStopAskingApprovals === true}
+                  onOpenPath={openToolPath}
                   approvalAnchorRef={
                     item.kind === "approval" &&
                     pendingApproval !== undefined &&
@@ -884,17 +915,18 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
         >
           {takeoverActive && pendingApproval ? (
             <div
-              className="composer__takeover approval approval--takeover"
+              className={`composer__takeover approval approval--takeover${
+                isLongApprovalDetail(pendingApproval.detail) ? " approval--takeover-long" : ""
+              }`}
               role="alertdialog"
               aria-label={t("task.approval.takeover.aria")}
               data-testid="approval-takeover"
             >
-              <div className="approval__body">
-                <p className="approval__question">{localizeText(t, pendingApproval.question)}</p>
-                {pendingApproval.detail ? (
-                  <p className="approval__detail">{localizeText(t, pendingApproval.detail)}</p>
-                ) : null}
-              </div>
+              <ApprovalCopy
+                question={pendingApproval.question}
+                detail={pendingApproval.detail}
+                askHint={askHintFor(pendingApproval.selection)}
+              />
               <div className="approval__actions">
                 <ApprovalChoices
                   entry={pendingApproval}
@@ -995,7 +1027,6 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
             title={t("task.composer.hint")}
           />
           {!takeoverActive && attachNotice ? <p className="composer__notice">{attachNotice}</p> : null}
-          {!takeoverActive && props.notice ? <p className="composer__notice">{props.notice}</p> : null}
           {/* **The row under the field: agent settings on the left, the action on the right.**
               Paseo's composer is a field with one button row beneath it — the attach button and the agent's
               controls at the left, send at the right (`composer/input/input.tsx`, the `buttonRow`) — and this is
@@ -1150,6 +1181,97 @@ function stepsSummaryLabel(
   return t("task.steps.summary");
 }
 
+/**
+ * Consecutive thought chunks are one reasoning stream — one disclosure, not N
+ * "Thought" headers stacked inside Steps.
+ */
+function coalesceStepsEntries(entries: readonly TranscriptEntry[]): TranscriptEntry[] {
+  const out: TranscriptEntry[] = [];
+  for (const entry of entries) {
+    const prev = out[out.length - 1];
+    if (entry.kind === "thought" && prev?.kind === "thought") {
+      const gap =
+        prev.text.endsWith("\n") || entry.text.startsWith("\n") ? "" : "\n\n";
+      out[out.length - 1] = { ...prev, text: `${prev.text}${gap}${entry.text}` };
+      continue;
+    }
+    out.push(entry);
+  }
+  return out;
+}
+
+/** Thought + interim assistant text for the live Working… stream pane. */
+function stepsLiveStreamText(entries: readonly TranscriptEntry[]): string {
+  const parts: string[] = [];
+  for (const entry of entries) {
+    if (entry.kind === "thought" || entry.kind === "assistant") {
+      const text = entry.text.trim();
+      if (text) parts.push(text);
+    }
+  }
+  return parts.join("\n\n");
+}
+
+/**
+ * Tool-group disclosure outside Steps — open on transition to running, fold when settled.
+ * Imperative (same as ToolCard Details): controlled `open={anyRunning}` blocked user collapse.
+ */
+function ToolsGroupRow(props: {
+  entry: Extract<TranscriptEntry, { kind: "tools" }>;
+  nestedInSteps: boolean;
+  summary: string;
+  onOpenPath?: (path: string, view: ToolOpenView) => void;
+}): JSX.Element {
+  const { entry, nestedInSteps, summary } = props;
+  const anyRunning = entry.tools.some((tool) => tool.status === "running");
+  const anyFailed = entry.tools.some((tool) => tool.status === "failed");
+  const tone = anyRunning ? "live" : anyFailed ? "danger" : "quiet";
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const wasRunning = useRef(false);
+
+  useLayoutEffect(() => {
+    if (nestedInSteps) return;
+    const node = detailsRef.current;
+    if (node === null) return;
+    if (anyRunning && !wasRunning.current) node.open = true;
+    if (!anyRunning && wasRunning.current) node.open = false;
+    wasRunning.current = anyRunning;
+  }, [anyRunning, nestedInSteps]);
+
+  // Inside Steps the outer disclosure owns collapse; list tools without a second details.
+  if (nestedInSteps) {
+    return (
+      <li className={`row row--tools row--tools-flat${anyRunning ? " row--tools-live" : ""}`}>
+        <p className="row__tool-head">
+          <span className={`dot dot--${tone}`} aria-hidden />
+          {summary}
+        </p>
+        <ol className="row__tool-list">
+          {entry.tools.map((tool) => (
+            <ToolCard key={tool.id} entry={tool} nested onOpenPath={props.onOpenPath} />
+          ))}
+        </ol>
+      </li>
+    );
+  }
+
+  return (
+    <li className={`row row--tools${anyRunning ? " row--tools-live" : ""}`}>
+      <details ref={detailsRef}>
+        <summary className="row__tool-head">
+          <span className={`dot dot--${tone}`} aria-hidden />
+          {summary}
+        </summary>
+        <ol className="row__tool-list">
+          {entry.tools.map((tool) => (
+            <ToolCard key={tool.id} entry={tool} nested onOpenPath={props.onOpenPath} />
+          ))}
+        </ol>
+      </details>
+    </li>
+  );
+}
+
 function StepsRow(props: {
   segment: StepsSegment;
   onAnswer: (
@@ -1158,37 +1280,76 @@ function StepsRow(props: {
     options?: { stopAsking?: boolean },
   ) => void | Promise<void>;
   takeoverRequestId?: string;
+  onOpenPath?: (path: string, view: ToolOpenView) => void;
 }): JSX.Element {
   const t = useT();
   const { segment } = props;
-  const detailsRef = useRef<HTMLDetailsElement>(null);
-  // Start false so the first layout pass opens when already live on mount.
-  const wasLive = useRef(false);
-  // Suggest open when tools start running; never force-close when they finish.
+  const entries = coalesceStepsEntries(segment.entries);
+  const live = segment.live;
+  // Open while live so Working… shows the stream; collapse when the turn settles
+  // so the hero answer outside Steps stays the focus. User can re-open after.
+  const [userOpen, setUserOpen] = useState(false);
+  const wasLiveRef = useRef(live);
+  const streamRef = useRef<HTMLDivElement | null>(null);
+  const streamText = live ? stepsLiveStreamText(entries) : "";
+
+  useEffect(() => {
+    if (wasLiveRef.current && !live) setUserOpen(false);
+    wasLiveRef.current = live;
+  }, [live]);
+
   useLayoutEffect(() => {
-    const node = detailsRef.current;
-    if (node !== null && segment.live && !wasLive.current) node.open = true;
-    wasLive.current = segment.live;
-  }, [segment.live]);
+    if (!live || !streamText) return;
+    const el = streamRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [live, streamText]);
+
+  const open = live || userOpen;
 
   return (
     <li
-      className={`row row--steps${segment.live ? " row--steps-live" : ""}`}
+      className={`row row--steps${live ? " row--steps-live" : ""}`}
       data-testid="transcript-steps"
     >
-      <details ref={detailsRef}>
+      <details
+        open={open}
+        onToggle={(event) => {
+          const next = (event.currentTarget as HTMLDetailsElement).open;
+          if (live) {
+            // Stay open while Working… — re-assert if the user clicks the summary.
+            if (!next) event.currentTarget.open = true;
+            return;
+          }
+          setUserOpen(next);
+        }}
+      >
         <summary className="row__steps-summary">
-          <span className={`dot dot--${segment.live ? "live" : "quiet"}`} aria-hidden />
+          <span className={`dot dot--${live ? "live" : "quiet"}`} aria-hidden />
           {stepsSummaryLabel(t, segment)}
         </summary>
+        {live && streamText ? (
+          <div
+            ref={streamRef}
+            className="row__steps-live-stream"
+            data-testid="transcript-steps-live-stream"
+            aria-live="polite"
+          >
+            <div className="row__steps-live-stream-md row__markdown">
+              <MessageMarkdown text={streamText} phase="streaming" />
+            </div>
+          </div>
+        ) : null}
         <ol className="row__steps-list">
-          {segment.entries.map((entry) => (
+          {entries.map((entry) => (
             <TranscriptRow
               key={`${entry.kind}-${entry.id}`}
               entry={entry}
               onAnswer={props.onAnswer}
               takeoverRequestId={props.takeoverRequestId}
               nestedInSteps
+              stepsLive={live}
+              onOpenPath={props.onOpenPath}
             />
           ))}
         </ol>
@@ -1209,7 +1370,10 @@ function TranscriptRow(props: {
   approvalAnchorRef?: RefObject<HTMLLIElement | null>;
   /** Inside a Steps disclosure — tools group stays nested, not a second Steps. */
   nestedInSteps?: boolean;
+  /** Steps segment is live — flatten thoughts (stream pane already shows them). */
+  stepsLive?: boolean;
   canStopAsking?: boolean;
+  onOpenPath?: (path: string, view: ToolOpenView) => void;
 }): JSX.Element | null {
   const t = useT();
   const { entry } = props;
@@ -1227,7 +1391,9 @@ function TranscriptRow(props: {
       );
 
     case "assistant":
-      // Interim narration inside Steps is muted; the turn's last assistant stays the hero outside.
+      // Live Steps streams interim narration in `.row__steps-live-stream`.
+      if (props.nestedInSteps && props.stepsLive) return null;
+      // Interim narration inside finished Steps is muted; hero stays outside.
       return (
         <li
           className={`row row--assistant${props.nestedInSteps ? " row--assistant-interim" : ""}`}
@@ -1242,15 +1408,10 @@ function TranscriptRow(props: {
       );
 
     case "thought":
-      // Inside Steps the outer disclosure already hides process work — no second chevron.
-      if (props.nestedInSteps) {
-        return (
-          <li className="row row--thought row--thought-flat">
-            <p className="row__meta">{t("task.thought.summary")}</p>
-            <p className="row__text">{entry.text}</p>
-          </li>
-        );
-      }
+      // Live Steps already streams thought text in `.row__steps-live-stream` —
+      // skip the nested copy so tools stay scannable underneath.
+      if (props.nestedInSteps && props.stepsLive) return null;
+      // Finished Steps: keep thoughts behind a closed summary.
       return (
         <li className="row row--thought">
           <details>
@@ -1261,44 +1422,23 @@ function TranscriptRow(props: {
       );
 
     case "tool":
-      return <ToolCard entry={entry} nested={props.nestedInSteps} />;
-
-    case "tools": {
-      const anyRunning = entry.tools.some((tool) => tool.status === "running");
-      const anyFailed = entry.tools.some((tool) => tool.status === "failed");
-      const tone = anyRunning ? "live" : anyFailed ? "danger" : "quiet";
-      // Inside Steps the outer disclosure owns collapse; list tools without a second details.
-      if (props.nestedInSteps) {
-        return (
-          <li className={`row row--tools row--tools-flat${anyRunning ? " row--tools-live" : ""}`}>
-            <p className="row__tool-head">
-              <span className={`dot dot--${tone}`} aria-hidden />
-              {toolGroupSummary(t, entry.counts)}
-            </p>
-            <ol className="row__tool-list">
-              {entry.tools.map((tool) => (
-                <ToolCard key={tool.id} entry={tool} nested />
-              ))}
-            </ol>
-          </li>
-        );
-      }
       return (
-        <li className={`row row--tools${anyRunning ? " row--tools-live" : ""}`}>
-          <details open={anyRunning}>
-            <summary className="row__tool-head">
-              <span className={`dot dot--${tone}`} aria-hidden />
-              {toolGroupSummary(t, entry.counts)}
-            </summary>
-            <ol className="row__tool-list">
-              {entry.tools.map((tool) => (
-                <ToolCard key={tool.id} entry={tool} nested />
-              ))}
-            </ol>
-          </details>
-        </li>
+        <ToolCard
+          entry={entry}
+          nested={props.nestedInSteps}
+          onOpenPath={props.onOpenPath}
+        />
       );
-    }
+
+    case "tools":
+      return (
+        <ToolsGroupRow
+          entry={entry}
+          nestedInSteps={props.nestedInSteps === true}
+          summary={toolGroupSummary(t, entry.counts)}
+          onOpenPath={props.onOpenPath}
+        />
+      );
 
     case "approval": {
       const pendingHere =
@@ -1320,6 +1460,13 @@ function TranscriptRow(props: {
       );
     }
 
+    case "plan":
+      return (
+        <li className="row row--plan">
+          <PlanCard planId={entry.planId} entries={entry.entries} markdown={entry.markdown} />
+        </li>
+      );
+
     case "note":
       return (
         <li className={`row row--note row--note-${entry.tone}`}>
@@ -1329,11 +1476,81 @@ function TranscriptRow(props: {
   }
 }
 
+/** Pick / type hint for `ask_user` cards (`selection` is set). Permission cards leave it undefined. */
+function askHintFor(
+  selection: "one" | "many" | "text" | undefined,
+): "approval.detail.pick" | "approval.detail.multiple" | "approval.detail.text" | undefined {
+  switch (selection) {
+    case "many":
+      return "approval.detail.multiple";
+    case "text":
+      return "approval.detail.text";
+    case "one":
+      return "approval.detail.pick";
+    default:
+      return undefined;
+  }
+}
+
+/** Long ask/plan bodies get a taller takeover so the markdown is actually readable. */
+function isLongApprovalDetail(detail: string | undefined): boolean {
+  if (detail === undefined || detail.trim() === "") return false;
+  return (
+    detail.length > 280 ||
+    detail.includes("\n") ||
+    /^#{1,6}\s/m.test(detail) ||
+    detail.includes("|")
+  );
+}
+
+/**
+ * Headline + scrollable markdown detail for an approval.
+ *
+ * Long ask_user plans land in `detail` (daemon `splitAskPrompt`); the body scrolls so choices stay
+ * reachable. Question stays plain text — it is the short headline. The pick/type line is catalogue
+ * copy from `selection`, not concatenated onto the plan (that would break keyed localization).
+ */
+function ApprovalCopy(props: {
+  question: string;
+  detail?: string;
+  askHint?: ReturnType<typeof askHintFor>;
+  /** Shown under the detail while choices live in the composer. */
+  pendingHint?: string;
+}): JSX.Element {
+  const t = useT();
+  const question = localizeText(t, props.question) ?? props.question;
+  const detailRaw = props.detail;
+  const detailLocalized = localizeText(t, detailRaw);
+  // Ask plan bodies are plain markdown (no key). Permission details are keyed sentences.
+  const detailText = detailLocalized ?? detailRaw;
+  const looksLikeMarkdown =
+    detailText !== undefined &&
+    (detailText.includes("\n") || /^#{1,6}\s/m.test(detailText) || detailText.includes("|"));
+  return (
+    <div className="approval__body">
+      <p className="approval__question">{question}</p>
+      {detailText ? (
+        looksLikeMarkdown ? (
+          <div className="approval__detail row__markdown" data-testid="approval-detail">
+            <MessageMarkdown text={detailText} phase="complete" />
+          </div>
+        ) : (
+          <p className="approval__detail" data-testid="approval-detail">
+            {detailText}
+          </p>
+        )
+      ) : null}
+      {props.askHint ? <p className="approval__hint">{t(props.askHint)}</p> : null}
+      {props.pendingHint ? <p className="approval__hint">{props.pendingHint}</p> : null}
+    </div>
+  );
+}
+
 /**
  * An approval in the transcript.
  *
- * While pending, choices live in the composer takeover (`actionsInComposer`); the transcript keeps
- * a compact marker so the pause stays in history. Answered cards keep the full body.
+ * While pending with composer takeover, the transcript is a compact pointer (question + “answer
+ * below”) — the plan body lives once in the takeover. Answered cards keep the full body.
  */
 function ApprovalCard(props: {
   entry: Extract<TranscriptEntry, { kind: "approval" }>;
@@ -1360,15 +1577,12 @@ function ApprovalCard(props: {
       role={answered || inComposer ? "status" : "alertdialog"}
       aria-label={answered ? t("task.approval.answered") : t("task.approval.aria")}
     >
-      <div className="approval__body">
-        <p className="approval__question">{localizeText(t, entry.question)}</p>
-        {entry.detail && !inComposer ? (
-          <p className="approval__detail">{localizeText(t, entry.detail)}</p>
-        ) : null}
-        {inComposer ? (
-          <p className="approval__detail">{t("task.approval.pendingInComposer")}</p>
-        ) : null}
-      </div>
+      <ApprovalCopy
+        question={entry.question}
+        detail={inComposer ? undefined : entry.detail}
+        askHint={inComposer ? undefined : askHintFor(entry.selection)}
+        pendingHint={inComposer ? t("task.approval.pendingInComposer") : undefined}
+      />
       {!inComposer ? (
         <div className="approval__actions">
           <ApprovalChoices

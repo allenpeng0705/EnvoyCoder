@@ -281,6 +281,44 @@ describe("a run's record follows its own events", () => {
     expect(state().runs["run-1"]?.run.status).toBe("needs-attention");
   });
 
+  it("keeps the task row's status in step with run.ended, so the rail does not stay on needs-attention", async () => {
+    const opened = await store();
+    opened.connection.answers.set("coder.listTasks", {
+      tasks: [
+        {
+          id: "w1",
+          projectId: "p1",
+          cwd: "/repo",
+          title: "a task",
+          harness: "envoy-harness",
+          status: "needs-attention",
+          runId: "run-1",
+          createdAt: "2026-09-13T09:00:00.000Z",
+          updatedAt: "2026-09-13T09:30:00.000Z",
+        },
+      ],
+    });
+    await opened.store.loadLists();
+    opened.connection.answers.set("coder.tailRun", {
+      run: {
+        id: "run-1",
+        taskId: "w1",
+        harness: "envoy-harness",
+        hostId: "local",
+        startedAt: "2026-09-13T09:00:00.000Z",
+        status: "needs-attention",
+      },
+      events: [],
+    });
+    await opened.store.openRun("run-1");
+    opened.connection.push(
+      "coder:run-event",
+      runEvent({ kind: "run.ended", exitCode: 1, status: "failed", taskId: "w1" }),
+    );
+    expect(opened.state().tasks.find((task) => task.id === "w1")?.status).toBe("failed");
+    expect(opened.state().runs["run-1"]?.run.endedAt).toBeDefined();
+  });
+
   it("drops run records when the window reconnects to a different daemon", async () => {
     // **Runs belong to the process that produced them.** A daemon restarted mid-run never sends `run.ended`, so the
     // window's old records are a live-looking fiction; a different `instanceId` is the fact that says so.
@@ -637,10 +675,11 @@ describe("applying run events", () => {
     connection.push("coder:run-event", runEvent({ kind: "run.output", stream: "assistant", text: "hi", messageId: "m1" }));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    // Unknown run → the store fetches it, including the backlog, so the transcript does not begin
-    // mid-sentence.
+    // Unknown run → the store fetches the backlog, then re-applies the live event so the first
+    // frame is not lost to the openRun race.
     expect(connection.calls.some((call) => call.method === "coder.tailRun")).toBe(true);
-    expect(state().runs["run-1"]?.events).toHaveLength(1);
+    const events = state().runs["run-1"]?.events ?? [];
+    expect(events.map((event) => event.kind)).toEqual(["run.started", "run.output"]);
   });
 
   it("appends a later event to a run it already knows", async () => {

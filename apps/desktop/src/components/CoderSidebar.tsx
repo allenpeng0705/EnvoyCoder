@@ -59,7 +59,7 @@ import {
 } from "@envoydev/task-model";
 
 import { useT } from "../i18n/context.js";
-import { localize, statusKey, type Notice, type Refusal } from "../i18n/notice.js";
+import { statusKey, type Refusal } from "../i18n/notice.js";
 import { harnessBadge } from "../composer/harness-label.js";
 import { mergeOfferedAgents } from "../composer/agent-for.js";
 import type { GitSnapshot } from "../state/coderStore.js";
@@ -196,15 +196,6 @@ export interface CoderSidebarProps {
    * group plus a notice that names the reason is honest, and a per-project claim of emptiness is not.
    */
   tasksUnknown?: boolean | undefined;
-  /**
-   * **The refusal from a row's own last press, and which row it is about.**
-   *
-   * A press that fails shows the daemon's sentence *under the row that was pressed* — never in the bar above
-   * the whole window, which names no control and has to be dismissed before the user can carry on. `rowId` is
-   * the project's or the task's own id, so a removal that failed says so where the removal was asked for, and
-   * the sentence leaves with the row if the row does.
-   */
-  failure?: { rowId: string; notice: Notice } | undefined;
   /**
    * Project this window was opened to work in (from "Open in new window").
    *
@@ -447,7 +438,6 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
         onRenameTask={props.onRenameTask}
         onChangeTaskHarness={props.onChangeTaskHarness}
         onRemoveTask={props.onRemoveTask}
-        failure={props.failure}
         TaskRow={TaskRow}
       />
 
@@ -568,7 +558,6 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
                     providers={home.state.providers}
                     catalog={home.state.catalog}
                     appHarness={home.state.appHarness}
-                    failure={focused ? props.failure : undefined}
                     TaskRow={TaskRow}
                   />
                 ) : null}

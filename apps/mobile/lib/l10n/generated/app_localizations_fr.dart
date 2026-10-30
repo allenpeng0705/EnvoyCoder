@@ -788,6 +788,17 @@ class AppLocalizationsFr extends AppLocalizations {
   String get runApprovalAnswerBelow => 'Répondez dans le champ ci-dessous';
 
   @override
+  String get runPlanTitle => 'Plan';
+
+  @override
+  String runPlanProgress(int done, int total) {
+    return 'Plan · $done sur $total';
+  }
+
+  @override
+  String get runPlanPriorityHigh => 'Élevée';
+
+  @override
   String approvalQuestionTool(String tool) {
     return 'Autoriser l\'agent à exécuter « $tool » ?';
   }

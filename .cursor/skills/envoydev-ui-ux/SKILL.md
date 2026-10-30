@@ -47,10 +47,11 @@ Choose by **lifetime** of the message relative to the surface that produced it:
 |---|---|---|
 | Outlives closing Settings / sheet | Shell **toast** on `CoderApp` | Invite copied, dissolve ok, restart ok |
 | Tied to the form / control | **In-place notice** beside the control | Validation, FixRunner failure |
-| Must block work until read | Top **notice strip** | Pairing / app refusals |
+| Durable cannot-load context | Connection chip + empty rail | Disconnect / skew feeding empty-state (no top banner) |
 
 - Toast state lives in the **shell**, not in a panel’s local state that unmounts with it.
-- Toast reports success and failure; never still-pending.
+- Toast reports success and failure (including write refusals); never still-pending.
+- No sticky top **banner** and no sticky composer/rail error line.
 - **A failed operation keeps the data visible.** Toast announces the failure; do not blank the row.
 - Error copy is plain language and short. Headline first, detail second, developer last.
 

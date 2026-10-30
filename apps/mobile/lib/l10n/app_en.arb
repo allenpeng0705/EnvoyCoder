@@ -955,7 +955,7 @@
   "@runYouQueued": {
     "description": "run.youQueued — A message that waited for the turn."
   },
-  "runThoughtTitle": "How it thought about this",
+  "runThoughtTitle": "Thought",
   "@runThoughtTitle": {
     "description": "run.thoughtTitle — Collapsed reasoning row."
   },
@@ -996,6 +996,22 @@
   "runApprovalAnswerBelow": "Answer in the composer below",
   "@runApprovalAnswerBelow": {
     "description": "run.approvalAnswerBelow — Transcript stub while sticky chrome owns the choices."
+  },
+  "runPlanTitle": "Plan",
+  "@runPlanTitle": {
+    "description": "run.plan.title — Headline for an ACP plan checklist with no progress count."
+  },
+  "runPlanProgress": "Plan · {done} of {total}",
+  "@runPlanProgress": {
+    "description": "run.plan.progress — Checklist progress.",
+    "placeholders": {
+      "done": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "runPlanPriorityHigh": "High",
+  "@runPlanPriorityHigh": {
+    "description": "run.plan.priority.high — High priority badge on a plan entry."
   },
   "approvalQuestionTool": "Allow the agent to run “{tool}”?",
   "@approvalQuestionTool": {

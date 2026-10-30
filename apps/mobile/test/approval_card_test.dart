@@ -24,7 +24,7 @@ String keyed(String key, String sentence, [Map<String, Object>? values]) =>
 TranscriptApproval approval({
   required String question,
   String? detail,
-  String selection = 'one',
+  String? selection,
   List<Map<String, String>> options = const [
     {'id': 'allow', 'label': 'Allow'},
     {'id': 'deny', 'label': "Don't allow"},
@@ -102,7 +102,6 @@ void main() {
       approval(
         question: keyed('approval.question.ask', 'The agent asked a question.'),
         selection: 'many',
-        detail: keyed('approval.detail.multiple', 'Tick every option that applies.'),
       ),
       locale: const Locale('ja'),
     );
@@ -111,6 +110,29 @@ void main() {
     expect(find.text(ja.approvalAllow), findsOneWidget);
     expect(find.text(ja.approvalDeny), findsOneWidget);
     expect(find.text(ja.approvalDetailMultiple), findsOneWidget);
+    expectNoWireFormat(tester);
+  });
+
+  testWidgets('a long plan detail scrolls and keeps the choice buttons', (tester) async {
+    await pumpCard(
+      tester,
+      approval(
+        question: 'Approve this plan and leave plan mode?',
+        detail: '# Veda — Make the memory work\n\n## Phase 0\n\n- Fix the suite\n\n## Phase 1\n\n- Wire RAG',
+        selection: 'one',
+        options: const [
+          {'id': '0', 'label': 'Approve plan and continue'},
+          {'id': '1', 'label': 'Reject'},
+        ],
+      ),
+    );
+
+    expect(find.text('Approve this plan and leave plan mode?'), findsOneWidget);
+    expect(find.byType(Scrollbar), findsWidgets);
+    expect(find.byType(SingleChildScrollView), findsWidgets);
+    expect(find.textContaining('Veda'), findsWidgets);
+    expect(find.text(lookupAppLocalizations(const Locale('en')).approvalDetailPick), findsOneWidget);
+    expect(find.text('Approve plan and continue'), findsOneWidget);
     expectNoWireFormat(tester);
   });
 

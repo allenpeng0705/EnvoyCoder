@@ -22,6 +22,7 @@
  * | `tool_call_update { toolCallId, status, content }` | `run.tool` terminal | `updates.ts:76-86` |
  * | `usage_update { used, size }` | `run.usage { contextUsed, contextSize }` | `updates.ts:93-99` |
  * | `available_commands_update { availableCommands }` | `run.commands` | ACP session update; the agent's own `/` list |
+ * | `plan` / `plan_update` / `plan_removed` | `run.plan` | ACP agent plan checklist (Cursor-style progress) |
  * | `session/request_permission { toolCall, options }` | `run.approval-requested` | `packages/acp/acp/src/index.ts:157-172` |
  * | the `session/prompt` result's `stopReason` | `run.ended` | observed against the real binary |
  *
@@ -84,6 +85,8 @@ import { AcpClient, type AcpLaunch, type AcpPermissionRequest, type AcpSessionPo
 import { launchForAgent } from "./launch.js";
 import { envoyRunModel } from "./envoy-llm.js";
 import { slashCommandsFromAcp } from "../composer/slash-commands.js";
+import { parseAcpPlanUpdate } from "./acp-plan.js";
+import { splitAskPrompt } from "./ask-prompt.js";
 import { keyed, ref } from "./messages.js";
 // The values a run asks for, checked against the catalogue before anything is spawned — and the
 // refusals a user reads when this build cannot deliver one. They live in their own module because they
@@ -865,6 +868,20 @@ export class RunManager {
         });
         return;
       }
+      case "plan":
+      case "plan_update":
+      case "plan_removed": {
+        const parsed = parseAcpPlanUpdate(update);
+        if (parsed === undefined) return;
+        void this.record(live, {
+          kind: "run.plan",
+          planId: parsed.planId,
+          entries: parsed.entries,
+          ...(parsed.markdown !== undefined ? { markdown: parsed.markdown } : {}),
+          ...(parsed.removed === true ? { removed: true } : {}),
+        });
+        return;
+      }
       default:
         // A kind this build does not render is dropped rather than guessed at. Showing a user raw
         // JSON for an unknown payload is worse than showing nothing.
@@ -999,6 +1016,13 @@ export class RunManager {
     const many = request.multiple === true && options.length > 1;
     const text = options.length === 0;
     const prompt = typeof request.prompt === "string" ? request.prompt.trim() : "";
+    // Headline vs body — never concatenate a keyed hint onto the body: localizeText would keep the
+    // key and drop the plan. The pick/type hint is selection-keyed and the window renders it.
+    const { question: head, body } = splitAskPrompt(prompt);
+    const question =
+      head !== ""
+        ? head
+        : keyed("approval.question.ask", "The agent asked a question.");
     return new Promise<AcpUserQuestionChoice | null>((resolve) => {
       const settle = (choice: string | AcpUserQuestionChoice | null): void => {
         if (live.approval?.requestId !== requestId) return;
@@ -1016,21 +1040,11 @@ export class RunManager {
         await this.record(live, {
           kind: "run.approval-requested",
           requestId,
-          question: prompt !== "" ? prompt : keyed("approval.question.ask", "The agent asked a question."),
-          detail: many
-            ? keyed(
-                "approval.detail.multiple",
-                "Tick every option that applies, then confirm. This answer is only for this question.",
-              )
-            : text
-              ? keyed(
-                  "approval.detail.text",
-                  "Type your answer. The agent will not continue until you send it.",
-                )
-              : keyed("approval.detail.pick", "Pick one. This answer is only for this question."),
+          question,
+          ...(body !== undefined && body !== "" ? { detail: body } : {}),
           options,
-          ...(many ? { selection: "many" as const } : {}),
-          ...(text ? { selection: "text" as const, ...(request.multiline === true ? { multiline: true } : {}) } : {}),
+          selection: many ? ("many" as const) : text ? ("text" as const) : ("one" as const),
+          ...(text && request.multiline === true ? { multiline: true } : {}),
         });
       })();
     });
@@ -1157,9 +1171,9 @@ export class RunManager {
     const primary = ids[0] ?? (text !== "" ? text : undefined);
     if (primary === undefined) return false;
     // RPC/mesh can send stopAsking with any choice; only an allow may flip machine approvals off.
-    if (extra?.stopAsking === true && live.approval.allowOptionIds.includes(primary)) {
-      await this.stopAskingApprovals(live);
-    }
+    // Settle the approval first — a Settings write must not strand the run on needs-attention.
+    const shouldStopAsking =
+      extra?.stopAsking === true && live.approval.allowOptionIds.includes(primary);
     const settle = live.approval.settle;
     await this.record(live, {
       kind: "run.approval-resolved",
@@ -1172,6 +1186,13 @@ export class RunManager {
     if (text !== "") settle({ text });
     else if (ids.length > 1) settle({ optionIds: ids });
     else settle(primary);
+    if (shouldStopAsking) {
+      try {
+        await this.stopAskingApprovals(live);
+      } catch {
+        // Allow already took; flipping machine approvals off is best-effort.
+      }
+    }
     return true;
   }
 
@@ -1187,13 +1208,17 @@ export class RunManager {
     ) {
       return;
     }
-    await this.deps.store.updateSettings({ requireApprovalForDestructive: false });
+    try {
+      await this.deps.store.updateSettings({ requireApprovalForDestructive: false });
+    } catch {
+      // Disk write failed — still try the live session policy below.
+    }
     const next: AcpSessionPolicy = { autoRun: "off" };
     try {
       await live.client?.applySessionPolicy(next);
       live.sessionPolicy = { ...(live.sessionPolicy ?? {}), ...next };
     } catch {
-      // Settings already flipped — next Envoy Harness run starts with autoRun off.
+      // Settings may already be flipped — next Envoy Harness run starts with autoRun off.
     }
   }
 

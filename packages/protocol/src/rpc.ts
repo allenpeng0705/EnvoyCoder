@@ -844,6 +844,27 @@ export const RunEventSchema: z.ZodType<RunEvent> = z.discriminatedUnion("kind", 
   z
     .object({
       ...RunEventBase,
+      kind: z.literal("run.plan"),
+      planId: z.string().min(1),
+      entries: z
+        .array(
+          z
+            .object({
+              id: z.string().min(1).optional(),
+              content: z.string(),
+              status: z.enum(["pending", "in_progress", "completed", "cancelled"]),
+              priority: z.enum(["high", "medium", "low"]).optional(),
+            })
+            .strict(),
+        )
+        .readonly(),
+      markdown: z.string().optional(),
+      removed: z.boolean().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      ...RunEventBase,
       kind: z.literal("run.status"),
       status: TaskStatusSchema,
       note: z.string().optional(),

@@ -3,8 +3,9 @@
 #
 # The Tauri app and the daemon are one package. The app starts the daemon
 # when the first window opens and stops it when the last window closes.
-# Envoy Harness is cloned from its repo and built into the same package,
-# so the installer does not depend on a copy the user already has.
+# Envoy Harness is cloned from its repo (scripts/envoy-harness.pin) and built
+# into the same package. If the clone fails, the stager falls back to
+# ../envoy-harness when that sibling checkout exists (or set ENVOY_HARNESS_DIR).
 #
 # Run this on a Mac, from the EnvoyCoder checkout:
 #   bash scripts/build-dmg.sh
@@ -12,11 +13,11 @@
 # Needs: git, Node.js >= 22, pnpm (or corepack), Rust, and the Xcode
 # command line tools.
 #
-# Apple Developer ID + notarization (Gatekeeper-friendly direct download):
+# Apple Developer ID + notarization is **required** (Gatekeeper-friendly download):
 #   Copy scripts/sign-macos-release.env.example → scripts/sign-macos-release.env
 #   (gitignored) and fill the four exports — same values as EnvoyMesh work.
-#   Without that file (or with placeholders), this script builds an **unsigned**
-#   DMG. With credentials:
+#   Missing or placeholder credentials abort the build; this script never ships
+#   an unsigned DMG. With credentials:
 #     1. deep-sign staged resources (Node + native addons)
 #     2. build an unsigned .app, then sign it (TAURI_DEFER_APP_SIGN=1, default)
 #        so Apple timestamp outages do not abort the whole Tauri build
@@ -55,28 +56,39 @@ if [ "$(uname -s)" != "Darwin" ]; then
 fi
 
 # Developer ID + notarization for a Gatekeeper-friendly DMG (not Mac App Store).
-apply_apple_signing_env() {
+# Signing is mandatory — refuse to produce an unsigned package.
+require_apple_signing_env() {
   local sign_env="$ROOT/scripts/sign-macos-release.env"
-  if [ -f "$sign_env" ]; then
-    set -a
-    # shellcheck source=/dev/null
-    source "$sign_env"
-    set +a
+  if [ ! -f "$sign_env" ]; then
+    echo "error: missing $sign_env" >&2
+    echo "  Copy scripts/sign-macos-release.env.example → scripts/sign-macos-release.env" >&2
+    echo "  and fill APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID." >&2
+    echo "  Release DMGs are always signed; unsigned builds are not supported." >&2
+    exit 1
   fi
 
-  export APPLE_SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:-Developer ID Application: …}"
-  export APPLE_ID="${APPLE_ID:-…}"
-  export APPLE_PASSWORD="${APPLE_PASSWORD:-…}"
-  export APPLE_TEAM_ID="${APPLE_TEAM_ID:-…}"
+  set -a
+  # shellcheck source=/dev/null
+  source "$sign_env"
+  set +a
 
-  if [ "$APPLE_SIGNING_IDENTITY" = "Developer ID Application: …" ] || \
-     [ "$APPLE_ID" = "…" ] || [ "$APPLE_PASSWORD" = "…" ] || [ "$APPLE_TEAM_ID" = "…" ]; then
-    unset APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
-    echo "  Apple signing: skipped (unsigned DMG — fill scripts/sign-macos-release.env)"
-    return 0
+  export APPLE_SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:-}"
+  export APPLE_ID="${APPLE_ID:-}"
+  export APPLE_PASSWORD="${APPLE_PASSWORD:-}"
+  export APPLE_TEAM_ID="${APPLE_TEAM_ID:-}"
+
+  if [ -z "$APPLE_SIGNING_IDENTITY" ] || [ "$APPLE_SIGNING_IDENTITY" = "Developer ID Application: …" ] || \
+     [[ "$APPLE_SIGNING_IDENTITY" == *"Your Name"* ]] || \
+     [ -z "$APPLE_ID" ] || [ "$APPLE_ID" = "…" ] || [[ "$APPLE_ID" == *"example.com"* ]] || \
+     [ -z "$APPLE_PASSWORD" ] || [ "$APPLE_PASSWORD" = "…" ] || [[ "$APPLE_PASSWORD" == *"xxxx"* ]] || \
+     [ -z "$APPLE_TEAM_ID" ] || [ "$APPLE_TEAM_ID" = "…" ] || [[ "$APPLE_TEAM_ID" == *"XXXXXXXXXX"* ]]; then
+    echo "error: $sign_env still has placeholders or empty Apple credentials." >&2
+    echo "  Fill all four exports before building a release DMG." >&2
+    echo "  Release DMGs are always signed; unsigned builds are not supported." >&2
+    exit 1
   fi
 
-  echo "  Apple signing: Developer ID + notarization enabled"
+  echo "  Apple signing: Developer ID + notarization required (enabled)"
 }
 
 # Newest EnvoyDev.app under the Cargo target tree (triple or host release).
@@ -95,15 +107,13 @@ newest_envoydev_app() {
   [ -n "$best" ] && echo "$best"
 }
 
-apply_apple_signing_env
+require_apple_signing_env
 
 echo "[1/4] Staging the daemon, Node, and the pinned Envoy Harness…"
 node "$ROOT/scripts/stage-desktop-bundle.mjs"
 
-if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
-  echo "[1.5/4] Signing nested Mach-O in staged resources…"
-  bash "$ROOT/scripts/sign-macos-staged-resources.sh"
-fi
+echo "[1.5/4] Signing nested Mach-O in staged resources…"
+bash "$ROOT/scripts/sign-macos-staged-resources.sh"
 
 echo "[2/4] Building the app and the DMG…"
 cd "$ROOT/apps/desktop"
@@ -117,7 +127,7 @@ TAURI="$ROOT/node_modules/.bin/tauri"
 # bundle. Build an unsigned .app, deep-sign with retry/fallback, then package DMG.
 defer_sign=0
 saved_identity=""
-if [ -n "${APPLE_SIGNING_IDENTITY:-}" ] && [ "${TAURI_DEFER_APP_SIGN:-1}" = "1" ]; then
+if [ "${TAURI_DEFER_APP_SIGN:-1}" = "1" ]; then
   defer_sign=1
   saved_identity="$APPLE_SIGNING_IDENTITY"
   unset APPLE_SIGNING_IDENTITY
@@ -167,8 +177,4 @@ if [ "$copied" -eq 0 ]; then
   exit 1
 fi
 
-if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
-  echo "Done. Signed (and notarized when Apple accepted the ticket) DMG is in $OUT/$versioned"
-else
-  echo "Done. The DMG is in $OUT/$versioned (unsigned — add scripts/sign-macos-release.env to sign)"
-fi
+echo "Done. Signed (and notarized when Apple accepted the ticket) DMG is in $OUT/$versioned"

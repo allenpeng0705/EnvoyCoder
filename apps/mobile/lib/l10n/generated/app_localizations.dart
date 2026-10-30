@@ -1431,7 +1431,7 @@ abstract class AppLocalizations {
   /// run.thoughtTitle — Collapsed reasoning row.
   ///
   /// In en, this message translates to:
-  /// **'How it thought about this'**
+  /// **'Thought'**
   String get runThoughtTitle;
 
   /// run.stepsSummary — Collapsed thought/tool segment.
@@ -1481,6 +1481,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Answer in the composer below'**
   String get runApprovalAnswerBelow;
+
+  /// run.plan.title — Headline for an ACP plan checklist with no progress count.
+  ///
+  /// In en, this message translates to:
+  /// **'Plan'**
+  String get runPlanTitle;
+
+  /// run.plan.progress — Checklist progress.
+  ///
+  /// In en, this message translates to:
+  /// **'Plan · {done} of {total}'**
+  String runPlanProgress(int done, int total);
+
+  /// run.plan.priority.high — High priority badge on a plan entry.
+  ///
+  /// In en, this message translates to:
+  /// **'High'**
+  String get runPlanPriorityHigh;
 
   /// approvalquestiontool — The permission the agent is asking for, naming the tool.
   ///

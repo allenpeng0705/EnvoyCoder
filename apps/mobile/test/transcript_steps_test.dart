@@ -83,7 +83,7 @@ void main() {
     expect(first.entries.map((e) => e.id).toList(), ['t1', 'n-quiet', 't2']);
   });
 
-  test('holds chat-only streaming answer in open Steps while the run is live', () {
+  test('keeps the streaming answer outside Steps so the reader does not hunt for it', () {
     final entries = [
       TranscriptEntry(kind: 'user', id: 'u1', text: 'hi'),
       TranscriptEntry(kind: 'assistant', id: 'a1', text: 'working on it'),
@@ -94,14 +94,48 @@ void main() {
       TranscriptEntryItem,
     ]);
 
+    // Match desktop: chat-only reply stays a hero while it streams.
     final live = segmentTranscriptSteps(entries, runLive: true);
     expect(live.map((i) => i.runtimeType).toList(), [
       TranscriptEntryItem,
-      TranscriptStepsItem,
+      TranscriptEntryItem,
     ]);
-    final steps = (live[1] as TranscriptStepsItem).segment;
-    expect(steps.live, isTrue);
-    expect(steps.entries.map((e) => e.id).toList(), ['a1']);
+  });
+
+  test('marks thought-only Steps live while the run is open', () {
+    final entries = [
+      TranscriptEntry(kind: 'user', id: 'u1', text: 'hi'),
+      TranscriptEntry(kind: 'thought', id: 'th1', text: 'planning…'),
+    ];
+    final idle = segmentTranscriptSteps(entries);
+    expect((idle[1] as TranscriptStepsItem).segment.live, isFalse);
+
+    final live = segmentTranscriptSteps(entries, runLive: true);
+    expect((live[1] as TranscriptStepsItem).segment.live, isTrue);
+  });
+
+  test('does not mark prior-turn Steps live when a later turn is running', () {
+    final entries = [
+      TranscriptEntry(kind: 'user', id: 'u1', text: 'first'),
+      TranscriptEntry(kind: 'tool', id: 't1', text: 'Read', status: 'completed'),
+      TranscriptEntry(kind: 'assistant', id: 'a1', text: 'done'),
+      TranscriptEntry(kind: 'user', id: 'u2', text: 'second'),
+      TranscriptEntry(kind: 'thought', id: 'th2', text: 'next…'),
+    ];
+    final items = segmentTranscriptSteps(entries, runLive: true);
+    expect((items[1] as TranscriptStepsItem).segment.live, isFalse);
+    expect((items[4] as TranscriptStepsItem).segment.live, isTrue);
+  });
+
+  test('stepsLiveStreamText joins thought and interim assistant', () {
+    expect(
+      stepsLiveStreamText([
+        TranscriptEntry(kind: 'thought', id: 'th1', text: 'planning'),
+        TranscriptEntry(kind: 'tool', id: 't1', text: 'Read', status: 'running'),
+        TranscriptEntry(kind: 'assistant', id: 'a1', text: 'looking'),
+      ]),
+      'planning\n\nlooking',
+    );
   });
 
   testWidgets('tool card hides I/O until Details is expanded', (tester) async {
@@ -156,5 +190,47 @@ void main() {
     expect(find.text(en.runThoughtTitle), findsOneWidget);
     expect(find.text('hmm'), findsOneWidget);
     expect(find.text('Bash'), findsOneWidget);
+  });
+
+  testWidgets('live Steps shows Working stream then collapses when settled', (tester) async {
+    final en = lookupAppLocalizations(const Locale('en'));
+    var live = true;
+    final liveEntries = [
+      TranscriptEntry(kind: 'thought', id: 'th1', text: 'planning the fix'),
+      TranscriptEntry(kind: 'tool', id: 't1', text: 'Read', status: 'running'),
+    ];
+    final settledEntries = [
+      TranscriptEntry(kind: 'thought', id: 'th1', text: 'planning the fix'),
+      TranscriptEntry(kind: 'tool', id: 't1', text: 'Read', status: 'completed'),
+    ];
+
+    late StateSetter setOuter;
+    await pumpLocalized(
+      tester,
+      Scaffold(
+        body: StatefulBuilder(
+          builder: (context, setState) {
+            setOuter = setState;
+            return TranscriptStepsBlock(
+              storageId: 'steps-live',
+              live: live,
+              colors: CoderColors.light,
+              entries: live ? liveEntries : settledEntries,
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text(en.runStepsWorking), findsOneWidget);
+    expect(find.text('planning the fix'), findsOneWidget);
+    expect(find.text('Read'), findsOneWidget);
+
+    setOuter(() => live = false);
+    await tester.pump();
+    await tester.pump(); // post-frame collapse
+    expect(find.text(en.runStepsSummary), findsOneWidget);
+    // Collapsed: stream pane gone; thought body not visible until reopen.
+    expect(find.text('planning the fix'), findsNothing);
   });
 }

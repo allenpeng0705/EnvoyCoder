@@ -751,6 +751,17 @@ class AppLocalizationsJa extends AppLocalizations {
   String get runApprovalAnswerBelow => '下の入力欄で回答してください';
 
   @override
+  String get runPlanTitle => 'プラン';
+
+  @override
+  String runPlanProgress(int done, int total) {
+    return 'プラン · $done / $total';
+  }
+
+  @override
+  String get runPlanPriorityHigh => '高';
+
+  @override
   String approvalQuestionTool(String tool) {
     return 'エージェントに「$tool」の実行を許可しますか？';
   }

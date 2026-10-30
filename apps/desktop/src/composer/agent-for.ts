@@ -20,7 +20,7 @@
  * the class of drift this repository keeps paying for.
  */
 
-import { cataloguedSessionModes } from "@envoydev/agent-catalog";
+import { cataloguedSessionModes } from "@envoydev/agent-catalog/catalog";
 import type {
   HarnessAvailability,
   HarnessId,

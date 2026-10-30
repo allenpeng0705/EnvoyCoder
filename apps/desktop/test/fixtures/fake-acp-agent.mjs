@@ -344,6 +344,39 @@ function handlePrompt(id, params) {
     return;
   }
 
+  if (text.includes("plan-checklist")) {
+    // ACP plan_update progress — EnvoyDev must fold into run.plan, not drop.
+    update({
+      sessionUpdate: "plan_update",
+      plan: {
+        type: "items",
+        planId: sessionId ?? "sess-plan",
+        entries: [
+          { content: "Phase 0", priority: "high", status: "in_progress" },
+          { content: "Phase 1", status: "pending" },
+        ],
+      },
+    });
+    update({
+      sessionUpdate: "plan_update",
+      plan: {
+        type: "items",
+        planId: sessionId ?? "sess-plan",
+        entries: [
+          { content: "Phase 0", priority: "high", status: "completed" },
+          { content: "Phase 1", status: "in_progress" },
+        ],
+      },
+    });
+    update({
+      sessionUpdate: "agent_message_chunk",
+      messageId: "m-plan",
+      content: { type: "text", text: "working the checklist" },
+    });
+    ok(id, { stopReason: "end_turn" });
+    return;
+  }
+
   if (text.includes("harness-me")) {
     // **The built-in `envoy-harness`'s dialect, envelope for envelope** — taken from a real turn
     // against the built peer rather than from the specification:

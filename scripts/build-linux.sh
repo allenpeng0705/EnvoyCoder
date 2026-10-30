@@ -3,7 +3,9 @@
 #
 # The Tauri app and the daemon are one package. The app starts the daemon
 # when the first window opens and stops it when the last window closes.
-# Envoy Harness is cloned from its repo and built into the same package.
+# Envoy Harness is cloned from its repo (scripts/envoy-harness.pin) and built
+# into the same package. If the clone fails, the stager falls back to
+# ../envoy-harness when that sibling checkout exists (or set ENVOY_HARNESS_DIR).
 #
 # Run this on Linux, from the EnvoyCoder checkout:
 #   bash scripts/build-linux.sh

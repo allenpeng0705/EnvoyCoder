@@ -1,10 +1,12 @@
 /**
  * Render-time grouping: thought / tool / interim assistant / quiet notes fold into
- * one Steps segment so only the turn's settled answer stays the visual focus.
+ * one Steps segment so only the turn's answer stays the visual focus.
  *
  * Approvals (and warn/error notes) break a segment — they must stay findable.
- * While the run is live and no tools have settled yet, assistants stay inside
- * open Steps so narration does not flash outside then jump in when tools start.
+ *
+ * The answer itself (the last assistant with no tools after it) stays **outside**
+ * Steps, including while it streams. Hiding that text inside an auto-opened Steps
+ * dump forced readers to scroll past every tool and thought to find the reply.
  */
 
 import { countToolBuckets, emptyToolCounts, type ToolCounts } from "./tool-buckets.js";
@@ -14,7 +16,7 @@ export type StepsSegment = {
   kind: "steps";
   id: string;
   entries: readonly TranscriptEntry[];
-  /** True when tools are running, or the run is live and this segment still holds the answer. */
+  /** True when tools in this segment are still running (summary hint only — Steps stay closed). */
   live: boolean;
   counts: ToolCounts;
   thoughtCount: number;
@@ -23,7 +25,7 @@ export type StepsSegment = {
 export type TranscriptRenderItem = TranscriptEntry | StepsSegment;
 
 export type SegmentTranscriptStepsOptions = {
-  /** When true, defer chat-only heroes into open Steps until the turn settles. */
+  /** True while a run has not ended — keeps Steps marked live when tools are running. */
   runLive?: boolean;
 };
 
@@ -41,58 +43,58 @@ function isQuietNote(entry: TranscriptEntry): boolean {
   return entry.kind === "note" && entry.tone === "quiet";
 }
 
-function segmentMeta(
-  entries: readonly TranscriptEntry[],
-  runLive: boolean,
-): {
-  live: boolean;
+function segmentMeta(entries: readonly TranscriptEntry[]): {
   counts: ToolCounts;
   thoughtCount: number;
+  toolsRunning: boolean;
 } {
   const tools: ToolEntry[] = [];
   let thoughtCount = 0;
-  let hasAssistant = false;
   for (const entry of entries) {
     if (entry.kind === "thought") thoughtCount += 1;
-    if (entry.kind === "assistant") hasAssistant = true;
     tools.push(...toolsFromEntry(entry));
   }
-  const toolsRunning = tools.some((tool) => tool.status === "running");
-  // Keep Steps open while live if it still holds the streaming answer (no tools yet).
-  const holdingAnswer = runLive && hasAssistant && tools.length === 0;
   return {
-    live: toolsRunning || holdingAnswer,
     counts: tools.length > 0 ? countToolBuckets(tools) : emptyToolCounts(),
     thoughtCount,
+    toolsRunning: tools.some((tool) => tool.status === "running"),
   };
 }
 
 /**
- * Within one turn, promote the last assistant that is not followed by any tool.
- * While the run is live and the turn has no tools yet, promote nothing — the
- * streaming answer stays in Steps (open) so a later tool does not demote a hero.
+ * Only the latest Steps segment is "live" while the run is open (thought-only
+ * phases included). Older segments stay quiet so prior turns do not flip back
+ * to "Working…".
+ */
+function applyLiveFlags(
+  items: TranscriptRenderItem[],
+  runLive: boolean,
+): TranscriptRenderItem[] {
+  let lastSteps = -1;
+  for (let i = 0; i < items.length; i += 1) {
+    if (items[i]!.kind === "steps") lastSteps = i;
+  }
+  return items.map((item, i) => {
+    if (item.kind !== "steps") return item;
+    const toolsRunning = item.entries.some((entry) =>
+      toolsFromEntry(entry).some((tool) => tool.status === "running"),
+    );
+    if (toolsRunning) return { ...item, live: true };
+    if (runLive && i === lastSteps && item.entries.length > 0) {
+      return { ...item, live: true };
+    }
+    return { ...item, live: false };
+  });
+}
+
+/**
+ * Within one turn, promote the last assistant that is not followed by any tool —
+ * that row is the answer the reader should see without opening Steps.
  */
 function promoteHeroInTurn(
   turn: readonly TranscriptEntry[],
   heroes: Set<string>,
-  runLive: boolean,
 ): void {
-  const hasTools = turn.some(isToolish);
-  const anyRunning = turn.some(
-    (entry) =>
-      (entry.kind === "tool" && entry.status === "running") ||
-      (entry.kind === "tools" && entry.tools.some((tool) => tool.status === "running")),
-  );
-
-  if (runLive && !hasTools) {
-    // Chat-only while live: hold in Steps (opened via holdingAnswer).
-    return;
-  }
-  if (runLive && anyRunning) {
-    // Tools still going — do not promote a final answer yet.
-    return;
-  }
-
   let heroId: string | undefined;
   for (let i = 0; i < turn.length; i += 1) {
     const entry = turn[i]!;
@@ -108,17 +110,16 @@ function promoteHeroInTurn(
  */
 export function heroAssistantIds(
   entries: readonly TranscriptEntry[],
-  options: SegmentTranscriptStepsOptions = {},
+  _options: SegmentTranscriptStepsOptions = {},
 ): ReadonlySet<string> {
-  const runLive = options.runLive === true;
   const heroes = new Set<string>();
   let turnStart = 0;
   for (let i = 0; i < entries.length; i += 1) {
     if (entries[i]!.kind !== "user") continue;
-    if (i > turnStart) promoteHeroInTurn(entries.slice(turnStart, i), heroes, runLive);
+    if (i > turnStart) promoteHeroInTurn(entries.slice(turnStart, i), heroes);
     turnStart = i;
   }
-  promoteHeroInTurn(entries.slice(turnStart), heroes, runLive);
+  promoteHeroInTurn(entries.slice(turnStart), heroes);
   return heroes;
 }
 
@@ -146,12 +147,14 @@ export function segmentTranscriptSteps(
 
   const flush = (): void => {
     if (pending.length === 0) return;
-    const meta = segmentMeta(pending, runLive);
+    const meta = segmentMeta(pending);
     out.push({
       kind: "steps",
       id: `steps-${pending[0]!.id}`,
       entries: pending,
-      ...meta,
+      live: false,
+      counts: meta.counts,
+      thoughtCount: meta.thoughtCount,
     });
     pending = [];
   };
@@ -165,5 +168,5 @@ export function segmentTranscriptSteps(
     out.push(entry);
   }
   flush();
-  return out;
+  return applyLiveFlags(out, runLive);
 }

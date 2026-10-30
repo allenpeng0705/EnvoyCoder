@@ -188,8 +188,9 @@ List<ProjectGroup> filterProjectGroups(List<ProjectGroup> groups, String query) 
       .toList();
 }
 
+/// Approvals only — a failed run already ended; counting it as "needs you" stuck the banner forever.
 int attentionBadge(List<TaskInfo> tasks) =>
-    tasks.where((t) => t.status == 'needs-attention' || t.status == 'failed').length;
+    tasks.where((t) => t.status == 'needs-attention').length;
 
 /// The English source for a task status, kept in step with the desktop's `statusLabel`.
 ///

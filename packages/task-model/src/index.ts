@@ -137,7 +137,7 @@ export function countStatuses(tasks: readonly Task[]): StatusCounts {
   return {
     total: tasks.length,
     active: tasks.filter((w) => statusIsActive(w.status)).length,
-    needsAttention: tasks.filter((w) => statusNeedsHuman(w.status)).length,
+    needsAttention: tasks.filter((w) => w.status === "needs-attention").length,
     done: tasks.filter((w) => w.status === "done").length,
     failed: tasks.filter((w) => w.status === "failed").length,
   };
@@ -324,7 +324,8 @@ export function attentionSummary(tasks: readonly Task[], extraBadge = 0): Attent
   return {
     needsAttention,
     failed,
-    badge: needsAttention.length + failed.length + Math.max(0, extraBadge),
+    // Banner / tray "needs you" is approvals only — failed stays on the row, not the badge.
+    badge: needsAttention.length + Math.max(0, extraBadge),
   };
 }
 

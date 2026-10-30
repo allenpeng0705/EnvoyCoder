@@ -16,6 +16,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { CodeFence } from "./CodeFence.js";
+import { MarkdownTableWrap } from "./MarkdownTableWrap.js";
 import { MermaidFence } from "./MermaidFence.js";
 import { prepareMarkdown } from "./prepareMarkdown.js";
 import { splitMarkdownBlocks } from "./splitMarkdownBlocks.js";
@@ -68,9 +69,9 @@ function MarkdownComponents(): Components {
     },
     table({ children }) {
       return (
-        <div className="md__table-wrap">
+        <MarkdownTableWrap>
           <table>{children}</table>
-        </div>
+        </MarkdownTableWrap>
       );
     },
   };

@@ -58,7 +58,7 @@ Full procedure, with the failures and their fixes: **`docs/upgrading.md`**.
 | Dependency | Upgrade |
 |---|---|
 | the mesh layer (8 linked packages) | `npm run upgrade:mesh -- --verify` — or by hand: pull the sibling, `npm install` there, `npx tsc -b` the 8 packages, then `npm install && npm run gates && npm run smoke` here. **The rebuild is the upgrade**: `node_modules` is a symlink, so sources change the moment you pull, while the code we import is their `dist/`. |
-| the harness (our clone, D4) | bump the pin (a commit — all ten of its packages are `0.0.0`), `pnpm install && pnpm -r run build` in `../envoy-harness`, then `gates` + `smoke`. Never through EnvoyMesh's link, and never vendored inside this repo: its own workspace overrides point at `../EnvoyMesh/packages/*`. |
+| the harness (our clone, D4) | bump the pin (a commit — all ten of its packages are `0.0.0`), `pnpm install && pnpm run build` in `../envoy-harness` (root script = topo `build-workspace.mjs`; not `pnpm -r run build`), then `gates` + `smoke`. Never through EnvoyMesh's link, and never vendored inside this repo: its own workspace overrides point at `../EnvoyMesh/packages/*`. |
 | the external agent CLIs | nothing to do — they are the user's installs, and we probe them at runtime. |
 
 Before a release: `npm run upgrade:mesh -- --commit <sha> --verify`, `npm run docs:check -- --strict`, and

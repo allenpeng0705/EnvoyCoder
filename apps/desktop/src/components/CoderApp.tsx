@@ -22,7 +22,7 @@
 
 import type { JSX } from "react";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useShortcuts, type ShortcutActions } from "../input/useShortcuts.js";
 import { wiredBindings } from "../input/shortcuts.js";
@@ -424,39 +424,28 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
   /** The explorer sits on the right of the open task. The control itself is in the title bar. */
   const [explorerOpen, setExplorerOpen] = useState(false);
   /**
-   * **The two failures this shell routes, because it is what holds the press.**
-   *
-   * Every other surface owns its own sink: a settings row renders the answer its `write` was handed, the
-   * catalogue's rows and the fix blocks have theirs, and the palette keeps itself open. These two do not
-   * because the press and the display are in different components — a row in the rail is drawn by
-   * `CoderSidebar` while the callback lives here, and the composer's write callbacks live here while the line
-   * under the composer is drawn by `TaskPane`.
-   *
-   * The rail's is keyed by row id, so a removal that failed says so under the row it was asked for. The
-   * pane's is keyed by task id: a failure about one task must not follow the user into another task's chat,
-   * which is exactly what a single un-keyed slot would do.
+   * Rail / composer write refusals toast — no sticky line under the row or composer.
+   * Palette and settings rows still keep their own in-place sinks.
    */
-  const [railFailure, setRailFailure] = useState<{ rowId: string; notice: Notice } | undefined>(undefined);
-  const [paneFailure, setPaneFailure] = useState<{ taskId: string; notice: Notice } | undefined>(undefined);
-  /** Route a press's answer to the rail row (or the pane) that asked for it. */
-  const toRail = (rowId: string, failure: WriteFailure): WriteFailure => {
-    setRailFailure(failure ? { rowId, notice: failure } : undefined);
+  const toastWriteFailure = (failure: WriteFailure): WriteFailure => {
+    if (failure) {
+      const text = localize(t, failure);
+      if (text !== undefined) showShellToast(text, { tone: "error" });
+    }
     return failure;
   };
+  const toRail = (_rowId: string, failure: WriteFailure): WriteFailure => toastWriteFailure(failure);
   const toPairedRail = (homeId: string, rowId: string, failure: WriteFailure): void => {
     homes?.setActiveHome(homeId);
     toRail(rowId, failure);
   };
-  const toPane = (taskId: string, failure: WriteFailure): WriteFailure => {
-    setPaneFailure(failure ? { taskId, notice: failure } : undefined);
-    return failure;
-  };
+  const toPane = (_taskId: string, failure: WriteFailure): WriteFailure => toastWriteFailure(failure);
 
   /**
    * Open this project in another window — the project's `…` menu, desktop shell only.
    *
    * Same shape as Paseo's kebab item: the shell creates the window and records the project id;
-   * the new window pulls it on mount. Failures land under the project row (toRail), not in a toast.
+   * the new window pulls it on mount. Failures toast like other rail writes.
    */
   const openProjectWindow = (project: Project): void => {
     void openProjectInNewWindow(project.id).then((result) => {
@@ -609,6 +598,35 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
     void props.actions.openRun(active.runId);
   }, [active?.runId, state.runs, props.actions]);
 
+  // Load every remembered run of this task so prior turns stay on screen when a new run starts.
+  useEffect(() => {
+    if (active?.id === undefined) return;
+    void props.actions.openTaskHistory(active.id);
+  }, [active?.id, props.actions]);
+
+  /** Window-level read/skew failures: toast once per new notice (no sticky top banner). */
+  const lastErrorToastKey = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const err = state.error;
+    if (err === undefined) {
+      lastErrorToastKey.current = undefined;
+      return;
+    }
+    const id = `${err.key ?? ""}:${err.message}`;
+    if (id === lastErrorToastKey.current) return;
+    lastErrorToastKey.current = id;
+    const text = localize(t, err);
+    if (text !== undefined) showShellToast(text, { tone: "error" });
+  }, [state.error, t]);
+
+  const activeRunSlices = useMemo(() => {
+    if (active === undefined) return [];
+    return Object.values(state.runs)
+      .filter((entry) => entry.run.taskId === active.id)
+      .sort((a, b) => Date.parse(a.run.startedAt) - Date.parse(b.run.startedAt))
+      .map((entry) => ({ events: entry.events }));
+  }, [state.runs, active]);
+
   const contributions = useMemo(
     () =>
       buildCommandContributions({
@@ -700,25 +718,6 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
             Command Center stays on Mod+K — not a rail button. */}
       </header>
 
-      {state.error ? (
-        // **What the window could not do, and only that.** A read that failed, a daemon this build cannot talk
-        // to. A press that was refused is answered where it was made — the row, the composer, the palette —
-        // because a sentence about one control, shown in a bar above every surface, names nothing, moves the
-        // window, and has to be dismissed before the user can get on with what they were doing.
-        <div className="banner" role="status">
-          {/* The daemon's sentence, rendered through its key: German for a German user, and the English
-              sentence it sent whenever this build has no translation for that key. */}
-          <span>{localize(t, state.error)}</span>
-          <button
-            type="button"
-            className="button button--ghost button--small"
-            onClick={() => props.actions.clearError()}
-          >
-            {t("notice.dismiss")}
-          </button>
-        </div>
-      ) : null}
-
       <ShellToastHost />
 
       <div className="shell__body">
@@ -798,7 +797,6 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               });
             }}
             onRemoveTask={(taskId) => void removeTaskRow(taskId).then((f) => toRail(taskId, f))}
-            failure={railFailure}
             onOpenSettings={openAppSettings}
             onShowPairing={openPairing}
             theme={homeTree.local.settings.theme ?? "dark"}
@@ -1033,6 +1031,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               task={active}
               project={projectFor(state.projects, active)}
               events={active.runId ? (state.runs[active.runId]?.events ?? []) : []}
+              runSlices={activeRunSlices.length > 0 ? activeRunSlices : undefined}
               runLive={runLive}
               harnesses={state.harnesses}
               providers={state.providers}
@@ -1075,7 +1074,6 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               onProbeAgent={(harness, options) =>
                 props.actions.probeSessionOptions(harness, options)
               }
-              notice={active && paneFailure?.taskId === active.id ? localize(t, paneFailure.notice) : undefined}
               onNewTask={() => {
                 void startNewTask(active.projectId).then((failure) => toRail(active.projectId, failure));
               }}

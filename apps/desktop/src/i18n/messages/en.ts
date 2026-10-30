@@ -203,6 +203,7 @@ export const en = {
   "task.transcript.empty.title": "Start this task",
   "task.transcript.empty.body":
     "The agent works in {cwd}. Describe what you want below — tool calls, approvals, and diffs appear here.",
+  "task.transcript.loading": "Loading this turn…",
   "task.composer.queueStatus": "Will send when this turn finishes",
   "task.approval.takeover.aria": "The agent needs your answer",
   "task.approval.pendingInComposer": "Answer in the composer below",
@@ -211,12 +212,13 @@ export const en = {
   "task.tool.bucket.shell": "Shell",
   "task.tool.bucket.other": "Tool",
   "task.tool.details": "Details",
+  "task.tool.openPath": "Open {path}",
   "task.steps.summary": "Steps",
   "task.steps.working": "Working…",
   "task.you": "You",
   "task.delivered.steered": "joined the turn",
   "task.delivered.queued": "waited for the turn",
-  "task.thought.summary": "How it thought about this",
+  "task.thought.summary": "Thought",
   "task.code.copy": "Copy",
   "task.code.copied": "Copied",
   "task.code.plain": "text",
@@ -231,6 +233,10 @@ export const en = {
   "task.approval.answeredWith": "Answered: {option}",
   "task.approval.confirm": "Confirm",
   "task.approval.stopAsking": "Allow and don't ask again on this machine",
+
+  "task.plan.title": "Plan",
+  "task.plan.progress": "Plan · {done} of {total}",
+  "task.plan.priority.high": "High",
 
   /* ── the composer ── */
   "task.composer.aria": "Message the agent",

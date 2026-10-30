@@ -20,7 +20,7 @@ import type { ProjectGroup } from "@envoydev/task-model";
 
 import { harnessBadge } from "../composer/harness-label.js";
 import { useT } from "../i18n/context.js";
-import { localize, type Notice, type Refusal } from "../i18n/notice.js";
+import type { Refusal } from "../i18n/notice.js";
 import type { GitSnapshot } from "../state/coderStore.js";
 import { ProjectAgentPicker } from "./ProjectAgentPicker.js";
 import { ProjectBranches } from "./ProjectBranches.js";
@@ -88,7 +88,6 @@ export interface ProjectListProps {
   onRenameTask: (taskId: string, title: string) => void;
   onChangeTaskHarness?: (taskId: string, harness: AgentId) => void;
   onRemoveTask: (taskId: string) => void;
-  failure?: { rowId: string; notice: Notice } | undefined;
   TaskRow: (input: {
     row: ProjectGroup["rows"][number];
     active: boolean;
@@ -264,12 +263,6 @@ export function ProjectList(props: ProjectListProps): JSX.Element {
                 />
               </div>
 
-              {props.failure?.rowId === group.project.id ? (
-                <p className="sidebar__failure" role="status">
-                  {localize(t, props.failure.notice)}
-                </p>
-              ) : null}
-
               {isCollapsed ? null : (
                 <>
                   <div className="project__tasks-bar">
@@ -296,11 +289,6 @@ export function ProjectList(props: ProjectListProps): JSX.Element {
                         providers={props.providers}
                         catalog={props.catalog}
                       />
-                      {props.failure?.rowId === row.task.id ? (
-                        <p className="sidebar__failure" role="status">
-                          {localize(t, props.failure.notice)}
-                        </p>
-                      ) : null}
                     </Fragment>
                   ))}
                   {group.rows.length === 0 && props.tasksUnknown !== true ? (

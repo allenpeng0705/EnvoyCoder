@@ -29,7 +29,7 @@
  *      transcript that silently skips the sentence explaining the change.
  */
 
-import type { RunEvent, TaskStatus } from "@envoydev/protocol";
+import type { PlanEntry, RunEvent, TaskStatus } from "@envoydev/protocol";
 
 import { localNotice, type Notice } from "../i18n/notice.js";
 import { countToolBuckets, type ToolCounts } from "./tool-buckets.js";
@@ -74,6 +74,17 @@ export type TranscriptEntry =
       resolvedWithIds?: readonly string[];
     }
   /**
+   * ACP agent plan checklist — updated in place by `planId` as the agent marks steps done.
+   * Not folded into Steps; it is a first-class progress surface (Cursor-style todos).
+   */
+  | {
+      kind: "plan";
+      id: string;
+      planId: string;
+      entries: readonly PlanEntry[];
+      markdown?: string;
+    }
+  /**
    * A line this module folds out of an event — "3 files changed.", "Context 45% full.".
    *
    * A **notice**, not a string: the sentence and the catalogue key that re-renders it. This module
@@ -100,12 +111,51 @@ export interface Transcript {
  * out of order gets a transcript in the order it applied them, and the gap flag tells it that
  * something is wrong rather than quietly rendering a plausible-looking lie.
  */
+/**
+ * Fold several runs of one task into one transcript (oldest run first).
+ *
+ * Each run has its own `seq` space; folding them as one stream would raise a false gap.
+ * Matches mobile `Transcript.beginRun()` — keep prior rows, reset fold maps between runs.
+ */
+export function buildTaskTranscript(
+  runs: readonly { events: readonly RunEvent[] }[],
+): Transcript {
+  const entries: TranscriptEntry[] = [];
+  let hasGap = false;
+  let lastSeq = 0;
+  let pendingApprovalId: string | undefined;
+  for (const run of runs) {
+    const part = buildTranscript(run.events);
+    entries.push(...part.entries);
+    hasGap = hasGap || part.hasGap;
+    lastSeq = part.lastSeq;
+    pendingApprovalId = part.pendingApprovalId;
+  }
+  return { entries, hasGap, lastSeq, pendingApprovalId };
+}
+
+/** Union two event lists by `seq`, keeping arrival order for equal seqs already present. */
+export function mergeRunEvents(
+  existing: readonly RunEvent[],
+  incoming: readonly RunEvent[],
+): RunEvent[] {
+  if (incoming.length === 0) return [...existing];
+  if (existing.length === 0) return [...incoming];
+  const bySeq = new Map<number, RunEvent>();
+  for (const event of existing) bySeq.set(event.seq, event);
+  for (const event of incoming) {
+    if (!bySeq.has(event.seq)) bySeq.set(event.seq, event);
+  }
+  return [...bySeq.values()].sort((a, b) => a.seq - b.seq);
+}
+
 export function buildTranscript(events: readonly RunEvent[]): Transcript {
   const entries: TranscriptEntry[] = [];
   /** Index by identity, so a later event can update a row it already created. */
   const indexByMessage = new Map<string, number>();
   const indexByCall = new Map<string, number>();
   const indexByRequest = new Map<string, number>();
+  const indexByPlan = new Map<string, number>();
 
   let lastSeq = 0;
   let hasGap = false;
@@ -238,6 +288,45 @@ export function buildTranscript(events: readonly RunEvent[]): Transcript {
           };
         }
         if (pendingApprovalId === event.requestId) pendingApprovalId = undefined;
+        break;
+      }
+
+      case "run.plan": {
+        breakAnonymousRun();
+        const at = indexByPlan.get(event.planId);
+        if (event.removed === true) {
+          if (at !== undefined) {
+            entries.splice(at, 1);
+            indexByPlan.delete(event.planId);
+            // Reindex maps that point past the removed row.
+            for (const [key, index] of indexByPlan) {
+              if (index > at) indexByPlan.set(key, index - 1);
+            }
+            for (const [key, index] of indexByMessage) {
+              if (index > at) indexByMessage.set(key, index - 1);
+            }
+            for (const [key, index] of indexByCall) {
+              if (index > at) indexByCall.set(key, index - 1);
+            }
+            for (const [key, index] of indexByRequest) {
+              if (index > at) indexByRequest.set(key, index - 1);
+            }
+          }
+          break;
+        }
+        const next: TranscriptEntry = {
+          kind: "plan",
+          id: event.planId,
+          planId: event.planId,
+          entries: event.entries,
+          ...(event.markdown !== undefined ? { markdown: event.markdown } : {}),
+        };
+        if (at !== undefined) {
+          entries[at] = next;
+        } else {
+          indexByPlan.set(event.planId, entries.length);
+          entries.push(next);
+        }
         break;
       }
 

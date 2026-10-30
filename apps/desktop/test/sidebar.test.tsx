@@ -233,8 +233,8 @@ describe("CoderSidebar", () => {
 
   it("counts what needs a human, once, in the rail", () => {
     renderSidebar();
-    // One needs-attention task plus one failed task in the fixtures.
-    expect(screen.getByText("2 tasks need you")).toBeTruthy();
+    // Approvals only — failed tasks stay on the row, not in the "needs you" banner.
+    expect(screen.getByText("1 task needs you")).toBeTruthy();
   });
 
   it("says a task on another machine is on another machine", () => {

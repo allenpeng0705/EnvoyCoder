@@ -23,11 +23,15 @@ export default defineConfig({
   define: { __ENVOYDEV_VERSION__: JSON.stringify(version) },
   resolve: {
     alias: [
-      // Before the package root. A prefix alias for the root would turn this subpath into
-      // `index.ts/features` and the window tests would load the Node barrel.
+      // Before the package root. A prefix alias for the root would turn these subpaths into
+      // `index.ts/features` (or `/catalog`) and the window tests would load the Node barrel.
       {
         find: "@envoydev/agent-catalog/features",
         replacement: `${here}packages/agent-catalog/src/features.ts`,
+      },
+      {
+        find: "@envoydev/agent-catalog/catalog",
+        replacement: `${here}packages/agent-catalog/src/acp-catalog.ts`,
       },
       { find: "@envoydev/protocol", replacement: `${here}packages/protocol/src/index.ts` },
       { find: "@envoydev/platform", replacement: `${here}packages/platform/src/index.ts` },

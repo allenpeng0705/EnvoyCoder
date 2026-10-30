@@ -958,9 +958,15 @@ export function isTaskStatus(value: string): value is TaskStatus {
   return (TASK_STATUSES as readonly string[]).includes(value);
 }
 
-/** Does this status want the human? Used by the sidebar, notifications and the badge count. */
+/**
+ * Does this status want the human *now*? Used by the sidebar banner, notifications and the badge.
+ *
+ * Only `needs-attention` (approval / ask). A `failed` run already ended — the row still says
+ * "Stopped with an error", but counting it as "needs you" forever left the banner stuck after
+ * every crash with no decision left to make.
+ */
 export function statusNeedsHuman(status: TaskStatus): boolean {
-  return status === "needs-attention" || status === "failed";
+  return status === "needs-attention";
 }
 
 export function statusIsActive(status: TaskStatus): boolean {
@@ -1099,6 +1105,11 @@ export const RUN_EVENT_KINDS = [
   "run.diff",
   "run.usage",
   "run.commands",
+  /**
+   * ACP agent plan checklist (`session/update` `plan` / `plan_update` / `plan_removed`).
+   * Newest snapshot wins per `planId`; see `docs` / Cursor-style todo progress.
+   */
+  "run.plan",
   "run.status",
   /**
    * A collaboration handoff recorded on the run that follows it — who became active and why.
@@ -1107,6 +1118,18 @@ export const RUN_EVENT_KINDS = [
   "run.handoff",
   "run.ended",
 ] as const;
+
+/** One ACP plan checklist entry (pending → in_progress → completed). */
+export type PlanEntryStatus = "pending" | "in_progress" | "completed" | "cancelled";
+export type PlanEntryPriority = "high" | "medium" | "low";
+
+export interface PlanEntry {
+  /** Stable id when the agent supplies one (harness todo ids); used for list reconciliation. */
+  id?: string;
+  content: string;
+  status: PlanEntryStatus;
+  priority?: PlanEntryPriority;
+}
 
 export type RunEventKind = (typeof RUN_EVENT_KINDS)[number];
 
@@ -1254,6 +1277,20 @@ export type RunEvent =
        * a command the agent did not name is one we must not offer.
        */
       commands: readonly { name: string; description: string; argumentHint?: string }[];
+    })
+  | (RunEventBase & {
+      kind: "run.plan";
+      /**
+       * ACP plan checklist for this session.
+       *
+       * Agents push a full `entries` array on every `plan_update` (replace semantics). `removed`
+       * clears the plan from the transcript. Optional `markdown` carries a free-form plan body when
+       * the agent sent `type: "markdown"` without items — UI prioritizes `entries`.
+       */
+      planId: string;
+      entries: readonly PlanEntry[];
+      markdown?: string;
+      removed?: boolean;
     })
   | (RunEventBase & { kind: "run.status"; status: TaskStatus; note?: string })
   | (RunEventBase & {

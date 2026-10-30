@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../l10n/daemon_text.dart';
 import '../l10n/l10n.dart';
 import '../models/transcript.dart';
+import '../models/transcript_steps.dart';
 import '../theme/tokens.dart';
 import 'assistant_markdown.dart';
 
@@ -54,6 +55,8 @@ class TranscriptRow extends StatelessWidget {
           actionsDeferred: actionsDeferred,
           canStopAsking: canStopAsking,
         );
+      case 'plan':
+        return PlanChecklistCard(entry: entry, colors: colors);
       case 'note':
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
@@ -121,6 +124,9 @@ class _UserBubble extends StatelessWidget {
 }
 
 /// Steps disclosure wrapping thought / tool / interim assistant rows.
+///
+/// Matches desktop: while [live], auto-expand and show a multi-line auto-scrolling
+/// stream; when the turn settles, collapse so the hero answer stays the focus.
 class TranscriptStepsBlock extends StatefulWidget {
   const TranscriptStepsBlock({
     super.key,
@@ -142,33 +148,37 @@ class TranscriptStepsBlock extends StatefulWidget {
 
 class _TranscriptStepsBlockState extends State<TranscriptStepsBlock>
     with AutomaticKeepAliveClientMixin {
-  final ExpansionTileController _controller = ExpansionTileController();
-  var _wasLive = false;
+  final ScrollController _streamScroll = ScrollController();
+
+  /// Bumped on live edges so [ExpansionTile] remounts open (Working…) or closed (settled).
+  var _liveEpoch = 0;
 
   @override
   bool get wantKeepAlive => true;
 
   @override
-  void initState() {
-    super.initState();
-    _wasLive = widget.live;
-  }
-
-  @override
   void didUpdateWidget(TranscriptStepsBlock oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Suggest expand when tools start; never force-collapse when they finish.
-    if (widget.live && !_wasLive) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _controller.expand();
-      });
+    // No setState — build runs right after didUpdateWidget in the same frame.
+    if (widget.live != oldWidget.live) {
+      _liveEpoch++;
     }
-    _wasLive = widget.live;
+
+    final stream = stepsLiveStreamText(widget.entries);
+    final oldStream = stepsLiveStreamText(oldWidget.entries);
+    if (widget.live && stream != oldStream) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollStreamToEnd());
+    }
+  }
+
+  void _scrollStreamToEnd() {
+    if (!mounted || !_streamScroll.hasClients) return;
+    _streamScroll.jumpTo(_streamScroll.position.maxScrollExtent);
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _streamScroll.dispose();
     super.dispose();
   }
 
@@ -176,7 +186,9 @@ class _TranscriptStepsBlockState extends State<TranscriptStepsBlock>
   Widget build(BuildContext context) {
     super.build(context);
     final l10n = context.l10n;
-    final title = widget.live
+    final live = widget.live;
+    final streamText = live ? stepsLiveStreamText(widget.entries) : '';
+    final title = live
         ? l10n.runStepsWorking
         : widget.entries.any((e) => e.kind == 'tool')
             ? l10n.runStepsSummary
@@ -186,17 +198,16 @@ class _TranscriptStepsBlockState extends State<TranscriptStepsBlock>
       decoration: BoxDecoration(
         color: widget.colors.surface1,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: widget.live ? widget.colors.accent : widget.colors.border),
+        border: Border.all(color: live ? widget.colors.accent : widget.colors.border),
       ),
       child: Material(
         type: MaterialType.transparency,
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
-            // storageId keeps the State (and expand/collapse) stable across rebuilds.
-            key: ValueKey<String>(widget.storageId),
-            controller: _controller,
-            initiallyExpanded: widget.live,
+            // Epoch remounts on live edges so Working… opens and settles closed.
+            key: ValueKey<String>('${widget.storageId}-$_liveEpoch'),
+            initiallyExpanded: live,
             tilePadding: const EdgeInsets.symmetric(horizontal: 12),
             childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
             title: Row(
@@ -204,7 +215,7 @@ class _TranscriptStepsBlockState extends State<TranscriptStepsBlock>
                 Icon(
                   Icons.circle,
                   size: 8,
-                  color: widget.live
+                  color: live
                       ? widget.colors.statusDotRunning
                       : widget.colors.foregroundMuted,
                 ),
@@ -218,8 +229,17 @@ class _TranscriptStepsBlockState extends State<TranscriptStepsBlock>
               ],
             ),
             children: [
+              if (live && streamText.isNotEmpty)
+                _LiveStreamPane(
+                  text: streamText,
+                  colors: widget.colors,
+                  scrollController: _streamScroll,
+                ),
               for (final entry in widget.entries) ...[
-                if (entry.kind == 'thought')
+                // Live stream already shows thought / interim assistant text.
+                if (live && (entry.kind == 'thought' || entry.kind == 'assistant'))
+                  const SizedBox.shrink()
+                else if (entry.kind == 'thought')
                   _FlatThought(text: entry.text, colors: widget.colors)
                 else if (entry.kind == 'assistant')
                   Padding(
@@ -251,6 +271,51 @@ class _TranscriptStepsBlockState extends State<TranscriptStepsBlock>
                   ),
               ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LiveStreamPane extends StatelessWidget {
+  const _LiveStreamPane({
+    required this.text,
+    required this.colors,
+    required this.scrollController,
+  });
+
+  final String text;
+  final CoderColors colors;
+  final ScrollController scrollController;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 4),
+      child: Container(
+        width: double.infinity,
+        constraints: const BoxConstraints(maxHeight: 192),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: Color.lerp(colors.surface1, colors.accent, 0.06),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Color.lerp(colors.border, colors.accent, 0.28)!),
+        ),
+        child: Scrollbar(
+          controller: scrollController,
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            controller: scrollController,
+            child: Text(
+              text,
+              style: TextStyle(
+                color: colors.foregroundMuted,
+                fontSize: 13,
+                height: 1.45,
+                fontFamily: 'monospace',
+              ),
+            ),
           ),
         ),
       ),
@@ -479,6 +544,139 @@ class _CodeBlock extends StatelessWidget {
   }
 }
 
+/// ACP plan checklist — Cursor-style progress on the phone.
+class PlanChecklistCard extends StatefulWidget {
+  const PlanChecklistCard({super.key, required this.entry, required this.colors});
+
+  final TranscriptEntry entry;
+  final CoderColors colors;
+
+  @override
+  State<PlanChecklistCard> createState() => _PlanChecklistCardState();
+}
+
+class _PlanChecklistCardState extends State<PlanChecklistCard> {
+  final ScrollController _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final colors = widget.colors;
+    final entry = widget.entry;
+    final items = entry.planEntries ?? const <TranscriptPlanEntry>[];
+    final done = items.where((e) => e.status == 'completed').length;
+    final complete = items.isNotEmpty && done == items.length;
+    final title = items.isEmpty
+        ? l10n.runPlanTitle
+        : l10n.runPlanProgress(done, items.length);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.surface1,
+        border: Border(
+          left: BorderSide(
+            color: complete ? colors.statusSuccess : colors.statusDotRunning,
+            width: 3,
+          ),
+          top: BorderSide(color: colors.border),
+          right: BorderSide(color: colors.border),
+          bottom: BorderSide(color: colors.border),
+        ),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: TextStyle(color: colors.foreground, fontWeight: FontWeight.w600)),
+          if (items.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Scrollbar(
+              controller: _scroll,
+              thumbVisibility: true,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 240),
+                child: ListView.separated(
+                  controller: _scroll,
+                  shrinkWrap: true,
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 6),
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    final muted = item.status == 'completed' || item.status == 'cancelled';
+                    return Row(
+                      key: ValueKey(item.id ?? 'plan-step-$index-${item.content}'),
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _planMark(item.status),
+                          style: TextStyle(
+                            color: item.status == 'in_progress'
+                                ? colors.statusDotRunning
+                                : item.status == 'completed'
+                                    ? colors.statusSuccess
+                                    : colors.foregroundMuted,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            item.content,
+                            style: TextStyle(
+                              color: muted ? colors.foregroundMuted : colors.foreground,
+                              decoration: muted ? TextDecoration.lineThrough : null,
+                              fontSize: 13,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                        if (item.priority == 'high')
+                          Text(
+                            l10n.runPlanPriorityHigh,
+                            style: TextStyle(color: colors.statusWarning, fontSize: 11),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+          if (entry.planMarkdown != null && entry.planMarkdown!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 192),
+              child: SingleChildScrollView(
+                child: AssistantMarkdown(text: entry.planMarkdown!, colors: colors),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _planMark(String status) {
+    switch (status) {
+      case 'completed':
+        return '✓';
+      case 'in_progress':
+        return '●';
+      case 'cancelled':
+        return '–';
+      default:
+        return '○';
+    }
+  }
+}
+
 class ApprovalCard extends StatelessWidget {
   const ApprovalCard({
     super.key,
@@ -543,12 +741,16 @@ class ApprovalCard extends StatelessWidget {
                 : daemonText(l10n, approval.question),
             style: TextStyle(color: colors.foreground, fontWeight: FontWeight.w600),
           ),
-          if (!deferred && approval.detail != null && approval.detail!.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              daemonText(l10n, approval.detail!),
-              style: TextStyle(color: colors.foregroundMuted, fontSize: 13),
-            ),
+          // Plan bodies stay visible even while choices live in sticky chrome — same contract as
+          // the desktop deferred card. Cap height so a long ask_user plan cannot push the buttons
+          // off the phone.
+          if (approval.detail != null && approval.detail!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _ApprovalDetail(detail: approval.detail!, colors: colors),
+          ],
+          if (_askHint(l10n, approval.selection) case final hint?) ...[
+            const SizedBox(height: 6),
+            Text(hint, style: TextStyle(color: colors.foregroundMuted, fontSize: 13)),
           ],
           if (deferred) ...[
             const SizedBox(height: 4),
@@ -633,6 +835,69 @@ String _noteText(AppLocalizations l10n, TranscriptEntry entry) {
       };
     default:
       return daemonText(l10n, entry.text);
+  }
+}
+
+String? _askHint(AppLocalizations l10n, String? selection) {
+  switch (selection) {
+    case 'many':
+      return l10n.approvalDetailMultiple;
+    case 'text':
+      return l10n.approvalDetailText;
+    case 'one':
+      return l10n.approvalDetailPick;
+    default:
+      return null;
+  }
+}
+
+bool _detailLooksLikeMarkdown(String detail) {
+  return detail.contains('\n') ||
+      RegExp(r'^#{1,6}\s', multiLine: true).hasMatch(detail) ||
+      detail.contains('|');
+}
+
+/// Scrollable ask/plan body — markdown when it looks like a plan, plain when it is a short keyed hint.
+class _ApprovalDetail extends StatefulWidget {
+  const _ApprovalDetail({required this.detail, required this.colors});
+
+  final String detail;
+  final CoderColors colors;
+
+  @override
+  State<_ApprovalDetail> createState() => _ApprovalDetailState();
+}
+
+class _ApprovalDetailState extends State<_ApprovalDetail> {
+  final ScrollController _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final text = daemonText(l10n, widget.detail);
+    final markdown = _detailLooksLikeMarkdown(text);
+    final child = markdown
+        ? AssistantMarkdown(text: text, colors: widget.colors)
+        : Text(text, style: TextStyle(color: widget.colors.foregroundMuted, fontSize: 13));
+    if (!markdown) return child;
+
+    return Scrollbar(
+      controller: _scroll,
+      thumbVisibility: true,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 240),
+        child: SingleChildScrollView(
+          controller: _scroll,
+          child: child,
+        ),
+      ),
+    );
   }
 }
 

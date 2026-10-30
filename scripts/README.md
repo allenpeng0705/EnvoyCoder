@@ -28,8 +28,16 @@ Tauri bundle for that platform.
 
 ### Use a local envoy-harness checkout
 
-By default the stager clones the commit in `scripts/envoy-harness.pin`. To build
-from a sibling tree instead (no fetch/reset of that tree):
+By default the stager clones the commit in `scripts/envoy-harness.pin`. If that
+clone fails (offline, private repo, bad network) and `ENVOY_HARNESS_DIR` is
+unset, it automatically tries the sibling folder `../envoy-harness` when that
+tree looks like a harness checkout. Prefer an explicit path when you mean to
+skip the network.
+
+The harness’s `pnpm` overrides are `link:../EnvoyMesh/packages/…`. A pin clone
+under `build/cache/` therefore needs `build/cache/EnvoyMesh`; the stager
+symlinks that to the family sibling `../EnvoyMesh` (which must already be built
+for `protocol`, `identity`, and `agent-adapter`).
 
 ```bash
 # macOS / Linux
@@ -64,15 +72,17 @@ Other env knobs (see `stage-desktop-bundle.mjs`): `ENVOY_HARNESS_COMMIT`,
 
 ### macOS signing / notarization
 
+Release DMGs are **always signed**. Missing credentials abort the build.
+
 1. Copy `sign-macos-release.env.example` → `sign-macos-release.env` (gitignored).
 2. Fill the four Apple Developer ID exports (same values as EnvoyMesh are fine).
 3. Run `bash scripts/build-dmg.sh`.
 
-Without that file the DMG is **unsigned**. With it, staged Node/native addons and
-`EnvoyDev.app` are signed (Node needs JIT entitlements in
-`macos-node.entitlements` — keep that plist **free of XML comments**, or
-`codesign` embeds nothing and the packaged daemon dies with “Daemon unreachable”).
-Family operator notes: `../EnvoyMesh/docs/macos-mirror-signing.md`.
+Staged Node/native addons and `EnvoyDev.app` are signed (Node needs JIT
+entitlements in `macos-node.entitlements` — keep that plist **free of XML
+comments**, or `codesign` embeds nothing and the packaged daemon dies with
+“Daemon unreachable”). Family operator notes:
+`../EnvoyMesh/docs/macos-mirror-signing.md`.
 
 ### Related checks
 

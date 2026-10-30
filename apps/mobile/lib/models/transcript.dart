@@ -46,9 +46,12 @@ class TranscriptEntry {
     this.noteCount,
     this.notePercent,
     this.noteStatus,
+    this.planId,
+    this.planEntries,
+    this.planMarkdown,
   });
 
-  /// `user` | `assistant` | `thought` | `tool` | `approval` | `note`.
+  /// `user` | `assistant` | `thought` | `tool` | `approval` | `plan` | `note`.
   final String kind;
 
   /// Identity within the transcript: a message id, a call id, a request id, or `kind:seq`.
@@ -80,6 +83,26 @@ class TranscriptEntry {
   String? toolOutput;
 
   TranscriptApproval? approval;
+
+  /// ACP plan checklist (`run.plan`), when [kind] is `plan`.
+  String? planId;
+  List<TranscriptPlanEntry>? planEntries;
+  String? planMarkdown;
+}
+
+/// One ACP plan checklist entry.
+class TranscriptPlanEntry {
+  const TranscriptPlanEntry({
+    required this.content,
+    required this.status,
+    this.id,
+    this.priority,
+  });
+
+  final String content;
+  final String status;
+  final String? id;
+  final String? priority;
 }
 
 /// An approval the agent is blocked on, as the transcript holds it.
@@ -139,6 +162,7 @@ class Transcript {
     _byMessage.clear();
     _byCall.clear();
     _byRequest.clear();
+    _byPlan.clear();
     _breakAnonymous();
   }
 
@@ -149,6 +173,7 @@ class Transcript {
   final Map<String, int> _byMessage = {};
   final Map<String, int> _byCall = {};
   final Map<String, int> _byRequest = {};
+  final Map<String, int> _byPlan = {};
 
   /// The bucket for fragments that carry no `messageId`, cleared by any other row.
   String _anonymousKey = '';
@@ -229,6 +254,11 @@ class Transcript {
             approval?.resolvedWithIds = [for (final id in ids) if (id is String) id];
           }
         }
+        return;
+
+      case 'run.plan':
+        _breakAnonymous();
+        _applyPlan(event, seq);
         return;
 
       case 'run.status':
@@ -395,6 +425,69 @@ class Transcript {
     );
     if (requestId.isNotEmpty) _byRequest[requestId] = entries.length;
     entries.add(entry);
+  }
+
+  void _applyPlan(Map<String, dynamic> event, int? seq) {
+    final planId = (event['planId'] as String?) ?? '';
+    if (planId.isEmpty) return;
+    final removed = event['removed'] == true;
+    final at = _byPlan[planId];
+    if (removed) {
+      if (at != null) {
+        entries.removeAt(at);
+        _byPlan.remove(planId);
+        _reindexAfter(at);
+      }
+      return;
+    }
+    final rawEntries = event['entries'];
+    final planEntries = <TranscriptPlanEntry>[];
+    if (rawEntries is List) {
+      for (final raw in rawEntries) {
+        if (raw is! Map) continue;
+        final content = raw['content'] as String?;
+        final status = raw['status'] as String?;
+        if (content == null || status == null) continue;
+        final id = raw['id'] as String?;
+        planEntries.add(
+          TranscriptPlanEntry(
+            content: content,
+            status: status,
+            id: id != null && id.isNotEmpty ? id : null,
+            priority: raw['priority'] as String?,
+          ),
+        );
+      }
+    }
+    final markdown = event['markdown'] as String?;
+    if (at != null) {
+      entries[at].planEntries = planEntries;
+      entries[at].planMarkdown = markdown;
+      return;
+    }
+    _byPlan[planId] = entries.length;
+    entries.add(
+      TranscriptEntry(
+        kind: 'plan',
+        id: planId,
+        planId: planId,
+        planEntries: planEntries,
+        planMarkdown: markdown,
+      ),
+    );
+  }
+
+  void _reindexAfter(int removedAt) {
+    void bump(Map<String, int> map) {
+      for (final entry in map.entries.toList()) {
+        if (entry.value > removedAt) map[entry.key] = entry.value - 1;
+      }
+    }
+
+    bump(_byMessage);
+    bump(_byCall);
+    bump(_byRequest);
+    bump(_byPlan);
   }
 
   /// Close every open question without answering it.

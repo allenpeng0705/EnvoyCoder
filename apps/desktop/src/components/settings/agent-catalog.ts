@@ -31,7 +31,7 @@
  * `rowVerdict` — one function over those facts, in one place, for all three lists.
  */
 
-import { acpAgent, cataloguedProviderInput } from "@envoydev/agent-catalog";
+import { acpAgent, cataloguedProviderInput } from "@envoydev/agent-catalog/catalog";
 import type {
   CatalogEntry,
   HarnessSummary,
@@ -165,8 +165,9 @@ export function commandLineOf(entry: Pick<CatalogEntry, "command" | "args">): st
  *
  * The authority is `@envoydev/agent-catalog`'s `splitArgs`, which is what the **launch** uses to turn a
  * provider's stored `args` into argv. This copy exists for one reason: that package's entry point reaches
- * `@envoydev/platform`, which imports `node:fs`, so the window's bundle cannot import it at all — the same
- * constraint that put the catalogue on the wire in the first place.
+ * `@envoydev/platform`, which imports `node:fs`, so the window's bundle cannot import the barrel — the same
+ * constraint that put the catalogue on the wire in the first place. (Pure catalogue helpers use
+ * `@envoydev/agent-catalog/catalog`; `splitArgs` still lives on the Node barrel.)
  *
  * A second answer to "what did the user mean by this string" is exactly the drift this repository keeps
  * paying for, so it is not left to care: `test/settings-agents-catalog.test.tsx` parses one table of inputs

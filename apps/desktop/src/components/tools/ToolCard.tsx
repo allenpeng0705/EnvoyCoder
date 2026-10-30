@@ -3,10 +3,11 @@
  * Derives from transcript ToolEntry only; drawing never invents session-log kinds.
  *
  * Default view is a one-liner (bucket, name, path / command / ±). Long payloads
- * sit behind a closed Details disclosure so the answer stays readable.
+ * sit behind a closed Details disclosure so the answer stays readable. Edit tools
+ * also show a short inline mini-diff when old/new strings are present.
  */
 
-import { useLayoutEffect, useRef, type ReactElement } from "react";
+import { useLayoutEffect, useMemo, useRef, type ReactElement } from "react";
 
 import { useT } from "../../i18n/context.js";
 import {
@@ -51,16 +52,9 @@ function lineCount(text: string): number {
   return text.split("\n").length;
 }
 
-/**
- * Diff-style summary for edit/write tools — path + +/- line counts when old/new
- * strings are present, else a short patch/diff excerpt from the input.
- */
-export function editDiffSummary(input: unknown): string | undefined {
-  if (input === null || typeof input !== "object") {
-    return typeof input === "string" && input.trim() !== ""
-      ? summarize(input, 200)
-      : undefined;
-  }
+/** Old/new text for an edit/write tool, when the agent sent them. */
+export function editTextsFromInput(input: unknown): { oldText?: string; newText?: string } {
+  if (input === null || typeof input !== "object") return {};
   const record = input as Record<string, unknown>;
   const oldText =
     typeof record.old_string === "string"
@@ -80,11 +74,26 @@ export function editDiffSummary(input: unknown): string | undefined {
           : typeof record.contents === "string"
             ? record.contents
             : undefined;
+  return { oldText, newText };
+}
+
+/**
+ * Diff-style summary for edit/write tools — path + +/- line counts when old/new
+ * strings are present, else a short patch/diff excerpt from the input.
+ */
+export function editDiffSummary(input: unknown): string | undefined {
+  if (input === null || typeof input !== "object") {
+    return typeof input === "string" && input.trim() !== ""
+      ? summarize(input, 200)
+      : undefined;
+  }
+  const { oldText, newText } = editTextsFromInput(input);
   if (oldText !== undefined || newText !== undefined) {
     const removed = oldText !== undefined ? lineCount(oldText) : 0;
     const added = newText !== undefined ? lineCount(newText) : 0;
     return `−${removed} / +${added}`;
   }
+  const record = input as Record<string, unknown>;
   for (const key of ["diff", "patch", "edits"]) {
     const value = record[key];
     if (typeof value === "string" && value.trim() !== "") return summarize(value, 200);
@@ -93,6 +102,30 @@ export function editDiffSummary(input: unknown): string | undefined {
     }
   }
   return undefined;
+}
+
+export type MiniDiffLine = { kind: "add" | "remove" | "more"; text: string };
+
+/** Compact preview lines for an edit (capped) — not a full LCS. */
+export function miniDiffLines(
+  oldText: string | undefined,
+  newText: string | undefined,
+  maxEach = 4,
+): MiniDiffLine[] {
+  const lines: MiniDiffLine[] = [];
+  const oldLines = oldText !== undefined ? oldText.split("\n") : [];
+  const newLines = newText !== undefined ? newText.split("\n") : [];
+  const showOld = oldLines.slice(0, maxEach);
+  const showNew = newLines.slice(0, maxEach);
+  for (const text of showOld) lines.push({ kind: "remove", text });
+  if (oldLines.length > maxEach) {
+    lines.push({ kind: "more", text: `… ${oldLines.length - maxEach} more removed` });
+  }
+  for (const text of showNew) lines.push({ kind: "add", text });
+  if (newLines.length > maxEach) {
+    lines.push({ kind: "more", text: `… ${newLines.length - maxEach} more added` });
+  }
+  return lines;
 }
 
 function bucketKey(
@@ -116,23 +149,71 @@ function shortCommand(command: string, limit = 80): string {
   return `${oneLine.slice(0, limit - 1)}…`;
 }
 
-export function ToolCard(props: { entry: ToolEntry; nested?: boolean }): ReactElement {
+/**
+ * One-line headline for an unknown tool — prefer a human field over dumping JSON on the head.
+ */
+export function otherToolHeadline(input: unknown): string | undefined {
+  if (input === null || typeof input === "undefined") return undefined;
+  if (typeof input === "string") {
+    const trimmed = input.trim();
+    return trimmed === "" ? undefined : shortCommand(trimmed, 72);
+  }
+  if (typeof input !== "object") return undefined;
+  const record = input as Record<string, unknown>;
+  for (const key of ["objective", "prompt", "message", "query", "title", "description", "reason"]) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim() !== "") return shortCommand(value, 72);
+  }
+  const tasks = record.tasks;
+  if (Array.isArray(tasks) && tasks.length > 0) {
+    const first = tasks[0];
+    if (first !== null && typeof first === "object") {
+      const objective = (first as Record<string, unknown>).objective;
+      if (typeof objective === "string" && objective.trim() !== "") {
+        return shortCommand(objective, 72);
+      }
+    }
+    return `${tasks.length} task${tasks.length === 1 ? "" : "s"}`;
+  }
+  return undefined;
+}
+
+export type ToolOpenView = "file" | "diff";
+
+export function ToolCard(props: {
+  entry: ToolEntry;
+  nested?: boolean;
+  /** Open this path in WorkArea (file for reads, diff for edits). */
+  onOpenPath?: (path: string, view: ToolOpenView) => void;
+}): ReactElement {
   const t = useT();
   const { entry } = props;
+  const nested = props.nested === true;
   const detailsRef = useRef<HTMLDetailsElement>(null);
-  // Suggest open when the tool starts running; never force-close when it finishes (Steps pattern).
+  // Outside Steps: open briefly while a tool runs so shell/read output is watchable, then
+  // fold when it settles. Inside Steps the outer disclosure already owns the live view —
+  // auto-opening every nested Details is what turns a turn into a wall of JSON.
   const wasRunning = useRef(false);
   useLayoutEffect(() => {
+    if (nested) return;
     const running = entry.status === "running";
     const node = detailsRef.current;
-    if (node !== null && running && !wasRunning.current) node.open = true;
+    if (node === null) return;
+    if (running && !wasRunning.current) node.open = true;
+    if (!running && wasRunning.current) node.open = false;
     wasRunning.current = running;
-  }, [entry.status]);
+  }, [entry.status, nested]);
 
   const bucket = toolBucket(entry.name);
   const path = pathFromToolInput(entry.input);
   const command = bucket === "ran" ? commandFromInput(entry.input) : undefined;
   const editSummary = bucket === "edited" ? editDiffSummary(entry.input) : undefined;
+  const preview = useMemo(() => {
+    if (bucket !== "edited") return [];
+    const { oldText, newText } = editTextsFromInput(entry.input);
+    return miniDiffLines(oldText, newText);
+  }, [bucket, entry.input]);
+  const otherHeadline = bucket === "other" ? otherToolHeadline(entry.input) : undefined;
   const excerpt =
     bucket === "searched"
       ? excerptFromOutput(entry.output)
@@ -159,10 +240,13 @@ export function ToolCard(props: { entry: ToolEntry; nested?: boolean }): ReactEl
   const tone =
     entry.status === "running" ? "live" : entry.status === "failed" ? "danger" : "quiet";
 
+  const openView: ToolOpenView = bucket === "edited" ? "diff" : "file";
+  const canOpen = path !== undefined && props.onOpenPath !== undefined;
+
   return (
     <li
       className={`row row--tool row--tool-${entry.status} row--tool-${bucket}${
-        props.nested === true ? " row--tool-nested" : ""
+        nested ? " row--tool-nested" : ""
       }`}
       data-testid={`tool-card-${bucket}`}
     >
@@ -171,9 +255,22 @@ export function ToolCard(props: { entry: ToolEntry; nested?: boolean }): ReactEl
         <span className="row__tool-kind">{t(bucketKey(bucket))}</span>
         <span className="row__tool-name">{entry.name}</span>
         {path ? (
-          <span className="row__tool-path" title={path}>
-            {path}
-          </span>
+          canOpen ? (
+            <button
+              type="button"
+              className="row__tool-path row__tool-path--link"
+              title={path}
+              aria-label={t("task.tool.openPath", { path })}
+              data-testid="tool-card-open-path"
+              onClick={() => props.onOpenPath?.(path, openView)}
+            >
+              {path}
+            </button>
+          ) : (
+            <span className="row__tool-path" title={path}>
+              {path}
+            </span>
+          )
         ) : null}
         {editSummary ? <span className="row__tool-diff">{editSummary}</span> : null}
         {command ? (
@@ -181,7 +278,26 @@ export function ToolCard(props: { entry: ToolEntry; nested?: boolean }): ReactEl
             {shortCommand(command)}
           </span>
         ) : null}
+        {otherHeadline ? (
+          <span className="row__tool-cmd" title={otherHeadline}>
+            {otherHeadline}
+          </span>
+        ) : null}
       </div>
+      {preview.length > 0 ? (
+        <pre className="row__tool-mini-diff" data-testid="tool-card-mini-diff" aria-hidden>
+          {preview.map((line, index) => (
+            <span
+              key={`${line.kind}-${index}`}
+              className={`row__tool-mini-diff-line row__tool-mini-diff-line--${line.kind}`}
+            >
+              {line.kind === "add" ? "+" : line.kind === "remove" ? "−" : " "}
+              {line.text}
+              {"\n"}
+            </span>
+          ))}
+        </pre>
+      ) : null}
       {detailBlocks.length > 0 ? (
         <details ref={detailsRef} className="row__tool-details">
           <summary>{t("task.tool.details")}</summary>

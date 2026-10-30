@@ -743,6 +743,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get runApprovalAnswerBelow => '请在下方输入区回答';
 
   @override
+  String get runPlanTitle => '计划';
+
+  @override
+  String runPlanProgress(int done, int total) {
+    return '计划 · $done/$total';
+  }
+
+  @override
+  String get runPlanPriorityHigh => '高';
+
+  @override
   String approvalQuestionTool(String tool) {
     return '允许智能体运行“$tool”吗？';
   }

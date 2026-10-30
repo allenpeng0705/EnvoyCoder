@@ -205,7 +205,8 @@ describe("attention", () => {
       task({ id: "c", status: "failed" }),
       task({ id: "d", status: "running" }),
     ]);
-    expect(summary.badge).toBe(3);
+    // Failed is listed but not in the "needs you" badge — that is approvals only.
+    expect(summary.badge).toBe(2);
     expect(summary.needsAttention.map((w) => w.id)).toEqual(["b", "a"]);
     expect(summary.failed.map((w) => w.id)).toEqual(["c"]);
   });
@@ -218,7 +219,7 @@ describe("attention", () => {
         task({ status: "done" }),
         task({ status: "failed" }),
       ]),
-    ).toEqual({ total: 4, active: 2, needsAttention: 1, done: 1, failed: 1 });
+    ).toEqual({ total: 4, active: 2, needsAttention: 0, done: 1, failed: 1 });
   });
 
   it("says a status in words a user reads, not in the internal bucket's words", () => {

@@ -744,7 +744,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get runYouQueued => 'You · waited for the turn';
 
   @override
-  String get runThoughtTitle => 'How it thought about this';
+  String get runThoughtTitle => 'Thought';
 
   @override
   String get runStepsSummary => 'Steps';
@@ -772,6 +772,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get runApprovalAnswerBelow => 'Answer in the composer below';
+
+  @override
+  String get runPlanTitle => 'Plan';
+
+  @override
+  String runPlanProgress(int done, int total) {
+    return 'Plan · $done of $total';
+  }
+
+  @override
+  String get runPlanPriorityHigh => 'High';
 
   @override
   String approvalQuestionTool(String tool) {

@@ -4,7 +4,7 @@
  * `@envoydev/agent-catalog` and `@envoydev/platform` pull `node:fs` and `node:child_process`. Vite
  * turns those into empty modules, the first script throws, and the Tauri window stays white — the
  * page never gets far enough to draw. The daemon may import them. The window may import only the
- * browser-safe subpath `@envoydev/agent-catalog/features`.
+ * browser-safe subpaths `@envoydev/agent-catalog/features` and `@envoydev/agent-catalog/catalog`.
  */
 
 import { readdirSync, readFileSync } from "node:fs";

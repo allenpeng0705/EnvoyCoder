@@ -53,6 +53,20 @@ class AssistantMarkdown extends StatelessWidget {
         ),
         a: TextStyle(color: colors.accentBright),
         listBullet: TextStyle(color: colors.foreground),
+        // Match desktop: content-sized columns + sideways scroll + always-visible thumb
+        // (FlexColumnWidth squeezes cells and wraps mid-token on a phone).
+        tableColumnWidth: const IntrinsicColumnWidth(),
+        tableScrollbarThumbVisibility: true,
+        tableHeadAlign: TextAlign.left,
+        tableVerticalAlignment: TableCellVerticalAlignment.top,
+        tablePadding: const EdgeInsets.only(bottom: 8),
+        tableCellsPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        tableBorder: TableBorder.all(color: colors.border, width: 1),
+        tableHead: theme.textTheme.bodyMedium?.copyWith(
+          color: colors.foreground,
+          fontWeight: FontWeight.w600,
+        ),
+        tableBody: theme.textTheme.bodyMedium?.copyWith(color: colors.foreground),
       ),
     );
   }

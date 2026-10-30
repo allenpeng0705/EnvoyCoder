@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 
 import type { RunEvent } from "@envoydev/protocol";
 
-import { buildTranscript } from "../src/state/transcript.js";
+import { buildTaskTranscript, buildTranscript, mergeRunEvents } from "../src/state/transcript.js";
 
 const base = { runId: "r1", taskId: "w1", at: "2026-09-13T10:00:00.000Z" };
 
@@ -152,6 +152,59 @@ describe("tool calls", () => {
   });
 });
 
+describe("plan checklist", () => {
+  it("updates a plan in place by planId and removes it when cleared", () => {
+    const transcript = buildTranscript([
+      at(1, {
+        kind: "run.plan",
+        planId: "sess-1",
+        entries: [
+          { content: "Fix tests", status: "in_progress" },
+          { content: "Ship", status: "pending" },
+        ],
+      }),
+      at(2, {
+        kind: "run.plan",
+        planId: "sess-1",
+        entries: [
+          { content: "Fix tests", status: "completed" },
+          { content: "Ship", status: "in_progress" },
+        ],
+      }),
+    ]);
+    expect(transcript.entries).toHaveLength(1);
+    expect(transcript.entries[0]).toMatchObject({
+      kind: "plan",
+      planId: "sess-1",
+      entries: [
+        { content: "Fix tests", status: "completed" },
+        { content: "Ship", status: "in_progress" },
+      ],
+    });
+
+    const emptied = buildTranscript([
+      at(1, {
+        kind: "run.plan",
+        planId: "sess-1",
+        entries: [{ content: "A", status: "pending" }],
+      }),
+      at(2, { kind: "run.plan", planId: "sess-1", entries: [] }),
+    ]);
+    expect(emptied.entries).toHaveLength(1);
+    expect(emptied.entries[0]).toMatchObject({ kind: "plan", planId: "sess-1", entries: [] });
+
+    const cleared = buildTranscript([
+      at(1, {
+        kind: "run.plan",
+        planId: "sess-1",
+        entries: [{ content: "A", status: "pending" }],
+      }),
+      at(2, { kind: "run.plan", planId: "sess-1", entries: [], removed: true }),
+    ]);
+    expect(cleared.entries).toHaveLength(0);
+  });
+});
+
 describe("approvals", () => {
   const requested = at(1, {
     kind: "run.approval-requested",
@@ -265,5 +318,34 @@ describe("honesty about what arrived", () => {
       at(2, { kind: "run.session", sessionId: "s1", resumable: true, resumed: false }),
     ]);
     expect(transcript.entries).toEqual([]);
+  });
+});
+
+describe("history across runs", () => {
+  it("concatenates folds without a false gap when seq restarts", () => {
+    const first = [
+      at(1, { kind: "run.output", stream: "assistant", text: "earlier", messageId: "a" }),
+      at(2, { kind: "run.ended", exitCode: 0, status: "done" }),
+    ];
+    const second = [
+      { ...base, runId: "r2", seq: 1, kind: "run.output", stream: "assistant", text: "later", messageId: "b" } as RunEvent,
+    ];
+    const transcript = buildTaskTranscript([{ events: first }, { events: second }]);
+    expect(transcript.hasGap).toBe(false);
+    expect(transcript.entries.map((e) => (e.kind === "assistant" ? e.text : e.kind))).toEqual([
+      "earlier",
+      "note",
+      "later",
+    ]);
+  });
+
+  it("merges streamed events with a later tail by seq", () => {
+    const streamed = [at(2, { kind: "run.output", stream: "assistant", text: "b", messageId: "m" })];
+    const tail = [
+      at(1, { kind: "run.output", stream: "assistant", text: "a", messageId: "m" }),
+      at(2, { kind: "run.output", stream: "assistant", text: "b", messageId: "m" }),
+      at(3, { kind: "run.output", stream: "assistant", text: "c", messageId: "m" }),
+    ];
+    expect(mergeRunEvents(streamed, tail).map((e) => e.seq)).toEqual([1, 2, 3]);
   });
 });

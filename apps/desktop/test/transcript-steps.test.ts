@@ -101,6 +101,48 @@ describe("segmentTranscriptSteps", () => {
     expect(items[0]!.live).toBe(true);
   });
 
+  it("marks thought-only Steps live while the run is open", () => {
+    const entries: TranscriptEntry[] = [
+      { kind: "user", id: "u1", text: "hi", mode: "queue", delivered: "queued" },
+      { kind: "thought", id: "th1", text: "planning…" },
+    ];
+    const idle = segmentTranscriptSteps(entries);
+    expect(idle.map((item) => item.kind)).toEqual(["user", "steps"]);
+    if (idle[1]!.kind !== "steps") return;
+    expect(idle[1]!.live).toBe(false);
+
+    const live = segmentTranscriptSteps(entries, { runLive: true });
+    if (live[1]!.kind !== "steps") return;
+    expect(live[1]!.live).toBe(true);
+  });
+
+  it("does not mark prior-turn Steps live when a later turn is running", () => {
+    const entries: TranscriptEntry[] = [
+      { kind: "user", id: "u1", text: "first", mode: "queue", delivered: "queued" },
+      {
+        kind: "tool",
+        id: "t1",
+        callId: "c1",
+        name: "Read",
+        status: "completed",
+      },
+      { kind: "assistant", id: "a1", text: "done" },
+      { kind: "user", id: "u2", text: "second", mode: "queue", delivered: "queued" },
+      { kind: "thought", id: "th2", text: "next…" },
+    ];
+    const items = segmentTranscriptSteps(entries, { runLive: true });
+    expect(items.map((item) => item.kind)).toEqual([
+      "user",
+      "steps",
+      "assistant",
+      "user",
+      "steps",
+    ]);
+    if (items[1]!.kind !== "steps" || items[4]!.kind !== "steps") return;
+    expect(items[1]!.live).toBe(false);
+    expect(items[4]!.live).toBe(true);
+  });
+
   it("does not swallow approvals into Steps", () => {
     const entries: TranscriptEntry[] = [
       {
@@ -172,7 +214,7 @@ describe("segmentTranscriptSteps", () => {
     expect(first.entries.map((e) => e.id)).toEqual(["t1", "n-quiet", "t2"]);
   });
 
-  it("holds chat-only streaming answer in open Steps while the run is live", () => {
+  it("keeps the streaming answer outside Steps so the reader does not hunt for it", () => {
     const entries: TranscriptEntry[] = [
       { kind: "user", id: "u1", text: "hi", mode: "queue", delivered: "queued" },
       { kind: "assistant", id: "a1", text: "working on it…" },
@@ -180,12 +222,10 @@ describe("segmentTranscriptSteps", () => {
     const settled = segmentTranscriptSteps(entries);
     expect(settled.map((item) => item.kind)).toEqual(["user", "assistant"]);
 
+    // Live chat-only used to hide the reply inside open Steps — that forced a
+    // scroll past every later tool. The answer stays a hero while it streams.
     const live = segmentTranscriptSteps(entries, { runLive: true });
-    expect(live.map((item) => item.kind)).toEqual(["user", "steps"]);
-    const steps = live[1]!;
-    if (steps.kind !== "steps") return;
-    expect(steps.live).toBe(true);
-    expect(steps.entries.map((e) => e.id)).toEqual(["a1"]);
+    expect(live.map((item) => item.kind)).toEqual(["user", "assistant"]);
   });
 
   it("promotes settled assistants before each user as heroes", () => {

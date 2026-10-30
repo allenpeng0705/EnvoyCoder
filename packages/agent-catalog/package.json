@@ -13,6 +13,10 @@
     "./features": {
       "types": "./src/features.ts",
       "import": "./src/features.ts"
+    },
+    "./catalog": {
+      "types": "./src/acp-catalog.ts",
+      "import": "./src/acp-catalog.ts"
     }
   },
   "dependencies": {

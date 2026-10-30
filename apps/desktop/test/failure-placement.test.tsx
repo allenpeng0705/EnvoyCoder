@@ -1,36 +1,18 @@
 /**
- * **Where a refused press is read** — the row, the composer, the palette; never the bar above the window.
+ * **Where a refused press is read** — toast for rail/composer; in-place for palette/settings; never a sticky banner.
  *
  * ## The report this file answers
  *
- * The owner pressed **Add** in the catalogue and the window answered with a strip across the top:
+ * The owner pressed **Add** in the catalogue and the window answered with a strip across the top that was
+ * ugly and useless. Writes must not raise a window banner. Sticky composer/rail failure lines also stuck
+ * forever — those are gone too. Rail and composer refusals toast; settings/palette keep in-place sinks.
  *
- * > *"After clicking 'Add', it will show the top bar which is ugly and usless, show like 'coder.addProvider was
- * > given a provider this build cannot store: …'"*
+ * ## The rule
  *
- * The strip was right about the sentence and wrong about the place. `CoderStore.mutate` stored every write's
- * refusal in `state.error`, which the shell rendered above every surface, so a press that had **already** said
- * the same thing on its own row said it twice — and the copy nobody could use was the one in the bar: it names no
- * control, it pushes the window down, and it has to be dismissed before the user can get on with what they were
- * doing.
- *
- * ## The rule, and the two halves of it
- *
- * * **A write raises nothing.** `mutate` returns the refusal; the caller renders it where the press was. This file
- *   walks each surface that has one and asserts both halves at once: the sentence is on screen **at the press**,
- *   and the window's banner is **absent** for it.
- * * **A read still does.** `state.error` keeps what the *window* could not do — a list it could not read, a daemon
- *   this build cannot talk to — because that is not about a control and has no row to live in. The last case
- *   asserts that boundary, so "no banner for a press" cannot quietly become "no banner at all", which would take
- *   the build-skew advice off the screen.
- *
- * ## Why the whole shell, rather than each component alone
- *
- * The routing is the thing that broke: the pane's own notice prop existed and **nothing ever passed it**
- * (`notice={` appeared nowhere in the source), and the palette's `status` prop was in the same condition. A
- * component test of `TaskPane` would have passed the whole time the failure was going into the strip. So every
- * case below drives the real `CoderApp` with a store that refuses the one call it is about, and reads the DOM a
- * user would read.
+ * * **A write raises no banner.** `mutate` returns the refusal; the shell toasts rail/composer failures and
+ *   keeps settings/palette in-place.
+ * * **A window read toasts, not a strip.** `state.error` still holds skew/load failures for empty-state
+ *   copy; the shell toasts once and paints **no** `.banner`.
  */
 
 /** @vitest-environment jsdom */
@@ -44,8 +26,12 @@ import { I18nProvider } from "../src/i18n/context.js";
 import { en } from "../src/i18n/messages/en.js";
 import type { CoderStore } from "../src/state/coderStore.js";
 import type { CoderState } from "../src/state/coderStore.js";
+import { dismissShellToast } from "../src/state/shell-toast.js";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  dismissShellToast();
+});
 
 /** The daemon's sentence, as a refusal. Deliberately unlike any catalogue string: it must be *the wire's*. */
 const REFUSED = "envoydev.no-space: there is no space left on the device";
@@ -140,6 +126,7 @@ function refusingStore(over: Record<string, unknown> = {}): CoderStore {
     answerApproval: refuse(),
     // The shell asks about the run a pane is showing; a double that did not answer would throw in an effect.
     openRun: vi.fn(async () => undefined),
+    openTaskHistory: vi.fn(async () => undefined),
     clearError: vi.fn(),
     ...over,
   } as unknown as CoderStore;
@@ -153,62 +140,50 @@ function show(over: Partial<CoderState> = {}, actions: CoderStore = refusingStor
   );
 }
 
-/** The bar above every surface — the thing a refused press must never reach. */
 const banner = (): HTMLElement | null => document.querySelector(".banner");
+const toast = (): HTMLElement | null => document.querySelector('[data-testid="shell-toast"]');
 
 /**
  * **How many times the daemon's sentence is on screen.**
  *
- * The owner's complaint was not that the strip said something wrong — it was that the strip said it *as well*, so
- * one press answered twice and the copy nobody could use was the one at the top of the window. A count is the
- * assertion that can see that: `1` for a press whose failure is read where it was made, whatever the surface.
+ * One press should answer once (toast or in-place), never doubled with a banner.
  */
 const timesOnScreen = (): number => (document.body.textContent ?? "").split(REFUSED).length - 1;
 
-describe("a refused press is read where it was made", () => {
-  it("shows a rail row's refusal under that row, and not in the window's bar", async () => {
-    // "+ New" on a project header is the shortest real press in the rail: the shell creates the task, the
-    // daemon refuses, and the sentence belongs to *that project's* row — which is the row the button is on.
+describe("a refused press is read without a sticky strip", () => {
+  it("toasts a rail row's refusal, and not in a window banner", async () => {
     show();
     fireEvent.click(screen.getByTitle(en["sidebar.project.newTask.title"].replace("{project}", "api")));
 
-    await waitFor(() => expect(document.querySelector(".sidebar__failure")).toBeTruthy());
-    expect(document.querySelector(".sidebar__failure")?.textContent).toBe(REFUSED);
+    await waitFor(() => expect(toast()?.textContent).toContain(REFUSED));
+    expect(document.querySelector(".sidebar__failure")).toBeNull();
     expect(timesOnScreen()).toBe(1);
     expect(banner()).toBeNull();
   });
 
-  it("shows a refused send under the composer, and not in the window's bar", async () => {
+  it("toasts a refused send, and not under the composer as a sticky line", async () => {
     show({ tasks: [task], runs: { "run-1": { run: runFixture(), events: [] } } });
     fireEvent.click(screen.getByText(task.title));
     const box = screen.getByLabelText(en["task.composer.aria"]);
     fireEvent.change(box, { target: { value: "and make it idempotent" } });
     fireEvent.click(screen.getByRole("button", { name: en["task.composer.send"] }));
 
-    // The composer's own line — the `notice` prop that existed and that nothing passed until this change.
-    await waitFor(() => expect(document.querySelector(".composer__notice")).toBeTruthy());
-    expect(document.querySelector(".composer__notice")?.textContent).toBe(REFUSED);
+    await waitFor(() => expect(toast()?.textContent).toContain(REFUSED));
+    expect(document.querySelector(".composer__notice")).toBeNull();
     expect(timesOnScreen()).toBe(1);
     expect(banner()).toBeNull();
   });
 
   it("keeps the palette open on a refusal, and says it in the palette", async () => {
-    // The other half of the same defect: the palette used to close and hand its failure to the strip, so the
-    // user lost the field they had typed the bad path into. `run` answers now, and the palette decides.
     const onClose = vi.fn();
     show();
 
-    // Command Center is Mod+K (no rail button) — open it the way a keyboard user does.
     const mac = /mac|iphone|ipad/i.test(`${navigator.platform} ${navigator.userAgent}`);
     fireEvent.keyDown(window, { key: "k", metaKey: mac, ctrlKey: !mac });
     fireEvent.click(screen.getByText(en["palette.addProject.title"]));
 
-    // The placeholder rather than the label: in a window with no shell the stage appends *why* there is no
-    // folder chooser to the label, and a test that pinned the bare label would be testing jsdom's picker.
     const field = screen.getByPlaceholderText(en["palette.addProject.needsPlaceholder"]);
     fireEvent.change(field, { target: { value: "/nope/nowhere" } });
-    // The stage's own confirm, inside the stage row: the *row* carries almost the same accessible name
-    // ("Add project…"), and pressing the row would re-stage rather than run.
     const stageRow = document.querySelector(".palette__stage-row") as HTMLElement;
     fireEvent.click(
       within(stageRow).getByRole("button", { name: en["palette.addProject.title"].replace("…", "") }),
@@ -216,7 +191,6 @@ describe("a refused press is read where it was made", () => {
 
     await waitFor(() => expect(document.querySelector(".palette__status")).toBeTruthy());
     expect(document.querySelector(".palette__status")?.textContent).toBe(REFUSED);
-    // Still open, with what was typed still in the field: the user can correct it and press again.
     expect(screen.getByRole("dialog", { name: en["palette.title"] })).toBeTruthy();
     expect((screen.getByPlaceholderText(en["palette.addProject.needsPlaceholder"]) as HTMLInputElement).value).toBe(
       "/nope/nowhere",
@@ -227,8 +201,6 @@ describe("a refused press is read where it was made", () => {
   });
 
   it("shows a settings row's refusal under that row, and not in the window's bar", async () => {
-    // A settings write is the case with no row of its own in the store's answer: the patch says what changed,
-    // not which control asked. `SettingRow` owns the sink, so the sentence lands under the control that wrote.
     show();
     fireEvent.click(screen.getByRole("button", { name: en["sidebar.settings"] }));
     const select = screen.getByLabelText(en["settings.language.aria"]);
@@ -236,7 +208,6 @@ describe("a refused press is read where it was made", () => {
 
     await waitFor(() => expect(document.querySelector(".setting__failure")).toBeTruthy());
     expect(document.querySelector(".setting__failure")?.textContent).toBe(REFUSED);
-    // Under the row that wrote, not under some other row on the page.
     expect(document.querySelectorAll(".setting__failure")).toHaveLength(1);
     expect(document.querySelector(".setting__failure")?.closest(".setting")?.textContent).toContain(
       en["settings.language.title"],
@@ -245,9 +216,7 @@ describe("a refused press is read where it was made", () => {
     expect(banner()).toBeNull();
   });
 
-  it("does not carry one task's failure into another task's chat", async () => {
-    // A pane-level slot would: the failure is about a press in *this* task's composer, and showing it to a user
-    // who has since opened a different task is a sentence about work they are not looking at.
+  it("does not leave a sticky composer notice when switching tasks after a refused send", async () => {
     show({
       tasks: [task, otherTask],
       runs: { "run-1": { run: runFixture(), events: [] } },
@@ -256,48 +225,30 @@ describe("a refused press is read where it was made", () => {
     fireEvent.change(screen.getByLabelText(en["task.composer.aria"]), { target: { value: "hello" } });
 
     fireEvent.click(screen.getByRole("button", { name: en["task.composer.send"] }));
-    await waitFor(() => expect(document.querySelector(".composer__notice")).toBeTruthy());
+    await waitFor(() => expect(toast()?.textContent).toContain(REFUSED));
+    expect(document.querySelector(".composer__notice")).toBeNull();
 
-    // Switch to the other task: the rail's own row.
     fireEvent.click(screen.getByText(otherTask.title));
     expect(document.querySelector(".composer__notice")).toBeNull();
-    expect(timesOnScreen()).toBe(0);
     expect(banner()).toBeNull();
   });
 
   it("says nothing in the title bar about how many windows are attached", () => {
-    // **Where the owner's question came from.** A chip used to stand in the title bar reading
-    // `hello.windowCount`, and it said "2 windows" for one window — because the window opened two sockets
-    // (`coder-store.test.ts`, "one window, one socket"). The badge is gone rather than half-fixed: the number is a
-    // **snapshot from connect time**, so it can never correct itself when a second window opens or closes, and a
-    // claim in the chrome that contradicts the truth is the class of thing this repository refuses. The count is
-    // still on *Settings → This machine*, where the row says which moment it was read.
     show({ hello: { ...HELLO, windowCount: 4 } });
     expect(document.querySelector(".titlebar")?.textContent ?? "").not.toContain("4 window");
     expect(document.body.textContent ?? "").not.toContain("windows");
   });
 
   it("shows the app's own logo in the top bar, beside the name", () => {
-    // The mark the product ships (`apps/desktop/assets/logo.png`), rendered at 18px from the 128px copy — a window
-    // should not decode a megabyte for a slot this size. Decorative, because the name is right beside it: a screen
-    // reader that read both would say the product twice.
     show();
     const logo = document.querySelector("img.titlebar__logo") as HTMLImageElement | null;
     expect(logo).toBeTruthy();
     expect(logo?.getAttribute("alt")).toBe("");
     expect(logo?.getAttribute("width")).toBe("18");
-    // It is bundled by Vite rather than linked from a path on disk, which is what makes it survive `tauri build`.
     expect(logo?.getAttribute("src") ?? "").not.toBe("");
   });
 
   it("starts a new run when the task's run is one this window has never heard of", async () => {
-    // **The owner's report, exactly.** A task carries a `runId` from a daemon that has since restarted, so the
-    // window has no record of that run — and `runLive` used to read `state.runs[runId]?.run.endedAt === undefined`,
-    // which is **true** when the record is absent. The composer therefore queued the message behind a run that does
-    // not exist, the daemon answered *"That run has already finished…"*, and the field was cleared on the way out.
-    //
-    // With the record required for "live", the press is a *start*: the daemon's `startRun` is the thing that can
-    // honour it, and the old run id is not sent anywhere.
     const actions = refusingStore();
     show({ tasks: [task], runs: {} }, actions);
     fireEvent.click(screen.getByText(task.title));
@@ -309,7 +260,6 @@ describe("a refused press is read where it was made", () => {
   });
 
   it("offers the send action while the run it is showing is genuinely live", async () => {
-    // The other direction, so "unknown is not running" cannot become "nothing is ever running".
     const actions = refusingStore();
     show({ tasks: [task], runs: { "run-1": { run: runFixture(), events: [] } } }, actions);
     fireEvent.click(screen.getByText(task.title));
@@ -321,8 +271,6 @@ describe("a refused press is read where it was made", () => {
   });
 
   it("keeps a rail toggle out of the window", () => {
-    // Hiding the project list used to collapse the window and take the button that opened this list
-    // with it. The title bar does not offer that, and neither does the command list.
     show();
     const titlebar = document.querySelector(".titlebar") as HTMLElement;
     expect(titlebar.querySelectorAll("button")).toHaveLength(1);
@@ -337,12 +285,19 @@ describe("a refused press is read where it was made", () => {
     expect(screen.queryByText("Toggle the project rail")).toBeNull();
   });
 
-  it("still raises the bar for what the *window* could not do", () => {
-    // The boundary. A read that failed is not about a control and has no row to live in, so it keeps the bar —
-    // and `error.daemonTooOld` is the case that must never become silent, because the fix it names is a restart.
-    show({ error: { message: "The daemon does not know coder.listTasks.", key: "error.daemonTooOld", values: { method: "coder.listTasks" } } });
-    expect(banner()?.textContent).toContain(en["error.daemonTooOld"].replace("{method}", "coder.listTasks"));
-    expect(within(banner() as HTMLElement).getByRole("button", { name: en["notice.dismiss"] })).toBeTruthy();
+  it("toasts what the *window* could not do — no sticky banner", async () => {
+    const skew =
+      en["error.daemonTooOld"].replace("{method}", "coder.listTasks");
+    show({
+      error: {
+        message: "The daemon does not know coder.listTasks.",
+        key: "error.daemonTooOld",
+        values: { method: "coder.listTasks" },
+      },
+    });
+    await waitFor(() => expect(toast()?.textContent).toContain(skew));
+    expect(banner()).toBeNull();
+    expect(within(toast() as HTMLElement).getByRole("button", { name: en["notice.dismiss"] })).toBeTruthy();
   });
 });
 

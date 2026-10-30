@@ -261,7 +261,39 @@ void main() {
       expect(transcript.hasGap, isFalse);
     });
 
-    test('ignores an event kind this build does not know', () {
+    test('updates an ACP plan checklist in place by planId', () {
+    final transcript = Transcript();
+    transcript.apply({
+      'runId': 'r1',
+      'taskId': 't1',
+      'seq': 1,
+      'kind': 'run.plan',
+      'planId': 'sess-1',
+      'entries': [
+        {'content': 'Fix tests', 'status': 'in_progress'},
+        {'content': 'Ship', 'status': 'pending'},
+      ],
+    });
+    transcript.apply({
+      'runId': 'r1',
+      'taskId': 't1',
+      'seq': 2,
+      'kind': 'run.plan',
+      'planId': 'sess-1',
+      'entries': [
+        {'content': 'Fix tests', 'status': 'completed'},
+        {'content': 'Ship', 'status': 'in_progress'},
+      ],
+    });
+    expect(transcript.entries, hasLength(1));
+    expect(transcript.entries.single.kind, 'plan');
+    expect(transcript.entries.single.planEntries!.map((e) => e.status).toList(), [
+      'completed',
+      'in_progress',
+    ]);
+  });
+
+  test('ignores an event kind this build does not know', () {
       final transcript = folded([
         at(1, {'kind': 'run.something-new', 'payload': {'a': 1}}),
       ]);

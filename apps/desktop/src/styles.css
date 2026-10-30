@@ -432,17 +432,6 @@ textarea.input--multiline {
   min-width: 0;
 }
 
-/* **A refused press, under the rail row it came from** — the same rule as `.setting__failure`, in the other
-   surface whose press and display live in different components. */
-.sidebar__failure {
-  margin: 2px 8px 6px;
-  padding-left: 8px;
-  border-left: 2px solid var(--status-danger);
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--status-danger);
-}
-
 .sidebar__attention {
   display: flex;
   align-items: center;
@@ -1918,6 +1907,13 @@ button.explorer__change:hover {
   color: var(--foreground-muted);
 }
 
+.transcript__loading {
+  margin: var(--space-4) auto;
+  max-width: var(--content-max-width);
+  color: var(--foreground-muted);
+  font-size: var(--font-size-sm);
+}
+
 /* Empty-task hero: title + one line + suggestion CTAs; composer stays below. */
 .transcript__hero {
   padding-top: 12vh;
@@ -1976,6 +1972,135 @@ button.explorer__change:hover {
   color: var(--foreground);
 }
 
+/* ── plan checklist (ACP plan_update; Cursor-style progress) ───────────── */
+
+.row--plan {
+  list-style: none;
+}
+
+.plan-card {
+  max-width: var(--content-max-width);
+  margin-inline: auto;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--status-dot-running);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+}
+
+.plan-card--complete {
+  border-left-color: var(--status-success);
+}
+
+.plan-card__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-content);
+  font-weight: var(--font-weight-semibold);
+  color: var(--foreground);
+}
+
+.plan-card__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  max-height: min(40vh, 20rem);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) var(--surface-1);
+  -webkit-overflow-scrolling: touch;
+  padding-right: var(--space-1);
+}
+
+.plan-card__list::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.plan-card__list::-webkit-scrollbar-track {
+  background: var(--surface-1);
+}
+
+.plan-card__list::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 2px solid var(--surface-1);
+}
+
+.plan-card__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  color: var(--foreground);
+}
+
+.plan-card__mark {
+  flex: 0 0 auto;
+  width: 1rem;
+  text-align: center;
+  color: var(--foreground-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-card__item--completed .plan-card__content {
+  color: var(--foreground-muted);
+  text-decoration: line-through;
+}
+
+.plan-card__item--completed .plan-card__mark {
+  color: var(--status-success);
+}
+
+.plan-card__item--in_progress .plan-card__mark {
+  color: var(--status-dot-running);
+}
+
+.plan-card__item--cancelled .plan-card__content {
+  color: var(--foreground-extra-muted);
+  text-decoration: line-through;
+}
+
+.plan-card__content {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.plan-card__priority {
+  flex: 0 0 auto;
+  font-size: var(--font-size-sm);
+  color: var(--status-warning);
+}
+
+.plan-card__markdown {
+  margin-top: var(--space-2);
+  max-height: 12rem;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) var(--surface-1);
+  -webkit-overflow-scrolling: touch;
+  padding-right: var(--space-1);
+}
+
+.plan-card__markdown::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.plan-card__markdown::-webkit-scrollbar-track {
+  background: var(--surface-1);
+}
+
+.plan-card__markdown::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 2px solid var(--surface-1);
+}
+
 /* ── approval (inline, never a modal) ──────────────────────────────────── */
 
 .approval {
@@ -1988,6 +2113,13 @@ button.explorer__change:hover {
   border-left: 3px solid var(--status-warning);
   border-radius: var(--radius-lg);
   background: var(--surface-1);
+  min-width: 0;
+}
+
+.approval__body {
+  flex: 1 1 12rem;
+  min-width: 0;
+  min-height: 0;
 }
 
 .approval__question {
@@ -2001,6 +2133,38 @@ button.explorer__change:hover {
   color: var(--foreground-muted);
   font-size: var(--font-size-sm);
   line-height: 1.5;
+}
+
+.approval__detail.row__markdown {
+  max-height: 16rem;
+  overflow-x: auto;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) var(--surface-1);
+  -webkit-overflow-scrolling: touch;
+  padding-right: var(--space-1);
+}
+
+.approval__detail.row__markdown::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.approval__detail.row__markdown::-webkit-scrollbar-track {
+  background: var(--surface-1);
+}
+
+.approval__detail.row__markdown::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 2px solid var(--surface-1);
+}
+
+.approval__hint {
+  margin: var(--space-2) 0 0;
+  color: var(--foreground-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
 }
 
 .approval__choice-stack {
@@ -2093,11 +2257,53 @@ button.explorer__change:hover {
 
 .composer__takeover,
 .approval--takeover {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: var(--space-3);
   margin-bottom: var(--space-2);
   padding: var(--space-3);
+  max-height: min(50vh, 28rem);
+  overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--status-warning) 45%, var(--border));
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--status-warning) 8%, var(--surface-1));
+}
+
+/* Long ask/plan bodies need real reading room; choices stay pinned below. */
+.approval--takeover.approval--takeover-long {
+  max-height: min(72vh, 40rem);
+}
+
+.approval--takeover .approval__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+
+.approval--takeover .approval__body::-webkit-scrollbar {
+  width: 10px;
+}
+
+.approval--takeover .approval__body::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+
+.approval--takeover .approval__detail.row__markdown {
+  max-height: none;
+  overflow: visible;
+}
+
+.approval--takeover .approval__actions {
+  flex: 0 0 auto;
+  margin-left: 0;
+  width: 100%;
 }
 
 .approval--deferred {
@@ -2126,6 +2332,56 @@ button.explorer__change:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+
+button.row__tool-path--link {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: var(--accent-bright, var(--accent));
+  cursor: pointer;
+  text-align: start;
+}
+
+button.row__tool-path--link:hover {
+  text-decoration: underline;
+}
+
+button.row__tool-path--link:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--accent));
+  outline-offset: 2px;
+}
+
+.row__tool-mini-diff {
+  margin: var(--space-1-5) 0 0;
+  max-height: 8rem;
+  overflow: auto;
+  padding: var(--space-1-5) var(--space-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-0, transparent);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  white-space: pre;
+  scrollbar-width: thin;
+}
+
+.row__tool-mini-diff-line--add {
+  color: var(--status-success);
+  display: block;
+}
+
+.row__tool-mini-diff-line--remove {
+  color: var(--status-danger);
+  display: block;
+}
+
+.row__tool-mini-diff-line--more {
+  color: var(--foreground-muted);
+  display: block;
 }
 
 .row__tool-diff {
@@ -2768,30 +3024,8 @@ button.explorer__change:hover {
   color: var(--text, #e6e8ec);
 }
 
-/* ────────────────────────────── the notice bar ────────────────────────────── */
-
-/* A refusal the user has to read sits between the title bar and the work, not in a toast that
-   disappears before it is understood. Dismissing is explicit. */
-.banner {
-  display: flex;
-  align-items: center;
-  flex: none;
-  gap: 10px;
-  padding: 6px 12px;
-  background: rgba(230, 160, 60, 0.1);
-  border-bottom: 1px solid rgba(230, 160, 60, 0.22);
-  font-size: 12px;
-  line-height: 1.35;
-  color: var(--text-muted, #a8adb8);
-}
-
-.banner span {
-  flex: 1;
-  min-width: 0;
-}
-
 /* Ephemeral success/failure that outlives Settings / sheets (`docs/envoydev-ui-polish.md` §3).
-   Not for refusals — those stay on `.banner`. */
+   Write refusals and window read failures toast here — no sticky top banner. */
 .shell-toast {
   display: flex;
   align-items: center;
@@ -4144,13 +4378,68 @@ button.explorer__change:hover {
 
 .md__table-wrap {
   margin: 0 0 var(--space-3);
-  overflow-x: auto;
+  max-width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
+  background: var(--surface-0, transparent);
+}
+
+/* Native bar is unreliable on macOS (overlay until hover). Hide it; use .md__table-rail. */
+.md__table-scroller {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.md__table-scroller::-webkit-scrollbar {
+  display: none;
+  height: 0;
+}
+
+.md__table-rail {
+  display: block;
+  height: 14px;
+  margin: 0;
+  padding: 4px 6px 5px;
+  box-sizing: border-box;
+  background: var(--surface-1);
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.md__table-rail-thumb {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  min-width: 28px;
+  cursor: grab;
+  touch-action: none;
+  transition: margin-left 40ms linear, width 40ms linear, background 120ms ease;
+}
+
+.md__table-wrap--scrollable .md__table-rail-thumb {
+  background: color-mix(in srgb, var(--text-muted) 70%, var(--border-strong));
+}
+
+.md__table-wrap--dragging {
+  cursor: grabbing;
+}
+
+.md__table-wrap--dragging .md__table-rail-thumb {
+  cursor: grabbing;
+  transition: none;
+  background: var(--text-muted);
 }
 
 .md table {
-  width: 100%;
+  /* Grow with content and scroll sideways — width:100% + wrap:anywhere was
+     shredding every cell into a vertical stack of mid-word lines. */
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   font-size: var(--font-size-base);
 }
@@ -4161,6 +4450,11 @@ button.explorer__change:hover {
   border-bottom: 1px solid var(--border);
   text-align: left;
   vertical-align: top;
+  /* Undo `.row__markdown { overflow-wrap: anywhere }` — tables need intact cells. */
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+  white-space: nowrap;
 }
 
 .md th {
@@ -4346,6 +4640,51 @@ button.explorer__change:hover {
 
 .row--steps > details > summary.row__steps-summary::-webkit-details-marker {
   display: none;
+}
+
+/* Live Working… body: multi-line thought / interim text, pinned to the latest line. */
+.row__steps-live-stream {
+  margin: var(--space-2) 0 0;
+  max-height: 12rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-2-5);
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface-0, transparent));
+  scrollbar-width: thin;
+}
+
+.row__steps-live-stream-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  color: var(--foreground-muted);
+}
+
+.row__steps-live-stream-md {
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  color: var(--foreground-muted);
+}
+
+.row__steps-live-stream-md .md p,
+.row__steps-live-stream-md .md li,
+.row__steps-live-stream-md p,
+.row__steps-live-stream-md li {
+  color: var(--foreground-muted);
+}
+
+.row__steps-live-stream-md h1,
+.row__steps-live-stream-md h2,
+.row__steps-live-stream-md h3 {
+  font-size: var(--font-size-content);
+  font-weight: var(--font-weight-semibold);
+  color: var(--foreground-muted);
+  margin: var(--space-1) 0;
 }
 
 .row__steps-list {

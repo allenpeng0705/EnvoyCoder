@@ -1,8 +1,8 @@
 /// Render-time grouping: thought / tool / interim assistant / quiet notes fold
 /// into one Steps segment so only the turn's settled answer stays the focus.
 ///
-/// While the run is live and no tools have settled yet, assistants stay inside
-/// open Steps so narration does not flash outside then jump in when tools start.
+/// Matches desktop: the last assistant with no tools after it stays a hero —
+/// including while it streams — so the reader does not hunt inside Working….
 library;
 
 import 'transcript.dart';
@@ -18,7 +18,7 @@ class TranscriptStepsSegment {
   final String id;
   final List<TranscriptEntry> entries;
 
-  /// Tools running, or live run still holding the streaming answer.
+  /// Latest Steps segment while the run is open, or any segment with a running tool.
   final bool live;
 
   int get thoughtCount => entries.where((e) => e.kind == 'thought').length;
@@ -45,17 +45,7 @@ bool _isToolish(TranscriptEntry entry) => entry.kind == 'tool';
 
 bool _isQuietNote(TranscriptEntry entry) => entry.kind == 'note' && entry.tone == 'quiet';
 
-void _promoteHeroInTurn(
-  List<TranscriptEntry> turn,
-  Set<String> heroes, {
-  required bool runLive,
-}) {
-  final hasTools = turn.any(_isToolish);
-  final anyRunning = turn.any((e) => e.kind == 'tool' && e.status == 'running');
-
-  if (runLive && !hasTools) return;
-  if (runLive && anyRunning) return;
-
+void _promoteHeroInTurn(List<TranscriptEntry> turn, Set<String> heroes) {
   String? heroId;
   for (var i = 0; i < turn.length; i++) {
     final entry = turn[i];
@@ -67,20 +57,17 @@ void _promoteHeroInTurn(
 }
 
 /// Assistants that stay outside Steps.
-Set<String> heroAssistantIds(
-  List<TranscriptEntry> entries, {
-  bool runLive = false,
-}) {
+Set<String> heroAssistantIds(List<TranscriptEntry> entries) {
   final heroes = <String>{};
   var turnStart = 0;
   for (var i = 0; i < entries.length; i++) {
     if (entries[i].kind != 'user') continue;
     if (i > turnStart) {
-      _promoteHeroInTurn(entries.sublist(turnStart, i), heroes, runLive: runLive);
+      _promoteHeroInTurn(entries.sublist(turnStart, i), heroes);
     }
     turnStart = i;
   }
-  _promoteHeroInTurn(entries.sublist(turnStart), heroes, runLive: runLive);
+  _promoteHeroInTurn(entries.sublist(turnStart), heroes);
   return heroes;
 }
 
@@ -91,19 +78,40 @@ bool _foldsIntoSteps(TranscriptEntry entry, Set<String> heroes) {
   return false;
 }
 
-bool _segmentLive(List<TranscriptEntry> entries, bool runLive) {
-  final toolsRunning = entries.any((e) => e.kind == 'tool' && e.status == 'running');
-  final hasAssistant = entries.any((e) => e.kind == 'assistant');
-  final hasTool = entries.any(_isToolish);
-  final holdingAnswer = runLive && hasAssistant && !hasTool;
-  return toolsRunning || holdingAnswer;
+bool _toolsRunning(List<TranscriptEntry> entries) =>
+    entries.any((e) => e.kind == 'tool' && e.status == 'running');
+
+/// Only the latest Steps segment is live while the run is open (thought-only
+/// included). Older segments stay quiet so prior turns do not flip back to Working….
+List<TranscriptRenderItem> _applyLiveFlags(
+  List<TranscriptRenderItem> items,
+  bool runLive,
+) {
+  var lastSteps = -1;
+  for (var i = 0; i < items.length; i++) {
+    if (items[i] is TranscriptStepsItem) lastSteps = i;
+  }
+  return [
+    for (var i = 0; i < items.length; i++)
+      if (items[i] case final TranscriptStepsItem steps)
+        TranscriptStepsItem(
+          TranscriptStepsSegment(
+            id: steps.segment.id,
+            entries: steps.segment.entries,
+            live: _toolsRunning(steps.segment.entries) ||
+                (runLive && i == lastSteps && steps.segment.entries.isNotEmpty),
+          ),
+        )
+      else
+        items[i],
+  ];
 }
 
 List<TranscriptRenderItem> segmentTranscriptSteps(
   List<TranscriptEntry> entries, {
   bool runLive = false,
 }) {
-  final heroes = heroAssistantIds(entries, runLive: runLive);
+  final heroes = heroAssistantIds(entries);
   final out = <TranscriptRenderItem>[];
   var pending = <TranscriptEntry>[];
 
@@ -114,7 +122,7 @@ List<TranscriptRenderItem> segmentTranscriptSteps(
         TranscriptStepsSegment(
           id: 'steps-${pending.first.id}',
           entries: List<TranscriptEntry>.from(pending),
-          live: _segmentLive(pending, runLive),
+          live: false,
         ),
       ),
     );
@@ -130,5 +138,17 @@ List<TranscriptRenderItem> segmentTranscriptSteps(
     out.add(TranscriptEntryItem(entry));
   }
   flush();
-  return out;
+  return _applyLiveFlags(out, runLive);
+}
+
+/// Thought + interim assistant text for the live Working… stream pane.
+String stepsLiveStreamText(List<TranscriptEntry> entries) {
+  final parts = <String>[];
+  for (final entry in entries) {
+    if (entry.kind == 'thought' || entry.kind == 'assistant') {
+      final text = entry.text.trim();
+      if (text.isNotEmpty) parts.add(text);
+    }
+  }
+  return parts.join('\n\n');
 }
