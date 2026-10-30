@@ -75,7 +75,8 @@ export function WorkArea(props: {
   onNewTask?: () => void;
   onReadFile?: (path: string) => Promise<{ ok: true; file: OpenedFile } | Refusal>;
   onReadDiff?: (path: string, from?: string) => Promise<{ ok: true; diff: OpenedDiff } | Refusal>;
-  onViewingFile: (viewing: boolean) => void;
+  /** Optional: parent used to hide the composer; composer now stays mounted while a file is open. */
+  onViewingFile?: (viewing: boolean) => void;
   children: ReactNode;
 }): JSX.Element {
   const t = useT();
@@ -91,7 +92,7 @@ export function WorkArea(props: {
   readDiffRef.current = props.onReadDiff;
 
   useEffect(() => {
-    props.onViewingFile(active !== "chat");
+    props.onViewingFile?.(active !== "chat");
   }, [active, props.onViewingFile]);
 
   useEffect(() => {

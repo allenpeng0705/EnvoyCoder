@@ -891,6 +891,110 @@ describe("whether the agent asks before it acts", () => {
     expect(said(b.events, "autoRun: safe-only")).toBe(false);
   });
 
+  it("pushes autoRun off onto a live Envoy Harness session when Settings turn Off mid-approval", async () => {
+    const b = await bench();
+    await b.manager.start({
+      taskId: b.taskId,
+      prompt: "please approve this and report-policy",
+    });
+    await b.until(
+      (events) => kinds(events, "run.approval-requested").length === 1,
+      "the approval card",
+    );
+    const requested = kinds(b.events, "run.approval-requested")[0];
+    if (requested?.kind !== "run.approval-requested") throw new Error("unreachable");
+
+    await b.manager.applyAskingOff();
+    expect(
+      await b.manager.answerApproval(requested.runId, requested.requestId, "allow-once"),
+    ).toBe(true);
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    expect(said(b.events, "autoRun: off")).toBe(true);
+  });
+
+  it("maps Settings Off to Claude's unattended mode", async () => {
+    const b = await bench({
+      harness: "claudecode",
+      agentEnv: {
+        FAKE_ACP_MODES: "default,acceptEdits,plan,auto,bypassPermissions",
+      },
+    });
+    await b.store.updateSettings({ requireApprovalForDestructive: false });
+    await b.manager.start({ taskId: b.taskId, prompt: "mode-me" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+    expect(said(b.events, "mode: bypassPermissions")).toBe(true);
+  });
+
+  it("pushes Claude's unattended mode onto a live session when Settings turn Off mid-approval", async () => {
+    const b = await bench({
+      harness: "claudecode",
+      agentEnv: {
+        FAKE_ACP_MODES: "default,acceptEdits,plan,auto,bypassPermissions",
+      },
+    });
+    await b.manager.start({
+      taskId: b.taskId,
+      prompt: "please approve this and report-mode",
+    });
+    await b.until(
+      (events) => kinds(events, "run.approval-requested").length === 1,
+      "the approval card",
+    );
+    const requested = kinds(b.events, "run.approval-requested")[0];
+    if (requested?.kind !== "run.approval-requested") throw new Error("unreachable");
+
+    await b.manager.applyAskingOff();
+    expect(
+      await b.manager.answerApproval(requested.runId, requested.requestId, "allow-once"),
+    ).toBe(true);
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    expect(said(b.events, "mode: bypassPermissions")).toBe(true);
+  });
+
+  it("pushes Codex's unattended mode onto a live session when Settings turn Off mid-approval", async () => {
+    const b = await bench({
+      harness: "codex",
+      agentEnv: {
+        FAKE_ACP_MODES: "default,plan,agent-full-access",
+      },
+    });
+    await b.manager.start({
+      taskId: b.taskId,
+      prompt: "please approve this and report-mode",
+    });
+    await b.until(
+      (events) => kinds(events, "run.approval-requested").length === 1,
+      "the approval card",
+    );
+    const requested = kinds(b.events, "run.approval-requested")[0];
+    if (requested?.kind !== "run.approval-requested") throw new Error("unreachable");
+
+    await b.manager.applyAskingOff();
+    expect(
+      await b.manager.answerApproval(requested.runId, requested.requestId, "allow-once"),
+    ).toBe(true);
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    expect(said(b.events, "mode: agent-full-access")).toBe(true);
+  });
+
+  it("maps Settings Off to DeepSeek Full access via launch env", async () => {
+    let launchEnv: Record<string, string> | undefined;
+    const b = await bench({
+      harness: "deepseek-harness",
+      agentEnv: { FAKE_ACP_NO_SET_POLICY: "1" },
+      onLaunch: (input) => {
+        launchEnv = input.extraEnv;
+      },
+    });
+    await b.store.updateSettings({ requireApprovalForDestructive: false });
+    await b.manager.start({ taskId: b.taskId, prompt: "hello" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+    expect(launchEnv?.DSH_PERMISSION_MODE).toBe("danger-full-access");
+  });
+
   it("is not sent at all to an agent that has no way to be told, and the run still works", async () => {
     // `deepseek-harness` is the real case: nine ACP methods, `session/set_policy` not among them. The
     // switch is disabled with a reason on screen; this is the other half — the daemon must not send the

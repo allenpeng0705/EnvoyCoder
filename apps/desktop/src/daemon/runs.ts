@@ -69,10 +69,13 @@ import {
 // references the compiler does not flag because `noUnusedLocals` is off. Removed while this import
 // block was already being edited.
 import {
+  askingControl,
   envoyPermissionPolicy,
   featureSessionConfigs,
   harnessDefinition,
+  isPermissionModeId,
   mapRetiredEnvoyMode,
+  modeForAskingOff,
   modeLaunchEnv,
   observeSessionOptions,
   collaborationModeToSet,
@@ -417,9 +420,16 @@ export class RunManager {
     const requestedMode = input.agentModeId ?? task.agentModeId;
     if (!shipped) await ensureRunnableAgent(this.deps.store, runHarness);
     const provider = shipped ? undefined : findRunnableProvider(this.deps.store, runHarness);
-    const agentModeId = shipped
+    let agentModeId = shipped
       ? resolveAgentMode(shipped, requestedMode)
       : resolveCataloguedProviderMode(provider, requestedMode);
+    // Settings Off for agents without `session/set_policy`: force their published unattended mode
+    // (Claude `bypassPermissions`, Codex `agent-full-access`, DeepSeek Full access via env). Envoy
+    // Harness stays on the chosen sandbox and only changes `autoRun` below.
+    if (shipped && this.settings().requireApprovalForDestructive === false) {
+      const unattended = modeForAskingOff(shipped);
+      if (unattended !== undefined) agentModeId = unattended;
+    }
     // A permission level is not `session/set_mode`. DeepSeek takes it as `DSH_PERMISSION_MODE` on the
     // process; Envoy Harness takes it as `session/set_policy`. `default` / `plan` / `review` stay on
     // `session/set_mode`, and those runs still get the settings switch as `autoRun`.
@@ -1204,7 +1214,7 @@ export class RunManager {
   private async stopAskingApprovals(live: LiveRun): Promise<void> {
     if (
       !isHarnessId(live.run.harness) ||
-      !harnessDefinition(live.run.harness).capabilities.approvalPolicy
+      askingControl(live.run.harness) !== "policy"
     ) {
       return;
     }
@@ -1213,12 +1223,41 @@ export class RunManager {
     } catch {
       // Disk write failed — still try the live session policy below.
     }
-    const next: AcpSessionPolicy = { autoRun: "off" };
+    await this.applyAskingOffToLive(live);
+  }
+
+  /**
+   * Settings turned Off while runs are live — stop asking on every open session that can hear it.
+   *
+   * Policy agents get `autoRun: off`. Unattended-mode agents get `session/set_mode` when the mode
+   * is not a permission level delivered only at process start (DeepSeek). Best-effort per run.
+   */
+  async applyAskingOff(): Promise<void> {
+    for (const live of this.active.values()) {
+      await this.applyAskingOffToLive(live);
+    }
+  }
+
+  private async applyAskingOffToLive(live: LiveRun): Promise<void> {
+    if (!isHarnessId(live.run.harness)) return;
+    const via = askingControl(live.run.harness);
+    if (via === "policy") {
+      const next: AcpSessionPolicy = { autoRun: "off" };
+      try {
+        await live.client?.applySessionPolicy(next);
+        live.sessionPolicy = { ...(live.sessionPolicy ?? {}), ...next };
+      } catch {
+        // Next Envoy Harness run still starts with autoRun off from Settings.
+      }
+      return;
+    }
+    if (via !== "unattended-mode") return;
+    const mode = modeForAskingOff(live.run.harness);
+    if (mode === undefined || isPermissionModeId(mode)) return;
     try {
-      await live.client?.applySessionPolicy(next);
-      live.sessionPolicy = { ...(live.sessionPolicy ?? {}), ...next };
+      await live.client?.applySessionMode(mode);
     } catch {
-      // Settings may already be flipped — next Envoy Harness run starts with autoRun off.
+      // Next run starts in the unattended mode from Settings Off.
     }
   }
 

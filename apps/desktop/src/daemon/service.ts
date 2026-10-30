@@ -1228,7 +1228,17 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         };
       };
       await ensureRunnableAgent(deps.store, input.settings.defaults?.harness);
+      const wasAsking = deps.store.settings().requireApprovalForDestructive === true;
       const settings = await deps.store.updateSettings(input.settings);
+      // Off mid-run: push autoRun off / unattended mode onto live sessions so a flood stops
+      // without restarting the task. On does not re-arm asking mid-turn — next run picks it up.
+      if (
+        wasAsking &&
+        settings.requireApprovalForDestructive === false &&
+        deps.runs !== undefined
+      ) {
+        await deps.runs.applyAskingOff();
+      }
       return { settings };
     },
 

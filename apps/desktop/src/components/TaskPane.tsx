@@ -284,7 +284,8 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   const { setExplorerWidth } = usePanelWidths();
   const { task, project, events } = props;
   const running = props.runLive;
-  const [viewingFile, setViewingFile] = useState(false);
+  // File tabs live in WorkArea; the composer stays mounted so approvals and send
+  // remain reachable while a file is open (chat workflow UX).
   const [openRequest, setOpenRequest] = useState<FileOpenRequest | undefined>(undefined);
 
   /** Tool-card path → WorkArea file or diff tab (same request shape as the explorer). */
@@ -662,7 +663,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
 
   return (
     <section
-      className={["pane", explorer ? "pane--explorer" : "", viewingFile ? "pane--file" : ""].filter(Boolean).join(" ")}
+      className={["pane", explorer ? "pane--explorer" : ""].filter(Boolean).join(" ")}
       aria-label={t("task.aria", { title: task.title || t("task.untitled") })}
     >
       <header className="pane__header">
@@ -778,7 +779,6 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
         onNewTask={props.onNewTask}
         onReadFile={props.onReadFile}
         onReadDiff={props.onReadDiff ? (path, from) => props.onReadDiff!(task.cwd, path, from) : undefined}
-        onViewingFile={setViewingFile}
       >
       <div className="transcript" data-testid="transcript" ref={transcriptRef} onScroll={onTranscriptScroll}>
         {transcript.hasGap ? (
@@ -896,7 +896,6 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
         </>
       ) : null}
 
-      {viewingFile ? null : (
       <footer className="composer">
         <div
           className={dropping ? "composer__card composer__card--drop" : "composer__card"}
@@ -1158,7 +1157,6 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
           ) : null}
         </div>
       </footer>
-      )}
     </section>
   );
 }
@@ -1286,15 +1284,16 @@ function StepsRow(props: {
   const { segment } = props;
   const entries = coalesceStepsEntries(segment.entries);
   const live = segment.live;
-  // Open while live so Working… shows the stream; collapse when the turn settles
-  // so the hero answer outside Steps stays the focus. User can re-open after.
-  const [userOpen, setUserOpen] = useState(false);
+  // Default open while live so Working… shows the stream; user may collapse.
+  // When the run settles, collapse so the hero answer outside Steps stays the focus.
+  // `undefined` means “use the default for live/settled”; a boolean is an explicit choice.
+  const [userOpen, setUserOpen] = useState<boolean | undefined>(undefined);
   const wasLiveRef = useRef(live);
   const streamRef = useRef<HTMLDivElement | null>(null);
   const streamText = live ? stepsLiveStreamText(entries) : "";
 
   useEffect(() => {
-    if (wasLiveRef.current && !live) setUserOpen(false);
+    if (wasLiveRef.current && !live) setUserOpen(undefined);
     wasLiveRef.current = live;
   }, [live]);
 
@@ -1305,7 +1304,7 @@ function StepsRow(props: {
     el.scrollTop = el.scrollHeight;
   }, [live, streamText]);
 
-  const open = live || userOpen;
+  const open = userOpen !== undefined ? userOpen : live;
 
   return (
     <li
@@ -1315,13 +1314,7 @@ function StepsRow(props: {
       <details
         open={open}
         onToggle={(event) => {
-          const next = (event.currentTarget as HTMLDetailsElement).open;
-          if (live) {
-            // Stay open while Working… — re-assert if the user clicks the summary.
-            if (!next) event.currentTarget.open = true;
-            return;
-          }
-          setUserOpen(next);
+          setUserOpen((event.currentTarget as HTMLDetailsElement).open);
         }}
       >
         <summary className="row__steps-summary">

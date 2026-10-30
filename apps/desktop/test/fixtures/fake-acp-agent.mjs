@@ -29,6 +29,8 @@
  * | `model-me` | announces its session config, so `session/set_config_option` is observable |
  * | `thinking-me` | announces its thinking level, so the *second* config option is observable too |
  * | `policy-me` | announces its session's `autoRun` policy, so `session/set_policy` is observable |
+ * | `approve` + `report-policy` | after the permission reply, also names `autoRun` (mid-turn `set_policy`) |
+ * | `approve` + `report-mode` | after the permission reply, also names the collaboration mode (mid-turn `set_mode`) |
  *
  * `FAKE_ACP_NO_SET_MODE=1` makes it refuse `session/set_mode` with `-32601`, the way
  * `deepseek-harness` does. That is how a test proves the honest failure mode: an agent that cannot be
@@ -90,9 +92,14 @@ import process from "node:process";
 let buffer = "";
 let sessionId = null;
 let sessionCounter = 0;
-/** The three `ModeKind`s `envoy-harness` accepts, and the one this session is currently in. */
-const MODES = ["default", "plan", "review"];
-let collaborationMode = "default";
+/**
+ * Modes `session/set_mode` accepts. Default is Envoy Harness's `ModeKind`s; set `FAKE_ACP_MODES`
+ * (comma-separated) to model Claude/Codex unattended ids such as `bypassPermissions`.
+ */
+const MODES = process.env.FAKE_ACP_MODES
+  ? process.env.FAKE_ACP_MODES.split(",").map((id) => id.trim()).filter(Boolean)
+  : ["default", "plan", "review"];
+let collaborationMode = MODES[0] ?? "default";
 /**
  * Which field name this agent's `session/set_mode` reads. See the module doc for the two contracts and
  * why the branches below are deliberately not symmetric.
@@ -288,7 +295,15 @@ function handlePrompt(id, params) {
         ],
       },
     });
-    permissionWaiter = { promptId: id, toolCallId };
+    // `report-policy` / `report-mode` ask the permission reply to also name autoRun or the
+    // collaboration mode — so a mid-turn Settings Off (`set_policy` / `set_mode`) is observable
+    // without a second prompt.
+    permissionWaiter = {
+      promptId: id,
+      toolCallId,
+      reportPolicy: text.includes("report-policy"),
+      reportMode: text.includes("report-mode"),
+    };
     return;
   }
 
@@ -492,7 +507,7 @@ function handle(message) {
   if (method === undefined && id !== undefined && permissionWaiter) {
     const chosen = message.result?.outcome;
     const optionId = chosen?.outcome === "selected" ? chosen.optionId : "cancelled";
-    const { promptId, toolCallId } = permissionWaiter;
+    const { promptId, toolCallId, reportPolicy, reportMode } = permissionWaiter;
     permissionWaiter = null;
     update({
       sessionUpdate: "tool_call_update",
@@ -505,6 +520,26 @@ function handle(message) {
       messageId: "m-p",
       content: { type: "text", text: `permission: ${optionId}` },
     });
+    if (reportPolicy) {
+      update({
+        sessionUpdate: "agent_message_chunk",
+        messageId: "m-p-policy",
+        content: {
+          type: "text",
+          text: `autoRun: ${autoRunPolicy ?? "(none)"}`,
+        },
+      });
+    }
+    if (reportMode) {
+      update({
+        sessionUpdate: "agent_message_chunk",
+        messageId: "m-p-mode",
+        content: {
+          type: "text",
+          text: `mode: ${collaborationMode}`,
+        },
+      });
+    }
     ok(promptId, { stopReason: "end_turn" });
     return;
   }

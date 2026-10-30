@@ -33,6 +33,10 @@ export default defineConfig({
         find: "@envoydev/agent-catalog/catalog",
         replacement: `${here}packages/agent-catalog/src/acp-catalog.ts`,
       },
+      {
+        find: "@envoydev/agent-catalog/asking",
+        replacement: `${here}packages/agent-catalog/src/asking-control.ts`,
+      },
       { find: "@envoydev/protocol", replacement: `${here}packages/protocol/src/index.ts` },
       { find: "@envoydev/platform", replacement: `${here}packages/platform/src/index.ts` },
       { find: "@envoydev/task-model", replacement: `${here}packages/task-model/src/index.ts` },

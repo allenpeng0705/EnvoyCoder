@@ -104,6 +104,8 @@ function show(over: Partial<CoderState> = {}): {
     archiveTask,
     updateProject: vi.fn(),
     openTask: vi.fn(),
+    openRun: vi.fn(async () => undefined),
+    openTaskHistory: vi.fn(async () => undefined),
     sendToRun: vi.fn(),
     cancelRun: vi.fn(),
     answerApproval: vi.fn(),

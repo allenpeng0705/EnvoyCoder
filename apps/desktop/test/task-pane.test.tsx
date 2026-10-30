@@ -189,8 +189,8 @@ describe("the transcript", () => {
 
     expect(screen.getByText("add the keys")).toBeTruthy();
     expect(screen.getByText("On it.")).toBeTruthy();
-    // The distinction the composer exists to make, rendered where a user can see it after the fact.
-    expect(screen.getByText(/joined the turn/)).toBeTruthy();
+    // Mid-run delivery label — how this follow-up reached the agent.
+    expect(screen.getByText(/Sent now/)).toBeTruthy();
   });
 
   it("renders assistant answers as markdown — headings, lists, and fenced code", () => {
@@ -259,6 +259,24 @@ describe("the transcript", () => {
     expect(within(stream).getByText(/check the parser/)).toBeTruthy();
   });
 
+  it("lets the user collapse live Steps so Working… does not pin open", () => {
+    renderPane(
+      [
+        event({
+          kind: "run.thought",
+          text: "thinking",
+          messageId: "th1",
+        }),
+      ],
+      { runLive: true },
+    );
+    const steps = screen.getByTestId("transcript-steps");
+    const details = steps.querySelector("details");
+    expect(details?.open).toBe(true);
+    fireEvent.click(within(steps).getByText("Working…"));
+    expect(details?.open).toBe(false);
+  });
+
   it("says when the history is incomplete rather than rendering a plausible lie", () => {
     const first = event({ kind: "run.output", stream: "assistant", text: "one", messageId: "m1" });
     renderPane([
@@ -320,13 +338,41 @@ describe("an approval, composer takeover", () => {
       harnesses: [harnessFor("envoy-harness")],
       canStopAskingApprovals: true,
     });
-    fireEvent.click(within(screen.getByTestId("approval-takeover")).getByTestId("approval-stop-asking"));
+    const takeover = screen.getByTestId("approval-takeover");
+    const stopAsking = within(takeover).getByTestId("approval-stop-asking");
+    expect(stopAsking.className).toContain("button--secondary");
+    expect(within(takeover).getByTestId("approval-settings-hint")).toBeTruthy();
+    fireEvent.click(stopAsking);
     expect(pane.onAnswer).toHaveBeenCalledWith("req-1", "allow-once", { stopAsking: true });
+  });
+
+  it("picks an allow-* option id for stop-asking when several non-destructive choices exist", () => {
+    const pane = renderPane(
+      [
+        event({
+          kind: "run.approval-requested",
+          requestId: "req-2",
+          question: "Allow the agent to run “shell”?",
+          options: [
+            { id: "proceed", label: "Proceed" },
+            { id: "allow-once", label: "Allow once" },
+            { id: "reject-once", label: "Reject", destructive: true },
+          ],
+        }),
+      ],
+      {
+        harnesses: [harnessFor("envoy-harness")],
+        canStopAskingApprovals: true,
+      },
+    );
+    fireEvent.click(screen.getByTestId("approval-stop-asking"));
+    expect(pane.onAnswer).toHaveBeenCalledWith("req-2", "allow-once", { stopAsking: true });
   });
 
   it("hides stop-asking when the agent has no approval policy", () => {
     renderPane([approval], withApprovals);
     expect(screen.queryByTestId("approval-stop-asking")).toBeNull();
+    expect(screen.queryByTestId("approval-settings-hint")).toBeNull();
   });
 
   it("keeps a long plan review readable — body once in takeover, deferred transcript is a pointer", () => {
@@ -465,11 +511,52 @@ describe("the composer", () => {
     // Nothing in the field yet: no primary action is drawn at all (see the leg below), so this one types first.
     fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "and then this" } });
     const send = screen.getByRole("button", { name: "Send" });
-    expect(send.getAttribute("data-hint")).toBe("The agent finishes the turn it is on, then reads this.");
+    expect(send.getAttribute("data-hint")).toBe("Will send when the agent finishes this reply");
     // And the picker is gone: one fewer control on the row, and no unexplained vocabulary on it.
     expect(screen.queryByLabelText("How to deliver the message")).toBeNull();
     expect(screen.queryByText("Queue")).toBeNull();
     expect(screen.queryByText("Steer")).toBeNull();
+  });
+
+  it("shows one queue status line while running, without repeating it in the placeholder", () => {
+    renderPane([], { runLive: true });
+    expect(screen.getByTestId("composer-queue-status").textContent).toBe(
+      "Will send when the agent finishes this reply",
+    );
+    const field = screen.getByLabelText("Message the agent") as HTMLTextAreaElement;
+    expect(field.placeholder).toBe("Add a follow-up");
+  });
+
+  it("keeps the composer when a file tab is open so approvals stay reachable", async () => {
+    renderPane(
+      [
+        event({
+          kind: "run.tool",
+          callId: "t-read",
+          name: "read-file",
+          status: "completed",
+          input: { path: "/repo/a.ts" },
+        }),
+      ],
+      {
+        runLive: false,
+        onReadFile: async () => ({
+          ok: true as const,
+          file: {
+            path: "/repo/a.ts",
+            name: "a.ts",
+            kind: "text" as const,
+            size: 12,
+            content: "const x = 1\n",
+          },
+        }),
+      },
+    );
+    fireEvent.click(screen.getByTestId("tool-card-open-path"));
+    await waitFor(() => expect(screen.getByRole("tab", { name: "a.ts" })).toBeTruthy());
+    expect(document.querySelector(".composer")).toBeTruthy();
+    expect(screen.getByLabelText("Message the agent")).toBeTruthy();
+    expect(document.querySelector(".pane--file")).toBeNull();
   });
 
   it("starts a task when nothing is running, rather than sending to a run that does not exist", () => {

@@ -21,6 +21,11 @@ import type { JSX } from "react";
 
 import type { HarnessId, HarnessSummary } from "@envoydev/protocol";
 import { isHarnessId } from "@envoydev/protocol";
+import {
+  agentCanControlAsking,
+  askingControl,
+  modeLabelForAskingOff,
+} from "@envoydev/agent-catalog/asking";
 
 import { agentFor } from "../../composer/agent-for.js";
 import { composerControls, modelNote, modelOffReason } from "../../composer/controls.js";
@@ -141,12 +146,9 @@ export function ModelRow(props: {
  * asking; `resolveApprovalPolicy` in the daemon owns the mapping and records why the strict value is the
  * one for `true`.
  *
- * **What it does not do, said on screen.** Only `envoy-harness` documents such a method —
- * `deepseek-harness` registers nine ACP methods and `session/set_policy` is not among them — so when the
- * default agent is one of the others, the row is **disabled and names it**. The same for a provider the
- * user added: we have never established that it accepts a policy, so inventing one would be a claim.
- * The alternative, a live switch that stores a preference no agent hears, is precisely the lie this pane
- * removes.
+ * **What it does not do, said on screen.** Agents with neither `session/set_policy` nor a
+ * deliverable unattended mode keep the row disabled with a reason. A live switch that stores a
+ * preference nothing reads is the lie this pane removes.
  */
 export function ApprovalRow(props: {
   state: CoderState;
@@ -162,14 +164,22 @@ export function ApprovalRow(props: {
     summary?.label ??
     provider?.label ??
     (isHarnessId(props.harness) ? harnessLabel(props.harness) : props.harness);
-  const supported = summary?.capabilities.approvalPolicy === true;
-  // A known provider (or a shipped agent without the method) is *unsupported*, not *unknown*: we know
-  // enough to refuse inventing a policy. `unknown` is only for an id nobody has a row for yet.
-  const note = supported
-    ? t("settings.approvals.reaches", { agent })
-    : summary === undefined && provider === undefined
-      ? t("settings.approvals.unknown", { agent })
-      : t("settings.approvals.unsupported", { agent });
+  const shipped = isHarnessId(props.harness) ? props.harness : undefined;
+  // Shipped agents: only when the catalogue has a deliverable wire (policy or unattended mode).
+  // Do not enable from `modes[].unattended` alone — Copilot/OMP list those but cannot take them
+  // (`askingControl === "none"`). Custom providers: daemon never maps Settings Off for them.
+  const via = shipped !== undefined ? askingControl(shipped) : "none";
+  const supported = shipped !== undefined && agentCanControlAsking(shipped);
+  const modeLabel = shipped !== undefined ? modeLabelForAskingOff(shipped) : undefined;
+  // A known provider (or a shipped agent without a wire) is *unsupported*, not *unknown*.
+  const note =
+    via === "policy"
+      ? t("settings.approvals.reaches", { agent })
+      : via === "unattended-mode" && modeLabel !== undefined
+        ? t("settings.approvals.reachesMode", { agent, mode: modeLabel })
+        : summary === undefined && provider === undefined && shipped === undefined
+          ? t("settings.approvals.unknown", { agent })
+          : t("settings.approvals.unsupported", { agent });
 
   return (
     <SettingRow

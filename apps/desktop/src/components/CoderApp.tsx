@@ -36,6 +36,7 @@ import {
   openProjectInNewWindow,
   takePendingProject,
 } from "../client/new-window.js";
+import { canStopAskingApprovals as agentCanStopAsking } from "../composer/stop-asking.js";
 import { useT } from "../i18n/context.js";
 import {
   asFailure,
@@ -1143,14 +1144,15 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
                 if (!active.runId) return;
                 toPane(active.id, asFailure(await props.actions.cancelRun(active.runId)));
               }}
-              canStopAskingApprovals={
-                // Key off the *live run's* agent, not the task's next-run pick — a mid-turn
-                // harness change must not offer stop-asking for an agent that cannot take a policy.
-                state.harnesses.find(
-                  (h) => h.id === (activeRun?.run.harness ?? active.harness),
-                )?.capabilities.approvalPolicy === true &&
-                state.settings.requireApprovalForDestructive === true
-              }
+              canStopAskingApprovals={(() => {
+                // Live run's agent, not the task's next-run pick — catalogue for shipped ids so an
+                // empty/stale harness list cannot hide Envoy Harness stop-asking.
+                const harnessId = activeRun?.run.harness ?? active.harness;
+                return agentCanStopAsking({
+                  harnessId,
+                  requireApproval: state.settings.requireApprovalForDestructive === true,
+                });
+              })()}
               onAnswer={async (requestId, choice, options) => {
                 if (!active.runId) return;
                 toPane(

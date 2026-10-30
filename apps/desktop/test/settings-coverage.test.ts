@@ -61,18 +61,18 @@ const READERS: Readonly<Record<string, readonly ReadSite[]>> = {
   language: [
     {
       file: "apps/desktop/src/main.tsx",
-      needle: "state.settings.language",
+      needle: "localSettings.language",
       because:
-        "the root `I18nProvider` takes the stored preference, which is what re-renders every `t()` in " +
+        "the root `I18nProvider` takes this machine's stored preference, which is what re-renders every `t()` in " +
         "the window when it changes",
     },
   ],
   theme: [
     {
       file: "apps/desktop/src/main.tsx",
-      needle: "state.settings.theme",
+      needle: "localSettings.theme",
       because:
-        "Root calls `applyTheme` whenever the stored preference changes, writing or clearing " +
+        "Root calls `applyTheme` whenever this machine's stored preference changes, writing or clearing " +
         "`document.documentElement.dataset.theme`",
     },
   ],
@@ -125,6 +125,12 @@ const READERS: Readonly<Record<string, readonly ReadSite[]>> = {
       because:
         "the mapping to the value `envoy-harness` validates; `runs.test.ts` proves both positions " +
         "reach the agent over a real pipe",
+    },
+    {
+      file: "apps/desktop/src/daemon/service.ts",
+      needle: "requireApprovalForDestructive === false",
+      because:
+        "turning Off mid-run pushes autoRun off / unattended mode onto live sessions without a restart",
     },
   ],
   keepTranscripts: [

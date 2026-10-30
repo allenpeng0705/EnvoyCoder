@@ -20,16 +20,17 @@
  *     document. `stopPropagation` is part of the contract rather than tidiness: the shell binds Escape
  *     globally to "stop the agent" (`input/useShortcuts.ts`), and a user pressing Escape to dismiss a
  *     menu must not kill a run they were not looking at.
- *   * **Choosing an item closes** the menu, except for the destructive one, which asks in place, and
- *     the pick item, which replaces the list with its options in the same popover.
+ *   * **Choosing an item closes** the menu, except for the destructive one, which asks in a centered
+ *     confirm dialog, and the pick item, which replaces the list with its options in the same popover.
  *
  * ## The destructive item, and design law 3
  *
  * The colour of destruction (`--destructive`) appears **only inside the confirmation** — never on the
  * row, and never on the menu item itself. So `Remove…` in the list is an ordinary item, and choosing it
- * replaces the list **in the same popover, over the same row** with a question. In place, not in a
- * modal: the family rule is that a decision shows the context it is made in, and the context here is the
- * row the question is about, which is still on screen behind the panel.
+ * opens a **centered confirm dialog** (portaled, with a dimmed backdrop) rather than expanding the
+ * rail popover. The family still rejects a native `window.confirm` (unreliable in Tauri) and rejects
+ * stuffing a long “what removing does” sentence into a 260px rail panel that covers neighbouring
+ * rows — the dialog keeps the question readable and unclipped past `overflow` ancestors.
  *
  * The question's *wording* is not this component's: it is handed in already translated, because this
  * component knows where the question goes and the caller knows what it means.
@@ -37,7 +38,8 @@
 
 import type { JSX, KeyboardEvent } from "react";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { useT } from "../i18n/context.js";
 import { EllipsisIcon } from "./icons.js";
@@ -106,8 +108,10 @@ export interface RowMenuProps {
 
 export function RowMenu(props: RowMenuProps): JSX.Element {
   const t = useT();
+  const titleId = useId();
+  const bodyId = useId();
   const [open, setOpen] = useState(false);
-  /** The destructive item has been chosen; the popover is showing the question instead of the list. */
+  /** The destructive item has been chosen; the centered confirm dialog is up. */
   const [asking, setAsking] = useState(false);
   /** The pick item has been chosen; the popover is showing its options instead of the list. */
   const [picking, setPicking] = useState(false);
@@ -137,15 +141,15 @@ export function RowMenu(props: RowMenuProps): JSX.Element {
     setOpen(true);
   };
 
-  // Focus on open, and on the swap from list to question. The question block takes focus itself
+  // Focus on open, and on the swap from list to confirm dialog. The dialog takes focus itself
   // (`tabIndex={-1}`) rather than its destructive button: a dialog that greets the user with focus on
   // "Remove" is a dialog that removes something on a stray Return.
   useEffect(() => {
-    if (!open) return;
     if (asking) {
       dialogRef.current?.focus();
       return;
     }
+    if (!open) return;
     const buttons = itemRefs.current.filter((item): item is HTMLButtonElement => item !== null);
     if (buttons.length === 0) return;
     buttons[landOnLast.current ? buttons.length - 1 : 0]?.focus();
@@ -155,9 +159,16 @@ export function RowMenu(props: RowMenuProps): JSX.Element {
   // while a touch fires only the first — and closing twice is a no-op. Capture phase, so a handler on
   // something the panel overlaps cannot swallow the press first.
   useEffect(() => {
-    if (!open) return;
+    if (!open && !asking) return;
     const onPress = (event: Event): void => {
-      if (!rootRef.current?.contains(event.target as Node)) close(false);
+      const target = event.target as Node;
+      if (asking) {
+        // Backdrop itself dismisses; presses inside the dialog do not.
+        if (dialogRef.current?.contains(target)) return;
+        close(false);
+        return;
+      }
+      if (!rootRef.current?.contains(target)) close(false);
     };
     document.addEventListener("pointerdown", onPress, true);
     document.addEventListener("mousedown", onPress, true);
@@ -168,7 +179,21 @@ export function RowMenu(props: RowMenuProps): JSX.Element {
     // `close` is re-created every render and is deliberately not a dependency: it only sets state and
     // focuses a ref, so the copy this effect captured behaves identically to a fresh one, and depending on
     // it would detach and re-attach the listeners on every render.
-  }, [open]);
+  }, [open, asking]);
+
+  // Escape while the confirm dialog is open (it lives outside `rootRef`, so the menu key handler
+  // never sees the keystroke).
+  useEffect(() => {
+    if (!asking) return;
+    const onKey = (event: globalThis.KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      event.preventDefault();
+      close();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [asking]);
 
   /** Focus movement among the items, from wherever the keystroke happened inside the panel. */
   const moveFocus = (step: 1 | -1 | "first" | "last"): void => {
@@ -190,14 +215,14 @@ export function RowMenu(props: RowMenuProps): JSX.Element {
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    if (event.key === "Escape" && open) {
+    if (event.key === "Escape" && (open || asking)) {
       // Before the shell's global Escape ("stop the agent") ever sees it. See the header comment.
       event.stopPropagation();
       event.preventDefault();
       close();
       return;
     }
-    if (event.key === "Tab" && open) {
+    if (event.key === "Tab" && open && !asking) {
       // Tab is "leave", not "dismiss": the next control should get focus, so this closes without
       // pulling focus back to the trigger.
       close(false);
@@ -223,6 +248,54 @@ export function RowMenu(props: RowMenuProps): JSX.Element {
     }
   };
 
+  const confirmDialog =
+    asking && confirm
+      ? createPortal(
+          <div className="confirm-dialog-backdrop" data-testid="row-menu-confirm-backdrop">
+            <div
+              className="confirm-dialog"
+              role="alertdialog"
+              aria-labelledby={titleId}
+              aria-describedby={bodyId}
+              aria-label={confirm.ariaLabel}
+              aria-modal="true"
+              tabIndex={-1}
+              ref={dialogRef}
+            >
+              <div className="confirm-dialog__mark" aria-hidden />
+              <div className="confirm-dialog__copy">
+                <h2 id={titleId} className="confirm-dialog__title">
+                  {confirm.ariaLabel}
+                </h2>
+                <p id={bodyId} className="confirm-dialog__body">
+                  {confirm.question}
+                </p>
+              </div>
+              <div className="confirm-dialog__actions">
+                <button type="button" className="button button--secondary" onClick={() => close()}>
+                  {t("action.cancel")}
+                </button>
+                {/* The one place the destructive colour is allowed to exist (design law 3). */}
+                <button
+                  type="button"
+                  className="button button--danger confirm-dialog__cta"
+                  onClick={() => {
+                    // Closed *before* the action runs: the action usually removes the row this menu
+                    // hangs off, and a dialog that lingered over a deleted row — or tried to return
+                    // focus to a trigger that no longer exists — would be a ghost.
+                    close(false);
+                    confirm.onConfirm();
+                  }}
+                >
+                  {confirm.cta}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
     <div className="row-menu" ref={rootRef} onKeyDown={onKeyDown}>
       <button
@@ -238,37 +311,8 @@ export function RowMenu(props: RowMenuProps): JSX.Element {
         <EllipsisIcon />
       </button>
 
-      {open ? (
-        asking && confirm ? (
-          <div
-            className="confirm row-menu__confirm"
-            role="alertdialog"
-            aria-label={confirm.ariaLabel}
-            tabIndex={-1}
-            ref={dialogRef}
-          >
-            <p className="confirm__question">{confirm.question}</p>
-            <div className="confirm__actions">
-              {/* The one place the destructive colour is allowed to exist (design law 3). */}
-              <button
-                type="button"
-                className="button button--danger"
-                onClick={() => {
-                  // Closed *before* the action runs: the action usually removes the row this menu
-                  // hangs off, and a popover that lingered over a deleted row — or tried to return
-                  // focus to a trigger that no longer exists — would be a ghost.
-                  close(false);
-                  confirm.onConfirm();
-                }}
-              >
-                {confirm.cta}
-              </button>
-              <button type="button" className="button button--secondary" onClick={() => close()}>
-                {t("action.cancel")}
-              </button>
-            </div>
-          </div>
-        ) : picking && pick ? (
+      {open && !asking ? (
+        picking && pick ? (
           <div className="row-menu__list" role="menu" aria-label={pick.ariaLabel}>
             {pick.options.map((option, index) => (
               <button
@@ -330,8 +374,12 @@ export function RowMenu(props: RowMenuProps): JSX.Element {
                   itemRefs.current[items.length + (pick ? 1 : 0)] = node;
                 }}
                 // Not `button--danger` and not red: choosing this asks a question. The colour arrives
-                // with the question, in the panel above.
-                onClick={() => setAsking(true)}
+                // with the question, in the dialog.
+                onClick={() => {
+                  setOpen(false);
+                  setPicking(false);
+                  setAsking(true);
+                }}
               >
                 {confirm.label}
               </button>
@@ -339,6 +387,7 @@ export function RowMenu(props: RowMenuProps): JSX.Element {
           </div>
         )
       ) : null}
+      {confirmDialog}
     </div>
   );
 }

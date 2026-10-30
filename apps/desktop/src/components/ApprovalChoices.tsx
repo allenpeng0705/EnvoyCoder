@@ -5,8 +5,8 @@
  * Several choices are checkboxes plus Confirm. A typed answer is a field plus Confirm.
  * The labels are the agent's own words, except the Confirm button, which is ours.
  *
- * When the agent accepts an approval policy (`approvalPolicy`), exclusive permission cards
- * also offer "Allow and don't ask again" — flips Settings and the live session.
+ * When the live agent is a shipped policy wire (`askingControl === "policy"`), exclusive
+ * permission cards also offer "Allow and don't ask again" — flips Settings and the live session.
  */
 
 import { useState, type JSX } from "react";
@@ -25,7 +25,7 @@ type Answer = (
 export function ApprovalChoices(props: {
   entry: ApprovalEntry;
   onAnswer: Answer;
-  /** Envoy Harness (and any agent with `approvalPolicy`) — show stop-asking. */
+  /** Envoy Harness (catalogue policy wire) — show stop-asking. */
   canStopAsking?: boolean;
 }): JSX.Element {
   const t = useT();
@@ -44,34 +44,62 @@ export function ApprovalChoices(props: {
   if (entry.selection === "many") return <ManyChoices entry={entry} onAnswer={props.onAnswer} />;
   if (entry.selection === "text") return <TextAnswer entry={entry} onAnswer={props.onAnswer} />;
 
-  const allowId = entry.options.find((option) => option.destructive !== true)?.id;
+  // Prefer an explicit allow id when several non-destructive options exist (Allow once vs Always).
+  const allowId = stopAskingAllowId(entry.options);
+  const stopAsking = props.canStopAsking === true && allowId !== undefined;
 
   return (
     <div className="approval__choice-stack">
       <div className="approval__choice-row">
-        {entry.options.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            className={`button ${option.destructive ? "button--danger" : "button--primary"}`}
-            onClick={() => void props.onAnswer(entry.requestId, option.id)}
-          >
-            {localizeText(t, option.label) ?? option.label}
-          </button>
-        ))}
+        {entry.options.flatMap((option) => {
+          const choice = (
+            <button
+              key={option.id}
+              type="button"
+              className={`button ${option.destructive ? "button--danger" : "button--primary"}`}
+              onClick={() => void props.onAnswer(entry.requestId, option.id)}
+            >
+              {localizeText(t, option.label) ?? option.label}
+            </button>
+          );
+          // Allow → don't ask again → Deny: one row, permanent allow next to Allow.
+          if (stopAsking && option.id === allowId) {
+            return [
+              choice,
+              <button
+                key="stop-asking"
+                type="button"
+                className="button button--secondary approval__stop-asking"
+                data-testid="approval-stop-asking"
+                onClick={() => void props.onAnswer(entry.requestId, allowId, { stopAsking: true })}
+              >
+                {t("task.approval.stopAsking")}
+              </button>,
+            ];
+          }
+          return [choice];
+        })}
       </div>
-      {props.canStopAsking === true && allowId !== undefined ? (
-        <button
-          type="button"
-          className="button button--ghost approval__stop-asking"
-          data-testid="approval-stop-asking"
-          onClick={() => void props.onAnswer(entry.requestId, allowId, { stopAsking: true })}
-        >
-          {t("task.approval.stopAsking")}
-        </button>
+      {stopAsking ? (
+        <p className="approval__hint" data-testid="approval-settings-hint">
+          {t("task.approval.settingsHint")}
+        </p>
       ) : null}
     </div>
   );
+}
+
+/** Option id stop-asking should send — same idea as the daemon's allowChoiceId, on card options. */
+function stopAskingAllowId(
+  options: readonly { id: string; destructive?: boolean }[],
+): string | undefined {
+  const allows = options.filter((option) => option.destructive !== true);
+  if (allows.length === 0) return undefined;
+  const preferred = allows.find((option) => {
+    const id = option.id.toLowerCase().replace(/_/g, "-");
+    return id === "allow" || id === "allow-once" || id === "allow-always" || id.startsWith("allow-");
+  });
+  return preferred?.id ?? allows[0]?.id;
 }
 
 function ManyChoices(props: { entry: ApprovalEntry; onAnswer: Answer }): JSX.Element {

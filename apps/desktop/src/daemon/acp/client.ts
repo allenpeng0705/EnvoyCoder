@@ -584,6 +584,16 @@ export class AcpClient {
     await this.setPolicy(policy);
   }
 
+  /**
+   * Push a collaboration / permission mode while the session is open.
+   *
+   * Used when Settings turns Off mid-run for an agent whose “don’t ask” path is an
+   * unattended mode (`bypassPermissions`, `agent-full-access`, …), not `set_policy`.
+   */
+  async applySessionMode(mode: string): Promise<void> {
+    await this.setMode(mode);
+  }
+
   private async setPolicy(policy: AcpSessionPolicy): Promise<void> {
     const sessionId = this.requireSession();
     await this.request(

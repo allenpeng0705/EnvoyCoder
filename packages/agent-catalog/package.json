@@ -17,6 +17,10 @@
     "./catalog": {
       "types": "./src/acp-catalog.ts",
       "import": "./src/acp-catalog.ts"
+    },
+    "./asking": {
+      "types": "./src/asking-control.ts",
+      "import": "./src/asking-control.ts"
     }
   },
   "dependencies": {

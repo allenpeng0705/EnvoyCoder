@@ -203,8 +203,8 @@ export const en = {
   "task.transcript.empty.title": "Start this task",
   "task.transcript.empty.body":
     "The agent works in {cwd}. Describe what you want below — tool calls, approvals, and diffs appear here.",
-  "task.transcript.loading": "Loading this turn…",
-  "task.composer.queueStatus": "Will send when this turn finishes",
+  "task.transcript.loading": "Loading…",
+  "task.composer.queueStatus": "Will send when the agent finishes this reply",
   "task.approval.takeover.aria": "The agent needs your answer",
   "task.approval.pendingInComposer": "Answer in the composer below",
   "task.tool.bucket.read": "Read",
@@ -220,8 +220,8 @@ export const en = {
   "task.steps.summary": "Steps",
   "task.steps.working": "Working…",
   "task.you": "You",
-  "task.delivered.steered": "joined the turn",
-  "task.delivered.queued": "waited for the turn",
+  "task.delivered.steered": "Sent now",
+  "task.delivered.queued": "Queued",
   "task.thought.summary": "Thought",
   "task.code.copy": "Copy",
   "task.code.copied": "Copied",
@@ -236,7 +236,9 @@ export const en = {
   "task.approval.answered": "Answered",
   "task.approval.answeredWith": "Answered: {option}",
   "task.approval.confirm": "Confirm",
-  "task.approval.stopAsking": "Allow and don't ask again on this machine",
+  "task.approval.stopAsking": "Don't ask again",
+  "task.approval.settingsHint":
+    "Stops asking on this machine. Same control: Settings → Ask before risky steps.",
 
   "task.plan.title": "Plan",
   "task.plan.progress": "Plan · {done} of {total}",
@@ -303,7 +305,7 @@ export const en = {
   "explorer.diff.failed": "Could not open this change.",
   "explorer.diff.tooLarge": "This change is too large to open here ({size}).",
   "task.composer.placeholder.approval": "Answer the request above before sending anything",
-  "task.composer.placeholder.running": "Add a follow-up — it waits until this turn finishes",
+  "task.composer.placeholder.running": "Add a follow-up",
   "task.composer.placeholder.idle": "Describe the task",
   "task.composer.hint": "Enter to send · Shift+Enter for a new line",
   "task.composer.attach": "Attach",
@@ -323,7 +325,7 @@ export const en = {
   "task.empty.suggestion.one": "Explain what this project does",
   "task.empty.suggestion.two": "Find and fix the failing test",
   "task.empty.suggestion.three": "Add tests for the last change",
-  "task.composer.send.queued": "The agent finishes the turn it is on, then reads this.",
+  "task.composer.send.queued": "Will send when the agent finishes this reply",
   "task.composer.send": "Send",
   "task.composer.start": "Start",
   "task.composer.resume": "Resume — continue the previous session",
@@ -780,11 +782,13 @@ export const en = {
   "settings.extraArgs.placeholder": "--verbose",
   "settings.approvals.title": "Ask before risky steps",
   "settings.approvals.detail":
-    "On Envoy Harness: when on, ask before commands and changes outside the project — not for ordinary in-project edits. Off means never ask for this machine, even under Project change. Full access also never asks.",
+    "When on, the agent asks before risky steps. Off means don’t ask on this machine — via the agent’s policy when it has one, or its unattended mode when that is what the catalogue publishes.",
   "settings.approvals.reaches":
     "Handed to {agent} as its own policy for every run, so the asking happens where the work does.",
+  "settings.approvals.reachesMode":
+    "Off starts {agent} in “{mode}” so it does not stop to ask. On keeps the mode you pick for the task.",
   "settings.approvals.unsupported":
-    "EnvoyDev cannot change this for {agent}: it has no way to be told, and asks on its own terms. Pick an agent EnvoyDev can hand a policy to, or answer {agent}'s own prompts.",
+    "EnvoyDev cannot change this for {agent}: it has no way to be told, and asks on its own terms. Pick an agent EnvoyDev can hand a policy or unattended mode to, or answer {agent}'s own prompts.",
   "settings.approvals.unknown":
     "EnvoyDev has not been told what {agent} accepts yet, so this stays off rather than storing a choice nothing reads.",
   "settings.transcripts.title": "Keep transcripts after a task ends",
