@@ -155,6 +155,7 @@ void main() {
         body: ApprovalCard(
           approval: approval(
             question: keyed('approval.question.generic', 'Allow the agent to continue?'),
+            detail: '# Plan\n\n## Phase 0\n\n- Do work',
           ),
           colors: CoderColors.light,
           actionsDeferred: true,
@@ -164,6 +165,8 @@ void main() {
     final en = lookupAppLocalizations(const Locale('en'));
     expect(find.text(en.runApprovalAnswerBelow), findsOneWidget);
     expect(find.text(en.approvalAllow), findsNothing);
+    // Body lives once in sticky chrome — deferred transcript is a pointer only.
+    expect(find.textContaining('Phase 0'), findsNothing);
     expectNoWireFormat(tester);
   });
 

@@ -44,6 +44,8 @@ use serde::{Deserialize, Serialize};
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 mod browser;
+#[cfg(target_os = "macos")]
+mod dmg_cleanup;
 mod terminal;
 
 use browser::{browser_close, browser_frame, browser_navigate, browser_open};
@@ -775,6 +777,13 @@ fn main() {
         // is (`daemon_endpoint`) rather than which port to dial: the shell decides what "the daemon"
         // means, and a command that handed out a port would invite the window to build a URL of its
         // own. `coder_paths` still reports it, for diagnostics.
+        .setup(|_app| {
+            // macOS DMG: eject the installer volume (closes its Finder window) and offer to trash
+            // the downloaded `.dmg`. Cannot run during the drag — only once the installed app opens.
+            #[cfg(target_os = "macos")]
+            dmg_cleanup::after_launch();
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
                 coder_paths,
                 daemon_endpoint,

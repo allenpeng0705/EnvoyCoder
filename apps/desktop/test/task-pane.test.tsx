@@ -386,6 +386,69 @@ describe("an approval, composer takeover", () => {
     expect(screen.queryByTestId("approval-settings-hint")).toBeNull();
   });
 
+  it("clears Plan before answering Implement on a plan-review ask", async () => {
+    const onToggleFeature = vi.fn().mockResolvedValue(undefined);
+    const onAnswer = vi.fn().mockResolvedValue(undefined);
+    renderPane(
+      [
+        event({
+          kind: "run.approval-requested",
+          requestId: "req-plan",
+          question: "Approve this plan and leave plan mode?",
+          detail: "# Title\n\n## Phase 0\n\n- Do work",
+          selection: "one",
+          options: [
+            { id: "0", label: "Approve plan and continue" },
+            { id: "1", label: "Reject" },
+          ],
+        }),
+      ],
+      {
+        ...withApprovals,
+        onToggleFeature,
+        onAnswer,
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Implement plan" }));
+    await waitFor(() => expect(onToggleFeature).toHaveBeenCalledWith("plan_mode", false));
+    await waitFor(() => expect(onAnswer).toHaveBeenCalledWith("req-plan", "0"));
+    expect(onToggleFeature.mock.invocationCallOrder[0]!).toBeLessThan(
+      onAnswer.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("stacks long plan actions under the body when choices stay on the transcript card", () => {
+    // Agent without composer takeover — same side-vs-footer bug as takeover.
+    const base = harnessFor("deepseek-harness");
+    renderPane(
+      [
+        event({
+          kind: "run.approval-requested",
+          requestId: "req-inline-plan",
+          question: "Approve this plan and leave plan mode?",
+          detail: "# Title\n\n## Phase 0\n\n- Do work",
+          selection: "one",
+          options: [
+            { id: "0", label: "Approve plan and continue" },
+            { id: "1", label: "Reject" },
+          ],
+        }),
+      ],
+      {
+        harnesses: [
+          {
+            ...base,
+            capabilities: { ...base.capabilities, approvals: false },
+          },
+        ],
+      },
+    );
+    const card = screen.getByRole("alertdialog", { name: "The agent needs your answer" });
+    expect(card.className).toContain("approval--stack");
+    expect(within(card).getByRole("button", { name: "Implement plan" })).toBeTruthy();
+    expect(within(card).getByRole("button", { name: "Keep planning" })).toBeTruthy();
+  });
+
   it("keeps a long plan review readable — body once in takeover, deferred transcript is a pointer", () => {
     renderPane(
       [
@@ -407,14 +470,14 @@ describe("an approval, composer takeover", () => {
 
     const takeover = screen.getByTestId("approval-takeover");
     expect(takeover.className).toContain("approval--takeover-long");
-    expect(within(takeover).getByText("Approve this plan and leave plan mode?")).toBeTruthy();
+    // Remapped to Implement this plan? / Implement plan — not the harness raw copy.
+    expect(within(takeover).getByText("Implement this plan?")).toBeTruthy();
     expect(within(takeover).getByTestId("approval-detail")).toBeTruthy();
     // Markdown heading, not the raw `#` source — only in the takeover.
     expect(within(takeover).getByRole("heading", { name: /Veda/ })).toBeTruthy();
     expect(within(takeover).getByText("Pick one. This answer is only for this question.")).toBeTruthy();
-    expect(
-      within(takeover).getByRole("button", { name: "Approve plan and continue" }),
-    ).toBeTruthy();
+    expect(within(takeover).getByRole("button", { name: "Implement plan" })).toBeTruthy();
+    expect(within(takeover).getByRole("button", { name: "Keep planning" })).toBeTruthy();
     // Deferred transcript is a compact pointer — do not duplicate the plan body.
     const transcript = screen.getByTestId("transcript");
     expect(within(transcript).queryByRole("heading", { name: /Veda/ })).toBeNull();
@@ -587,6 +650,60 @@ describe("the composer", () => {
       undefined,
     );
     expect(pane.onSend).not.toHaveBeenCalled();
+  });
+
+  it("auto-plans a large send: persists Plan, then starts framed with displayPrompt", async () => {
+    const onToggleFeature = vi.fn().mockResolvedValue(undefined);
+    const onStart = vi.fn().mockResolvedValue(undefined);
+    const big = "Refactor the entire architecture of this codebase";
+    renderPane([], {
+      runLive: false,
+      task: {
+        ...task,
+        harness: "envoy-harness",
+        model: "gpt-5.5",
+        planMode: false,
+        runId: undefined,
+        status: "idle",
+      },
+      harnesses: [harnessFor("envoy-harness")],
+      onToggleFeature,
+      onStart,
+    });
+    fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: big } });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    await waitFor(() => expect(onToggleFeature).toHaveBeenCalledWith("plan_mode", true));
+    await waitFor(() => expect(onStart).toHaveBeenCalled());
+    const args = onStart.mock.calls[0] as unknown[];
+    expect(String(args[0])).toContain("[Plan carefully");
+    expect(String(args[0])).toContain(big);
+    // displayPrompt is the last arg when framing differs from what the user typed.
+    expect(args[6]).toBe(big);
+  });
+
+  it("does not frame a large send when Plan cannot be persisted", async () => {
+    const onStart = vi.fn().mockResolvedValue(undefined);
+    const big = "Refactor the entire architecture of this codebase";
+    renderPane([], {
+      runLive: false,
+      task: {
+        ...task,
+        harness: "envoy-harness",
+        model: "gpt-5.5",
+        planMode: false,
+        runId: undefined,
+        status: "idle",
+      },
+      harnesses: [harnessFor("envoy-harness")],
+      onStart,
+      // no onToggleFeature
+    });
+    fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: big } });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    await waitFor(() => expect(onStart).toHaveBeenCalled());
+    const args = onStart.mock.calls[0] as unknown[];
+    expect(args[0]).toBe(big);
+    expect(String(args[0])).not.toContain("[Plan carefully");
   });
 
   it("resumes when the transcript named a resumable session and the agent can rejoin", () => {

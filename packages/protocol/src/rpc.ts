@@ -2914,7 +2914,7 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
         fastMode: z.boolean().optional(),
         /** Codex Plan for the next run. Absent leaves the stored value alone. */
         planMode: z.boolean().optional(),
-        /** Skip the large-task “plan carefully?” gate for this task. Absent leaves the stored value alone. */
+        /** Legacy unused flag; accepted so older clients do not fail `.strict()`. */
         skipPlanGate: z.boolean().optional(),
         extraArgs: z.string().optional(),
       })
@@ -2985,6 +2985,13 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
          */
         thinkingLevel: z.string().min(1).optional(),
         images: z.array(PromptImageSchema).max(8).optional(),
+        /**
+         * What the transcript shows for this opening message.
+         *
+         * When the wire `prompt` carries host framing (e.g. plan-first instructions) that the agent
+         * must see but the user must not, pass the user's own words here. Absent means record `prompt`.
+         */
+        displayPrompt: z.string().min(1).optional(),
       })
       .strict(),
     result: z.object({ run: AgentRunSchema }).strict(),

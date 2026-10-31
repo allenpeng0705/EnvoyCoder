@@ -9,10 +9,55 @@ export type SplitAskPrompt = {
   /** Empty means the caller should use the generic "agent asked a question" headline. */
   question: string;
   body?: string;
+  /** Cursor-style plan doc approval (`exit_plan_mode`), not a normal permission. */
+  kind?: "plan-review";
 };
 
 const HEADLINE_MAX = 160;
 const LONG_PROMPT = 280;
+
+function withPlanKind(split: SplitAskPrompt, raw: string): SplitAskPrompt {
+  if (isPlanReviewPrompt(raw, split.question, split.body)) {
+    return { ...split, kind: "plan-review" };
+  }
+  return split;
+}
+
+/** Detect harness `exit_plan_mode` / plan-doc approval prompts. */
+export function isPlanReviewPrompt(
+  raw: string,
+  question?: string,
+  body?: string,
+): boolean {
+  // Keep in step with `isPlanReviewAsk` (composer) — same cues, applied to raw and/or split parts.
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes("approve this plan") ||
+    lower.includes("leave plan mode") ||
+    lower.includes("plan review") ||
+    lower.includes("implement this plan")
+  ) {
+    return true;
+  }
+  const head = (question ?? "").toLowerCase();
+  if (
+    head.includes("approve this plan") ||
+    head.includes("leave plan mode") ||
+    head.includes("plan review") ||
+    head.includes("implement this plan")
+  ) {
+    return true;
+  }
+  if (
+    body !== undefined &&
+    body.trim() !== "" &&
+    /^#{1,6}\s/m.test(body) &&
+    /\bplan\b/i.test((question ?? "") + "\n" + body.slice(0, 240))
+  ) {
+    return true;
+  }
+  return false;
+}
 
 /**
  * Prefer a short lead-in as the question when the rest looks like a plan body.
@@ -27,7 +72,7 @@ export function splitAskPrompt(prompt: string): SplitAskPrompt {
     const head = afterSentence[1]!.trim();
     const body = afterSentence[2]!.trim();
     if (head.length > 0 && head.length <= HEADLINE_MAX && body.length > 0) {
-      return { question: head, body };
+      return withPlanKind({ question: head, body }, trimmed);
     }
   }
 
@@ -37,7 +82,7 @@ export function splitAskPrompt(prompt: string): SplitAskPrompt {
     const head = trimmed.slice(0, blank.index).trim();
     const body = trimmed.slice(blank.index).trim();
     if (head.length > 0 && body.length > 0) {
-      return { question: head, body };
+      return withPlanKind({ question: head, body }, trimmed);
     }
   }
 
@@ -51,7 +96,7 @@ export function splitAskPrompt(prompt: string): SplitAskPrompt {
       body.length > 0 &&
       (body.length > 80 || /^#{1,6}\s/m.test(body) || body.includes("|"))
     ) {
-      return { question: head, body };
+      return withPlanKind({ question: head, body }, trimmed);
     }
   }
 
@@ -62,8 +107,8 @@ export function splitAskPrompt(prompt: string): SplitAskPrompt {
     /^\|/.test(trimmed) ||
     trimmed.includes("\n|")
   ) {
-    return { question: "", body: trimmed };
+    return withPlanKind({ question: "", body: trimmed }, trimmed);
   }
 
-  return { question: trimmed };
+  return withPlanKind({ question: trimmed }, trimmed);
 }

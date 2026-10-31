@@ -814,6 +814,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get runComposerQueueStatus => '智能体完成本次回复后发送';
 
   @override
+  String get runPlanReviewImplement => '按计划实现';
+
+  @override
+  String get runPlanReviewRevise => '继续规划';
+
+  @override
+  String get runPlanReviewQuestion => '按此计划实现吗？';
+
+  @override
   String get runToolDetails => '详情';
 
   @override

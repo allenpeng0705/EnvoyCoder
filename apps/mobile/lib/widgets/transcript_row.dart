@@ -828,17 +828,17 @@ class ApprovalCard extends StatelessWidget {
                 : daemonText(l10n, approval.question),
             style: TextStyle(color: colors.foreground, fontWeight: FontWeight.w600),
           ),
-          // Plan bodies stay visible even while choices live in sticky chrome — same contract as
-          // the desktop deferred card. Cap height so a long ask_user plan cannot push the buttons
-          // off the phone.
-          if (approval.detail != null && approval.detail!.isNotEmpty) ...[
+          // Deferred → composer sticky owns the plan body + choices (desktop polish §1).
+          // Cap height in the sticky card so a long ask_user plan cannot push buttons off-screen.
+          if (!deferred && approval.detail != null && approval.detail!.isNotEmpty) ...[
             const SizedBox(height: 8),
             _ApprovalDetail(detail: approval.detail!, colors: colors),
           ],
-          if (_askHint(l10n, approval.selection) case final hint?) ...[
-            const SizedBox(height: 6),
-            Text(hint, style: TextStyle(color: colors.foregroundMuted, fontSize: 13)),
-          ],
+          if (!deferred)
+            if (_askHint(l10n, approval.selection) case final hint?) ...[
+              const SizedBox(height: 6),
+              Text(hint, style: TextStyle(color: colors.foregroundMuted, fontSize: 13)),
+            ],
           if (deferred) ...[
             const SizedBox(height: 4),
             Text(

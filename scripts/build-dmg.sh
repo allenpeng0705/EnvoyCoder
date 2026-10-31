@@ -107,6 +107,25 @@ newest_envoydev_app() {
   [ -n "$best" ] && echo "$best"
 }
 
+# create-dmg leaves `rw.<pid>.….dmg` mounted under /Volumes/dmg.* when a prior
+# bundle dies mid-flight. The next `bundle_dmg.sh` then fails with a bare
+# "failed to run bundle_dmg.sh" and no useful stderr.
+cleanup_stale_bundle_dmg_mounts() {
+  local vol img
+  echo "  Clearing stale create-dmg mounts (if any)…"
+  # Temp volumes from create-dmg (random /Volumes/dmg.XXXX).
+  for vol in /Volumes/dmg.*; do
+    [ -e "$vol" ] || continue
+    hdiutil detach "$vol" -force >/dev/null 2>&1 || true
+  done
+  # RW scratch images under the Tauri bundle tree.
+  while IFS= read -r img; do
+    [ -n "$img" ] || continue
+    hdiutil detach "$img" -force >/dev/null 2>&1 || true
+    rm -f "$img"
+  done < <(find "$TAURI_TARGET" -path '*/release/bundle/macos/rw.*.dmg' -type f 2>/dev/null)
+}
+
 require_apple_signing_env
 
 echo "[1/4] Staging the daemon, Node, and the pinned Envoy Harness…"
@@ -151,12 +170,14 @@ if [ "$defer_sign" = "1" ]; then
   bash "$ROOT/scripts/sign-macos-app-bundle.sh" "$app"
   echo ""
   echo "Packaging DMG from signed .app…"
+  cleanup_stale_bundle_dmg_mounts
   # App is already signed; force unsigned bundle config so Tauri does not re-codesign.
   # Keep APPLE_ID / PASSWORD / TEAM_ID so notarization still runs.
   unset APPLE_SIGNING_IDENTITY
   "$TAURI" bundle --config "$BUNDLE_CONF" --config "$UNSIGNED_CONF" --bundles dmg
   export APPLE_SIGNING_IDENTITY="$saved_identity"
 else
+  cleanup_stale_bundle_dmg_mounts
   "$TAURI" build --config "$BUNDLE_CONF" --bundles dmg,app
 fi
 

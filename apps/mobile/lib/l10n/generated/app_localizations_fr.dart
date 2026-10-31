@@ -860,6 +860,15 @@ class AppLocalizationsFr extends AppLocalizations {
       'Envoi quand l’agent aura fini cette réponse';
 
   @override
+  String get runPlanReviewImplement => 'Mettre en œuvre le plan';
+
+  @override
+  String get runPlanReviewRevise => 'Continuer à planifier';
+
+  @override
+  String get runPlanReviewQuestion => 'Mettre en œuvre ce plan ?';
+
+  @override
   String get runToolDetails => 'Détails';
 
   @override

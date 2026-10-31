@@ -1105,6 +1105,18 @@
   "@runComposerQueueStatus": {
     "description": "task.composer.queueStatus — Quiet status while send queues."
   },
+  "runPlanReviewImplement": "Implement plan",
+  "@runPlanReviewImplement": {
+    "description": "task.planReview.implement"
+  },
+  "runPlanReviewRevise": "Keep planning",
+  "@runPlanReviewRevise": {
+    "description": "task.planReview.revise"
+  },
+  "runPlanReviewQuestion": "Implement this plan?",
+  "@runPlanReviewQuestion": {
+    "description": "approval.question.planReview"
+  },
   "runToolDetails": "Details",
   "@runToolDetails": {
     "description": "run.toolDetails — Expand tool input/output."

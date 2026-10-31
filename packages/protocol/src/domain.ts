@@ -526,10 +526,8 @@ export interface Task {
    */
   planMode?: boolean;
   /**
-   * Skip the “this looks large — plan carefully?” composer gate for this task.
-   *
-   * Set when the user chooses “Don’t ask again for this task”. Absent / false means the gate may
-   * still appear when the prompt looks large and the agent can plan.
+   * Legacy: formerly skipped the pre-send plan chooser. Auto plan-first no longer asks, so this
+   * flag is unused; kept optional so older task files still load.
    */
   skipPlanGate?: boolean;
   extraArgs?: string;

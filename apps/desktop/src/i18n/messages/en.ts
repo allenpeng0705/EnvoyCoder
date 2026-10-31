@@ -349,6 +349,10 @@ export const en = {
   "task.composer.hint.work": "Agent does the work. Plan only looks and proposes.",
   "task.composer.work.agent": "Agent",
   "task.composer.work.plan": "Plan",
+  // Plan-doc approval after auto plan-first (exit_plan_mode).
+  "task.planReview.implement": "Implement plan",
+  "task.planReview.revise": "Keep planning",
+  "approval.question.planReview": "Implement this plan?",
   "task.composer.folder.aria": "Change this task's folder",
   "task.composer.folder.noPicker":
     "This window has no folder chooser, so this task's folder cannot be changed here.",

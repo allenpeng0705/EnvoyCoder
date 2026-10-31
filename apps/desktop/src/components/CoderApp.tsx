@@ -1078,13 +1078,14 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               onNewTask={() => {
                 void startNewTask(active.projectId).then((failure) => toRail(active.projectId, failure));
               }}
-              onStart={async (prompt, agentModeId, model, thinkingLevel, images, resume) => {
+              onStart={async (prompt, agentModeId, model, thinkingLevel, images, resume, displayPrompt) => {
                 const result = await props.actions.startRun(active.id, prompt, {
                   ...(resume === true ? { resume: true } : {}),
                   ...(agentModeId !== undefined ? { agentModeId } : {}),
                   ...(model !== undefined ? { model } : {}),
                   ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
                   ...(images !== undefined && images.length > 0 ? { images } : {}),
+                  ...(displayPrompt !== undefined ? { displayPrompt } : {}),
                 });
                 if (!result.ok) {
                   // **The answer, back to the composer**, which keeps the prompt in the field rather than
@@ -1094,9 +1095,9 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
                 }
                 // The first message names the task, when it has no name yet. Done after the run starts,
                 // so a refusal to rename can never take the prompt down with it — the agent is already
-                // working, and a title is a label.
+                // working, and a title is a label. Prefer the user's words over host framing.
                 if (active.title === "") {
-                  const named = taskTitleFromPrompt(prompt);
+                  const named = taskTitleFromPrompt(displayPrompt ?? prompt);
                   if (named !== "") await props.actions.updateTask({ id: active.id, title: named });
                 }
                 return undefined;
@@ -1120,7 +1121,7 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               onChangeThinking={async (thinkingLevel) => {
                 toPane(active.id, asFailure(await props.actions.updateTask({ id: active.id, thinkingLevel })));
               }}
-              onToggleFeature={async (id, value) => {
+              onToggleFeature={async (id, value) =>
                 toPane(
                   active.id,
                   asFailure(
@@ -1128,8 +1129,8 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
                       id === "fast_mode" ? { id: active.id, fastMode: value } : { id: active.id, planMode: value },
                     ),
                   ),
-                );
-              }}
+                )
+              }
               // A refusal here is worth showing: "that is not a folder on this machine" is the one
               // thing the user has to fix before the next run can start.
               onChangeFolder={async (path) => {

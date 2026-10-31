@@ -879,6 +879,7 @@ export class CoderStore {
       model?: string;
       thinkingLevel?: string;
       images?: PromptImage[];
+      displayPrompt?: string;
     } = {},
   ): Promise<{ ok: true; run: AgentRun } | Refusal> {
     const result = await this.mutate(
@@ -900,6 +901,9 @@ export class CoderStore {
           ? { thinkingLevel: options.thinkingLevel }
           : {}),
         ...(options.images !== undefined && options.images.length > 0 ? { images: options.images } : {}),
+        ...(options.displayPrompt !== undefined && options.displayPrompt !== ""
+          ? { displayPrompt: options.displayPrompt }
+          : {}),
       },
       (answer) => ({ ok: true as const, run: (answer as { run: AgentRun }).run }),
     );

@@ -821,6 +821,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get runComposerQueueStatus => '에이전트가 이 답변을 마치면 보냅니다';
 
   @override
+  String get runPlanReviewImplement => '계획대로 구현';
+
+  @override
+  String get runPlanReviewRevise => '계속 계획';
+
+  @override
+  String get runPlanReviewQuestion => '이 계획대로 구현할까요?';
+
+  @override
   String get runToolDetails => '세부 정보';
 
   @override

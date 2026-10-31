@@ -2192,6 +2192,25 @@ button.explorer__change:hover {
   flex-direction: column;
   align-items: stretch;
   margin-left: 0;
+  width: 100%;
+}
+
+/* Stacked / takeover: choices are a footer under the body, reading order start → end. */
+.approval--stack .approval__choice-stack,
+.approval--takeover .approval__choice-stack {
+  align-items: stretch;
+  width: 100%;
+}
+
+.approval--stack .approval__choice-row,
+.approval--takeover .approval__choice-row {
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.approval--stack .approval__choice-stack > .approval__hint,
+.approval--takeover .approval__choice-stack > .approval__hint {
+  text-align: start;
 }
 
 .approval__choices {
@@ -2292,10 +2311,16 @@ button.explorer__change:hover {
   overflow: visible;
 }
 
+/* Footer under the body — not a side chip beside a tall plan. */
 .approval--takeover .approval__actions {
   flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   margin-left: 0;
   width: 100%;
+  padding-top: var(--space-2);
+  border-top: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
 }
 
 .approval--deferred {

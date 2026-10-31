@@ -89,6 +89,7 @@ import { AcpClient, type AcpLaunch, type AcpPermissionRequest, type AcpSessionPo
 import { launchForAgent } from "./launch.js";
 import { envoyRunModel } from "./envoy-llm.js";
 import { slashCommandsFromAcp } from "../composer/slash-commands.js";
+import { stripPlanFirstFraming } from "../composer/plan-gate.js";
 import { parseAcpPlanUpdate } from "./acp-plan.js";
 import { splitAskPrompt } from "./ask-prompt.js";
 import { keyed, ref } from "./messages.js";
@@ -308,6 +309,10 @@ export interface StartRunInput {
   thinkingLevel?: string;
   /** Pictures for this turn. Absent when the message is only words. */
   images?: PromptImage[];
+  /**
+   * Transcript text for the opening message when `prompt` carries host framing the user should not see.
+   */
+  displayPrompt?: string;
   /**
    * After `coder.acceptParticipantOffer` on this daemon: run a peer participant locally while
    * keeping `run.hostId` as the peer id. Mesh dial will replace this path (M5b).
@@ -605,10 +610,16 @@ export class RunManager {
     }
     // Echo the opening prompt into the transcript. Follow-ups go through `send()` which records
     // `run.message`; without this, a startRun's words reach the agent but never the chat UI.
+    // Prefer `displayPrompt` / strip plan-first framing so the chat never shows host instructions.
     if (input.prompt.trim() !== "") {
+      const shown = (() => {
+        const display = input.displayPrompt?.trim();
+        if (display !== undefined && display !== "") return display;
+        return stripPlanFirstFraming(input.prompt);
+      })();
       await this.record(live, {
         kind: "run.message",
-        text: input.prompt,
+        text: shown,
         mode: "steer",
         delivered: "steered",
       });

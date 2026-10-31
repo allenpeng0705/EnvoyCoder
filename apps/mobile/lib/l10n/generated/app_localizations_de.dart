@@ -861,6 +861,15 @@ class AppLocalizationsDe extends AppLocalizations {
       'Wird gesendet, wenn der Agent diese Antwort beendet';
 
   @override
+  String get runPlanReviewImplement => 'Plan umsetzen';
+
+  @override
+  String get runPlanReviewRevise => 'Weiter planen';
+
+  @override
+  String get runPlanReviewQuestion => 'Diesen Plan umsetzen?';
+
+  @override
   String get runToolDetails => 'Details';
 
   @override

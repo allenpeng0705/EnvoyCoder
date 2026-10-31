@@ -61,8 +61,11 @@ import {
   thinkingOffReason,
 } from "../composer/controls.js";
 import {
+  isPlanReviewApproveChoice,
   isPlanReviewAsk,
-  shouldOfferPlanGate,
+  planReviewOptionLabel,
+  shouldAutoPlanFirst,
+  stripPlanFirstFraming,
   withPlanFirstFraming,
 } from "../composer/plan-gate.js";
 import { canResumeRun } from "../composer/resume.js";
@@ -170,6 +173,7 @@ export interface TaskPaneProps {
     thinkingLevel?: string,
     images?: PromptImage[],
     resume?: boolean,
+    displayPrompt?: string,
   ) => WriteFailure | Promise<WriteFailure>;
   /** Remember the agent's mode for this task, so the next run starts the way the user left it. */
   onChangeMode?: (agentModeId: string) => void | Promise<void>;
@@ -186,9 +190,10 @@ export interface TaskPaneProps {
    */
   onChangeThinking?: (level: string) => void | Promise<void>;
   /** Remember Fast or Plan for this task. The next run applies whichever the agent accepts. */
-  onToggleFeature?: (id: "fast_mode" | "plan_mode", value: boolean) => void | Promise<void>;
-  /** Persist “don’t ask again” for the large-task plan gate on this task. */
-  onSkipPlanGate?: () => void | Promise<void>;
+  onToggleFeature?: (
+    id: "fast_mode" | "plan_mode",
+    value: boolean,
+  ) => WriteFailure | Promise<WriteFailure>;
   /** Move this task to another folder. Applies to the next run — the agent keeps the one it started in. */
   onChangeFolder?: (path: string) => void | Promise<void>;
   /**
@@ -324,21 +329,6 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
       afterCount: number;
     }[]
   >([]);
-  /**
-   * Large-task gate: hold the composed turn until the user picks Plan carefully /
-   * Start working / Don’t ask. Draft stays in the field until then.
-   */
-  const [planGate, setPlanGate] = useState<
-    | {
-        prompt: string;
-        images?: PromptImage[];
-        mode: string | undefined;
-        model: string | undefined;
-        thinking: string | undefined;
-        resume: boolean;
-      }
-    | undefined
-  >(undefined);
   /** A mode the user has just chosen, before the task's saved copy comes back. */
   const [pickedMode, setPickedMode] = useState<string | undefined>(undefined);
   /** A model the user has just chosen, for the same reason and with the same lifetime. */
@@ -405,7 +395,6 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     setAttachments([]);
     setAttachNotice(undefined);
     setLocalEchoes([]);
-    setPlanGate(undefined);
     setDropping(false);
   }, [task.id, task.harness]);
 
@@ -615,7 +604,11 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
       if (prev.length === 0) return prev;
       const next = prev.filter((echo) => {
         const later = transcript.entries.slice(echo.afterCount);
-        return !later.some((entry) => entry.kind === "user" && entry.text === echo.text);
+        return !later.some(
+          (entry) =>
+            entry.kind === "user" &&
+            (entry.text === echo.text || stripPlanFirstFraming(entry.text) === echo.text),
+        );
       });
       return next.length === prev.length ? prev : next;
     });
@@ -656,6 +649,9 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     });
   };
 
+  /** Blocks a second auto-plan Send while Plan persist + startRun are in flight. */
+  const startBusyRef = useRef(false);
+
   const dispatchStart = (
     prompt: string,
     images: PromptImage[] | undefined,
@@ -665,6 +661,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
       thinking: string | undefined;
       resume: boolean;
       echoText?: string;
+      onSettled?: () => void;
     },
   ): void => {
     const previousText = text;
@@ -683,7 +680,6 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
       },
     ]);
     clearDraft();
-    setPlanGate(undefined);
 
     const track = (answer: WriteFailure | Promise<WriteFailure>): void => {
       const restore = (): void => {
@@ -691,17 +687,24 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
         setText(previousText);
         setAttachments(previousAttachments);
       };
+      const settled = (): void => {
+        opts.onSettled?.();
+      };
       if (answer !== undefined && typeof (answer as Promise<WriteFailure>).then === "function") {
         void (answer as Promise<WriteFailure>).then((failure) => {
           if (failure !== undefined) restore();
+          settled();
         });
         return;
       }
       if (answer !== undefined) restore();
+      settled();
     };
 
+    const displayPrompt = opts.echoText !== undefined && opts.echoText !== prompt ? opts.echoText : undefined;
+    // Keep the short arity when nothing optional is set — many tests assert the four-arg form.
     track(
-      images === undefined && !opts.resume
+      images === undefined && !opts.resume && displayPrompt === undefined
         ? props.onStart(prompt, opts.mode, opts.model, opts.thinking)
         : props.onStart(
             prompt,
@@ -710,12 +713,13 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
             opts.thinking,
             images,
             opts.resume ? true : undefined,
+            displayPrompt,
           ),
     );
   };
 
   const submit = (): void => {
-    if (!canSend(text, attachments) || planGate !== undefined) return;
+    if (!canSend(text, attachments)) return;
     const turn = composeTurn(text, attachments, {
       imageOnly: t("task.composer.attach.imagesOnly"),
       imagesOnly: t("task.composer.attach.imagesOnlyMany"),
@@ -727,7 +731,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     const images = turn.images.length > 0 ? turn.images : undefined;
 
     if (running) {
-      // **`queue`, always** while live — follow-ups never re-open the plan gate.
+      // **`queue`, always** while live — follow-ups never re-open auto plan-first.
       const previousText = text;
       const previousAttachments = attachments;
       const echoId = `local:${Date.now()}`;
@@ -767,63 +771,59 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
         ? selectedThinkingLevel
         : undefined;
     const mode = modeEnabled ? selectedModeId : undefined;
-    const planCapable = composerFeatures(task.harness, chosenModel ?? task.model).some(
-      (feature) => feature.id === "plan_mode",
-    );
+    const planCapable =
+      isHarnessId(task.harness) &&
+      composerFeatures(task.harness, chosenModel ?? task.model).some(
+        (feature) => feature.id === "plan_mode",
+      );
     const planModeOn = task.planMode === true || task.agentModeId === "plan";
-    if (
-      shouldOfferPlanGate({
-        prompt: turn.prompt,
-        attachmentCount: attachments.length,
-        planMode: planModeOn,
-        skipPlanGate: task.skipPlanGate === true,
-        planCapable,
-        running: false,
-      })
-    ) {
-      setPlanGate({
-        prompt: turn.prompt,
-        ...(images !== undefined ? { images } : {}),
-        mode,
-        model: chosenModel,
-        thinking: chosenThinking,
-        resume: canResume,
-      });
-      return;
-    }
-
-    dispatchStart(turn.prompt, images, {
+    const startOpts = {
       mode,
       model: chosenModel,
       thinking: chosenThinking,
       resume: canResume,
-    });
-  };
-
-  const resolvePlanGate = (choice: "plan" | "work" | "skip"): void => {
-    const pending = planGate;
-    if (pending === undefined) return;
-    const go = (prompt: string, echoText?: string): void => {
-      dispatchStart(prompt, pending.images, {
-        mode: pending.mode,
-        model: pending.model,
-        thinking: pending.thinking,
-        resume: pending.resume,
-        ...(echoText !== undefined ? { echoText } : {}),
-      });
     };
-    if (choice === "skip") {
-      void props.onSkipPlanGate?.();
-      go(pending.prompt);
+    if (
+      shouldAutoPlanFirst({
+        prompt: turn.prompt,
+        attachmentCount: attachments.length,
+        planMode: planModeOn,
+        planCapable,
+        running: false,
+      })
+    ) {
+      const toggle = props.onToggleFeature;
+      if (toggle === undefined) {
+        // Cannot persist Plan — start normally rather than frame without plan mode.
+        dispatchStart(turn.prompt, images, startOpts);
+        return;
+      }
+      // Large change → plan first automatically; ask only when the plan is ready to implement.
+      // Persist Plan first — do not start if that write fails (framing without plan mode is worse).
+      // Busy flag blocks a second Send while updateTask + startRun are still in flight.
+      if (startBusyRef.current) return;
+      startBusyRef.current = true;
+      void Promise.resolve(toggle("plan_mode", true))
+        .then((failure) => {
+          if (failure !== undefined) {
+            startBusyRef.current = false;
+            return;
+          }
+          dispatchStart(withPlanFirstFraming(turn.prompt), images, {
+            ...startOpts,
+            echoText: turn.prompt,
+            onSettled: () => {
+              startBusyRef.current = false;
+            },
+          });
+        })
+        .catch(() => {
+          startBusyRef.current = false;
+        });
       return;
     }
-    if (choice === "plan") {
-      void Promise.resolve(props.onToggleFeature?.("plan_mode", true)).finally(() => {
-        go(withPlanFirstFraming(pending.prompt), pending.prompt);
-      });
-      return;
-    }
-    go(pending.prompt);
+
+    dispatchStart(turn.prompt, images, startOpts);
   };
 
   const explorer =
@@ -1016,6 +1016,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                   onAnswer={props.onAnswer}
                   takeoverRequestId={pendingApproval?.requestId}
                   canStopAsking={props.canStopAskingApprovals === true}
+                  onToggleFeature={props.onToggleFeature}
                   onOpenPath={openToolPath}
                   approvalAnchorRef={
                     item.kind === "approval" &&
@@ -1092,88 +1093,22 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               data-testid="approval-takeover"
             >
               <ApprovalCopy
-                question={
-                  isPlanReviewAsk(pendingApproval.question, pendingApproval.detail)
-                    ? t("approval.question.planReview")
-                    : pendingApproval.question
-                }
+                question={planReviewDisplay(pendingApproval, t).question}
                 detail={pendingApproval.detail}
                 askHint={askHintFor(pendingApproval.selection)}
               />
               <div className="approval__actions">
                 <ApprovalChoices
-                  entry={
-                    isPlanReviewAsk(pendingApproval.question, pendingApproval.detail)
-                      ? {
-                          ...pendingApproval,
-                          options: pendingApproval.options.map((option, index) => ({
-                            ...option,
-                            label:
-                              index === 0
-                                ? t("task.planReview.implement")
-                                : index === 1
-                                  ? t("task.planReview.revise")
-                                  : option.label,
-                          })),
-                        }
-                      : pendingApproval
+                  entry={planReviewDisplay(pendingApproval, t).entry}
+                  onAnswer={(requestId, choice, options) =>
+                    answerApproval(props, pendingApproval, requestId, choice, options)
                   }
-                  onAnswer={(requestId, choice, options) => {
-                    const approveId = pendingApproval.options[0]?.id;
-                    if (
-                      isPlanReviewAsk(pendingApproval.question, pendingApproval.detail) &&
-                      typeof choice === "string" &&
-                      approveId !== undefined &&
-                      choice === approveId
-                    ) {
-                      // Leave the task's Plan toggle so the next send is implementation, not design.
-                      void props.onToggleFeature?.("plan_mode", false);
-                    }
-                    return props.onAnswer(requestId, choice, options);
-                  }}
                   canStopAsking={props.canStopAskingApprovals === true}
                 />
               </div>
             </div>
           ) : null}
           {/* Field stays mounted under takeover so a draft survives the pause (polish §1). */}
-          {planGate !== undefined && !takeoverActive ? (
-            <div
-              className="composer__plan-gate"
-              role="group"
-              aria-label={t("task.composer.planGate.title")}
-              data-testid="composer-plan-gate"
-            >
-              <p className="composer__plan-gate-title">{t("task.composer.planGate.title")}</p>
-              <p className="composer__plan-gate-body">{t("task.composer.planGate.body")}</p>
-              <div className="composer__plan-gate-actions">
-                <button
-                  type="button"
-                  className="button button--primary"
-                  data-testid="plan-gate-plan"
-                  onClick={() => resolvePlanGate("plan")}
-                >
-                  {t("task.composer.planGate.plan")}
-                </button>
-                <button
-                  type="button"
-                  className="button button--secondary"
-                  data-testid="plan-gate-work"
-                  onClick={() => resolvePlanGate("work")}
-                >
-                  {t("task.composer.planGate.work")}
-                </button>
-                <button
-                  type="button"
-                  className="button button--ghost"
-                  data-testid="plan-gate-skip"
-                  onClick={() => resolvePlanGate("skip")}
-                >
-                  {t("task.composer.planGate.skip")}
-                </button>
-              </div>
-            </div>
-          ) : null}
           {running && !approvalOpen && !takeoverActive ? (
             <p className="composer__queue-status" role="status" data-testid="composer-queue-status">
               {t("task.composer.queueStatus")}
@@ -1603,6 +1538,7 @@ function TranscriptRow(props: {
   /** Steps segment is live — flatten thoughts (stream pane already shows them). */
   stepsLive?: boolean;
   canStopAsking?: boolean;
+  onToggleFeature?: TaskPaneProps["onToggleFeature"];
   onOpenPath?: (path: string, view: ToolOpenView) => void;
 }): JSX.Element | null {
   const t = useT();
@@ -1685,6 +1621,7 @@ function TranscriptRow(props: {
             onAnswer={props.onAnswer}
             actionsInComposer={pendingHere}
             canStopAsking={props.canStopAsking === true}
+            onToggleFeature={props.onToggleFeature}
           />
         </li>
       );
@@ -1720,6 +1657,66 @@ function askHintFor(
     default:
       return undefined;
   }
+}
+
+type ApprovalEntry = Extract<TranscriptEntry, { kind: "approval" }>;
+
+/** Remap plan-doc approval copy — same words in takeover and on the transcript card. */
+function planReviewDisplay(
+  entry: ApprovalEntry,
+  t: ReturnType<typeof useT>,
+): { question: string; entry: ApprovalEntry } {
+  if (!isPlanReviewAsk(entry.question, entry.detail)) {
+    return { question: entry.question, entry };
+  }
+  return {
+    question: t("approval.question.planReview"),
+    entry: {
+      ...entry,
+      options: entry.options.map((option, index) => ({
+        ...option,
+        label: planReviewOptionLabel(option.label, index, {
+          implement: t("task.planReview.implement"),
+          revise: t("task.planReview.revise"),
+        }),
+      })),
+    },
+  };
+}
+
+type ApprovalAnswer = (
+  requestId: string,
+  choice: string | readonly string[] | { text: string },
+  options?: { stopAsking?: boolean },
+) => void | Promise<void>;
+
+/** Clear Plan before Implement reaches the agent — takeover and inline card share this. */
+function answerApproval(
+  handlers: {
+    onAnswer: ApprovalAnswer;
+    onToggleFeature?: (
+      id: "fast_mode" | "plan_mode",
+      value: boolean,
+    ) => WriteFailure | Promise<WriteFailure>;
+  },
+  entry: ApprovalEntry,
+  requestId: string,
+  choice: string | readonly string[] | { text: string },
+  options?: { stopAsking?: boolean },
+): void | Promise<void> {
+  const answer = (): void | Promise<void> =>
+    options === undefined
+      ? handlers.onAnswer(requestId, choice)
+      : handlers.onAnswer(requestId, choice, options);
+  if (
+    isPlanReviewAsk(entry.question, entry.detail) &&
+    typeof choice === "string" &&
+    isPlanReviewApproveChoice(choice, entry.options) &&
+    handlers.onToggleFeature !== undefined
+  ) {
+    return Promise.resolve(handlers.onToggleFeature("plan_mode", false)).then(() => answer());
+  }
+  return answer();
 }
 
 /** Long ask/plan bodies get a taller takeover so the markdown is actually readable. */
@@ -1792,12 +1789,19 @@ function ApprovalCard(props: {
   /** Pending — actions are in the composer; show a pointer, not a second set of buttons. */
   actionsInComposer?: boolean;
   canStopAsking?: boolean;
+  onToggleFeature?: TaskPaneProps["onToggleFeature"];
 }): JSX.Element {
   const t = useT();
   const { entry } = props;
   const answered = entry.resolvedWith !== undefined;
-  const stacked = entry.selection === "many" || entry.selection === "text";
+  // Short Allow/Deny can sit beside a one-line question. Long plans, multi-pick, and typed
+  // answers need the actions under the body — otherwise buttons float beside a tall card.
+  const stacked =
+    entry.selection === "many" ||
+    entry.selection === "text" ||
+    isLongApprovalDetail(entry.detail);
   const inComposer = props.actionsInComposer === true && !answered;
+  const display = planReviewDisplay(entry, t);
 
   return (
     <div
@@ -1808,7 +1812,7 @@ function ApprovalCard(props: {
       aria-label={answered ? t("task.approval.answered") : t("task.approval.aria")}
     >
       <ApprovalCopy
-        question={entry.question}
+        question={display.question}
         detail={inComposer ? undefined : entry.detail}
         askHint={inComposer ? undefined : askHintFor(entry.selection)}
         pendingHint={inComposer ? t("task.approval.pendingInComposer") : undefined}
@@ -1816,8 +1820,16 @@ function ApprovalCard(props: {
       {!inComposer ? (
         <div className="approval__actions">
           <ApprovalChoices
-            entry={entry}
-            onAnswer={props.onAnswer}
+            entry={display.entry}
+            onAnswer={(requestId, choice, options) =>
+              answerApproval(
+                { onAnswer: props.onAnswer, onToggleFeature: props.onToggleFeature },
+                entry,
+                requestId,
+                choice,
+                options,
+              )
+            }
             canStopAsking={props.canStopAsking === true}
           />
         </div>

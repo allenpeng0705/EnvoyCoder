@@ -254,11 +254,14 @@ class Transcript {
         for (var i = entries.length - 1; i >= 0; i--) {
           final row = entries[i];
           if (row.kind != 'user') continue;
-          if (row.id.startsWith('local:') && row.text == text) {
+          // Match exact text, or a framed wire prompt against an unframed local echo.
+          final same = row.text == text ||
+              text.endsWith(row.text) && text.contains('[Plan carefully');
+          if (row.id.startsWith('local:') && same) {
             entries[i] = TranscriptEntry(
               kind: 'user',
               id: 'u${seq ?? entries.length}',
-              text: text,
+              text: row.text, // keep the user's words if the wire still carried framing
               delivered: delivered ?? row.delivered,
             );
             return;

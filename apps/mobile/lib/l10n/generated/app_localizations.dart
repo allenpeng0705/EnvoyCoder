@@ -1584,6 +1584,24 @@ abstract class AppLocalizations {
   /// **'Will send when the agent finishes this reply'**
   String get runComposerQueueStatus;
 
+  /// task.planReview.implement
+  ///
+  /// In en, this message translates to:
+  /// **'Implement plan'**
+  String get runPlanReviewImplement;
+
+  /// task.planReview.revise
+  ///
+  /// In en, this message translates to:
+  /// **'Keep planning'**
+  String get runPlanReviewRevise;
+
+  /// approval.question.planReview
+  ///
+  /// In en, this message translates to:
+  /// **'Implement this plan?'**
+  String get runPlanReviewQuestion;
+
   /// run.toolDetails — Expand tool input/output.
   ///
   /// In en, this message translates to:

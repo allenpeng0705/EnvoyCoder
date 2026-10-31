@@ -822,6 +822,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get runComposerQueueStatus => 'エージェントがこの返答を終えたら送信します';
 
   @override
+  String get runPlanReviewImplement => '計画どおり実装';
+
+  @override
+  String get runPlanReviewRevise => '計画を続ける';
+
+  @override
+  String get runPlanReviewQuestion => 'この計画で実装しますか？';
+
+  @override
   String get runToolDetails => '詳細';
 
   @override

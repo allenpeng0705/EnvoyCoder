@@ -741,6 +741,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         model?: string;
         thinkingLevel?: string;
         images?: PromptImage[];
+        displayPrompt?: string;
       };
       const runs = requireRuns(deps);
       const run = await runs.start({
@@ -759,6 +760,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         // would start it at a depth nobody chose.
         ...(input.thinkingLevel !== undefined ? { thinkingLevel: input.thinkingLevel } : {}),
         ...(input.images !== undefined && input.images.length > 0 ? { images: input.images } : {}),
+        ...(input.displayPrompt !== undefined ? { displayPrompt: input.displayPrompt } : {}),
       });
       return { run };
     },

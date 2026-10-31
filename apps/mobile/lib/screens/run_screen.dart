@@ -10,6 +10,7 @@ import '../l10n/l10n.dart';
 import '../models/asking_control.dart';
 import '../models/composer_attachment.dart';
 import '../models/harness.dart';
+import '../models/plan_gate.dart';
 import '../models/run_transcript_view.dart';
 import '../models/text_reveal.dart';
 import '../models/transcript.dart';
@@ -79,6 +80,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   /// Agent on the live run (prefer over composer selection for stop-asking).
   String? _runHarnessId;
   ComposerSelection _selection = const ComposerSelection();
+  bool _planMode = false;
   List<_SlashCommand> _commands = const [];
   StreamSubscription<Map<String, dynamic>>? _eventSub;
 
@@ -116,6 +118,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
               agentModeId: raw['agentModeId'] as String?,
               thinkingLevel: raw['thinkingLevel'] as String?,
             );
+            _planMode = raw['planMode'] == true || raw['agentModeId'] == 'plan';
             final cwd = raw['cwd'];
             if (cwd is String && cwd.isNotEmpty) _cwd = cwd;
             break;
@@ -407,6 +410,22 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     String? text,
     bool stopAsking = false,
   }) async {
+    final pending = _transcript.pendingApproval;
+    final choiceId = optionIds != null && optionIds.isNotEmpty
+        ? optionIds.first
+        : optionId;
+    if (pending != null &&
+        choiceId != null &&
+        isPlanReviewAsk(pending.question, pending.detail) &&
+        isPlanReviewApproveChoice(
+          choiceId,
+          [
+            for (final o in pending.options) (id: o.id, label: o.label),
+          ],
+        )) {
+      // Clear Plan before the agent hears “implement”, so the next send is work.
+      await _setPlanMode(false);
+    }
     final params = <String, Object>{
       'runId': _runId,
       'requestId': requestId,
@@ -431,6 +450,51 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
         SnackBar(content: Text(context.l10n.runCouldNotAnswer)),
       );
     }
+  }
+
+  /// Returns false when the write failed — caller must not start a plan-first run.
+  Future<bool> _setPlanMode(bool value) async {
+    final taskId = _taskId;
+    if (taskId == null) return false;
+    final previous = _planMode;
+    setState(() => _planMode = value);
+    try {
+      await widget.client.call('coder.updateTask', {
+        'id': taskId,
+        'planMode': value,
+      });
+      return true;
+    } catch (_) {
+      if (mounted) setState(() => _planMode = previous);
+      return false;
+    }
+  }
+
+  TranscriptApproval _displayApproval(TranscriptApproval approval, AppLocalizations l10n) {
+    if (!isPlanReviewAsk(approval.question, approval.detail)) return approval;
+    final remapped = TranscriptApproval(
+      requestId: approval.requestId,
+      question: l10n.runPlanReviewQuestion,
+      detail: approval.detail,
+      selection: approval.selection,
+      options: [
+        for (var i = 0; i < approval.options.length; i++)
+          TranscriptOption(
+            id: approval.options[i].id,
+            label: planReviewOptionLabel(
+              approval.options[i].label,
+              i,
+              implement: l10n.runPlanReviewImplement,
+              revise: l10n.runPlanReviewRevise,
+            ),
+            destructive: approval.options[i].destructive,
+          ),
+      ],
+    );
+    remapped.resolvedWith = approval.resolvedWith;
+    remapped.resolvedWithIds = approval.resolvedWithIds;
+    remapped.closed = approval.closed;
+    return remapped;
   }
 
   bool get _canStopAsking {
@@ -484,11 +548,43 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   Future<void> _send() async {
     final turn = composeTurn(_composer.text, _attachments, context.l10n);
     if (turn.prompt.isEmpty || !_canSend) return;
+    if (!_live &&
+        shouldAutoPlanFirst(
+          prompt: turn.prompt,
+          attachmentCount: _attachments.length,
+          planMode: _planMode,
+          planCapable: planCapableHarness(_selection.harnessId),
+          running: false,
+        )) {
+      // Large change → plan first automatically; ask only when the plan is ready.
+      final ok = await _setPlanMode(true);
+      if (!ok) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.runCouldNotUpdateTask)),
+        );
+        return;
+      }
+      await _dispatchSend(
+        withPlanFirstFraming(turn.prompt),
+        turn.images,
+        echoText: turn.prompt,
+      );
+      return;
+    }
+    await _dispatchSend(turn.prompt, turn.images, echoText: turn.prompt);
+  }
+
+  Future<void> _dispatchSend(
+    String prompt,
+    List<Map<String, String>> images, {
+    required String echoText,
+  }) async {
     final previousText = _composer.text;
     final previousAttachments = List<ComposerAttachment>.of(_attachments);
     // Echo into the transcript before the wire answers — otherwise the composer
     // clears and the bubble only appears if/when `run.message` arrives.
-    _transcript.echoUser(turn.prompt, delivered: _live ? 'queued' : 'steered');
+    _transcript.echoUser(echoText, delivered: _live ? 'queued' : 'steered');
     _composer.clear();
     setState(() {
       _attachments = [];
@@ -501,17 +597,17 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
           'coder.sendToRun',
           {
             'runId': _runId,
-            'text': turn.prompt,
+            'text': prompt,
             'mode': 'queue',
-            if (turn.images.isNotEmpty) 'images': turn.images,
+            if (images.isNotEmpty) 'images': images,
           },
-          turn.images.isEmpty ? const Duration(seconds: 15) : const Duration(seconds: 60),
+          images.isEmpty ? const Duration(seconds: 15) : const Duration(seconds: 60),
         );
         return;
       }
       final taskId = _taskId;
       if (taskId == null) {
-        _transcript.dropLocalEcho(turn.prompt);
+        _transcript.dropLocalEcho(echoText);
         if (mounted) setState(() {});
         return;
       }
@@ -525,14 +621,15 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
         'coder.startRun',
         {
           'taskId': taskId,
-          'prompt': turn.prompt,
+          'prompt': prompt,
+          if (echoText != prompt) 'displayPrompt': echoText,
           if (_selection.agentModeId != null) 'agentModeId': _selection.agentModeId,
           if (_selection.model != null && _selection.model!.isNotEmpty) 'model': _selection.model,
           if (_selection.thinkingLevel != null && _selection.thinkingLevel!.isNotEmpty)
             'thinkingLevel': _selection.thinkingLevel,
-          if (turn.images.isNotEmpty) 'images': turn.images,
+          if (images.isNotEmpty) 'images': images,
         },
-        turn.images.isEmpty ? const Duration(seconds: 15) : const Duration(seconds: 60),
+        images.isEmpty ? const Duration(seconds: 15) : const Duration(seconds: 60),
       );
       final run = started['run'];
       final id = run is Map ? run['id'] as String? : null;
@@ -552,7 +649,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
       await _loadTail();
     } catch (_) {
       if (!mounted) return;
-      _transcript.dropLocalEcho(turn.prompt);
+      _transcript.dropLocalEcho(echoText);
       _composer.text = previousText;
       setState(() => _attachments = previousAttachments);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -849,7 +946,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                   children: [
                     if (takeover && pendingApproval != null) ...[
                       ApprovalCard(
-                        approval: pendingApproval,
+                        approval: _displayApproval(pendingApproval, l10n),
                         colors: colors,
                         onAnswer: _answer,
                         canStopAsking: _canStopAsking,

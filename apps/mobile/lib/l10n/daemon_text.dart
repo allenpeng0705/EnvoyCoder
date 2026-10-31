@@ -143,6 +143,7 @@ const Map<String, DaemonRefRenderer> daemonRefRenderers = {
   'approval.question.step': DaemonRefRenderer('approvalQuestionStep', _questionStep),
   'approval.question.generic': DaemonRefRenderer('approvalQuestionGeneric', _questionGeneric),
   'approval.question.ask': DaemonRefRenderer('approvalQuestionAsk', _questionAsk),
+  'approval.question.planReview': DaemonRefRenderer('runPlanReviewQuestion', _questionPlanReview),
   'approval.detail': DaemonRefRenderer('approvalDetail', _detail),
   'approval.detail.remember': DaemonRefRenderer('approvalDetailRemember', _detailRemember),
   'approval.detail.pick': DaemonRefRenderer('approvalDetailPick', _detailPick),
@@ -181,6 +182,8 @@ String _questionStep(AppLocalizations l10n, Map<String, Object> values) =>
 String _questionGeneric(AppLocalizations l10n, Map<String, Object> _) => l10n.approvalQuestionGeneric;
 
 String _questionAsk(AppLocalizations l10n, Map<String, Object> _) => l10n.approvalQuestionAsk;
+
+String _questionPlanReview(AppLocalizations l10n, Map<String, Object> _) => l10n.runPlanReviewQuestion;
 
 String _detail(AppLocalizations l10n, Map<String, Object> _) => l10n.approvalDetail;
 

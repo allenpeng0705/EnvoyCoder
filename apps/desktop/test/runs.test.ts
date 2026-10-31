@@ -192,6 +192,38 @@ describe("one run, end to end", () => {
     expect(b.manager.isLive(run.id)).toBe(false);
   });
 
+  it("records displayPrompt in the transcript, not the framed agent prompt", async () => {
+    const b = await bench();
+    // Avoid the word "approve" — the fake agent treats that as a permission round-trip.
+    const framed = "[Plan carefully — design only]\n\nRefactor the entire architecture";
+    await b.manager.start({
+      taskId: b.taskId,
+      prompt: framed,
+      displayPrompt: "Refactor the entire architecture",
+    });
+    await b.until((events) => kinds(events, "run.message").length === 1, "opening message");
+    const opening = kinds(b.events, "run.message")[0];
+    expect(opening && opening.kind === "run.message" ? opening.text : "").toBe(
+      "Refactor the entire architecture",
+    );
+    expect(opening && opening.kind === "run.message" ? opening.text : "").not.toContain(
+      "[Plan carefully",
+    );
+    await b.manager.cancel(kinds(b.events, "run.started")[0]!.runId);
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+  });
+
+  it("strips plan-first framing from the transcript when displayPrompt is absent", async () => {
+    const b = await bench();
+    const framed = "[Plan carefully — design only]\n\nDo the big thing";
+    await b.manager.start({ taskId: b.taskId, prompt: framed });
+    await b.until((events) => kinds(events, "run.message").length === 1, "opening message");
+    const opening = kinds(b.events, "run.message")[0];
+    expect(opening && opening.kind === "run.message" ? opening.text : "").toBe("Do the big thing");
+    await b.manager.cancel(kinds(b.events, "run.started")[0]!.runId);
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+  });
+
   it("pairs a tool call with its result by the agent's own call id", async () => {
     const b = await bench();
     await b.manager.start({ taskId: b.taskId, prompt: "run a tool" });
