@@ -397,6 +397,38 @@ class AppLocalizationsFr extends AppLocalizations {
       'Conserver les transcriptions après la fin d\'une tâche';
 
   @override
+  String get settingsSendWhileRunning => 'Send while the agent is working';
+
+  @override
+  String get settingsSendWhileRunningDetail =>
+      'Queue waits for the current reply. Steer stops it and sends yours instead.';
+
+  @override
+  String get settingsSendWhileRunningQueue => 'Queue';
+
+  @override
+  String get settingsSendWhileRunningSteer => 'Steer';
+
+  @override
+  String get settingsGuardian => 'Permission reviewer';
+
+  @override
+  String get settingsGuardianDetail =>
+      'Guardian auto-allows clear read/search permission cards. Edits and commands still ask you.';
+
+  @override
+  String get settingsGuardianUser => 'Always ask me';
+
+  @override
+  String get settingsGuardianGuardian => 'Guardian';
+
+  @override
+  String get runVoiceStart => 'Start dictation';
+
+  @override
+  String get runVoiceStop => 'Stop dictation';
+
+  @override
   String get settingsLanguage => 'Langue';
 
   @override
@@ -884,6 +916,18 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get runApprovalStopAsking => 'Ne plus demander';
+
+  @override
+  String get runApprovalStopAskingSession =>
+      'Ne plus demander pour cette exécution';
+
+  @override
+  String get runApprovalStopAskingMachine =>
+      'Ne plus demander sur cette machine';
+
+  @override
+  String get runApprovalStopAskingHint =>
+      'Cette exécution : autoriser les étapes suivantes jusqu’à la fin. Cette machine : Paramètres → Demander avant les étapes risquées désactivé.';
 
   @override
   String get runApprovalAnswerBelow => 'Répondez dans le champ ci-dessous';
@@ -1457,6 +1501,51 @@ class AppLocalizationsFr extends AppLocalizations {
       'Combien l\'agent réfléchit avant de répondre';
 
   @override
+  String get composerPlanOn => 'Plan';
+
+  @override
+  String get composerPlanOff => 'Agent';
+
+  @override
+  String get composerPlanTooltip =>
+      'Plan observe et propose ; Agent fait le travail';
+
+  @override
+  String get composerAutonomyAskingOn => 'Demandes activées';
+
+  @override
+  String get composerAutonomyAskingOff => 'Demandes désactivées';
+
+  @override
+  String get composerAutonomyFullAccess => 'Accès complet';
+
+  @override
+  String get composerAutonomyReadOnly => 'Lecture seule';
+
+  @override
+  String get composerAutonomyDefault => 'Par défaut';
+
+  @override
+  String get composerAutonomyConfirmTitle => 'Activer l’accès complet ?';
+
+  @override
+  String get composerAutonomyConfirmBody =>
+      'L’accès complet désactive les demandes sur cette machine et laisse cet agent modifier des fichiers et exécuter des outils sans approbation. Cela augmente le risque de modifications indésirables, de perte de données ou de comportement inattendu. Vous pouvez réactiver les demandes dans Paramètres.';
+
+  @override
+  String get composerAutonomyConfirm => 'Oui, continuer quand même';
+
+  @override
+  String get composerAutonomySheet => 'Autonomie';
+
+  @override
+  String get composerAutonomyTooltip =>
+      'À quelle fréquence cet agent demande — Lecture seule, Par défaut ou Accès complet';
+
+  @override
+  String get taskPostureAria => 'Posture d’autonomie pour cette tâche';
+
+  @override
   String get taskUntitled => 'Tâche sans titre';
 
   @override
@@ -1643,6 +1732,166 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get teamJobPeerOffline => 'Hors ligne';
+
+  @override
+  String get errorJobGitNotARepo =>
+      'Ce dossier n’est pas un dépôt Git. Les jobs d’équipe partagent le travail via Git — initialisez ou clonez un dépôt.';
+
+  @override
+  String get errorJobGitNoRemote =>
+      'Ce dépôt Git n’a pas de remote. Ajoutez origin (ou un autre remote) pour que l’équipe puisse tirer et pousser.';
+
+  @override
+  String get errorJobGitMissingInstall =>
+      'Git n’est pas installé (ou pas dans le PATH) sur cette machine. Installez Git avant d’accepter une étape de job d’équipe.';
+
+  @override
+  String get errorJobGitSyncDirty =>
+      'Ce dossier a des modifications non validées. Validez ou mettez-les de côté avant d’accepter l’étape.';
+
+  @override
+  String get errorJobGitSyncDiverged =>
+      'Les branches locale et distante ont toutes deux changé — un pull en avance rapide est impossible.';
+
+  @override
+  String get errorJobGitSyncPullFailed =>
+      'Échec du git pull. Vérifiez le distant et vos identifiants, puis réessayez.';
+
+  @override
+  String get errorJobGitSyncBranchInvalid =>
+      'Ce nom de branche n’est pas valide pour Git.';
+
+  @override
+  String get errorJobGitSyncBranchFailed =>
+      'Impossible de basculer ou de créer la branche de l’étape.';
+
+  @override
+  String get errorJobGitSyncPushFailed =>
+      'Échec du git push. Vérifiez le distant et vos identifiants, puis réessayez.';
+
+  @override
+  String get errorTeamMembersMayNotStart =>
+      'Cette équipe n’autorise pas les membres à démarrer des jobs. Demandez à l’hôte de l’activer dans Réglages → Équipes.';
+
+  @override
+  String get teamJobStepWaitingPeer => 'En attente d’une machine';
+
+  @override
+  String teamJobStepWaitingPeerDetail(String machine) {
+    return 'Nouvel essai quand $machine sera de retour';
+  }
+
+  @override
+  String get errorJobMissing => 'Aucun job avec cet identifiant.';
+
+  @override
+  String get errorJobStepMissing => 'Aucune étape avec cet identifiant.';
+
+  @override
+  String get errorJobStepsLocked =>
+      'Les étapes ne peuvent être modifiées que pendant la rédaction ou l’exécution du job.';
+
+  @override
+  String errorJobWriterLock(String key) {
+    return 'Deux étapes d’implémentation partagent la clé de worktree « $key ».';
+  }
+
+  @override
+  String get errorJobNotRunning =>
+      'Le job n’est pas dans un état qui accepte cette action.';
+
+  @override
+  String get errorJobDeps =>
+      'Les dépendances des étapes ne sont pas satisfaites.';
+
+  @override
+  String get errorJobNoSteps => 'Ajoutez au moins une étape avant de démarrer.';
+
+  @override
+  String errorJobNoCandidate(String role) {
+    return 'Aucune machine en ligne ne propose le rôle « $role ». Corrigez l’équipe, puis réessayez Démarrer.';
+  }
+
+  @override
+  String get errorJobStepsInFlight =>
+      'Impossible de remplacer des étapes déjà en cours. Mettez d’abord le job en pause, ou modifiez uniquement les étapes en attente.';
+
+  @override
+  String get errorJobOfferMissing => 'Aucune offre avec cet identifiant.';
+
+  @override
+  String get errorJobOfferClosed => 'Cette offre n’est plus en attente.';
+
+  @override
+  String get errorJobExhausted =>
+      'L’étape a épuisé les nouvelles tentatives et réassignations.';
+
+  @override
+  String get errorJobPathMissing =>
+      'Ce dossier est absent sur cette machine. Clonez le projet et ouvrez-le, puis réessayez.';
+
+  @override
+  String get errorJobFailed => 'Ce job a échoué.';
+
+  @override
+  String get jobPaneHasGap =>
+      'Lacune d’événements — une partie de la progression peut manquer';
+
+  @override
+  String get workAttentionAria => 'Éléments de travail qui ont besoin de vous';
+
+  @override
+  String get workAttentionHeading => 'Éléments de travail';
+
+  @override
+  String get workAttentionStageDelivery => 'Entrée non livrée';
+
+  @override
+  String get workAttentionStageAnswer => 'En attente de réponse';
+
+  @override
+  String get workAttentionStageReview => 'En attente d’examen';
+
+  @override
+  String get workAttentionStageBlocked => 'Bloqué';
+
+  @override
+  String get workAttentionOpenTask => 'Ouvrir la tâche';
+
+  @override
+  String get workAttentionRetry => 'Réessayer';
+
+  @override
+  String get workAttentionStop => 'Arrêter';
+
+  @override
+  String get workAttentionAnswerPlaceholder => 'Votre réponse';
+
+  @override
+  String get workAttentionAnswerSend => 'Envoyer';
+
+  @override
+  String get teamJobPause => 'Pause';
+
+  @override
+  String get teamJobStop => 'Arrêter';
+
+  @override
+  String get teamJobResume => 'Reprendre';
+
+  @override
+  String get teamJobTemplate => 'Modèle d’étapes';
+
+  @override
+  String get teamJobOpenRun => 'Ouvrir la course';
+
+  @override
+  String teamJobStepPhase(String phase) {
+    return '$phase';
+  }
+
+  @override
+  String get teamJobRecentHeading => 'Jobs d’équipe récents';
 
   @override
   String get welcomeSkip => 'Ignorer';

@@ -169,6 +169,15 @@ export const en = {
   "palette.addProject.needs": "Which folder? Paste its full path.",
   "palette.addProject.needsPlaceholder": "/Users/you/work/repo",
   "palette.newTask.title": "New task in {project}",
+  "palette.newWorktree.title": "New worktree task in {project}",
+  "palette.newWorktree.subtitle": "Creates a git worktree and opens a task there",
+  "palette.newWorktree.needs": "Branch name",
+  "palette.newWorktree.placeholder": "feature/my-change",
+  "palette.newWorktree.empty": "A branch name is required.",
+  "palette.applyProfile.title": "Apply profile “{profile}”",
+  "palette.applyProfile.subtitle": "Uses the saved agent, model, and mode on the open task",
+  "palette.applyProfile.missing": "That profile is no longer in Settings.",
+  "palette.applyProfile.noProject": "Add a project first, then apply a profile.",
   "palette.openTask.subtitle": "Open this task",
   "palette.pairPhone.title": "Pair a phone",
   "palette.pairPhone.subtitle": "Show a code the mobile app can scan",
@@ -205,6 +214,7 @@ export const en = {
     "The agent works in {cwd}. Describe what you want below — tool calls, approvals, and diffs appear here.",
   "task.transcript.loading": "Loading…",
   "task.composer.queueStatus": "Will send when the agent finishes this reply",
+  "task.composer.steerStatus": "Will stop this reply and send yours instead",
   "task.approval.takeover.aria": "The agent needs your answer",
   "task.approval.pendingInComposer": "Answer in the composer below",
   "task.tool.bucket.read": "Read",
@@ -237,8 +247,10 @@ export const en = {
   "task.approval.answeredWith": "Answered: {option}",
   "task.approval.confirm": "Confirm",
   "task.approval.stopAsking": "Don't ask again",
+  "task.approval.stopAsking.session": "Don't ask again for this run",
+  "task.approval.stopAsking.machine": "Don't ask again on this machine",
   "task.approval.settingsHint":
-    "Stops asking on this machine. Same control: Settings → Ask before risky steps.",
+    "This run: allow further steps until this run ends. This machine: Settings → Ask before risky steps Off.",
 
   "task.plan.title": "Plan",
   "task.plan.progress": "Plan · {done} of {total}",
@@ -326,10 +338,22 @@ export const en = {
   "task.empty.suggestion.two": "Find and fix the failing test",
   "task.empty.suggestion.three": "Add tests for the last change",
   "task.composer.send.queued": "Will send when the agent finishes this reply",
+  "task.composer.send.steer": "Stops this reply and sends yours instead (Shift-click / Alt+Enter flips)",
   "task.composer.send": "Send",
   "task.composer.start": "Start",
   "task.composer.resume": "Resume — continue the previous session",
   "task.composer.submit.blocked": "Answer the request above first",
+  "task.composer.diffPill.hint": "Open Changes in the explorer (file counts, not lines)",
+  "task.composer.diffPill.aria": "Open changes: {additions} added files, {deletions} removed files",
+  "palette.applyProfile.fullAccessConfirm":
+    "This profile turns off “Ask before risky steps” on this machine. Continue?",
+  "task.composer.helper": "Helper",
+  "task.composer.voice.start": "Start dictation",
+  "task.composer.voice.stop": "Stop dictation",
+  "task.composer.voice.unsupported": "Dictation is not available in this window",
+  "task.tracks.aria": "Other tasks in this project",
+  "task.tracks.running": "Running",
+  "task.tracks.needsInput": "Needs your input",
 
   /* ── the four controls above the field: the folder, the agent's mode, its model, how it thinks ──
      All four share one property: a choice made while a turn is running applies to the **next** run. That
@@ -345,6 +369,20 @@ export const en = {
   "task.composer.hint.thinking": "Thinking mode",
   "task.composer.hint.fast": "Toggle fast mode",
   "task.composer.hint.plan": "Toggle plan mode",
+  "task.composer.hint.autonomy":
+    "How often this agent asks — Read only, Default, or Full access (Settings + mode)",
+  "task.composer.autonomy.askingOn": "Asking on",
+  "task.composer.autonomy.askingOff": "Asking off",
+  "task.composer.autonomy.fullAccess": "Full access",
+  "task.composer.autonomy.readOnly": "Read only",
+  "task.composer.autonomy.default": "Default",
+  "task.composer.autonomy.confirmTitle": "Enable full access?",
+  "task.composer.autonomy.confirmBody":
+    "Full access turns off asking on this machine and lets this agent edit files and run tools without approval prompts. That raises the risk of unwanted edits, data loss, or unexpected behavior. You can turn asking back on in Settings.",
+  "task.composer.autonomy.confirm": "Yes, continue anyway",
+  "task.composer.autonomy.label": "Autonomy",
+  "task.composer.workingPeek.aria": "What the agent is working on",
+  "task.posture.aria": "Autonomy posture for this task",
   "task.composer.work.label": "Work",
   "task.composer.hint.work": "Agent does the work. Plan only looks and proposes.",
   "task.composer.work.agent": "Agent",
@@ -587,6 +625,9 @@ export const en = {
     "Join another EnvoyDev from this laptop as a thin client.",
   "settings.section.teams.title": "Teams",
   "settings.section.teams.detail": "Host a team, share an invite, run jobs across machines.",
+  "settings.section.work.title": "Work items",
+  "settings.section.work.detail":
+    "Watch GitHub mentions or turn them into Work items. Needs you only when something is blocked or ready to review.",
 
   /* Settings section Info — orientation for the complex pages (inline at the top). */
   "settings.info.howHeading": "How to use it",
@@ -634,6 +675,97 @@ export const en = {
     "Set the roles this machine offers. The host can assign or override roles for members.",
   "settings.section.teams.info.how.4":
     "Start a team job from a project (Git with a remote). Open jobs from this page or the project rail.",
+  "settings.section.work.info.what":
+    "Work items are a separate lane from Team jobs. Watch GitHub for @envoy mentions, or let EnvoyDev take them as Work items. When something needs you, it appears in the sidebar Work items list.",
+  "settings.section.work.info.how.1":
+    "Choose Off, Watch mentions, or Take work.",
+  "settings.section.work.info.how.2":
+    "Under GitHub, set a repo (or leave empty for notifications), then Poll now — or turn on automatic polling. You need the gh CLI signed in.",
+  "settings.section.work.info.how.3":
+    "In Needs your review, take or ignore what showed up. Under Take work, items that need a person also appear in the sidebar.",
+  "settings.work.mode.title": "Mode",
+  "settings.work.mode.detail": "How EnvoyDev treats new work from GitHub and the inbox.",
+  "settings.work.mode.off": "Off",
+  "settings.work.mode.watch": "Watch mentions",
+  "settings.work.mode.take": "Take work",
+  "settings.work.mode.offNote":
+    "Work items stay off. Nothing new is created or recorded from GitHub.",
+  "settings.work.mode.watchNote":
+    "Mentions are recorded so you can see what would become work. Nothing starts automatically.",
+  "settings.work.mode.takeNote":
+    "Mentions can become Work items and get a short GitHub acknowledgement. Items that need you show in the sidebar.",
+  "settings.work.allowList.title": "Allow list",
+  "settings.work.allowList.detail":
+    "Optional. When set, inferred mentions must include one of these phrases (comma or newline separated).",
+  "settings.work.allowList.placeholder": "acme/app, @trusted-org",
+  "settings.work.requireApprovals.title": "Require approvals when unattended",
+  "settings.work.requireApprovals.detail":
+    "Refuse unattended assignments when the worker cannot ask for approval.",
+  "settings.work.advanced.title": "Advanced",
+  "settings.work.review.title": "Needs your review",
+  "settings.work.review.detail":
+    "Pending inbox items and watched GitHub mentions you can take or ignore.",
+  "settings.work.review.empty": "Nothing needs review right now.",
+  "settings.work.review.take": "Take this work",
+  "settings.work.review.accept": "Accept",
+  "settings.work.review.ignore": "Ignore",
+  "settings.work.review.openTeamDraft": "Open as Team job draft",
+  "settings.work.review.openTeamDraft.noTeam": "Create a team first (Settings → Teams).",
+  "settings.work.review.openTeamDraft.created": "Team job draft created.",
+  "settings.work.review.openTeamDraft.existing": "Opened the existing Team job draft for this thread.",
+  "settings.work.activity.title": "Recent activity",
+  "settings.work.activity.empty": "No recent decisions yet.",
+  "settings.work.inbox.title": "Add manually",
+  "settings.work.inbox.detail": "Paste text to queue as a candidate without GitHub.",
+  "settings.work.inbox.text": "Candidate text",
+  "settings.work.inbox.placeholder": "Describe the work you want tracked…",
+  "settings.work.inbox.enqueue": "Add candidate",
+  "settings.work.inbox.file": "File candidate",
+  "settings.work.github.title": "GitHub",
+  "settings.work.github.detail":
+    "Look for @envoy / @envoydev mentions with the gh CLI on this machine.",
+  "settings.work.github.repo": "Repository",
+  "settings.work.github.repoPlaceholder": "owner/name (empty = your notifications)",
+  "settings.work.github.repoDetail":
+    "Used for Poll now and automatic polling. Leave empty to use your GitHub notifications.",
+  "settings.work.github.autoPoll.title": "Poll automatically",
+  "settings.work.github.autoPoll.detail":
+    "Background checks with the gh CLI. Off by default.",
+  "settings.work.github.autoPoll.off": "Off",
+  "settings.work.github.autoPoll.5m": "Every 5 minutes",
+  "settings.work.github.autoPoll.15m": "Every 15 minutes",
+  "settings.work.github.autoPoll.60m": "Every 60 minutes",
+  "settings.work.github.autoPoll.onNote":
+    "Automatic polling is on. The notice below is from the last manual poll.",
+  "settings.work.github.poll": "Poll now",
+  "settings.work.github.pollBusy": "Polling…",
+  "settings.work.github.pollDisabled": "Turn Mode to Watch mentions or Take work to poll.",
+  "settings.work.github.ok.none": "No new mentions.",
+  "settings.work.github.ok.observe":
+    "Recorded {wouldAccept} mention(s) for review — no Work items created.",
+  "settings.work.github.ok.auto": "Created {accepted} Work item(s) from new mentions.",
+  "settings.work.github.ok.mixed":
+    "Recorded {wouldAccept} for review; created {accepted} Work item(s).",
+  "settings.work.github.ok.ackFailed":
+    "GitHub acknowledgement failed for {ackFailed} of those Work items — check gh auth.",
+  "settings.work.github.disposition.would-accept": "Seen (not started)",
+  "settings.work.github.disposition.accept": "Taken",
+  "settings.work.github.disposition.ignore": "Ignored",
+  "settings.work.github.source.github": "GitHub",
+  "settings.work.github.source.manual": "Manual",
+  "settings.work.github.source.other": "Other",
+  "work.promote": "Promote to Work item",
+  "work.attention.aria": "Work items needing you",
+  "work.attention.heading": "Work items",
+  "work.attention.stage.delivery": "Input undelivered",
+  "work.attention.stage.answer": "Awaiting answer",
+  "work.attention.stage.review": "Awaiting review",
+  "work.attention.stage.blocked": "Blocked",
+  "work.attention.openTask": "Open task",
+  "work.attention.retry": "Retry",
+  "work.attention.stop": "Stop",
+  "work.attention.answer.placeholder": "Your answer",
+  "work.attention.answer.send": "Send",
   "settings.teams.title": "Teams",
   "settings.teams.blurb": "Host a team, or join with an invite.",
   "settings.teams.start": "Get started",
@@ -705,11 +837,18 @@ export const en = {
   "settings.teams.role.designer": "Designer",
   "settings.teams.role.document": "Document",
   "settings.teams.tokenExpiring": "Invite expires soon — create a new one.",
+  "settings.teams.membersMayStartJobs": "Members may start jobs",
+  "settings.teams.membersMayStartJobs.detail": "Online members can press Start on drafts; pause, stop, and kick stay with you.",
+  "error.team.membersMayNotStart":
+    "This team does not allow members to start jobs. Ask the host to enable it in Settings → Teams.",
   "job.pane.stopConfirm": "Stop all steps on all machines?",
   "job.pane.report": "Report",
   "job.pane.kick": "Kick",
   "job.pane.kickConfirm": "Remove {label} from the team. Their step will stop.",
   "job.pane.stallAutomation": "Enable stall automation (after board is visible)",
+  "job.pane.contentBusAdvanced": "Git on accept and finish",
+  "job.pane.pullOnAccept": "Pull before accepting a step",
+  "job.pane.pushOnSuccess": "Push when a step succeeds",
   "job.pane.noOnline": "Start needs at least one online peer (or this machine).",
   "job.pane.crew.noSteps": "Add steps before starting (use a step template).",
   "job.pane.crew.noMembers": "This team has no machines yet. Invite someone from Teams.",
@@ -795,6 +934,29 @@ export const en = {
     "EnvoyDev cannot change this for {agent}: it has no way to be told, and asks on its own terms. Pick an agent EnvoyDev can hand a policy or unattended mode to, or answer {agent}'s own prompts.",
   "settings.approvals.unknown":
     "EnvoyDev has not been told what {agent} accepts yet, so this stays off rather than storing a choice nothing reads.",
+  "settings.guardian.title": "Permission reviewer",
+  "settings.guardian.detail":
+    "Guardian auto-allows clear read/search permission cards. Edits, commands, and questions still ask you. Not a second AI.",
+  "settings.guardian.user": "Always ask me",
+  "settings.guardian.guardian": "Guardian (auto-allow safe reads)",
+  "settings.sendWhileRunning.title": "Send while the agent is working",
+  "settings.sendWhileRunning.detail":
+    "Queue waits for the current reply. Steer stops it and sends yours instead. Shift-click Send or Alt+Enter flips for one message.",
+  "settings.sendWhileRunning.queue": "Queue (wait, then send)",
+  "settings.sendWhileRunning.steer": "Steer (interrupt and send)",
+  "settings.profiles.title": "Agent profiles",
+  "settings.profiles.detail": "Named bundles you can apply from the command palette.",
+  "settings.profiles.empty": "No profiles yet. Add a name to save one.",
+  "settings.profiles.placeholder": "Profile name",
+  "settings.profiles.harness": "Agent id (optional)",
+  "settings.profiles.model": "Model (optional)",
+  "settings.profiles.mode": "Mode id (optional)",
+  "settings.profiles.thinking": "Thinking level (optional)",
+  "settings.profiles.autonomy": "Autonomy preset (optional)",
+  "settings.profiles.autonomyUnset": "Autonomy: leave unchanged",
+  "settings.profiles.nameOnly": "name only",
+  "settings.profiles.add": "Add",
+  "settings.profiles.remove": "Remove",
   "settings.transcripts.title": "Keep transcripts after a task ends",
   "settings.transcripts.detail": "Keep the record of what the agent did.",
   "settings.project.title": "Project settings for {project}",
@@ -1429,6 +1591,9 @@ export const en = {
     "{path} is not a directory on this machine. Pick a folder that exists — EnvoyDev runs agents in it, so the path has to be real.",
   "error.createTask.notDirectory":
     "{path} is not a directory on this machine, so there is nowhere to run the agent. It was the working directory for \"{title}\".",
+  "error.createTask.worktreeExists":
+    "A worktree already exists at {path}. Choose another branch name, or remove that folder first.",
+  "task.posture.guardian": "Guardian",
   "error.updateTask.notDirectory":
     "{path} is not a directory on this machine, so the agent would have nowhere to run. The task's folder is unchanged.",
   // The mode is the agent's, and the two refusals below keep the two causes apart: the harness has no
@@ -1476,6 +1641,17 @@ export const en = {
     "There is no project called \"{id}\" on this machine. It may have been removed from another window.",
   "error.taskNotFound":
     "There is no task called \"{id}\" on this machine. It may have been removed from another window.",
+  "error.ticketNotFound":
+    "There is no work item called \"{id}\" on this machine. It may have been removed from another window.",
+  "error.work.candidateMissing": "No candidate with that id.",
+  "error.work.candidateDecided": "That candidate was already decided.",
+  "error.work.disabled": "Work items are turned off in Settings.",
+  "error.work.emptyAnswer": "Answer text is empty.",
+  "error.work.deliveryFailed":
+    "Could not deliver that answer to the live run. Try again, or open the task and answer there.",
+  "error.work.noLiveRun":
+    "There is no live run to answer. Open the task or Retry the work item.",
+  "error.work.githubReplyFailed": "Could not post that reply on GitHub.",
   "error.collaboration.empty": "A collaboration needs at least one participant.",
   "error.collaboration.duplicateId":
     "Two participants share the id “{id}”. Each participant needs its own id.",
@@ -1530,6 +1706,16 @@ export const en = {
     "This Git repository has no remote. Add origin (or another remote) so teammates can pull and push.",
   "error.job.git.missing":
     "Git is not installed (or not on PATH) on this machine. Install Git before accepting a Team job step.",
+  "error.job.git.syncDirty":
+    "This folder has uncommitted changes. Commit or stash them before accepting the Team job step.",
+  "error.job.git.syncDiverged":
+    "Local and remote branches have both changed, so a fast-forward pull cannot bring them together.",
+  "error.job.git.syncPullFailed":
+    "Git pull failed. Check the remote and your credentials, then try again.",
+  "error.job.git.syncBranchInvalid": "That branch name is not valid for Git.",
+  "error.job.git.syncBranchFailed": "Could not check out or create the step branch.",
+  "error.job.git.syncPushFailed":
+    "Git push failed. Check the remote and your credentials, then try again.",
   "teamJob.git.ok": "Git ready — repository with a remote.",
   "teamJob.git.pathMissing": "Project folder is missing.",
   "teamJob.git.notARepo": "This project is not a Git repository. Team jobs need Git to share files.",

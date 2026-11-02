@@ -40,6 +40,14 @@ export const teams = {
   "job.pane.kick": "Espelli",
   "job.pane.kickConfirm": "Rimuovere {label} dal team. Il suo passaggio si fermerà.",
   "job.pane.stallAutomation": "Abilita automazione degli stalli (dopo che la bacheca è visibile)",
+  "job.pane.contentBusAdvanced": "Git in accettazione e al termine",
+  "job.pane.pullOnAccept": "Pull prima di accettare un passo",
+  "job.pane.pushOnSuccess": "Push quando un passo riesce",
+  "settings.teams.membersMayStartJobs": "I membri possono avviare i job",
+  "settings.teams.membersMayStartJobs.detail":
+    "I membri online possono avviare bozze; pausa, stop ed espulsione restano con te.",
+  "error.team.membersMayNotStart":
+    "Questo team non consente ai membri di avviare job. Chiedi all’host di abilitarlo in Impostazioni → Team.",
   "job.pane.noOnline": "L’avvio richiede almeno un peer online (o questa macchina).",
   "job.pane.crew.noSteps": "Aggiungi i passaggi prima di avviare (usa un modello di passaggi).",
   "job.pane.crew.noMembers": "Questo team non ha ancora macchine. Invita qualcuno da Team.",
@@ -137,6 +145,16 @@ export const teams = {
   "error.job.git.notARepo": "Quella cartella non è un repository Git. I job di team condividono il lavoro tramite Git — inizializza o clona un repository.",
   "error.job.git.noRemote": "Questo repository Git non ha remote. Aggiungi origin (o un altro remote) così i compagni possono fare pull e push.",
   "error.job.git.missing": "Git non è installato (o non è nel PATH) su questa macchina. Installa Git prima di accettare un passaggio di un job di team.",
+  "error.job.git.syncDirty":
+    "Questa cartella ha modifiche non committate. Fai commit o stash prima di accettare il passo.",
+  "error.job.git.syncDiverged":
+    "Il branch locale e remoto sono entrambi cambiati — un pull fast-forward non è possibile.",
+  "error.job.git.syncPullFailed":
+    "Git pull non riuscito. Controlla il remote e le credenziali, poi riprova.",
+  "error.job.git.syncBranchInvalid": "Quel nome di branch non è valido per Git.",
+  "error.job.git.syncBranchFailed": "Impossibile fare checkout o creare il branch del passo.",
+  "error.job.git.syncPushFailed":
+    "Git push non riuscito. Controlla il remote e le credenziali, poi riprova.",
   "teamJob.git.ok": "Git pronto — repository con un remote.",
   "teamJob.git.pathMissing": "La cartella del progetto manca.",
   "teamJob.git.notARepo": "Questo progetto non è un repository Git. I job di team necessitano di Git per condividere i file.",

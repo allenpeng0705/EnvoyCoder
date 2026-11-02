@@ -24,6 +24,7 @@ import {
   cataloguedProviderInput,
   cataloguedRecipe,
   cataloguedSessionModes,
+  cataloguedUnattendedModeId,
   overlappingAgentIds,
   probeRecipe,
   resolveAgentEntry,
@@ -301,11 +302,14 @@ describe("what an entry states about the dialect it speaks", () => {
     expect(gemini?.modeParam).toBe("modeId");
     expect(gemini?.modes.map((mode) => mode.id)).toEqual(["default", "auto_edit", "yolo"]);
     expect(cataloguedProviderInput(acpAgent("gemini")!).modeParam).toBe("modeId");
+    expect(cataloguedUnattendedModeId("gemini")).toBe("yolo");
 
     const qwen = cataloguedSessionModes("qwen-code");
     expect(qwen?.modeParam).toBe("modeId");
     expect(qwen?.modes.map((mode) => mode.id)).toEqual(["default", "auto-edit", "yolo", "plan"]);
+    expect(cataloguedUnattendedModeId("qwen-code")).toBe("yolo");
     expect(cataloguedSessionModes("goose")).toBeUndefined();
+    expect(cataloguedUnattendedModeId("goose")).toBeUndefined();
   });
 
   it("carries the command, the args and the environment **names**, and no value", () => {

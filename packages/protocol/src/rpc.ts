@@ -300,7 +300,12 @@ export function coderErrorRef(message: string): CoderMessageRef | undefined {
  *     `loopbackOnlyMethods`) is a two-line change, and the family's guide §7.4 says contract changes
  *     go upstream rather than into a workaround.
  */
-export const CODER_EVENTS = ["coder:state-changed", "coder:run-event", "coder:mesh-status"] as const;
+export const CODER_EVENTS = [
+  "coder:state-changed",
+  "coder:run-event",
+  "coder:mesh-status",
+  "work:ticket-changed",
+] as const;
 
 export type CoderEventName = (typeof CODER_EVENTS)[number];
 
@@ -319,7 +324,7 @@ export interface CoderStateChange {
    * composer's options for that agent are new — and a client that refetches tasks on that event would
    * fetch the wrong list.
    */
-  kind: "projects" | "tasks" | "settings" | "harnesses";
+  kind: "projects" | "tasks" | "settings" | "harnesses" | "work";
   at: string;
   ids?: readonly string[];
   /** Which window caused it, so a client can skip work it has already applied. */
@@ -435,6 +440,7 @@ export const BlockReasonSchema = z.enum([
   "heartbeat-miss",
   "offer-unacked",
   "cancel-pending",
+  "peer-offline",
 ]);
 
 export const RunPhaseSchema = z.enum(["starting", "streaming", "needs-attention", "idle"]);
@@ -457,6 +463,14 @@ export const StallPolicySchema = z
   })
   .strict();
 
+export const JobContentBusPolicySchema = z
+  .object({
+    pullOnAccept: z.boolean().optional(),
+    pushOnSuccess: z.boolean().optional(),
+    allowDeferredOffers: z.boolean().optional(),
+  })
+  .strict();
+
 export const FailurePolicySchema = z
   .object({
     maxRetriesPerAssignee: z.number().int().nonnegative(),
@@ -466,6 +480,7 @@ export const FailurePolicySchema = z
     onPeerRefuse: z.enum(["reassign", "fail-step"]),
     onTeamRevoked: z.literal("cancel-job"),
     allowDegradedAssignees: z.boolean().optional(),
+    contentBus: JobContentBusPolicySchema.optional(),
   })
   .strict();
 
@@ -492,6 +507,7 @@ export const TeamSchema = z
     tokenGeneration: z.number().int().nonnegative(),
     roleCatalog: z.array(RoleDefSchema).min(1).readonly(),
     members: z.array(TeamMemberSchema).readonly(),
+    membersMayStartJobs: z.boolean().optional(),
     createdAt: z.string().min(1),
     updatedAt: z.string().min(1),
   })
@@ -506,6 +522,7 @@ export const TeamPublicSchema = z
     tokenGeneration: z.number().int().nonnegative(),
     roleCatalog: z.array(RoleDefSchema).min(1).readonly(),
     members: z.array(TeamMemberSchema).readonly(),
+    membersMayStartJobs: z.boolean().optional(),
     createdAt: z.string().min(1),
     updatedAt: z.string().min(1),
   })
@@ -556,6 +573,7 @@ export const JobStepSchema = z
     brief: z.string().min(1),
     worktreeKey: z.string().min(1),
     cwdHint: z.string().min(1),
+    branch: z.string().min(1).optional(),
     dependsOn: z.array(z.string().min(1)).readonly().optional(),
     assigneeMemberId: z.string().min(1).optional(),
     status: JobStepStatusSchema,
@@ -568,9 +586,7 @@ export const JobStepSchema = z
     hasGap: z.boolean().optional(),
     approvalRequestId: z.string().min(1).optional(),
     runPhase: z.enum(["starting", "streaming", "needs-attention", "idle"]).optional(),
-    blocked: z
-      .enum(["no-progress", "needs-attention", "heartbeat-miss", "offer-unacked", "cancel-pending"])
-      .optional(),
+    blocked: BlockReasonSchema.optional(),
   })
   .strict();
 
@@ -625,6 +641,7 @@ export const JobSchema = z
     policy: FailurePolicySchema,
     stallPolicy: StallPolicySchema,
     ledger: z.array(JobLedgerNoteSchema).readonly(),
+    sourceRef: z.string().min(1).optional(),
     createdAt: z.string().min(1),
     updatedAt: z.string().min(1),
     endedAt: z.string().optional(),
@@ -641,6 +658,9 @@ export const StepOfferSchema = z
     role: JobRoleSchema,
     worktreeKey: z.string().min(1),
     cwdHint: z.string().min(1),
+    branch: z.string().min(1).optional(),
+    pullOnAccept: z.boolean().optional(),
+    pushOnSuccess: z.boolean().optional(),
     deadline: z.string().optional(),
     assigneeMemberId: z.string().min(1),
     status: z.enum(["pending", "accepted", "refused", "cancelled"]),
@@ -658,6 +678,7 @@ export const JobStepDraftSchema = z
     brief: z.string().min(1),
     worktreeKey: z.string().min(1),
     cwdHint: z.string().min(1),
+    branch: z.string().min(1).optional(),
     dependsOn: z.array(z.string().min(1)).readonly().optional(),
     assigneeMemberId: z.string().min(1).optional(),
     deadline: z.string().optional(),
@@ -2321,6 +2342,110 @@ export const DaemonLogSchema = z
 
 export type DaemonLog = z.infer<typeof DaemonLogSchema>;
 
+const WorkReportKindSchema = z.enum(["progress", "waiting", "ready", "blocked", "failed", "dropped"]);
+const AcceptModeSchema = z.enum(["off", "observe", "auto"]);
+const MandateStrengthSchema = z.enum(["explicit", "inferred"]);
+
+export const WorkTicketSchema = z
+  .object({
+    id: z.string().min(1),
+    shortName: z.string().min(1),
+    title: z.string(),
+    projectId: z.string().min(1).optional(),
+    taskId: z.string().min(1).optional(),
+    status: z.enum(["open", "ended"]),
+    mandate: z
+      .object({
+        id: z.string().min(1),
+        policyVersion: z.number().int(),
+        strength: MandateStrengthSchema,
+        scope: z.string(),
+        createdAt: z.string().min(1),
+      })
+      .strict(),
+    assignments: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1),
+            status: z.enum(["pending", "running", "ended"]),
+            runId: z.string().min(1).optional(),
+            harness: z.string().optional(),
+            startedAt: z.string().optional(),
+            endedAt: z.string().optional(),
+          })
+          .strict(),
+      )
+      .readonly(),
+    latestReport: z
+      .object({
+        kind: WorkReportKindSchema,
+        note: z.string().optional(),
+        at: z.string().min(1),
+      })
+      .strict()
+      .optional(),
+    attention: z
+      .object({
+        question: z.string(),
+        askedAt: z.string().min(1),
+        requestId: z.string().min(1).optional(),
+        runId: z.string().min(1).optional(),
+      })
+      .strict()
+      .optional(),
+    deliveryFailed: z.boolean().optional(),
+    enabled: z.boolean().optional(),
+    externalRef: z.string().optional(),
+    createdAt: z.string().min(1),
+    updatedAt: z.string().min(1),
+    endedAt: z.string().optional(),
+    endReason: z.string().optional(),
+    stage: z.string().optional(),
+  })
+  .strict();
+
+export const WorkPolicySchema = z
+  .object({
+    version: z.number().int(),
+    acceptMode: AcceptModeSchema,
+    allowList: z.array(z.string()).readonly(),
+    requireApprovalsForUnattended: z.boolean(),
+    enabled: z.boolean(),
+    githubPollIntervalMs: z.number().int().nonnegative().default(0),
+    githubPollRepo: z.string().min(1).optional(),
+    updatedAt: z.string().min(1),
+  })
+  .strict();
+
+const WorkCandidateSchema = z
+  .object({
+    id: z.string().min(1),
+    text: z.string(),
+    strength: MandateStrengthSchema,
+    sourceKind: z.enum(["manual", "github"]),
+    externalRef: z.string().optional(),
+    createdAt: z.string().min(1),
+    disposition: z.enum(["accept", "attach", "ignore", "stop", "would-accept"]).optional(),
+    dispositionNote: z.string().optional(),
+    ticketId: z.string().optional(),
+  })
+  .strict();
+
+const WorkEffectSchema = z
+  .object({
+    id: z.string().min(1),
+    kind: z.enum(["launch", "deliver", "notify", "assess", "reply"]),
+    ticketId: z.string().optional(),
+    payload: z.record(z.string(), z.unknown()),
+    status: z.enum(["pending", "done", "failed"]),
+    receiptKey: z.string().optional(),
+    createdAt: z.string().min(1),
+    doneAt: z.string().optional(),
+    error: z.string().optional(),
+  })
+  .strict();
+
 export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.freeze({
   /* — who am I talking to, and what does this daemon do — */
   "coder.hello": {
@@ -2705,6 +2830,25 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
       .strict(),
   },
   /**
+   * Push the current branch to a remote (default `origin` / `HEAD`).
+   * No force-push. Used by Team job content-bus handoff and the Changes rail.
+   */
+  "coder.gitPush": {
+    params: z
+      .object({
+        projectId: z.string().min(1),
+        remote: z.string().min(1).max(200).optional(),
+        refspec: z.string().min(1).max(200).optional(),
+      })
+      .strict(),
+    result: z
+      .object({
+        status: GitStatusSchema,
+        summary: z.string(),
+      })
+      .strict(),
+  },
+  /**
    * Commit **what is staged**, with the message the user typed.
    *
    * Staged rather than "everything", because that is what a commit is; the window's composer offers "stage
@@ -2875,6 +3019,11 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
         harness: AgentIdSchema.optional(),
         model: z.string().optional(),
         extraArgs: z.string().optional(),
+        /**
+         * Create a git worktree under `<project>/.envoy-worktrees/<branch>` and point the task there.
+         * Mutually exclusive with an explicit `cwd` that is not that worktree path.
+         */
+        worktree: z.object({ branch: z.string().min(1) }).strict().optional(),
       })
       .strict(),
     result: z.object({ task: TaskSchema }).strict(),
@@ -3022,10 +3171,12 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
         /** The user left the question without picking. Not a permission decision. */
         skipped: z.literal(true).optional(),
         /**
-         * Also turn off "Ask before risky steps" for this machine and push
-         * `autoRun: off` onto the live Envoy Harness session when it accepts one.
+         * Also stop asking for further permissions. Scope defaults to `machine`
+         * when omitted (Settings Off + live push). `session` auto-allows only
+         * for this live run.
          */
         stopAsking: z.literal(true).optional(),
+        stopAskingScope: z.enum(["session", "machine"]).optional(),
       })
       .strict()
       .refine(
@@ -3035,6 +3186,10 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
           (value.optionIds !== undefined && value.optionIds.length > 0) ||
           value.text !== undefined,
         { message: "An answer needs a choice, some text, or a skip." },
+      )
+      .refine(
+        (value) => value.stopAskingScope === undefined || value.stopAsking === true,
+        { message: "stopAskingScope requires stopAsking." },
       ),
     result: z.object({ runId: z.string(), requestId: z.string(), resolved: z.boolean() }).strict(),
   },
@@ -3626,11 +3781,30 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
         title: z.string().min(1).max(200),
         goal: z.string().min(1).max(16_000),
         projectId: z.string().min(1).optional(),
+        sourceRef: z.string().min(1).max(500).optional(),
         steps: z.array(JobStepDraftSchema).max(64).optional(),
         policy: FailurePolicySchema.partial().optional(),
       })
       .strict(),
     result: z.object({ job: JobSchema }).strict(),
+  },
+  /**
+   * Idempotent Team draft from an external claim key (Work `externalRef` / GitHub thread).
+   * Returns the existing open job when `sourceRef` already claims one.
+   */
+  "coder.createJobFromSource": {
+    params: z
+      .object({
+        teamId: z.string().min(1),
+        sourceRef: z.string().min(1).max(500),
+        title: z.string().min(1).max(200),
+        goal: z.string().min(1).max(16_000),
+        projectId: z.string().min(1).optional(),
+        steps: z.array(JobStepDraftSchema).max(64).optional(),
+        policy: FailurePolicySchema.partial().optional(),
+      })
+      .strict(),
+    result: z.object({ job: JobSchema, created: z.boolean() }).strict(),
   },
   "coder.listJobs": {
     params: z
@@ -3654,8 +3828,33 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
       .strict(),
     result: z.object({ job: JobSchema }).strict(),
   },
+  "coder.updateJobPolicy": {
+    params: z
+      .object({
+        jobId: z.string().min(1),
+        policy: FailurePolicySchema.partial(),
+      })
+      .strict(),
+    result: z.object({ job: JobSchema }).strict(),
+  },
+  "coder.updateTeamSettings": {
+    params: z
+      .object({
+        teamId: z.string().min(1),
+        membersMayStartJobs: z.boolean().optional(),
+      })
+      .strict(),
+    result: z.object({ team: TeamPublicSchema }).strict(),
+  },
   "coder.startJob": {
-    params: z.object({ jobId: z.string().min(1) }).strict(),
+    params: z
+      .object({
+        jobId: z.string().min(1),
+        teamToken: z.string().min(16).optional(),
+        memberToken: z.string().min(16).optional(),
+        memberId: z.string().min(1).optional(),
+      })
+      .strict(),
     result: z.object({ job: JobSchema }).strict(),
   },
   "coder.pauseJob": {
@@ -4355,6 +4554,152 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
         endpoint: z.string().min(1).optional(),
       })
       .strict(),
+  },
+
+  /* — Work Engine — */
+  "work.listTickets": {
+    params: z
+      .object({
+        projectId: z.string().min(1).optional(),
+        includeEnded: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+    result: z.object({ tickets: z.array(WorkTicketSchema).readonly() }).strict(),
+  },
+  "work.getTicket": {
+    params: z.object({ id: z.string().min(1) }).strict(),
+    result: z.object({ ticket: WorkTicketSchema }).strict(),
+  },
+  "work.createTicket": {
+    params: z
+      .object({
+        title: z.string(),
+        projectId: z.string().min(1).optional(),
+        taskId: z.string().min(1).optional(),
+        scope: z.string().optional(),
+      })
+      .strict(),
+    result: z.object({ ticket: WorkTicketSchema }).strict(),
+  },
+  "work.promoteTask": {
+    params: z
+      .object({
+        taskId: z.string().min(1),
+        title: z.string().optional(),
+      })
+      .strict(),
+    result: z.object({ ticket: WorkTicketSchema }).strict(),
+  },
+  "work.stopTicket": {
+    params: z
+      .object({
+        id: z.string().min(1),
+        reason: z.string().optional(),
+      })
+      .strict(),
+    result: z.object({ ticket: WorkTicketSchema }).strict(),
+  },
+  "work.retryTicket": {
+    params: z.object({ id: z.string().min(1) }).strict(),
+    result: z.object({ ticket: WorkTicketSchema }).strict(),
+  },
+  "work.answerAttention": {
+    params: z
+      .object({
+        id: z.string().min(1),
+        text: z.string(),
+      })
+      .strict(),
+    result: z.object({ ticket: WorkTicketSchema }).strict(),
+  },
+  "work.getPolicy": {
+    params: EmptyParams,
+    result: z.object({ policy: WorkPolicySchema }).strict(),
+  },
+  "work.setPolicy": {
+    params: z
+      .object({
+        acceptMode: AcceptModeSchema.optional(),
+        allowList: z.array(z.string()).optional(),
+        requireApprovalsForUnattended: z.boolean().optional(),
+        enabled: z.boolean().optional(),
+        githubPollIntervalMs: z.number().int().nonnegative().optional(),
+        githubPollRepo: z.string().optional(),
+      })
+      .strict(),
+    result: z.object({ policy: WorkPolicySchema }).strict(),
+  },
+  "work.listAttention": {
+    params: z.object({ projectId: z.string().min(1).optional() }).strict().optional(),
+    result: z.object({ tickets: z.array(WorkTicketSchema).readonly() }).strict(),
+  },
+  "work.enqueueCandidate": {
+    params: z
+      .object({
+        text: z.string(),
+        strength: MandateStrengthSchema.optional(),
+        sourceKind: z.enum(["manual", "github"]).optional(),
+      })
+      .strict(),
+    result: z.object({ candidate: WorkCandidateSchema }).strict(),
+  },
+  "work.listCandidates": {
+    params: EmptyParams,
+    result: z.object({ candidates: z.array(WorkCandidateSchema).readonly() }).strict(),
+  },
+  "work.triageCandidate": {
+    params: z
+      .object({
+        id: z.string().min(1),
+        assessmentAccepts: z.boolean().optional(),
+      })
+      .strict(),
+    result: z
+      .object({
+        candidate: WorkCandidateSchema,
+        ticket: WorkTicketSchema.optional(),
+      })
+      .strict(),
+  },
+  "work.listEffects": {
+    params: z.object({ pendingOnly: z.boolean().optional() }).strict().optional(),
+    result: z.object({ effects: z.array(WorkEffectSchema).readonly() }).strict(),
+  },
+  "work.report": {
+    params: z
+      .object({
+        ticketId: z.string().min(1),
+        kind: WorkReportKindSchema,
+        note: z.string().optional(),
+      })
+      .strict(),
+    result: z.object({ ticket: WorkTicketSchema }).strict(),
+  },
+  "work.githubPoll": {
+    params: z.object({ repo: z.string().min(1).optional() }).strict().optional(),
+    result: z
+      .object({
+        ok: z.boolean(),
+        triggers: z.number().int().nonnegative(),
+        candidates: z.number().int().nonnegative(),
+        wouldAccept: z.number().int().nonnegative().optional(),
+        accepted: z.number().int().nonnegative().optional(),
+        /** Auto-accept ack replies that failed to post on GitHub this poll. */
+        ackFailed: z.number().int().nonnegative().optional(),
+        error: z.string().optional(),
+      })
+      .strict(),
+  },
+  "work.githubReply": {
+    params: z
+      .object({
+        threadKey: z.string().min(1),
+        body: z.string(),
+        purpose: z.string().optional(),
+      })
+      .strict(),
+    result: z.object({ ok: z.literal(true) }).strict(),
   },
 });
 

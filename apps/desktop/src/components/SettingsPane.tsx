@@ -117,6 +117,7 @@ import { AppearanceSection } from "./settings/SectionsAppearance.js";
 import { PairingSection } from "./settings/PairingSection.js";
 import { PairedHomesPanel } from "./settings/PairedHomesPanel.js";
 import { TeamsSection } from "./settings/TeamsSection.js";
+import { WorkSection } from "./settings/WorkSection.js";
 import { ServiceSection } from "./settings/SectionsService.js";
 import { LlmSection } from "./settings/EnvoyLlmPanel.js";
 import { ProjectSection, ProjectsSection } from "./settings/SectionsProjects.js";
@@ -431,6 +432,15 @@ function sectionBody(props: SettingsPaneProps & { section: SettingsSectionId }):
           agents={props.agents}
           {...(props.onOpenJob !== undefined ? { onOpenJob: props.onOpenJob } : {})}
           {...(props.onOpenTask !== undefined ? { onOpenTask: props.onOpenTask } : {})}
+        />
+      );
+    case "work":
+      return (
+        <WorkSection
+          state={props.state}
+          onUpdate={props.onUpdate}
+          agents={props.agents}
+          {...(props.onOpenJob !== undefined ? { onOpenJob: props.onOpenJob } : {})}
         />
       );
     case "service":

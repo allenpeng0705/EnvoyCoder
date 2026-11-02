@@ -79,6 +79,7 @@ type TeamPublicView = {
     rolesAssigned?: readonly string[];
     connection: { status: string; transport: string };
   }[];
+  membersMayStartJobs?: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -741,6 +742,23 @@ export function TeamsSection(
                       {t("settings.teams.tokenExpiring")}
                     </p>
                   ) : null}
+                  <label className="settings__pairing-field" data-testid={`team-members-start-${team.id}`}>
+                    <input
+                      type="checkbox"
+                      checked={team.membersMayStartJobs === true}
+                      disabled={busy}
+                      onChange={(e) => {
+                        void props.agents
+                          .updateTeamSettings(team.id, { membersMayStartJobs: e.target.checked })
+                          .then((r) => {
+                            if (!r.ok) setNotice(r.message);
+                            else void reload();
+                          });
+                      }}
+                    />{" "}
+                    <span className="setting__title">{t("settings.teams.membersMayStartJobs")}</span>
+                    <span className="settings__note"> {t("settings.teams.membersMayStartJobs.detail")}</span>
+                  </label>
                   <ul className="settings__teams-members">
                     {(board.length > 0
                       ? board.map((row) => {

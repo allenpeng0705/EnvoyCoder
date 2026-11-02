@@ -169,6 +169,32 @@ const Map<String, DaemonRefRenderer> daemonRefRenderers = {
   // away: the window's sentence, reused rather than reworded.
   'git.merge.resolved': DaemonRefRenderer('gitMergeResolved', _mergeResolved),
   'approval.deny': DaemonRefRenderer('approvalDeny', _deny),
+  // Team job content-bus refusals (accept / push) — same catalogue as the desktop Job pane.
+  'error.job.git.notARepo': DaemonRefRenderer('errorJobGitNotARepo', _jobGitNotARepo),
+  'error.job.git.noRemote': DaemonRefRenderer('errorJobGitNoRemote', _jobGitNoRemote),
+  'error.job.git.missing': DaemonRefRenderer('errorJobGitMissingInstall', _jobGitMissingInstall),
+  'error.job.git.syncDirty': DaemonRefRenderer('errorJobGitSyncDirty', _jobGitSyncDirty),
+  'error.job.git.syncDiverged': DaemonRefRenderer('errorJobGitSyncDiverged', _jobGitSyncDiverged),
+  'error.job.git.syncPullFailed': DaemonRefRenderer('errorJobGitSyncPullFailed', _jobGitSyncPullFailed),
+  'error.job.git.syncBranchInvalid': DaemonRefRenderer('errorJobGitSyncBranchInvalid', _jobGitSyncBranchInvalid),
+  'error.job.git.syncBranchFailed': DaemonRefRenderer('errorJobGitSyncBranchFailed', _jobGitSyncBranchFailed),
+  'error.job.git.syncPushFailed': DaemonRefRenderer('errorJobGitSyncPushFailed', _jobGitSyncPushFailed),
+  'error.team.membersMayNotStart': DaemonRefRenderer('errorTeamMembersMayNotStart', _membersMayNotStart),
+  'error.job.missing': DaemonRefRenderer('errorJobMissing', _jobMissing),
+  'error.job.stepMissing': DaemonRefRenderer('errorJobStepMissing', _jobStepMissing),
+  'error.job.stepsLocked': DaemonRefRenderer('errorJobStepsLocked', _jobStepsLocked),
+  'error.job.writerLock': DaemonRefRenderer('errorJobWriterLock', _jobWriterLock),
+  'error.job.notRunning': DaemonRefRenderer('errorJobNotRunning', _jobNotRunning),
+  'error.job.deps': DaemonRefRenderer('errorJobDeps', _jobDeps),
+  'error.job.noSteps': DaemonRefRenderer('errorJobNoSteps', _jobNoSteps),
+  'error.job.noCandidate': DaemonRefRenderer('errorJobNoCandidate', _jobNoCandidate),
+  'error.job.notDrafting': DaemonRefRenderer('errorJobNotDrafting', _jobNotDrafting),
+  'error.job.stepsInFlight': DaemonRefRenderer('errorJobStepsInFlight', _jobStepsInFlight),
+  'error.job.offerMissing': DaemonRefRenderer('errorJobOfferMissing', _jobOfferMissing),
+  'error.job.offerClosed': DaemonRefRenderer('errorJobOfferClosed', _jobOfferClosed),
+  'error.job.exhausted': DaemonRefRenderer('errorJobExhausted', _jobExhausted),
+  'error.job.pathMissing': DaemonRefRenderer('errorJobPathMissing', _jobPathMissing),
+  'error.job.failed': DaemonRefRenderer('errorJobFailed', _jobFailed),
 };
 
 // One tear-off per sentence rather than a lookup by name: Dart has no reflection, so the compiler is
@@ -223,3 +249,58 @@ String _mergeResolveFailed(AppLocalizations l10n, Map<String, Object> values) =>
     l10n.errorGitMergeResolveFailed('${values['detail'] ?? ''}');
 
 String _mergeResolved(AppLocalizations l10n, Map<String, Object> _) => l10n.gitMergeResolved;
+
+String _jobGitNotARepo(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobGitNotARepo;
+
+String _jobGitNoRemote(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobGitNoRemote;
+
+String _jobGitMissingInstall(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobGitMissingInstall;
+
+String _jobGitSyncDirty(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobGitSyncDirty;
+
+String _jobGitSyncDiverged(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobGitSyncDiverged;
+
+String _jobGitSyncPullFailed(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobGitSyncPullFailed;
+
+String _jobGitSyncBranchInvalid(AppLocalizations l10n, Map<String, Object> _) =>
+    l10n.errorJobGitSyncBranchInvalid;
+
+String _jobGitSyncBranchFailed(AppLocalizations l10n, Map<String, Object> _) =>
+    l10n.errorJobGitSyncBranchFailed;
+
+String _jobGitSyncPushFailed(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobGitSyncPushFailed;
+
+String _membersMayNotStart(AppLocalizations l10n, Map<String, Object> _) =>
+    l10n.errorTeamMembersMayNotStart;
+
+String _jobMissing(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobMissing;
+
+String _jobStepMissing(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobStepMissing;
+
+String _jobStepsLocked(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobStepsLocked;
+
+String _jobWriterLock(AppLocalizations l10n, Map<String, Object> values) =>
+    l10n.errorJobWriterLock('${values['key'] ?? ''}');
+
+String _jobNotRunning(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobNotRunning;
+
+String _jobDeps(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobDeps;
+
+String _jobNoSteps(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobNoSteps;
+
+String _jobNoCandidate(AppLocalizations l10n, Map<String, Object> values) =>
+    l10n.errorJobNoCandidate('${values['role'] ?? ''}');
+
+String _jobNotDrafting(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobNotDrafting;
+
+String _jobStepsInFlight(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobStepsInFlight;
+
+String _jobOfferMissing(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobOfferMissing;
+
+String _jobOfferClosed(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobOfferClosed;
+
+String _jobExhausted(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobExhausted;
+
+String _jobPathMissing(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobPathMissing;
+
+String _jobFailed(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobFailed;

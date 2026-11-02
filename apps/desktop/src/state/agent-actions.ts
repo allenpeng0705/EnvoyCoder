@@ -306,6 +306,7 @@ export interface AgentActions {
             rolesAssigned?: readonly string[];
             connection: { status: string; transport: string };
           }>;
+          membersMayStartJobs?: boolean;
           createdAt: string;
           updatedAt: string;
         }>;
@@ -343,6 +344,24 @@ export interface AgentActions {
       dependsOn?: readonly string[];
     }[];
   }): Promise<{ ok: true; job: import("@envoydev/protocol").Job } | Refusal>;
+  /** Idempotent Team draft from Work / GitHub `externalRef`. */
+  createJobFromSource(input: {
+    teamId: string;
+    sourceRef: string;
+    title: string;
+    goal: string;
+    projectId?: string;
+    steps?: readonly {
+      role: import("@envoydev/protocol").JobRole;
+      brief: string;
+      worktreeKey: string;
+      cwdHint: string;
+      dependsOn?: readonly string[];
+    }[];
+    policy?: Partial<import("@envoydev/protocol").FailurePolicy>;
+  }): Promise<
+    { ok: true; job: import("@envoydev/protocol").Job; created: boolean } | Refusal
+  >;
   listJobs(filter: { teamId?: string; projectId?: string }): Promise<
     | { ok: true; jobs: readonly import("@envoydev/protocol").Job[] }
     | Refusal
@@ -404,6 +423,36 @@ export interface AgentActions {
       id?: string;
     }[],
   ): Promise<{ ok: true; job: import("@envoydev/protocol").Job } | Refusal>;
+  updateJobPolicy(
+    jobId: string,
+    policy: Partial<import("@envoydev/protocol").FailurePolicy>,
+  ): Promise<{ ok: true; job: import("@envoydev/protocol").Job } | Refusal>;
+  updateTeamSettings(
+    teamId: string,
+    patch: { membersMayStartJobs?: boolean },
+  ): Promise<
+    | {
+        ok: true;
+        team: {
+          id: string;
+          label: string;
+          tokenExpiresAt: string;
+          tokenGeneration: number;
+          roleCatalog: readonly import("@envoydev/protocol").RoleDef[];
+          members: readonly unknown[];
+          membersMayStartJobs?: boolean;
+          createdAt: string;
+          updatedAt: string;
+        };
+      }
+    | Refusal
+  >;
+  /** Push current branch (default origin / HEAD) for a project work tree. */
+  gitPush(input: {
+    projectId: string;
+    remote?: string;
+    refspec?: string;
+  }): Promise<{ ok: true; summary: string } | Refusal>;
   kickMember(teamId: string, memberId: string): Promise<{ ok: true; kicked: true } | Refusal>;
   setJobStallAutomation(
     jobId: string,
@@ -507,4 +556,86 @@ export interface AgentActions {
     requestId: string,
     optionId: string,
   ): Promise<{ ok: true; answered: boolean; alreadyResolved: boolean } | Refusal>;
+  getWorkPolicy(): Promise<
+    | { ok: true; policy: import("@envoydev/work-model").WorkPolicy }
+    | Refusal
+  >;
+  setWorkPolicy(
+    patch: Partial<
+      Pick<
+        import("@envoydev/work-model").WorkPolicy,
+        | "acceptMode"
+        | "allowList"
+        | "requireApprovalsForUnattended"
+        | "enabled"
+        | "githubPollIntervalMs"
+        | "githubPollRepo"
+      >
+    >,
+  ): Promise<{ ok: true; policy: import("@envoydev/work-model").WorkPolicy } | Refusal>;
+  listWorkAttention(projectId?: string): Promise<
+    | { ok: true; tickets: readonly import("@envoydev/work-model").WorkTicket[] }
+    | Refusal
+  >;
+  listWorkTickets(filter?: {
+    projectId?: string;
+    includeEnded?: boolean;
+  }): Promise<
+    | { ok: true; tickets: readonly import("@envoydev/work-model").WorkTicket[] }
+    | Refusal
+  >;
+  promoteTaskToWork(
+    taskId: string,
+    title?: string,
+  ): Promise<{ ok: true; ticket: import("@envoydev/work-model").WorkTicket } | Refusal>;
+  createWorkTicket(input: {
+    title: string;
+    projectId?: string;
+    taskId?: string;
+  }): Promise<{ ok: true; ticket: import("@envoydev/work-model").WorkTicket } | Refusal>;
+  stopWorkTicket(id: string, reason?: string): Promise<
+    | { ok: true; ticket: import("@envoydev/work-model").WorkTicket }
+    | Refusal
+  >;
+  retryWorkTicket(id: string): Promise<
+    | { ok: true; ticket: import("@envoydev/work-model").WorkTicket }
+    | Refusal
+  >;
+  answerWorkAttention(id: string, text: string): Promise<
+    | { ok: true; ticket: import("@envoydev/work-model").WorkTicket }
+    | Refusal
+  >;
+  enqueueWorkCandidate(
+    text: string,
+    strength?: import("@envoydev/work-model").MandateStrength,
+  ): Promise<{ ok: true; candidate: import("@envoydev/work-model").WorkCandidate } | Refusal>;
+  listWorkCandidates(): Promise<
+    | { ok: true; candidates: readonly import("@envoydev/work-model").WorkCandidate[] }
+    | Refusal
+  >;
+  triageWorkCandidate(
+    id: string,
+    assessmentAccepts?: boolean,
+  ): Promise<
+    | {
+        ok: true;
+        candidate: import("@envoydev/work-model").WorkCandidate;
+        ticket?: import("@envoydev/work-model").WorkTicket;
+      }
+    | Refusal
+  >;
+  githubPoll(repo?: string): Promise<
+    | {
+        ok: true;
+        triggers: number;
+        candidates: number;
+        wouldAccept?: number;
+        accepted?: number;
+        ackFailed?: number;
+      }
+    | ({ ok: false; triggers: number; candidates: number; error: string; ackFailed?: number } &
+        Partial<Refusal>)
+    | Refusal
+  >;
+  githubReply(threadKey: string, body: string): Promise<{ ok: true } | Refusal>;
 }

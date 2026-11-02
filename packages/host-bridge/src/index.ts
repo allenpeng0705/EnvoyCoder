@@ -182,6 +182,11 @@ export interface CoderPaths {
    */
   deliveriesFile: string;
   runsDir: string;
+  /**
+   * Work Engine state — Tickets, policy, effects outbox, candidates (not task JSON).
+   * See `docs/superagent-control-plane-design.md` §13.
+   */
+  workDir: string;
   transcriptsDir: string;
   logsDir: string;
   /** Pairing/daemon secrets — `0600` on POSIX, and see the platform note below. */
@@ -227,6 +232,7 @@ export function coderPaths(home: string = resolveHomeDir()): CoderPaths {
     agentAuthFile: join(stateDir, "agent-auth.json"),
     deliveriesFile: join(stateDir, "agent-delivery.json"),
     runsDir: join(stateDir, "runs"),
+    workDir: join(stateDir, "work"),
     transcriptsDir: join(stateDir, "transcripts"),
     logsDir: join(stateDir, "logs"),
     secretsDir: join(stateDir, "secrets"),

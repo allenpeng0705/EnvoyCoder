@@ -64,7 +64,8 @@
 
 // The free-text draft lives in `ModelChoice`. The only state here is the Fast/Plan press, so a click
 // paints before `updateTask` comes back — the same reason the mode picker keeps its own choice.
-import { useEffect, useState, type JSX } from "react";
+import { useEffect, useId, useRef, useState, type JSX } from "react";
+import { createPortal } from "react-dom";
 
 // `./features`, not the package root. The root pulls `node:fs` and the window goes white.
 import { composerFeatures, type AgentFeatureId } from "@envoydev/agent-catalog/features";
@@ -90,6 +91,12 @@ import type { MessageKey } from "../i18n/messages/en.js";
 import { localize, type Notice } from "../i18n/notice.js";
 import { formatWhen } from "../i18n/when.js";
 import { ModelChoice } from "./ModelChoice.js";
+import {
+  AUTONOMY_PRESETS,
+  activeAutonomyPreset,
+  modeLooksReadOnly,
+  type AutonomyPresetId,
+} from "../composer/autonomy-presets.js";
 import { FastIcon, ModeIcon, ModelIcon, PlanIcon, ThinkingIcon } from "./icons.js";
 
 export interface ComposerControlsProps {
@@ -182,6 +189,15 @@ export interface ComposerControlsProps {
   /** Remembered Plan. Absent is off. */
   planMode?: boolean;
   onToggleFeature?: (id: AgentFeatureId, value: boolean) => void;
+  /** Settings → Ask before risky steps (composer autonomy chip). */
+  requireApproval?: boolean;
+  /** True when the selected mode is catalogue-marked unattended (Full / YOLO). */
+  modeUnattended?: boolean;
+  /**
+   * Apply an autonomy preset (Settings Asking + optional mode id).
+   * Full access is confirmed in-chip before this fires.
+   */
+  onChooseAutonomyPreset?: (preset: AutonomyPresetId) => void;
 }
 
 export function ComposerControls(props: ComposerControlsProps): JSX.Element {
@@ -279,13 +295,29 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
       ? composerFeatures(props.harness, props.selectedModelId)
       : [];
   const [pending, setPending] = useState<Partial<Record<AgentFeatureId, boolean>>>({});
+  const modeSelectRef = useRef<HTMLSelectElement | null>(null);
+  const [confirmFullAccess, setConfirmFullAccess] = useState(false);
   useEffect(() => {
     setPending({});
+    setConfirmFullAccess(false);
   }, [props.taskId]);
   const featureOn = (id: AgentFeatureId): boolean => {
     const pressed = pending[id];
     if (pressed !== undefined) return pressed;
     return id === "fast_mode" ? props.fastMode === true : props.planMode === true;
+  };
+  const autonomyPreset = activeAutonomyPreset({
+    requireApproval: props.requireApproval === true,
+    modeUnattended: props.modeUnattended === true,
+    modeReadOnly: modeLooksReadOnly(props.selectedModeId),
+  });
+  const chooseAutonomy = (preset: AutonomyPresetId): void => {
+    if (preset === "full-access" && autonomyPreset !== "full-access") {
+      setConfirmFullAccess(true);
+      return;
+    }
+    setConfirmFullAccess(false);
+    props.onChooseAutonomyPreset?.(preset);
   };
 
   /**
@@ -302,8 +334,64 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
    * reading, and the location already has a home in the pane's header (a glyph and the project's name, the whole
    * path in the title) where it is also the control that changes it.
    */
+  const confirmTitleId = useId();
+  const confirmBodyId = useId();
+  const confirmDialog =
+    confirmFullAccess && props.onChooseAutonomyPreset !== undefined
+      ? createPortal(
+          <div
+            className="confirm-dialog-backdrop"
+            data-testid="autonomy-full-access-confirm-backdrop"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) setConfirmFullAccess(false);
+            }}
+          >
+            <div
+              className="confirm-dialog"
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby={confirmTitleId}
+              aria-describedby={confirmBodyId}
+              data-testid="autonomy-full-access-confirm"
+            >
+              <div className="confirm-dialog__mark" aria-hidden />
+              <div className="confirm-dialog__copy">
+                <h2 id={confirmTitleId} className="confirm-dialog__title">
+                  {t("task.composer.autonomy.confirmTitle")}
+                </h2>
+                <p id={confirmBodyId} className="confirm-dialog__body">
+                  {t("task.composer.autonomy.confirmBody")}
+                </p>
+              </div>
+              <div className="confirm-dialog__actions">
+                <button
+                  type="button"
+                  className="button button--secondary"
+                  onClick={() => setConfirmFullAccess(false)}
+                >
+                  {t("action.cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="button button--danger confirm-dialog__cta"
+                  data-testid="autonomy-full-access-confirm-cta"
+                  onClick={() => {
+                    setConfirmFullAccess(false);
+                    props.onChooseAutonomyPreset?.("full-access");
+                  }}
+                >
+                  {t("task.composer.autonomy.confirm")}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
     <>
+      {confirmDialog}
       <div className="composer__controls">
         <div className="composer__chips">
         <span
@@ -311,28 +399,83 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
           data-hint={t("task.composer.hint.mode")}
         >
           <ModeIcon size={14} />
-          <select
-            className="composer__chip-field"
-            disabled={modeOff !== undefined}
-            aria-label={t("task.composer.agentMode.label")}
-            {...(chipTitle(modeReason, nextRun) !== undefined ? { "aria-describedby": "composer-mode-reason" } : {})}
-            value={props.selectedModeId ?? ""}
-            onChange={(event) => props.onChooseMode(event.target.value)}
-          >
-            {/* No modes to list is a *state*, not an empty box: the option says so, and the reason attached to the
-                control says why (`docs/settings-parity.md` §7.30). */}
-            {props.modes.length === 0 ? (
-              <option value="">{t("task.composer.agentMode.unset")}</option>
-            ) : null}
-            {props.modes.map((mode) => (
-              <option key={mode.id} value={mode.id} title={modeDescription(mode, t)}>
-                {modeLabel(mode, t)}
-              </option>
-            ))}
-          </select>
-          <span className="composer__chip-caret" aria-hidden>
-            ▾
-          </span>
+          {props.modes.length > 3 ? (
+            <>
+              <button
+                type="button"
+                className="composer__chip-field composer__chip-cycle"
+                disabled={modeOff !== undefined}
+                aria-label={t("task.composer.agentMode.label")}
+                title={
+                  props.modes.find((mode) => mode.id === props.selectedModeId) !== undefined
+                    ? modeDescription(
+                        props.modes.find((mode) => mode.id === props.selectedModeId)!,
+                        t,
+                      )
+                    : undefined
+                }
+                {...(chipTitle(modeReason, nextRun) !== undefined
+                  ? { "aria-describedby": "composer-mode-reason" }
+                  : {})}
+                onClick={() => {
+                  if (props.modes.length === 0) return;
+                  const index = props.modes.findIndex((mode) => mode.id === props.selectedModeId);
+                  const next = props.modes[(index + 1) % props.modes.length];
+                  if (next) props.onChooseMode(next.id);
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  modeSelectRef.current?.focus();
+                  modeSelectRef.current?.click();
+                }}
+              >
+                {props.modes.find((mode) => mode.id === props.selectedModeId) !== undefined
+                  ? modeLabel(props.modes.find((mode) => mode.id === props.selectedModeId)!, t)
+                  : t("task.composer.agentMode.unset")}
+              </button>
+              <select
+                ref={modeSelectRef}
+                className="composer__chip-field composer__chip-field--hidden-menu"
+                disabled={modeOff !== undefined}
+                aria-hidden
+                tabIndex={-1}
+                value={props.selectedModeId ?? ""}
+                onChange={(event) => props.onChooseMode(event.target.value)}
+              >
+                {props.modes.map((mode) => (
+                  <option key={mode.id} value={mode.id}>
+                    {modeLabel(mode, t)}
+                  </option>
+                ))}
+              </select>
+            </>
+          ) : (
+            <>
+              <select
+                ref={modeSelectRef}
+                className="composer__chip-field"
+                disabled={modeOff !== undefined}
+                aria-label={t("task.composer.agentMode.label")}
+                {...(chipTitle(modeReason, nextRun) !== undefined
+                  ? { "aria-describedby": "composer-mode-reason" }
+                  : {})}
+                value={props.selectedModeId ?? ""}
+                onChange={(event) => props.onChooseMode(event.target.value)}
+              >
+                {props.modes.length === 0 ? (
+                  <option value="">{t("task.composer.agentMode.unset")}</option>
+                ) : null}
+                {props.modes.map((mode) => (
+                  <option key={mode.id} value={mode.id} title={modeDescription(mode, t)}>
+                    {modeLabel(mode, t)}
+                  </option>
+                ))}
+              </select>
+              <span className="composer__chip-caret" aria-hidden>
+                ▾
+              </span>
+            </>
+          )}
           {chipTitle(modeReason, nextRun) === undefined ? null : (
             <p className="visually-hidden" id="composer-mode-reason">
               {chipTitle(modeReason, nextRun)}
@@ -417,6 +560,34 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
             </p>
           )}
           </span>
+          {props.requireApproval !== undefined ? (
+            <span
+              className="composer__chip composer__autonomy has-hint"
+              data-hint={t("task.composer.hint.autonomy")}
+              data-testid="composer-autonomy-chip"
+            >
+              <select
+                className="composer__chip-field"
+                aria-label={t("task.composer.autonomy.label")}
+                value={autonomyPreset}
+                disabled={props.onChooseAutonomyPreset === undefined}
+                onChange={(event) => chooseAutonomy(event.target.value as AutonomyPresetId)}
+              >
+                {AUTONOMY_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id} title={preset.description}>
+                    {preset.id === "read-only"
+                      ? t("task.composer.autonomy.readOnly")
+                      : preset.id === "full-access"
+                        ? t("task.composer.autonomy.fullAccess")
+                        : t("task.composer.autonomy.default")}
+                  </option>
+                ))}
+              </select>
+              <span className="composer__chip-caret" aria-hidden>
+                ▾
+              </span>
+            </span>
+          ) : null}
           {features.map((feature) => {
             if (feature.id === "plan_mode" && props.harness === "envoy-harness") {
               const on = featureOn("plan_mode");

@@ -2,20 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import { composerFeatures, featureSessionConfigs } from "../src/features.js";
 
-describe("composer feature toggles", () => {
-  it("gives Codex Plan always, and Fast only for a model that accepts it", () => {
+describe("composerFeatures", () => {
+  it("shows Plan for Codex and never a dead Fast toggle", () => {
     expect(composerFeatures("codex", undefined).map((feature) => feature.id)).toEqual(["plan_mode"]);
     expect(composerFeatures("codex", "openai/gpt-5.5").map((feature) => feature.id)).toEqual([
-      "fast_mode",
       "plan_mode",
     ]);
     expect(composerFeatures("codex", "gpt-4.1").map((feature) => feature.id)).toEqual(["plan_mode"]);
   });
 
-  it("gives Claude Fast only for Opus, and never a second Plan control", () => {
-    expect(composerFeatures("claudecode", "claude-opus-4-6").map((feature) => feature.id)).toEqual([
-      "fast_mode",
-    ]);
+  it("hides Fast for Claude until an ACP wire exists; Plan only on Envoy", () => {
+    expect(composerFeatures("claudecode", "claude-opus-4-6")).toEqual([]);
     expect(composerFeatures("claudecode", "claude-sonnet-4-6")).toEqual([]);
     expect(composerFeatures("envoy-harness", "gpt-5.5").map((feature) => feature.id)).toEqual([
       "plan_mode",
@@ -23,14 +20,9 @@ describe("composer feature toggles", () => {
     expect(composerFeatures("envoy-harness", "gpt-5.5")[0]?.config).toBeUndefined();
   });
 
-  it("sends Codex plan as collaboration_mode, and does not invent a Fast config", () => {
+  it("emits Codex collaboration_mode configs from remembered Plan", () => {
     expect(
-      featureSessionConfigs("codex", "gpt-5.5", { planMode: true, fastMode: true }),
+      featureSessionConfigs("codex", "gpt-5.5", { planMode: true }),
     ).toEqual([{ configId: "collaboration_mode", value: "plan" }]);
-    expect(featureSessionConfigs("codex", "gpt-5.5", { planMode: false })).toEqual([
-      { configId: "collaboration_mode", value: "default" },
-    ]);
-    expect(featureSessionConfigs("codex", "gpt-5.5", {})).toEqual([]);
-    expect(featureSessionConfigs("envoy-harness", "gpt-5.5", { planMode: true })).toEqual([]);
   });
 });

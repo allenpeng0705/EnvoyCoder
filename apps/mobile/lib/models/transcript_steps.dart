@@ -190,3 +190,59 @@ String stepsLiveStreamText(List<TranscriptEntry> entries) {
   }
   return parts.join('\n\n');
 }
+
+/// Last lines of the live stream for the composer peek strip (Wave 3A / 4C).
+String workingPeekText(List<TranscriptEntry> entries, {int maxChars = 280}) {
+  return workingPeekTail(stepsLiveStreamText(entries), maxChars: maxChars);
+}
+
+/// Latest status-header line (Codex `latest_summary_line`).
+String? latestSummaryLine(String streamText) {
+  final lines = streamText.split('\n');
+  for (var i = lines.length - 1; i >= 0; i--) {
+    var line = lines[i].trim();
+    if (line.isEmpty || line.startsWith('<!--')) continue;
+    line = line.replaceFirst(RegExp(r'^#+\s*'), '').trim();
+    if (line.startsWith('**')) {
+      final close = line.indexOf('**', 2);
+      if (close > 2) {
+        line = '${line.substring(2, close)}${line.substring(close + 2)}'.trim();
+      }
+    }
+    if (line.isEmpty) continue;
+    return line.length > 96 ? '${line.substring(0, 93)}…' : line;
+  }
+  return null;
+}
+
+/// Muted tail of the live stream for the peek body.
+String workingPeekTail(String streamText, {int maxChars = 280}) {
+  final full = streamText.trim();
+  if (full.isEmpty) return '';
+  if (full.length <= maxChars) return full;
+  final slice = full.substring(full.length - maxChars);
+  final cut = slice.indexOf('\n');
+  final trimmed = cut >= 0 && cut < 40 ? slice.substring(cut + 1) : slice;
+  return '…${trimmed.trimLeft()}';
+}
+
+/// Status header + optional muted body; drops a body that only repeats the summary.
+({String? summary, String tail}) workingPeekParts(
+  String streamText, {
+  int maxChars = 280,
+}) {
+  final summary = latestSummaryLine(streamText);
+  final tail = workingPeekTail(streamText, maxChars: maxChars);
+  if (tail.isEmpty) return (summary: summary, tail: '');
+  if (summary == null) return (summary: summary, tail: tail);
+  final normalized = tail.startsWith('…') ? tail.substring(1).trim() : tail;
+  if (normalized == summary || tail == summary) {
+    return (summary: summary, tail: '');
+  }
+  final firstNl = normalized.indexOf('\n');
+  if (firstNl > 0 && normalized.substring(0, firstNl).trim() == summary) {
+    final rest = normalized.substring(firstNl + 1).trim();
+    return (summary: summary, tail: rest);
+  }
+  return (summary: summary, tail: tail);
+}

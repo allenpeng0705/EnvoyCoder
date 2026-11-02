@@ -73,6 +73,7 @@ class JobStepInfo {
     this.approvalRequestId,
     this.runPhase,
     this.blocked,
+    this.hasGap = false,
   });
 
   final String id;
@@ -85,9 +86,13 @@ class JobStepInfo {
   final String? approvalRequestId;
   final String? runPhase;
   final String? blocked;
+  final bool hasGap;
 
   bool get needsApproval =>
       runPhase == 'needs-attention' || blocked == 'needs-attention';
+
+  /// Sticky assignee is offline — origin will retry when they heartbeat.
+  bool get waitingForPeer => blocked == 'peer-offline';
 
   factory JobStepInfo.fromJson(Map<String, dynamic> json) => JobStepInfo(
         id: (json['id'] as String?) ?? '',
@@ -100,6 +105,7 @@ class JobStepInfo {
         approvalRequestId: json['approvalRequestId'] as String?,
         runPhase: json['runPhase'] as String?,
         blocked: json['blocked'] as String?,
+        hasGap: json['hasGap'] == true,
       );
 }
 
@@ -129,6 +135,8 @@ class JobInfo {
     required this.goal,
     required this.status,
     this.projectId,
+    this.updatedAt,
+    this.createdAt,
     this.steps = const [],
     this.ledger = const [],
   });
@@ -139,8 +147,15 @@ class JobInfo {
   final String goal;
   final String status;
   final String? projectId;
+  final String? updatedAt;
+  final String? createdAt;
   final List<JobStepInfo> steps;
   final List<JobLedgerNoteInfo> ledger;
+
+  /// Daemon pause writes status back to `drafting` with this ledger note.
+  bool get looksPaused =>
+      status == 'drafting' &&
+      ledger.any((n) => n.message.startsWith('Job paused'));
 
   factory JobInfo.fromJson(Map<String, dynamic> json) {
     final steps = json['steps'];
@@ -152,6 +167,8 @@ class JobInfo {
       goal: (json['goal'] as String?) ?? '',
       status: (json['status'] as String?) ?? 'drafting',
       projectId: json['projectId'] as String?,
+      updatedAt: json['updatedAt'] as String?,
+      createdAt: json['createdAt'] as String?,
       steps: steps is List
           ? steps
               .whereType<Map>()

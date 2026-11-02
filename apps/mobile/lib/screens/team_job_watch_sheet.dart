@@ -10,10 +10,12 @@ import 'package:flutter/material.dart';
 
 import '../l10n/daemon_text.dart';
 import '../l10n/l10n.dart';
+import '../l10n/team_job_text.dart';
 import '../models/team_job.dart';
 import '../services/host_client.dart';
 import '../services/team_job_api.dart';
 import '../theme/tokens.dart';
+import 'run_screen.dart';
 
 Future<void> showTeamJobWatchSheet({
   required BuildContext context,
@@ -43,17 +45,26 @@ class _TeamJobWatchSheetState extends State<_TeamJobWatchSheet> {
   bool _busy = false;
   String? _error;
   Timer? _poll;
+  StreamSubscription<Map<String, dynamic>>? _eventSub;
 
   @override
   void initState() {
     super.initState();
     unawaited(_reload());
     _poll = Timer.periodic(const Duration(seconds: 4), (_) => unawaited(_reload(quiet: true)));
+    _eventSub = widget.client.events.listen((frame) {
+      if (frame['event'] != 'coder:state-changed') return;
+      final data = frame['data'];
+      if (data is Map && data['kind'] == 'jobs') {
+        unawaited(_reload(quiet: true));
+      }
+    });
   }
 
   @override
   void dispose() {
     _poll?.cancel();
+    unawaited(_eventSub?.cancel() ?? Future<void>.value());
     super.dispose();
   }
 
@@ -72,13 +83,16 @@ class _TeamJobWatchSheetState extends State<_TeamJobWatchSheet> {
       setState(() {
         _job = job;
         _board = readiness.board;
-        _busy = false;
+        // Quiet polls must not clear an in-flight pause/stop/answer busy lock.
+        if (!quiet) _busy = false;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _busy = false;
-        if (!quiet) _error = daemonErrorText(context.l10n, error.toString());
+        if (!quiet) {
+          _busy = false;
+          _error = daemonErrorText(context.l10n, error.toString());
+        }
       });
     }
   }
@@ -107,29 +121,112 @@ class _TeamJobWatchSheetState extends State<_TeamJobWatchSheet> {
     }
   }
 
-  String _statusLabel(AppLocalizations l10n, String status) => switch (status) {
-        'drafting' => l10n.teamJobStatusDrafting,
-        'running' => l10n.statusWorking,
-        'paused' => l10n.teamJobStatusPaused,
-        'done' => l10n.statusDone,
-        'failed' => l10n.statusFailed,
-        'stopped' => l10n.statusStopped,
-        'succeeded' => l10n.statusDone,
-        'cancelled' => l10n.statusStopped,
-        _ => status,
-      };
+  Future<void> _pause() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final job = await widget.client.pauseJob(widget.jobId);
+      if (!mounted) return;
+      setState(() {
+        _job = job;
+        _busy = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = daemonErrorText(context.l10n, error.toString());
+      });
+    }
+  }
 
-  String _stepStatusLabel(AppLocalizations l10n, String status) => switch (status) {
-        'pending' => l10n.teamJobStepPending,
-        'offered' => l10n.teamJobStepOffered,
-        'running' => l10n.statusWorking,
-        'succeeded' => l10n.statusDone,
-        'done' => l10n.statusDone,
-        'failed' => l10n.statusFailed,
-        'stopped' => l10n.statusStopped,
-        'cancelled' => l10n.statusStopped,
-        _ => status,
-      };
+  Future<void> _stop() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final job = await widget.client.stopJob(widget.jobId);
+      if (!mounted) return;
+      setState(() {
+        _job = job;
+        _busy = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = daemonErrorText(context.l10n, error.toString());
+      });
+    }
+  }
+
+  Future<void> _resume() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final readiness = await widget.client.assessTeamJobReadiness(widget.jobId);
+      if (!readiness.canStart) {
+        if (!mounted) return;
+        setState(() {
+          _busy = false;
+          _error = teamJobReadinessText(context.l10n, readiness);
+        });
+        return;
+      }
+      final job = await widget.client.startJob(widget.jobId);
+      if (!mounted) return;
+      setState(() {
+        _job = job;
+        _busy = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = daemonErrorText(context.l10n, error.toString());
+      });
+    }
+  }
+
+  Future<void> _openRun(JobStepInfo step) async {
+    final runId = step.runId;
+    if (runId == null || runId.isEmpty) return;
+    final job = _job;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => RunScreen(
+          client: widget.client,
+          runId: runId,
+          title: job == null ? step.role : '${step.role} — ${job.title}',
+        ),
+      ),
+    );
+    if (mounted) unawaited(_reload(quiet: true));
+  }
+
+  String _statusLabel(AppLocalizations l10n, JobInfo job) {
+    if (job.looksPaused) return l10n.teamJobStatusPaused;
+    return switch (job.status) {
+      'drafting' => l10n.teamJobStatusDrafting,
+      'running' => l10n.statusWorking,
+      'paused' => l10n.teamJobStatusPaused,
+      'done' => l10n.statusDone,
+      'failed' => l10n.statusFailed,
+      'stopped' => l10n.statusStopped,
+      'succeeded' => l10n.statusDone,
+      'cancelled' => l10n.statusStopped,
+      'merging' => l10n.statusWorking,
+      _ => job.status,
+    };
+  }
 
   String _connectionLabel(AppLocalizations l10n, String status) => switch (status) {
         'online' => l10n.teamJobPeerOnline,
@@ -137,6 +234,17 @@ class _TeamJobWatchSheetState extends State<_TeamJobWatchSheet> {
         'offline' => l10n.teamJobPeerOffline,
         _ => status,
       };
+
+  String? _stepSubtitle(AppLocalizations l10n, JobStepInfo step) {
+    final parts = <String>[];
+    final waiting = teamJobStepWaitingDetail(l10n, step, board: _board);
+    if (waiting != null) parts.add(waiting);
+    parts.addAll(teamJobStepExtraLines(l10n, step));
+    final brief = step.brief.trim();
+    if (brief.isNotEmpty) parts.add(brief);
+    if (parts.isEmpty) return null;
+    return parts.join('\n');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -148,6 +256,10 @@ class _TeamJobWatchSheetState extends State<_TeamJobWatchSheet> {
         : job.ledger.length <= 8
             ? job.ledger
             : job.ledger.sublist(job.ledger.length - 8);
+    final paused = job?.looksPaused == true;
+    final canPause = job?.status == 'running';
+    final canResume = paused;
+    final canStop = job?.status == 'running' || paused;
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -173,9 +285,38 @@ class _TeamJobWatchSheetState extends State<_TeamJobWatchSheet> {
             ),
             if (job != null)
               Text(
-                _statusLabel(l10n, job.status),
+                _statusLabel(l10n, job),
                 style: TextStyle(color: colors.foregroundMuted, fontSize: 13),
               ),
+            if (job != null && (canPause || canResume || canStop)) ...[
+              const SizedBox(height: CoderSpace.sm),
+              Row(
+                children: [
+                  if (canPause)
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _busy ? null : () => unawaited(_pause()),
+                        child: Text(l10n.teamJobPause),
+                      ),
+                    ),
+                  if (canResume)
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _busy ? null : () => unawaited(_resume()),
+                        child: Text(l10n.teamJobResume),
+                      ),
+                    ),
+                  if ((canPause || canResume) && canStop) const SizedBox(width: CoderSpace.sm),
+                  if (canStop)
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _busy ? null : () => unawaited(_stop()),
+                        child: Text(l10n.teamJobStop),
+                      ),
+                    ),
+                ],
+              ),
+            ],
             if (_error != null) ...[
               const SizedBox(height: CoderSpace.sm),
               Text(_error!, style: TextStyle(color: colors.destructive, fontSize: 13)),
@@ -193,7 +334,8 @@ class _TeamJobWatchSheetState extends State<_TeamJobWatchSheet> {
                   Padding(
                     padding: const EdgeInsets.only(top: CoderSpace.xs),
                     child: Text(
-                      '${m.label} — ${_connectionLabel(l10n, m.connectionStatus)}',
+                      '${m.label} — ${_connectionLabel(l10n, m.connectionStatus)}'
+                      '${m.rolesOffered.isEmpty ? '' : ' · ${m.rolesOffered.join(', ')}'}',
                       style: TextStyle(
                         color: m.isOnline ? colors.foregroundMuted : colors.statusWarning,
                         fontSize: 12,
@@ -208,10 +350,37 @@ class _TeamJobWatchSheetState extends State<_TeamJobWatchSheet> {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   dense: true,
-                  title: Text('${step.role} — ${_stepStatusLabel(l10n, step.status)}'),
-                  subtitle: step.brief.isEmpty
-                      ? null
-                      : Text(step.brief, maxLines: 2, overflow: TextOverflow.ellipsis),
+                  onTap: step.runId != null && step.runId!.isNotEmpty
+                      ? () => unawaited(_openRun(step))
+                      : null,
+                  title: Text(
+                    '${step.role} — ${teamJobStepStatusText(l10n, step)}',
+                    style: TextStyle(
+                      color: step.waitingForPeer || step.hasGap ? colors.statusWarning : null,
+                    ),
+                  ),
+                  subtitle: () {
+                    final text = _stepSubtitle(l10n, step);
+                    if (text == null) return null;
+                    return Text(
+                      text,
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: step.waitingForPeer || step.hasGap
+                            ? colors.statusWarning
+                            : colors.foregroundMuted,
+                        fontSize: 12,
+                      ),
+                    );
+                  }(),
+                  trailing: step.runId != null && step.runId!.isNotEmpty
+                      ? IconButton(
+                          tooltip: l10n.teamJobOpenRun,
+                          onPressed: () => unawaited(_openRun(step)),
+                          icon: const Icon(Icons.open_in_new, size: 20),
+                        )
+                      : null,
                 ),
                 if (step.needsApproval)
                   Padding(

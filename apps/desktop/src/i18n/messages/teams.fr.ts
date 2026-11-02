@@ -40,6 +40,14 @@ export const teams = {
   "job.pane.kick": "Expulser",
   "job.pane.kickConfirm": "Retirer {label} de l’équipe. Son étape s’arrêtera.",
   "job.pane.stallAutomation": "Activer l’automatisation des blocages (après affichage du tableau)",
+  "job.pane.contentBusAdvanced": "Git à l’acceptation et à la fin",
+  "job.pane.pullOnAccept": "Pull avant d’accepter une étape",
+  "job.pane.pushOnSuccess": "Push quand une étape réussit",
+  "settings.teams.membersMayStartJobs": "Les membres peuvent démarrer des jobs",
+  "settings.teams.membersMayStartJobs.detail":
+    "Les membres en ligne peuvent lancer des brouillons ; pause, arrêt et exclusion restent chez vous.",
+  "error.team.membersMayNotStart":
+    "Cette équipe n’autorise pas les membres à démarrer des jobs. Demandez à l’hôte de l’activer dans Réglages → Équipes.",
   "job.pane.noOnline": "Le démarrage nécessite au moins un pair en ligne (ou cette machine).",
   "job.pane.crew.noSteps": "Ajoutez des étapes avant de démarrer (utilisez un modèle d’étapes).",
   "job.pane.crew.noMembers": "Cette équipe n’a encore aucune machine. Invitez quelqu’un depuis Équipes.",
@@ -137,6 +145,16 @@ export const teams = {
   "error.job.git.notARepo": "Ce dossier n’est pas un dépôt Git. Les jobs d’équipe partagent le travail via Git — initialisez ou clonez un dépôt.",
   "error.job.git.noRemote": "Ce dépôt Git n’a pas de remote. Ajoutez origin (ou un autre remote) pour que l’équipe puisse tirer et pousser.",
   "error.job.git.missing": "Git n’est pas installé (ou pas dans le PATH) sur cette machine. Installez Git avant d’accepter une étape de job d’équipe.",
+  "error.job.git.syncDirty":
+    "Ce dossier a des modifications non validées. Validez ou mettez-les de côté avant d’accepter l’étape.",
+  "error.job.git.syncDiverged":
+    "Les branches locale et distante ont toutes deux changé — un pull en avance rapide est impossible.",
+  "error.job.git.syncPullFailed":
+    "Échec du git pull. Vérifiez le distant et vos identifiants, puis réessayez.",
+  "error.job.git.syncBranchInvalid": "Ce nom de branche n’est pas valide pour Git.",
+  "error.job.git.syncBranchFailed": "Impossible de basculer ou de créer la branche de l’étape.",
+  "error.job.git.syncPushFailed":
+    "Échec du git push. Vérifiez le distant et vos identifiants, puis réessayez.",
   "teamJob.git.ok": "Git prêt — dépôt avec un remote.",
   "teamJob.git.pathMissing": "Le dossier du projet est manquant.",
   "teamJob.git.notARepo": "Ce projet n’est pas un dépôt Git. Les jobs d’équipe ont besoin de Git pour partager les fichiers.",

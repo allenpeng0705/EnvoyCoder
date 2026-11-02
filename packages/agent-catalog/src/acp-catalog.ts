@@ -929,3 +929,14 @@ export function cataloguedSessionModes(entryId: string | undefined): {
   }
   return { modeParam: entry.modeParam, modes: entry.sessionModes };
 }
+
+/**
+ * Unattended / YOLO mode id for a catalogue entry, when the audit recorded one.
+ *
+ * Used when Settings “Ask before risky steps” is Off — same idea as `modeForAskingOff` for
+ * shipped harnesses (Gemini `yolo`, Qwen `yolo`, …).
+ */
+export function cataloguedUnattendedModeId(entryId: string | undefined): string | undefined {
+  const documented = cataloguedSessionModes(entryId);
+  return documented?.modes.find((mode) => mode.unattended === true)?.id;
+}

@@ -566,6 +566,23 @@ describe("approvals", () => {
     expect(b.store.settings().requireApprovalForDestructive).toBe(false);
   });
 
+  it("session stopAsking does not flip machine Settings", async () => {
+    const b = await bench();
+    expect(b.store.settings().requireApprovalForDestructive).toBe(true);
+    await b.manager.start({ taskId: b.taskId, prompt: "please approve this" });
+    await b.until((events) => kinds(events, "run.approval-requested").length === 1, "the approval card");
+    const requested = kinds(b.events, "run.approval-requested")[0];
+    if (requested?.kind !== "run.approval-requested") throw new Error("unreachable");
+
+    expect(
+      await b.manager.answerApproval(requested.runId, requested.requestId, "allow-once", {
+        stopAsking: true,
+        stopAskingScope: "session",
+      }),
+    ).toBe(true);
+    expect(b.store.settings().requireApprovalForDestructive).toBe(true);
+  });
+
   it("settles allow even when stopAsking settings persistence fails", async () => {
     const b = await bench();
     await b.manager.start({ taskId: b.taskId, prompt: "please approve this" });

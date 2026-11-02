@@ -140,6 +140,31 @@ const READERS: Readonly<Record<string, readonly ReadSite[]>> = {
       because: "`appendTranscript` returns before touching the disk when the record is not wanted",
     },
   ],
+  sendWhileRunning: [
+    {
+      file: "apps/desktop/src/components/TaskPane.tsx",
+      needle: "props.sendWhileRunning",
+      because:
+        "the composer reads the stored default when Send fires while a turn is live, and Shift-click / " +
+        "Alt+Enter flips it for one press",
+    },
+  ],
+  approvalsReviewer: [
+    {
+      file: "apps/desktop/src/daemon/runs.ts",
+      needle: "this.settings().approvalsReviewer",
+      because:
+        "permission requests consult Guardian before opening a card, so a durable reviewer setting " +
+        "reaches every run without a session-scoped stop-asking toggle",
+    },
+  ],
+  agentProfiles: [
+    {
+      file: "apps/desktop/src/components/CoderApp.tsx",
+      needle: "state.settings.agentProfiles",
+      because: "handed to the palette as saved profiles so Apply / new-task-from-profile can write task fields",
+    },
+  ],
   // **`hiddenAgents` is not here, and its absence is the assertion.** This registry is checked in both
   // directions against `CoderSettingsSchema` below, so a field that came back would fail this test for
   // having no reader — and a field removed without being retired would fail it too. The preference was

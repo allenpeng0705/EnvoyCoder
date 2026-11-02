@@ -27,6 +27,7 @@ import {
   dependenciesSatisfied,
   failStep,
   getJob,
+  listJobs,
   note,
   pickAssignee,
   readOffers,
@@ -40,6 +41,14 @@ import {
   gitContentBusRef,
 } from "./job-git-readiness.js";
 import {
+  jobGitSyncMessage,
+  jobGitSyncRef,
+  prepareStepWorkingTree,
+  shouldPullOnAccept,
+  shouldPushOnSuccess,
+  type JobGitSyncPolicy,
+} from "./job-git-sync.js";
+import {
   memberOnlineForAssign,
   normalizeTeamRecord,
   requireTeam,
@@ -47,6 +56,20 @@ import {
   touchTeamActivity,
   updateMemberConnection,
 } from "./teams.js";
+
+async function syncCwdForStep(input: {
+  cwd: string;
+  branch?: string;
+  pullOnAccept: boolean;
+}): Promise<{ ok: true } | { ok: false; policy: string }> {
+  const sync = await prepareStepWorkingTree({
+    cwd: input.cwd,
+    ...(input.branch ? { branch: input.branch } : {}),
+    pullOnAccept: input.pullOnAccept,
+  });
+  if (!sync.ok) return { ok: false, policy: sync.policy };
+  return { ok: true };
+}
 
 export async function offerJobStep(
   jobsPath: string,
@@ -94,16 +117,39 @@ export async function offerJobStep(
   );
   await updateMemberConnection(teamsPath, job.teamId, memberId, dial.connection);
   await touchTeamActivity(teamsPath, job.teamId);
+  const allowDeferred = job.policy.contentBus?.allowDeferredOffers !== false;
   if (!dial.reachable && memberId !== "local") {
+    if (!allowDeferred) {
+      // Do not sticky-pin an offline member when deferral is off — try another candidate.
+      const exclude = new Set(input.excludeMemberIds ?? []);
+      exclude.add(memberId);
+      return offerJobStep(jobsPath, offersPath, teamsPath, {
+        ...input,
+        memberId: undefined,
+        excludeMemberIds: exclude,
+      });
+    }
     const current = await getJob(jobsPath, input.jobId);
+    const currentStep = current.steps.find((s) => s.id === step.id);
+    const alreadyDeferred =
+      currentStep?.blocked === "peer-offline" && currentStep.assigneeMemberId === memberId;
+    if (alreadyDeferred) {
+      return { status: "refused", policy: "peer-offline" };
+    }
     await saveJob(jobsPath, {
       ...current,
+      steps: current.steps.map((s) =>
+        s.id === step.id
+          ? { ...s, assigneeMemberId: memberId, blocked: "peer-offline" as const }
+          : s,
+      ),
       ledger: [
         ...current.ledger,
-        note("info", `Dial failed (${dial.connection.lastDialError ?? "unreachable"})`, {
-          stepId: step.id,
-          memberId,
-        }),
+        note(
+          "info",
+          `Assignee offline — will retry when ${member.label} is back (${dial.connection.lastDialError ?? "unreachable"})`,
+          { stepId: step.id, memberId },
+        ),
       ],
     });
     return { status: "refused", policy: "peer-offline" };
@@ -112,21 +158,68 @@ export async function offerJobStep(
   const refreshedTeam = await requireTeam(teamsPath, job.teamId);
   const liveMember = refreshedTeam.members.find((m) => m.id === memberId)!;
   if (!memberOnlineForAssign(liveMember, !!job.policy.allowDegradedAssignees)) {
+    if (!allowDeferred) {
+      const exclude = new Set(input.excludeMemberIds ?? []);
+      exclude.add(memberId);
+      return offerJobStep(jobsPath, offersPath, teamsPath, {
+        ...input,
+        memberId: undefined,
+        excludeMemberIds: exclude,
+      });
+    }
+    const current = await getJob(jobsPath, input.jobId);
+    const currentStep = current.steps.find((s) => s.id === step.id);
+    const alreadyDeferred =
+      currentStep?.blocked === "peer-offline" && currentStep.assigneeMemberId === memberId;
+    if (!alreadyDeferred) {
+      await saveJob(jobsPath, {
+        ...current,
+        steps: current.steps.map((s) =>
+          s.id === step.id
+            ? { ...s, assigneeMemberId: memberId, blocked: "peer-offline" as const }
+            : s,
+        ),
+        ledger: [
+          ...current.ledger,
+          note("info", `Assignee offline — deferred offer for ${liveMember.label}`, {
+            stepId: step.id,
+            memberId,
+          }),
+        ],
+      });
+    }
     return { status: "refused", policy: "peer-offline" };
+  }
+
+  // Re-read after dial — pause/stop/progress during the wait must not be overwritten.
+  const liveJob = await getJob(jobsPath, input.jobId);
+  if (liveJob.status !== "running" && liveJob.status !== "drafting") {
+    return { status: "refused", policy: "job-not-accepting" };
+  }
+  const liveStep = liveJob.steps.find((s) => s.id === input.stepId);
+  // Only mint a new offer from pending — never stack a second offer on an already-offered step.
+  if (!liveStep || liveStep.status !== "pending") {
+    return { status: "refused", policy: "step-not-pending" };
+  }
+  if (!dependenciesSatisfied(liveStep, liveJob.steps)) {
+    return { status: "refused", policy: "deps-unsatisfied" };
   }
 
   const offerId = randomUUID();
   const cancelNonce = randomUUID();
   const offer: StepOffer = {
     offerId,
-    jobId: job.id,
-    stepId: step.id,
-    teamId: job.teamId,
-    brief: step.brief,
-    role: step.role,
-    worktreeKey: step.worktreeKey,
-    cwdHint: step.cwdHint,
-    ...(step.deadline ? { deadline: step.deadline } : {}),
+    jobId: liveJob.id,
+    stepId: liveStep.id,
+    teamId: liveJob.teamId,
+    brief: liveStep.brief,
+    role: liveStep.role,
+    worktreeKey: liveStep.worktreeKey,
+    cwdHint: liveStep.cwdHint,
+    ...(liveStep.branch ? { branch: liveStep.branch } : {}),
+    pullOnAccept: shouldPullOnAccept(liveJob.policy.contentBus),
+    pushOnSuccess: shouldPushOnSuccess(liveJob.policy.contentBus),
+    ...(liveStep.deadline ? { deadline: liveStep.deadline } : {}),
     assigneeMemberId: memberId,
     status: "pending",
     createdAt: new Date().toISOString(),
@@ -142,26 +235,26 @@ export async function offerJobStep(
     startedAt: offer.createdAt,
     offerId,
   };
-  const steps = job.steps.map((s) =>
-    s.id === step.id
-      ? {
-          ...s,
-          status: "offered" as const,
-          assigneeMemberId: memberId,
-          attempts: [...s.attempts, attempt],
-        }
-      : s,
-  );
+  const steps = liveJob.steps.map((s) => {
+    if (s.id !== liveStep.id) return s;
+    const { blocked: _cleared, ...rest } = s;
+    return {
+      ...rest,
+      status: "offered" as const,
+      assigneeMemberId: memberId,
+      attempts: [...s.attempts, attempt],
+    };
+  });
   await saveJob(jobsPath, {
-    ...job,
-    status: job.status === "drafting" ? "running" : job.status,
+    ...liveJob,
+    status: liveJob.status === "drafting" ? "running" : liveJob.status,
     steps,
     ledger: [
-      ...job.ledger,
+      ...liveJob.ledger,
       note(
         "info",
         `Offered step to ${liveMember.label} · ${dial.connection.transport}`,
-        { stepId: step.id, memberId },
+        { stepId: liveStep.id, memberId },
       ),
     ],
   });
@@ -169,10 +262,18 @@ export async function offerJobStep(
   // Loopback / local: honour AcceptPolicy (§4.7) — no silent implement auto-accept.
   // Origin Job pane Accepts pending local offers; power users set auto-roles on This machine.
   // Start a real harness *before* accept so we never mint a placeholder `job-run-…` id.
-  if (shouldAutoAccept(liveMember.acceptPolicy, step.role)) {
-    const git = await assessGitContentBus(step.cwdHint);
+  if (shouldAutoAccept(liveMember.acceptPolicy, liveStep.role)) {
+    const git = await assessGitContentBus(liveStep.cwdHint);
     if (!git.ok) {
       return refuseOfferInternal(jobsPath, offersPath, teamsPath, offerId, git.policy);
+    }
+    const synced = await syncCwdForStep({
+      cwd: git.path,
+      ...(liveStep.branch ? { branch: liveStep.branch } : {}),
+      pullOnAccept: offer.pullOnAccept !== false,
+    });
+    if (!synced.ok) {
+      return refuseOfferInternal(jobsPath, offersPath, teamsPath, offerId, synced.policy);
     }
     const resolved = { ok: true as const, path: git.path };
     const started = await startLocalAutoAcceptRun({
@@ -255,6 +356,7 @@ export async function acceptJobStepOffer(
       ref("error.job.notRunning"),
     );
   }
+  let job = await getJob(jobsPath, offer.jobId);
   if (!input.skipPathCheck) {
     const git = await assessGitContentBus(input.resolvedCwd);
     if (!git.ok) {
@@ -264,11 +366,26 @@ export async function acceptJobStepOffer(
         ref(gitContentBusRef(git.policy)),
       );
     }
+    const synced = await syncCwdForStep({
+      cwd: git.path,
+      ...(offer.branch ? { branch: offer.branch } : {}),
+      pullOnAccept:
+        offer.pullOnAccept !== undefined
+          ? offer.pullOnAccept
+          : shouldPullOnAccept(job.policy.contentBus),
+    });
+    if (!synced.ok) {
+      throw coderError(
+        ENVOYDEV_ERRORS.peerRefused,
+        jobGitSyncMessage(synced.policy as JobGitSyncPolicy),
+        ref(jobGitSyncRef(synced.policy as JobGitSyncPolicy)),
+      );
+    }
+    // Sync can take time — re-read so accept does not clobber concurrent pause/stop.
+    job = await getJob(jobsPath, offer.jobId);
   }
-
   // Real harness runId only — never invent a placeholder the RPC wrapper cannot replace.
   const runId = input.runId;
-  const job = await getJob(jobsPath, offer.jobId);
   const step = job.steps.find((s) => s.id === offer.stepId);
   if (!step) {
     throw coderError(ENVOYDEV_ERRORS.stepMissing, "No step with that id.", ref("error.job.stepMissing"));
@@ -396,5 +513,27 @@ export async function refuseJobStepOffer(
     }
   }
   return { offerId: offer.offerId, status: "refused", policy: input.policy, job: next };
+}
+
+/** Retry pending steps that were deferred while their sticky assignee was offline. */
+export async function retryDeferredOffers(
+  jobsPath: string,
+  offersPath: string,
+  teamsPath: string,
+): Promise<void> {
+  const jobs = await listJobs(jobsPath);
+  for (const job of jobs) {
+    if (job.status !== "running") continue;
+    if (job.policy.contentBus?.allowDeferredOffers === false) continue;
+    for (const step of job.steps) {
+      if (step.status !== "pending" || step.blocked !== "peer-offline") continue;
+      if (!dependenciesSatisfied(step, job.steps)) continue;
+      await offerJobStep(jobsPath, offersPath, teamsPath, {
+        jobId: job.id,
+        stepId: step.id,
+        ...(step.assigneeMemberId ? { memberId: step.assigneeMemberId } : {}),
+      });
+    }
+  }
 }
 

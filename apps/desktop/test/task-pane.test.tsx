@@ -250,7 +250,7 @@ describe("the transcript", () => {
     expect(within(steps).getByText(/perhaps the parser is wrong/)).toBeTruthy();
   });
 
-  it("streams Working… as muted markdown when the reader opens live Steps", () => {
+  it("streams Working… as muted markdown while live Steps are open", () => {
     renderPane(
       [
         event({
@@ -262,15 +262,35 @@ describe("the transcript", () => {
       { runLive: true },
     );
     const steps = screen.getByTestId("transcript-steps");
-    expect(steps.querySelector("details")?.open).toBe(false);
-    fireEvent.click(within(steps).getByText("Working…"));
+    expect(steps.querySelector("details")?.open).toBe(true);
     const stream = screen.getByTestId("transcript-steps-live-stream");
     expect(stream.querySelector(".row__steps-live-stream-md")).toBeTruthy();
     expect(within(stream).getByRole("heading", { name: /Plan/ })).toBeTruthy();
     expect(within(stream).getByText(/check the parser/)).toBeTruthy();
   });
 
-  it("keeps live Steps collapsed so chat history stays the focus", () => {
+  it("opens live Steps by default and pins a Working peek above the composer", () => {
+    renderPane(
+      [
+        event({
+          kind: "run.thought",
+          text: "thinking about the parser",
+          messageId: "th1",
+        }),
+      ],
+      { runLive: true },
+    );
+    const steps = screen.getByTestId("transcript-steps");
+    expect(steps.querySelector("details")?.open).toBe(true);
+    const peek = screen.getByTestId("composer-working-peek");
+    expect(within(peek).getByTestId("composer-working-peek-summary").textContent).toMatch(
+      /thinking about the parser/,
+    );
+    // Short streams put the line in the status header only — no duplicate muted body.
+    expect(within(peek).queryByText(/thinking about the parser/, { selector: "p.composer__working-peek-text" })).toBeNull();
+  });
+
+  it("collapses Steps when the run settles", () => {
     renderPane(
       [
         event({
@@ -278,14 +298,18 @@ describe("the transcript", () => {
           text: "thinking",
           messageId: "th1",
         }),
+        event({
+          kind: "run.output",
+          stream: "assistant",
+          text: "Done.",
+          messageId: "m1",
+        }),
       ],
-      { runLive: true },
+      { runLive: false },
     );
     const steps = screen.getByTestId("transcript-steps");
-    const details = steps.querySelector("details");
-    expect(details?.open).toBe(false);
-    fireEvent.click(within(steps).getByText("Working…"));
-    expect(details?.open).toBe(true);
+    expect(steps.querySelector("details")?.open).toBe(false);
+    expect(screen.queryByTestId("composer-working-peek")).toBeNull();
   });
 
   it("says when the history is incomplete rather than rendering a plausible lie", () => {
@@ -344,20 +368,26 @@ describe("an approval, composer takeover", () => {
     expect(pane.onAnswer).toHaveBeenCalledWith("req-1", "allow-once");
   });
 
-  it("offers Allow and don't ask again when the agent accepts an approval policy", () => {
+  it("offers session and machine stop-asking when the agent accepts an approval policy", () => {
     const pane = renderPane([approval], {
       harnesses: [harnessFor("envoy-harness")],
       canStopAskingApprovals: true,
     });
     const takeover = screen.getByTestId("approval-takeover");
-    const stopAsking = within(takeover).getByTestId("approval-stop-asking");
-    expect(stopAsking.className).toContain("button--secondary");
+    expect(within(takeover).getByTestId("approval-stop-asking-scopes")).toBeTruthy();
+    const session = within(takeover).getByTestId("approval-stop-asking-session");
+    const machine = within(takeover).getByTestId("approval-stop-asking-machine");
+    expect(session.className).toContain("button--secondary");
+    expect(machine.className).toContain("button--secondary");
     expect(within(takeover).getByTestId("approval-settings-hint")).toBeTruthy();
-    fireEvent.click(stopAsking);
-    expect(pane.onAnswer).toHaveBeenCalledWith("req-1", "allow-once", { stopAsking: true });
+    fireEvent.click(session);
+    expect(pane.onAnswer).toHaveBeenCalledWith("req-1", "allow-once", {
+      stopAsking: true,
+      stopAskingScope: "session",
+    });
   });
 
-  it("picks an allow-* option id for stop-asking when several non-destructive choices exist", () => {
+  it("picks an allow-* option id for machine stop-asking when several non-destructive choices exist", () => {
     const pane = renderPane(
       [
         event({
@@ -376,13 +406,17 @@ describe("an approval, composer takeover", () => {
         canStopAskingApprovals: true,
       },
     );
-    fireEvent.click(screen.getByTestId("approval-stop-asking"));
-    expect(pane.onAnswer).toHaveBeenCalledWith("req-2", "allow-once", { stopAsking: true });
+    fireEvent.click(screen.getByTestId("approval-stop-asking-machine"));
+    expect(pane.onAnswer).toHaveBeenCalledWith("req-2", "allow-once", {
+      stopAsking: true,
+      stopAskingScope: "machine",
+    });
   });
 
   it("hides stop-asking when the agent has no approval policy", () => {
     renderPane([approval], withApprovals);
-    expect(screen.queryByTestId("approval-stop-asking")).toBeNull();
+    expect(screen.queryByTestId("approval-stop-asking-session")).toBeNull();
+    expect(screen.queryByTestId("approval-stop-asking-machine")).toBeNull();
     expect(screen.queryByTestId("approval-settings-hint")).toBeNull();
   });
 
@@ -1713,13 +1747,14 @@ describe("asking the agent what it offers, before the first run", () => {
 });
 
 describe("fast and plan", () => {
-  it("shows Codex's toggles, flips Plan, and hides both for an agent that has neither", () => {
+  it("shows Codex Plan (not unwired Fast), flips it, and uses Work/Plan for Envoy", () => {
     const onToggleFeature = vi.fn();
     const shown = renderPane([], {
       task: { ...task, harness: "codex", model: "gpt-5.5" },
       onToggleFeature,
     });
-    expect(screen.getByRole("button", { name: "Toggle fast mode" })).toBeTruthy();
+    // Fast has no ACP wire — hide rather than show a dead toggle (Wave 3B).
+    expect(screen.queryByRole("button", { name: "Toggle fast mode" })).toBeNull();
     const plan = screen.getByRole("button", { name: "Toggle plan mode" });
     expect(plan.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(plan);

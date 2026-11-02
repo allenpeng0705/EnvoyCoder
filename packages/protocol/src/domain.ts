@@ -705,6 +705,8 @@ export const BLOCK_REASONS = [
   "heartbeat-miss",
   "offer-unacked",
   "cancel-pending",
+  /** Sticky assignee is offline — offer will retry when they return. */
+  "peer-offline",
 ] as const;
 export type BlockReason = (typeof BLOCK_REASONS)[number];
 
@@ -746,6 +748,19 @@ export interface StallPolicy {
   automationEnabled: boolean;
 }
 
+/** Git handoff around Team job steps — pull/push stay on the content bus, not the mesh. */
+export interface JobContentBusPolicy {
+  /** Fast-forward pull before the step run. Default true when unset. */
+  pullOnAccept?: boolean;
+  /** Push after a successful step before dependents are offered. Default false. */
+  pushOnSuccess?: boolean;
+  /**
+   * When Start/offer would assign an offline peer, keep a sticky assignee and retry
+   * instead of refusing. Default true when unset (Phase 2).
+   */
+  allowDeferredOffers?: boolean;
+}
+
 export interface FailurePolicy {
   maxRetriesPerAssignee: number;
   retryBackoffMs: number;
@@ -754,6 +769,7 @@ export interface FailurePolicy {
   onPeerRefuse: "reassign" | "fail-step";
   onTeamRevoked: "cancel-job";
   allowDegradedAssignees?: boolean;
+  contentBus?: JobContentBusPolicy;
 }
 
 export const DEFAULT_FAILURE_POLICY: FailurePolicy = {
@@ -764,6 +780,11 @@ export const DEFAULT_FAILURE_POLICY: FailurePolicy = {
   onPeerRefuse: "reassign",
   onTeamRevoked: "cancel-job",
   allowDegradedAssignees: false,
+  contentBus: {
+    pullOnAccept: true,
+    pushOnSuccess: false,
+    allowDeferredOffers: true,
+  },
 };
 
 export const DEFAULT_STALL_POLICY: StallPolicy = {
@@ -812,6 +833,11 @@ export interface Team {
   /** Preset + custom roles this team recognises. Always includes `orchestrate`. */
   roleCatalog: readonly RoleDef[];
   members: readonly TeamMember[];
+  /**
+   * When true, online members (not only the origin client) may call `coder.startJob`
+   * for this team's drafts. Pause/stop/kick stay origin-gated.
+   */
+  membersMayStartJobs?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -855,6 +881,11 @@ export interface JobStep {
   worktreeKey: string;
   /** Absolute path or project-relative key the member must resolve before accept. */
   cwdHint: string;
+  /**
+   * Optional Git branch to checkout (or create) after pull, before the harness runs.
+   * Parallel steps should use distinct branches that match distinct worktreeKeys.
+   */
+  branch?: string;
   dependsOn?: readonly string[];
   assigneeMemberId?: string;
   status: JobStepStatus;
@@ -905,6 +936,11 @@ export interface Job {
   policy: FailurePolicy;
   stallPolicy: StallPolicy;
   ledger: readonly JobLedgerNote[];
+  /**
+   * External claim key (same shape as Work `externalRef`, e.g. `github:owner/repo#N`).
+   * Idempotent Team draft creation uses this so multiple watchers cannot open two jobs.
+   */
+  sourceRef?: string;
   createdAt: string;
   updatedAt: string;
   endedAt?: string;
@@ -920,6 +956,11 @@ export interface StepOffer {
   role: JobRole;
   worktreeKey: string;
   cwdHint: string;
+  branch?: string;
+  /** Copied from job contentBus so the assignee can sync without reading origin policy. */
+  pullOnAccept?: boolean;
+  /** Copied from job contentBus — assignee pushes before reporting success. */
+  pushOnSuccess?: boolean;
   deadline?: string;
   assigneeMemberId: string;
   status: "pending" | "accepted" | "refused" | "cancelled";
@@ -1382,6 +1423,8 @@ export const ENVOYDEV_ERRORS = {
   pathMissing: "envoydev.path-missing",
   /** No task with that id. */
   taskMissing: "envoydev.task-missing",
+  /** No ticket with that id. */
+  ticketMissing: "envoydev.ticket-missing",
   /** No project with that id. */
   projectMissing: "envoydev.project-missing",
   /**
@@ -1669,7 +1712,8 @@ export const RPC_METHODS = [
    */
   "coder.gitMerge",
   "coder.gitFetch",
-  "coder.gitPull", 
+  "coder.gitPull",
+  "coder.gitPush",
   /**
    * Setting work aside, and putting it back.
    *
@@ -1858,9 +1902,12 @@ export const RPC_METHODS = [
   "coder.refuseLocalJobStepOffer",
   "coder.kickMember",
   "coder.createJob",
+  "coder.createJobFromSource",
   "coder.listJobs",
   "coder.getJob",
   "coder.updateJobSteps",
+  "coder.updateJobPolicy",
+  "coder.updateTeamSettings",
   "coder.startJob",
   "coder.pauseJob",
   "coder.stopJob",
@@ -1967,6 +2014,40 @@ export const RPC_METHODS = [
    * looks complete is a lie somebody debugs from.
    */
   "coder.getDaemonLog",
+  /** List work tickets, optionally scoped to a project and including ended rows. */
+  "work.listTickets",
+  /** Fetch one work ticket by id. */
+  "work.getTicket",
+  /** Create a work ticket from a title and optional project, task, or mandate scope. */
+  "work.createTicket",
+  /** Promote an existing task into a work ticket. */
+  "work.promoteTask",
+  /** End a work ticket, with an optional reason. */
+  "work.stopTicket",
+  /** Retry a stalled or failed work ticket. */
+  "work.retryTicket",
+  /** Answer a person-stage attention question on a ticket. */
+  "work.answerAttention",
+  /** Read the Work Engine accept policy. */
+  "work.getPolicy",
+  /** Patch Work Engine accept policy fields. */
+  "work.setPolicy",
+  /** Tickets waiting on a person — the daemon filters to person/* stages. */
+  "work.listAttention",
+  /** Enqueue a candidate mandate for triage (Phase 3). */
+  "work.enqueueCandidate",
+  /** List work candidates awaiting triage. */
+  "work.listCandidates",
+  /** Triage a candidate; observe mode may record would-accept without creating a ticket. */
+  "work.triageCandidate",
+  /** List effect outbox rows (Phase 2). */
+  "work.listEffects",
+  /** Optional agent-originated progress report on a ticket. */
+  "work.report",
+  /** Poll GitHub for new work triggers (Phase 4). */
+  "work.githubPoll",
+  /** Post a reply on a GitHub thread keyed by threadKey. */
+  "work.githubReply",
 ] as const;
 
 export type RpcMethod = (typeof RPC_METHODS)[number];
@@ -2074,6 +2155,42 @@ export interface CoderSettings {
    * until the user asks. Applied by writing (or clearing) `document.documentElement.dataset.theme`.
    */
   theme?: "light" | "dark" | "system";
+  /**
+   * What Send does while a turn is already live.
+   *
+   * - `queue` (default / absent): finish the current reply, then read the new message.
+   * - `steer`: cancel the in-flight turn and send this message instead.
+   *
+   * Shift-click Send (or Alt+Enter) flips whichever is stored for one press. Stop in the header
+   * remains cancel-only — it is not a third send mode.
+   */
+  sendWhileRunning?: "queue" | "steer";
+  /**
+   * Who reviews permission cards before the agent continues.
+   *
+   * - `user` (default / absent): every permission card surfaces in the UI.
+   * - `guardian`: auto-allow clear non-destructive reads (`toolCall.kind` read/search); still ask
+   *   for execute/edit/delete, shell commands, ask_user, and plan review. Not a second LLM.
+   */
+  approvalsReviewer?: "user" | "guardian";
+  /**
+   * Named bundles of harness / model / mode / thinking / autonomy for new tasks and the palette.
+   *
+   * Absent or empty means none saved. Applying a profile writes task fields via the usual update /
+   * create path — it does not invent a run RPC.
+   */
+  agentProfiles?: readonly AgentProfile[];
+}
+
+/** One saved agent configuration a user can apply to a task. */
+export interface AgentProfile {
+  id: string;
+  label: string;
+  harness?: AgentId;
+  model?: string;
+  mode?: string;
+  thinking?: string;
+  autonomyPreset?: "read-only" | "default" | "full-access";
 }
 
 export const DEFAULT_CODER_SETTINGS: CoderSettings = {
@@ -2082,6 +2199,9 @@ export const DEFAULT_CODER_SETTINGS: CoderSettings = {
   keepTranscripts: true,
   language: DEFAULT_CODER_LANGUAGE,
   theme: "dark",
+  sendWhileRunning: "queue",
+  approvalsReviewer: "user",
+  agentProfiles: [],
 };
 
 /**
@@ -2112,6 +2232,18 @@ const ProjectDefaultsSchema = z
   })
   .strict();
 
+export const AgentProfileSchema = z
+  .object({
+    id: z.string().min(1),
+    label: z.string().min(1),
+    harness: AgentIdSchema.optional(),
+    model: z.string().min(1).optional(),
+    mode: z.string().min(1).optional(),
+    thinking: z.string().min(1).optional(),
+    autonomyPreset: z.enum(["read-only", "default", "full-access"]).optional(),
+  })
+  .strict();
+
 export const CoderSettingsSchema = z
   .object({
     defaultProjectPath: z.string().min(1).optional(),
@@ -2122,6 +2254,9 @@ export const CoderSettingsSchema = z
     // asked for a language nobody translated is a client bug the daemon should refuse, not store.
     language: CoderLanguageSchema.optional(),
     theme: z.enum(["light", "dark", "system"]).optional(),
+    sendWhileRunning: z.enum(["queue", "steer"]).optional(),
+    approvalsReviewer: z.enum(["user", "guardian"]).optional(),
+    agentProfiles: z.array(AgentProfileSchema).optional(),
   })
   .strict();
 

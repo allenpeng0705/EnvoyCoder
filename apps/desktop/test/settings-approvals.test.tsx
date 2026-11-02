@@ -179,4 +179,33 @@ describe("Safety → Ask before risky steps", () => {
       ),
     ).toBeTruthy();
   });
+
+  it("enables the switch for a Gemini catalogue provider (YOLO)", () => {
+    showSafety(
+      stateWith({
+        settings: { ...settings, defaults: { harness: "gemini-cli" } },
+        harnesses: [],
+        providers: [
+          {
+            id: "gemini-cli",
+            label: "Gemini CLI",
+            command: "npx",
+            args: [],
+            env: [],
+            transport: "acp",
+            availability: { state: "ready", binary: "/usr/bin/npx" },
+            detail: "…",
+            catalogEntryId: "gemini",
+            agentMode: true,
+            modes: [
+              { id: "default", label: "Default" },
+              { id: "yolo", label: "YOLO", unattended: true },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(approvalsCheckbox().disabled).toBe(false);
+    expect(screen.getByText(/YOLO/)).toBeTruthy();
+  });
 });

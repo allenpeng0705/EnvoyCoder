@@ -5,8 +5,8 @@
  *
  *   1. **The header states where the work is.** Host only appears when the task is not on this
  *      machine — saying "This machine" on every local task is noise. Cwd and branch stay visible.
- *   2. **Send while running queues.** The window always queues; a status line says so. Steer stays
- *      on the wire for other clients (`docs/envoydev-ui-polish.md` §2).
+ *   2. **Send while running follows Settings.** `sendWhileRunning` chooses queue (default) or steer;
+ *      Shift-click Send / Alt+Enter flips for one press. Stop stays cancel-only.
  *   3. **Approvals take over the composer**, not a modal. Transcript keeps history; the pending
  *      decision owns the composer chrome so it cannot scroll away (`docs/envoydev-ui-polish.md` §1).
  *   4. **Event folding lives in `state/transcript.ts`.** This file turns rows into elements and, at
@@ -104,6 +104,19 @@ import {
   type StepsSegment,
 } from "../state/transcript-steps.js";
 import { toolGroupSummary } from "../state/tool-group-summary.js";
+import {
+  activeAutonomyPreset,
+  modeLooksReadOnly,
+  type AutonomyPresetId,
+} from "../composer/autonomy-presets.js";
+import { diffStatFromChanges, type DiffStat } from "../composer/diff-stat.js";
+import { resolveSendWhileRunning } from "../composer/send-while-running.js";
+import {
+  dictationSupported,
+  startDictation,
+  type DictationSession,
+} from "../composer/voice-dictation.js";
+import { workingPeekParts, workingPeekTail } from "../composer/working-peek.js";
 import { ApprovalChoices } from "./ApprovalChoices.js";
 import { ComposerControls } from "./ComposerControls.js";
 import { AttachButton, AttachmentTray } from "./ComposerAttach.js";
@@ -152,7 +165,7 @@ export interface TaskPaneProps {
   onAnswer: (
     requestId: string,
     choice: string | readonly string[] | { text: string },
-    options?: { stopAsking?: boolean },
+    options?: { stopAsking?: boolean; stopAskingScope?: "session" | "machine" },
   ) => void | Promise<void>;
   /**
    * Start this task's run with the first message.
@@ -212,6 +225,34 @@ export interface TaskPaneProps {
    */
   canStopAskingApprovals?: boolean;
   /**
+   * Settings → Ask before risky steps. Drives the composer autonomy chip
+   * (Read only / Default / Full access) without inventing a second policy.
+   */
+  requireApproval?: boolean;
+  /**
+   * Settings → Send while a turn is live. Absent means queue.
+   *
+   * Read here (not only in Settings) so the composer's primary action matches what was stored.
+   */
+  sendWhileRunning?: "queue" | "steer";
+  /** Settings → Guardian reviews non-destructive permission cards. */
+  approvalsReviewer?: "user" | "guardian";
+  /** Apply a Codex-inspired autonomy preset (Settings Asking + optional mode). */
+  onChooseAutonomyPreset?: (preset: AutonomyPresetId) => void;
+  /**
+   * Sibling tasks in this project that are running or need input — track pills above the composer.
+   * Click selects that task. Absent or empty draws nothing.
+   */
+  trackPills?: readonly {
+    taskId: string;
+    title: string;
+    kind: "running" | "needs-input";
+  }[];
+  /** Select another task (track pill). */
+  onSelectTask?: (taskId: string) => void;
+  /** Promote this task to a Work item (Work Engine lane). */
+  onPromoteToWork?: () => void | Promise<unknown>;
+  /**
    * Change this *task's* coding agent. Applies to the next run.
    *
    * Absent in a pane rendered without a write path (a test, a preview).
@@ -245,6 +286,8 @@ export interface TaskPaneProps {
    * the sidebar.
    */
   explorerOpen?: boolean;
+  /** Open the explorer sidebar if it is closed (composer diff pill). */
+  onEnsureExplorer?: () => void;
   /** List one folder. A refusal is shown in the sidebar, not the window banner. */
   onListDirectory?: (path: string) => Promise<DirectoryListing>;
   /** Git changes in the task folder. `repo: false` is an answer, not a failure. */
@@ -315,6 +358,13 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [attachNotice, setAttachNotice] = useState<string | undefined>(undefined);
   const [dropping, setDropping] = useState(false);
+  const [diffStat, setDiffStat] = useState<DiffStat | undefined>(undefined);
+  const [explorerFocus, setExplorerFocus] = useState<{ tab: "files" | "changes"; token: number }>({
+    tab: "files",
+    token: 0,
+  });
+  const [dictating, setDictating] = useState(false);
+  const dictationRef = useRef<DictationSession | undefined>(undefined);
   /**
    * Words already sent, shown before the daemon's `run.message` lands (or forever, if an older
    * daemon never echoes the opening prompt). Dropped when a matching user row appears after the
@@ -396,7 +446,33 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     setAttachNotice(undefined);
     setLocalEchoes([]);
     setDropping(false);
+    setDiffStat(undefined);
+    // Stop dictation when the task (or agent) changes — otherwise finals append into another draft.
+    dictationRef.current?.stop();
+    dictationRef.current = undefined;
+    setDictating(false);
   }, [task.id, task.harness]);
+
+  // Composer diff pill — poll the same listing the Changes tab uses.
+  useEffect(() => {
+    if (props.onListChanges === undefined) return;
+    let cancelled = false;
+    const refresh = (): void => {
+      void props.onListChanges?.(task.cwd).then((result) => {
+        if (cancelled || !result.ok || !result.repo) {
+          if (!cancelled) setDiffStat(undefined);
+          return;
+        }
+        setDiffStat(diffStatFromChanges(result.changes));
+      });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 8_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [task.cwd, props.onListChanges, running]);
 
   /* ── the controls above the field: what they offer is decided in `composer/controls.ts` ── */
   const summary = isHarnessId(task.harness)
@@ -718,7 +794,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     );
   };
 
-  const submit = (): void => {
+  const submit = (flip = false): void => {
     if (!canSend(text, attachments)) return;
     const turn = composeTurn(text, attachments, {
       imageOnly: t("task.composer.attach.imagesOnly"),
@@ -731,7 +807,9 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     const images = turn.images.length > 0 ? turn.images : undefined;
 
     if (running) {
-      // **`queue`, always** while live — follow-ups never re-open auto plan-first.
+      // Follow-ups never re-open auto plan-first. Mode comes from Settings; Shift/Alt flips once.
+      const mode = resolveSendWhileRunning(props.sendWhileRunning, flip);
+      const delivered = mode === "steer" ? "steered" : "queued";
       const previousText = text;
       const previousAttachments = attachments;
       const echoId = `local:${Date.now()}`;
@@ -741,8 +819,8 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
         {
           id: echoId,
           text: turn.prompt,
-          mode: "queue",
-          delivered: "queued",
+          mode,
+          delivered,
           afterCount,
         },
       ]);
@@ -761,7 +839,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
         }
         if (answer !== undefined) restore();
       };
-      track(images === undefined ? props.onSend(turn.prompt, "queue") : props.onSend(turn.prompt, "queue", images));
+      track(images === undefined ? props.onSend(turn.prompt, mode) : props.onSend(turn.prompt, mode, images));
       return;
     }
 
@@ -920,6 +998,46 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                 </span>
               </>
             ) : null}
+            {props.requireApproval !== undefined ? (
+              <>
+                <span className="pane__meta-sep" aria-hidden>
+                  ·
+                </span>
+                <span
+                  className="pane__posture"
+                  data-testid="task-posture"
+                  aria-label={t("task.posture.aria")}
+                  title={t("task.posture.aria")}
+                >
+                  {(() => {
+                    const posture = activeAutonomyPreset({
+                      requireApproval: props.requireApproval === true,
+                      modeUnattended:
+                        controls.mode.options.find((mode) => mode.id === selectedModeId)
+                          ?.unattended === true,
+                      modeReadOnly: modeLooksReadOnly(selectedModeId),
+                    });
+                    if (posture === "read-only") return t("task.composer.autonomy.readOnly");
+                    if (posture === "full-access") return t("task.composer.autonomy.fullAccess");
+                    return t("task.composer.autonomy.default");
+                  })()}
+                </span>
+                {props.approvalsReviewer === "guardian" ? (
+                  <>
+                    <span className="pane__meta-sep" aria-hidden>
+                      ·
+                    </span>
+                    <span
+                      className="pane__posture"
+                      data-testid="task-guardian"
+                      title={t("settings.guardian.detail")}
+                    >
+                      {t("task.posture.guardian")}
+                    </span>
+                  </>
+                ) : null}
+              </>
+            ) : null}
           </div>
           {/* **A press that failed, under the chip that was pressed.** §7.27's rule, and the reason this is
               not silence: the chooser refused, so the header says so where the click was made. */}
@@ -930,6 +1048,16 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
           )}
         </div>
         <div className="pane__actions">
+          {props.onPromoteToWork ? (
+            <button
+              type="button"
+              className="button button--ghost"
+              title={t("work.promote")}
+              onClick={() => void props.onPromoteToWork!()}
+            >
+              {t("work.promote")}
+            </button>
+          ) : null}
           {running ? (
             <button
               type="button"
@@ -1050,6 +1178,8 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
           {...(props.onCommit !== undefined ? { onCommit: props.onCommit } : {})}
           {...(props.stash !== undefined ? { stash: props.stash } : {})}
           cwd={task.cwd}
+          focusTab={explorerFocus.tab}
+          focusToken={explorerFocus.token}
           onListDirectory={props.onListDirectory}
           onListChanges={props.onListChanges}
           onOpenFile={(entry) => setOpenRequest({ path: entry.path, name: entry.name, nonce: Date.now() })}
@@ -1068,6 +1198,31 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
       ) : null}
 
       <footer className="composer">
+        {props.trackPills !== undefined && props.trackPills.length > 0 ? (
+          <div className="composer__tracks" role="list" aria-label={t("task.tracks.aria")}>
+            {props.trackPills.map((pill) => (
+              <button
+                key={pill.taskId}
+                type="button"
+                role="listitem"
+                className={
+                  pill.kind === "needs-input"
+                    ? "composer__track composer__track--needs"
+                    : "composer__track"
+                }
+                onClick={() => props.onSelectTask?.(pill.taskId)}
+                data-hint={
+                  pill.kind === "needs-input"
+                    ? t("task.tracks.needsInput")
+                    : t("task.tracks.running")
+                }
+              >
+                <span className="composer__track-dot" aria-hidden />
+                <span className="composer__track-title">{pill.title || t("task.untitled")}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div
           className={dropping ? "composer__card composer__card--drop" : "composer__card"}
           onDragOver={(event) => {
@@ -1109,11 +1264,65 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
             </div>
           ) : null}
           {/* Field stays mounted under takeover so a draft survives the pause (polish §1). */}
-          {running && !approvalOpen && !takeoverActive ? (
-            <p className="composer__queue-status" role="status" data-testid="composer-queue-status">
-              {t("task.composer.queueStatus")}
-            </p>
-          ) : null}
+          {running && !approvalOpen && !takeoverActive
+            ? (() => {
+                const liveSteps = segmentTranscriptSteps(displayEntries, {
+                  runLive: true,
+                }).filter(
+                  (item): item is Extract<typeof item, { kind: "steps" }> =>
+                    item.kind === "steps" && item.live,
+                );
+                const peekSource = liveSteps[liveSteps.length - 1]?.entries ?? [];
+                const stream = stepsLiveStreamText(peekSource);
+                const { summary, tail } = workingPeekParts(stream);
+                return (
+                  <>
+                    {summary || tail ? (
+                      <div
+                        className="composer__working-peek"
+                        role="status"
+                        data-testid="composer-working-peek"
+                        aria-label={t("task.composer.workingPeek.aria")}
+                      >
+                        <p
+                          className="composer__working-peek-summary"
+                          data-testid="composer-working-peek-summary"
+                        >
+                          {summary ?? t("task.steps.working")}
+                        </p>
+                        {peekSource.some((entry) => {
+                          const names =
+                            entry.kind === "tool"
+                              ? [entry.name]
+                              : entry.kind === "tools"
+                                ? entry.tools.map((tool) => tool.name)
+                                : [];
+                          return names.some((name) =>
+                            /helper|spawn|child|subagent/i.test(name),
+                          );
+                        }) ? (
+                          <span className="composer__helper-chip" data-testid="composer-helper-chip">
+                            {t("task.composer.helper")}
+                          </span>
+                        ) : null}
+                        {tail ? (
+                          <p className="composer__working-peek-text">{tail}</p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <p
+                      className="composer__queue-status"
+                      role="status"
+                      data-testid="composer-queue-status"
+                    >
+                      {resolveSendWhileRunning(props.sendWhileRunning, false) === "steer"
+                        ? t("task.composer.steerStatus")
+                        : t("task.composer.queueStatus")}
+                    </p>
+                  </>
+                );
+              })()
+            : null}
           {!takeoverActive && commandMatches.length > 0 ? (
             <SlashCommandList
               commands={commandMatches}
@@ -1180,11 +1389,10 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                   return;
                 }
               }
-              // Enter sends, Shift+Enter is a newline. Not Cmd+Enter: a prompt is one thought, and a
-              // modifier for "send" is what makes people paste half a message.
+              // Enter sends, Shift+Enter is a newline. Alt+Enter flips queue/steer while live.
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-                submit();
+                submit(event.altKey);
               }
             }}
             placeholder={
@@ -1211,6 +1419,61 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               onAdd={addFiles}
               onPasteFailed={() => setAttachNotice(t("task.composer.attach.pasteFailed"))}
             />
+            {dictationSupported() ? (
+              <button
+                type="button"
+                className={
+                  dictating
+                    ? "button button--icon composer__voice composer__voice--live has-hint"
+                    : "button button--icon composer__voice has-hint"
+                }
+                data-testid="composer-voice"
+                disabled={approvalOpen || takeoverActive}
+                data-hint={
+                  dictating ? t("task.composer.voice.stop") : t("task.composer.voice.start")
+                }
+                aria-label={
+                  dictating ? t("task.composer.voice.stop") : t("task.composer.voice.start")
+                }
+                aria-pressed={dictating}
+                onClick={() => {
+                  if (dictating) {
+                    dictationRef.current?.stop();
+                    dictationRef.current = undefined;
+                    setDictating(false);
+                    return;
+                  }
+                  const session = startDictation({
+                    onFinal: (piece) => {
+                      setText((prev) => {
+                        const gap = prev === "" || /\s$/.test(prev) ? "" : " ";
+                        return `${prev}${gap}${piece.trim()}`;
+                      });
+                    },
+                    onEnd: () => {
+                      dictationRef.current = undefined;
+                      setDictating(false);
+                    },
+                  });
+                  if (session === undefined) {
+                    setAttachNotice(t("task.composer.voice.unsupported"));
+                    return;
+                  }
+                  dictationRef.current = session;
+                  setDictating(true);
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+                <span className="visually-hidden">
+                  {dictating ? t("task.composer.voice.stop") : t("task.composer.voice.start")}
+                </span>
+              </button>
+            ) : null}
             {/* **The agent's settings, as a toolbar.** Each applies to the *next run* — the agent is
                 launched with `task.cwd` and put into its mode right after `session/new` — so none of them
                 pretends to move or re-mode a run that is already going. */}
@@ -1253,6 +1516,12 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               onToggleFeature={(id, value) => {
                 void props.onToggleFeature?.(id, value);
               }}
+              requireApproval={props.requireApproval}
+              modeUnattended={
+                controls.mode.options.find((mode) => mode.id === selectedModeId)?.unattended ===
+                true
+              }
+              onChooseAutonomyPreset={props.onChooseAutonomyPreset}
               running={running}
               probeNote={probe.note}
               // Drawn only when there is a button to draw: `probe.buttonKey` is absent for an agent the
@@ -1268,35 +1537,40 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               }
             />
             <div className="composer__toolbar-actions">
-            {/* **The Queue/Steer picker is gone.** Two words in a select, explained by a tooltip nobody opened:
-                the owner asked what they meant, which is the answer. A message sent while a turn is running
-                **queues** — the daemon finishes what it is doing and reads it next — and the button underneath
-                says so in its tooltip. `steer` (interrupt the turn and send this instead) is still on the wire;
-                a *setting* for which one is the default is where that choice belongs (§8.3).
-                The keyboard contract went with it, off the row and onto the field's own tooltip. */}
-            {/* **An icon, and only while there is something to send.**
-                The owner: *"can we use the same send button style, no text, no send button, when inputting, the icon
-                button displayed."* That is the reference product's rule exactly
-                (`composer/input/input.tsx`, `resolvePrimaryActionKind`): with something in the field the send action
-                is drawn — as a glyph, not as a word — and with an empty field there is no primary action at all
-                (Paseo draws its cancel control there; ours is the header's Stop). A worded button at the end of
-                every row is a label the user has read a thousand times, and the glyph is the one meaning every
-                message box on every platform already teaches.
-
-                The name a screen reader reads is still a sentence — `visually-hidden`, so it is announced and not
-                drawn — and the tooltip stays: it is where "this queues behind the turn in flight" is said
-                (§7.33). */}
+            {diffStat !== undefined ? (
+              <button
+                type="button"
+                className="composer__diff-pill has-hint"
+                data-testid="composer-diff-pill"
+                data-hint={t("task.composer.diffPill.hint")}
+                aria-label={t("task.composer.diffPill.aria", {
+                  additions: String(diffStat.additions),
+                  deletions: String(diffStat.deletions),
+                })}
+                onClick={() => {
+                  props.onEnsureExplorer?.();
+                  setExplorerFocus({ tab: "changes", token: Date.now() });
+                }}
+              >
+                <span className="composer__diff-pill-add">+{diffStat.additions}</span>
+                <span className="composer__diff-pill-del">−{diffStat.deletions}</span>
+              </button>
+            ) : null}
+            {/* Send while running follows Settings `sendWhileRunning` (default queue). Shift-click or
+                Alt+Enter flips for one press; Stop in the header stays cancel-only. */}
             {canSend(text, attachments) ? (
               <button
                 type="button"
                 className="button button--primary button--icon composer__send has-hint"
-                onClick={submit}
+                onClick={(event) => submit(event.shiftKey)}
                 disabled={approvalOpen}
                 data-hint={
                   approvalOpen
                     ? t("task.composer.submit.blocked")
                     : running
-                      ? t("task.composer.send.queued")
+                      ? resolveSendWhileRunning(props.sendWhileRunning, false) === "steer"
+                        ? t("task.composer.send.steer")
+                        : t("task.composer.send.queued")
                       : canResume
                         ? t("task.composer.resume")
                         : t("task.composer.start")
@@ -1383,6 +1657,11 @@ function stepsLiveStreamText(entries: readonly TranscriptEntry[]): string {
   return parts.join("\n\n");
 }
 
+/** Last lines of the live stream for the composer peek strip (Wave 3A / 4C). */
+export function workingPeekText(entries: readonly TranscriptEntry[], maxChars = 280): string {
+  return workingPeekTail(stepsLiveStreamText(entries), maxChars);
+}
+
 /**
  * Tool-group disclosure outside Steps — open on transition to running, fold when settled.
  * Imperative (same as ToolCard Details): controlled `open={anyRunning}` blocked user collapse.
@@ -1448,7 +1727,7 @@ function StepsRow(props: {
   onAnswer: (
     requestId: string,
     choice: string | readonly string[] | { text: string },
-    options?: { stopAsking?: boolean },
+    options?: { stopAsking?: boolean; stopAskingScope?: "session" | "machine" },
   ) => void | Promise<void>;
   takeoverRequestId?: string;
   onOpenPath?: (path: string, view: ToolOpenView) => void;
@@ -1457,8 +1736,8 @@ function StepsRow(props: {
   const { segment } = props;
   const entries = coalesceStepsEntries(segment.entries);
   const live = segment.live;
-  // Stay closed by default so the chat is user + answer history; expand for Working…
-  // stream / tools / thoughts. An explicit toggle sticks until the live edge flips.
+  // Live → open by default and stay open (peek while Working). Settled → closed so the
+  // hero answer stays the focus. User expand sticks after settle until the live edge flips.
   const [userOpen, setUserOpen] = useState<boolean | undefined>(undefined);
   const wasLiveRef = useRef(live);
   const streamRef = useRef<HTMLDivElement | null>(null);
@@ -1476,7 +1755,7 @@ function StepsRow(props: {
     el.scrollTop = el.scrollHeight;
   }, [live, streamText]);
 
-  const open = userOpen === true;
+  const open = live ? userOpen !== false : userOpen === true;
 
   return (
     <li
@@ -1486,7 +1765,13 @@ function StepsRow(props: {
       <details
         open={open}
         onToggle={(event) => {
-          setUserOpen((event.currentTarget as HTMLDetailsElement).open);
+          const next = (event.currentTarget as HTMLDetailsElement).open;
+          // While live, keep Working… open if the user collapses via summary — same as ToolsGroup.
+          if (live && !next) {
+            event.currentTarget.open = true;
+            return;
+          }
+          setUserOpen(next);
         }}
       >
         <summary className="row__steps-summary">
@@ -1529,7 +1814,7 @@ function TranscriptRow(props: {
   onAnswer: (
     requestId: string,
     choice: string | readonly string[] | { text: string },
-    options?: { stopAsking?: boolean },
+    options?: { stopAsking?: boolean; stopAskingScope?: "session" | "machine" },
   ) => void | Promise<void>;
   takeoverRequestId?: string;
   approvalAnchorRef?: RefObject<HTMLLIElement | null>;
@@ -1687,7 +1972,7 @@ function planReviewDisplay(
 type ApprovalAnswer = (
   requestId: string,
   choice: string | readonly string[] | { text: string },
-  options?: { stopAsking?: boolean },
+  options?: { stopAsking?: boolean; stopAskingScope?: "session" | "machine" },
 ) => void | Promise<void>;
 
 /** Clear Plan before Implement reaches the agent — takeover and inline card share this. */
@@ -1702,7 +1987,7 @@ function answerApproval(
   entry: ApprovalEntry,
   requestId: string,
   choice: string | readonly string[] | { text: string },
-  options?: { stopAsking?: boolean },
+  options?: { stopAsking?: boolean; stopAskingScope?: "session" | "machine" },
 ): void | Promise<void> {
   const answer = (): void | Promise<void> =>
     options === undefined
@@ -1784,7 +2069,7 @@ function ApprovalCard(props: {
   onAnswer: (
     requestId: string,
     choice: string | readonly string[] | { text: string },
-    options?: { stopAsking?: boolean },
+    options?: { stopAsking?: boolean; stopAskingScope?: "session" | "machine" },
   ) => void | Promise<void>;
   /** Pending — actions are in the composer; show a pointer, not a second set of buttons. */
   actionsInComposer?: boolean;

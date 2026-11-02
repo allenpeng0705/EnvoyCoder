@@ -42,6 +42,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   bool _requireApproval = true;
   bool _keepTranscripts = true;
+  String _sendWhileRunning = 'queue';
+  String _approvalsReviewer = 'user';
   String _language = kSystemLanguagePreference;
   String? _defaultHarness;
   bool _apiKeySet = false;
@@ -82,6 +84,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (settings is Map) {
           _requireApproval = settings['requireApprovalForDestructive'] != false;
           _keepTranscripts = settings['keepTranscripts'] != false;
+          _sendWhileRunning =
+              settings['sendWhileRunning'] == 'steer' ? 'steer' : 'queue';
+          _approvalsReviewer =
+              settings['approvalsReviewer'] == 'guardian' ? 'guardian' : 'user';
           if (widget.localeController == null) {
             _language = (settings['language'] as String?) ?? kSystemLanguagePreference;
           }
@@ -118,6 +124,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'settings': {
           'requireApprovalForDestructive': _requireApproval,
           'keepTranscripts': _keepTranscripts,
+          'sendWhileRunning': _sendWhileRunning,
+          'approvalsReviewer': _approvalsReviewer,
           'language': _language,
           'defaults': {
             if (_defaultHarness != null && _defaultHarness!.isNotEmpty) 'harness': _defaultHarness,
@@ -223,6 +231,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   defaultHarness: _defaultHarness,
                   value: _requireApproval,
                   onChanged: (v) => setState(() => _requireApproval = v),
+                ),
+                ListTile(
+                  title: Text(l10n.settingsSendWhileRunning),
+                  subtitle: Text(l10n.settingsSendWhileRunningDetail),
+                  trailing: DropdownButton<String>(
+                    value: _sendWhileRunning,
+                    items: [
+                      DropdownMenuItem(
+                        value: 'queue',
+                        child: Text(l10n.settingsSendWhileRunningQueue),
+                      ),
+                      DropdownMenuItem(
+                        value: 'steer',
+                        child: Text(l10n.settingsSendWhileRunningSteer),
+                      ),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) setState(() => _sendWhileRunning = v);
+                    },
+                  ),
+                ),
+                ListTile(
+                  title: Text(l10n.settingsGuardian),
+                  subtitle: Text(l10n.settingsGuardianDetail),
+                  trailing: DropdownButton<String>(
+                    value: _approvalsReviewer,
+                    items: [
+                      DropdownMenuItem(
+                        value: 'user',
+                        child: Text(l10n.settingsGuardianUser),
+                      ),
+                      DropdownMenuItem(
+                        value: 'guardian',
+                        child: Text(l10n.settingsGuardianGuardian),
+                      ),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) setState(() => _approvalsReviewer = v);
+                    },
+                  ),
                 ),
                 SwitchListTile(
                   title: Text(l10n.settingsTranscripts),
@@ -443,9 +491,37 @@ class _ApprovalsTile extends StatelessWidget {
     final summary = harnessById(harnesses, id);
     final agent = summary?.label ??
         (id != null && id.isNotEmpty ? id : l10n.composerAgentBare);
-    final via = id != null && id.isNotEmpty ? askingControl(id) : AskingControl.none;
-    final supported = id != null && id.isNotEmpty && agentCanControlAsking(id);
-    final modeLabel = id != null ? modeLabelForAskingOff(id) : null;
+    final catalogEntryId = summary?.catalogEntryId ?? id;
+    final catalogYolo = id != null &&
+            id.isNotEmpty &&
+            !isShippedAskingAgent(id)
+        ? cataloguedUnattendedModeId(catalogEntryId)
+        : null;
+    final via = id != null && id.isNotEmpty
+        ? (askingControl(id) != AskingControl.none
+            ? askingControl(id)
+            : catalogYolo != null
+                ? AskingControl.unattendedMode
+                : AskingControl.none)
+        : AskingControl.none;
+    final supported = agentOrCatalogueCanControlAsking(
+      harnessId: id,
+      catalogEntryId: catalogEntryId,
+    );
+    String? modeLabel;
+    if (id != null && askingControl(id) != AskingControl.none) {
+      modeLabel = modeLabelForAskingOff(id);
+    } else if (catalogYolo != null) {
+      modeLabel = cataloguedUnattendedModeLabel(catalogEntryId);
+      if (summary != null) {
+        for (final mode in summary.modes) {
+          if (mode.id == catalogYolo) {
+            modeLabel = mode.label;
+            break;
+          }
+        }
+      }
+    }
     final String note;
     if (via == AskingControl.policy) {
       note = l10n.settingsApprovalsReaches(agent);

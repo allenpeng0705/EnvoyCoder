@@ -20,16 +20,20 @@
  */
 
 import {
+  branchNameRefusal,
   currentSearchPath,
   getHomeFsInfo,
+  gitWorktreeAddArgs,
   listHomeFsEntries,
   listWorktreeChanges,
   readWorktreeDiff,
   createHomeFsEntry,
   readHomeFsFile,
   normalizeUserPath,
+  safeWorktreeDirName,
 } from "@envoydev/platform";
-import { stat } from "node:fs/promises";
+import { mkdir, stat } from "node:fs/promises";
+import { join } from "node:path";
 
 import {
   type AgentId,
@@ -79,6 +83,8 @@ import {
 import { forgetPeer, getPeer, listPeers, registerPeer } from "./peers.js";
 import { createCollabHandlers, COLLAB_PRE_AUTH_METHODS } from "./collab-handlers.js";
 export { COLLAB_PRE_AUTH_METHODS };
+import { createWorkHandlers } from "./work-handlers.js";
+import type { WorkEngine } from "./work-engine.js";
 import type { PairedDeviceStore } from "./paired-devices.js";
 import { createCatalogHandlers } from "./catalog.js";
 import {
@@ -89,6 +95,7 @@ import { getEnvoyLlmPublic, setEnvoyLlm, envoyHarnessModels } from "./envoy-llm.
 import { harnessSwitchPatch } from "./task-harness-switch.js";
 import { createFixHandlers } from "./fixes.js";
 import { createGitHandlers, measureProjectVcs, type GitDeps } from "./git.js";
+import { gitFailed, invalidBranch, runGit } from "./git-runner.js";
 import { notFound } from "./not-found.js";
 import { createRecheckHandlers } from "./recheck.js";
 import { createProviderHandlers } from "./providers.js";
@@ -254,6 +261,8 @@ export interface CoderServiceDeps {
   callPeer?: import("./member-peer-call.js").MemberPeerCall;
   /** Notify windows when a collaborative job ledger row changes. */
   onJobsChanged?: (jobId: string) => void;
+  /** Work Engine — optional until the product enables work items. */
+  work?: WorkEngine;
 }
 
 /**
@@ -582,6 +591,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         harness?: AgentId;
         model?: string;
         extraArgs?: string;
+        worktree?: { branch: string };
       };
       const project = deps.store.findProject(input.projectId);
       if (!project) throw notFound("project", input.projectId);
@@ -597,7 +607,32 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         },
       });
       await ensureRunnableAgent(deps.store, resolved.harness);
-      const cwd = input.cwd ?? project.path;
+
+      let cwd = input.cwd ?? project.path;
+      let worktree: { path: string; branch: string } | undefined;
+      if (input.worktree !== undefined) {
+        const branch = input.worktree.branch.trim();
+        const refused = branchNameRefusal(branch);
+        if (refused !== undefined) throw invalidBranch(branch, refused);
+        const dirName = safeWorktreeDirName(branch);
+        const parent = join(project.path, ".envoy-worktrees");
+        const path = join(parent, dirName);
+        if (await isDirectory(path)) {
+          throw coderError(
+            ENVOYDEV_ERRORS.badRequest,
+            `A worktree already exists at ${path}. Choose another branch name, or remove that folder first.`,
+            ref("error.createTask.worktreeExists", { path }),
+          );
+        }
+        await mkdir(parent, { recursive: true });
+        const added = await runGit({}, project.path, gitWorktreeAddArgs(path, branch), {
+          read: false,
+        });
+        if (added.code !== 0) throw gitFailed(added);
+        cwd = path;
+        worktree = { path, branch };
+      }
+
       if (!(await isDirectory(cwd))) {
         throw coderError(
           ENVOYDEV_ERRORS.pathMissing,
@@ -605,7 +640,15 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
           ref("error.createTask.notDirectory", { path: cwd, title: input.title }),
         );
       }
-      const task = await deps.store.createTask({ ...input, cwd });
+      const task = await deps.store.createTask({
+        projectId: input.projectId,
+        title: input.title,
+        cwd,
+        ...(input.harness !== undefined ? { harness: input.harness } : {}),
+        ...(input.model !== undefined ? { model: input.model } : {}),
+        ...(input.extraArgs !== undefined ? { extraArgs: input.extraArgs } : {}),
+        ...(worktree !== undefined ? { worktree } : {}),
+      });
       if (!task) throw notFound("project", input.projectId);
       return { task };
     },
@@ -791,12 +834,14 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         optionIds?: string[];
         text?: string;
         stopAsking?: true;
+        stopAskingScope?: "session" | "machine";
       };
       const runs = requireRuns(deps);
       const resolved = await runs.answerApproval(input.runId, input.requestId, input.optionId, {
         ...(input.optionIds !== undefined ? { optionIds: input.optionIds } : {}),
         ...(input.text !== undefined ? { text: input.text } : {}),
         ...(input.stopAsking === true ? { stopAsking: true } : {}),
+        ...(input.stopAskingScope !== undefined ? { stopAskingScope: input.stopAskingScope } : {}),
       });
       return { runId: input.runId, requestId: input.requestId, resolved };
     },
@@ -1196,6 +1241,10 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
           async (params: unknown, context: CoderCallContext) => handler(params, context),
         ]),
     ),
+
+    ...(deps.work
+      ? createWorkHandlers({ engine: deps.work })
+      : {}),
 
     /* ────────────────── settings ────────────────── */
     "coder.getSettings": async (params) => {

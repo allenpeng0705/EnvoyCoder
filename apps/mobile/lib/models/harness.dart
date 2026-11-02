@@ -17,6 +17,7 @@ class HarnessInfo {
     required this.approvals,
     required this.approvalsKnown,
     required this.ready,
+    this.catalogEntryId,
   });
 
   final String id;
@@ -38,6 +39,8 @@ class HarnessInfo {
   /// True when the catalogue included an `approvals` capability bit.
   final bool approvalsKnown;
   final bool ready;
+  /// Catalogue recipe this provider was added from (Gemini, Qwen, …).
+  final String? catalogEntryId;
 
   factory HarnessInfo.fromJson(Map<String, dynamic> json) {
     final caps = json['capabilities'];
@@ -56,6 +59,7 @@ class HarnessInfo {
           id: id,
           label: (raw['label'] as String?) ?? id,
           description: raw['description'] as String?,
+          unattended: raw['unattended'] == true,
         ));
       }
     }
@@ -101,6 +105,7 @@ class HarnessInfo {
         : json['available'] == true;
 
     final approvalsKnown = caps is Map && caps.containsKey('approvals');
+    final catalogEntryId = json['catalogEntryId'] as String?;
     return HarnessInfo(
       id: (json['id'] as String?) ?? '',
       label: (json['label'] as String?) ?? (json['id'] as String?) ?? 'agent',
@@ -120,6 +125,9 @@ class HarnessInfo {
       approvals: !approvalsKnown || (caps is Map && caps['approvals'] == true),
       approvalsKnown: approvalsKnown,
       ready: ready,
+      catalogEntryId: catalogEntryId != null && catalogEntryId.isNotEmpty
+          ? catalogEntryId
+          : null,
     );
   }
 
@@ -134,10 +142,16 @@ class HarnessInfo {
 }
 
 class AgentModeOption {
-  const AgentModeOption({required this.id, required this.label, this.description});
+  const AgentModeOption({
+    required this.id,
+    required this.label,
+    this.description,
+    this.unattended = false,
+  });
   final String id;
   final String label;
   final String? description;
+  final bool unattended;
 }
 
 class AgentModelOption {

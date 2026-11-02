@@ -606,6 +606,41 @@ export function JobPane(props: {
             />{" "}
             {t("job.pane.stallAutomation")}
           </label>
+          <details className="settings__teams-advanced" data-testid="job-content-bus-policy">
+            <summary className="setting__title">{t("job.pane.contentBusAdvanced")}</summary>
+            <label className="settings__pairing-field">
+              <input
+                type="checkbox"
+                checked={job.policy.contentBus?.pullOnAccept !== false}
+                disabled={busy}
+                onChange={(e) => {
+                  const pullOnAccept = e.target.checked;
+                  void act(() =>
+                    props.agents.updateJobPolicy(job.id, {
+                      contentBus: { ...job.policy.contentBus, pullOnAccept },
+                    }),
+                  );
+                }}
+              />{" "}
+              {t("job.pane.pullOnAccept")}
+            </label>
+            <label className="settings__pairing-field">
+              <input
+                type="checkbox"
+                checked={job.policy.contentBus?.pushOnSuccess === true}
+                disabled={busy}
+                onChange={(e) => {
+                  const pushOnSuccess = e.target.checked;
+                  void act(() =>
+                    props.agents.updateJobPolicy(job.id, {
+                      contentBus: { ...job.policy.contentBus, pushOnSuccess },
+                    }),
+                  );
+                }}
+              />{" "}
+              {t("job.pane.pushOnSuccess")}
+            </label>
+          </details>
         </section>
       </div>
 

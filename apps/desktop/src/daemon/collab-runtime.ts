@@ -10,12 +10,8 @@ import { callPeerDaemon } from "./peer-rpc.js";
 import type { CollabDeps } from "./collab-deps.js";
 import { startRunForOffer } from "./job-step-run.js";
 import { patchInboundOffer } from "./memberships.js";
-import {
-  acceptJobStepOffer,
-  remoteCancelTargets,
-  reportJobStepProgress,
-  resolveCwdHint,
-} from "./jobs.js";
+import { remoteCancelTargets, reportJobStepProgress } from "./jobs.js";
+import { pushStepWorkingTree } from "./job-git-sync.js";
 import { requireTeam, teamTokenPlain } from "./teams.js";
 import { daemonWsUrl } from "./team-invite.js";
 import { firstLanAddress } from "./pairing.js";
@@ -120,7 +116,7 @@ export async function maybeStartLocalRun(
       resolvedCwd,
       projectId,
     );
-    void watchRunForJob(deps, offer, started.runId, remote);
+    void watchRunForJob(deps, offer, started.runId, remote, { cwd: resolvedCwd });
     return started;
   } catch (error) {
     console.warn(`[collab] could not start harness for offer ${offer.offerId}: ${String(error)}`);
@@ -175,6 +171,7 @@ export async function watchRunForJob(
   offer: StepOffer,
   runId: string,
   remote?: { originWs: string; teamToken: string; memberToken: string },
+  options?: { cwd?: string },
 ): Promise<void> {
   if (!deps.runs) return;
   let lastSeq = -1;
@@ -224,6 +221,26 @@ export async function watchRunForJob(
     const run = deps.runs.get(runId);
     const status = run?.status;
     try {
+      // Push on the assignee machine only. Origin local steps push inside completeJobStep;
+      // remote members push here before reporting succeeded (origin must not push cwdHint).
+      if (remote && status === "done" && offer.pushOnSuccess === true && options?.cwd) {
+        const pushed = await pushStepWorkingTree({ cwd: options.cwd });
+        if (!pushed.ok) {
+          await reportProgressForOffer(
+            deps,
+            offer,
+            {
+              runId,
+              runPhase: "idle",
+              outcome: "failed",
+              error: pushed.message,
+              eventSeq: lastSeq >= 0 ? lastSeq + 1 : 0,
+            },
+            remote,
+          );
+          return;
+        }
+      }
       await reportProgressForOffer(
         deps,
         offer,

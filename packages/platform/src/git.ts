@@ -466,6 +466,41 @@ export function gitCreateBranchArgs(name: string): string[] {
 }
 
 /**
+ * Push the current tip to a remote. No force. Team job handoff and the Changes rail use this;
+ * credentials remain the user's git helper.
+ */
+export function gitPushArgs(remote = "origin", refspec = "HEAD"): string[] {
+  return ["push", "-u", remote, refspec];
+}
+
+/**
+ * Add a linked worktree at `path` for `branch`.
+ *
+ * `-b` creates the branch at HEAD when it does not exist yet. The path is absolute and already
+ * decided by the daemon (`<project>/.envoy-worktrees/<safe-branch>`); this only builds argv.
+ */
+export function gitWorktreeAddArgs(path: string, branch: string): string[] {
+  return ["worktree", "add", "-b", branch, path];
+}
+
+/**
+ * Safe directory name for a worktree under `.envoy-worktrees/`.
+ *
+ * Path separators become `--` (not `-`) so `feature/foo` and `feature-foo` never collide.
+ * Separators are marked first so the later `-+` collapse cannot erase that distinction.
+ */
+export function safeWorktreeDirName(branch: string): string {
+  const trimmed = branch.trim().replace(/^\.+/, "");
+  const marked = trimmed.replace(/[/\\]+/g, "\u0001");
+  const cleaned = marked
+    .replace(/[^A-Za-z0-9._\u0001-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/\u0001+/g, "--")
+    .replace(/^-|-$/g, "");
+  return cleaned === "" ? "worktree" : cleaned.slice(0, 120);
+}
+
+/**
  * The environment a `git` child gets.
  *
  *   * **Never interactive.** A credential question becomes an EOF instead of an RPC held open until its

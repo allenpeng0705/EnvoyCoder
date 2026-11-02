@@ -52,6 +52,7 @@ export interface TeamPublic {
   tokenGeneration: number;
   roleCatalog: readonly RoleDef[];
   members: readonly TeamMember[];
+  membersMayStartJobs?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -200,6 +201,9 @@ export function toPublic(team: TeamRecord): TeamPublic {
     tokenGeneration: normalized.tokenGeneration,
     roleCatalog: normalized.roleCatalog,
     members: normalized.members.map(({ memberTokenHash: _h, ...m }) => m),
+    ...(normalized.membersMayStartJobs !== undefined
+      ? { membersMayStartJobs: normalized.membersMayStartJobs }
+      : {}),
     createdAt: normalized.createdAt,
     updatedAt: normalized.updatedAt,
   };
@@ -706,6 +710,27 @@ export async function setMemberRolesOffered(
   file.teams[team.id] = { ...team, roleCatalog: catalog, members, updatedAt: new Date().toISOString() };
   await writeTeamFile(path, file);
   return members[idx]!;
+}
+
+export async function updateTeamSettings(
+  path: string,
+  teamId: string,
+  input: { membersMayStartJobs?: boolean },
+): Promise<TeamPublic> {
+  const file = await readTeamFile(path);
+  const team = file.teams[teamId];
+  if (!team) {
+    throw coderError(ENVOYDEV_ERRORS.teamMissing, "No team with that id.", ref("error.team.missing"));
+  }
+  const at = new Date().toISOString();
+  const next: TeamRecord = {
+    ...team,
+    ...(input.membersMayStartJobs !== undefined ? { membersMayStartJobs: input.membersMayStartJobs } : {}),
+    updatedAt: at,
+  };
+  file.teams[teamId] = next;
+  await writeTeamFile(path, file);
+  return toPublic(next);
 }
 
 export async function setTeamRoleCatalog(

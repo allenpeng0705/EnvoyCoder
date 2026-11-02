@@ -5,11 +5,13 @@
  * Several choices are checkboxes plus Confirm. A typed answer is a field plus Confirm.
  * The labels are the agent's own words, except the Confirm button, which is ours.
  *
- * When the live agent is a shipped policy wire (`askingControl === "policy"`), exclusive
- * permission cards also offer "Allow and don't ask again" — flips Settings and the live session.
+ * When the live agent has a deliverable asking wire (policy, unattended-mode, or catalogue
+ * YOLO), exclusive permission cards also offer scoped "don't ask again" — this session
+ * (auto-allow on this run) or this machine (Settings Off).
  */
 
 import { useState, type JSX } from "react";
+import type { StopAskingScope } from "@envoydev/protocol";
 
 import { useT } from "../i18n/context.js";
 import { localizeText } from "../i18n/notice.js";
@@ -19,13 +21,13 @@ type ApprovalEntry = Extract<TranscriptEntry, { kind: "approval" }>;
 type Answer = (
   requestId: string,
   choice: string | readonly string[] | { text: string },
-  options?: { stopAsking?: boolean },
+  options?: { stopAsking?: boolean; stopAskingScope?: StopAskingScope },
 ) => void | Promise<void>;
 
 export function ApprovalChoices(props: {
   entry: ApprovalEntry;
   onAnswer: Answer;
-  /** Envoy Harness (catalogue policy wire) — show stop-asking. */
+  /** Deliverable asking wire — show stop-asking (policy / unattended / catalogue YOLO). */
   canStopAsking?: boolean;
 }): JSX.Element {
   const t = useT();
@@ -51,35 +53,47 @@ export function ApprovalChoices(props: {
   return (
     <div className="approval__choice-stack">
       <div className="approval__choice-row">
-        {entry.options.flatMap((option) => {
-          const choice = (
-            <button
-              key={option.id}
-              type="button"
-              className={`button ${option.destructive ? "button--danger" : "button--primary"}`}
-              onClick={() => void props.onAnswer(entry.requestId, option.id)}
-            >
-              {localizeText(t, option.label) ?? option.label}
-            </button>
-          );
-          // Allow → don't ask again → Deny: one row, permanent allow next to Allow.
-          if (stopAsking && option.id === allowId) {
-            return [
-              choice,
-              <button
-                key="stop-asking"
-                type="button"
-                className="button button--secondary approval__stop-asking"
-                data-testid="approval-stop-asking"
-                onClick={() => void props.onAnswer(entry.requestId, allowId, { stopAsking: true })}
-              >
-                {t("task.approval.stopAsking")}
-              </button>,
-            ];
-          }
-          return [choice];
-        })}
+        {entry.options.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className={`button ${option.destructive ? "button--danger" : "button--primary"}`}
+            onClick={() => void props.onAnswer(entry.requestId, option.id)}
+          >
+            {localizeText(t, option.label) ?? option.label}
+          </button>
+        ))}
       </div>
+      {stopAsking && allowId !== undefined ? (
+        <div className="approval__stop-asking-scopes" data-testid="approval-stop-asking-scopes">
+          <button
+            type="button"
+            className="button button--secondary approval__stop-asking"
+            data-testid="approval-stop-asking-session"
+            onClick={() =>
+              void props.onAnswer(entry.requestId, allowId, {
+                stopAsking: true,
+                stopAskingScope: "session",
+              })
+            }
+          >
+            {t("task.approval.stopAsking.session")}
+          </button>
+          <button
+            type="button"
+            className="button button--secondary approval__stop-asking"
+            data-testid="approval-stop-asking-machine"
+            onClick={() =>
+              void props.onAnswer(entry.requestId, allowId, {
+                stopAsking: true,
+                stopAskingScope: "machine",
+              })
+            }
+          >
+            {t("task.approval.stopAsking.machine")}
+          </button>
+        </div>
+      ) : null}
       {stopAsking ? (
         <p className="approval__hint" data-testid="approval-settings-hint">
           {t("task.approval.settingsHint")}

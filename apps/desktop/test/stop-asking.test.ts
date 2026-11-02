@@ -1,7 +1,6 @@
 /**
- * Whether the permission card offers “don't ask again” — catalogue policy wire only.
- * Custom providers and unattended-mode agents never get the button: the daemon only
- * flips Settings for shipped `askingControl === "policy"` agents.
+ * Whether the permission card offers “don't ask again” — any deliverable asking wire
+ * (policy or unattended-mode), plus catalogue YOLO providers.
  */
 
 import { describe, expect, it } from "vitest";
@@ -27,22 +26,45 @@ describe("canStopAskingApprovals", () => {
     ).toBe(false);
   });
 
-  it("is false for agents that only have an unattended mode, not set_policy", () => {
+  it("is true for unattended-mode agents (Claude / Codex / DeepSeek)", () => {
     expect(
       canStopAskingApprovals({
         harnessId: "claudecode",
         requireApproval: true,
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       canStopAskingApprovals({
         harnessId: "deepseek-harness",
         requireApproval: true,
       }),
-    ).toBe(false);
+    ).toBe(true);
+    expect(
+      canStopAskingApprovals({
+        harnessId: "codex",
+        requireApproval: true,
+      }),
+    ).toBe(true);
   });
 
-  it("is false for custom providers — the daemon has no Settings Off path for them", () => {
+  it("is true for catalogue YOLO providers (Gemini / Qwen)", () => {
+    expect(
+      canStopAskingApprovals({
+        harnessId: "gemini-provider",
+        requireApproval: true,
+        catalogEntryId: "gemini",
+      }),
+    ).toBe(true);
+    expect(
+      canStopAskingApprovals({
+        harnessId: "qwen-code",
+        requireApproval: true,
+        catalogEntryId: "qwen-code",
+      }),
+    ).toBe(true);
+  });
+
+  it("is false for custom providers without a catalogue YOLO mode", () => {
     expect(
       canStopAskingApprovals({
         harnessId: "my-custom-agent",

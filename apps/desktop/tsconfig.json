@@ -32,6 +32,9 @@
       "path": "../../packages/task-model"
     },
     {
+      "path": "../../packages/work-model"
+    },
+    {
       "path": "../../packages/agent-catalog"
     },
     {

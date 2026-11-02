@@ -750,6 +750,66 @@ abstract class AppLocalizations {
   /// **'Keep transcripts after a task ends'**
   String get settingsTranscripts;
 
+  /// settings.sendWhileRunning — Queue vs steer default.
+  ///
+  /// In en, this message translates to:
+  /// **'Send while the agent is working'**
+  String get settingsSendWhileRunning;
+
+  /// settings.sendWhileRunning.detail
+  ///
+  /// In en, this message translates to:
+  /// **'Queue waits for the current reply. Steer stops it and sends yours instead.'**
+  String get settingsSendWhileRunningDetail;
+
+  /// settings.sendWhileRunning.queue
+  ///
+  /// In en, this message translates to:
+  /// **'Queue'**
+  String get settingsSendWhileRunningQueue;
+
+  /// settings.sendWhileRunning.steer
+  ///
+  /// In en, this message translates to:
+  /// **'Steer'**
+  String get settingsSendWhileRunningSteer;
+
+  /// settings.guardian — User vs Guardian.
+  ///
+  /// In en, this message translates to:
+  /// **'Permission reviewer'**
+  String get settingsGuardian;
+
+  /// settings.guardian.detail
+  ///
+  /// In en, this message translates to:
+  /// **'Guardian auto-allows clear read/search permission cards. Edits and commands still ask you.'**
+  String get settingsGuardianDetail;
+
+  /// settings.guardian.user
+  ///
+  /// In en, this message translates to:
+  /// **'Always ask me'**
+  String get settingsGuardianUser;
+
+  /// settings.guardian.guardian
+  ///
+  /// In en, this message translates to:
+  /// **'Guardian'**
+  String get settingsGuardianGuardian;
+
+  /// Composer mic — start
+  ///
+  /// In en, this message translates to:
+  /// **'Start dictation'**
+  String get runVoiceStart;
+
+  /// Composer mic — stop
+  ///
+  /// In en, this message translates to:
+  /// **'Stop dictation'**
+  String get runVoiceStop;
+
   /// settings.language — The language picker's label.
   ///
   /// In en, this message translates to:
@@ -1632,6 +1692,24 @@ abstract class AppLocalizations {
   /// **'Don\'t ask again'**
   String get runApprovalStopAsking;
 
+  /// Stop asking for the rest of this live run only.
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t ask again for this run'**
+  String get runApprovalStopAskingSession;
+
+  /// Stop asking on this machine — Settings Ask before risky steps Off.
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t ask again on this machine'**
+  String get runApprovalStopAskingMachine;
+
+  /// Explains this-run vs machine stop-asking scopes.
+  ///
+  /// In en, this message translates to:
+  /// **'This run: allow further steps until this run ends. This machine: Settings → Ask before risky steps Off.'**
+  String get runApprovalStopAskingHint;
+
   /// run.approvalAnswerBelow — Transcript stub while sticky chrome owns the choices.
   ///
   /// In en, this message translates to:
@@ -2508,6 +2586,90 @@ abstract class AppLocalizations {
   /// **'How much the agent thinks before it answers'**
   String get composerThinkingTooltip;
 
+  /// composerplanon — Plan mode is on
+  ///
+  /// In en, this message translates to:
+  /// **'Plan'**
+  String get composerPlanOn;
+
+  /// composerplanoff — Plan mode is off (agent works)
+  ///
+  /// In en, this message translates to:
+  /// **'Agent'**
+  String get composerPlanOff;
+
+  /// composerplantooltip — Plan toggle hint
+  ///
+  /// In en, this message translates to:
+  /// **'Plan looks and proposes; Agent does the work'**
+  String get composerPlanTooltip;
+
+  /// composerautonomyaskingon — Settings still asks before risky steps
+  ///
+  /// In en, this message translates to:
+  /// **'Asking on'**
+  String get composerAutonomyAskingOn;
+
+  /// composerautonomyaskingoff — Settings does not ask before risky steps
+  ///
+  /// In en, this message translates to:
+  /// **'Asking off'**
+  String get composerAutonomyAskingOff;
+
+  /// composerautonomyfullaccess — Selected mode is unattended / YOLO
+  ///
+  /// In en, this message translates to:
+  /// **'Full access'**
+  String get composerAutonomyFullAccess;
+
+  /// composerautonomyreadonly — Ask + plan/read-only mode
+  ///
+  /// In en, this message translates to:
+  /// **'Read only'**
+  String get composerAutonomyReadOnly;
+
+  /// composerautonomydefault — Ask + normal mode
+  ///
+  /// In en, this message translates to:
+  /// **'Default'**
+  String get composerAutonomyDefault;
+
+  /// Full access confirmation title
+  ///
+  /// In en, this message translates to:
+  /// **'Enable full access?'**
+  String get composerAutonomyConfirmTitle;
+
+  /// Full access confirmation body
+  ///
+  /// In en, this message translates to:
+  /// **'Full access turns off asking on this machine and lets this agent edit files and run tools without approval prompts. That raises the risk of unwanted edits, data loss, or unexpected behavior. You can turn asking back on in Settings.'**
+  String get composerAutonomyConfirmBody;
+
+  /// Full access confirmation CTA
+  ///
+  /// In en, this message translates to:
+  /// **'Yes, continue anyway'**
+  String get composerAutonomyConfirm;
+
+  /// Autonomy preset picker sheet title
+  ///
+  /// In en, this message translates to:
+  /// **'Autonomy'**
+  String get composerAutonomySheet;
+
+  /// composerautonomytooltip — Autonomy chip hint
+  ///
+  /// In en, this message translates to:
+  /// **'How often this agent asks — Read only, Default, or Full access'**
+  String get composerAutonomyTooltip;
+
+  /// Always-visible posture label in task chrome
+  ///
+  /// In en, this message translates to:
+  /// **'Autonomy posture for this task'**
+  String get taskPostureAria;
+
   /// taskuntitled — A task the daemon gave no title.
   ///
   /// In en, this message translates to:
@@ -2843,6 +3005,276 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Offline'**
   String get teamJobPeerOffline;
+
+  /// error.job.git.notARepo — Team job accept: not a repo.
+  ///
+  /// In en, this message translates to:
+  /// **'That folder is not a Git repository. Team jobs share work through Git — initialize or clone a repo.'**
+  String get errorJobGitNotARepo;
+
+  /// error.job.git.noRemote — Team job accept: no remote.
+  ///
+  /// In en, this message translates to:
+  /// **'This Git repository has no remote. Add origin (or another remote) so teammates can pull and push.'**
+  String get errorJobGitNoRemote;
+
+  /// error.job.git.missing — Team job accept: git missing.
+  ///
+  /// In en, this message translates to:
+  /// **'Git is not installed (or not on PATH) on this machine. Install Git before accepting a Team job step.'**
+  String get errorJobGitMissingInstall;
+
+  /// error.job.git.syncDirty — Team job accept: dirty tree.
+  ///
+  /// In en, this message translates to:
+  /// **'This folder has uncommitted changes. Commit or stash them before accepting the Team job step.'**
+  String get errorJobGitSyncDirty;
+
+  /// error.job.git.syncDiverged — Team job accept: diverged.
+  ///
+  /// In en, this message translates to:
+  /// **'Local and remote branches have both changed, so a fast-forward pull cannot bring them together.'**
+  String get errorJobGitSyncDiverged;
+
+  /// error.job.git.syncPullFailed — Team job accept: pull failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Git pull failed. Check the remote and your credentials, then try again.'**
+  String get errorJobGitSyncPullFailed;
+
+  /// error.job.git.syncBranchInvalid — Team job accept: bad branch.
+  ///
+  /// In en, this message translates to:
+  /// **'That branch name is not valid for Git.'**
+  String get errorJobGitSyncBranchInvalid;
+
+  /// error.job.git.syncBranchFailed — Team job accept: checkout failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not check out or create the step branch.'**
+  String get errorJobGitSyncBranchFailed;
+
+  /// error.job.git.syncPushFailed — Team job complete: push failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Git push failed. Check the remote and your credentials, then try again.'**
+  String get errorJobGitSyncPushFailed;
+
+  /// error.team.membersMayNotStart — Member start refused by team setting.
+  ///
+  /// In en, this message translates to:
+  /// **'This team does not allow members to start jobs. Ask the host to enable it in Settings → Teams.'**
+  String get errorTeamMembersMayNotStart;
+
+  /// Phone: step blocked peer-offline status label.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for a machine'**
+  String get teamJobStepWaitingPeer;
+
+  /// Phone: step blocked peer-offline detail with assignee label.
+  ///
+  /// In en, this message translates to:
+  /// **'Will retry when {machine} is back'**
+  String teamJobStepWaitingPeerDetail(String machine);
+
+  /// error.job.missing
+  ///
+  /// In en, this message translates to:
+  /// **'No job with that id.'**
+  String get errorJobMissing;
+
+  /// error.job.stepMissing
+  ///
+  /// In en, this message translates to:
+  /// **'No step with that id.'**
+  String get errorJobStepMissing;
+
+  /// error.job.stepsLocked
+  ///
+  /// In en, this message translates to:
+  /// **'Steps can only be edited while the job is drafting or running.'**
+  String get errorJobStepsLocked;
+
+  /// error.job.writerLock
+  ///
+  /// In en, this message translates to:
+  /// **'Two implement steps share worktree key “{key}”.'**
+  String errorJobWriterLock(String key);
+
+  /// error.job.notRunning
+  ///
+  /// In en, this message translates to:
+  /// **'The job is not in a state that accepts this action.'**
+  String get errorJobNotRunning;
+
+  /// error.job.deps
+  ///
+  /// In en, this message translates to:
+  /// **'Step dependencies are not satisfied.'**
+  String get errorJobDeps;
+
+  /// error.job.noSteps
+  ///
+  /// In en, this message translates to:
+  /// **'Add at least one step before starting.'**
+  String get errorJobNoSteps;
+
+  /// error.job.noCandidate
+  ///
+  /// In en, this message translates to:
+  /// **'No online machine offers role “{role}”. Fix the team, then try Start again.'**
+  String errorJobNoCandidate(String role);
+
+  /// error.job.stepsInFlight
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot replace steps that are already in progress. Pause the job first, or edit only pending steps.'**
+  String get errorJobStepsInFlight;
+
+  /// error.job.offerMissing
+  ///
+  /// In en, this message translates to:
+  /// **'No offer with that id.'**
+  String get errorJobOfferMissing;
+
+  /// error.job.offerClosed
+  ///
+  /// In en, this message translates to:
+  /// **'That offer is no longer pending.'**
+  String get errorJobOfferClosed;
+
+  /// error.job.exhausted
+  ///
+  /// In en, this message translates to:
+  /// **'Step exhausted retries and reassigns.'**
+  String get errorJobExhausted;
+
+  /// error.job.pathMissing
+  ///
+  /// In en, this message translates to:
+  /// **'That folder is missing on this machine. Clone the project and open it, then try again.'**
+  String get errorJobPathMissing;
+
+  /// error.job.failed
+  ///
+  /// In en, this message translates to:
+  /// **'This job has failed.'**
+  String get errorJobFailed;
+
+  /// job.pane.hasGap
+  ///
+  /// In en, this message translates to:
+  /// **'Event gap — some progress may be missing'**
+  String get jobPaneHasGap;
+
+  /// work.attention.aria
+  ///
+  /// In en, this message translates to:
+  /// **'Work items needing you'**
+  String get workAttentionAria;
+
+  /// work.attention.heading
+  ///
+  /// In en, this message translates to:
+  /// **'Work items'**
+  String get workAttentionHeading;
+
+  /// work.attention.stage.delivery
+  ///
+  /// In en, this message translates to:
+  /// **'Input undelivered'**
+  String get workAttentionStageDelivery;
+
+  /// work.attention.stage.answer
+  ///
+  /// In en, this message translates to:
+  /// **'Awaiting answer'**
+  String get workAttentionStageAnswer;
+
+  /// work.attention.stage.review
+  ///
+  /// In en, this message translates to:
+  /// **'Awaiting review'**
+  String get workAttentionStageReview;
+
+  /// work.attention.stage.blocked
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked'**
+  String get workAttentionStageBlocked;
+
+  /// work.attention.openTask
+  ///
+  /// In en, this message translates to:
+  /// **'Open task'**
+  String get workAttentionOpenTask;
+
+  /// work.attention.retry
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get workAttentionRetry;
+
+  /// work.attention.stop
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get workAttentionStop;
+
+  /// work.attention.answer.placeholder
+  ///
+  /// In en, this message translates to:
+  /// **'Your answer'**
+  String get workAttentionAnswerPlaceholder;
+
+  /// work.attention.answer.send
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get workAttentionAnswerSend;
+
+  /// Phone: pause team job
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get teamJobPause;
+
+  /// Phone: stop team job
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get teamJobStop;
+
+  /// Phone: resume paused team job (start again)
+  ///
+  /// In en, this message translates to:
+  /// **'Resume'**
+  String get teamJobResume;
+
+  /// Phone: step template picker label
+  ///
+  /// In en, this message translates to:
+  /// **'Step template'**
+  String get teamJobTemplate;
+
+  /// Phone: open step harness run
+  ///
+  /// In en, this message translates to:
+  /// **'Open run'**
+  String get teamJobOpenRun;
+
+  /// Phone: step runPhase label
+  ///
+  /// In en, this message translates to:
+  /// **'{phase}'**
+  String teamJobStepPhase(String phase);
+
+  /// Phone: recent/terminal jobs section
+  ///
+  /// In en, this message translates to:
+  /// **'Recent team jobs'**
+  String get teamJobRecentHeading;
 
   /// First-launch: skip welcome slides.
   ///

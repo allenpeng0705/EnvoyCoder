@@ -3,6 +3,7 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { cataloguedUnattendedModeId } from "@envoydev/agent-catalog/catalog";
 import { coderErrorCode, ENVOYDEV_ERRORS, type AgentProviderConfig } from "@envoydev/protocol";
 
 import { resolveCataloguedProviderMode } from "../src/daemon/run-options.js";
@@ -25,6 +26,15 @@ describe("resolveCataloguedProviderMode", () => {
   it("accepts an audited mode id without a stored modeParam", () => {
     expect(resolveCataloguedProviderMode(geminiProvider(), "yolo")).toBe("yolo");
     expect(resolveCataloguedProviderMode(geminiProvider(), undefined)).toBeUndefined();
+  });
+
+  it("Settings Off resolves catalogue YOLO the same way runs.ts does", () => {
+    // Mirrors RunManager.start when requireApprovalForDestructive is false for a provider.
+    const provider = geminiProvider();
+    const unattended = cataloguedUnattendedModeId(provider.catalogEntryId ?? provider.id);
+    expect(unattended).toBe("yolo");
+    expect(resolveCataloguedProviderMode(provider, unattended)).toBe("yolo");
+    expect(cataloguedUnattendedModeId("qwen-code")).toBe("yolo");
   });
 
   it("refuses an unknown mode id and a catalogue row with no modes", () => {

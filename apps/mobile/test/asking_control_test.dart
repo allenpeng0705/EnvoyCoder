@@ -25,9 +25,72 @@ void main() {
     expect(agentCanControlAsking('copilot'), isFalse);
   });
 
-  test('custom providers have no wire', () {
+  test('custom providers have no wire unless catalogue YOLO', () {
     expect(askingControl('my-custom-agent'), AskingControl.none);
     expect(agentCanControlAsking('my-custom-agent'), isFalse);
     expect(isShippedAskingAgent('my-custom-agent'), isFalse);
+    expect(cataloguedUnattendedModeId('my-custom-agent'), isNull);
+  });
+
+  test('catalogue YOLO modes are Settings Off delivery', () {
+    expect(cataloguedUnattendedModeId('gemini'), 'yolo');
+    expect(cataloguedUnattendedModeId('qwen-code'), 'yolo');
+    expect(cataloguedUnattendedModeLabel('gemini'), 'YOLO');
+    expect(
+      agentOrCatalogueCanControlAsking(harnessId: 'gemini'),
+      isTrue,
+    );
+    expect(
+      agentOrCatalogueCanControlAsking(
+        harnessId: 'my-gemini',
+        catalogEntryId: 'gemini',
+      ),
+      isTrue,
+    );
+  });
+
+  test('canStopAskingApprovals matches desktop deliverable wires', () {
+    expect(
+      canStopAskingApprovals(harnessId: 'envoy-harness', requireApproval: true),
+      isTrue,
+    );
+    expect(
+      canStopAskingApprovals(harnessId: 'claudecode', requireApproval: true),
+      isTrue,
+    );
+    expect(
+      canStopAskingApprovals(
+        harnessId: 'gemini-cli',
+        requireApproval: true,
+        catalogEntryId: 'gemini',
+      ),
+      isTrue,
+    );
+    expect(
+      canStopAskingApprovals(harnessId: 'copilot', requireApproval: true),
+      isFalse,
+    );
+    expect(
+      canStopAskingApprovals(harnessId: 'envoy-harness', requireApproval: false),
+      isFalse,
+    );
+  });
+
+  test('stopAskingAllowId prefers allow-* over a generic proceed', () {
+    expect(
+      stopAskingAllowId([
+        (id: 'proceed', destructive: false),
+        (id: 'allow-once', destructive: false),
+        (id: 'reject', destructive: true),
+      ]),
+      'allow-once',
+    );
+    expect(
+      stopAskingAllowId([
+        (id: 'proceed', destructive: false),
+        (id: 'reject', destructive: true),
+      ]),
+      'proceed',
+    );
   });
 }

@@ -54,3 +54,56 @@ String teamJobGitPolicyText(AppLocalizations l10n, String? policy) {
       return l10n.teamJobGitChecking;
   }
 }
+
+/// Step status for the watch sheet — prefer blocked reason over raw status when waiting on a peer.
+String teamJobStepStatusText(AppLocalizations l10n, JobStepInfo step) {
+  if (step.blocked == 'peer-offline') return l10n.teamJobStepWaitingPeer;
+  switch (step.status) {
+    case 'pending':
+      return l10n.teamJobStepPending;
+    case 'offered':
+      return l10n.teamJobStepOffered;
+    case 'running':
+      return l10n.statusWorking;
+    case 'succeeded':
+    case 'done':
+      return l10n.statusDone;
+    case 'failed':
+      return l10n.statusFailed;
+    case 'stopped':
+    case 'cancelled':
+      return l10n.statusStopped;
+    default:
+      return step.status;
+  }
+}
+
+/// Optional second line when a step is deferred until its assignee is online.
+String? teamJobStepWaitingDetail(
+  AppLocalizations l10n,
+  JobStepInfo step, {
+  required List<TeamMemberInfo> board,
+}) {
+  if (step.blocked != 'peer-offline') return null;
+  final id = step.assigneeMemberId;
+  if (id == null || id.isEmpty) return null;
+  for (final m in board) {
+    if (m.id == id) return l10n.teamJobStepWaitingPeerDetail(m.label);
+  }
+  return l10n.teamJobStepWaitingPeerDetail(id);
+}
+
+/// Extra lines under a step (gap / run phase) for the watch sheet.
+List<String> teamJobStepExtraLines(AppLocalizations l10n, JobStepInfo step) {
+  final lines = <String>[];
+  if (step.hasGap) lines.add(l10n.jobPaneHasGap);
+  final phase = step.runPhase?.trim();
+  if (phase != null &&
+      phase.isNotEmpty &&
+      phase != 'idle' &&
+      phase != 'starting' &&
+      !step.needsApproval) {
+    lines.add(l10n.teamJobStepPhase(phase));
+  }
+  return lines;
+}

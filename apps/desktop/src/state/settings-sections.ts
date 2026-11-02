@@ -55,6 +55,7 @@ export type SettingsSectionId =
   | "pairing"
   | "homes"
   | "teams"
+  | "work"
   | "service"
   | "about";
 
@@ -304,6 +305,33 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
         file: "apps/desktop/src/components/settings/TeamsSection.tsx",
         needle: "data-testid=\"teams-section\"",
         because: "the Teams page itself — join, connection chips, and job create",
+      },
+    ],
+  },
+  {
+    id: "work",
+    titleKey: "settings.section.work.title",
+    band: { kind: "sentence", key: "settings.section.work.detail" },
+    content: [
+      {
+        file: "apps/desktop/src/components/settings/WorkSection.tsx",
+        needle: 't("settings.work.mode.title")',
+        because: "the Off / Watch / Take mode control",
+      },
+      {
+        file: "apps/desktop/src/components/settings/WorkSection.tsx",
+        needle: "data-testid=\"work-section\"",
+        because: "Work settings page shell",
+      },
+      {
+        file: "apps/desktop/src/components/settings/WorkSection.tsx",
+        needle: "data-testid=\"work-github-poll\"",
+        because: "manual GitHub poll",
+      },
+      {
+        file: "apps/desktop/src/components/settings/WorkSection.tsx",
+        needle: "data-testid=\"work-needs-review\"",
+        because: "Needs your review queue",
       },
     ],
   },

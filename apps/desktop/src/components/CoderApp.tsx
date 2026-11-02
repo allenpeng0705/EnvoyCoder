@@ -27,7 +27,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useShortcuts, type ShortcutActions } from "../input/useShortcuts.js";
 import { wiredBindings } from "../input/shortcuts.js";
 import type { Project, Task } from "@envoydev/protocol";
+import { isHarnessId } from "@envoydev/protocol";
 import { taskTitleFromPrompt } from "@envoydev/task-model";
+import { cataloguedUnattendedModeId } from "@envoydev/agent-catalog/catalog";
+import { modeForAskingOff } from "@envoydev/agent-catalog/asking";
 
 import { startWindowDrag } from "../client/window-drag.js";
 import { hasShellPicker, pickFolder } from "../client/folder-picker.js";
@@ -36,6 +39,10 @@ import {
   openProjectInNewWindow,
   takePendingProject,
 } from "../client/new-window.js";
+import {
+  modeIdForPreset,
+  type AutonomyPresetId,
+} from "../composer/autonomy-presets.js";
 import { canStopAskingApprovals as agentCanStopAsking } from "../composer/stop-asking.js";
 import { useT } from "../i18n/context.js";
 import {
@@ -642,6 +649,8 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
         ...(state.settings.defaultProjectPath !== undefined
           ? { defaultProjectPath: state.settings.defaultProjectPath }
           : {}),
+        // **`agentProfiles` read site** — palette rows for Apply profile.
+        agentProfiles: state.settings.agentProfiles ?? [],
         tasks: state.tasks.map((task) => ({
           id: task.id,
           title: task.title,
@@ -670,6 +679,58 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
           const started = await props.actions.startRun(created.task.id, title);
           return started.ok ? undefined : started;
         },
+        onNewWorktreeTask: async (projectId, branch) => {
+          const created = await props.actions.createTask({
+            projectId,
+            title: branch,
+            worktree: { branch },
+          });
+          if (!created.ok) return created;
+          setTeamJobProjectId(undefined);
+          setActiveId(created.task.id);
+          return undefined;
+        },
+        onApplyProfile: async (profileId) => {
+          const profile = (state.settings.agentProfiles ?? []).find((entry) => entry.id === profileId);
+          if (profile === undefined) return localNotice("palette.applyProfile.missing");
+          let taskId = activeId;
+          if (taskId === undefined) {
+            const project = state.projects[0];
+            if (project === undefined) return localNotice("palette.applyProfile.noProject");
+            const created = await props.actions.createTask({
+              projectId: project.id,
+              title: profile.label,
+              ...(profile.harness !== undefined ? { harness: profile.harness } : {}),
+              ...(profile.model !== undefined ? { model: profile.model } : {}),
+            });
+            if (!created.ok) return created;
+            taskId = created.task.id;
+            setActiveId(taskId);
+          }
+          const patch: {
+            id: string;
+            harness?: string;
+            model?: string;
+            agentModeId?: string;
+            thinkingLevel?: string;
+            planMode?: boolean;
+          } = { id: taskId };
+          if (profile.harness !== undefined) patch.harness = profile.harness;
+          if (profile.model !== undefined) patch.model = profile.model;
+          if (profile.mode !== undefined) patch.agentModeId = profile.mode;
+          if (profile.thinking !== undefined) patch.thinkingLevel = profile.thinking;
+          if (profile.autonomyPreset === "read-only") patch.planMode = true;
+          if (profile.autonomyPreset === "full-access") {
+            // Same bar as the composer Full access confirm — machine-wide Asking must not flip quietly.
+            if (!window.confirm(t("palette.applyProfile.fullAccessConfirm"))) {
+              return undefined;
+            }
+            await props.actions.updateSettings({ requireApprovalForDestructive: false });
+          } else if (profile.autonomyPreset === "default" || profile.autonomyPreset === "read-only") {
+            await props.actions.updateSettings({ requireApprovalForDestructive: true });
+          }
+          return asFailure(await props.actions.updateTask(patch));
+        },
         onOpenSettings: openAppSettings,
         onPairPhone: openPairing,
         onRevealTask: (taskId) => {
@@ -678,7 +739,15 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
           setActiveId(taskId);
         },
       }),
-    [state.projects, state.tasks, state.settings.defaultProjectPath, props.actions, t],
+    [
+      state.projects,
+      state.tasks,
+      state.settings.defaultProjectPath,
+      state.settings.agentProfiles,
+      activeId,
+      props.actions,
+      t,
+    ],
   );
 
   return (
@@ -915,6 +984,15 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
             onForgetPairedHome={(homeId) => {
               void homes?.forgetHome(homeId);
             }}
+            agents={localActions}
+            workRevision={state.workRevision ?? 0}
+            onOpenTaskFromWork={(taskId) => {
+              homes?.setActiveHome(LOCAL_HOME_ID);
+              setTeamJobProjectId(undefined);
+              setActiveId(taskId);
+              setActiveJobId(undefined);
+              setSettingsScope(undefined);
+            }}
           />
 
         <ResizeHandle
@@ -1054,6 +1132,39 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
                 state.hello?.methods.includes("coder.probeSessionOptions") === true
               }
               explorerOpen={explorerOpen}
+              onEnsureExplorer={() => setExplorerOpen(true)}
+              sendWhileRunning={state.settings.sendWhileRunning}
+              approvalsReviewer={state.settings.approvalsReviewer}
+              trackPills={state.tasks
+                .filter(
+                  (task) =>
+                    task.projectId === active.projectId &&
+                    task.id !== active.id &&
+                    (task.status === "running" || task.status === "needs-attention"),
+                )
+                .map((task) => ({
+                  taskId: task.id,
+                  title: task.title,
+                  kind:
+                    task.status === "needs-attention"
+                      ? ("needs-input" as const)
+                      : ("running" as const),
+                }))}
+              onSelectTask={(taskId) => {
+                setTeamJobProjectId(undefined);
+                setActiveJobId(undefined);
+                setActiveId(taskId);
+              }}
+              {...(state.workEnabled === true
+                ? {
+                    onPromoteToWork: () =>
+                      void localActions.promoteTaskToWork(active.id).then((result) => {
+                        if (!result.ok) {
+                          showShellToast(localize(t, result) ?? result.message, { tone: "error" });
+                        }
+                      }),
+                  }
+                : {})}
               onListDirectory={(path) => props.actions.listDirectory(path)}
               onListChanges={(path) => props.actions.listWorktreeChanges(path)}
               // The three writes the Changes tab offers. Stagedness comes from each write's own answer, so the
@@ -1149,11 +1260,63 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
                 // Live run's agent, not the task's next-run pick — catalogue for shipped ids so an
                 // empty/stale harness list cannot hide Envoy Harness stop-asking.
                 const harnessId = activeRun?.run.harness ?? active.harness;
+                const provider = state.providers.find((entry) => entry.id === harnessId);
                 return agentCanStopAsking({
                   harnessId,
                   requireApproval: state.settings.requireApprovalForDestructive === true,
+                  ...(provider?.catalogEntryId !== undefined
+                    ? { catalogEntryId: provider.catalogEntryId }
+                    : {}),
                 });
               })()}
+              requireApproval={state.settings.requireApprovalForDestructive === true}
+              onChooseAutonomyPreset={async (preset: AutonomyPresetId) => {
+                const requireApproval = preset !== "full-access";
+                toPane(
+                  active.id,
+                  asFailure(
+                    await props.actions.updateSettings({
+                      requireApprovalForDestructive: requireApproval,
+                    }),
+                  ),
+                );
+                const harnessId = active.harness;
+                const summary = state.harnesses.find((entry) => entry.id === harnessId);
+                const provider = state.providers.find((entry) => entry.id === harnessId);
+                const modes = (summary?.modes ?? []).map((mode) => ({
+                  id: mode.id,
+                  ...(mode.unattended === true ? { unattended: true as const } : {}),
+                }));
+                const unattendedFallback = isHarnessId(harnessId)
+                  ? modeForAskingOff(harnessId)
+                  : cataloguedUnattendedModeId(
+                      provider?.catalogEntryId ?? provider?.id ?? harnessId,
+                    );
+                const modeId = modeIdForPreset(preset, modes, unattendedFallback);
+                if (modeId !== undefined) {
+                  toPane(
+                    active.id,
+                    asFailure(
+                      await props.actions.updateTask({ id: active.id, agentModeId: modeId }),
+                    ),
+                  );
+                } else if (preset === "read-only") {
+                  // Envoy-style Plan when the agent has no published read-only mode id.
+                  toPane(
+                    active.id,
+                    asFailure(
+                      await props.actions.updateTask({ id: active.id, planMode: true }),
+                    ),
+                  );
+                } else if (preset === "default" && active.planMode === true) {
+                  toPane(
+                    active.id,
+                    asFailure(
+                      await props.actions.updateTask({ id: active.id, planMode: false }),
+                    ),
+                  );
+                }
+              }}
               onAnswer={async (requestId, choice, options) => {
                 if (!active.runId) return;
                 toPane(

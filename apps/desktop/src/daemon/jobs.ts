@@ -44,6 +44,7 @@ import {
   offerJobStep,
   acceptJobStepOffer,
   refuseJobStepOffer,
+  retryDeferredOffers,
 } from "./job-offers.js";
 import {
   buildJobStepTemplate,
@@ -124,7 +125,14 @@ export function note(
 }
 
 function mergePolicy(partial?: Partial<FailurePolicy>): FailurePolicy {
-  return { ...DEFAULT_FAILURE_POLICY, ...partial };
+  const base = { ...DEFAULT_FAILURE_POLICY, ...partial };
+  return {
+    ...base,
+    contentBus: {
+      ...DEFAULT_FAILURE_POLICY.contentBus,
+      ...partial?.contentBus,
+    },
+  };
 }
 
 export type JobStepDraft = {
@@ -133,6 +141,7 @@ export type JobStepDraft = {
   brief: string;
   worktreeKey: string;
   cwdHint: string;
+  branch?: string;
   dependsOn?: readonly string[];
   assigneeMemberId?: string;
   deadline?: string;
@@ -146,6 +155,7 @@ function draftToStep(jobId: string, draft: JobStepDraft): JobStep {
     brief: draft.brief,
     worktreeKey: draft.worktreeKey,
     cwdHint: draft.cwdHint,
+    ...(draft.branch?.trim() ? { branch: draft.branch.trim() } : {}),
     ...(draft.dependsOn ? { dependsOn: draft.dependsOn } : {}),
     ...(draft.assigneeMemberId ? { assigneeMemberId: draft.assigneeMemberId } : {}),
     ...(draft.deadline ? { deadline: draft.deadline } : {}),
@@ -198,6 +208,7 @@ export async function createJob(
     title: string;
     goal: string;
     projectId?: string;
+    sourceRef?: string;
     steps?: readonly JobStepDraft[];
     policy?: Partial<FailurePolicy>;
   },
@@ -214,10 +225,12 @@ export async function createJob(
     assertStepsInCatalog(steps, catalog);
   }
   assertWriterLocks(steps, catalog);
+  const sourceRef = input.sourceRef?.trim();
   const job: Job = {
     id,
     teamId: input.teamId,
     ...(input.projectId ? { projectId: input.projectId } : {}),
+    ...(sourceRef ? { sourceRef } : {}),
     title: input.title.trim(),
     goal: input.goal.trim(),
     status: "drafting",
@@ -231,6 +244,81 @@ export async function createJob(
   file.jobs[id] = job;
   await writeJsonFile(jobsPath, file);
   return job;
+}
+
+const OPEN_JOB_STATUSES = new Set(["drafting", "running", "merging"]);
+
+/** Idempotent draft keyed by `sourceRef` (Work / GitHub claim). */
+export async function createJobFromSource(
+  jobsPath: string,
+  input: {
+    teamId: string;
+    sourceRef: string;
+    title: string;
+    goal: string;
+    projectId?: string;
+    steps?: readonly JobStepDraft[];
+    policy?: Partial<FailurePolicy>;
+  },
+  teamsPath?: string,
+): Promise<{ job: Job; created: boolean }> {
+  const sourceRef = input.sourceRef.trim();
+  if (!sourceRef) {
+    throw coderError(ENVOYDEV_ERRORS.badRequest, "sourceRef is required.", ref("error.job.missing"));
+  }
+  // Claim is origin-wide on sourceRef so two teams cannot open two jobs for one GitHub thread.
+  const existing = (await listJobs(jobsPath)).find(
+    (j) => j.sourceRef === sourceRef && OPEN_JOB_STATUSES.has(j.status),
+  );
+  if (existing) return { job: existing, created: false };
+  const job = await createJob(
+    jobsPath,
+    {
+      teamId: input.teamId,
+      title: input.title,
+      goal: input.goal,
+      sourceRef,
+      ...(input.projectId ? { projectId: input.projectId } : {}),
+      ...(input.steps ? { steps: input.steps } : {}),
+      ...(input.policy ? { policy: input.policy } : {}),
+    },
+    teamsPath,
+  );
+  // TOCTOU: if a parallel call also created, keep the older open job and cancel the rest.
+  const rivals = (await listJobs(jobsPath)).filter(
+    (j) => j.sourceRef === sourceRef && OPEN_JOB_STATUSES.has(j.status),
+  );
+  if (rivals.length > 1) {
+    const winner = rivals.sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0]!;
+    for (const rival of rivals) {
+      if (rival.id === winner.id) continue;
+      await saveJob(jobsPath, {
+        ...rival,
+        status: "cancelled",
+        endedAt: new Date().toISOString(),
+        ledger: [...rival.ledger, note("info", "Superseded by earlier sourceRef claim")],
+      });
+    }
+    return { job: winner, created: winner.id === job.id };
+  }
+  return { job, created: true };
+}
+
+export async function updateJobPolicy(
+  jobsPath: string,
+  jobId: string,
+  policy: Partial<FailurePolicy>,
+  teamsPath?: string,
+): Promise<Job> {
+  const job = await getJob(jobsPath, jobId);
+  if (teamsPath) {
+    await requireTeam(teamsPath, job.teamId);
+  }
+  return saveJob(jobsPath, {
+    ...job,
+    policy: mergePolicy({ ...job.policy, ...policy, contentBus: { ...job.policy.contentBus, ...policy.contentBus } }),
+    ledger: [...job.ledger, note("info", "Job policy updated")],
+  });
 }
 
 export async function listJobs(
@@ -322,27 +410,36 @@ export function pickAssignee(
   step: JobStep,
   policy: FailurePolicy,
   excludeMemberIds: ReadonlySet<string> = new Set(),
+  options: { requireOnline?: boolean } = {},
 ): string | undefined {
+  const requireOnline =
+    options.requireOnline === true || policy.contentBus?.allowDeferredOffers === false;
   if (
     step.assigneeMemberId &&
     !excludeMemberIds.has(step.assigneeMemberId)
   ) {
     const sticky = team.members.find((m) => m.id === step.assigneeMemberId);
-    if (
-      sticky &&
-      effectiveRoles(sticky).includes(step.role) &&
-      memberOnlineForAssign(sticky, !!policy.allowDegradedAssignees)
-    ) {
-      return sticky.id;
+    if (sticky && effectiveRoles(sticky).includes(step.role)) {
+      if (
+        !requireOnline ||
+        memberOnlineForAssign(sticky, !!policy.allowDegradedAssignees)
+      ) {
+        return sticky.id;
+      }
     }
   }
-  const candidates = team.members.filter(
+  const online = team.members.filter(
     (m) =>
       !excludeMemberIds.has(m.id) &&
       effectiveRoles(m).includes(step.role) &&
       memberOnlineForAssign(m, !!policy.allowDegradedAssignees),
   );
-  return candidates[0]?.id;
+  if (online[0]) return online[0].id;
+  if (requireOnline) return undefined;
+  const anyCapable = team.members.filter(
+    (m) => !excludeMemberIds.has(m.id) && effectiveRoles(m).includes(step.role),
+  );
+  return anyCapable[0]?.id;
 }
 
 export async function startJob(
@@ -366,7 +463,7 @@ export async function startJob(
   const catalog = normalizeTeamRecord(team).roleCatalog;
   assertStepsInCatalog(job.steps, catalog);
   assertWriterLocks(job.steps, catalog);
-  // Preflight: every currently schedulable step needs an online assignee (UI crew gate can race).
+  // Preflight: every schedulable root needs a role-capable assignee (online, or deferred when allowed).
   const roots = job.steps.filter(
     (s) => s.status === "pending" && dependenciesSatisfied(s, job.steps),
   );
@@ -374,7 +471,7 @@ export async function startJob(
     if (!pickAssignee(team, step, job.policy)) {
       throw coderError(
         ENVOYDEV_ERRORS.badRequest,
-        `No online machine offers role “${step.role}”. Fix the team, then try Start again.`,
+        `No machine offers role “${step.role}”. Fix the team, then try Start again.`,
         ref("error.job.noCandidate", { role: step.role }),
       );
     }
@@ -792,4 +889,4 @@ export {
   cancelWorkForMember,
 } from "./job-progress.js";
 
-export { offerJobStep, acceptJobStepOffer, refuseJobStepOffer };
+export { offerJobStep, acceptJobStepOffer, refuseJobStepOffer, retryDeferredOffers };

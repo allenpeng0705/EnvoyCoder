@@ -72,4 +72,65 @@ void main() {
     expect(job.steps.single.role, 'developer');
     expect(job.ledger.single.message, 'Job started');
   });
+
+  test('peer-offline blocked steps read as waiting for a machine', () {
+    final step = JobStepInfo.fromJson({
+      'id': 's1',
+      'role': 'developer',
+      'status': 'pending',
+      'brief': 'implement',
+      'assigneeMemberId': 'm-peer',
+      'blocked': 'peer-offline',
+    });
+    expect(step.waitingForPeer, isTrue);
+    expect(teamJobStepStatusText(l10n, step), l10n.teamJobStepWaitingPeer);
+    final board = [
+      TeamMemberInfo(id: 'm-peer', label: 'Laptop B', connectionStatus: 'offline'),
+    ];
+    expect(
+      teamJobStepWaitingDetail(l10n, step, board: board),
+      l10n.teamJobStepWaitingPeerDetail('Laptop B'),
+    );
+  });
+
+  test('hasGap surfaces the desktop gap sentence', () {
+    final step = JobStepInfo.fromJson({
+      'id': 's1',
+      'role': 'developer',
+      'status': 'running',
+      'hasGap': true,
+      'runPhase': 'streaming',
+    });
+    expect(step.hasGap, isTrue);
+    final lines = teamJobStepExtraLines(l10n, step);
+    expect(lines, contains(l10n.jobPaneHasGap));
+    expect(lines, contains(l10n.teamJobStepPhase('streaming')));
+  });
+
+  test('looksPaused follows the daemon pause ledger note on drafting status', () {
+    final paused = JobInfo.fromJson({
+      'id': 'j1',
+      'teamId': 't1',
+      'title': 'Ship',
+      'goal': 'done',
+      'status': 'drafting',
+      'updatedAt': '2026-01-02T00:00:00Z',
+      'ledger': [
+        {'at': '2026-01-02T00:00:00Z', 'kind': 'info', 'message': 'Job paused — no new offers'},
+      ],
+    });
+    expect(paused.looksPaused, isTrue);
+    final fresh = JobInfo.fromJson({
+      'id': 'j2',
+      'teamId': 't1',
+      'title': 'New',
+      'goal': 'x',
+      'status': 'drafting',
+      'updatedAt': '2026-01-01T00:00:00Z',
+      'ledger': [
+        {'at': '2026-01-01T00:00:00Z', 'kind': 'info', 'message': 'Job created: New'},
+      ],
+    });
+    expect(fresh.looksPaused, isFalse);
+  });
 }

@@ -370,6 +370,38 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsTranscripts => '任务结束后保留对话记录';
 
   @override
+  String get settingsSendWhileRunning => 'Send while the agent is working';
+
+  @override
+  String get settingsSendWhileRunningDetail =>
+      'Queue waits for the current reply. Steer stops it and sends yours instead.';
+
+  @override
+  String get settingsSendWhileRunningQueue => 'Queue';
+
+  @override
+  String get settingsSendWhileRunningSteer => 'Steer';
+
+  @override
+  String get settingsGuardian => 'Permission reviewer';
+
+  @override
+  String get settingsGuardianDetail =>
+      'Guardian auto-allows clear read/search permission cards. Edits and commands still ask you.';
+
+  @override
+  String get settingsGuardianUser => 'Always ask me';
+
+  @override
+  String get settingsGuardianGuardian => 'Guardian';
+
+  @override
+  String get runVoiceStart => 'Start dictation';
+
+  @override
+  String get runVoiceStop => 'Stop dictation';
+
+  @override
   String get settingsLanguage => '语言';
 
   @override
@@ -838,6 +870,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get runApprovalStopAsking => '不再询问';
+
+  @override
+  String get runApprovalStopAskingSession => '本次运行不再询问';
+
+  @override
+  String get runApprovalStopAskingMachine => '本机不再询问';
+
+  @override
+  String get runApprovalStopAskingHint =>
+      '本次运行：直到结束前继续允许后续步骤。本机：设置 →「执行有风险的步骤前先询问」关闭。';
 
   @override
   String get runApprovalAnswerBelow => '请在下方输入区回答';
@@ -1386,6 +1428,49 @@ class AppLocalizationsZh extends AppLocalizations {
   String get composerThinkingTooltip => '智能体在回答前思考多少';
 
   @override
+  String get composerPlanOn => '计划';
+
+  @override
+  String get composerPlanOff => '智能体';
+
+  @override
+  String get composerPlanTooltip => '计划仅查看并提出建议；智能体执行工作';
+
+  @override
+  String get composerAutonomyAskingOn => '询问开启';
+
+  @override
+  String get composerAutonomyAskingOff => '询问关闭';
+
+  @override
+  String get composerAutonomyFullAccess => '完全访问';
+
+  @override
+  String get composerAutonomyReadOnly => '只读';
+
+  @override
+  String get composerAutonomyDefault => '默认';
+
+  @override
+  String get composerAutonomyConfirmTitle => '启用完全访问？';
+
+  @override
+  String get composerAutonomyConfirmBody =>
+      '完全访问会在本机关闭询问，并允许此智能体在未经批准的情况下编辑文件与运行工具。这会提高意外修改、数据丢失或异常行为的风险。可在设置中重新打开询问。';
+
+  @override
+  String get composerAutonomyConfirm => '是，仍然继续';
+
+  @override
+  String get composerAutonomySheet => '自主性';
+
+  @override
+  String get composerAutonomyTooltip => '此智能体询问的频率 — 只读、默认或完全访问';
+
+  @override
+  String get taskPostureAria => '此任务的自主姿态';
+
+  @override
   String get taskUntitled => '无标题任务';
 
   @override
@@ -1560,6 +1645,151 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get teamJobPeerOffline => '离线';
+
+  @override
+  String get errorJobGitNotARepo =>
+      '该文件夹不是 Git 仓库。团队任务通过 Git 共享工作 — 请初始化或克隆仓库。';
+
+  @override
+  String get errorJobGitNoRemote => '此 Git 仓库没有远程。请添加 origin（或其他远程），以便队友拉取与推送。';
+
+  @override
+  String get errorJobGitMissingInstall =>
+      '本机未安装 Git（或不在 PATH 中）。接受团队任务步骤前请先安装 Git。';
+
+  @override
+  String get errorJobGitSyncDirty => '此文件夹有未提交的更改。接受团队任务步骤前请先提交或暂存。';
+
+  @override
+  String get errorJobGitSyncDiverged => '本地与远程分支都有更改，无法快进拉取。';
+
+  @override
+  String get errorJobGitSyncPullFailed => 'Git 拉取失败。请检查远程与凭据后重试。';
+
+  @override
+  String get errorJobGitSyncBranchInvalid => '该分支名对 Git 无效。';
+
+  @override
+  String get errorJobGitSyncBranchFailed => '无法检出或创建步骤分支。';
+
+  @override
+  String get errorJobGitSyncPushFailed => 'Git 推送失败。请检查远程与凭据后重试。';
+
+  @override
+  String get errorTeamMembersMayNotStart => '此团队不允许成员启动作业。请让主机在「设置 → 团队」中启用。';
+
+  @override
+  String get teamJobStepWaitingPeer => '等待某台机器上线';
+
+  @override
+  String teamJobStepWaitingPeerDetail(String machine) {
+    return '$machine 恢复在线后会重试';
+  }
+
+  @override
+  String get errorJobMissing => '没有该 id 的任务。';
+
+  @override
+  String get errorJobStepMissing => '没有该 id 的步骤。';
+
+  @override
+  String get errorJobStepsLocked => '仅在任务起草或运行时可编辑步骤。';
+
+  @override
+  String errorJobWriterLock(String key) {
+    return '两个实现步骤共享工作区键 “$key”。';
+  }
+
+  @override
+  String get errorJobNotRunning => '任务当前状态不允许此操作。';
+
+  @override
+  String get errorJobDeps => '步骤依赖尚未满足。';
+
+  @override
+  String get errorJobNoSteps => '开始前请至少添加一个步骤。';
+
+  @override
+  String errorJobNoCandidate(String role) {
+    return '没有在线机器提供角色 “$role”。请修正团队后再次尝试开始。';
+  }
+
+  @override
+  String get errorJobStepsInFlight => '无法替换已在进行中的步骤。请先暂停任务，或仅编辑待处理步骤。';
+
+  @override
+  String get errorJobOfferMissing => '没有该 id 的邀约。';
+
+  @override
+  String get errorJobOfferClosed => '该邀约已不再待处理。';
+
+  @override
+  String get errorJobExhausted => '步骤已用尽重试与改派次数。';
+
+  @override
+  String get errorJobPathMissing => '本机缺少该文件夹。请克隆项目并打开，然后重试。';
+
+  @override
+  String get errorJobFailed => '此任务已失败。';
+
+  @override
+  String get jobPaneHasGap => '事件缺口 — 部分进度可能缺失';
+
+  @override
+  String get workAttentionAria => '需要你处理的工作项';
+
+  @override
+  String get workAttentionHeading => '工作项';
+
+  @override
+  String get workAttentionStageDelivery => '输入未送达';
+
+  @override
+  String get workAttentionStageAnswer => '等待回答';
+
+  @override
+  String get workAttentionStageReview => '等待审阅';
+
+  @override
+  String get workAttentionStageBlocked => '已阻塞';
+
+  @override
+  String get workAttentionOpenTask => '打开任务';
+
+  @override
+  String get workAttentionRetry => '重试';
+
+  @override
+  String get workAttentionStop => '停止';
+
+  @override
+  String get workAttentionAnswerPlaceholder => '你的回答';
+
+  @override
+  String get workAttentionAnswerSend => '发送';
+
+  @override
+  String get teamJobPause => '暂停';
+
+  @override
+  String get teamJobStop => '停止';
+
+  @override
+  String get teamJobResume => '继续';
+
+  @override
+  String get teamJobTemplate => '步骤模板';
+
+  @override
+  String get teamJobOpenRun => '打开运行';
+
+  @override
+  String teamJobStepPhase(String phase) {
+    return '$phase';
+  }
+
+  @override
+  String get teamJobRecentHeading => '最近的团队任务';
 
   @override
   String get welcomeSkip => '跳过';

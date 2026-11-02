@@ -23,7 +23,7 @@ import type { JSX } from "react";
 
 import { useState } from "react";
 
-import type { CoderSettings, HarnessId } from "@envoydev/protocol";
+import type { AgentProfile, CoderSettings, HarnessId } from "@envoydev/protocol";
 
 import { mergeOfferedAgents } from "../../composer/agent-for.js";
 import { useI18n } from "../../i18n/context.js";
@@ -222,6 +222,35 @@ export function TasksSection(props: SettingsSectionProps): JSX.Element {
           />
         )}
       </SettingRow>
+
+      <SettingRow
+        title={t("settings.sendWhileRunning.title")}
+        detail={t("settings.sendWhileRunning.detail")}
+        developerNote="settings.sendWhileRunning"
+      >
+        {(write) => (
+          <select
+            className="select"
+            value={settings.sendWhileRunning ?? "queue"}
+            aria-label={t("settings.sendWhileRunning.title")}
+            onChange={(event) =>
+              write(
+                props.onUpdate({
+                  sendWhileRunning: event.target.value as "queue" | "steer",
+                }),
+              )
+            }
+          >
+            <option value="queue">{t("settings.sendWhileRunning.queue")}</option>
+            <option value="steer">{t("settings.sendWhileRunning.steer")}</option>
+          </select>
+        )}
+      </SettingRow>
+
+      <AgentProfilesRow
+        profiles={settings.agentProfiles ?? []}
+        onUpdate={(agentProfiles) => props.onUpdate({ agentProfiles })}
+      />
     </>
   );
 }
@@ -247,6 +276,30 @@ export function SafetySection(props: SettingsSectionProps): JSX.Element {
       />
 
       <SettingRow
+        title={t("settings.guardian.title")}
+        detail={t("settings.guardian.detail")}
+        developerNote="settings.approvalsReviewer"
+      >
+        {(write) => (
+          <select
+            className="select"
+            value={settings.approvalsReviewer ?? "user"}
+            aria-label={t("settings.guardian.title")}
+            onChange={(event) =>
+              write(
+                props.onUpdate({
+                  approvalsReviewer: event.target.value as "user" | "guardian",
+                }),
+              )
+            }
+          >
+            <option value="user">{t("settings.guardian.user")}</option>
+            <option value="guardian">{t("settings.guardian.guardian")}</option>
+          </select>
+        )}
+      </SettingRow>
+
+      <SettingRow
         title={t("settings.transcripts.title")}
         detail={t("settings.transcripts.detail")}
         developerNote="settings.keepTranscripts"
@@ -265,5 +318,141 @@ export function SafetySection(props: SettingsSectionProps): JSX.Element {
         <EnvoyDecisionPanel agents={props.agents} />
       ) : null}
     </>
+  );
+}
+
+function AgentProfilesRow(props: {
+  profiles: readonly AgentProfile[];
+  onUpdate: (profiles: AgentProfile[]) => Promise<import("../../i18n/notice.js").WriteFailure>;
+}): JSX.Element {
+  const { t } = useI18n();
+  const [label, setLabel] = useState("");
+  const [harness, setHarness] = useState("");
+  const [model, setModel] = useState("");
+  const [mode, setMode] = useState("");
+  const [thinking, setThinking] = useState("");
+  const [autonomy, setAutonomy] = useState<"read-only" | "default" | "full-access" | "">("");
+
+  const add = (
+    write: (answer: void | Promise<import("../../i18n/notice.js").WriteFailure>) => void,
+  ): void => {
+    const trimmed = label.trim();
+    if (trimmed === "") return;
+    const next: AgentProfile = {
+      id: `profile-${Date.now().toString(36)}`,
+      label: trimmed,
+      ...(harness.trim() !== "" ? { harness: harness.trim() } : {}),
+      ...(model.trim() !== "" ? { model: model.trim() } : {}),
+      ...(mode.trim() !== "" ? { mode: mode.trim() } : {}),
+      ...(thinking.trim() !== "" ? { thinking: thinking.trim() } : {}),
+      ...(autonomy !== "" ? { autonomyPreset: autonomy } : {}),
+    };
+    setLabel("");
+    setHarness("");
+    setModel("");
+    setMode("");
+    setThinking("");
+    setAutonomy("");
+    write(props.onUpdate([...props.profiles, next]));
+  };
+
+  const summary = (profile: AgentProfile): string => {
+    const parts = [
+      profile.harness,
+      profile.model,
+      profile.mode,
+      profile.thinking,
+      profile.autonomyPreset,
+    ].filter((part): part is string => typeof part === "string" && part !== "");
+    return parts.length === 0 ? t("settings.profiles.nameOnly") : parts.join(" · ");
+  };
+
+  return (
+    <SettingRow
+      title={t("settings.profiles.title")}
+      detail={t("settings.profiles.detail")}
+      developerNote="settings.agentProfiles"
+    >
+      {(write) => (
+        <div className="setting__field-group">
+          {props.profiles.length === 0 ? (
+            <p className="settings__note">{t("settings.profiles.empty")}</p>
+          ) : (
+            <ul className="settings__profile-list">
+              {props.profiles.map((profile) => (
+                <li key={profile.id} className="settings__profile-row">
+                  <span>
+                    <strong>{profile.label}</strong>
+                    <span className="settings__note"> — {summary(profile)}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="button button--ghost"
+                    onClick={() =>
+                      write(props.onUpdate(props.profiles.filter((entry) => entry.id !== profile.id)))
+                    }
+                  >
+                    {t("settings.profiles.remove")}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="settings__profile-add settings__profile-add--grid">
+            <input
+              className="input"
+              value={label}
+              placeholder={t("settings.profiles.placeholder")}
+              aria-label={t("settings.profiles.placeholder")}
+              onChange={(event) => setLabel(event.target.value)}
+            />
+            <input
+              className="input"
+              value={harness}
+              placeholder={t("settings.profiles.harness")}
+              aria-label={t("settings.profiles.harness")}
+              onChange={(event) => setHarness(event.target.value)}
+            />
+            <input
+              className="input"
+              value={model}
+              placeholder={t("settings.profiles.model")}
+              aria-label={t("settings.profiles.model")}
+              onChange={(event) => setModel(event.target.value)}
+            />
+            <input
+              className="input"
+              value={mode}
+              placeholder={t("settings.profiles.mode")}
+              aria-label={t("settings.profiles.mode")}
+              onChange={(event) => setMode(event.target.value)}
+            />
+            <input
+              className="input"
+              value={thinking}
+              placeholder={t("settings.profiles.thinking")}
+              aria-label={t("settings.profiles.thinking")}
+              onChange={(event) => setThinking(event.target.value)}
+            />
+            <select
+              className="select"
+              value={autonomy}
+              aria-label={t("settings.profiles.autonomy")}
+              onChange={(event) =>
+                setAutonomy(event.target.value as "" | "read-only" | "default" | "full-access")
+              }
+            >
+              <option value="">{t("settings.profiles.autonomyUnset")}</option>
+              <option value="read-only">{t("task.composer.autonomy.readOnly")}</option>
+              <option value="default">{t("task.composer.autonomy.default")}</option>
+              <option value="full-access">{t("task.composer.autonomy.fullAccess")}</option>
+            </select>
+            <button type="button" className="button" onClick={() => add(write)}>
+              {t("settings.profiles.add")}
+            </button>
+          </div>
+        </div>
+      )}
+    </SettingRow>
   );
 }

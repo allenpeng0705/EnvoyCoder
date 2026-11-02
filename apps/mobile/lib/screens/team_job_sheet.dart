@@ -24,12 +24,14 @@ Future<void> showTeamJobSheet({
   required HostClient client,
   required ProjectInfo project,
 }) {
+  // Keep the caller's context — after this sheet pops we still need a mounted host for the watch sheet.
+  final hostContext = context;
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    builder: (context) => Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: _TeamJobSheet(client: client, project: project),
+    builder: (sheetContext) => Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(sheetContext).bottom),
+      child: _TeamJobSheet(client: client, project: project, hostContext: hostContext),
     ),
   );
 }
@@ -37,10 +39,15 @@ Future<void> showTeamJobSheet({
 enum _Phase { pick, create, startGate }
 
 class _TeamJobSheet extends StatefulWidget {
-  const _TeamJobSheet({required this.client, required this.project});
+  const _TeamJobSheet({
+    required this.client,
+    required this.project,
+    required this.hostContext,
+  });
 
   final HostClient client;
   final ProjectInfo project;
+  final BuildContext hostContext;
 
   @override
   State<_TeamJobSheet> createState() => _TeamJobSheetState();
@@ -53,7 +60,9 @@ class _TeamJobSheetState extends State<_TeamJobSheet> {
   _Phase _phase = _Phase.pick;
   List<TeamInfo> _teams = const [];
   List<JobInfo> _jobs = const [];
+  List<JobStepTemplateInfo> _templates = const [];
   String? _teamId;
+  String? _templateId;
   bool _loading = true;
   bool _busy = false;
   String? _error;
@@ -85,18 +94,35 @@ class _TeamJobSheetState extends State<_TeamJobSheet> {
       final teams = await widget.client.listTeams();
       final jobs = await widget.client.listJobs(projectId: widget.project.id);
       final git = await widget.client.assessGitContentBus(widget.project.path);
+      List<JobStepTemplateInfo> templates = const [];
+      try {
+        templates = await widget.client.listJobStepTemplates();
+      } catch (_) {}
       if (!mounted) return;
-      final active = jobs
-          .where((j) => j.status == 'drafting' || j.status == 'running' || j.status == 'paused')
-          .toList(growable: false);
+      // Active first, then recent terminal — so finished jobs stay reopenable.
+      const activeStatuses = {'drafting', 'running', 'paused', 'merging'};
+      int recency(JobInfo j) {
+        final stamp = j.updatedAt ?? j.createdAt ?? '';
+        return stamp.isEmpty ? 0 : DateTime.tryParse(stamp)?.millisecondsSinceEpoch ?? 0;
+      }
+      final sorted = [...jobs]..sort((a, b) {
+          final aActive = activeStatuses.contains(a.status) || a.looksPaused;
+          final bActive = activeStatuses.contains(b.status) || b.looksPaused;
+          if (aActive != bActive) return aActive ? -1 : 1;
+          return recency(b).compareTo(recency(a));
+        });
       setState(() {
         _teams = teams;
-        _jobs = active;
+        _jobs = sorted;
+        _templates = templates;
+        _templateId = templates.isNotEmpty
+            ? (templates.any((t) => t.id == 'solo') ? 'solo' : templates.first.id)
+            : 'solo';
         _teamId = teams.isNotEmpty ? teams.first.id : null;
         _gitPolicy = git.ok ? 'ok' : git.policy;
         _loading = false;
         // Skip the picker when there is nothing to resume.
-        _phase = active.isEmpty && teams.isNotEmpty ? _Phase.create : _Phase.pick;
+        _phase = sorted.isEmpty && teams.isNotEmpty ? _Phase.create : _Phase.pick;
       });
     } catch (error) {
       if (!mounted) return;
@@ -116,8 +142,21 @@ class _TeamJobSheetState extends State<_TeamJobSheet> {
     return null;
   }
 
+  Future<void> _openWatch(String jobId) async {
+    if (!mounted) return;
+    final host = widget.hostContext;
+    Navigator.of(context).pop();
+    if (!host.mounted) return;
+    await showTeamJobWatchSheet(
+      context: host,
+      client: widget.client,
+      jobId: jobId,
+    );
+  }
+
   Future<void> _openExisting(JobInfo job) async {
-    if (job.status == 'drafting') {
+    // Never-started drafts go to the Start gate; paused (drafting + pause ledger) go to watch.
+    if (job.status == 'drafting' && !job.looksPaused) {
       setState(() {
         _busy = true;
         _error = null;
@@ -143,13 +182,7 @@ class _TeamJobSheetState extends State<_TeamJobSheet> {
       }
       return;
     }
-    if (!mounted) return;
-    Navigator.of(context).pop();
-    await showTeamJobWatchSheet(
-      context: context,
-      client: widget.client,
-      jobId: job.id,
-    );
+    await _openWatch(job.id);
   }
 
   Future<void> _createDraft() async {
@@ -161,21 +194,35 @@ class _TeamJobSheetState extends State<_TeamJobSheet> {
       _busy = true;
       _error = null;
     });
+    JobInfo? created;
     try {
-      final job = await widget.client.createJob(
+      // Create empty draft, then apply a named template (same path as desktop Job pane Suggest).
+      created = await widget.client.createJob(
         teamId: teamId,
         title: title,
         goal: goal,
         projectId: widget.project.id,
-        steps: [
-          {
-            'role': 'developer',
-            'brief': goal.length > 500 ? goal.substring(0, 500) : goal,
-            'worktreeKey': '${widget.project.id}:main',
-            'cwdHint': widget.project.path,
-          },
-        ],
       );
+      var job = created;
+      final suggested = await widget.client.suggestJobSteps(
+        jobId: job.id,
+        templateId: _templateId,
+        hint: goal.length > 500 ? goal.substring(0, 500) : goal,
+      );
+      final cwd = widget.project.path;
+      final steps = suggested.steps
+          .map((raw) {
+            final step = Map<String, dynamic>.from(raw);
+            final hint = (step['cwdHint'] as String?)?.trim();
+            if (hint == null || hint.isEmpty || hint == '.') {
+              step['cwdHint'] = cwd;
+            }
+            return step;
+          })
+          .toList(growable: false);
+      if (steps.isNotEmpty) {
+        job = await widget.client.updateJobSteps(jobId: job.id, steps: steps);
+      }
       final readiness = await widget.client.assessTeamJobReadiness(job.id);
       if (!mounted) return;
       setState(() {
@@ -186,6 +233,23 @@ class _TeamJobSheetState extends State<_TeamJobSheet> {
       });
     } catch (error) {
       if (!mounted) return;
+      // A persisted draft must not stay invisible — recover into Start gate so Create is not double-tapped.
+      if (created != null) {
+        try {
+          final readiness = await widget.client.assessTeamJobReadiness(created.id);
+          if (!mounted) return;
+          setState(() {
+            _draft = created;
+            _readiness = readiness;
+            _phase = _Phase.startGate;
+            _busy = false;
+            _error = daemonErrorText(context.l10n, error.toString());
+          });
+          return;
+        } catch (_) {
+          /* fall through */
+        }
+      }
       setState(() {
         _busy = false;
         _error = daemonErrorText(context.l10n, error.toString());
@@ -232,12 +296,7 @@ class _TeamJobSheetState extends State<_TeamJobSheet> {
       }
       final started = await widget.client.startJob(job.id);
       if (!mounted) return;
-      Navigator.of(context).pop();
-      await showTeamJobWatchSheet(
-        context: context,
-        client: widget.client,
-        jobId: started.id,
-      );
+      await _openWatch(started.id);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -248,12 +307,20 @@ class _TeamJobSheetState extends State<_TeamJobSheet> {
     }
   }
 
-  String _jobStatusLabel(AppLocalizations l10n, String status) => switch (status) {
-        'drafting' => l10n.teamJobStatusDrafting,
-        'running' => l10n.statusWorking,
-        'paused' => l10n.teamJobStatusPaused,
-        _ => status,
-      };
+  String _jobStatusLabel(AppLocalizations l10n, JobInfo job) {
+    if (job.looksPaused) return l10n.teamJobStatusPaused;
+    return switch (job.status) {
+      'drafting' => l10n.teamJobStatusDrafting,
+      'running' => l10n.statusWorking,
+      'paused' => l10n.teamJobStatusPaused,
+      'done' => l10n.statusDone,
+      'failed' => l10n.statusFailed,
+      'cancelled' => l10n.statusStopped,
+      'stopped' => l10n.statusStopped,
+      'merging' => l10n.statusWorking,
+      _ => job.status,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -313,7 +380,7 @@ class _TeamJobSheetState extends State<_TeamJobSheet> {
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(job.title),
-                      subtitle: Text(_jobStatusLabel(l10n, job.status)),
+                      subtitle: Text(_jobStatusLabel(l10n, job)),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: _busy ? null : () => unawaited(_openExisting(job)),
                     ),
@@ -373,6 +440,36 @@ class _TeamJobSheetState extends State<_TeamJobSheet> {
                 maxLines: 4,
                 enabled: !_busy,
               ),
+              if (_templates.isNotEmpty) ...[
+                const SizedBox(height: CoderSpace.md),
+                Text(l10n.teamJobTemplate, style: Theme.of(context).textTheme.labelLarge),
+                const SizedBox(height: CoderSpace.xs),
+                DropdownButtonFormField<String>(
+                  // ignore: deprecated_member_use — controlled field; initialValue is not enough.
+                  value: _templateId,
+                  items: [
+                    for (final t in _templates)
+                      DropdownMenuItem(
+                        value: t.id,
+                        child: Text(t.title, overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: _busy ? null : (v) => setState(() => _templateId = v),
+                ),
+                if (_templateId != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: CoderSpace.xs),
+                    child: Text(
+                      _templates
+                          .firstWhere(
+                            (t) => t.id == _templateId,
+                            orElse: () => _templates.first,
+                          )
+                          .detail,
+                      style: TextStyle(color: colors.foregroundMuted, fontSize: 12),
+                    ),
+                  ),
+              ],
               const SizedBox(height: CoderSpace.sm),
               Text(l10n.teamJobCreateDraftHint, style: TextStyle(color: colors.foregroundMuted, fontSize: 12)),
               const SizedBox(height: CoderSpace.md),
@@ -398,6 +495,20 @@ class _TeamJobSheetState extends State<_TeamJobSheet> {
               ),
               Text(_draft!.title, style: Theme.of(context).textTheme.titleMedium),
               Text(_draft!.goal, style: TextStyle(color: colors.foregroundMuted, fontSize: 13)),
+              if (_draft!.steps.isNotEmpty) ...[
+                const SizedBox(height: CoderSpace.sm),
+                Text(l10n.teamJobStepsHeading, style: Theme.of(context).textTheme.titleSmall),
+                for (final step in _draft!.steps)
+                  Padding(
+                    padding: const EdgeInsets.only(top: CoderSpace.xs),
+                    child: Text(
+                      '${step.role}: ${step.brief}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: colors.foregroundMuted, fontSize: 12),
+                    ),
+                  ),
+              ],
               const SizedBox(height: CoderSpace.md),
               if (readiness != null && !readiness.canStart)
                 Text(

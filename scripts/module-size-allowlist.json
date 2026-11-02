@@ -8,8 +8,38 @@
     },
     {
       "path": "apps/desktop/src/i18n/messages/en.ts",
-      "lines": 1340,
+      "lines": 1769,
       "reason": "The English catalogue every other locale is measured against. Splitting it means splitting key namespaces across all locale files and the i18n parity gate at once. Outstanding."
+    },
+    {
+      "path": "apps/desktop/src/i18n/messages/de.ts",
+      "lines": 1016,
+      "reason": "Locale twin of en.ts; same split debt as the English catalogue."
+    },
+    {
+      "path": "apps/desktop/src/i18n/messages/fr.ts",
+      "lines": 1016,
+      "reason": "Locale twin of en.ts; same split debt as the English catalogue."
+    },
+    {
+      "path": "apps/desktop/src/i18n/messages/it.ts",
+      "lines": 1015,
+      "reason": "Locale twin of en.ts; same split debt as the English catalogue."
+    },
+    {
+      "path": "apps/desktop/src/i18n/messages/ja.ts",
+      "lines": 1011,
+      "reason": "Locale twin of en.ts; same split debt as the English catalogue."
+    },
+    {
+      "path": "apps/desktop/src/i18n/messages/ko.ts",
+      "lines": 1012,
+      "reason": "Locale twin of en.ts; same split debt as the English catalogue."
+    },
+    {
+      "path": "apps/desktop/src/i18n/messages/zh.ts",
+      "lines": 990,
+      "reason": "Locale twin of en.ts; same split debt as the English catalogue."
     },
     {
       "path": "apps/desktop/src/daemon/store.ts",
@@ -28,22 +58,22 @@
     },
     {
       "path": "apps/desktop/src/daemon/runs.ts",
-      "lines": 1277,
+      "lines": 1690,
       "reason": "One agent turn's event lifecycle; event normalization and retention want separate modules. Outstanding."
     },
     {
       "path": "apps/desktop/src/daemon/service.ts",
-      "lines": 1194,
+      "lines": 1489,
       "reason": "The daemon's method handlers; the handler families need extracting behind the dispatcher (@envoydev/host-bridge). Outstanding."
     },
     {
       "path": "packages/protocol/src/domain.ts",
-      "lines": 1778,
+      "lines": 2381,
       "reason": "The shared domain nouns the daemon, window and phone agree on; splitting by bounded context is the follow-up. Outstanding."
     },
     {
       "path": "packages/protocol/src/rpc.ts",
-      "lines": 3282,
+      "lines": 4407,
       "reason": "Every method schema and event name in one wire module; splitting by surface (session / project / daemon) is the follow-up. Outstanding."
     },
     {

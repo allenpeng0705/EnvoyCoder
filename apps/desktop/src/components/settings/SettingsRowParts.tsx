@@ -26,6 +26,7 @@ import {
   askingControl,
   modeLabelForAskingOff,
 } from "@envoydev/agent-catalog/asking";
+import { cataloguedUnattendedModeId } from "@envoydev/agent-catalog/catalog";
 
 import { agentFor } from "../../composer/agent-for.js";
 import { composerControls, modelNote, modelOffReason } from "../../composer/controls.js";
@@ -167,10 +168,25 @@ export function ApprovalRow(props: {
   const shipped = isHarnessId(props.harness) ? props.harness : undefined;
   // Shipped agents: only when the catalogue has a deliverable wire (policy or unattended mode).
   // Do not enable from `modes[].unattended` alone — Copilot/OMP list those but cannot take them
-  // (`askingControl === "none"`). Custom providers: daemon never maps Settings Off for them.
-  const via = shipped !== undefined ? askingControl(shipped) : "none";
-  const supported = shipped !== undefined && agentCanControlAsking(shipped);
-  const modeLabel = shipped !== undefined ? modeLabelForAskingOff(shipped) : undefined;
+  // (`askingControl === "none"`). Catalogue providers with documented YOLO (Gemini, Qwen) follow
+  // the same Settings Off → unattended mode path as Claude/Codex.
+  const catalogEntryId = provider?.catalogEntryId ?? (shipped === undefined ? props.harness : undefined);
+  const catalogYolo =
+    shipped === undefined ? cataloguedUnattendedModeId(catalogEntryId) : undefined;
+  const via =
+    shipped !== undefined
+      ? askingControl(shipped)
+      : catalogYolo !== undefined
+        ? ("unattended-mode" as const)
+        : "none";
+  const supported =
+    (shipped !== undefined && agentCanControlAsking(shipped)) || catalogYolo !== undefined;
+  const modeLabel =
+    shipped !== undefined
+      ? modeLabelForAskingOff(shipped)
+      : catalogYolo !== undefined
+        ? (provider?.modes?.find((m) => m.id === catalogYolo)?.label ?? catalogYolo)
+        : undefined;
   // A known provider (or a shipped agent without a wire) is *unsupported*, not *unknown*.
   const note =
     via === "policy"

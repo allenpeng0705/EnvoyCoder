@@ -40,6 +40,14 @@ export const teams = {
   "job.pane.kick": "내보내기",
   "job.pane.kickConfirm": "{label}을(를) 팀에서 제거합니다. 해당 단계가 중지됩니다.",
   "job.pane.stallAutomation": "정체 자동화 사용 (보드가 보인 뒤)",
+  "job.pane.contentBusAdvanced": "수락·완료 시 Git",
+  "job.pane.pullOnAccept": "단계 수락 전 pull",
+  "job.pane.pushOnSuccess": "단계 성공 시 push",
+  "settings.teams.membersMayStartJobs": "멤버가 작업 시작 가능",
+  "settings.teams.membersMayStartJobs.detail":
+    "온라인 멤버가 초안을 시작할 수 있습니다. 일시정지·중지·제외는 호스트만 가능합니다.",
+  "error.team.membersMayNotStart":
+    "이 팀은 멤버가 작업을 시작할 수 없습니다. 호스트에게 설정 → 팀에서 켜 달라고 요청하세요.",
   "job.pane.noOnline": "시작하려면 온라인 피어(또는 이 기기)가 하나 이상 필요합니다.",
   "job.pane.crew.noSteps": "시작하기 전에 단계를 추가하세요(단계 템플릿 사용).",
   "job.pane.crew.noMembers": "이 팀에는 아직 기기가 없습니다. 팀에서 초대하세요.",
@@ -137,6 +145,16 @@ export const teams = {
   "error.job.git.notARepo": "해당 폴더는 Git 저장소가 아닙니다. 팀 작업은 Git으로 작업을 공유합니다 — 저장소를 초기화하거나 클론하세요.",
   "error.job.git.noRemote": "이 Git 저장소에 원격이 없습니다. 팀원이 pull/push할 수 있도록 origin(또는 다른 원격)을 추가하세요.",
   "error.job.git.missing": "이 기기에 Git이 설치되어 있지 않거나 PATH에 없습니다. 팀 작업 단계를 수락하기 전에 Git을 설치하세요.",
+  "error.job.git.syncDirty":
+    "이 폴더에 커밋되지 않은 변경이 있습니다. 팀 잡 단계를 수락하기 전에 커밋하거나 stash하세요.",
+  "error.job.git.syncDiverged":
+    "로컬과 원격 브랜치가 모두 바뀌어 fast-forward pull을 할 수 없습니다.",
+  "error.job.git.syncPullFailed":
+    "Git pull에 실패했습니다. 원격과 인증을 확인한 뒤 다시 시도하세요.",
+  "error.job.git.syncBranchInvalid": "해당 브랜치 이름은 Git에서 유효하지 않습니다.",
+  "error.job.git.syncBranchFailed": "단계 브랜치를 체크아웃하거나 만들 수 없습니다.",
+  "error.job.git.syncPushFailed":
+    "Git push에 실패했습니다. 원격과 인증을 확인한 뒤 다시 시도하세요.",
   "teamJob.git.ok": "Git 준비됨 — 원격이 있는 저장소.",
   "teamJob.git.pathMissing": "프로젝트 폴더가 없습니다.",
   "teamJob.git.notARepo": "이 프로젝트는 Git 저장소가 아닙니다. 팀 작업은 파일 공유에 Git이 필요합니다.",

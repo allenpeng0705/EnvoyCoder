@@ -100,6 +100,12 @@ export function ExplorerSidebar(props: {
   onOpenFile?: (entry: ExplorerEntry) => void;
   /** A file in Changes. The window opens the difference, not the file. */
   onOpenChange?: (change: ExplorerChange) => void;
+  /**
+   * Force the Changes (or Files) tab when the composer diff pill asks to open it.
+   * `focusToken` bumps so a second click still switches even if already on that tab.
+   */
+  focusTab?: "files" | "changes";
+  focusToken?: number;
   onCreateEntry?: (
     directory: string,
     name: string,
@@ -129,6 +135,11 @@ export function ExplorerSidebar(props: {
   listChanges.current = props.onListChanges;
 
   const [tab, setTab] = useState<"files" | "changes">("files");
+
+  useEffect(() => {
+    if (props.focusTab === undefined) return;
+    setTab(props.focusTab);
+  }, [props.focusTab, props.focusToken]);
   /** The commit message being typed, and what the last write said. */
   const [commitMessage, setCommitMessage] = useState("");
   const [writeNotice, setWriteNotice] = useState<string | undefined>(undefined);

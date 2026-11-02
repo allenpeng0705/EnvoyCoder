@@ -36,9 +36,10 @@ describe("product state on disk", () => {
   it("keeps this product's state inside the shared home, under its own name", () => {
     const paths = coderPaths("/home/dev/.envoymesh");
     expect(paths.stateDir).toBe("/home/dev/.envoymesh/EnvoyDev");
-    for (const file of [paths.projectsFile, paths.tasksFile, paths.settingsFile]) {
+    for (const file of [paths.projectsFile, paths.tasksFile, paths.settingsFile, paths.workDir]) {
       expect(file.startsWith(paths.stateDir)).toBe(true);
     }
+    expect(paths.workDir.endsWith("work")).toBe(true);
     // Another product's state must not be reachable through these paths.
     expect(JSON.stringify(paths)).not.toMatch(/EnvoyMesh\/|profile\//);
   });

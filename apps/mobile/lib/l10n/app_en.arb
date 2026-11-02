@@ -495,6 +495,46 @@
   "@settingsTranscripts": {
     "description": "settings.transcripts — The transcript switch."
   },
+  "settingsSendWhileRunning": "Send while the agent is working",
+  "@settingsSendWhileRunning": {
+    "description": "settings.sendWhileRunning — Queue vs steer default."
+  },
+  "settingsSendWhileRunningDetail": "Queue waits for the current reply. Steer stops it and sends yours instead.",
+  "@settingsSendWhileRunningDetail": {
+    "description": "settings.sendWhileRunning.detail"
+  },
+  "settingsSendWhileRunningQueue": "Queue",
+  "@settingsSendWhileRunningQueue": {
+    "description": "settings.sendWhileRunning.queue"
+  },
+  "settingsSendWhileRunningSteer": "Steer",
+  "@settingsSendWhileRunningSteer": {
+    "description": "settings.sendWhileRunning.steer"
+  },
+  "settingsGuardian": "Permission reviewer",
+  "@settingsGuardian": {
+    "description": "settings.guardian — User vs Guardian."
+  },
+  "settingsGuardianDetail": "Guardian auto-allows clear read/search permission cards. Edits and commands still ask you.",
+  "@settingsGuardianDetail": {
+    "description": "settings.guardian.detail"
+  },
+  "settingsGuardianUser": "Always ask me",
+  "@settingsGuardianUser": {
+    "description": "settings.guardian.user"
+  },
+  "settingsGuardianGuardian": "Guardian",
+  "@settingsGuardianGuardian": {
+    "description": "settings.guardian.guardian"
+  },
+  "runVoiceStart": "Start dictation",
+  "@runVoiceStart": {
+    "description": "Composer mic — start"
+  },
+  "runVoiceStop": "Stop dictation",
+  "@runVoiceStop": {
+    "description": "Composer mic — stop"
+  },
   "settingsLanguage": "Language",
   "@settingsLanguage": {
     "description": "settings.language — The language picker's label."
@@ -1014,7 +1054,9 @@
   "@runToolsEditedMany": {
     "description": "run.tools.edited.many — Bucket summary: N file edits.",
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "runToolsRanOne": "ran 1 command",
@@ -1025,7 +1067,9 @@
   "@runToolsRanMany": {
     "description": "run.tools.ran.many — Bucket summary: N commands.",
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "runToolsSearchedOne": "searched once",
@@ -1036,7 +1080,9 @@
   "@runToolsSearchedMany": {
     "description": "run.tools.searched.many — Bucket summary: N searches.",
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "runToolsOtherOne": "used 1 tool",
@@ -1047,7 +1093,9 @@
   "@runToolsOtherMany": {
     "description": "run.tools.other.many — Bucket summary: N other tools.",
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "runToolsSummaryEmpty": "Tools",
@@ -1058,16 +1106,24 @@
   "@runToolsSummaryTwo": {
     "description": "run.tools.summary.two — Join two bucket phrases.",
     "placeholders": {
-      "a": { "type": "String" },
-      "b": { "type": "String" }
+      "a": {
+        "type": "String"
+      },
+      "b": {
+        "type": "String"
+      }
     }
   },
   "runToolsSummaryMany": "{head}, and {last}",
   "@runToolsSummaryMany": {
     "description": "run.tools.summary.many — Join three+ bucket phrases.",
     "placeholders": {
-      "head": { "type": "String" },
-      "last": { "type": "String" }
+      "head": {
+        "type": "String"
+      },
+      "last": {
+        "type": "String"
+      }
     }
   },
   "runToolsSummaryComma": ", ",
@@ -1082,7 +1138,9 @@
   "@runEmptyBody": {
     "description": "task.transcript.empty.body — Empty-task hero body with folder name.",
     "placeholders": {
-      "cwd": { "type": "String" }
+      "cwd": {
+        "type": "String"
+      }
     }
   },
   "runEmptySuggestionOne": "Explain what this project does",
@@ -1121,7 +1179,6 @@
   "@runToolDetails": {
     "description": "run.toolDetails — Expand tool input/output."
   },
-
   "runAnswered": "Answered",
   "@runAnswered": {
     "description": "run.answered — An approval that has an answer."
@@ -1143,6 +1200,18 @@
   "@runApprovalStopAsking": {
     "description": "On an Envoy Harness approval: allow this step and turn off Ask before risky steps."
   },
+  "runApprovalStopAskingSession": "Don't ask again for this run",
+  "@runApprovalStopAskingSession": {
+    "description": "Stop asking for the rest of this live run only."
+  },
+  "runApprovalStopAskingMachine": "Don't ask again on this machine",
+  "@runApprovalStopAskingMachine": {
+    "description": "Stop asking on this machine — Settings Ask before risky steps Off."
+  },
+  "runApprovalStopAskingHint": "This run: allow further steps until this run ends. This machine: Settings → Ask before risky steps Off.",
+  "@runApprovalStopAskingHint": {
+    "description": "Explains this-run vs machine stop-asking scopes."
+  },
   "runApprovalAnswerBelow": "Answer in the composer below",
   "@runApprovalAnswerBelow": {
     "description": "run.approvalAnswerBelow — Transcript stub while sticky chrome owns the choices."
@@ -1155,8 +1224,12 @@
   "@runPlanProgress": {
     "description": "run.plan.progress — Checklist progress.",
     "placeholders": {
-      "done": { "type": "int" },
-      "total": { "type": "int" }
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "runPlanPriorityHigh": "High",
@@ -1941,6 +2014,62 @@
   "@composerThinkingTooltip": {
     "description": "composerthinkingtooltip — Reused from desktop task.composer.thinking.title"
   },
+  "composerPlanOn": "Plan",
+  "@composerPlanOn": {
+    "description": "composerplanon — Plan mode is on"
+  },
+  "composerPlanOff": "Agent",
+  "@composerPlanOff": {
+    "description": "composerplanoff — Plan mode is off (agent works)"
+  },
+  "composerPlanTooltip": "Plan looks and proposes; Agent does the work",
+  "@composerPlanTooltip": {
+    "description": "composerplantooltip — Plan toggle hint"
+  },
+  "composerAutonomyAskingOn": "Asking on",
+  "@composerAutonomyAskingOn": {
+    "description": "composerautonomyaskingon — Settings still asks before risky steps"
+  },
+  "composerAutonomyAskingOff": "Asking off",
+  "@composerAutonomyAskingOff": {
+    "description": "composerautonomyaskingoff — Settings does not ask before risky steps"
+  },
+  "composerAutonomyFullAccess": "Full access",
+  "@composerAutonomyFullAccess": {
+    "description": "composerautonomyfullaccess — Selected mode is unattended / YOLO"
+  },
+  "composerAutonomyReadOnly": "Read only",
+  "@composerAutonomyReadOnly": {
+    "description": "composerautonomyreadonly — Ask + plan/read-only mode"
+  },
+  "composerAutonomyDefault": "Default",
+  "@composerAutonomyDefault": {
+    "description": "composerautonomydefault — Ask + normal mode"
+  },
+  "composerAutonomyConfirmTitle": "Enable full access?",
+  "@composerAutonomyConfirmTitle": {
+    "description": "Full access confirmation title"
+  },
+  "composerAutonomyConfirmBody": "Full access turns off asking on this machine and lets this agent edit files and run tools without approval prompts. That raises the risk of unwanted edits, data loss, or unexpected behavior. You can turn asking back on in Settings.",
+  "@composerAutonomyConfirmBody": {
+    "description": "Full access confirmation body"
+  },
+  "composerAutonomyConfirm": "Yes, continue anyway",
+  "@composerAutonomyConfirm": {
+    "description": "Full access confirmation CTA"
+  },
+  "composerAutonomySheet": "Autonomy",
+  "@composerAutonomySheet": {
+    "description": "Autonomy preset picker sheet title"
+  },
+  "composerAutonomyTooltip": "How often this agent asks — Read only, Default, or Full access",
+  "@composerAutonomyTooltip": {
+    "description": "composerautonomytooltip — Autonomy chip hint"
+  },
+  "taskPostureAria": "Autonomy posture for this task",
+  "@taskPostureAria": {
+    "description": "Always-visible posture label in task chrome"
+  },
   "taskUntitled": "Untitled task",
   "@taskUntitled": {
     "description": "taskuntitled — A task the daemon gave no title."
@@ -2182,6 +2311,206 @@
     "description": "Phone: peer degraded."
   },
   "teamJobPeerOffline": "Offline",
+  "errorJobGitNotARepo": "That folder is not a Git repository. Team jobs share work through Git — initialize or clone a repo.",
+  "@errorJobGitNotARepo": {
+    "description": "error.job.git.notARepo — Team job accept: not a repo."
+  },
+  "errorJobGitNoRemote": "This Git repository has no remote. Add origin (or another remote) so teammates can pull and push.",
+  "@errorJobGitNoRemote": {
+    "description": "error.job.git.noRemote — Team job accept: no remote."
+  },
+  "errorJobGitMissingInstall": "Git is not installed (or not on PATH) on this machine. Install Git before accepting a Team job step.",
+  "@errorJobGitMissingInstall": {
+    "description": "error.job.git.missing — Team job accept: git missing."
+  },
+  "errorJobGitSyncDirty": "This folder has uncommitted changes. Commit or stash them before accepting the Team job step.",
+  "@errorJobGitSyncDirty": {
+    "description": "error.job.git.syncDirty — Team job accept: dirty tree."
+  },
+  "errorJobGitSyncDiverged": "Local and remote branches have both changed, so a fast-forward pull cannot bring them together.",
+  "@errorJobGitSyncDiverged": {
+    "description": "error.job.git.syncDiverged — Team job accept: diverged."
+  },
+  "errorJobGitSyncPullFailed": "Git pull failed. Check the remote and your credentials, then try again.",
+  "@errorJobGitSyncPullFailed": {
+    "description": "error.job.git.syncPullFailed — Team job accept: pull failed."
+  },
+  "errorJobGitSyncBranchInvalid": "That branch name is not valid for Git.",
+  "@errorJobGitSyncBranchInvalid": {
+    "description": "error.job.git.syncBranchInvalid — Team job accept: bad branch."
+  },
+  "errorJobGitSyncBranchFailed": "Could not check out or create the step branch.",
+  "@errorJobGitSyncBranchFailed": {
+    "description": "error.job.git.syncBranchFailed — Team job accept: checkout failed."
+  },
+  "errorJobGitSyncPushFailed": "Git push failed. Check the remote and your credentials, then try again.",
+  "@errorJobGitSyncPushFailed": {
+    "description": "error.job.git.syncPushFailed — Team job complete: push failed."
+  },
+  "errorTeamMembersMayNotStart": "This team does not allow members to start jobs. Ask the host to enable it in Settings → Teams.",
+  "@errorTeamMembersMayNotStart": {
+    "description": "error.team.membersMayNotStart — Member start refused by team setting."
+  },
+  "teamJobStepWaitingPeer": "Waiting for a machine",
+  "@teamJobStepWaitingPeer": {
+    "description": "Phone: step blocked peer-offline status label."
+  },
+  "teamJobStepWaitingPeerDetail": "Will retry when {machine} is back",
+  "@teamJobStepWaitingPeerDetail": {
+    "description": "Phone: step blocked peer-offline detail with assignee label.",
+    "placeholders": {
+      "machine": {
+        "type": "String"
+      }
+    }
+  },
+  "errorJobMissing": "No job with that id.",
+  "@errorJobMissing": {
+    "description": "error.job.missing"
+  },
+  "errorJobStepMissing": "No step with that id.",
+  "@errorJobStepMissing": {
+    "description": "error.job.stepMissing"
+  },
+  "errorJobStepsLocked": "Steps can only be edited while the job is drafting or running.",
+  "@errorJobStepsLocked": {
+    "description": "error.job.stepsLocked"
+  },
+  "errorJobWriterLock": "Two implement steps share worktree key “{key}”.",
+  "@errorJobWriterLock": {
+    "description": "error.job.writerLock",
+    "placeholders": {
+      "key": {
+        "type": "String"
+      }
+    }
+  },
+  "errorJobNotRunning": "The job is not in a state that accepts this action.",
+  "@errorJobNotRunning": {
+    "description": "error.job.notRunning"
+  },
+  "errorJobDeps": "Step dependencies are not satisfied.",
+  "@errorJobDeps": {
+    "description": "error.job.deps"
+  },
+  "errorJobNoSteps": "Add at least one step before starting.",
+  "@errorJobNoSteps": {
+    "description": "error.job.noSteps"
+  },
+  "errorJobNoCandidate": "No online machine offers role “{role}”. Fix the team, then try Start again.",
+  "@errorJobNoCandidate": {
+    "description": "error.job.noCandidate",
+    "placeholders": {
+      "role": {
+        "type": "String"
+      }
+    }
+  },
+  "errorJobStepsInFlight": "Cannot replace steps that are already in progress. Pause the job first, or edit only pending steps.",
+  "@errorJobStepsInFlight": {
+    "description": "error.job.stepsInFlight"
+  },
+  "errorJobOfferMissing": "No offer with that id.",
+  "@errorJobOfferMissing": {
+    "description": "error.job.offerMissing"
+  },
+  "errorJobOfferClosed": "That offer is no longer pending.",
+  "@errorJobOfferClosed": {
+    "description": "error.job.offerClosed"
+  },
+  "errorJobExhausted": "Step exhausted retries and reassigns.",
+  "@errorJobExhausted": {
+    "description": "error.job.exhausted"
+  },
+  "errorJobPathMissing": "That folder is missing on this machine. Clone the project and open it, then try again.",
+  "@errorJobPathMissing": {
+    "description": "error.job.pathMissing"
+  },
+  "errorJobFailed": "This job has failed.",
+  "@errorJobFailed": {
+    "description": "error.job.failed"
+  },
+  "jobPaneHasGap": "Event gap — some progress may be missing",
+  "@jobPaneHasGap": {
+    "description": "job.pane.hasGap"
+  },
+  "workAttentionAria": "Work items needing you",
+  "@workAttentionAria": {
+    "description": "work.attention.aria"
+  },
+  "workAttentionHeading": "Work items",
+  "@workAttentionHeading": {
+    "description": "work.attention.heading"
+  },
+  "workAttentionStageDelivery": "Input undelivered",
+  "@workAttentionStageDelivery": {
+    "description": "work.attention.stage.delivery"
+  },
+  "workAttentionStageAnswer": "Awaiting answer",
+  "@workAttentionStageAnswer": {
+    "description": "work.attention.stage.answer"
+  },
+  "workAttentionStageReview": "Awaiting review",
+  "@workAttentionStageReview": {
+    "description": "work.attention.stage.review"
+  },
+  "workAttentionStageBlocked": "Blocked",
+  "@workAttentionStageBlocked": {
+    "description": "work.attention.stage.blocked"
+  },
+  "workAttentionOpenTask": "Open task",
+  "@workAttentionOpenTask": {
+    "description": "work.attention.openTask"
+  },
+  "workAttentionRetry": "Retry",
+  "@workAttentionRetry": {
+    "description": "work.attention.retry"
+  },
+  "workAttentionStop": "Stop",
+  "@workAttentionStop": {
+    "description": "work.attention.stop"
+  },
+  "workAttentionAnswerPlaceholder": "Your answer",
+  "@workAttentionAnswerPlaceholder": {
+    "description": "work.attention.answer.placeholder"
+  },
+  "workAttentionAnswerSend": "Send",
+  "@workAttentionAnswerSend": {
+    "description": "work.attention.answer.send"
+  },
+  "teamJobPause": "Pause",
+  "@teamJobPause": {
+    "description": "Phone: pause team job"
+  },
+  "teamJobStop": "Stop",
+  "@teamJobStop": {
+    "description": "Phone: stop team job"
+  },
+  "teamJobResume": "Resume",
+  "@teamJobResume": {
+    "description": "Phone: resume paused team job (start again)"
+  },
+  "teamJobTemplate": "Step template",
+  "@teamJobTemplate": {
+    "description": "Phone: step template picker label"
+  },
+  "teamJobOpenRun": "Open run",
+  "@teamJobOpenRun": {
+    "description": "Phone: open step harness run"
+  },
+  "teamJobStepPhase": "{phase}",
+  "@teamJobStepPhase": {
+    "description": "Phone: step runPhase label",
+    "placeholders": {
+      "phase": {
+        "type": "String"
+      }
+    }
+  },
+  "teamJobRecentHeading": "Recent team jobs",
+  "@teamJobRecentHeading": {
+    "description": "Phone: recent/terminal jobs section"
+  },
   "@teamJobPeerOffline": {
     "description": "Phone: peer offline."
   },

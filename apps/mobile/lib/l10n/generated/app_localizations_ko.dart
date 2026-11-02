@@ -374,6 +374,38 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsTranscripts => '작업이 끝난 뒤에도 기록 유지';
 
   @override
+  String get settingsSendWhileRunning => 'Send while the agent is working';
+
+  @override
+  String get settingsSendWhileRunningDetail =>
+      'Queue waits for the current reply. Steer stops it and sends yours instead.';
+
+  @override
+  String get settingsSendWhileRunningQueue => 'Queue';
+
+  @override
+  String get settingsSendWhileRunningSteer => 'Steer';
+
+  @override
+  String get settingsGuardian => 'Permission reviewer';
+
+  @override
+  String get settingsGuardianDetail =>
+      'Guardian auto-allows clear read/search permission cards. Edits and commands still ask you.';
+
+  @override
+  String get settingsGuardianUser => 'Always ask me';
+
+  @override
+  String get settingsGuardianGuardian => 'Guardian';
+
+  @override
+  String get runVoiceStart => 'Start dictation';
+
+  @override
+  String get runVoiceStop => 'Stop dictation';
+
+  @override
   String get settingsLanguage => '언어';
 
   @override
@@ -845,6 +877,16 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get runApprovalStopAsking => '다시 묻지 않음';
+
+  @override
+  String get runApprovalStopAskingSession => '이번 실행에서는 다시 묻지 않음';
+
+  @override
+  String get runApprovalStopAskingMachine => '이 기기에서는 다시 묻지 않음';
+
+  @override
+  String get runApprovalStopAskingHint =>
+      '이번 실행: 끝날 때까지 이후 단계를 허용. 이 기기: 설정 → 위험한 단계 전에 확인 끔.';
 
   @override
   String get runApprovalAnswerBelow => '아래 입력란에서 답하세요';
@@ -1399,6 +1441,49 @@ class AppLocalizationsKo extends AppLocalizations {
   String get composerThinkingTooltip => '에이전트가 답하기 전에 얼마나 생각할지';
 
   @override
+  String get composerPlanOn => '계획';
+
+  @override
+  String get composerPlanOff => '에이전트';
+
+  @override
+  String get composerPlanTooltip => '계획은 살펴보고 제안합니다. 에이전트가 작업합니다';
+
+  @override
+  String get composerAutonomyAskingOn => '확인 켜짐';
+
+  @override
+  String get composerAutonomyAskingOff => '확인 꺼짐';
+
+  @override
+  String get composerAutonomyFullAccess => '전체 액세스';
+
+  @override
+  String get composerAutonomyReadOnly => '읽기 전용';
+
+  @override
+  String get composerAutonomyDefault => '기본';
+
+  @override
+  String get composerAutonomyConfirmTitle => '전체 액세스를 켤까요?';
+
+  @override
+  String get composerAutonomyConfirmBody =>
+      '전체 액세스는 이 기기에서 확인을 끄고, 이 에이전트가 승인 없이 파일을 편집하고 도구를 실행하도록 합니다. 원치 않는 편집, 데이터 손실, 예상치 못한 동작의 위험이 커집니다. 설정에서 다시 켤 수 있습니다.';
+
+  @override
+  String get composerAutonomyConfirm => '예, 계속합니다';
+
+  @override
+  String get composerAutonomySheet => '자율성';
+
+  @override
+  String get composerAutonomyTooltip => '이 에이전트가 묻는 빈도 — 읽기 전용, 기본 또는 전체 액세스';
+
+  @override
+  String get taskPostureAria => '이 작업의 자율성';
+
+  @override
   String get taskUntitled => '제목 없는 작업';
 
   @override
@@ -1574,6 +1659,159 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get teamJobPeerOffline => '오프라인';
+
+  @override
+  String get errorJobGitNotARepo =>
+      '해당 폴더는 Git 저장소가 아닙니다. 팀 작업은 Git으로 작업을 공유합니다 — 저장소를 초기화하거나 클론하세요.';
+
+  @override
+  String get errorJobGitNoRemote =>
+      '이 Git 저장소에 원격이 없습니다. 팀원이 pull/push할 수 있도록 origin(또는 다른 원격)을 추가하세요.';
+
+  @override
+  String get errorJobGitMissingInstall =>
+      '이 기기에 Git이 설치되어 있지 않거나 PATH에 없습니다. 팀 작업 단계를 수락하기 전에 Git을 설치하세요.';
+
+  @override
+  String get errorJobGitSyncDirty =>
+      '이 폴더에 커밋되지 않은 변경이 있습니다. 팀 잡 단계를 수락하기 전에 커밋하거나 stash하세요.';
+
+  @override
+  String get errorJobGitSyncDiverged =>
+      '로컬과 원격 브랜치가 모두 바뀌어 fast-forward pull을 할 수 없습니다.';
+
+  @override
+  String get errorJobGitSyncPullFailed =>
+      'Git pull에 실패했습니다. 원격과 인증을 확인한 뒤 다시 시도하세요.';
+
+  @override
+  String get errorJobGitSyncBranchInvalid => '해당 브랜치 이름은 Git에서 유효하지 않습니다.';
+
+  @override
+  String get errorJobGitSyncBranchFailed => '단계 브랜치를 체크아웃하거나 만들 수 없습니다.';
+
+  @override
+  String get errorJobGitSyncPushFailed =>
+      'Git push에 실패했습니다. 원격과 인증을 확인한 뒤 다시 시도하세요.';
+
+  @override
+  String get errorTeamMembersMayNotStart =>
+      '이 팀은 멤버가 작업을 시작할 수 없습니다. 호스트에게 설정 → 팀에서 켜 달라고 요청하세요.';
+
+  @override
+  String get teamJobStepWaitingPeer => '기기 대기 중';
+
+  @override
+  String teamJobStepWaitingPeerDetail(String machine) {
+    return '$machine이(가) 돌아오면 다시 시도합니다';
+  }
+
+  @override
+  String get errorJobMissing => '해당 id의 작업이 없습니다.';
+
+  @override
+  String get errorJobStepMissing => '해당 id의 단계가 없습니다.';
+
+  @override
+  String get errorJobStepsLocked => '단계는 작업이 초안 또는 실행 중일 때만 편집할 수 있습니다.';
+
+  @override
+  String errorJobWriterLock(String key) {
+    return '두 구현 단계가 워킹트리 키 “$key”를 공유합니다.';
+  }
+
+  @override
+  String get errorJobNotRunning => '작업이 이 작업을 허용하는 상태가 아닙니다.';
+
+  @override
+  String get errorJobDeps => '단계 종속성이 충족되지 않았습니다.';
+
+  @override
+  String get errorJobNoSteps => '시작하기 전에 단계를 하나 이상 추가하세요.';
+
+  @override
+  String errorJobNoCandidate(String role) {
+    return '역할 “$role”을(를) 제공하는 온라인 기기가 없습니다. 팀을 고친 뒤 다시 시작하세요.';
+  }
+
+  @override
+  String get errorJobStepsInFlight =>
+      '이미 진행 중인 단계는 바꿀 수 없습니다. 먼저 작업을 일시 중지하거나 대기 중인 단계만 편집하세요.';
+
+  @override
+  String get errorJobOfferMissing => '해당 id의 제안이 없습니다.';
+
+  @override
+  String get errorJobOfferClosed => '해당 제안은 더 이상 대기 중이 아닙니다.';
+
+  @override
+  String get errorJobExhausted => '단계의 재시도 및 재할당을 모두 사용했습니다.';
+
+  @override
+  String get errorJobPathMissing =>
+      '이 기기에 해당 폴더가 없습니다. 프로젝트를 클론해 연 뒤 다시 시도하세요.';
+
+  @override
+  String get errorJobFailed => '이 작업이 실패했습니다.';
+
+  @override
+  String get jobPaneHasGap => '이벤트 공백 — 일부 진행 상황이 빠졌을 수 있습니다';
+
+  @override
+  String get workAttentionAria => '당신이 필요한 작업 항목';
+
+  @override
+  String get workAttentionHeading => '작업 항목';
+
+  @override
+  String get workAttentionStageDelivery => '입력 미전달';
+
+  @override
+  String get workAttentionStageAnswer => '답변 대기';
+
+  @override
+  String get workAttentionStageReview => '검토 대기';
+
+  @override
+  String get workAttentionStageBlocked => '차단됨';
+
+  @override
+  String get workAttentionOpenTask => '작업 열기';
+
+  @override
+  String get workAttentionRetry => '다시 시도';
+
+  @override
+  String get workAttentionStop => '중지';
+
+  @override
+  String get workAttentionAnswerPlaceholder => '당신의 답변';
+
+  @override
+  String get workAttentionAnswerSend => '보내기';
+
+  @override
+  String get teamJobPause => '일시 중지';
+
+  @override
+  String get teamJobStop => '중지';
+
+  @override
+  String get teamJobResume => '재개';
+
+  @override
+  String get teamJobTemplate => '단계 템플릿';
+
+  @override
+  String get teamJobOpenRun => '실행 열기';
+
+  @override
+  String teamJobStepPhase(String phase) {
+    return '$phase';
+  }
+
+  @override
+  String get teamJobRecentHeading => '최근 팀 작업';
 
   @override
   String get welcomeSkip => '건너뛰기';

@@ -21,6 +21,7 @@
     "@envoydev/platform": "0.1.0",
     "@envoydev/protocol": "0.1.0",
     "@envoydev/task-model": "0.1.0",
+    "@envoydev/work-model": "0.1.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "highlight.js": "^11.12.0",

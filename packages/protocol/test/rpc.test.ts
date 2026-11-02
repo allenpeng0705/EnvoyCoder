@@ -177,8 +177,10 @@ describe("errors on the wire", () => {
 
 describe("the broadcast vocabulary", () => {
   it("prefixes every event so it cannot collide with the mesh's own", () => {
-    expect(CODER_EVENTS.length).toBe(3);
-    for (const event of CODER_EVENTS) expect(event.startsWith("coder:")).toBe(true);
+    expect(CODER_EVENTS.length).toBe(4);
+    for (const event of CODER_EVENTS) {
+      expect(event.startsWith("coder:") || event.startsWith("work:")).toBe(true);
+    }
   });
 });
 

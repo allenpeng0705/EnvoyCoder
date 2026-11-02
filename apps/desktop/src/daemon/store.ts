@@ -86,6 +86,8 @@ export interface CreateTaskInput {
   harness?: AgentId;
   model?: string;
   extraArgs?: string;
+  /** Set when the daemon created a linked worktree for this task. */
+  worktree?: { path: string; branch: string };
 }
 
 export interface UpdateTaskInput {
@@ -511,6 +513,7 @@ export class CoderStore {
       harness: resolved.harness,
       ...(resolved.model ? { model: resolved.model } : {}),
       ...(resolved.extraArgs ? { extraArgs: resolved.extraArgs } : {}),
+      ...(input.worktree !== undefined ? { worktree: input.worktree } : {}),
       // `idle`, not `queued`: nothing has been asked of an agent yet, and "waiting to start" would
       // claim a run exists. The rail reserves `queued` for work the daemon has accepted.
       status: "idle",

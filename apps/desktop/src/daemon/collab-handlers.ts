@@ -29,6 +29,7 @@ import {
   cancelJobsForTeam,
   cancelWorkForMember,
   createJob,
+  createJobFromSource,
   evaluateStalls,
   evaluateDeadlines,
   failJobStep,
@@ -45,9 +46,17 @@ import {
   suggestJobSteps,
   listJobStepTemplates,
   updateJobSteps,
+  updateJobPolicy,
+  retryDeferredOffers,
   readOffers,
 } from "./jobs.js";
 import { assessGitContentBus, gitContentBusMessage, gitContentBusRef } from "./job-git-readiness.js";
+import {
+  jobGitSyncMessage,
+  jobGitSyncRef,
+  prepareStepWorkingTree,
+  shouldPullOnAccept,
+} from "./job-git-sync.js";
 import { assessTeamJobReadiness } from "./job-start-readiness.js";
 import {
   buildMemberStatusBoard,
@@ -63,6 +72,7 @@ import {
   setMemberRolesAssigned,
   setMemberRolesOffered,
   setTeamRoleCatalog,
+  updateTeamSettings,
   suggestMemberRoles,
   teamHeartbeat,
   teamTokenPlain,
@@ -307,6 +317,8 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
         return remote.result;
       }
       const connection = await teamHeartbeat(deps.paths.teamsFile, input);
+      // Member is online — retry steps deferred while they were unreachable.
+      await retryDeferredOffers(deps.paths.jobsFile, deps.paths.jobOffersFile, deps.paths.teamsFile);
       const team = await requireTeam(deps.paths.teamsFile, input.teamId);
       const row = team.members.find((m) => m.id === input.memberId);
       return {
@@ -497,12 +509,39 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
         title: string;
         goal: string;
         projectId?: string;
+        sourceRef?: string;
         steps?: import("./jobs.js").JobStepDraft[];
         policy?: Partial<import("@envoydev/protocol").FailurePolicy>;
       };
       await requireTeam(deps.paths.teamsFile, input.teamId);
-      const job = await createJob(deps.paths.jobsFile, input, deps.paths.teamsFile);
+      const job = await createJob(
+        deps.paths.jobsFile,
+        {
+          teamId: input.teamId,
+          title: input.title,
+          goal: input.goal,
+          ...(input.projectId ? { projectId: input.projectId } : {}),
+          ...(input.sourceRef ? { sourceRef: input.sourceRef } : {}),
+          ...(input.steps ? { steps: input.steps } : {}),
+          ...(input.policy ? { policy: input.policy } : {}),
+        },
+        deps.paths.teamsFile,
+      );
       return { job };
+    },
+    "coder.createJobFromSource": async (params, context) => {
+      requireOriginClient(context, "coder.createJobFromSource");
+      const input = parseRpcParams("coder.createJobFromSource", params) as {
+        teamId: string;
+        sourceRef: string;
+        title: string;
+        goal: string;
+        projectId?: string;
+        steps?: import("./jobs.js").JobStepDraft[];
+        policy?: Partial<import("@envoydev/protocol").FailurePolicy>;
+      };
+      await requireTeam(deps.paths.teamsFile, input.teamId);
+      return createJobFromSource(deps.paths.jobsFile, input, deps.paths.teamsFile);
     },
     "coder.listJobs": async (params) => {
       const input = parseRpcParams("coder.listJobs", params) as {
@@ -516,6 +555,12 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
       const input = parseRpcParams("coder.getJob", params) as { jobId: string };
       let job = await getJob(deps.paths.jobsFile, input.jobId);
       if (job.status === "running") {
+        await retryDeferredOffers(
+          deps.paths.jobsFile,
+          deps.paths.jobOffersFile,
+          deps.paths.teamsFile,
+        );
+        job = await getJob(deps.paths.jobsFile, input.jobId);
         job = await evaluateDeadlines(
           deps.paths.jobsFile,
           deps.paths.jobOffersFile,
@@ -542,9 +587,66 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
       const job = await updateJobSteps(deps.paths.jobsFile, input.jobId, input.steps, deps.paths.teamsFile);
       return { job };
     },
+    "coder.updateJobPolicy": async (params, context) => {
+      requireOriginClient(context, "coder.updateJobPolicy");
+      const input = parseRpcParams("coder.updateJobPolicy", params) as {
+        jobId: string;
+        policy: Partial<import("@envoydev/protocol").FailurePolicy>;
+      };
+      const job = await updateJobPolicy(
+        deps.paths.jobsFile,
+        input.jobId,
+        input.policy,
+        deps.paths.teamsFile,
+      );
+      return { job };
+    },
+    "coder.updateTeamSettings": async (params, context) => {
+      requireOwnerWindow(context, "coder.updateTeamSettings");
+      const input = parseRpcParams("coder.updateTeamSettings", params) as {
+        teamId: string;
+        membersMayStartJobs?: boolean;
+      };
+      const team = await updateTeamSettings(deps.paths.teamsFile, input.teamId, {
+        ...(input.membersMayStartJobs !== undefined
+          ? { membersMayStartJobs: input.membersMayStartJobs }
+          : {}),
+      });
+      return { team };
+    },
     "coder.startJob": async (params, context) => {
-      requireOriginClient(context, "coder.startJob");
-      const input = parseRpcParams("coder.startJob", params) as { jobId: string };
+      const input = parseRpcParams("coder.startJob", params) as {
+        jobId: string;
+        teamToken?: string;
+        memberToken?: string;
+        memberId?: string;
+      };
+      const originClient =
+        context === undefined ||
+        context.session === undefined ||
+        (context.session as { isOwnerScope?: boolean } | null)?.isOwnerScope === true;
+      if (!originClient) {
+        const draft = await getJob(deps.paths.jobsFile, input.jobId);
+        await requireTeamToken(deps.paths.teamsFile, draft.teamId, input.teamToken);
+        const team = await requireTeam(deps.paths.teamsFile, draft.teamId);
+        if (!team.membersMayStartJobs) {
+          throw coderError(
+            ENVOYDEV_ERRORS.unauthorized,
+            "This team does not allow members to start jobs. Ask the host to enable it in Settings → Teams.",
+            ref("error.team.membersMayNotStart"),
+          );
+        }
+        const member = team.members.find((m) => m.id === input.memberId);
+        if (!member || !memberTokenMatches(member, input.memberToken)) {
+          throw coderError(
+            ENVOYDEV_ERRORS.unauthorized,
+            "That member token is not valid.",
+            ref("error.team.badToken"),
+          );
+        }
+      } else {
+        requireOriginClient(context, "coder.startJob");
+      }
       const job = await startJob(
         deps.paths.jobsFile,
         deps.paths.jobOffersFile,
@@ -634,10 +736,12 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
           ref("error.team.badToken"),
         );
       }
+      // Member already synced before starting the harness — do not pull/checkout on origin.
       return acceptJobStepOffer(deps.paths.jobsFile, deps.paths.jobOffersFile, {
         offerId: input.offerId,
         resolvedCwd: input.resolvedCwd,
         runId: input.runId,
+        skipPathCheck: true,
       });
     },
     "coder.refuseJobStepOffer": async (params) => {
@@ -726,7 +830,7 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
           ref("error.job.pathMissing"),
         );
       }
-      // Git content bus before harness — never orphan a run if Accept would refuse.
+      // Git content bus + pull/branch before harness — never orphan a run if Accept would refuse.
       const git = await assessGitContentBus(input.resolvedCwd);
       if (!git.ok) {
         throw coderError(
@@ -736,6 +840,21 @@ export function createCollabHandlers(deps: CollabDeps): Partial<Record<string, C
         );
       }
       const job = await getJob(deps.paths.jobsFile, existing.jobId);
+      const sync = await prepareStepWorkingTree({
+        cwd: git.path,
+        ...(existing.branch ? { branch: existing.branch } : {}),
+        pullOnAccept:
+          existing.pullOnAccept !== undefined
+            ? existing.pullOnAccept
+            : shouldPullOnAccept(job.policy.contentBus),
+      });
+      if (!sync.ok) {
+        throw coderError(
+          ENVOYDEV_ERRORS.peerRefused,
+          jobGitSyncMessage(sync.policy),
+          ref(jobGitSyncRef(sync.policy)),
+        );
+      }
       const started = await maybeStartLocalRun(deps, existing, git.path, job.projectId);
       if (!started) {
         throw coderError(
@@ -1014,4 +1133,6 @@ export const COLLAB_PRE_AUTH_METHODS = [
   "coder.reportJobStepProgress",
   "coder.cancelInboundJobStep",
   "coder.answerInboundJobStepApproval",
+  /** Member Start when `membersMayStartJobs` — still gated inside the handler. */
+  "coder.startJob",
 ] as const;

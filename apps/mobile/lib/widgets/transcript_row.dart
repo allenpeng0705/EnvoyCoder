@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/daemon_text.dart';
 import '../l10n/l10n.dart';
+import '../models/asking_control.dart';
 import '../models/tool_buckets.dart';
 import '../models/tool_group_summary.dart';
 import '../models/transcript.dart';
@@ -31,6 +32,7 @@ class TranscriptRow extends StatelessWidget {
     List<String>? optionIds,
     String? text,
     bool stopAsking,
+    String? stopAskingScope,
   })? onAnswer;
   final bool streaming;
   /// Pending — choices live in the sticky chrome above the composer.
@@ -130,8 +132,9 @@ class _UserBubble extends StatelessWidget {
 
 /// Steps disclosure wrapping thought / tool / interim assistant rows.
 ///
-/// Matches desktop: stays **closed** by default so the chat is user + answer
-/// history. Expand for the live Working… stream, tools, and nested thoughts.
+/// Matches desktop Wave 3A: **open while live** (Working… stream visible without
+/// hunting), locked against collapse mid-run; **closed when settled** so the
+/// hero answer stays the focus.
 class TranscriptStepsBlock extends StatefulWidget {
   const TranscriptStepsBlock({
     super.key,
@@ -159,7 +162,7 @@ class _TranscriptStepsBlockState extends State<TranscriptStepsBlock>
     with AutomaticKeepAliveClientMixin {
   final ScrollController _streamScroll = ScrollController();
 
-  /// Bumped on live edges so a remount resets to collapsed (chat stays the focus).
+  /// Bumped on live edges so a remount opens while Working… and collapses when settled.
   var _liveEpoch = 0;
 
   @override
@@ -216,9 +219,15 @@ class _TranscriptStepsBlockState extends State<TranscriptStepsBlock>
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
-            // Epoch remounts on live edges; always start collapsed so history stays readable.
+            // Epoch remounts on live edges: open while Working…, collapse when settled.
+            // While live, collapsing bumps the epoch so Steps stay open (desktop twin).
             key: ValueKey<String>('${widget.storageId}-$_liveEpoch'),
-            initiallyExpanded: false,
+            initiallyExpanded: live,
+            onExpansionChanged: (expanded) {
+              if (live && !expanded) {
+                setState(() => _liveEpoch++);
+              }
+            },
             tilePadding: const EdgeInsets.symmetric(horizontal: 12),
             childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
             title: Row(
@@ -782,6 +791,7 @@ class ApprovalCard extends StatelessWidget {
     List<String>? optionIds,
     String? text,
     bool stopAsking,
+    String? stopAskingScope,
   })? onAnswer;
   /// Pending — actions live in sticky chrome above the composer.
   final bool actionsDeferred;
@@ -880,10 +890,9 @@ class ApprovalCard extends StatelessWidget {
               ],
             ),
             if (canStopAsking)
-              _StopAskingButton(
+              _StopAskingScopes(
                 approval: approval,
                 onAnswer: onAnswer,
-                label: l10n.runApprovalStopAsking,
               ),
           ],
               ],
@@ -1014,6 +1023,7 @@ class _ManyChoices extends StatefulWidget {
     List<String>? optionIds,
     String? text,
     bool stopAsking,
+    String? stopAskingScope,
   })? onAnswer;
 
   @override
@@ -1078,49 +1088,78 @@ class _TextAnswer extends StatefulWidget {
     List<String>? optionIds,
     String? text,
     bool stopAsking,
+    String? stopAskingScope,
   })? onAnswer;
 
   @override
   State<_TextAnswer> createState() => _TextAnswerState();
 }
 
-class _StopAskingButton extends StatelessWidget {
-  const _StopAskingButton({
+class _StopAskingScopes extends StatelessWidget {
+  const _StopAskingScopes({
     required this.approval,
-    required this.label,
     this.onAnswer,
   });
 
   final TranscriptApproval approval;
-  final String label;
   final Future<void> Function(
     String requestId, {
     String? optionId,
     List<String>? optionIds,
     String? text,
     bool stopAsking,
+    String? stopAskingScope,
   })? onAnswer;
 
   @override
   Widget build(BuildContext context) {
     if (onAnswer == null) return const SizedBox.shrink();
-    String? allowId;
-    for (final option in approval.options) {
-      if (!option.destructive) {
-        allowId = option.id;
-        break;
-      }
-    }
+    final l10n = context.l10n;
+    final allowId = stopAskingAllowId([
+      for (final option in approval.options)
+        (id: option.id, destructive: option.destructive),
+    ]);
     if (allowId == null) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 8),
-      child: TextButton(
-        onPressed: () => onAnswer!(
-          approval.requestId,
-          optionId: allowId,
-          stopAsking: true,
-        ),
-        child: Text(label),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              TextButton(
+                key: const ValueKey('approval-stop-asking-session'),
+                onPressed: () => onAnswer!(
+                  approval.requestId,
+                  optionId: allowId,
+                  stopAsking: true,
+                  stopAskingScope: 'session',
+                ),
+                child: Text(l10n.runApprovalStopAskingSession),
+              ),
+              TextButton(
+                key: const ValueKey('approval-stop-asking-machine'),
+                onPressed: () => onAnswer!(
+                  approval.requestId,
+                  optionId: allowId,
+                  stopAsking: true,
+                  stopAskingScope: 'machine',
+                ),
+                child: Text(l10n.runApprovalStopAskingMachine),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            l10n.runApprovalStopAskingHint,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 12,
+            ),
+          ),
+        ],
       ),
     );
   }

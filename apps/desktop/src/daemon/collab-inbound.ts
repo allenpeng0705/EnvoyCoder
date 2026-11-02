@@ -32,6 +32,13 @@ import {
   gitContentBusMessage,
   gitContentBusRef,
 } from "./job-git-readiness.js";
+import {
+  jobGitSyncMessage,
+  jobGitSyncRef,
+  prepareStepWorkingTree,
+  shouldPullOnAccept,
+  type JobGitSyncPolicy,
+} from "./job-git-sync.js";
 import { requireTeam, memberTokenMatches } from "./teams.js";
 import { requireTeamToken } from "./collab-auth.js";
 import { requireOwnerWindow } from "./pairing.js";
@@ -88,18 +95,28 @@ export function createCollabInboundHandlers(deps: CollabDeps): Partial<Record<st
       const existing = await getInboundOffer(deps.paths.inboundJobOffersFile, input.offer.offerId);
       if (existing && existing.status !== "pending") {
         // Redelivery must not rewind an accepted/refused/cancelled offer.
-        const status =
-          existing.status === "accepted"
-            ? ("accepted" as const)
-            : ("refused" as const);
+        // Wire result only allows pending|accepted|refused — map cancelled → refused + policy.
+        if (existing.status === "accepted") {
+          return {
+            received: true as const,
+            status: "accepted" as const,
+            ...(existing.runId ? { runId: existing.runId } : {}),
+            ...(existing.taskId ? { taskId: existing.taskId } : {}),
+          };
+        }
         return {
           received: true as const,
-          status,
+          status: "refused" as const,
+          policy: existing.policy ?? (existing.status === "cancelled" ? "cancelled" : existing.status),
+        };
+      }
+      // Pending redelivery — never start a second auto-accept / harness for the same offerId.
+      if (existing?.status === "pending") {
+        return {
+          received: true as const,
+          status: "pending" as const,
           ...(existing.runId ? { runId: existing.runId } : {}),
           ...(existing.taskId ? { taskId: existing.taskId } : {}),
-          ...(existing.policy || existing.status === "cancelled"
-            ? { policy: existing.policy ?? existing.status }
-            : {}),
         };
       }
       const record: InboundOfferRecord = {
@@ -130,6 +147,33 @@ export function createCollabInboundHandlers(deps: CollabDeps): Partial<Record<st
             policy: git.policy,
           });
           return { received: true as const, status: "refused" as const, policy: git.policy };
+        }
+        const sync = await prepareStepWorkingTree({
+          cwd: git.path,
+          ...(input.offer.branch ? { branch: input.offer.branch } : {}),
+          pullOnAccept:
+            input.offer.pullOnAccept !== undefined
+              ? input.offer.pullOnAccept
+              : shouldPullOnAccept(undefined),
+        });
+        if (!sync.ok) {
+          await peerCall(deps)({
+            url: record.originWs,
+            method: "coder.refuseJobStepOffer",
+            params: {
+              offerId: record.offerId,
+              policy: sync.policy,
+              memberId: membership.memberId,
+              teamToken: membership.token,
+              memberToken: membership.memberToken,
+              cancelNonce: record.cancelNonce,
+            },
+          });
+          await patchInboundOffer(deps.paths.inboundJobOffersFile, record.offerId, {
+            status: "refused",
+            policy: sync.policy,
+          });
+          return { received: true as const, status: "refused" as const, policy: sync.policy };
         }
         const resolved = { ok: true as const, path: git.path };
         const started = await maybeStartLocalRun(deps, record, resolved.path, undefined, {
@@ -238,6 +282,19 @@ export function createCollabInboundHandlers(deps: CollabDeps): Partial<Record<st
           ENVOYDEV_ERRORS.peerRefused,
           gitContentBusMessage(git.policy),
           ref(gitContentBusRef(git.policy)),
+        );
+      }
+      const sync = await prepareStepWorkingTree({
+        cwd: git.path,
+        ...(offer.branch ? { branch: offer.branch } : {}),
+        pullOnAccept:
+          offer.pullOnAccept !== undefined ? offer.pullOnAccept : shouldPullOnAccept(undefined),
+      });
+      if (!sync.ok) {
+        throw coderError(
+          ENVOYDEV_ERRORS.peerRefused,
+          jobGitSyncMessage(sync.policy as JobGitSyncPolicy),
+          ref(jobGitSyncRef(sync.policy as JobGitSyncPolicy)),
         );
       }
       const resolved = { ok: true as const, path: git.path };

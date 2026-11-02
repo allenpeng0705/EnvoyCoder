@@ -81,6 +81,7 @@ import {
   observeSessionOptions,
   collaborationModeToSet,
 } from "@envoydev/agent-catalog";
+import { cataloguedUnattendedModeId } from "@envoydev/agent-catalog/catalog";
 import type { PlatformId } from "@envoydev/platform";
 
 import type { CoderPaths } from "@envoydev/host-bridge";
@@ -113,6 +114,7 @@ import {
   permissionMemoryKey,
   rememberCommand,
 } from "./allowed-commands.js";
+import { guardianMayAutoAllow } from "./guardian.js";
 import {
   agentRunFromTranscript,
   readTranscript,
@@ -263,6 +265,11 @@ interface LiveRun {
      */
     allowOptionIds: readonly string[];
   } | undefined;
+  /**
+   * Wave 4 session stop-asking — auto-allow further permission cards on this live run only.
+   * Does not flip Settings; cleared when the run ends.
+   */
+  sessionAutoAllow?: boolean;
   stderr: string[];
   settled: boolean;
   /**
@@ -387,6 +394,41 @@ export class RunManager {
     return undefined;
   }
 
+  /**
+   * Snapshot for the loopback companion UI — active runs and any pending approval request id.
+   * Question text is not stored on the live run; the companion shows a generic prompt.
+   */
+  companionSnapshot(): readonly {
+    runId: string;
+    taskId: string;
+    status: string;
+    approvalRequestId?: string;
+    allowOptionId?: string;
+  }[] {
+    const rows: {
+      runId: string;
+      taskId: string;
+      status: string;
+      approvalRequestId?: string;
+      allowOptionId?: string;
+    }[] = [];
+    for (const live of this.active.values()) {
+      if (live.settled) continue;
+      rows.push({
+        runId: live.run.id,
+        taskId: live.run.taskId,
+        status: live.run.status,
+        ...(live.approval !== undefined
+          ? {
+              approvalRequestId: live.approval.requestId,
+              allowOptionId: live.approval.allowOptionIds[0],
+            }
+          : {}),
+      });
+    }
+    return rows;
+  }
+
   list(filter: { taskId?: string; limit?: number } = {}): readonly AgentRun[] {
     const all = [...this.active.values(), ...this.finished.values()].map((live) => live.run);
     const matching = filter.taskId ? all.filter((run) => run.taskId === filter.taskId) : all;
@@ -450,9 +492,15 @@ export class RunManager {
     // Settings Off for agents without `session/set_policy`: force their published unattended mode
     // (Claude `bypassPermissions`, Codex `agent-full-access`, DeepSeek Full access via env). Envoy
     // Harness stays on the chosen sandbox and only changes `autoRun` below.
-    if (shipped && this.settings().requireApprovalForDestructive === false) {
-      const unattended = modeForAskingOff(shipped);
-      if (unattended !== undefined) agentModeId = unattended;
+    if (this.settings().requireApprovalForDestructive === false) {
+      if (shipped) {
+        const unattended = modeForAskingOff(shipped);
+        if (unattended !== undefined) agentModeId = unattended;
+      } else {
+        // Catalogue YOLO / Full modes (Gemini, Qwen, …) — same Settings Off posture as shipped.
+        const unattended = cataloguedUnattendedModeId(provider?.catalogEntryId ?? provider?.id);
+        if (unattended !== undefined) agentModeId = unattended;
+      }
     }
     // A permission level is not `session/set_mode`. DeepSeek takes it as `DSH_PERMISSION_MODE` on the
     // process; Envoy Harness takes it as `session/set_policy`. `default` / `plan` / `review` stay on
@@ -995,6 +1043,26 @@ export class RunManager {
         const choice = allowChoiceId(request.options);
         if (choice !== undefined) return choice;
       }
+      // Session-scoped stop-asking — allow without a card for the rest of this run.
+      if (live.sessionAutoAllow === true) {
+        const choice = allowChoiceId(request.options);
+        if (choice !== undefined) return choice;
+      }
+      // Durable Guardian — auto-allow clear non-destructive reads only.
+      if (this.settings().approvalsReviewer === "guardian" && guardianMayAutoAllow(request)) {
+        const choice = allowChoiceId(request.options);
+        if (choice !== undefined) {
+          // Audit trail: resolved with by=guardian so the transcript shows what was auto-allowed
+          // without opening a card (no live.approval, no needs-attention flicker).
+          void this.record(live, {
+            kind: "run.approval-resolved",
+            requestId,
+            optionId: choice,
+            by: "guardian",
+          });
+          return choice;
+        }
+      }
       return this.askPermission(live, request, requestId, key);
     });
   }
@@ -1281,7 +1349,12 @@ export class RunManager {
     runId: string,
     requestId: string,
     optionId: string | undefined,
-    extra?: { optionIds?: readonly string[]; text?: string; stopAsking?: boolean },
+    extra?: {
+      optionIds?: readonly string[];
+      text?: string;
+      stopAsking?: boolean;
+      stopAskingScope?: "session" | "machine";
+    },
   ): Promise<boolean> {
     const live = this.active.get(runId);
     if (!live?.approval || live.approval.requestId !== requestId) return false;
@@ -1289,10 +1362,11 @@ export class RunManager {
     const text = extra?.text?.trim() ?? "";
     const primary = ids[0] ?? (text !== "" ? text : undefined);
     if (primary === undefined) return false;
-    // RPC/mesh can send stopAsking with any choice; only an allow may flip machine approvals off.
+    // RPC/mesh can send stopAsking with any choice; only an allow may flip asking off.
     // Settle the approval first — a Settings write must not strand the run on needs-attention.
     const shouldStopAsking =
       extra?.stopAsking === true && live.approval.allowOptionIds.includes(primary);
+    const scope = extra?.stopAskingScope === "session" ? "session" : "machine";
     const settle = live.approval.settle;
     await this.record(live, {
       kind: "run.approval-resolved",
@@ -1307,9 +1381,19 @@ export class RunManager {
     else settle(primary);
     if (shouldStopAsking) {
       try {
-        await this.stopAskingApprovals(live);
+        if (scope === "session") {
+          live.sessionAutoAllow = true;
+        } else {
+          await this.stopAskingApprovals(live);
+        }
       } catch {
-        // Allow already took; flipping machine approvals off is best-effort.
+        // Allow already took; surface that the machine flip did not stick.
+        await this.record(live, {
+          kind: "run.output",
+          stream: "stderr",
+          text: "Could not turn off asking for this agent. Use Settings → Ask before risky steps, or pick a Full access / YOLO mode.",
+          messageId: `stop-asking-fail-${requestId}`,
+        }).catch(() => undefined);
       }
     }
     return true;
@@ -1321,16 +1405,22 @@ export class RunManager {
    * Best-effort on the live push: a refusal still leaves Settings off for the next run.
    */
   private async stopAskingApprovals(live: LiveRun): Promise<void> {
-    if (
-      !isHarnessId(live.run.harness) ||
-      askingControl(live.run.harness) !== "policy"
-    ) {
-      return;
+    const harness = live.run.harness;
+    if (isHarnessId(harness)) {
+      if (askingControl(harness) === "none") {
+        throw new Error("asking-unsupported");
+      }
+    } else {
+      const provider = findRunnableProvider(this.deps.store, harness);
+      const unattended = cataloguedUnattendedModeId(provider?.catalogEntryId ?? provider?.id ?? harness);
+      if (unattended === undefined) {
+        throw new Error("asking-unsupported");
+      }
     }
     try {
       await this.deps.store.updateSettings({ requireApprovalForDestructive: false });
     } catch {
-      // Disk write failed — still try the live session policy below.
+      // Disk write failed — still try the live session below.
     }
     await this.applyAskingOffToLive(live);
   }
@@ -1348,8 +1438,19 @@ export class RunManager {
   }
 
   private async applyAskingOffToLive(live: LiveRun): Promise<void> {
-    if (!isHarnessId(live.run.harness)) return;
-    const via = askingControl(live.run.harness);
+    const harness = live.run.harness;
+    if (!isHarnessId(harness)) {
+      const provider = findRunnableProvider(this.deps.store, harness);
+      const mode = cataloguedUnattendedModeId(provider?.catalogEntryId ?? provider?.id ?? harness);
+      if (mode === undefined) return;
+      try {
+        await live.client?.applySessionMode(mode);
+      } catch {
+        // Next run still starts in YOLO from Settings Off.
+      }
+      return;
+    }
+    const via = askingControl(harness);
     if (via === "policy") {
       const next: AcpSessionPolicy = { autoRun: "off" };
       try {
@@ -1361,7 +1462,7 @@ export class RunManager {
       return;
     }
     if (via !== "unattended-mode") return;
-    const mode = modeForAskingOff(live.run.harness);
+    const mode = modeForAskingOff(harness);
     if (mode === undefined || isPermissionModeId(mode)) return;
     try {
       await live.client?.applySessionMode(mode);

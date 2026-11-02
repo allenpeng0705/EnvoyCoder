@@ -28,6 +28,7 @@ import '../theme/tokens.dart';
 import '../widgets/confirm_dialog.dart';
 import '../widgets/name_dialog.dart';
 import '../widgets/project_branches_sheet.dart';
+import '../widgets/work_attention_card.dart';
 import 'new_task_sheet.dart';
 import 'add_project_sheet.dart';
 import 'run_screen.dart';
@@ -321,6 +322,8 @@ class _ProjectListScreenState extends State<ProjectListScreen> {
       ),
       body: Column(
         children: [
+          if (state == HostConnectionState.connected)
+            WorkAttentionCard(client: widget.client),
           Padding(
             padding: const EdgeInsets.fromLTRB(
               CoderSpace.md2,

@@ -37,7 +37,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Project } from "@envoydev/protocol";
 
 import { useT } from "../i18n/context.js";
-import { localize, type Notice, type WriteFailure } from "../i18n/notice.js";
+import { localNotice, localize, type Notice, type WriteFailure } from "../i18n/notice.js";
 import type { Translator } from "../i18n/translate.js";
 
 /** A row a user can run. `selected` only means anything for `choice`. */
@@ -434,6 +434,10 @@ export function buildCommandContributions(input: {
   onOpenSettings: () => void;
   onPairPhone: () => void;
   onRevealTask: (taskId: string) => void;
+  /** Apply a saved agent profile to the active task (or create a task when none is open). */
+  onApplyProfile?: (profileId: string) => Promise<WriteFailure>;
+  /** Create a task whose cwd is a new git worktree under the project. */
+  onNewWorktreeTask?: (projectId: string, branch: string) => Promise<WriteFailure>;
   tasks: readonly { id: string; title: string; projectId: string }[];
   /**
    * The folder the user nominated in Settings, which seeds the "Add project" field.
@@ -445,6 +449,8 @@ export function buildCommandContributions(input: {
    * absent means "the field starts empty", which is not a failure.
    */
   defaultProjectPath?: string | undefined;
+  /** Saved agent profiles from Settings — each becomes a palette row. */
+  agentProfiles?: readonly { id: string; label: string }[];
   /**
    * The window's translator.
    *
@@ -506,6 +512,38 @@ export function buildCommandContributions(input: {
       // prompt goes — the same shape as Paseo's new workspace, which opens the chat rather than asking
       // for a name first. The first message names the task (see `startNewTask` in `CoderApp`).
       run: () => input.onNewTask(project.id, ""),
+    });
+    if (input.onNewWorktreeTask !== undefined) {
+      rows.push({
+        id: `task.worktree.${project.id}`,
+        title: t("palette.newWorktree.title", { project: project.label }),
+        subtitle: t("palette.newWorktree.subtitle"),
+        group: t("palette.group.tasks"),
+        kind: "action",
+        keywords: ["worktree", "branch", "parallel"],
+        needs: {
+          label: t("palette.newWorktree.needs"),
+          placeholder: t("palette.newWorktree.placeholder"),
+        },
+        run: async (value) => {
+          const branch = value.trim();
+          if (!branch) return localNotice("palette.newWorktree.empty");
+          return input.onNewWorktreeTask!(project.id, branch);
+        },
+      });
+    }
+  }
+
+  for (const profile of input.agentProfiles ?? []) {
+    if (input.onApplyProfile === undefined) break;
+    rows.push({
+      id: `profile.apply.${profile.id}`,
+      title: t("palette.applyProfile.title", { profile: profile.label }),
+      subtitle: t("palette.applyProfile.subtitle"),
+      group: t("palette.group.tasks"),
+      kind: "action",
+      keywords: ["profile", "agent", "preset"],
+      run: () => input.onApplyProfile!(profile.id),
     });
   }
 

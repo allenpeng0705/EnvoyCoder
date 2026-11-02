@@ -40,6 +40,14 @@ export const teams = {
   "job.pane.kick": "Entfernen",
   "job.pane.kickConfirm": "{label} aus dem Team entfernen. Der Schritt wird gestoppt.",
   "job.pane.stallAutomation": "Stall-Automatisierung aktivieren (nach sichtbarer Tafel)",
+  "job.pane.contentBusAdvanced": "Git bei Annahme und Abschluss",
+  "job.pane.pullOnAccept": "Vor Schritt-Annahme pullen",
+  "job.pane.pushOnSuccess": "Nach erfolgreichem Schritt pushen",
+  "settings.teams.membersMayStartJobs": "Mitglieder dürfen Jobs starten",
+  "settings.teams.membersMayStartJobs.detail":
+    "Online-Mitglieder können Entwürfe starten; Pause, Stopp und Entfernen bleiben beim Host.",
+  "error.team.membersMayNotStart":
+    "Dieses Team erlaubt Mitgliedern nicht, Jobs zu starten. Bitten Sie den Host, es unter Einstellungen → Teams zu aktivieren.",
   "job.pane.noOnline": "Start braucht mindestens einen online Peer (oder dieses Gerät).",
   "job.pane.crew.noSteps": "Vor dem Start Schritte hinzufügen (Schrittvorlage nutzen).",
   "job.pane.crew.noMembers": "Dieses Team hat noch keine Geräte. Lade jemanden unter Teams ein.",
@@ -137,6 +145,16 @@ export const teams = {
   "error.job.git.notARepo": "Dieser Ordner ist kein Git-Repository. Team-Jobs teilen Arbeit über Git — Repository initialisieren oder klonen.",
   "error.job.git.noRemote": "Dieses Git-Repository hat kein Remote. Origin (oder ein anderes Remote) hinzufügen, damit Kollegen pullen und pushen können.",
   "error.job.git.missing": "Git ist auf diesem Gerät nicht installiert (oder nicht im PATH). Git installieren, bevor ein Team-Job-Schritt angenommen wird.",
+  "error.job.git.syncDirty":
+    "Dieser Ordner hat uncommittete Änderungen. Committe oder stash sie, bevor du den Team-Job-Schritt annimmst.",
+  "error.job.git.syncDiverged":
+    "Lokaler und Remote-Branch haben sich beide geändert — ein Fast-Forward-Pull ist nicht möglich.",
+  "error.job.git.syncPullFailed":
+    "Git-Pull fehlgeschlagen. Remote und Anmeldung prüfen, dann erneut versuchen.",
+  "error.job.git.syncBranchInvalid": "Dieser Branch-Name ist für Git ungültig.",
+  "error.job.git.syncBranchFailed": "Schritt-Branch konnte nicht ausgecheckt oder erstellt werden.",
+  "error.job.git.syncPushFailed":
+    "Git-Push fehlgeschlagen. Remote und Anmeldung prüfen, dann erneut versuchen.",
   "teamJob.git.ok": "Git bereit — Repository mit Remote.",
   "teamJob.git.pathMissing": "Projektordner fehlt.",
   "teamJob.git.notARepo": "Dieses Projekt ist kein Git-Repository. Team-Jobs brauchen Git zum Teilen von Dateien.",

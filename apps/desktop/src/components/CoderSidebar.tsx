@@ -66,6 +66,8 @@ import type { GitSnapshot } from "../state/coderStore.js";
 import { jobAttentionCount } from "./JobPane.js";
 
 import { ProjectList } from "./sidebar-project-list.js";
+import { WorkAttention } from "./WorkAttention.js";
+import type { AgentActions } from "../state/agent-actions.js";
 
 export interface CoderSidebarProps {
   projects: readonly Project[];
@@ -238,6 +240,10 @@ export interface CoderSidebarProps {
   ) => Promise<{ ok: true } | Refusal>;
   onAddPairedHome?: () => void;
   onForgetPairedHome?: (homeId: string) => void;
+  /** Work Engine attention — local daemon only. */
+  agents?: AgentActions;
+  workRevision?: number;
+  onOpenTaskFromWork?: (taskId: string) => void;
 }
 
 export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
@@ -339,6 +345,14 @@ export function CoderSidebar(props: CoderSidebarProps): JSX.Element {
         />
         {/* Flat "List" view is deferred — grouped by project is the default and only layout for now. */}
       </div>
+
+      {props.agents && typeof props.agents.listWorkAttention === "function" ? (
+        <WorkAttention
+          agents={props.agents}
+          workRevision={props.workRevision}
+          {...(props.onOpenTaskFromWork !== undefined ? { onOpenTask: props.onOpenTaskFromWork } : {})}
+        />
+      ) : null}
 
       {attention.badge > 0 ? (
         <div className="sidebar__attention" role="status">

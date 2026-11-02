@@ -301,6 +301,7 @@ const EMPTY_REMOTE_STATE: CoderState = {
   mesh: { kind: "no-node", reason: "" },
   runs: {},
   jobsRevision: 0,
+  workRevision: 0,
   loaded: false,
   error: undefined,
   notes: [],

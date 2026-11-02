@@ -198,7 +198,7 @@ void main() {
     expect(find.text('hmm'), findsOneWidget);
   });
 
-  testWidgets('live Steps stays collapsed; expand shows Working stream', (tester) async {
+  testWidgets('live Steps opens by default; collapses when settled', (tester) async {
     final en = lookupAppLocalizations(const Locale('en'));
     var live = true;
     final liveEntries = [
@@ -231,14 +231,14 @@ void main() {
     );
     await tester.pump();
     expect(find.text(en.runStepsWorking), findsOneWidget);
-    // Collapsed by default — chat history stays the focus.
-    expect(find.text('planning the fix'), findsNothing);
-    expect(find.text('Read'), findsNothing);
+    // Open while Working… so progress is visible without hunting (Wave 3A).
+    expect(find.text('planning the fix'), findsOneWidget);
+    expect(find.text('Read'), findsOneWidget);
 
+    // Collapsing while live remounts open again (desktop lock).
     await tester.tap(find.text(en.runStepsWorking));
     await tester.pumpAndSettle();
     expect(find.text('planning the fix'), findsOneWidget);
-    expect(find.text('Read'), findsOneWidget);
 
     setOuter(() => live = false);
     await tester.pump();

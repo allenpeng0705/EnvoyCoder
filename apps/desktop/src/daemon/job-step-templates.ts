@@ -15,6 +15,7 @@ export type TemplateStepDraft = {
   worktreeKey: string;
   cwdHint: string;
   dependsOn?: readonly string[];
+  branch?: string;
 };
 
 export type JobStepTemplateId =
@@ -111,6 +112,7 @@ function step(
   worktreeKey: string,
   cwdHint: string,
   dependsOn?: readonly string[],
+  branch?: string,
 ): TemplateStepDraft {
   return {
     id,
@@ -119,6 +121,7 @@ function step(
     worktreeKey,
     cwdHint,
     ...(dependsOn && dependsOn.length > 0 ? { dependsOn: [...dependsOn] } : {}),
+    ...(branch ? { branch } : {}),
   };
 }
 
@@ -199,6 +202,7 @@ export function buildJobStepTemplate(
             `${base}:feature-${i + 1}`,
             cwd,
             ["s1"],
+            `job/${base}/feature-${i + 1}`,
           ),
         );
       }
@@ -256,6 +260,7 @@ export function buildJobStepTemplate(
             `${base}:test-${i + 1}`,
             cwd,
             ["s1"],
+            `job/${base}/test-${i + 1}`,
           ),
         );
       }
@@ -347,6 +352,7 @@ export function buildJobStepTemplate(
           `${base}:review-a`,
           cwd,
           ["s1"],
+          `job/${base}/review-a`,
         ),
         step(
           "s3",
@@ -355,6 +361,7 @@ export function buildJobStepTemplate(
           `${base}:review-b`,
           cwd,
           ["s1"],
+          `job/${base}/review-b`,
         ),
         step(
           "s4",

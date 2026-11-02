@@ -20,6 +20,7 @@ import {
   buildReport,
   dependenciesSatisfied,
   failJobStep,
+  failStep,
   getJob,
   maybeCompleteJob,
   note,
@@ -33,6 +34,7 @@ import {
   stopJobStep,
   writeJsonFile,
 } from "./jobs.js";
+import { pushStepWorkingTree, shouldPushOnSuccess } from "./job-git-sync.js";
 import { normalizeTeamRecord, requireTeam } from "./teams.js";
 
 type RemoteStepCancel = (job: Job, stepId: string) => Promise<void>;
@@ -297,6 +299,20 @@ export async function completeJobStep(
   stepId: string,
 ): Promise<Job> {
   let job = await getJob(jobsPath, jobId);
+  const done = job.steps.find((s) => s.id === stepId);
+  // Push only on the assignee machine. Origin completes remote steps after the member
+  // already pushed (see watchRunForJob); pushing cwdHint here would hit the wrong tree.
+  if (
+    done &&
+    shouldPushOnSuccess(job.policy.contentBus) &&
+    done.assigneeMemberId === "local"
+  ) {
+    const pushed = await pushStepWorkingTree({ cwd: done.cwdHint });
+    if (!pushed.ok) {
+      const catalog = normalizeTeamRecord(await requireTeam(teamsPath, job.teamId)).roleCatalog;
+      return failStep(jobsPath, job, stepId, `push-failed:${pushed.policy}`, catalog);
+    }
+  }
   const steps = job.steps.map((s) => {
     if (s.id !== stepId) return s;
     const attempts = s.attempts.map((a, i) =>

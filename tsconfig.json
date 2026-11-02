@@ -4,6 +4,7 @@
     { "path": "./packages/protocol" },
     { "path": "./packages/platform" },
     { "path": "./packages/task-model" },
+    { "path": "./packages/work-model" },
     { "path": "./packages/agent-catalog" },
     { "path": "./packages/host-bridge" },
     { "path": "./apps/desktop" }

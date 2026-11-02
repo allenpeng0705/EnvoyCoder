@@ -12,6 +12,7 @@
     "packages/protocol",
     "packages/platform",
     "packages/task-model",
+    "packages/work-model",
     "packages/agent-catalog",
     "packages/host-bridge",
     "apps/desktop"

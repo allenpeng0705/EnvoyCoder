@@ -5,9 +5,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../l10n/l10n.dart';
 import '../models/asking_control.dart';
+import '../models/autonomy_presets.dart';
 import '../models/composer_attachment.dart';
 import '../models/harness.dart';
 import '../models/plan_gate.dart';
@@ -77,6 +79,11 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   String? _cwd;
   List<HarnessInfo> _harnesses = [];
   bool _requireApproval = true;
+  /// Settings → send while a turn is live (`queue` | `steer`).
+  String _sendWhileRunning = 'queue';
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _speechReady = false;
+  bool _listening = false;
   /// Agent on the live run (prefer over composer selection for stop-asking).
   String? _runHarnessId;
   ComposerSelection _selection = const ComposerSelection();
@@ -103,6 +110,12 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   Future<void> _bootstrap() async {
     await _loadAgents();
     await _loadApprovalSetting();
+    try {
+      _speechReady = await _speech.initialize();
+      if (mounted) setState(() {});
+    } catch (_) {
+      _speechReady = false;
+    }
     if (_taskId != null) {
       try {
         final tasks = await widget.client.call('coder.listTasks', {});
@@ -256,6 +269,8 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
       if (body is Map && mounted) {
         setState(() {
           _requireApproval = body['requireApprovalForDestructive'] != false;
+          final send = body['sendWhileRunning'];
+          _sendWhileRunning = send == 'steer' ? 'steer' : 'queue';
         });
       }
     } catch (_) {}
@@ -409,6 +424,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     List<String>? optionIds,
     String? text,
     bool stopAsking = false,
+    String? stopAskingScope,
   }) async {
     final pending = _transcript.pendingApproval;
     final choiceId = optionIds != null && optionIds.isNotEmpty
@@ -440,15 +456,78 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     } else {
       return;
     }
-    if (stopAsking) params['stopAsking'] = true;
+    if (stopAsking) {
+      params['stopAsking'] = true;
+      params['stopAskingScope'] = stopAskingScope ?? 'machine';
+    }
     try {
       await widget.client.call('coder.answerApproval', params);
-      if (stopAsking && mounted) setState(() => _requireApproval = false);
+      if (stopAsking &&
+          (stopAskingScope ?? 'machine') == 'machine' &&
+          mounted) {
+        setState(() => _requireApproval = false);
+      }
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.l10n.runCouldNotAnswer)),
       );
+    }
+  }
+
+  Future<void> _applyAutonomyPreset(AutonomyPresetId preset) async {
+    final requireApproval = preset != AutonomyPresetId.fullAccess;
+    final previous = _requireApproval;
+    setState(() => _requireApproval = requireApproval);
+    try {
+      await widget.client.call('coder.updateSettings', {
+        'settings': {'requireApprovalForDestructive': requireApproval},
+      });
+    } catch (_) {
+      if (mounted) setState(() => _requireApproval = previous);
+      return;
+    }
+    final harness = harnessById(_harnesses, _selection.harnessId);
+    final modes = [
+      for (final mode in harness?.modes ?? const <AgentModeOption>[])
+        (id: mode.id, unattended: mode.unattended),
+    ];
+    final modeId = modeIdForPreset(preset, modes);
+    if (modeId != null) {
+      final next = _selection.copyWith(agentModeId: modeId);
+      setState(() => _selection = next);
+      await _persistSelection(next);
+      return;
+    }
+    if (preset == AutonomyPresetId.readOnly) {
+      await _setPlanMode(true);
+    } else if (preset == AutonomyPresetId.default_ && _planMode) {
+      await _setPlanMode(false);
+    }
+  }
+
+  String get _postureLabel {
+    final l10n = context.l10n;
+    final harness = harnessById(_harnesses, _selection.harnessId);
+    var modeUnattended = false;
+    final modeId = _selection.agentModeId;
+    if (harness != null && modeId != null) {
+      for (final mode in harness.modes) {
+        if (mode.id == modeId && mode.unattended) modeUnattended = true;
+      }
+    }
+    final preset = activeAutonomyPreset(
+      requireApproval: _requireApproval,
+      modeUnattended: modeUnattended,
+      modeReadOnly: modeLooksReadOnly(modeId) || _planMode,
+    );
+    switch (preset) {
+      case AutonomyPresetId.readOnly:
+        return l10n.composerAutonomyReadOnly;
+      case AutonomyPresetId.fullAccess:
+        return l10n.composerAutonomyFullAccess;
+      case AutonomyPresetId.default_:
+        return l10n.composerAutonomyDefault;
     }
   }
 
@@ -498,10 +577,14 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   }
 
   bool get _canStopAsking {
-    if (!_requireApproval) return false;
     final id = _runHarnessId ?? _selection.harnessId;
-    // Catalogue policy wire only — matches the daemon and the window.
-    return id != null && askingControl(id) == AskingControl.policy;
+    final harness = harnessById(_harnesses, id);
+    // Desktop twin: policy, unattended-mode, or catalogue YOLO.
+    return canStopAskingApprovals(
+      harnessId: id,
+      requireApproval: _requireApproval,
+      catalogEntryId: harness?.catalogEntryId,
+    );
   }
 
   /// Composer takeover when pending and the agent supports approvals — or when
@@ -584,7 +667,8 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     final previousAttachments = List<ComposerAttachment>.of(_attachments);
     // Echo into the transcript before the wire answers — otherwise the composer
     // clears and the bubble only appears if/when `run.message` arrives.
-    _transcript.echoUser(echoText, delivered: _live ? 'queued' : 'steered');
+    final mode = _live ? _sendWhileRunning : 'steer';
+    _transcript.echoUser(echoText, delivered: mode == 'steer' ? 'steered' : 'queued');
     _composer.clear();
     setState(() {
       _attachments = [];
@@ -598,7 +682,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
           {
             'runId': _runId,
             'text': prompt,
-            'mode': 'queue',
+            'mode': mode,
             if (images.isNotEmpty) 'images': images,
           },
           images.isEmpty ? const Duration(seconds: 15) : const Duration(seconds: 60),
@@ -773,7 +857,24 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
       },
       child: Scaffold(
       appBar: AppBar(
-        title: Text(_explorerOpen ? l10n.explorerTitle : widget.title),
+        title: _explorerOpen
+            ? Text(l10n.explorerTitle)
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.title, overflow: TextOverflow.ellipsis),
+                  Text(
+                    _postureLabel,
+                    key: const ValueKey('task-posture'),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: colors.foreground,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
         leading: _explorerOpen
             ? IconButton(
                 tooltip: MaterialLocalizations.of(context).backButtonTooltip,
@@ -959,10 +1060,76 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                         selection: _selection,
                         enabled: true,
                         onChanged: (next) => unawaited(_persistSelection(next)),
+                        planMode: _planMode,
+                        onTogglePlan: (value) => unawaited(_setPlanMode(value)),
+                        requireApproval: _requireApproval,
+                        onChooseAutonomyPreset: (preset) =>
+                            unawaited(_applyAutonomyPreset(preset)),
                       ),
                       const SizedBox(height: 8),
                     ],
-                    if (_live && !approvalOpen)
+                    if (_live && !approvalOpen) ...[
+                      Builder(
+                        builder: (context) {
+                          final items = segmentTranscriptSteps(
+                            displayEntries,
+                            runLive: true,
+                          );
+                          TranscriptStepsSegment? liveSteps;
+                          for (final item in items.reversed) {
+                            if (item is TranscriptStepsItem && item.segment.live) {
+                              liveSteps = item.segment;
+                              break;
+                            }
+                          }
+                          final stream = liveSteps == null
+                              ? ''
+                              : stepsLiveStreamText(liveSteps.entries);
+                          final parts = workingPeekParts(stream);
+                          final summary = parts.summary;
+                          final peek = parts.tail;
+                          if ((summary == null || summary.isEmpty) &&
+                              peek.isEmpty) {
+                            return const SizedBox.shrink();
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Column(
+                              key: const ValueKey('composer-working-peek'),
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  (summary != null && summary.isNotEmpty)
+                                      ? summary
+                                      : l10n.runStepsWorking,
+                                  key: const ValueKey(
+                                    'composer-working-peek-summary',
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: colors.foreground,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                if (peek.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    peek,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: colors.foregroundMuted,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Text(
@@ -970,6 +1137,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                           style: TextStyle(color: colors.foregroundMuted, fontSize: 11),
                         ),
                       ),
+                    ],
                     if (!takeover && !approvalOpen && _commandMatches.isNotEmpty)
                       ..._commandMatches.map(
                         (command) => ListTile(
@@ -998,6 +1166,36 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                           onPaste: () => unawaited(_attach(pasteClipboardImage)),
                           onFile: () => unawaited(_attach(pickDocuments)),
                         ),
+                        if (_speechReady)
+                          IconButton(
+                            tooltip: _listening ? l10n.runVoiceStop : l10n.runVoiceStart,
+                            color: _listening ? colors.statusDanger : null,
+                            onPressed: !_canSend
+                                ? null
+                                : () async {
+                                    if (_listening) {
+                                      await _speech.stop();
+                                      if (mounted) setState(() => _listening = false);
+                                      return;
+                                    }
+                                    final ok = await _speech.listen(
+                                      onResult: (result) {
+                                        if (!result.finalResult) return;
+                                        final piece = result.recognizedWords.trim();
+                                        if (piece.isEmpty) return;
+                                        final prev = _composer.text;
+                                        final gap = prev.isEmpty || prev.endsWith(' ') ? '' : ' ';
+                                        _composer.text = '$prev$gap$piece';
+                                        _composer.selection = TextSelection.collapsed(
+                                          offset: _composer.text.length,
+                                        );
+                                        setState(() {});
+                                      },
+                                    );
+                                    if (mounted) setState(() => _listening = ok);
+                                  },
+                            icon: Icon(_listening ? Icons.mic : Icons.mic_none),
+                          ),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,

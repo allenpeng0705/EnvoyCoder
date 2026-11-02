@@ -13,7 +13,7 @@ import type { MessageKey } from "../../i18n/messages/en.js";
 import type { SettingsSectionId } from "../../state/settings-sections.js";
 
 /** Sections that carry the orientation block. */
-export const SECTIONS_WITH_INFO = ["agents", "llm", "pairing", "homes", "teams"] as const;
+export const SECTIONS_WITH_INFO = ["agents", "llm", "pairing", "homes", "teams", "work"] as const;
 export type SectionWithInfo = (typeof SECTIONS_WITH_INFO)[number];
 
 export function hasSectionInfo(id: SettingsSectionId): id is SectionWithInfo {
@@ -66,6 +66,14 @@ const INFO: Record<SectionWithInfo, InfoKeys> = {
       "settings.section.teams.info.how.2",
       "settings.section.teams.info.how.3",
       "settings.section.teams.info.how.4",
+    ],
+  },
+  work: {
+    what: "settings.section.work.info.what",
+    steps: [
+      "settings.section.work.info.how.1",
+      "settings.section.work.info.how.2",
+      "settings.section.work.info.how.3",
     ],
   },
 };

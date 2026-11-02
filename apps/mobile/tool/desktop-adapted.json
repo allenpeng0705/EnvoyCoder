@@ -3,5 +3,12 @@
   "settingsLlmDetail": "settings.section.llm.detail",
   "settingsApiKeySaved": "settings.agents.envoyLlm.apiKey.saved",
   "addProjectBrowse": "settings.folder.choose",
-  "folderTitle": "palette.addProject.pickPrompt"
+  "folderTitle": "palette.addProject.pickPrompt",
+  "composerAutonomyTooltip": "task.composer.hint.autonomy",
+  "composerPlanTooltip": "task.composer.hint.work",
+  "settingsSendWhileRunningDetail": "settings.sendWhileRunning.detail",
+  "settingsSendWhileRunningQueue": "settings.sendWhileRunning.queue",
+  "settingsSendWhileRunningSteer": "settings.sendWhileRunning.steer",
+  "settingsGuardianDetail": "settings.guardian.detail",
+  "settingsGuardianGuardian": "settings.guardian.guardian"
 }

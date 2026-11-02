@@ -34,6 +34,7 @@ import {
   DEFAULT_DAEMON_PATH,
   DEFAULT_DAEMON_PORT,
   ENVOYDEV_PRODUCT_NAME,
+  isHarnessId,
 } from "@envoydev/protocol";
 import {
   type CoderMeshPeer,
@@ -60,6 +61,7 @@ import {
   acpAgent,
   cataloguedInstall,
   harnessAvailability,
+  harnessDefinition,
   probeHarness,
   probeableBinaryNames,
   type HarnessProbe,
@@ -72,10 +74,13 @@ import { join } from "node:path";
 import { createCoderEventBus, createCoderSocketMethods, createNodeService } from "./events.js";
 import { clearDaemonClaim, writeDaemonClaim } from "./lock.js";
 import { RunManager } from "./runs.js";
+import { WorkEngine } from "./work-engine.js";
 import { SessionProbe } from "./session-probe.js";
 import { WARM_STALE_MS, startDeepWarm } from "./deep-warm.js";
 import { SessionSignIn } from "./sign-in.js";
 import { createCoderHandlers, COLLAB_PRE_AUTH_METHODS } from "./service.js";
+import { bootWebCompanion, stopWebCompanion } from "./web-companion-boot.js";
+import type { WebCompanionHandle } from "./web-companion.js";
 import { startMembershipHeartbeats } from "./membership-heartbeat.js";
 import { createMemberPeerCall } from "./member-peer-call.js";
 import { configureMemberDial } from "./member-dial.js";
@@ -120,6 +125,10 @@ export interface StartCoderDaemonOptions {
   managedBy?: "app" | "service";
   /** Skip the mesh attach. Used by tests, which have no node and should not wait for one. */
   skipMeshAttach?: boolean;
+  /** Skip the loopback companion HTTP UI (tests / smoke). */
+  skipWebCompanion?: boolean;
+  /** Override companion port; `0` lets the OS choose. */
+  webCompanionPort?: number;
   /** Injected so a test does not depend on which agents happen to be installed. */
   mesh?: () => CoderMeshStatus;
   isDirectory?: (path: string) => Promise<boolean>;
@@ -228,15 +237,57 @@ export async function startCoderDaemon(options: StartCoderDaemonOptions = {}): P
   // Every run event goes onto the bus, and each subscribed connection receives it. That is the only
   // path by which a transcript reaches a window: the daemon never sends a client a frame it did not
   // ask for (`CODER_EVENTS` in `@envoydev/protocol` explains why subscription works this way).
+  let workEngine: WorkEngine | undefined;
   const runs = new RunManager({
     // The same lookup the list and the launch use: one answer to "how is this agent delivered".
     deliveryOf: (harness) => deliveries.of(harness),
     paths,
     store,
-    onEvent: (event) => bus.emit("coder:run-event", event),
+    onEvent: (event) => {
+      bus.emit("coder:run-event", event);
+      void workEngine?.applyRunEvent(event);
+    },
     ...(options.startClient ? { startClient: options.startClient } : {}),
     ...(options.resolveLaunch ? { resolveLaunch: options.resolveLaunch } : {}),
     ...(options.platform ? { platform: options.platform } : {}),
+  });
+
+  workEngine = await WorkEngine.open({
+    workDir: paths.workDir,
+    store: {
+      findTask: (id) => store.findTask(id),
+      createTask: (input) => store.createTask(input),
+      defaultProjectId: () => store.projects()[0]?.id,
+    },
+    runs: {
+      start: (input) => runs.start(input).then((run) => ({ run: { id: run.id } })),
+      send: (runId, text, mode = "queue") =>
+        runs.send(runId, text, mode).then(() => undefined),
+      cancel: (runId) => runs.cancel(runId).then(() => undefined),
+      isLive: (runId) => runs.isLive(runId),
+      pendingApproval: (runId) => {
+        const row = runs.companionSnapshot().find((entry) => entry.runId === runId);
+        if (!row?.approvalRequestId) return undefined;
+        return {
+          requestId: row.approvalRequestId,
+          allowOptionIds: row.allowOptionId ? [row.allowOptionId] : [],
+        };
+      },
+      answerApproval: (runId, requestId, optionId, extra) =>
+        runs.answerApproval(runId, requestId, optionId, extra),
+    },
+    workerAllowsUnattended: (taskId) => {
+      const task = store.findTask(taskId);
+      if (!task) return false;
+      // Unknown / custom agents: refuse unattended until we know they can ask.
+      if (!isHarnessId(task.harness)) return false;
+      return harnessDefinition(task.harness).capabilities.approvals === true;
+    },
+    onChanged: (ids) => {
+      const at = new Date().toISOString();
+      bus.emit("work:ticket-changed", { at, ids });
+      bus.emit("coder:state-changed", { kind: "work", at, ids });
+    },
   });
 
   /**
@@ -451,6 +502,7 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
     callPeer: memberPeerCall,
     onJobsChanged: (jobId) =>
       bus.emit("coder:state-changed", { kind: "jobs", at: new Date().toISOString(), ids: [jobId] }),
+    work: workEngine,
   }),
     ...createPairingHandlers({
       store: pairedDevices,
@@ -555,6 +607,13 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
 
   await host.serve();
   boundPort = host.port;
+
+  const webCompanion: WebCompanionHandle | undefined = await bootWebCompanion({
+    store,
+    runs,
+    skip: options.skipWebCompanion === true,
+    ...(options.webCompanionPort !== undefined ? { port: options.webCompanionPort } : {}),
+  });
 
   // The peer starts **after** the socket answers, for the same reason the claim is written only then:
   // a daemon that has not accepted its first window must not be sitting in a network handshake. A peer
@@ -763,6 +822,7 @@ function isFreshObservation(observedAt: string | undefined, now: number): boolea
       // waiting on a pipe nobody will ever answer.
       await Promise.all([runs.stopAll(), probeSession.stopAll(), signIn.stopAll()]);
       host.stop();
+      await stopWebCompanion(webCompanion);
       // The peer's stop never rejects, so it is awaited unconditionally: a shutdown that could throw
       // here would skip the claim removal below and leave the next window talking to nobody.
       await meshPeer?.stop();

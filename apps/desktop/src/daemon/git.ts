@@ -19,8 +19,8 @@
  * names the task, because "something is running" is not something a user can act on.
  *
  *   * refused while a run is live: `gitCheckout`, `gitCreateBranch`, `gitMerge`, `gitMergeResolve`,
- *     `gitMergeContinue`, `gitMergeAbort`, `gitPull`, `gitStage`, `gitUnstage`, `gitCommit`, `gitStashPush`
- *     and `gitStashPop`;
+ *     `gitMergeContinue`, `gitMergeAbort`, `gitPull`, `gitPush`, `gitStage`, `gitUnstage`, `gitCommit`,
+ *     `gitStashPush` and `gitStashPop`;
  *   * allowed: `gitStatus`, `gitBranches`, `gitStashList`, `gitFetch`, `gitStashDrop` and the diff read
  *     (`coder.readWorktreeDiff`, served by `service.ts`) — looking is not the dangerous half, a fetch moves
  *     only remote-tracking refs, and dropping a stash moves no branch and no file.
@@ -41,12 +41,12 @@
  *
  * ## What is deliberately absent
  *
- * No force-push, no rebase, no `push`, and no `reset --hard` as a *user* action: the first three destroy work
- * git cannot get back, and each needs a confirmation that names what is about to be lost — which is a
- * conversation, not a method. The one `reset --hard` the daemon runs is not a user action at all: it is
- * `gitStashPop` taking back a *pop it just made onto a tree it measured as clean*, and `platform/git.ts`
- * records why that is exact. Credentials are not this file's business either: a `fetch`/`pull` runs with the
- * user's own git and helper, which is the whole credential story this product has.
+ * No force-push, no rebase, and no `reset --hard` as a *user* action: force and rebase destroy work
+ * git cannot get back without a confirmation that names the loss. Ordinary `gitPush` is allowed (no
+ * `--force`) for Team job handoff and the Changes rail. The one `reset --hard` the daemon runs is not a
+ * user action at all: it is `gitStashPop` taking back a *pop it just made onto a tree it measured as
+ * clean*, and `platform/git.ts` records why that is exact. Credentials are not this file's business
+ * either: a `fetch`/`pull`/`push` runs with the user's own git and helper.
  */
 
 import {
@@ -63,6 +63,7 @@ import {
   gitCommitArgs,
   gitCreateBranchArgs,
   gitMergeArgs,
+  gitPushArgs,
   gitStageArgs,
   gitStashDropArgs,
   gitStashPopArgs,
@@ -677,6 +678,28 @@ export function createGitHandlers(deps: GitHandlerDeps): Partial<Record<RpcMetho
         changes: changesOf(root),
         summary: summaryOf(pulled),
       };
+    },
+
+    "coder.gitPush": async (params) => {
+      const input = parseRpcParams("coder.gitPush", params) as {
+        projectId: string;
+        remote?: string;
+        refspec?: string;
+      };
+      const project = projectFor(input.projectId);
+      await repositoryFor(project.path);
+      refuseWhileRunning(project.id);
+      const root = await gitRoot(deps, project.path);
+      refuseConflict(root, await statusOf(deps, root));
+
+      const pushed = await runGit(
+        deps,
+        root,
+        gitPushArgs(input.remote ?? "origin", input.refspec ?? "HEAD"),
+        { read: false },
+      );
+      if (pushed.code !== 0) throw gitFailed(pushed);
+      return { status: await statusOf(deps, root), summary: summaryOf(pushed) };
     },
 
     "coder.gitStashList": async (params) => {

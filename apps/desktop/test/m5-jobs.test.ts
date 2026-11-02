@@ -25,6 +25,7 @@ import {
   assertWriterLocks,
   createJob,
   evaluateStalls,
+  getJob,
   handleStepRunFailure,
   offerJobStep,
   refuseJobStepOffer,
@@ -431,6 +432,46 @@ describe("jobs", () => {
     // Already-offered step stays offered; dependent stays pending until first completes.
     expect(job.steps[0]!.status).toBe("offered");
     expect(job.steps[1]!.status).toBe("pending");
+  });
+
+  it("defers offer for offline sticky assignee without clearing assigneeMemberId", async () => {
+    const paths = await tempPaths();
+    await prepareGitWorkDir(paths.workDir);
+    const team = await createTeam(paths.teamsFile, {
+      label: "Desk",
+      originWs: "ws://127.0.0.1:4770/ws",
+    });
+    const peer = await joinTeam(paths.teamsFile, {
+      token: team.token,
+      label: "peer",
+      rolesOffered: ["developer"],
+      hostHints: "ws://127.0.0.1:9/ws",
+    });
+    let job = await createJob(paths.jobsFile, {
+      teamId: team.team.id,
+      title: "Fix",
+      goal: "ship",
+      steps: [
+        {
+          role: "developer",
+          brief: "do it",
+          worktreeKey: "main",
+          cwdHint: paths.workDir,
+          assigneeMemberId: peer.memberId,
+        },
+      ],
+    });
+    job = await startJob(paths.jobsFile, paths.jobOffersFile, paths.teamsFile, job.id);
+    const result = await offerJobStep(paths.jobsFile, paths.jobOffersFile, paths.teamsFile, {
+      jobId: job.id,
+      stepId: job.steps[0]!.id,
+      memberId: peer.memberId,
+    });
+    expect(result.status).toBe("refused");
+    expect(result.policy).toBe("peer-offline");
+    job = await getJob(paths.jobsFile, job.id);
+    expect(job.steps[0]!.assigneeMemberId).toBe(peer.memberId);
+    expect(job.steps[0]!.blocked).toBe("peer-offline");
   });
 
   it("reassigns after refuse when policy is reassign", async () => {

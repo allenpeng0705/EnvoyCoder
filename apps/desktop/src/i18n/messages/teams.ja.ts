@@ -40,6 +40,14 @@ export const teams = {
   "job.pane.kick": "除外",
   "job.pane.kickConfirm": "{label} をチームから外します。そのステップは停止します。",
   "job.pane.stallAutomation": "停滞の自動処理を有効にする（ボード表示後）",
+  "job.pane.contentBusAdvanced": "承諾時と完了時の Git",
+  "job.pane.pullOnAccept": "ステップ承諾前に pull",
+  "job.pane.pushOnSuccess": "ステップ成功時に push",
+  "settings.teams.membersMayStartJobs": "メンバーがジョブを開始できる",
+  "settings.teams.membersMayStartJobs.detail":
+    "オンラインのメンバーが下書きを開始できます。一時停止・停止・除外はホストのみです。",
+  "error.team.membersMayNotStart":
+    "このチームではメンバーがジョブを開始できません。ホストに「設定 → チーム」で有効化してもらってください。",
   "job.pane.noOnline": "開始にはオンラインのピア（またはこのマシン）が少なくとも1台必要です。",
   "job.pane.crew.noSteps": "開始前にステップを追加してください（ステップテンプレートを使用）。",
   "job.pane.crew.noMembers": "このチームにはまだマシンがありません。「チーム」から招待してください。",
@@ -137,6 +145,16 @@ export const teams = {
   "error.job.git.notARepo": "そのフォルダは Git リポジトリではありません。チームジョブは Git で作業を共有します — リポジトリを初期化するかクローンしてください。",
   "error.job.git.noRemote": "この Git リポジトリにリモートがありません。チームメイトが pull / push できるよう origin（または別のリモート）を追加してください。",
   "error.job.git.missing": "このマシンに Git がインストールされていません（または PATH にありません）。チームジョブのステップを承諾する前に Git をインストールしてください。",
+  "error.job.git.syncDirty":
+    "このフォルダに未コミットの変更があります。チームジョブのステップを承諾する前にコミットするか stash してください。",
+  "error.job.git.syncDiverged":
+    "ローカルとリモートのブランチが両方変わっているため、早送り pull できません。",
+  "error.job.git.syncPullFailed":
+    "Git pull に失敗しました。リモートと認証を確認してから再試行してください。",
+  "error.job.git.syncBranchInvalid": "そのブランチ名は Git で無効です。",
+  "error.job.git.syncBranchFailed": "ステップ用ブランチをチェックアウトまたは作成できませんでした。",
+  "error.job.git.syncPushFailed":
+    "Git push に失敗しました。リモートと認証を確認してから再試行してください。",
   "teamJob.git.ok": "Git 準備完了 — リモート付きリポジトリ。",
   "teamJob.git.pathMissing": "プロジェクトフォルダがありません。",
   "teamJob.git.notARepo": "このプロジェクトは Git リポジトリではありません。チームジョブはファイル共有に Git が必要です。",

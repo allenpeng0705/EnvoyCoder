@@ -68,6 +68,7 @@ const SOURCE_DIRS = [
   "packages/platform/src",
   "packages/protocol/src",
   "packages/task-model/src",
+  "packages/work-model/src",
 ];
 
 if (!existsSync(checker)) {

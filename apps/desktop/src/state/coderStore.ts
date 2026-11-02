@@ -186,6 +186,13 @@ export interface CoderState {
    * Optional on hand-built test snapshots — the live store always starts at 0.
    */
   jobsRevision?: number;
+  /**
+   * Bumped when the daemon emits `coder:state-changed { kind: "work" }`.
+   * Work attention refreshes from this rather than only polling.
+   */
+  workRevision?: number;
+  /** Work Engine kill switch — Promote is offered only when true. */
+  workEnabled?: boolean;
   /** True once projects, tasks and settings have arrived at least once. */
   loaded: boolean;
   /**
@@ -232,6 +239,8 @@ const initialState: CoderState = {
   mesh: { kind: "no-node", reason: "" },
   runs: {},
   jobsRevision: 0,
+  workRevision: 0,
+  workEnabled: false,
   loaded: false,
   error: undefined,
   notes: [],
@@ -519,12 +528,17 @@ export class CoderStore {
         // Jobs live outside the project/task lists — bump a revision so the rail refetches.
         this.set({ jobsRevision: (this.state.jobsRevision ?? 0) + 1 });
       }
+      if (kinds.has("work")) {
+        this.set({ workRevision: (this.state.workRevision ?? 0) + 1 });
+        loads.push(this.loadWorkPolicy());
+      }
       const needLists = [...kinds].some(
         (k) =>
           k !== "settings" &&
           k !== "harnesses" &&
           k !== "providers" &&
-          k !== "jobs",
+          k !== "jobs" &&
+          k !== "work",
       );
       if (needLists) loads.push(this.loadLists());
       void Promise.all(loads);
@@ -539,8 +553,19 @@ export class CoderStore {
       this.loadProviders(),
       this.loadCatalog(),
       this.loadMesh(),
+      this.loadWorkPolicy(),
     ]);
     this.set({ loaded: true });
+  }
+
+  /** Work kill switch for Promote / Attention — best-effort; older daemons leave it false. */
+  async loadWorkPolicy(): Promise<void> {
+    if (!this.canCall("work.getPolicy")) {
+      this.set({ workEnabled: false });
+      return;
+    }
+    const result = await this.getWorkPolicy();
+    if (result.ok) this.set({ workEnabled: result.policy.enabled === true });
   }
 
   async loadLists(): Promise<void> {
@@ -986,7 +1011,7 @@ export class CoderStore {
     // accepts it directly rather than making every caller wrap it as `{ optionIds }` — the adapter that
     // used to be missing is why `tsc -b` failed on `CoderApp`'s `onAnswer` handler.
     choice: string | readonly string[] | { optionIds: readonly string[] } | { text: string },
-    options?: { stopAsking?: boolean },
+    options?: { stopAsking?: boolean; stopAskingScope?: "session" | "machine" },
   ): Promise<{ ok: true } | Refusal> {
     const params =
       typeof choice === "string"
@@ -1001,6 +1026,9 @@ export class CoderStore {
       {
         ...params,
         ...(options?.stopAsking === true ? { stopAsking: true as const } : {}),
+        ...(options?.stopAskingScope !== undefined
+          ? { stopAskingScope: options.stopAskingScope }
+          : {}),
       },
       () => ({ ok: true as const }),
     );
@@ -1259,6 +1287,28 @@ export class CoderStore {
       return { summary: result.summary };
     });
     return "ok" in pulled ? pulled : { ok: true, ...pulled };
+  }
+
+  /** Push HEAD to the remote (no force). */
+  async gitPush(input: {
+    projectId: string;
+    remote?: string;
+    refspec?: string;
+  }): Promise<{ ok: true; summary: string } | Refusal> {
+    const pushed = await this.mutate(
+      "coder.gitPush",
+      {
+        projectId: input.projectId,
+        ...(input.remote !== undefined ? { remote: input.remote } : {}),
+        ...(input.refspec !== undefined ? { refspec: input.refspec } : {}),
+      },
+      (answer) => {
+        const result = answer as { status: GitStatus; summary: string };
+        this.rememberStatus(input.projectId, result.status);
+        return { summary: result.summary };
+      },
+    );
+    return "ok" in pushed ? pushed : { ok: true, ...pushed };
   }
 
   /**
@@ -1569,6 +1619,7 @@ export class CoderStore {
     title: string;
     harness?: string;
     model?: string;
+    worktree?: { branch: string };
   }): Promise<{ ok: true; task: Task } | Refusal> {
     return this.mutate("coder.createTask", input, (result) => {
       const task = (result as { task: Task }).task;
@@ -2002,6 +2053,27 @@ export class CoderStore {
     });
   }
 
+  async createJobFromSource(input: {
+    teamId: string;
+    sourceRef: string;
+    title: string;
+    goal: string;
+    projectId?: string;
+    steps?: readonly {
+      role: import("@envoydev/protocol").JobRole;
+      brief: string;
+      worktreeKey: string;
+      cwdHint: string;
+      dependsOn?: readonly string[];
+    }[];
+    policy?: Partial<import("@envoydev/protocol").FailurePolicy>;
+  }) {
+    return this.mutate("coder.createJobFromSource", input, (result) => {
+      const answer = result as { job: import("@envoydev/protocol").Job; created: boolean };
+      return { ok: true as const, job: answer.job, created: answer.created };
+    });
+  }
+
   async listJobs(filter: { teamId?: string; projectId?: string }) {
     return this.mutate("coder.listJobs", filter, (result) => {
       const answer = result as { jobs: readonly import("@envoydev/protocol").Job[] };
@@ -2139,6 +2211,23 @@ export class CoderStore {
     return this.mutate("coder.updateJobSteps", { jobId, steps }, (result) => {
       const answer = result as { job: import("@envoydev/protocol").Job };
       return { ok: true as const, job: answer.job };
+    });
+  }
+
+  async updateJobPolicy(
+    jobId: string,
+    policy: Partial<import("@envoydev/protocol").FailurePolicy>,
+  ) {
+    return this.mutate("coder.updateJobPolicy", { jobId, policy }, (result) => {
+      const answer = result as { job: import("@envoydev/protocol").Job };
+      return { ok: true as const, job: answer.job };
+    });
+  }
+
+  async updateTeamSettings(teamId: string, patch: { membersMayStartJobs?: boolean }) {
+    return this.mutate("coder.updateTeamSettings", { teamId, ...patch }, (result) => {
+      const answer = result as { team: never };
+      return { ok: true as const, team: answer.team };
     });
   }
 
@@ -2331,6 +2420,168 @@ export class CoderStore {
         return { ok: true as const, ...answer };
       },
     );
+  }
+
+  async getWorkPolicy() {
+    return this.mutate("work.getPolicy", {}, (result) => {
+      const answer = result as { policy: import("@envoydev/work-model").WorkPolicy };
+      return { ok: true as const, policy: answer.policy };
+    });
+  }
+
+  async setWorkPolicy(
+    patch: Partial<
+      Pick<
+        import("@envoydev/work-model").WorkPolicy,
+        | "acceptMode"
+        | "allowList"
+        | "requireApprovalsForUnattended"
+        | "enabled"
+        | "githubPollIntervalMs"
+        | "githubPollRepo"
+      >
+    >,
+  ) {
+    return this.mutate("work.setPolicy", patch as Record<string, unknown>, (result) => {
+      const answer = result as { policy: import("@envoydev/work-model").WorkPolicy };
+      this.set({ workEnabled: answer.policy.enabled === true });
+      return { ok: true as const, policy: answer.policy };
+    });
+  }
+
+  async listWorkAttention(projectId?: string) {
+    return this.mutate(
+      "work.listAttention",
+      projectId !== undefined ? { projectId } : {},
+      (result) => {
+        const answer = result as { tickets: readonly import("@envoydev/work-model").WorkTicket[] };
+        return { ok: true as const, tickets: answer.tickets };
+      },
+    );
+  }
+
+  async listWorkTickets(filter: { projectId?: string; includeEnded?: boolean } = {}) {
+    return this.mutate("work.listTickets", filter, (result) => {
+      const answer = result as { tickets: readonly import("@envoydev/work-model").WorkTicket[] };
+      return { ok: true as const, tickets: answer.tickets };
+    });
+  }
+
+  async promoteTaskToWork(taskId: string, title?: string) {
+    return this.mutate(
+      "work.promoteTask",
+      { taskId, ...(title !== undefined ? { title } : {}) },
+      (result) => {
+        const answer = result as { ticket: import("@envoydev/work-model").WorkTicket };
+        return { ok: true as const, ticket: answer.ticket };
+      },
+    );
+  }
+
+  async createWorkTicket(input: { title: string; projectId?: string; taskId?: string }) {
+    return this.mutate("work.createTicket", input, (result) => {
+      const answer = result as { ticket: import("@envoydev/work-model").WorkTicket };
+      return { ok: true as const, ticket: answer.ticket };
+    });
+  }
+
+  async stopWorkTicket(id: string, reason?: string) {
+    return this.mutate(
+      "work.stopTicket",
+      { id, ...(reason !== undefined ? { reason } : {}) },
+      (result) => {
+        const answer = result as { ticket: import("@envoydev/work-model").WorkTicket };
+        return { ok: true as const, ticket: answer.ticket };
+      },
+    );
+  }
+
+  async retryWorkTicket(id: string) {
+    return this.mutate("work.retryTicket", { id }, (result) => {
+      const answer = result as { ticket: import("@envoydev/work-model").WorkTicket };
+      return { ok: true as const, ticket: answer.ticket };
+    });
+  }
+
+  async answerWorkAttention(id: string, text: string) {
+    return this.mutate("work.answerAttention", { id, text }, (result) => {
+      const answer = result as { ticket: import("@envoydev/work-model").WorkTicket };
+      return { ok: true as const, ticket: answer.ticket };
+    });
+  }
+
+  async enqueueWorkCandidate(
+    text: string,
+    strength?: import("@envoydev/work-model").MandateStrength,
+  ) {
+    return this.mutate(
+      "work.enqueueCandidate",
+      { text, ...(strength !== undefined ? { strength } : {}) },
+      (result) => {
+        const answer = result as { candidate: import("@envoydev/work-model").WorkCandidate };
+        return { ok: true as const, candidate: answer.candidate };
+      },
+    );
+  }
+
+  async listWorkCandidates() {
+    return this.mutate("work.listCandidates", {}, (result) => {
+      const answer = result as { candidates: readonly import("@envoydev/work-model").WorkCandidate[] };
+      return { ok: true as const, candidates: answer.candidates };
+    });
+  }
+
+  async triageWorkCandidate(id: string, assessmentAccepts?: boolean) {
+    return this.mutate(
+      "work.triageCandidate",
+      { id, ...(assessmentAccepts !== undefined ? { assessmentAccepts } : {}) },
+      (result) => {
+        const answer = result as {
+          candidate: import("@envoydev/work-model").WorkCandidate;
+          ticket?: import("@envoydev/work-model").WorkTicket;
+        };
+        return { ok: true as const, candidate: answer.candidate, ticket: answer.ticket };
+      },
+    );
+  }
+
+  async githubPoll(repo?: string) {
+    return this.mutate(
+      "work.githubPoll",
+      repo !== undefined && repo.trim() !== "" ? { repo: repo.trim() } : {},
+      (result) => {
+        const answer = result as {
+          ok: boolean;
+          triggers: number;
+          candidates: number;
+          wouldAccept?: number;
+          accepted?: number;
+          ackFailed?: number;
+          error?: string;
+        };
+        if (!answer.ok) {
+          return {
+            ok: false as const,
+            triggers: answer.triggers,
+            candidates: answer.candidates,
+            ...(answer.ackFailed !== undefined ? { ackFailed: answer.ackFailed } : {}),
+            error: answer.error ?? "GitHub poll failed.",
+          };
+        }
+        return {
+          ok: true as const,
+          triggers: answer.triggers,
+          candidates: answer.candidates,
+          ...(answer.wouldAccept !== undefined ? { wouldAccept: answer.wouldAccept } : {}),
+          ...(answer.accepted !== undefined ? { accepted: answer.accepted } : {}),
+          ...(answer.ackFailed !== undefined ? { ackFailed: answer.ackFailed } : {}),
+        };
+      },
+    );
+  }
+
+  async githubReply(threadKey: string, body: string) {
+    return this.mutate("work.githubReply", { threadKey, body }, () => ({ ok: true as const }));
   }
 
   /**

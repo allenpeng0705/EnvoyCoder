@@ -7,6 +7,18 @@ library;
 import '../models/team_job.dart';
 import 'host_client.dart';
 
+class SuggestedJobSteps {
+  const SuggestedJobSteps({
+    required this.templateId,
+    required this.steps,
+    this.note = '',
+  });
+
+  final String templateId;
+  final List<Map<String, dynamic>> steps;
+  final String note;
+}
+
 extension TeamJobHostClient on HostClient {
   Future<List<TeamInfo>> listTeams() async {
     final result = await call('coder.listTeams');
@@ -100,7 +112,8 @@ extension TeamJobHostClient on HostClient {
         .toList(growable: false);
   }
 
-  Future<JobInfo> suggestJobSteps({
+  /// Suggest steps for a draft — does **not** persist; call [updateJobSteps] with [SuggestedJobSteps.steps].
+  Future<SuggestedJobSteps> suggestJobSteps({
     required String jobId,
     String? templateId,
     int? parallelCount,
@@ -112,9 +125,17 @@ extension TeamJobHostClient on HostClient {
       if (parallelCount != null) 'parallelCount': parallelCount,
       if (hint != null) 'hint': hint,
     });
-    final job = result['job'];
-    if (job is! Map) throw StateError('suggestJobSteps returned no job');
-    return JobInfo.fromJson(Map<String, dynamic>.from(job));
+    final steps = result['steps'];
+    return SuggestedJobSteps(
+      templateId: (result['templateId'] as String?) ?? templateId ?? '',
+      steps: steps is List
+          ? steps
+              .whereType<Map>()
+              .map((s) => Map<String, dynamic>.from(s))
+              .toList(growable: false)
+          : const [],
+      note: (result['note'] as String?) ?? '',
+    );
   }
 
   Future<JobInfo> updateJobSteps({

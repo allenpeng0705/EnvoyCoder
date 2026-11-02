@@ -1,8 +1,7 @@
 /// How Settings → “Ask before risky steps” reaches an agent.
 ///
-/// Mirrors `@envoydev/agent-catalog/asking` so the phone and the window agree.
-/// Window-safe table: no probe. Custom / unknown ids are `none` — the daemon
-/// never maps Settings Off for them.
+/// Mirrors `@envoydev/agent-catalog/asking` (+ catalogue YOLO from `acp-catalog`) so the phone
+/// and the window agree. Custom / unknown ids without a documented YOLO mode are `none`.
 library;
 
 enum AskingControl {
@@ -17,7 +16,7 @@ enum AskingControl {
   none,
 }
 
-/// Which mechanism Settings Off uses for this agent id.
+/// Which mechanism Settings Off uses for this shipped agent id.
 AskingControl askingControl(String harnessId) {
   switch (harnessId) {
     case 'envoy-harness':
@@ -37,7 +36,7 @@ AskingControl askingControl(String harnessId) {
   }
 }
 
-/// Whether Settings can change how often this agent asks.
+/// Whether Settings can change how often this shipped agent asks.
 bool agentCanControlAsking(String harnessId) =>
     askingControl(harnessId) != AskingControl.none;
 
@@ -48,7 +47,7 @@ String? modeForAskingOff(String harnessId) {
 }
 
 /// Catalogue unattended mode id — metadata, not a delivery guarantee.
-/// Prefer [modeForAskingOff] for Settings.
+/// Prefer [modeForAskingOff] for Settings on shipped agents.
 String? unattendedModeId(String harnessId) {
   switch (harnessId) {
     case 'envoy-harness':
@@ -67,7 +66,21 @@ String? unattendedModeId(String harnessId) {
   }
 }
 
-/// End-user label for the unattended mode Settings Off would pick.
+/// Unattended / YOLO mode for a catalogue entry id (Gemini, Qwen, …).
+///
+/// Same table as `@envoydev/agent-catalog` `cataloguedUnattendedModeId`.
+String? cataloguedUnattendedModeId(String? entryId) {
+  if (entryId == null || entryId.isEmpty) return null;
+  switch (entryId) {
+    case 'gemini':
+    case 'qwen-code':
+      return 'yolo';
+    default:
+      return null;
+  }
+}
+
+/// End-user label for the unattended mode Settings Off would pick (shipped agents).
 String? modeLabelForAskingOff(String harnessId) {
   final id = modeForAskingOff(harnessId);
   if (id == null) return null;
@@ -87,6 +100,43 @@ String? modeLabelForAskingOff(String harnessId) {
   }
 }
 
+/// Label for a catalogue YOLO mode id.
+String? cataloguedUnattendedModeLabel(String? entryId) {
+  final id = cataloguedUnattendedModeId(entryId);
+  if (id == null) return null;
+  switch (id) {
+    case 'yolo':
+      return 'YOLO';
+    default:
+      return id;
+  }
+}
+
+/// Whether the permission card may offer “Allow and don't ask again”.
+///
+/// Matches desktop `canStopAskingApprovals`: policy, unattended-mode, or catalogue YOLO.
+bool canStopAskingApprovals({
+  required String? harnessId,
+  required bool requireApproval,
+  String? catalogEntryId,
+}) {
+  if (!requireApproval) return false;
+  if (harnessId == null || harnessId.isEmpty) return false;
+  if (askingControl(harnessId) != AskingControl.none) return true;
+  return cataloguedUnattendedModeId(catalogEntryId ?? harnessId) != null;
+}
+
+/// Whether Settings can flip asking for this agent (shipped wire or catalogue YOLO).
+bool agentOrCatalogueCanControlAsking({
+  required String? harnessId,
+  String? catalogEntryId,
+}) {
+  if (harnessId == null || harnessId.isEmpty) return false;
+  if (agentCanControlAsking(harnessId)) return true;
+  if (isShippedAskingAgent(harnessId)) return false;
+  return cataloguedUnattendedModeId(catalogEntryId ?? harnessId) != null;
+}
+
 /// Shipped agent ids in the asking-control table (including `none`).
 bool isShippedAskingAgent(String harnessId) {
   switch (harnessId) {
@@ -103,4 +153,23 @@ bool isShippedAskingAgent(String harnessId) {
     default:
       return false;
   }
+}
+
+/// Option id stop-asking should send — prefer explicit allow-* ids (desktop twin).
+String? stopAskingAllowId(Iterable<({String id, bool destructive})> options) {
+  final allows = [
+    for (final option in options)
+      if (!option.destructive) option,
+  ];
+  if (allows.isEmpty) return null;
+  for (final option in allows) {
+    final id = option.id.toLowerCase().replaceAll('_', '-');
+    if (id == 'allow' ||
+        id == 'allow-once' ||
+        id == 'allow-always' ||
+        id.startsWith('allow-')) {
+      return option.id;
+    }
+  }
+  return allows.first.id;
 }

@@ -34,6 +34,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../l10n/l10n.dart';
+import '../models/autonomy_presets.dart';
 import '../models/harness.dart';
 import '../theme/tokens.dart';
 
@@ -76,12 +77,23 @@ class ComposerControls extends StatelessWidget {
     required this.selection,
     required this.onChanged,
     this.enabled = true,
+    this.planMode = false,
+    this.onTogglePlan,
+    this.requireApproval,
+    this.onChooseAutonomyPreset,
   });
 
   final List<HarnessInfo> harnesses;
   final ComposerSelection selection;
   final ValueChanged<ComposerSelection> onChanged;
   final bool enabled;
+  /// Plan-first toggle (Envoy / Codex) — desktop Work/Plan parity.
+  final bool planMode;
+  final ValueChanged<bool>? onTogglePlan;
+  /// Settings → Ask before risky steps (autonomy chip).
+  final bool? requireApproval;
+  /// Apply Read only / Default / Full access (Settings + optional mode).
+  final ValueChanged<AutonomyPresetId>? onChooseAutonomyPreset;
 
   @override
   Widget build(BuildContext context) {
@@ -137,6 +149,28 @@ class ComposerControls extends StatelessWidget {
           colors: colors,
           onTap: () => _pickThinking(context, current),
         ),
+      if (onTogglePlan != null &&
+          current != null &&
+          (current.id == 'envoy-harness' || current.id == 'codex'))
+        _ChipButton(
+          icon: Icons.map_outlined,
+          label: planMode ? l10n.composerPlanOn : l10n.composerPlanOff,
+          semanticsLabel: planMode ? l10n.composerPlanOn : l10n.composerPlanOff,
+          tooltip: l10n.composerPlanTooltip,
+          enabled: enabled,
+          colors: colors,
+          onTap: () => onTogglePlan!(!planMode),
+        ),
+      if (requireApproval != null)
+        _ChipButton(
+          icon: Icons.shield_outlined,
+          label: _autonomyLabel(l10n, current, selection.agentModeId, requireApproval!),
+          semanticsLabel: _autonomyLabel(l10n, current, selection.agentModeId, requireApproval!),
+          tooltip: l10n.composerAutonomyTooltip,
+          enabled: enabled && onChooseAutonomyPreset != null,
+          colors: colors,
+          onTap: () => _pickAutonomy(context, current),
+        ),
     ];
 
     // A harness list that has not arrived leaves nothing to set up, and a row of nothing would spend
@@ -187,6 +221,105 @@ class ComposerControls extends StatelessWidget {
       if (o.value == level) return o.label;
     }
     return level;
+  }
+
+  String _autonomyLabel(
+    AppLocalizations l10n,
+    HarnessInfo? current,
+    String? modeId,
+    bool requireApproval,
+  ) {
+    var modeUnattended = false;
+    if (current != null && modeId != null && modeId.isNotEmpty) {
+      for (final o in current.modes) {
+        if (o.id == modeId && o.unattended) modeUnattended = true;
+      }
+    }
+    final preset = activeAutonomyPreset(
+      requireApproval: requireApproval,
+      modeUnattended: modeUnattended,
+      modeReadOnly: modeLooksReadOnly(modeId),
+    );
+    switch (preset) {
+      case AutonomyPresetId.readOnly:
+        return l10n.composerAutonomyReadOnly;
+      case AutonomyPresetId.fullAccess:
+        return l10n.composerAutonomyFullAccess;
+      case AutonomyPresetId.default_:
+        return l10n.composerAutonomyDefault;
+    }
+  }
+
+  Future<void> _pickAutonomy(BuildContext context, HarnessInfo? current) async {
+    final l10n = context.l10n;
+    if (onChooseAutonomyPreset == null || requireApproval == null) return;
+    var modeUnattended = false;
+    final modeId = selection.agentModeId;
+    if (current != null && modeId != null && modeId.isNotEmpty) {
+      for (final o in current.modes) {
+        if (o.id == modeId && o.unattended) modeUnattended = true;
+      }
+    }
+    final currentPreset = activeAutonomyPreset(
+      requireApproval: requireApproval!,
+      modeUnattended: modeUnattended,
+      modeReadOnly: modeLooksReadOnly(modeId),
+    );
+    final chosen = await showModalBottomSheet<AutonomyPresetId>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            ListTile(title: Text(l10n.composerAutonomySheet)),
+            ListTile(
+              title: Text(l10n.composerAutonomyReadOnly),
+              trailing: currentPreset == AutonomyPresetId.readOnly
+                  ? const Icon(Icons.check)
+                  : null,
+              onTap: () => Navigator.pop(context, AutonomyPresetId.readOnly),
+            ),
+            ListTile(
+              title: Text(l10n.composerAutonomyDefault),
+              trailing: currentPreset == AutonomyPresetId.default_
+                  ? const Icon(Icons.check)
+                  : null,
+              onTap: () => Navigator.pop(context, AutonomyPresetId.default_),
+            ),
+            ListTile(
+              title: Text(l10n.composerAutonomyFullAccess),
+              trailing: currentPreset == AutonomyPresetId.fullAccess
+                  ? const Icon(Icons.check)
+                  : null,
+              onTap: () => Navigator.pop(context, AutonomyPresetId.fullAccess),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (chosen == null || !context.mounted) return;
+    if (chosen == AutonomyPresetId.fullAccess &&
+        currentPreset != AutonomyPresetId.fullAccess) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(l10n.composerAutonomyConfirmTitle),
+          content: Text(l10n.composerAutonomyConfirmBody),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(MaterialLocalizations.of(context).cancelButtonLabel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(l10n.composerAutonomyConfirm),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !context.mounted) return;
+    }
+    onChooseAutonomyPreset!(chosen);
   }
 
   Future<void> _pickAgent(BuildContext context) async {

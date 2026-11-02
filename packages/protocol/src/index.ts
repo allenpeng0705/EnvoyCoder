@@ -27,3 +27,4 @@
 export * from "./domain.js";
 export * from "./agent-auth.js";
 export * from "./rpc.js";
+export * from "./stop-asking-scope.js";

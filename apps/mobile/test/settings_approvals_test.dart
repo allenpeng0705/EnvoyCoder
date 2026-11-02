@@ -66,6 +66,7 @@ HarnessInfo harness({
   bool approvalPolicy = false,
   bool agentMode = false,
   List<AgentModeOption> modes = const [],
+  String? catalogEntryId,
 }) {
   return HarnessInfo(
     id: id,
@@ -82,6 +83,7 @@ HarnessInfo harness({
     approvals: true,
     approvalsKnown: true,
     ready: true,
+    catalogEntryId: catalogEntryId,
   );
 }
 
@@ -161,6 +163,29 @@ void main() {
     final tile = tester.widget<SwitchListTile>(find.byType(SwitchListTile).first);
     expect(tile.onChanged, isNull);
     expect(find.textContaining('cannot change this for GitHub Copilot'), findsOneWidget);
+    await client.dispose();
+  });
+
+  testWidgets('enables the switch for Gemini catalogue YOLO', (tester) async {
+    final client = await pumpSettings(
+      tester,
+      defaultHarness: 'gemini',
+      harnesses: [
+        harness(
+          id: 'gemini',
+          label: 'Gemini CLI',
+          agentMode: true,
+          catalogEntryId: 'gemini',
+          modes: const [
+            AgentModeOption(id: 'default', label: 'Default'),
+            AgentModeOption(id: 'yolo', label: 'YOLO', unattended: true),
+          ],
+        ),
+      ],
+    );
+    final tile = tester.widget<SwitchListTile>(find.byType(SwitchListTile).first);
+    expect(tile.onChanged, isNotNull);
+    expect(find.textContaining('YOLO'), findsOneWidget);
     await client.dispose();
   });
 }

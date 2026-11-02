@@ -374,6 +374,38 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsTranscripts => 'タスク終了後も記録を残す';
 
   @override
+  String get settingsSendWhileRunning => 'Send while the agent is working';
+
+  @override
+  String get settingsSendWhileRunningDetail =>
+      'Queue waits for the current reply. Steer stops it and sends yours instead.';
+
+  @override
+  String get settingsSendWhileRunningQueue => 'Queue';
+
+  @override
+  String get settingsSendWhileRunningSteer => 'Steer';
+
+  @override
+  String get settingsGuardian => 'Permission reviewer';
+
+  @override
+  String get settingsGuardianDetail =>
+      'Guardian auto-allows clear read/search permission cards. Edits and commands still ask you.';
+
+  @override
+  String get settingsGuardianUser => 'Always ask me';
+
+  @override
+  String get settingsGuardianGuardian => 'Guardian';
+
+  @override
+  String get runVoiceStart => 'Start dictation';
+
+  @override
+  String get runVoiceStop => 'Stop dictation';
+
+  @override
   String get settingsLanguage => '言語';
 
   @override
@@ -846,6 +878,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get runApprovalStopAsking => '今後確認しない';
+
+  @override
+  String get runApprovalStopAskingSession => 'この実行では再確認しない';
+
+  @override
+  String get runApprovalStopAskingMachine => 'このマシンでは再確認しない';
+
+  @override
+  String get runApprovalStopAskingHint =>
+      'この実行: 終了まで以降の手順を許可します。このマシン: 設定の「リスクのある操作の前に確認する」をオフ。';
 
   @override
   String get runApprovalAnswerBelow => '下の入力欄で回答してください';
@@ -1401,6 +1443,50 @@ class AppLocalizationsJa extends AppLocalizations {
   String get composerThinkingTooltip => 'エージェントが答える前にどれだけ考えるか';
 
   @override
+  String get composerPlanOn => 'プラン';
+
+  @override
+  String get composerPlanOff => 'エージェント';
+
+  @override
+  String get composerPlanTooltip => 'プランは確認と提案のみ。エージェントが作業します';
+
+  @override
+  String get composerAutonomyAskingOn => '確認オン';
+
+  @override
+  String get composerAutonomyAskingOff => '確認オフ';
+
+  @override
+  String get composerAutonomyFullAccess => 'フルアクセス';
+
+  @override
+  String get composerAutonomyReadOnly => '読み取り専用';
+
+  @override
+  String get composerAutonomyDefault => 'デフォルト';
+
+  @override
+  String get composerAutonomyConfirmTitle => 'フルアクセスを有効にしますか？';
+
+  @override
+  String get composerAutonomyConfirmBody =>
+      'フルアクセスはこのマシンでの確認をオフにし、このエージェントが承認なしでファイル編集やツール実行をできるようにします。意図しない変更、データ損失、予期しない動作のリスクが高まります。設定から確認を再度オンにできます。';
+
+  @override
+  String get composerAutonomyConfirm => 'はい、続行する';
+
+  @override
+  String get composerAutonomySheet => '自律性';
+
+  @override
+  String get composerAutonomyTooltip =>
+      'このエージェントが確認する頻度 — 読み取り専用、デフォルト、またはフルアクセス';
+
+  @override
+  String get taskPostureAria => 'このタスクの自律性';
+
+  @override
   String get taskUntitled => '無題のタスク';
 
   @override
@@ -1577,6 +1663,159 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get teamJobPeerOffline => 'オフライン';
+
+  @override
+  String get errorJobGitNotARepo =>
+      'そのフォルダは Git リポジトリではありません。チームジョブは Git で作業を共有します — リポジトリを初期化するかクローンしてください。';
+
+  @override
+  String get errorJobGitNoRemote =>
+      'この Git リポジトリにリモートがありません。チームメイトが pull / push できるよう origin（または別のリモート）を追加してください。';
+
+  @override
+  String get errorJobGitMissingInstall =>
+      'このマシンに Git がインストールされていません（または PATH にありません）。チームジョブのステップを承諾する前に Git をインストールしてください。';
+
+  @override
+  String get errorJobGitSyncDirty =>
+      'このフォルダに未コミットの変更があります。チームジョブのステップを承諾する前にコミットするか stash してください。';
+
+  @override
+  String get errorJobGitSyncDiverged =>
+      'ローカルとリモートのブランチが両方変わっているため、早送り pull できません。';
+
+  @override
+  String get errorJobGitSyncPullFailed =>
+      'Git pull に失敗しました。リモートと認証を確認してから再試行してください。';
+
+  @override
+  String get errorJobGitSyncBranchInvalid => 'そのブランチ名は Git で無効です。';
+
+  @override
+  String get errorJobGitSyncBranchFailed => 'ステップ用ブランチをチェックアウトまたは作成できませんでした。';
+
+  @override
+  String get errorJobGitSyncPushFailed =>
+      'Git push に失敗しました。リモートと認証を確認してから再試行してください。';
+
+  @override
+  String get errorTeamMembersMayNotStart =>
+      'このチームではメンバーがジョブを開始できません。ホストに「設定 → チーム」で有効化してもらってください。';
+
+  @override
+  String get teamJobStepWaitingPeer => 'マシンのオンラインを待機中';
+
+  @override
+  String teamJobStepWaitingPeerDetail(String machine) {
+    return '$machine が戻ったら再試行します';
+  }
+
+  @override
+  String get errorJobMissing => 'その id のジョブはありません。';
+
+  @override
+  String get errorJobStepMissing => 'その id のステップはありません。';
+
+  @override
+  String get errorJobStepsLocked => 'ステップはジョブの下書きまたは実行中のみ編集できます。';
+
+  @override
+  String errorJobWriterLock(String key) {
+    return '2つの実装ステップがワークツリーキー 「$key」 を共有しています。';
+  }
+
+  @override
+  String get errorJobNotRunning => 'ジョブはこの操作を受け付ける状態ではありません。';
+
+  @override
+  String get errorJobDeps => 'ステップの依存関係が満たされていません。';
+
+  @override
+  String get errorJobNoSteps => '開始前に少なくとも1つのステップを追加してください。';
+
+  @override
+  String errorJobNoCandidate(String role) {
+    return '役割 「$role」 を提供するオンラインマシンがありません。チームを直してから、再度開始してください。';
+  }
+
+  @override
+  String get errorJobStepsInFlight =>
+      '進行中のステップは置き換えられません。先にジョブを一時停止するか、保留中のステップだけを編集してください。';
+
+  @override
+  String get errorJobOfferMissing => 'その id のオファーはありません。';
+
+  @override
+  String get errorJobOfferClosed => 'そのオファーはもう保留ではありません。';
+
+  @override
+  String get errorJobExhausted => 'ステップの再試行と再割り当てを使い切りました。';
+
+  @override
+  String get errorJobPathMissing =>
+      'このマシンにそのフォルダがありません。プロジェクトをクローンして開き、再試行してください。';
+
+  @override
+  String get errorJobFailed => 'このジョブは失敗しました。';
+
+  @override
+  String get jobPaneHasGap => 'イベントの欠落 — 一部の進捗が見えない可能性があります';
+
+  @override
+  String get workAttentionAria => '対応が必要な作業項目';
+
+  @override
+  String get workAttentionHeading => '作業項目';
+
+  @override
+  String get workAttentionStageDelivery => '入力が未配信';
+
+  @override
+  String get workAttentionStageAnswer => '回答待ち';
+
+  @override
+  String get workAttentionStageReview => 'レビュー待ち';
+
+  @override
+  String get workAttentionStageBlocked => 'ブロック中';
+
+  @override
+  String get workAttentionOpenTask => 'タスクを開く';
+
+  @override
+  String get workAttentionRetry => '再試行';
+
+  @override
+  String get workAttentionStop => '停止';
+
+  @override
+  String get workAttentionAnswerPlaceholder => 'あなたの回答';
+
+  @override
+  String get workAttentionAnswerSend => '送信';
+
+  @override
+  String get teamJobPause => '一時停止';
+
+  @override
+  String get teamJobStop => '停止';
+
+  @override
+  String get teamJobResume => '再開';
+
+  @override
+  String get teamJobTemplate => 'ステップテンプレート';
+
+  @override
+  String get teamJobOpenRun => '実行を開く';
+
+  @override
+  String teamJobStepPhase(String phase) {
+    return '$phase';
+  }
+
+  @override
+  String get teamJobRecentHeading => '最近のチームジョブ';
 
   @override
   String get welcomeSkip => 'スキップ';

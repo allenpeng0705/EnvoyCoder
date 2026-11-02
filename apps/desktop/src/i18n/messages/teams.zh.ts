@@ -36,6 +36,13 @@ export const teams = {
   "job.pane.kick": "移出",
   "job.pane.kickConfirm": "将 {label} 移出团队。其步骤将停止。",
   "job.pane.stallAutomation": "启用停滞自动处理（看板可见后）",
+  "job.pane.contentBusAdvanced": "接受与完成时的 Git",
+  "job.pane.pullOnAccept": "接受步骤前 pull",
+  "job.pane.pushOnSuccess": "步骤成功后 push",
+  "settings.teams.membersMayStartJobs": "成员可启动作业",
+  "settings.teams.membersMayStartJobs.detail": "在线成员可启动草稿；暂停、停止和踢人仍仅主机可用。",
+  "error.team.membersMayNotStart":
+    "此团队不允许成员启动作业。请让主机在「设置 → 团队」中启用。",
   "job.pane.noOnline": "开始需要至少一台在线的对等机（或本机）。",
   "job.pane.crew.noSteps": "开始前请先添加步骤（可使用步骤模板）。",
   "job.pane.crew.noMembers": "此团队还没有机器。请从「团队」邀请他人。",
@@ -133,6 +140,16 @@ export const teams = {
   "error.job.git.notARepo": "该文件夹不是 Git 仓库。团队任务通过 Git 共享工作 — 请初始化或克隆仓库。",
   "error.job.git.noRemote": "此 Git 仓库没有远程。请添加 origin（或其他远程），以便队友拉取与推送。",
   "error.job.git.missing": "本机未安装 Git（或不在 PATH 中）。接受团队任务步骤前请先安装 Git。",
+  "error.job.git.syncDirty":
+    "此文件夹有未提交的更改。接受团队任务步骤前请先提交或暂存。",
+  "error.job.git.syncDiverged":
+    "本地与远程分支都有更改，无法快进拉取。",
+  "error.job.git.syncPullFailed":
+    "Git 拉取失败。请检查远程与凭据后重试。",
+  "error.job.git.syncBranchInvalid": "该分支名对 Git 无效。",
+  "error.job.git.syncBranchFailed": "无法检出或创建步骤分支。",
+  "error.job.git.syncPushFailed":
+    "Git 推送失败。请检查远程与凭据后重试。",
   "teamJob.git.ok": "Git 就绪 — 带远程的仓库。",
   "teamJob.git.pathMissing": "项目文件夹缺失。",
   "teamJob.git.notARepo": "此项目不是 Git 仓库。团队任务需要 Git 来共享文件。",
