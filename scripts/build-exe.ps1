@@ -14,8 +14,11 @@
 #
 # Before staging, this script:
 #   * fails fast on missing host tools (Node / git / Rust / MSVC) with install hints
-#   * runs `npm install` when workspace links or the Tauri CLI look incomplete
-#   * installs the matching `@tauri-apps/cli-win32-*-msvc` optional when npm skipped it
+#   * runs npm install when workspace links or the Tauri CLI look incomplete
+#   * installs the matching @tauri-apps/cli-win32-*-msvc optional when npm skipped it
+#
+# Keep this file ASCII-only. Windows PowerShell 5.1 mis-parses UTF-8 ellipsis /
+# dashes without a BOM and then reports bogus errors on later "From" lines.
 #
 # Output: release\envoydev-desktop-{version}-windows-{arch}-setup.exe
 # Override the folder with $env:OUT_DIR (default: release).
@@ -54,17 +57,17 @@ function Get-DesktopArch {
 
 function Get-TauriWinNativePkg {
   switch ($env:PROCESSOR_ARCHITECTURE) {
-    "ARM64" { return "@tauri-apps/cli-win32-arm64-msvc" }
-    "AMD64" { return "@tauri-apps/cli-win32-x64-msvc" }
-    "x86" { return "@tauri-apps/cli-win32-ia32-msvc" }
-    default { return "@tauri-apps/cli-win32-x64-msvc" }
+    "ARM64" { return '@tauri-apps/cli-win32-arm64-msvc' }
+    "AMD64" { return '@tauri-apps/cli-win32-x64-msvc' }
+    "x86" { return '@tauri-apps/cli-win32-ia32-msvc' }
+    default { return '@tauri-apps/cli-win32-x64-msvc' }
   }
 }
 
 function Test-TauriWinNative {
   $pkg = Get-TauriWinNativePkg
-  $leaf = $pkg.Substring("@tauri-apps/".Length)
-  return Test-Path (Join-Path $Root "node_modules\@tauri-apps\$leaf")
+  $leaf = $pkg.Substring('@tauri-apps/'.Length)
+  return Test-Path (Join-Path $Root ("node_modules\@tauri-apps\" + $leaf))
 }
 
 function Get-CommandPath([string]$Name) {
@@ -73,13 +76,14 @@ function Get-CommandPath([string]$Name) {
   return $cmd.Source
 }
 
+function Write-Die([string]$Message) {
+  Write-Error -Message $Message
+  exit 1
+}
+
 function Assert-HostTool([string]$Name, [string]$Hint) {
   if (Get-CommandPath $Name) { return }
-  Write-Error @"
-Missing required tool: $Name
-$Hint
-"@
-  exit 1
+  Write-Die ("Missing required tool: {0}`n{1}" -f $Name, $Hint)
 }
 
 function Ensure-CargoOnPath {
@@ -121,14 +125,14 @@ function Join-Root([string[]]$Parts) {
 }
 
 function Get-WorkspaceInstallGaps {
-  $gaps = [System.Collections.Generic.List[string]]::new()
+  $gaps = New-Object System.Collections.Generic.List[string]
   $esbuildOk =
     (Test-Path (Join-Root @("node_modules", "esbuild"))) -or
     (Test-Path (Join-Root @("apps", "desktop", "node_modules", "esbuild")))
   if (-not $esbuildOk) { [void]$gaps.Add("esbuild") }
 
   if (-not (Test-Path (Join-Root @("node_modules", "@tauri-apps", "cli", "package.json")))) {
-    [void]$gaps.Add("@tauri-apps/cli")
+    [void]$gaps.Add('@tauri-apps/cli')
   }
   if (-not (Test-Path (Join-Root @("node_modules", ".bin", "tauri.cmd")))) {
     [void]$gaps.Add("tauri.cmd")
@@ -198,7 +202,7 @@ function Ensure-NpmWorkspace {
   # Native optional alone: prefer the light repair (avoids a full reinstall).
   $onlyNative =
     ($gaps.Count -eq 1) -and
-    ("$($gaps[0])" -like "@tauri-apps/cli-win32-*")
+    ("$($gaps[0])" -like '@tauri-apps/cli-win32-*')
   if ($gaps.Count -eq 0) { return }
 
   if ($onlyNative) {
@@ -213,10 +217,10 @@ function Ensure-NpmWorkspace {
       }
     }
     $spec = if ($cliVersion) { "$nativePkg@$cliVersion" } else { $nativePkg }
-    Write-Host "  Repairing Tauri Windows native binding ($spec)…"
+    Write-Host "  Repairing Tauri Windows native binding ($spec)..."
     $code = Invoke-NpmInstall -ExtraArgs @("install", $spec, "--no-save")
     if ($code -ne 0 -or -not (Test-TauriWinNative)) {
-      Write-Error @"
+      Write-Die @"
 Could not install $spec (npm exit $code).
 npm often skips optional platform packages:
   https://github.com/npm/cli/issues/4828
@@ -226,19 +230,17 @@ From the EnvoyCoder root:
   npm install
 Then re-run this script.
 "@
-      exit 1
     }
     return
   }
 
-  Write-Host "  Workspace deps incomplete ($($gaps -join ', ')); running npm install…"
+  Write-Host ("  Workspace deps incomplete ({0}); running npm install..." -f ($gaps -join ', '))
   $code = Invoke-NpmInstall
   if ($code -ne 0) {
-    Write-Error "npm install failed (exit $code). Fix that, then re-run this script."
-    exit 1
+    Write-Die "npm install failed (exit $code). Fix that, then re-run this script."
   }
 
-  # Full install can still skip the Windows optional — repair it next.
+  # Full install can still skip the Windows optional - repair it next.
   if (-not (Test-TauriWinNative)) {
     $nativePkg = Get-TauriWinNativePkg
     $cliVersion = $null
@@ -251,10 +253,10 @@ Then re-run this script.
       }
     }
     $spec = if ($cliVersion) { "$nativePkg@$cliVersion" } else { $nativePkg }
-    Write-Host "  npm install skipped $nativePkg; installing $spec…"
+    Write-Host "  npm install skipped $nativePkg; installing $spec..."
     $code = Invoke-NpmInstall -ExtraArgs @("install", $spec, "--no-save")
     if ($code -ne 0 -or -not (Test-TauriWinNative)) {
-      Write-Error @"
+      Write-Die @"
 Could not install $spec after npm install.
 From the EnvoyCoder root:
   Remove-Item -Recurse -Force node_modules
@@ -262,24 +264,19 @@ From the EnvoyCoder root:
   npm install $spec --no-save
 Then re-run this script.
 "@
-      exit 1
     }
   }
 
-  $still = @(Get-WorkspaceInstallGaps | Where-Object { $_ -notlike "@tauri-apps/cli-win32-*" })
-  # Native already verified above.
+  $nativePattern = '@tauri-apps/cli-win32-*'
+  $still = @(Get-WorkspaceInstallGaps | Where-Object { $_ -notlike $nativePattern })
   $still = @($still | Where-Object { $_ })
   if ($still.Count -gt 0) {
-    Write-Error @"
-npm install finished, but still missing: $($still -join ', ').
-From the EnvoyCoder root run ``npm install`` and try again.
-"@
-    exit 1
+    Write-Die ("npm install finished, but still missing: {0}.`nFrom the EnvoyCoder root run npm install and try again." -f ($still -join ', '))
   }
 }
 
 function Assert-BuildHost {
-  Write-Host "[0/3] Checking Windows build tools…"
+  Write-Host "[0/3] Checking Windows build tools..."
 
   Assert-HostTool "node" @"
 Install Node.js 22 or newer from https://nodejs.org/
@@ -292,8 +289,7 @@ Then open a new PowerShell and re-run this script.
     $nodeMajor = 0
   }
   if ($nodeMajor -lt 22) {
-    Write-Error "Node.js >= 22 is required (found major $nodeMajor). Upgrade from https://nodejs.org/"
-    exit 1
+    Write-Die "Node.js >= 22 is required (found major $nodeMajor). Upgrade from https://nodejs.org/"
   }
   Write-Host "  node $(node -v)"
 
@@ -323,17 +319,16 @@ rustc is missing even though cargo was found. Re-run rustup-init, then:
   Write-Host "  $((cargo --version))"
 
   if (-not (Test-MsvcToolchain)) {
-    Write-Error @"
+    Write-Die @"
 Visual Studio C++ build tools are missing (MSVC linker / VC tools).
 Tauri needs them to compile the Windows app.
 
-Install "Desktop development with C++" (or Build Tools with the MSVC + Windows SDK workloads):
+Install Desktop development with C++ (or Build Tools with the MSVC + Windows SDK workloads):
   https://visualstudio.microsoft.com/visual-cpp-build-tools/
   Or: winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
 
 Then open a new PowerShell and re-run this script.
 "@
-    exit 1
   }
   Write-Host "  MSVC C++ tools: found"
 
@@ -341,7 +336,7 @@ Then open a new PowerShell and re-run this script.
   if (-not (Get-CommandPath "pnpm")) {
     $corepack = Get-CommandPath "corepack"
     if ($corepack) {
-      Write-Host "  pnpm not on PATH; enabling via corepack…"
+      Write-Host "  pnpm not on PATH; enabling via corepack..."
       try {
         & corepack enable 2>$null | Out-Null
         & corepack prepare pnpm@10.0.0 --activate
@@ -361,8 +356,7 @@ Then open a new PowerShell and re-run this script.
 }
 
 if ($env:OS -ne "Windows_NT") {
-  Write-Error "This script builds a Windows EXE. Run it on Windows.`nMac: scripts/build-dmg.sh    Linux: scripts/build-linux.sh"
-  exit 1
+  Write-Die "This script builds a Windows EXE. Run it on Windows.`nMac: scripts/build-dmg.sh    Linux: scripts/build-linux.sh"
 }
 
 Assert-BuildHost
@@ -374,8 +368,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "[2/3] Building the app and the EXE..."
 $Tauri = Join-Path $Root "node_modules\.bin\tauri.cmd"
 if (-not (Test-Path $Tauri)) {
-  Write-Error "The Tauri CLI is not installed after repair. From the EnvoyCoder root run ``npm install``, then try again."
-  exit 1
+  Write-Die "The Tauri CLI is not installed after repair. From the EnvoyCoder root run npm install, then try again."
 }
 if (-not (Test-TauriWinNative)) {
   # Stager / parallel edits can still leave this gap; repair once more before cargo.
@@ -395,8 +388,7 @@ Write-Host "[3/3] Publishing the EXE to $OutDirName/..."
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 $found = Get-ChildItem -Path (Join-Path $Root "apps\desktop\src-tauri\target") -Recurse -Filter "*-setup.exe" -ErrorAction SilentlyContinue
 if (-not $found) {
-  Write-Error "The build finished, but no setup EXE was found under apps\desktop\src-tauri\target."
-  exit 1
+  Write-Die "The build finished, but no setup EXE was found under apps\desktop\src-tauri\target."
 }
 $arch = Get-DesktopArch
 $versioned = "envoydev-desktop-$Version-windows-$arch-setup.exe"
