@@ -562,17 +562,63 @@ function stageLaunchers() {
   );
 }
 
+/**
+ * True when root `node_modules` looks complete enough for `tsc -b` / daemon package.
+ * esbuild alone is not enough: a stale install after adding a workspace package
+ * (e.g. `@envoydev/work-model`) still has esbuild and then fails with TS2307.
+ */
+function workspaceInstallGaps() {
+  const gaps = [];
+  const esbuildOk =
+    existsSync(path.join(root, "node_modules", "esbuild")) ||
+    existsSync(path.join(root, "apps", "desktop", "node_modules", "esbuild"));
+  if (!esbuildOk) gaps.push("esbuild");
+
+  let workspaces = [];
+  try {
+    workspaces = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).workspaces ?? [];
+  } catch {
+    gaps.push("root package.json");
+    return gaps;
+  }
+  for (const rel of workspaces) {
+    if (typeof rel !== "string" || rel.includes("*")) continue;
+    const pkgJson = path.join(root, rel, "package.json");
+    if (!existsSync(pkgJson)) {
+      gaps.push(rel);
+      continue;
+    }
+    let name;
+    try {
+      name = JSON.parse(readFileSync(pkgJson, "utf8")).name;
+    } catch {
+      gaps.push(rel);
+      continue;
+    }
+    if (typeof name !== "string" || !name) {
+      gaps.push(rel);
+      continue;
+    }
+    // npm nests the desktop workspace under apps/desktop; linked packages live at root.
+    const linked =
+      existsSync(path.join(root, "node_modules", ...name.split("/"))) ||
+      existsSync(path.join(root, rel, "node_modules", ...name.split("/")));
+    if (!linked) gaps.push(name);
+  }
+  return gaps;
+}
+
 function ensureWorkspaceInstalled() {
-  const markers = [
-    path.join(root, "node_modules", "esbuild"),
-    path.join(root, "apps", "desktop", "node_modules", "esbuild"),
-  ];
-  if (markers.some((p) => existsSync(p))) return;
-  say("Workspace deps missing (no esbuild); running npm install at the EnvoyCoder root…");
+  const gaps = workspaceInstallGaps();
+  if (gaps.length === 0) return;
+  say(
+    `Workspace deps incomplete (${gaps.join(", ")}); running npm install at the EnvoyCoder root…`,
+  );
   run("npm", ["install"], { cwd: root });
-  if (!markers.some((p) => existsSync(p))) {
+  const still = workspaceInstallGaps();
+  if (still.length > 0) {
     fail(
-      "npm install finished, but esbuild is still missing. From the EnvoyCoder root run `npm install` and try again.",
+      `npm install finished, but still missing: ${still.join(", ")}. From the EnvoyCoder root run \`npm install\` and try again.`,
     );
   }
 }
