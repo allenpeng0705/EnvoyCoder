@@ -574,6 +574,10 @@ function workspaceInstallGaps() {
     existsSync(path.join(root, "apps", "desktop", "node_modules", "esbuild"));
   if (!esbuildOk) gaps.push("esbuild");
 
+  if (!existsSync(path.join(root, "node_modules", "@tauri-apps", "cli", "package.json"))) {
+    gaps.push("@tauri-apps/cli");
+  }
+
   let workspaces = [];
   try {
     workspaces = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).workspaces ?? [];

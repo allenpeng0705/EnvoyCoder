@@ -62,7 +62,9 @@ const DEFAULT_DAEMON_PORT: u16 = 4770;
 /// not a failure of the daemon.
 const CLAIM_TIMEOUT: Duration = Duration::from_secs(20);
 
-/// How long a polite stop gets before it is killed.
+/// How long a polite POSIX stop gets before it is killed (`kill -TERM` → wait → `-KILL`).
+/// Windows uses a longer ask-grace in `stop_child` (daemon drain over the socket).
+#[cfg(unix)]
 const STOP_GRACE: Duration = Duration::from_secs(5);
 
 /* ────────────────────────────── the shared home ───────────────────────────── */
@@ -926,7 +928,7 @@ fn new_window(
         .filter(|value| !value.is_empty())
         .map(str::to_string);
 
-    let mut builder = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html".into()))
+    let builder = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html".into()))
         .title("EnvoyDev")
         .inner_size(1280.0, 820.0)
         .min_inner_size(900.0, 560.0)
@@ -934,9 +936,7 @@ fn new_window(
 
     // hidden_title + Overlay title bar are macOS-only APIs on WebviewWindowBuilder.
     #[cfg(target_os = "macos")]
-    {
-        builder = builder.hidden_title(true).title_bar_style(tauri::TitleBarStyle::Overlay);
-    }
+    let builder = builder.hidden_title(true).title_bar_style(tauri::TitleBarStyle::Overlay);
 
     // Record the landing project *before* the webview can ask for it — otherwise a fast mount
     // can race an empty map (Paseo's store is filled in `onCreated` for the same reason).

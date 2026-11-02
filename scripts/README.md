@@ -65,9 +65,11 @@ Other env knobs (see `stage-desktop-bundle.mjs`): `ENVOY_HARNESS_COMMIT`,
 - pnpm or corepack (harness build)
 - **macOS:** Xcode CLT; for a Gatekeeper-friendly DMG see signing below
 - **Windows:** Visual Studio C++ build tools; run `build-exe.ps1` in PowerShell.
-  If Tauri fails with `Cannot find native binding` / `@tauri-apps/cli-win32-*-msvc`,
-  reinstall platform optionals (`Remove-Item -Recurse -Force node_modules; npm install`,
-  or `npm install @tauri-apps/cli-win32-x64-msvc --no-save`).
+  Step `[0/3]` checks Node ≥ 22, git, Rust (`cargo`/`rustc`, including
+  `%USERPROFILE%\.cargo\bin`), and MSVC via `vswhere`, then runs `npm install`
+  / installs `@tauri-apps/cli-win32-*-msvc` when the workspace or Tauri optional
+  is incomplete. Host tools it cannot install fail with winget/URL hints.
+  If the npm repair still fails: `Remove-Item -Recurse -Force node_modules; npm install`.
 - **Linux:** usual Tauri Linux deps for your distro
 
 ### macOS signing / notarization
