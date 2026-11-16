@@ -47,7 +47,21 @@ Avoid putting real secrets, customer code, or production API keys on the review 
 
 ## What to put in store review notes
 
+Lead with the thin-client boundary. Guideline **2.5.2** rejections have happened when
+a reviewer saw a desktop agent/tool transcript (or an approval) and assumed the
+iPhone executed code. Put the architecture sentence first.
+
+If App Review already rejected under 2.5.2, use the full Resolution Center letter in
+[`appstore/resolution-2.5.2-reply.md`](appstore/resolution-2.5.2-reply.md) rather than
+only this short block.
+
 ```text
+IMPORTANT (Guideline 2.5.2): EnvoyDev Mobile does not download, install, or execute
+code on the iPhone. It is a thin companion UI. Coding agents and any shell/tool
+calls run only on the paired EnvoyDev desktop. The phone shows transcripts and
+sends RPCs (pair, open task, send message, Confirm/Reject). There is no on-device
+interpreter, terminal, OTA update, or downloaded native code.
+
 EnvoyDev Mobile has no login/password. Pairing is QR-only (or paste the URI).
 
 Demo desktop for App Review / Play review:
@@ -56,16 +70,22 @@ Demo desktop for App Review / Play review:
 2. Pairing URI:
    envoy://pair?pairing=<PASTE_FULL_URI>
 3. After pair: open the sample project → open the sample task → scroll the transcript.
-   If an approval is shown, tap Confirm or Reject.
+   Prefer a completed run. If an approval is shown, tap Reject (or Confirm); that only
+   answers the desktop — it does not run code on iOS.
 4. Demo desktop is online 24/7 during review. Contact: you@example.com
 
 Notes for reviewers:
-- The phone is a thin client. Agents run on the demo desktop, not on the phone.
 - First connect can take a short time while the app walks LAN / mesh / relay candidates.
+- Optional SSH in the product is a local port-forward to reach the desktop daemon, not
+  an interactive shell on the phone.
 - This URI is for store review only. Normal users mint their own QR from their own EnvoyDev desktop.
 ```
 
 Also attach a **QR PNG** if the console allows attachments.
+
+**Demo content tip for 2.5.2:** leave a finished transcript with ordinary messages; avoid
+a pending “allow shell” approval if you can. If one must stay, say in the notes that
+Reject is the intended review action.
 
 ---
 
@@ -116,4 +136,5 @@ Do **not** send EnvoyGo family-invite URIs to EnvoyDev Mobile reviewers — the 
 | `apps/desktop/src/components/settings/PairingSection.tsx` | Mobile Pairing settings UI |
 | `apps/desktop/src/daemon/paired-devices.ts` | Issued pairing records + TTL |
 | `apps/mobile/store-release/appstore/listing.md` | App Store listing + short review notes |
+| `apps/mobile/store-release/appstore/resolution-2.5.2-reply.md` | Full Resolution Center letter for 2.5.2 |
 | `apps/mobile/store-release/googleplay/listing.md` | Play listing + app access notes |

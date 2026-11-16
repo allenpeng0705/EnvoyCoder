@@ -82,8 +82,13 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   /// Settings → send while a turn is live (`queue` | `steer`).
   String _sendWhileRunning = 'queue';
   final stt.SpeechToText _speech = stt.SpeechToText();
+  /// True after a successful [SpeechToText.initialize] (permissions granted).
   bool _speechReady = false;
+  /// True after init failed or the user denied — hide the mic so we do not re-prompt.
+  bool _speechUnavailable = false;
   bool _listening = false;
+  /// Guards double-taps while initialize/listen is in flight.
+  bool _speechBusy = false;
   /// Agent on the live run (prefer over composer selection for stop-asking).
   String? _runHarnessId;
   ComposerSelection _selection = const ComposerSelection();
@@ -110,12 +115,8 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   Future<void> _bootstrap() async {
     await _loadAgents();
     await _loadApprovalSetting();
-    try {
-      _speechReady = await _speech.initialize();
-      if (mounted) setState(() {});
-    } catch (_) {
-      _speechReady = false;
-    }
+    // Do not call SpeechToText.initialize here — that prompts for mic/speech
+    // before the user taps the mic. Init runs from [_toggleVoice] on first use.
     if (_taskId != null) {
       try {
         final tasks = await widget.client.call('coder.listTasks', {});
@@ -825,9 +826,63 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     Navigator.of(context).pop(true);
   }
 
+  /// Ask for mic/speech only when the user taps the mic (not on screen open).
+  Future<bool> _ensureSpeech() async {
+    if (_speechReady) return true;
+    if (_speechUnavailable) return false;
+    try {
+      final ok = await _speech.initialize();
+      if (!mounted) return false;
+      setState(() {
+        _speechReady = ok;
+        _speechUnavailable = !ok;
+      });
+      return ok;
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _speechReady = false;
+          _speechUnavailable = true;
+        });
+      }
+      return false;
+    }
+  }
+
+  Future<void> _toggleVoice() async {
+    if (_speechBusy || !_canSend) return;
+    setState(() => _speechBusy = true);
+    try {
+      if (_listening) {
+        await _speech.stop();
+        if (mounted) setState(() => _listening = false);
+        return;
+      }
+      if (!await _ensureSpeech()) return;
+      final ok = await _speech.listen(
+        onResult: (result) {
+          if (!result.finalResult) return;
+          final piece = result.recognizedWords.trim();
+          if (piece.isEmpty) return;
+          final prev = _composer.text;
+          final gap = prev.isEmpty || prev.endsWith(' ') ? '' : ' ';
+          _composer.text = '$prev$gap$piece';
+          _composer.selection = TextSelection.collapsed(
+            offset: _composer.text.length,
+          );
+          setState(() {});
+        },
+      );
+      if (mounted) setState(() => _listening = ok);
+    } finally {
+      if (mounted) setState(() => _speechBusy = false);
+    }
+  }
+
   @override
   void dispose() {
     unawaited(_eventSub?.cancel() ?? Future<void>.value());
+    unawaited(_speech.stop());
     _stopTicker();
     _composer.dispose();
     _scroll.dispose();
@@ -1166,34 +1221,13 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                           onPaste: () => unawaited(_attach(pasteClipboardImage)),
                           onFile: () => unawaited(_attach(pickDocuments)),
                         ),
-                        if (_speechReady)
+                        if (!_speechUnavailable)
                           IconButton(
                             tooltip: _listening ? l10n.runVoiceStop : l10n.runVoiceStart,
                             color: _listening ? colors.statusDanger : null,
-                            onPressed: !_canSend
+                            onPressed: (!_canSend || _speechBusy)
                                 ? null
-                                : () async {
-                                    if (_listening) {
-                                      await _speech.stop();
-                                      if (mounted) setState(() => _listening = false);
-                                      return;
-                                    }
-                                    final ok = await _speech.listen(
-                                      onResult: (result) {
-                                        if (!result.finalResult) return;
-                                        final piece = result.recognizedWords.trim();
-                                        if (piece.isEmpty) return;
-                                        final prev = _composer.text;
-                                        final gap = prev.isEmpty || prev.endsWith(' ') ? '' : ' ';
-                                        _composer.text = '$prev$gap$piece';
-                                        _composer.selection = TextSelection.collapsed(
-                                          offset: _composer.text.length,
-                                        );
-                                        setState(() {});
-                                      },
-                                    );
-                                    if (mounted) setState(() => _listening = ok);
-                                  },
+                                : () => unawaited(_toggleVoice()),
                             icon: Icon(_listening ? Icons.mic : Icons.mic_none),
                           ),
                         Expanded(

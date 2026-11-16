@@ -129,6 +129,7 @@ Use App Store Connect → App Privacy. Adjust if your push / analytics setup dif
 | Diagnostics | Optional (crash only if you enable) | — | — | — |
 | Other User Content (prompts / transcripts) | Processed via your desktop daemon | Yes | No | App functionality |
 | Photos / Camera | Yes (QR scan; optional image attach) | No | No | App functionality |
+| Audio Data | Yes (optional composer dictation; may use Apple speech recognition, not an EnvoyDev backend) | No (not to EnvoyDev; Apple’s speech service may process audio while dictating) | No | App functionality |
 | Location | No | — | — | — |
 
 **Data Not Collected** vs **Collected**: declare what the phone sends to the user’s own daemon and (if enabled later) Apple push services — not a third-party EnvoyDev backend.
@@ -143,8 +144,16 @@ Suggested: **4+**. Confirm with Apple’s questionnaire. There is no unrestricte
 
 ## Review notes (for App Review team)
 
+For a **2.5.2 rejection**, paste the full letter in
+[`resolution-2.5.2-reply.md`](resolution-2.5.2-reply.md). For a normal submission,
+use the short notes below (and the longer block in `apple_google_reviewing.md`).
+
 ```
-EnvoyDev Mobile requires an EnvoyDev desktop app (daemon) on a computer. Without pairing it shows the connections / pair UI only.
+IMPORTANT (Guideline 2.5.2): EnvoyDev Mobile does not download, install, or execute
+code on the iPhone. Agents and shell/tool calls run only on the paired EnvoyDev
+desktop. The phone is a thin companion (transcripts + approvals over RPC).
+
+EnvoyDev Mobile requires an EnvoyDev desktop app (daemon) on a computer. Without pairing it shows the connections / pair UI only. No login/password — QR or paste URI.
 
 Demo path for reviewers:
 See apple_google_reviewing.md in this folder (demo desktop + long-lived pairing QR).
@@ -152,12 +161,14 @@ See apple_google_reviewing.md in this folder (demo desktop + long-lived pairing 
 1. Open EnvoyDev Mobile → Add computer → Scan QR (or paste the pairing URI).
 2. Pairing URI:
    TODO: paste the live envoy://pair?… URI for this submission
-3. After pair: open a project → open a task → read the transcript. If an approval is pending, Confirm or Reject it.
+3. After pair: open a project → open a completed sample task → scroll the transcript.
+   If an approval is pending, tap Reject (or Confirm); that only answers the desktop.
 4. Demo desktop is online during review. Contact: TODO: you@example.com
 
 Permissions:
 • Camera — scan the desktop pairing QR
 • Photo Library — optional image attach on a message
+• Microphone / Speech Recognition — optional dictate into the message composer
 
 No account creation on a central server. The credential is a pairing token for the user’s own machine.
 ```
@@ -219,5 +230,5 @@ flutter build ipa   # after signing / certificates configured in Xcode
 
 - Version: `CFBundleShortVersionString` from Flutter `version` name (`0.1.0`)
 - Build: `CFBundleVersion` from Flutter build number (`N`)
-- Camera usage string is already in `Info.plist`
+- Camera, photo library, microphone, and speech-recognition usage strings are in `ios/Runner/Info.plist`
 - Export compliance: uses encryption (HTTPS / TLS / mesh) — usually **exempt** standard encryption; answer the questionnaire accordingly

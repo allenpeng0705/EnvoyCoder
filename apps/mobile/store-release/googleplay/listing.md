@@ -154,6 +154,7 @@ Play Console → App content → Data safety. Align with your real setup.
 | Device or other IDs (FCM, if push is added) | Only if you enable push | With your desktop (for push) | Notifications | Yes | Yes |
 | Messages / prompts / transcripts | Yes (via your desktop) | Via your desktop daemon | App functionality | No | Yes |
 | Photos (attachments / QR) | Yes | Via desktop when sending | App functionality | Yes | Yes |
+| Audio (microphone / speech recognition) | Yes — optional composer dictation; may use the device speech service (Apple/Google), not an EnvoyDev backend | With the platform speech service while dictating | App functionality | Yes | Yes (to speech service / your desktop for the resulting text) |
 | Approx location | No | — | — | — | — |
 | Crash logs | Only if you enable Play / Firebase Crashlytics | — | — | — | — |
 
@@ -195,12 +196,15 @@ Play Console → App content → App access.
 |------------|-----|
 | INTERNET | Connect to EnvoyDev desktop / mesh / relay |
 | CAMERA | Pairing QR scan |
+| RECORD_AUDIO | Optional dictate into the message composer (`speech_to_text`) |
 | READ media / photos | Optional image attach on a message |
 | POST_NOTIFICATIONS | Alerts when you enable them (Android 13+) |
 
 Camera usage string suggestion:
 
 > EnvoyDev uses the camera to scan the pairing code shown on your computer.
+
+Microphone: declared in `android/app/src/main/AndroidManifest.xml` as `RECORD_AUDIO`. The OS prompts only when the user taps the mic on a run.
 
 ---
 

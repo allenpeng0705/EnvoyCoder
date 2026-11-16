@@ -240,3 +240,9 @@ flutter run         # device or emulator; daemon reachable (same machine, LAN, o
 - EnvoyMesh (product) → [www.envoymesh.cn](https://www.envoymesh.cn)
 - envoy-harness (the built-in agent runtime) → [github.com/allenpeng0705/envoy-harness](https://github.com/allenpeng0705/envoy-harness)
 - Collaborative Team jobs → [`docs/envoydev-collaboration.md`](docs/envoydev-collaboration.md)
+
+---
+
+## License
+
+[MIT License](LICENSE)
