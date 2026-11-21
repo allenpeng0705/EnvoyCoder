@@ -216,11 +216,16 @@ export async function setEnvoyLlm(
     await atomicWrite(secretFile(paths), `${JSON.stringify({ apiKey: input.apiKey }, null, 2)}\n`);
   }
 
-  // Keep New tasks / composer defaults aligned with this panel.
-  const patch: Partial<CoderSettings> = {
-    defaults: { model: modelIdFor(provider, model) },
-  };
-  await store.updateSettings(patch);
+  // Align app composer defaults only when the machine default agent is Envoy Harness.
+  // Writing `defaults.model` while the default (or next task) agent is DeepSeek made
+  // MiniMax / OpenAI ids ride onto DeepSeek runs — those agents use their own settings.
+  const appHarness = store.settings().defaults.harness ?? "envoy-harness";
+  if (appHarness === "envoy-harness") {
+    const patch: Partial<CoderSettings> = {
+      defaults: { model: modelIdFor(provider, model) },
+    };
+    await store.updateSettings(patch);
+  }
 
   return getEnvoyLlmPublic(paths);
 }
@@ -307,6 +312,13 @@ export function envoyRunModel(paths: CoderPaths, requested: string | undefined):
   if (!resolved.ok) return configured;
   if (resolved.provider.toLowerCase() !== config.provider.toLowerCase()) return configured;
   return modelIdFor(resolved.provider, resolved.model);
+}
+
+/** `provider/model` currently saved for Envoy Harness LLM, if any — used to scrub leaks onto other agents. */
+export function envoyLlmStoredModelId(paths: CoderPaths): string | undefined {
+  const config = readEnvoyLlmConfigSync(paths);
+  if (config === undefined) return undefined;
+  return modelIdFor(config.provider, config.model);
 }
 
 function readEnvoyLlmConfigSync(paths: CoderPaths): EnvoyLlmConfig | undefined {

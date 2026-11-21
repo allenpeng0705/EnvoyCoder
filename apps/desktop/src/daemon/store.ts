@@ -48,6 +48,7 @@ import {
 } from "@envoydev/protocol";
 import type { CoderPaths } from "@envoydev/host-bridge";
 import { projectIdFor, resolveTaskDefaults, taskIdFor } from "@envoydev/task-model";
+import { envoyLlmStoredModelId } from "./envoy-llm.js";
 import { StateFiles, type FileNotes } from "./state-file.js";
 
 /** What a mutation reports, so a listener can refetch exactly one list. */
@@ -274,6 +275,9 @@ export class CoderStore {
     if (auth.skipped.length > 0) {
       await store.files.writeJsonAtomic(store.paths.agentAuthFile, auth.items);
     }
+
+    // Drop Envoy LLM model ids that leaked onto other agents before harness-aware defaults landed.
+    await store.scrubLeakedEnvoyModel();
     return store;
   }
 
@@ -672,7 +676,18 @@ export class CoderStore {
    * model the user chose in another window.
    */
   async updateSettings(patch: Partial<CoderSettings>): Promise<CoderSettings> {
+    const prevHarness = this.settingsState.defaults.harness ?? "envoy-harness";
     const mergedDefaults = { ...this.settingsState.defaults, ...(patch.defaults ?? {}) };
+    const nextHarness = mergedDefaults.harness ?? "envoy-harness";
+    // Changing the default agent clears a model that belonged to the previous agent. Merging
+    // `{ harness }` alone used to keep Envoy LLM's MiniMax id, which then rode onto DeepSeek tasks.
+    if (
+      patch.defaults?.harness !== undefined &&
+      nextHarness !== prevHarness &&
+      patch.defaults.model === undefined
+    ) {
+      mergedDefaults.model = "";
+    }
     const next: CoderSettings = {
       ...this.settingsState,
       ...patch,
@@ -789,6 +804,46 @@ export class CoderStore {
   }
 
   /* ────────────────────────────── reading ────────────────────────────── */
+
+  /**
+   * Clear Envoy Harness LLM model ids that were stored on other agents before
+   * harness-aware defaults (DeepSeek was accepting any `provider/model` shape).
+   */
+  private async scrubLeakedEnvoyModel(): Promise<void> {
+    const envoyModel = envoyLlmStoredModelId(this.paths);
+    if (envoyModel === undefined) return;
+    // Include the pre-normalize OpenAI-shaped id: MiniMax was often saved as
+    // `openai/MiniMax-M3` while the LLM file normalizes to `minimax/MiniMax-M3`.
+    const slash = envoyModel.indexOf("/");
+    const leaf = slash > 0 ? envoyModel.slice(slash + 1) : envoyModel;
+    const aliases = new Set<string>([envoyModel, `openai/${leaf}`]);
+
+    const isLeaked = (model: string | undefined): boolean =>
+      model !== undefined && model !== "" && aliases.has(model);
+
+    let settingsDirty = false;
+    const appHarness = this.settingsState.defaults.harness ?? "envoy-harness";
+    if (appHarness !== "envoy-harness" && isLeaked(this.settingsState.defaults.model)) {
+      const { model: _drop, ...rest } = this.settingsState.defaults;
+      this.settingsState = CoderSettingsSchema.parse({
+        ...this.settingsState,
+        defaults: rest,
+      });
+      settingsDirty = true;
+    }
+
+    const touched: string[] = [];
+    this.tasksState = this.tasksState.map((task) => {
+      if (task.harness === "envoy-harness") return task;
+      if (!isLeaked(task.model)) return task;
+      touched.push(task.id);
+      const { model: _drop, ...rest } = task;
+      return { ...rest, updatedAt: this.now().toISOString() };
+    });
+
+    if (settingsDirty) await this.persistSettings();
+    if (touched.length > 0) await this.persistTasks(touched);
+  }
 
   /* ────────────────────────────── writing ────────────────────────────── */
 

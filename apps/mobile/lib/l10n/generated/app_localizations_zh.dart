@@ -396,10 +396,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsGuardianGuardian => 'Guardian';
 
   @override
-  String get runVoiceStart => 'Start dictation';
+  String get runVoiceStart => '开始听写';
 
   @override
-  String get runVoiceStop => 'Stop dictation';
+  String get runVoiceStop => '停止听写';
+
+  @override
+  String get runVoiceUnavailable => '无法使用听写。请检查系统设置中 EnvoyDev 的麦克风与语音识别权限。';
 
   @override
   String get settingsLanguage => '语言';

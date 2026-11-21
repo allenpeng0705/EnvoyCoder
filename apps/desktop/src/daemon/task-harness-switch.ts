@@ -28,9 +28,8 @@ export interface HarnessSwitchPatch {
 /**
  * Compute the patch that moves `task` onto `nextHarness`.
  *
- * `preferredModel` is the project's default model (when set): used when the stored model is dropped or
- * absent and the new harness can take that preferred id — so Envoy does not land model-less after a
- * switch that cleared an incompatible DeepSeek free-text id.
+ * `preferredModel` is the project's default model when that project is for this same agent (caller
+ * filters). Applied after the previous agent's model is cleared, when the new harness can take it.
  */
 export function harnessSwitchPatch(
   task: Pick<Task, "agentModeId" | "model" | "thinkingLevel">,
@@ -56,20 +55,17 @@ export function harnessSwitchPatch(
     clearAgentMode = true;
   }
 
-  let clearModel = false;
-  let model = task.model;
-  if (model !== undefined && model !== "" && !resolveModelChoice(nextHarness, model).ok) {
-    model = undefined;
-    clearModel = true;
-  }
+  // Always drop the previous agent's model on a harness change. DeepSeek is `free-text`: any
+  // `provider/model` shape passes `resolveModelChoice`, so Envoy LLM ids (e.g. openai/MiniMax-M3)
+  // would otherwise follow onto DeepSeek and fail only inside the agent.
+  let clearModel = task.model !== undefined && task.model !== "";
+  let model: string | undefined = undefined;
 
   const preferred =
     preferredModel !== undefined && preferredModel !== "" ? preferredModel : undefined;
-  if ((model === undefined || model === "") && preferred !== undefined) {
-    if (resolveModelChoice(nextHarness, preferred).ok) {
-      model = preferred;
-      clearModel = false;
-    }
+  if (preferred !== undefined && resolveModelChoice(nextHarness, preferred).ok) {
+    model = preferred;
+    clearModel = false;
   }
 
   let clearThinkingLevel = false;

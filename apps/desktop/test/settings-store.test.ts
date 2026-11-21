@@ -146,10 +146,67 @@ describe("where a new task's defaults come from", () => {
     await b.store.updateProject(b.projectId, { defaults: { harness: "claudecode" } });
 
     const task = await b.store.createTask({ projectId: b.projectId, title: "a task" });
-    // The project's agent, the app's model — per key, not per scope, and the resolver is where that
-    // order lives (`packages/task-model/src/index.ts:92-105`).
+    // The project's agent wins. The app model stays with the app's agent (envoy-harness) — it
+    // must not ride onto Claude / DeepSeek (`packages/task-model` resolveTaskDefaults).
     expect(task?.harness).toBe("claudecode");
-    expect(task?.model).toBe("deepseek/deepseek-chat");
+    expect(task?.model).toBeUndefined();
+  });
+
+  it("clears a stale Envoy model when the app default agent becomes DeepSeek", async () => {
+    const b = await bench();
+    await b.store.updateSettings({
+      defaults: { harness: "envoy-harness", model: "openai/MiniMax-M3" },
+    });
+    await b.store.updateSettings({ defaults: { harness: "deepseek-harness" } });
+    expect(b.store.settings().defaults.harness).toBe("deepseek-harness");
+    expect(b.store.settings().defaults.model).toBeUndefined();
+
+    const task = await b.store.createTask({ projectId: b.projectId, title: "a task" });
+    expect(task?.harness).toBe("deepseek-harness");
+    expect(task?.model).toBeUndefined();
+  });
+
+  it("scrubs a leaked Envoy LLM model off DeepSeek tasks on open", async () => {
+    const b = await bench();
+    const { writeFile, mkdir } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    await mkdir(b.paths.stateDir, { recursive: true });
+    await writeFile(
+      join(b.paths.stateDir, "envoy-llm.json"),
+      `${JSON.stringify({ provider: "openai", model: "MiniMax-M3" }, null, 2)}\n`,
+    );
+    await b.store.updateSettings({
+      defaults: { harness: "deepseek-harness", model: "openai/MiniMax-M3" },
+    });
+    // Bypass createTask defaults: write a DeepSeek task that already carries the Envoy model.
+    const rawTask = {
+      id: `${b.projectId}::task::leak`,
+      projectId: b.projectId,
+      cwd: "/tmp",
+      title: "leak",
+      harness: "deepseek-harness",
+      model: "openai/MiniMax-M3",
+      status: "idle",
+      createdAt: "2026-11-21T00:00:00.000Z",
+      updatedAt: "2026-11-21T00:00:00.000Z",
+    };
+    await writeFile(b.paths.tasksFile, `${JSON.stringify([rawTask], null, 2)}\n`);
+    await writeFile(
+      b.paths.settingsFile,
+      `${JSON.stringify(
+        {
+          ...b.store.settings(),
+          defaults: { harness: "deepseek-harness", model: "openai/MiniMax-M3" },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    const reopened = await CoderStore.open({ paths: b.paths });
+    expect(reopened.settings().defaults.model).toBeUndefined();
+    expect(reopened.findTask(rawTask.id)?.model).toBeUndefined();
+    expect(reopened.findTask(rawTask.id)?.harness).toBe("deepseek-harness");
   });
 
   it("replaces a project's defaults rather than merging them, which is what the pane compensates for", async () => {

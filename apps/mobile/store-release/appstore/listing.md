@@ -148,29 +148,61 @@ For a **2.5.2 rejection**, paste the full letter in
 [`resolution-2.5.2-reply.md`](resolution-2.5.2-reply.md). For a normal submission,
 use the short notes below (and the longer block in `apple_google_reviewing.md`).
 
+Paste-ready block (keep in sync with `REVIEW-NOTES-PASTE.txt`):
+
 ```
-IMPORTANT (Guideline 2.5.2): EnvoyDev Mobile does not download, install, or execute
-code on the iPhone. Agents and shell/tool calls run only on the paired EnvoyDev
-desktop. The phone is a thin companion (transcripts + approvals over RPC).
+IMPORTANT — Guideline 2.5.2 (please read first)
 
-EnvoyDev Mobile requires an EnvoyDev desktop app (daemon) on a computer. Without pairing it shows the connections / pair UI only. No login/password — QR or paste URI.
+EnvoyDev Mobile does NOT download, install, or execute agent/tool/code on the iPhone.
+It is a thin companion UI only. Coding agents, shells, and tool calls run exclusively
+on the paired EnvoyDev desktop daemon on the user’s own computer. The phone only shows
+project/task transcripts and sends high-level RPCs (pair, open project/task, send a
+message, Confirm/Reject). There is no on-device agent runtime, terminal/shell, OTA
+update mechanism, or downloaded native agent code. Optional SSH in the app is only a
+local port-forward to reach the desktop daemon — not an interactive shell on the phone.
 
-Demo path for reviewers:
-See apple_google_reviewing.md in this folder (demo desktop + long-lived pairing QR).
+No username/password / no central EnvoyDev account
+Pairing uses a QR code (or paste of an envoy://pair link). There is nothing to sign up for.
 
-1. Open EnvoyDev Mobile → Add computer → Scan QR (or paste the pairing URI).
-2. Pairing URI:
-   TODO: paste the live envoy://pair?… URI for this submission
-3. After pair: open a project → open a completed sample task → scroll the transcript.
-   If an approval is pending, tap Reject (or Confirm); that only answers the desktop.
-4. Demo desktop is online during review. Contact: TODO: you@example.com
+About AI / third-party services (phone binary)
+The iOS app does not embed a third-party AI SDK and does not send prompts or user
+content to any third-party AI API. Any model or tool work happens on the user’s own
+computer through the EnvoyDev desktop they already run and configure. The phone only
+connects to that paired computer to view status and control settings / approvals.
 
-Permissions:
+Demo video (architecture walkthrough):
+https://youtu.be/DFoRIRMSHCU
+
+=== Demo desktop for App Review (kept online during review) ===
+
+Step-by-step test (about 2–3 minutes):
+1. Install EnvoyDev from this build.
+2. Open the app → Add computer / Pair.
+3. Tap Paste link (or Scan QR). Allow Camera only if scanning.
+4. Paste the Pairing URI below and connect.
+5. If iOS asks for Local Network, tap Allow (helps LAN; cellular/mesh still works if denied).
+6. After pairing succeeds: open the sample project → open the sample task → scroll the
+   transcript. Prefer a completed run.
+7. If an Approval / Confirm–Reject card appears: tap Reject (safe review action). That
+   only answers the desktop daemon; it does not run code on the phone.
+8. Optional: browse Connection / Settings screens. You do not need to start a new agent
+   run for this review.
+
+Pairing URI (paste into Add computer):
+envoy://pair?pairing=H4sIAAAAAAAAE7WTS5OaUBCF_8pUb4P3wUugKgtFHWUY4ogjQzJZcK9iQAN35E0q_z2F2SSprFKml119vjp9qvsb1GBRCZoCLGgKC2NqyojqBlKQoVnqeExwU4AEZX4CC57SF3oK4-b0cvFtEldzsjEfY7Jvd1pJ35oSJMiTPVhwyOq8s_ImO1ysc86j88igXNfYnjL9oHJN0wbmdZTKM-Uhz4NFMa23nR0nTp0EVHds5raL6Nh9PPFtsq7iUN4-Z1x3fX9SgwRMgPUJcCJUTOUxIoggiksusK4QImMhC_yP5J_MX2K4IVYdI1NBlCKZylesSgj9jep6GzUIg-W0aA5G1Wp9UHQ6r-67JgvXDtuzaMKY-Oo8piwfhCOeXHiVlLewJmsUmRSZ479bmwTJzheFnYo0qnpDSVK3OraNzzdOYpieup7Q3RO1-yLj7NbWbpja_1kYPksQCQEWzIfbnx0G97kYvmY01HR-v_Lu1s9Td2XfPczDa_M1y1Zp5vY9DzzNv1DXL3fH9AszF60ffSiW5_74brbtsLPEZPX-NbuK5t7sTw58_wGxrReYyQMAAA
+
+Permissions you may see (all optional except Camera for QR):
 • Camera — scan the desktop pairing QR
-• Photo Library — optional image attach on a message
-• Microphone / Speech Recognition — optional dictate into the message composer
+• Local Network — reach the desktop on Wi‑Fi
+• Microphone / Speech — optional dictation into a message (skip if unused)
+• Photos — optional image attach (skip if unused)
 
-No account creation on a central server. The credential is a pairing token for the user’s own machine.
+Contact (demo desktop / questions during review):
+shilei.peng@qq.com
+Alternate: shileipeng@gmail.com
+
+This pairing URI is for App Review only. End users mint their own QR from their own
+EnvoyDev desktop (Settings → Mobile Pairing).
 ```
 
 ---

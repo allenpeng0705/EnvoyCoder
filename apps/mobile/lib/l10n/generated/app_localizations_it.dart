@@ -426,6 +426,10 @@ class AppLocalizationsIt extends AppLocalizations {
   String get runVoiceStop => 'Stop dictation';
 
   @override
+  String get runVoiceUnavailable =>
+      'Dictation is not available. Check microphone and speech recognition access for EnvoyDev.';
+
+  @override
   String get settingsLanguage => 'Lingua';
 
   @override

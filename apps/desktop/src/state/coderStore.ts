@@ -1857,7 +1857,7 @@ export class CoderStore {
     });
   }
 
-  /** Save Envoy Harness LLM settings; `defaults.model` syncs on the daemon and via settings broadcast. */
+  /** Save Envoy Harness LLM settings (keys/models for the built-in agent only). */
   async setEnvoyLlm(input: EnvoyLlmSetInput): Promise<{ ok: true } & EnvoyLlmPublic | Refusal> {
     return this.mutate(
       "coder.setEnvoyLlm",

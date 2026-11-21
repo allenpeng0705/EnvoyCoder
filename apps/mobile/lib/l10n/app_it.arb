@@ -559,5 +559,6 @@
   "settingsGuardianUser": "Always ask me",
   "settingsGuardianGuardian": "Guardian",
   "runVoiceStart": "Start dictation",
-  "runVoiceStop": "Stop dictation"
+  "runVoiceStop": "Stop dictation",
+  "runVoiceUnavailable": "Dictation is not available. Check microphone and speech recognition access for EnvoyDev."
 }

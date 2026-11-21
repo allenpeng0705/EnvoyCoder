@@ -858,7 +858,14 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
         if (mounted) setState(() => _listening = false);
         return;
       }
-      if (!await _ensureSpeech()) return;
+      if (!await _ensureSpeech()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.runVoiceUnavailable)),
+          );
+        }
+        return;
+      }
       final ok = await _speech.listen(
         onResult: (result) {
           if (!result.finalResult) return;

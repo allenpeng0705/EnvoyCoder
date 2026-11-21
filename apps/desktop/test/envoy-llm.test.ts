@@ -69,7 +69,7 @@ describe("Envoy Harness LLM settings", () => {
     expect(stateBody).toContain("anthropic");
   });
 
-  it("writes defaults.model as provider/model on save", async () => {
+  it("writes defaults.model as provider/model on save when the default agent is Envoy", async () => {
     const home = tempDir("envoydev-llm-defaults-");
     const paths = coderPaths(home);
     const store = await CoderStore.open({ paths });
@@ -81,6 +81,25 @@ describe("Envoy Harness LLM settings", () => {
     });
 
     expect(store.settings().defaults.model).toBe("openai/gpt-4o");
+  });
+
+  it("does not write defaults.model when the machine default agent is DeepSeek", async () => {
+    const home = tempDir("envoydev-llm-no-pollute-");
+    const paths = coderPaths(home);
+    const store = await CoderStore.open({ paths });
+    await store.updateSettings({ defaults: { harness: "deepseek-harness" } });
+
+    await setEnvoyLlm(paths, store, {
+      provider: "openai",
+      model: "MiniMax-M3",
+      apiKey: "sk-minimax-test",
+    });
+
+    expect(store.settings().defaults.harness).toBe("deepseek-harness");
+    expect(store.settings().defaults.model).toBeUndefined();
+    // Envoy LLM file still saved for when the user runs envoy-harness.
+    const pub = await getEnvoyLlmPublic(paths);
+    expect(pub.model).toBe("MiniMax-M3");
   });
 
   it("injects the matching API key env and --base-url when launching envoy-harness", async () => {

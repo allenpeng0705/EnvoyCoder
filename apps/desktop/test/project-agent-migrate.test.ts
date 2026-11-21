@@ -28,15 +28,25 @@ async function bench(): Promise<{ store: CoderStore; projectId: string }> {
 }
 
 describe("harnessSwitchPatch", () => {
-  it("clears an Envoy mode when switching to DeepSeek", () => {
+  it("clears an Envoy mode and model when switching to DeepSeek", () => {
     const patch = harnessSwitchPatch(
       { agentModeId: "plan", model: "anthropic/claude-sonnet-4-6", thinkingLevel: undefined },
       "deepseek-harness",
     );
     expect(patch.clearAgentMode).toBe(true);
-    // provider/model free-text is still valid for DeepSeek — only the mode is stranded.
-    expect(patch.clearModel).toBe(false);
+    // Free-text agents accept any provider/model shape, so the previous agent's model must not follow.
+    expect(patch.clearModel).toBe(true);
+    expect(patch.model).toBeUndefined();
     expect(patch.harness).toBe("deepseek-harness");
+  });
+
+  it("does not carry Envoy LLM MiniMax onto DeepSeek", () => {
+    const patch = harnessSwitchPatch(
+      { agentModeId: undefined, model: "openai/MiniMax-M3", thinkingLevel: undefined },
+      "deepseek-harness",
+    );
+    expect(patch.clearModel).toBe(true);
+    expect(patch.model).toBeUndefined();
   });
 
   it("applies the project's preferred model when the stored one cannot follow", () => {

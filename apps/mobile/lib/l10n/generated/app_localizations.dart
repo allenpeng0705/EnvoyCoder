@@ -810,6 +810,12 @@ abstract class AppLocalizations {
   /// **'Stop dictation'**
   String get runVoiceStop;
 
+  /// Composer mic — initialize or permission failed
+  ///
+  /// In en, this message translates to:
+  /// **'Dictation is not available. Check microphone and speech recognition access for EnvoyDev.'**
+  String get runVoiceUnavailable;
+
   /// settings.language — The language picker's label.
   ///
   /// In en, this message translates to:

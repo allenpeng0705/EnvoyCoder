@@ -98,7 +98,19 @@ export function resolveTaskDefaults(input: {
     input.appDefaults?.harness ??
     input.fallbackHarness ??
     "envoy-harness";
-  const model = input.explicit?.model ?? input.project?.defaults?.model ?? input.appDefaults?.model;
+  // A model default belongs to the agent it was saved with. Envoy Harness LLM settings write
+  // `defaults.model` for envoy-harness only; applying that id to DeepSeek (or any other agent)
+  // starts a run the agent rejects (`unknown model option`). Inherit project/app model only when
+  // that scope pins *this same* harness — a model with no harness pin is not borrowed across agents.
+  const projectHarness = input.project?.defaults?.harness;
+  const projectModel =
+    input.project?.defaults?.model && projectHarness === harness
+      ? input.project.defaults.model
+      : undefined;
+  const appHarness = input.appDefaults?.harness ?? "envoy-harness";
+  const appModel =
+    input.appDefaults?.model && harness === appHarness ? input.appDefaults.model : undefined;
+  const model = input.explicit?.model ?? projectModel ?? appModel;
   const extraArgs =
     input.explicit?.extraArgs ?? input.project?.defaults?.extraArgs ?? input.appDefaults?.extraArgs;
   return {

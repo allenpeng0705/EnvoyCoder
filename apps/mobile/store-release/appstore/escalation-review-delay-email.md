@@ -152,12 +152,14 @@ There is no username/password.
 1. Open EnvoyDev Mobile → Add computer → paste the pairing URI (or scan the QR
    if attached).
 2. Pairing URI:
-   TODO: paste the live envoy://pair?… URI for this review
+   envoy://pair?pairing=H4sIAAAAAAAAE7WTS5OaUBCF_8pUb4P3wUugKgtFHWUY4ogjQzJZcK9iQAN35E0q_z2F2SSprFKml119vjp9qvsb1GBRCZoCLGgKC2NqyojqBlKQoVnqeExwU4AEZX4CC57SF3oK4-b0cvFtEldzsjEfY7Jvd1pJ35oSJMiTPVhwyOq8s_ImO1ysc86j88igXNfYnjL9oHJN0wbmdZTKM-Uhz4NFMa23nR0nTp0EVHds5raL6Nh9PPFtsq7iUN4-Z1x3fX9SgwRMgPUJcCJUTOUxIoggiksusK4QImMhC_yP5J_MX2K4IVYdI1NBlCKZylesSgj9jep6GzUIg-W0aA5G1Wp9UHQ6r-67JgvXDtuzaMKY-Oo8piwfhCOeXHiVlLewJmsUmRSZ479bmwTJzheFnYo0qnpDSVK3OraNzzdOYpieup7Q3RO1-yLj7NbWbpja_1kYPksQCQEWzIfbnx0G97kYvmY01HR-v_Lu1s9Td2XfPczDa_M1y1Zp5vY9DzzNv1DXL3fH9AszF60ffSiW5_74brbtsLPEZPX-NbuK5t7sTw58_wGxrReYyQMAAA
 3. After pair: open the sample project → open the sample task → scroll the
    transcript. Prefer a completed run. If an approval is shown, tap Reject (or
    Confirm); either only sends an RPC to the demo desktop — it does not run
    code on iOS.
-4. Demo desktop is online during re-review. Contact: shilei.peng@qq.com
+4. Demo video: https://youtu.be/DFoRIRMSHCU
+5. Demo desktop is online during re-review. Contact: shilei.peng@qq.com
+   Alternate: shileipeng@gmail.com
 
 ══════════════════════════════════════
 5. WHAT WE ARE ASKING FOR

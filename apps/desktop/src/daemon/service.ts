@@ -716,6 +716,10 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         await ensureRunnableAgent(deps.store, input.harness);
         const current = deps.store.findTask(input.id);
         const project = current !== undefined ? deps.store.findProject(current.projectId) : undefined;
+        // Project preferred model only when that project pins this same agent. A model without a
+        // harness pin must not follow onto DeepSeek (free-text accepts any provider/model shape).
+        const preferredModel =
+          project?.defaults?.harness === input.harness ? project?.defaults?.model : undefined;
         const switched = harnessSwitchPatch(
           {
             agentModeId: agentModeId ?? current?.agentModeId,
@@ -723,7 +727,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
             thinkingLevel: thinkingLevel ?? current?.thinkingLevel,
           },
           input.harness,
-          project?.defaults?.model,
+          preferredModel,
         );
         if (switched.clearAgentMode) {
           agentModeId = undefined;

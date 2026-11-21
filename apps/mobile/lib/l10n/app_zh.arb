@@ -558,6 +558,7 @@
   "settingsGuardianDetail": "Guardian auto-allows clear read/search permission cards. Edits and commands still ask you.",
   "settingsGuardianUser": "Always ask me",
   "settingsGuardianGuardian": "Guardian",
-  "runVoiceStart": "Start dictation",
-  "runVoiceStop": "Stop dictation"
+  "runVoiceStart": "开始听写",
+  "runVoiceStop": "停止听写",
+  "runVoiceUnavailable": "无法使用听写。请检查系统设置中 EnvoyDev 的麦克风与语音识别权限。"
 }

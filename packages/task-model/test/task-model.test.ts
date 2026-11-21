@@ -66,15 +66,28 @@ describe("defaults", () => {
   it("resolves explicit over project over app over built-in", () => {
     const proj = project({ defaults: { harness: "claudecode", model: "anthropic/opus" } });
     expect(resolveTaskDefaults({ project: proj }).harness).toBe("claudecode");
+    expect(resolveTaskDefaults({ project: proj }).model).toBe("anthropic/opus");
     expect(resolveTaskDefaults({ project: proj, explicit: { harness: "codex" } }).harness).toBe("codex");
+    // Explicit / resolved harness differs from the project's — do not keep the project's model.
+    expect(resolveTaskDefaults({ project: proj, explicit: { harness: "codex" } }).model).toBeUndefined();
     expect(resolveTaskDefaults({ project: project() }).harness).toBe("envoy-harness");
-    // A project with a model but no agent keeps the model and takes the app's agent.
+    // A project model without a harness pin is not inherited — it has no agent to belong to.
     const modelOnly = project({ defaults: { model: "deepseek/deepseek-v4" } });
     expect(resolveTaskDefaults({ project: modelOnly, appDefaults: { harness: "codex" } })).toEqual({
       harness: "codex",
-      model: "deepseek/deepseek-v4",
     });
   });
+
+  it("does not apply Envoy app model defaults to a DeepSeek project", () => {
+    const proj = project({ defaults: { harness: "deepseek-harness" } });
+    expect(
+      resolveTaskDefaults({
+        project: proj,
+        appDefaults: { harness: "envoy-harness", model: "openai/MiniMax-M3" },
+      }),
+    ).toEqual({ harness: "deepseek-harness" });
+  });
+
 });
 
 describe("grouping", () => {

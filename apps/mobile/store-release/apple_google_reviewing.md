@@ -55,30 +55,29 @@ If App Review already rejected under 2.5.2, use the full Resolution Center lette
 [`appstore/resolution-2.5.2-reply.md`](appstore/resolution-2.5.2-reply.md) rather than
 only this short block.
 
+Prefer the paste-ready file
+[`appstore/REVIEW-NOTES-PASTE.txt`](appstore/REVIEW-NOTES-PASTE.txt) (includes demo
+video + live pairing URI). Short template:
+
 ```text
-IMPORTANT (Guideline 2.5.2): EnvoyDev Mobile does not download, install, or execute
-code on the iPhone. It is a thin companion UI. Coding agents and any shell/tool
-calls run only on the paired EnvoyDev desktop. The phone shows transcripts and
-sends RPCs (pair, open task, send message, Confirm/Reject). There is no on-device
-interpreter, terminal, OTA update, or downloaded native code.
+IMPORTANT — Guideline 2.5.2 (please read first)
 
-EnvoyDev Mobile has no login/password. Pairing is QR-only (or paste the URI).
+EnvoyDev Mobile does NOT download, install, or execute agent/tool/code on the iPhone.
+It is a thin companion UI. Coding agents / shell / tools run only on the paired
+EnvoyDev desktop. The phone shows transcripts and sends RPCs (pair, open task,
+message, Confirm/Reject). No on-device interpreter, terminal, OTA, or downloaded code.
+Optional SSH is a local port-forward only — not a shell on the phone.
 
-Demo desktop for App Review / Play review:
+No login/password. Pairing is QR or paste URI.
+The iOS app does not call third-party AI APIs; model/tool work stays on the user’s computer.
 
-1. Open EnvoyDev Mobile → Add computer → Scan QR (or paste the URI below).
-2. Pairing URI:
-   envoy://pair?pairing=<PASTE_FULL_URI>
-3. After pair: open the sample project → open the sample task → scroll the transcript.
-   Prefer a completed run. If an approval is shown, tap Reject (or Confirm); that only
-   answers the desktop — it does not run code on iOS.
-4. Demo desktop is online 24/7 during review. Contact: you@example.com
+Demo video: https://youtu.be/DFoRIRMSHCU
 
-Notes for reviewers:
-- First connect can take a short time while the app walks LAN / mesh / relay candidates.
-- Optional SSH in the product is a local port-forward to reach the desktop daemon, not
-  an interactive shell on the phone.
-- This URI is for store review only. Normal users mint their own QR from their own EnvoyDev desktop.
+1. Open EnvoyDev → Add computer → paste the Pairing URI (or scan QR).
+2. Pairing URI: (see REVIEW-NOTES-PASTE.txt — keep desktop online)
+3. Open sample project → sample task → scroll a completed transcript.
+   If an approval appears, tap Reject (answers desktop only; no code on iOS).
+4. Contact: shilei.peng@qq.com / shileipeng@gmail.com
 ```
 
 Also attach a **QR PNG** if the console allows attachments.
