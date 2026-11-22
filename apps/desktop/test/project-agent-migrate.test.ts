@@ -88,6 +88,28 @@ describe("harnessSwitchPatch", () => {
     expect(patch.model).toBeUndefined();
   });
 
+  it("rejects a preferred Envoy LLM id when switching onto DeepSeek", () => {
+    const patch = harnessSwitchPatch(
+      { agentModeId: undefined, model: "anthropic/claude-sonnet-4-6", thinkingLevel: undefined },
+      "deepseek-harness",
+      "openai/MiniMax-M3",
+      { rejectPreferredModels: new Set(["minimax/MiniMax-M3", "openai/MiniMax-M3"]) },
+    );
+    expect(patch.clearModel).toBe(true);
+    expect(patch.model).toBeUndefined();
+  });
+
+  it("still applies a preferred Envoy LLM id when switching onto Envoy Harness", () => {
+    const patch = harnessSwitchPatch(
+      { agentModeId: undefined, model: "bare-id", thinkingLevel: undefined },
+      "envoy-harness",
+      "minimax/MiniMax-M3",
+      { rejectPreferredModels: new Set(["minimax/MiniMax-M3", "openai/MiniMax-M3"]) },
+    );
+    expect(patch.model).toBe("minimax/MiniMax-M3");
+    expect(patch.clearModel).toBe(false);
+  });
+
   it("applies the project's preferred model when the stored one cannot follow", () => {
     const patch = harnessSwitchPatch(
       { agentModeId: undefined, model: "some-bare-id", thinkingLevel: undefined },

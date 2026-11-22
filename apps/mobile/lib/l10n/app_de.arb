@@ -398,6 +398,7 @@
   "composerModelSheet": "Modell",
   "composerModelTooltip": "Welches Modell der Agent für diese Aufgabe verwendet",
   "composerModelHint": "anbieter/modell",
+  "composerModelCustom": "Custom…",
   "composerThinkingSheet": "Denken",
   "composerThinkingTooltip": "Wie viel der Agent vor der Antwort nachdenkt",
   "taskUntitled": "Unbenannte Aufgabe",

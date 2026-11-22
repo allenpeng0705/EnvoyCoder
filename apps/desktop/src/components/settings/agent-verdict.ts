@@ -513,6 +513,25 @@ export function verdictFacts(input: FactInput, t: Translate): RowFact[] {
     facts.push({ label: t("settings.agent.fact.runs"), value: input.commandLine });
   }
 
+  // Envoy Harness revision: package version (ACP) + pin commit (unique handle).
+  if (
+    input.harness?.id === "envoy-harness" &&
+    (input.harness.runtimeVersion !== undefined || input.harness.runtimeCommit !== undefined)
+  ) {
+    const version = input.harness.runtimeVersion ?? "?";
+    const short =
+      input.harness.runtimeCommit !== undefined
+        ? input.harness.runtimeCommit.slice(0, 7)
+        : undefined;
+    facts.push({
+      label: t("settings.agent.fact.runtime"),
+      value:
+        short !== undefined
+          ? t("settings.agent.fact.runtime.value", { version, commit: short })
+          : version,
+    });
+  }
+
   /**
    * **How the connector is delivered** — and only when the user has chosen the fetched route.
    *

@@ -1425,6 +1425,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get composerModelHint => '提供商/模型';
 
   @override
+  String get composerModelCustom => 'Custom…';
+
+  @override
   String get composerThinkingSheet => '思考';
 
   @override

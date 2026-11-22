@@ -509,6 +509,7 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
             off={modelOff}
             bareId={props.modelBareId === true}
             allowUnset={props.harness !== "envoy-harness"}
+            allowCustom={props.harness === "envoy-harness"}
             {...(chipTitle(modelReason, nextRun) !== undefined ? { descriptionId: "composer-model-reason" } : {})}
             title=""
             onChoose={props.onChooseModel}

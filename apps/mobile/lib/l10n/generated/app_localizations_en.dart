@@ -1476,6 +1476,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get composerModelHint => 'provider/model';
 
   @override
+  String get composerModelCustom => 'Custom…';
+
+  @override
   String get composerThinkingSheet => 'Thinking';
 
   @override
@@ -1534,7 +1537,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get composerDomainTooltip =>
-      'Unlock phone & simulator tools, or browser tools, for Envoy Harness';
+      'Unlock phone & simulator tools, or browser tools, for Envoy Harness. Works with Plan.';
 
   @override
   String get composerAutonomyTooltip =>

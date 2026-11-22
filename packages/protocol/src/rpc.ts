@@ -1475,6 +1475,13 @@ export interface HarnessSummary {
   label: string;
   tier: "built-in" | "catalogued";
   summary: string;
+  /**
+   * Envoy Harness package version as ACP advertises (`agentInfo.version` / getConfig), when known.
+   * Not a unique revision — pair with `runtimeCommit` (the pin). Absent for other agents.
+   */
+  runtimeVersion?: string;
+  /** Full commit from `scripts/envoy-harness.pin` when this row is Envoy Harness. */
+  runtimeCommit?: string;
   /** The agent's own modes. Empty is a fact ("it declares none here"), not a missing answer. */
   modes: readonly AgentMode[];
   /**
@@ -1635,6 +1642,10 @@ export const HarnessSummarySchema = z
     label: z.string(),
     tier: z.enum(["built-in", "catalogued"]),
     summary: z.string(),
+    /** Envoy Harness package version (ACP); not unique without `runtimeCommit`. */
+    runtimeVersion: z.string().min(1).optional(),
+    /** Envoy Harness pin commit (40 hex). */
+    runtimeCommit: z.string().regex(/^[0-9a-f]{40}$/).optional(),
     /**
      * The modes this agent offers, so a composer can render the picker from data.
      *

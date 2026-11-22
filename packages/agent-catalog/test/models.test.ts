@@ -55,17 +55,17 @@ describe("what each agent publishes about its models", () => {
     const models = harnessModels("envoy-harness");
     expect(models.kind).toBe("listed");
     expect(models.options.map((option) => option.id)).toEqual([
-      "openai/gpt-4o",
-      "anthropic/claude-sonnet-4-6",
-      "deepseek/deepseek-chat",
-      "minimax/MiniMax-M3",
-      "glm/glm-4-flash",
+      "openai/gpt-6.2-sol",
+      "anthropic/claude-sonnet-5-5",
+      "deepseek/deepseek-flash",
+      "minimax/MiniMax-M3.1-Flash",
+      "glm/glm-4.7-flash",
       "qwen/qwen-plus",
-      "ollama/llama3.1",
+      "ollama/llama3.2",
     ]);
     // The citation is on the *fact*, not only in the test: it names the peer file and the line range
     // the table was read from, which is what a maintainer needs when the peer moves.
-    expect(models.source).toContain("envoy-harness/src/llm/index.ts:110-120");
+    expect(models.source).toContain("envoy-harness/src/llm/index.ts:110-126");
     // Every provider the peer documents a default for has an entry, and no provider it does not is
     // present. `zhipu` and `dashscope` are in its `SUPPORTED_PROVIDERS` as aliases but have no default
     // model, so they are deliberately **not** here — a model id invented for an alias is one the agent

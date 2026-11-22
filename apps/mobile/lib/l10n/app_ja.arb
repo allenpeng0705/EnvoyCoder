@@ -398,6 +398,7 @@
   "composerModelSheet": "モデル",
   "composerModelTooltip": "このタスクでエージェントが使うモデル",
   "composerModelHint": "プロバイダー/モデル",
+  "composerModelCustom": "Custom…",
   "composerThinkingSheet": "思考",
   "composerThinkingTooltip": "エージェントが答える前にどれだけ考えるか",
   "taskUntitled": "無題のタスク",

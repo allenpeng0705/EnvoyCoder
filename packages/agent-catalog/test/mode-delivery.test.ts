@@ -86,4 +86,12 @@ describe("permission levels", () => {
     expect(envoyDomainPresetPolicy("envoy-harness", "safe")).toBeUndefined()
     expect(envoyDomainPresetPolicy("deepseek-harness", "mobile")).toBeUndefined()
   })
+
+  it("Plan mode and domain preset are independent axes", () => {
+    // session/set_mode plan vs session/set_policy preset — harness keeps domain roots
+    // under plan read-only (readOnlyPolicyPreservingDomainRoots).
+    expect(collaborationModeToSet("envoy-harness", "workspace-write", true)).toBe("plan")
+    expect(envoyDomainPresetPolicy("envoy-harness", "webdev")).toEqual({ preset: "webdev" })
+    expect(envoyDomainPresetPolicy("envoy-harness", "mobile")).toEqual({ preset: "mobile" })
+  })
 })

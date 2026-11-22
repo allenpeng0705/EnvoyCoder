@@ -166,9 +166,9 @@ describe("where a new task's defaults come from", () => {
     expect(task?.model).toBeUndefined();
   });
 
-  it("scrubs a leaked Envoy LLM model off DeepSeek tasks on open", async () => {
+  it("scrubs a leaked Envoy LLM model off DeepSeek tasks and projects on open", async () => {
     const b = await bench();
-    const { writeFile, mkdir } = await import("node:fs/promises");
+    const { writeFile, mkdir, readFile } = await import("node:fs/promises");
     const { join } = await import("node:path");
     await mkdir(b.paths.stateDir, { recursive: true });
     await writeFile(
@@ -202,11 +202,26 @@ describe("where a new task's defaults come from", () => {
         2,
       )}\n`,
     );
+    // DeepSeek-pinned project still holding the Envoy LLM id (seeds new tasks via resolveTaskDefaults).
+    const projects = JSON.parse(await readFile(b.paths.projectsFile, "utf8")) as Array<{
+      id: string;
+      defaults?: { harness?: string; model?: string };
+    }>;
+    const withLeak = projects.map((project) =>
+      project.id === b.projectId
+        ? {
+            ...project,
+            defaults: { harness: "deepseek-harness", model: "openai/MiniMax-M3" },
+          }
+        : project,
+    );
+    await writeFile(b.paths.projectsFile, `${JSON.stringify(withLeak, null, 2)}\n`);
 
     const reopened = await CoderStore.open({ paths: b.paths });
     expect(reopened.settings().defaults.model).toBeUndefined();
     expect(reopened.findTask(rawTask.id)?.model).toBeUndefined();
     expect(reopened.findTask(rawTask.id)?.harness).toBe("deepseek-harness");
+    expect(reopened.findProject(b.projectId)?.defaults).toEqual({ harness: "deepseek-harness" });
   });
 
   it("replaces a project's defaults rather than merging them, which is what the pane compensates for", async () => {

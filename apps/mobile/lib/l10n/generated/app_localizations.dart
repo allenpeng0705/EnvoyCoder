@@ -2580,6 +2580,12 @@ abstract class AppLocalizations {
   /// **'provider/model'**
   String get composerModelHint;
 
+  /// composermodelcustom — Type a model id not in the curated/live list
+  ///
+  /// In en, this message translates to:
+  /// **'Custom…'**
+  String get composerModelCustom;
+
   /// composerthinkingsheet — Reused from desktop task.composer.thinking.label
   ///
   /// In en, this message translates to:
@@ -2691,7 +2697,7 @@ abstract class AppLocalizations {
   /// Tooltip for domain tools chip
   ///
   /// In en, this message translates to:
-  /// **'Unlock phone & simulator tools, or browser tools, for Envoy Harness'**
+  /// **'Unlock phone & simulator tools, or browser tools, for Envoy Harness. Works with Plan.'**
   String get composerDomainTooltip;
 
   /// composerautonomytooltip — Autonomy chip hint

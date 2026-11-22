@@ -18,14 +18,18 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  envoyAllCatalogModels,
   envoyProviderApiKeyEnv,
+  envoyProviderCatalogModels,
   isEnvoyHarnessProvider,
+  mergeEnvoyProviderModels,
   modelIdFor,
   resolveModelChoice,
 } from "@envoydev/agent-catalog";
 import {
   ENVOYDEV_ERRORS,
   coderError,
+  type AgentModel,
   type AgentModels,
   type CoderSettings,
 } from "@envoydev/protocol";
@@ -33,6 +37,10 @@ import type { CoderPaths } from "@envoydev/host-bridge";
 
 import { ref } from "./messages.js";
 import type { CoderStore } from "./store.js";
+import {
+  fetchEnvoyLiveModelIds,
+  invalidateEnvoyLlmModelCache,
+} from "./envoy-llm-models.js";
 
 /** Non-secret half — safe to put under `stateDir`. */
 export interface EnvoyLlmConfig {
@@ -47,6 +55,10 @@ export interface EnvoyLlmPublic {
   model?: string;
   baseUrl?: string;
   apiKeySet: boolean;
+  /**
+   * Suggested models for the Settings field: curated (all providers, or the saved provider)
+   * merged with a live provider list when a key is set.
+   */
   options: readonly { id: string; provider: string; model: string; label: string }[];
 }
 
@@ -78,12 +90,14 @@ async function atomicWrite(path: string, body: string): Promise<void> {
 /**
  * Turn the model string a person typed into the provider/model Envoy Harness launches with.
  *
- * `anthropic/claude-sonnet-4-5` names both halves. A bare id (`gpt-4o`, or a custom id) is OpenAI-compatible
- * unless it is a MiniMax id (`MiniMax-M3`, `Minimax M3`) or the client already named a provider.
+ * `anthropic/claude-sonnet-5-5` names both halves. A bare id (`gpt-6.2-sol`, or a custom id) is OpenAI-compatible
+ * unless it is a MiniMax id (`MiniMax-M3.1-Flash`, `MiniMax-M3`) or the client already named a provider.
  */
 function miniMaxModelId(input: string): string | undefined {
   const compact = input.replace(/[\s_-]+/g, "").toLowerCase();
-  const match = /^minimaxm(\d+)$/.exec(compact);
+  const flash = /^minimaxm(\d+(?:\.\d+)?)flash$/.exec(compact);
+  if (flash !== null) return `MiniMax-M${flash[1]}-Flash`;
+  const match = /^minimaxm(\d+(?:\.\d+)?)$/.exec(compact);
   return match === null ? undefined : `MiniMax-M${match[1]}`;
 }
 
@@ -153,6 +167,7 @@ async function readApiKey(paths: CoderPaths): Promise<string | undefined> {
 export async function getEnvoyLlmPublic(paths: CoderPaths): Promise<EnvoyLlmPublic> {
   const config = await readEnvoyLlmConfig(paths);
   const key = await readApiKey(paths);
+  const options = await resolveEnvoyLlmOptions(paths, config);
   return {
     ...(config !== undefined
       ? {
@@ -162,8 +177,29 @@ export async function getEnvoyLlmPublic(paths: CoderPaths): Promise<EnvoyLlmPubl
         }
       : {}),
     apiKeySet: key !== undefined,
-    options: config === undefined ? [] : [configuredOption(config)],
+    options,
   };
+}
+
+async function resolveEnvoyLlmOptions(
+  paths: CoderPaths,
+  config: EnvoyLlmConfig | undefined,
+): Promise<readonly { id: string; provider: string; model: string; label: string }[]> {
+  if (config === undefined) {
+    return envoyAllCatalogModels().map((entry) => ({ ...entry }));
+  }
+  const apiKey = readApiKeySync(paths);
+  const live = await fetchEnvoyLiveModelIds({
+    provider: config.provider,
+    ...(config.baseUrl !== undefined ? { baseUrl: config.baseUrl } : {}),
+    ...(apiKey !== undefined ? { apiKey } : {}),
+  });
+  return mergeEnvoyProviderModels({
+    provider: config.provider,
+    curated: envoyProviderCatalogModels(config.provider),
+    liveModelIds: live,
+    savedModel: config.model,
+  });
 }
 
 export async function setEnvoyLlm(
@@ -227,6 +263,12 @@ export async function setEnvoyLlm(
     await store.updateSettings(patch);
   }
 
+  // Scrub immediately — do not wait for the next store open. Saving Envoy LLM while the
+  // default agent is DeepSeek (or after a prior leak) must clear matching ids off other
+  // agents' app/project/task defaults now.
+  await store.scrubLeakedEnvoyModel();
+  invalidateEnvoyLlmModelCache();
+
   return getEnvoyLlmPublic(paths);
 }
 
@@ -261,27 +303,14 @@ export function envoyLlmBaseUrlArgs(
   return ["--base-url", config.baseUrl];
 }
 
-function configuredOption(config: EnvoyLlmConfig): {
-  id: string;
-  provider: string;
-  model: string;
-  label: string;
-} {
-  return {
-    id: modelIdFor(config.provider, config.model),
-    provider: config.provider,
-    model: config.model,
-    label: config.model,
-  };
-}
-
 /**
  * What the composer may offer for Envoy Harness.
  *
- * The harness has no model of its own. Until Settings saves one, the control is off. After that,
- * the list is that model — not the catalogue of provider defaults.
+ * Until Settings saves a model, the control is off. After that: curated catalog for that provider,
+ * plus live `/models` when a key is set, plus the saved id — never a closed allowlist (Custom
+ * free-text still accepts any `provider/model` Envoy resolves).
  */
-export function envoyHarnessModels(paths: CoderPaths): AgentModels {
+export async function envoyHarnessModels(paths: CoderPaths): Promise<AgentModels> {
   const config = readEnvoyLlmConfigSync(paths);
   if (config === undefined) {
     return {
@@ -290,10 +319,30 @@ export function envoyHarnessModels(paths: CoderPaths): AgentModels {
       source: "Envoy Harness has no model of its own. Settings has not saved one.",
     };
   }
+  const apiKey = readApiKeySync(paths);
+  const live = await fetchEnvoyLiveModelIds({
+    provider: config.provider,
+    ...(config.baseUrl !== undefined ? { baseUrl: config.baseUrl } : {}),
+    ...(apiKey !== undefined ? { apiKey } : {}),
+  });
+  const merged = mergeEnvoyProviderModels({
+    provider: config.provider,
+    curated: envoyProviderCatalogModels(config.provider),
+    liveModelIds: live,
+    savedModel: config.model,
+  });
+  const options: AgentModel[] = merged.map((entry) => ({
+    id: entry.id,
+    label: entry.label,
+    provider: entry.provider,
+    model: entry.model,
+  }));
   return {
     kind: "listed",
-    options: [configuredOption(config)],
-    source: "The model saved in Settings. Envoy Harness does not ship a model list.",
+    options,
+    source:
+      "Curated Envoy provider catalog (packages/agent-catalog models.ts) merged with a live " +
+      "provider /models list when an API key is set, plus the model saved in Settings.",
   };
 }
 
@@ -319,6 +368,27 @@ export function envoyLlmStoredModelId(paths: CoderPaths): string | undefined {
   const config = readEnvoyLlmConfigSync(paths);
   if (config === undefined) return undefined;
   return modelIdFor(config.provider, config.model);
+}
+
+/**
+ * Ids that count as the same Envoy LLM choice for leak detection.
+ *
+ * MiniMax was often saved as `openai/MiniMax-M3` before normalize stored `minimax/MiniMax-M3`;
+ * both must scrub / reject as the same leak.
+ */
+export function envoyLlmModelAliases(storedId: string): ReadonlySet<string> {
+  const slash = storedId.indexOf("/");
+  const leaf = slash > 0 ? storedId.slice(slash + 1) : storedId;
+  return new Set([storedId, `openai/${leaf}`]);
+}
+
+/** True when `model` is the saved Envoy LLM id (or its pre-normalize OpenAI-shaped alias). */
+export function isEnvoyLlmModelLeak(
+  model: string | undefined,
+  storedId: string | undefined,
+): boolean {
+  if (model === undefined || model === "" || storedId === undefined) return false;
+  return envoyLlmModelAliases(storedId).has(model);
 }
 
 function readEnvoyLlmConfigSync(paths: CoderPaths): EnvoyLlmConfig | undefined {

@@ -1441,6 +1441,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get composerModelHint => 'プロバイダー/モデル';
 
   @override
+  String get composerModelCustom => 'Custom…';
+
+  @override
   String get composerThinkingSheet => '思考';
 
   @override

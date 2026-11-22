@@ -460,11 +460,47 @@ class ComposerControls extends StatelessWidget {
                 trailing: selection.model == o.id ? const Icon(Icons.check) : null,
                 onTap: () => Navigator.pop(context, o.id),
               ),
+            // Envoy Harness: curated ∪ live list is not closed — Custom types any provider/model.
+            if (harness.id == 'envoy-harness')
+              ListTile(
+                title: Text(l10n.composerModelCustom),
+                onTap: () => Navigator.pop(context, '__custom__'),
+              ),
           ],
         ),
       ),
     );
     if (chosen == null) return;
+    if (chosen == '__custom__') {
+      final controller = TextEditingController(text: selection.model ?? '');
+      final value = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(l10n.composerModelCustom),
+          content: TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              hintText: l10n.composerModelHint,
+              border: const OutlineInputBorder(),
+            ),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(l10n.composerDefault),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, controller.text.trim()),
+              child: Text(l10n.composerUse),
+            ),
+          ],
+        ),
+      );
+      if (value == null) return;
+      onChanged(selection.copyWith(model: value, clearModel: value.isEmpty));
+      return;
+    }
     onChanged(selection.copyWith(model: chosen, clearModel: chosen.isEmpty));
   }
 

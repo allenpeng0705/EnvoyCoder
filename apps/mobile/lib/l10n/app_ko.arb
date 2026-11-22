@@ -398,6 +398,7 @@
   "composerModelSheet": "모델",
   "composerModelTooltip": "이 작업에서 에이전트가 사용하는 모델",
   "composerModelHint": "제공자/모델",
+  "composerModelCustom": "Custom…",
   "composerThinkingSheet": "사고",
   "composerThinkingTooltip": "에이전트가 답하기 전에 얼마나 생각할지",
   "taskUntitled": "제목 없는 작업",

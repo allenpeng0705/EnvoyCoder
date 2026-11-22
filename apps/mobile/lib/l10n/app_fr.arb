@@ -398,6 +398,7 @@
   "composerModelSheet": "Modèle",
   "composerModelTooltip": "Le modèle que l'agent utilise pour cette tâche",
   "composerModelHint": "fournisseur/modèle",
+  "composerModelCustom": "Custom…",
   "composerThinkingSheet": "Réflexion",
   "composerThinkingTooltip": "Combien l'agent réfléchit avant de répondre",
   "taskUntitled": "Tâche sans titre",

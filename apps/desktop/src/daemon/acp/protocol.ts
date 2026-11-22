@@ -199,9 +199,10 @@ export type AcpPermissionPreset = "safe" | "ask-all" | "approve-all" | "mobile" 
  * only then (`safe-only`); Full access does not ask (`off`). `approval` is not sent: the harness
  * setter that receives it replaces the handler Allow is answered on.
  *
- * `preset` is the named unlock for Mobile / Web tool loops. On envoy-harness a preset in the
- * same request wins and applies its own sandbox / autoRun / roots; a follow-up `autoRun`-only
- * update is how Settings "Ask before risky steps" Off still lands after a domain preset.
+ * `preset` is the named unlock for Mobile / Web tool loops. On envoy-harness the preset
+ * applies first (sandbox / autoRun / roots), then any co-sent `sandbox` / `approval` /
+ * `autoRun` tweak the axes in the same request — so Settings Asking Off is
+ * `{ preset, autoRun: "off" }` in one call.
  */
 export interface AcpSessionPolicy {
   sandbox?: "read-only" | "workspace-write" | "danger-full-access";

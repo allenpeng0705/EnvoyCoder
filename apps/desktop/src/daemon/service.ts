@@ -91,7 +91,13 @@ import {
   getEnvoyDecisionPublic,
   setEnvoyDecision,
 } from "./envoy-decision.js";
-import { getEnvoyLlmPublic, setEnvoyLlm, envoyHarnessModels } from "./envoy-llm.js";
+import {
+  getEnvoyLlmPublic,
+  setEnvoyLlm,
+  envoyHarnessModels,
+  envoyLlmStoredModelId,
+  envoyLlmModelAliases,
+} from "./envoy-llm.js";
 import { harnessSwitchPatch } from "./task-harness-switch.js";
 import { domainDoctorHint } from "./domain-doctor.js";
 import { createFixHandlers } from "./fixes.js";
@@ -726,8 +732,10 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         const project = current !== undefined ? deps.store.findProject(current.projectId) : undefined;
         // Project preferred model only when that project pins this same agent. A model without a
         // harness pin must not follow onto DeepSeek (free-text accepts any provider/model shape).
+        // Also reject a leftover Envoy LLM id even when the project is DeepSeek-pinned.
         const preferredModel =
           project?.defaults?.harness === input.harness ? project?.defaults?.model : undefined;
+        const envoyModelId = envoyLlmStoredModelId(deps.paths);
         const switched = harnessSwitchPatch(
           {
             agentModeId: agentModeId ?? current?.agentModeId,
@@ -737,6 +745,9 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
           },
           input.harness,
           preferredModel,
+          envoyModelId !== undefined
+            ? { rejectPreferredModels: envoyLlmModelAliases(envoyModelId) }
+            : undefined,
         );
         if (switched.clearAgentMode) {
           agentModeId = undefined;
@@ -904,7 +915,8 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     "coder.listHarnesses": async (params) => {
       parseRpcParams("coder.listHarnesses", params);
       return {
-        harnesses: ALL_HARNESSES.map((id) => {
+        harnesses: await Promise.all(
+          ALL_HARNESSES.map(async (id) => {
           /**
            * **The probe follows the delivery**, and that is the whole point of the field.
            *
@@ -956,10 +968,11 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
               ? { package: fetchablePackage(id) ?? "", covers: fetchableCovers(id) ?? "connector" }
               : undefined,
           );
-          // Envoy Harness has no model of its own. The catalogue's provider defaults are not a list
-          // the user can call. The picker is the model saved in Settings, or nothing until one is.
-          return id === "envoy-harness" ? { ...row, models: envoyHarnessModels(deps.paths) } : row;
+          // Envoy Harness: curated ∪ live ∪ Settings model for the configured provider.
+          if (id !== "envoy-harness") return row;
+          return { ...row, models: await envoyHarnessModels(deps.paths) };
         }),
+        ),
       };
     },
 

@@ -72,7 +72,7 @@ const PROVIDER_LABELS: Readonly<Record<string, string>> = {
  *
  * **Copied, not imported**, and that is a decision worth stating. The peer publishes this table
  * "public so callers can show them in help text"
- * (`../envoy-harness/packages/envoy-harness/src/llm/index.ts:110-120`), which is exactly what we do
+ * (`../envoy-harness/packages/envoy-harness/src/llm/index.ts:110-126`), which is exactly what we do
  * with it — but this package links only `@envoydev/protocol` and `@envoydev/platform`
  * (`packages/agent-catalog/package.json`), and adding a `file:` dependency on the peer checkout would
  * make the whole catalogue unloadable on a machine that has not cloned it. The family's rule is that
@@ -83,31 +83,113 @@ const PROVIDER_LABELS: Readonly<Record<string, string>> = {
  * refuses.
  */
 const ENVOY_HARNESS_DEFAULTS: readonly (readonly [provider: string, model: string])[] = [
-  ["openai", "gpt-4o"],
-  ["anthropic", "claude-sonnet-4-6"],
-  ["deepseek", "deepseek-chat"],
-  ["minimax", "MiniMax-M3"],
-  ["glm", "glm-4-flash"],
+  ["openai", "gpt-6.2-sol"],
+  ["anthropic", "claude-sonnet-5-5"],
+  ["deepseek", "deepseek-flash"],
+  ["minimax", "MiniMax-M3.1-Flash"],
+  ["glm", "glm-4.7-flash"],
   ["qwen", "qwen-plus"],
-  ["ollama", "llama3.1"],
+  ["ollama", "llama3.2"],
 ];
+
+/**
+ * Coding-focused model ids per Envoy Harness provider — a curated shortlist, not a closed allowlist.
+ *
+ * Live `/models` (daemon) merges on top when a key is set. Private gateway ids stay reachable via
+ * Custom free-text. Defaults above are always first in each provider's list.
+ *
+ * Citations: OpenAI models page (GPT-6.2 family); Anthropic models overview (5.5 line);
+ * DeepSeek API docs (`deepseek-flash` / `deepseek-v4-pro`); MiniMax platform text models;
+ * Zhipu BigModel free flash (`glm-4.7-flash`); DashScope Qwen commercial aliases; Ollama library tags.
+ */
+const ENVOY_PROVIDER_MODEL_CATALOG: Readonly<Record<string, readonly string[]>> = {
+  openai: ["gpt-6.2-sol", "gpt-6.2-astra", "gpt-6-luna", "gpt-5.5", "gpt-5.4", "gpt-4.1"],
+  anthropic: [
+    "claude-sonnet-5-5",
+    "claude-opus-5-5",
+    "claude-haiku-5-5",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5",
+  ],
+  deepseek: ["deepseek-flash", "deepseek-v4-pro"],
+  minimax: ["MiniMax-M3.1-Flash", "MiniMax-M3"],
+  glm: ["glm-4.7-flash", "glm-4.5-flash", "glm-4-flash", "glm-4-plus"],
+  qwen: ["qwen-plus", "qwen3.7-plus", "qwen3.7-flash", "qwen-max", "qwen-flash"],
+  ollama: ["llama3.2", "llama3.1", "qwen3", "qwen2.5-coder", "mistral"],
+};
+
+export interface EnvoyCatalogModel {
+  id: string;
+  provider: string;
+  model: string;
+  label: string;
+}
 
 /**
  * The provider/model pairs Envoy Harness publishes as defaults — public so the Agents LLM panel and
  * the launch inject path share one list with the catalogue picker.
  */
-export function envoyHarnessDefaultModels(): readonly {
-  id: string;
-  provider: string;
-  model: string;
-  label: string;
-}[] {
+export function envoyHarnessDefaultModels(): readonly EnvoyCatalogModel[] {
   return ENVOY_HARNESS_DEFAULTS.map(([provider, model]) => ({
     id: modelIdFor(provider, model),
     provider,
     model,
     label: model,
   }));
+}
+
+/** Curated coding models for one Envoy provider (aliases normalized). Empty when unknown. */
+export function envoyProviderCatalogModels(provider: string): readonly EnvoyCatalogModel[] {
+  const key = normalizeEnvoyProvider(provider);
+  const models = ENVOY_PROVIDER_MODEL_CATALOG[key];
+  if (models === undefined) return [];
+  return models.map((model) => ({
+    id: modelIdFor(key, model),
+    provider: key,
+    model,
+    label: model,
+  }));
+}
+
+/** Every curated Envoy model across providers — Settings suggestions before a provider is fixed. */
+export function envoyAllCatalogModels(): readonly EnvoyCatalogModel[] {
+  return Object.keys(ENVOY_PROVIDER_MODEL_CATALOG).flatMap((provider) =>
+    envoyProviderCatalogModels(provider),
+  );
+}
+
+/** Canonical provider id (`zhipu`→`glm`, `dashscope`→`qwen`). */
+export function normalizeEnvoyProvider(provider: string): string {
+  const lower = provider.toLowerCase();
+  if (lower === "zhipu") return "glm";
+  if (lower === "dashscope") return "qwen";
+  return lower;
+}
+
+/**
+ * Merge curated + live + saved ids for one provider. Order: saved first (if any), then curated,
+ * then remaining live — de-duplicated by bare model id.
+ */
+export function mergeEnvoyProviderModels(input: {
+  provider: string;
+  curated?: readonly EnvoyCatalogModel[];
+  liveModelIds?: readonly string[];
+  savedModel?: string;
+}): EnvoyCatalogModel[] {
+  const provider = normalizeEnvoyProvider(input.provider);
+  const curated = input.curated ?? envoyProviderCatalogModels(provider);
+  const seen = new Set<string>();
+  const out: EnvoyCatalogModel[] = [];
+  const push = (model: string): void => {
+    const bare = model.includes("/") ? model.slice(model.indexOf("/") + 1) : model;
+    if (bare === "" || seen.has(bare)) return;
+    seen.add(bare);
+    out.push({ id: modelIdFor(provider, bare), provider, model: bare, label: bare });
+  };
+  if (input.savedModel !== undefined && input.savedModel !== "") push(input.savedModel);
+  for (const entry of curated) push(entry.model);
+  for (const live of input.liveModelIds ?? []) push(live);
+  return out;
 }
 
 /**
@@ -383,7 +465,7 @@ export const HARNESS_MODELS: Readonly<Record<HarnessId, HarnessModels>> = {
     kind: "listed",
     options: listedModels(),
     source:
-      "DEFAULT_PROVIDER_MODELS, read from ../envoy-harness/packages/envoy-harness/src/llm/index.ts:110-120 " +
+      "DEFAULT_PROVIDER_MODELS, read from ../envoy-harness/packages/envoy-harness/src/llm/index.ts:110-126 " +
       "(\"Default models per provider. Public so callers can show them in help text\"). The ids are " +
       "copied verbatim — a translated or prettified model id is one `createProviderAdapter` routes to " +
       "nothing. NOT a closed list: the peer's `--model` is documented as a free-form \"LLM model " +

@@ -36,6 +36,9 @@ import {
 } from "../composer/controls.js";
 import { useI18n } from "../i18n/context.js";
 
+/** Sentinel select value — switches listed Envoy picks into the Custom text field. */
+const CUSTOM_SENTINEL = "__envoy_custom__";
+
 export interface ModelChoiceProps {
   /**
    * The id of the visible label element — **or, on a surface with no room for one, `ariaLabel`.**
@@ -85,15 +88,37 @@ export interface ModelChoiceProps {
    * When false, the empty "agent default" option is omitted. Envoy Harness has no default model.
    */
   allowUnset?: boolean;
+  /**
+   * Listed + Custom: offer a Custom… row that types any `provider/model` not in the curated/live list
+   * (Envoy Harness). When the stored id is already outside the list, the text field opens immediately.
+   */
+  allowCustom?: boolean;
 }
 
 export function ModelChoice(props: ModelChoiceProps): JSX.Element {
   const { t } = useI18n();
 
+  const inList =
+    props.selected !== undefined &&
+    props.selected !== "" &&
+    props.options.some((option) => option.id === props.selected);
+  const [customMode, setCustomMode] = useState(
+    props.allowCustom === true && props.selected !== undefined && props.selected !== "" && !inList,
+  );
   const [draft, setDraft] = useState(props.selected ?? "");
   useEffect(() => {
     setDraft(props.selected ?? "");
-  }, [props.selected]);
+    const listed =
+      props.selected !== undefined &&
+      props.selected !== "" &&
+      props.options.some((option) => option.id === props.selected);
+    if (props.allowCustom === true && props.selected !== undefined && props.selected !== "" && !listed) {
+      setCustomMode(true);
+    }
+    if (props.allowCustom === true && (props.selected === undefined || props.selected === "" || listed)) {
+      setCustomMode(false);
+    }
+  }, [props.selected, props.options, props.allowCustom]);
 
   const commit = (): void => {
     const value = draft.trim();
@@ -110,34 +135,50 @@ export function ModelChoice(props: ModelChoiceProps): JSX.Element {
     }
   };
 
-  if (props.kind === "free-text") {
+  const labelProps = {
+    ...(props.labelId !== undefined ? { "aria-labelledby": props.labelId } : {}),
+    ...(props.ariaLabel !== undefined ? { "aria-label": props.ariaLabel } : {}),
+    ...(props.descriptionId !== undefined ? { "aria-describedby": props.descriptionId } : {}),
+  };
+
+  if (props.kind === "free-text" || (props.kind === "listed" && props.allowCustom === true && customMode)) {
     return (
-      <input
-        type="text"
-        className={props.inputClassName ?? "input"}
-        // The visible span labels both shapes, exactly as it does for a `<select>`: `aria-labelledby`
-        // rather than a second `aria-label`, so the name a screen reader announces and the one on screen
-        // cannot drift apart.
-        {...(props.labelId !== undefined ? { "aria-labelledby": props.labelId } : {})}
-        {...(props.ariaLabel !== undefined ? { "aria-label": props.ariaLabel } : {})}
-        {...(props.descriptionId !== undefined ? { "aria-describedby": props.descriptionId } : {})}
-        disabled={props.off !== undefined}
-        placeholder={
-          props.bareId === true
-            ? t("task.composer.model.placeholderBare")
-            : t("task.composer.model.placeholder")
-        }
-        {...(props.title !== "" ? { title: props.title } : {})}
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            commit();
+      <span className="model-choice model-choice--custom">
+        <input
+          type="text"
+          className={props.inputClassName ?? "input"}
+          {...labelProps}
+          disabled={props.off !== undefined}
+          placeholder={
+            props.bareId === true
+              ? t("task.composer.model.placeholderBare")
+              : t("task.composer.model.placeholder")
           }
-        }}
-        onBlur={commit}
-      />
+          {...(props.title !== "" ? { title: props.title } : {})}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commit();
+            }
+          }}
+          onBlur={commit}
+        />
+        {props.kind === "listed" && props.allowCustom === true ? (
+          <button
+            type="button"
+            className="settings__link"
+            disabled={props.off !== undefined}
+            onClick={() => {
+              setCustomMode(false);
+              setDraft(props.selected ?? "");
+            }}
+          >
+            {t("task.composer.model.backToList")}
+          </button>
+        ) : null}
+      </span>
     );
   }
 
@@ -148,12 +189,18 @@ export function ModelChoice(props: ModelChoiceProps): JSX.Element {
       // publishes models it cannot be *set* to keeps the control visible and disabled, with the reason
       // on the next line.
       disabled={props.off !== undefined}
-      {...(props.labelId !== undefined ? { "aria-labelledby": props.labelId } : {})}
-      {...(props.ariaLabel !== undefined ? { "aria-label": props.ariaLabel } : {})}
-      {...(props.descriptionId !== undefined ? { "aria-describedby": props.descriptionId } : {})}
+      {...labelProps}
       {...(props.title !== "" ? { title: props.title } : {})}
       value={props.selected ?? ""}
-      onChange={(event) => props.onChoose(event.target.value)}
+      onChange={(event) => {
+        const value = event.target.value;
+        if (value === CUSTOM_SENTINEL) {
+          setCustomMode(true);
+          setDraft(props.selected ?? "");
+          return;
+        }
+        props.onChoose(value);
+      }}
     >
       {/* Other agents can leave the model unset and use their own default. Envoy Harness cannot:
           with no model it does not call the LLM saved in Settings. */}
@@ -167,6 +214,9 @@ export function ModelChoice(props: ModelChoiceProps): JSX.Element {
           {model.label}
         </option>
       ))}
+      {props.allowCustom === true ? (
+        <option value={CUSTOM_SENTINEL}>{t("task.composer.model.custom")}</option>
+      ) : null}
     </select>
   );
 }

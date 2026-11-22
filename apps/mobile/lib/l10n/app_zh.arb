@@ -398,6 +398,7 @@
   "composerModelSheet": "模型",
   "composerModelTooltip": "智能体在此任务中使用哪个模型",
   "composerModelHint": "提供商/模型",
+  "composerModelCustom": "Custom…",
   "composerThinkingSheet": "思考",
   "composerThinkingTooltip": "智能体在回答前思考多少",
   "taskUntitled": "无标题任务",

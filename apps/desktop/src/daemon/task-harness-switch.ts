@@ -27,6 +27,15 @@ export interface HarnessSwitchPatch {
   clearDomainPreset: boolean;
 }
 
+export interface HarnessSwitchOptions {
+  /**
+   * Model ids that must not be re-applied as `preferredModel` when leaving Envoy Harness
+   * (typically the current Envoy LLM id and its OpenAI-shaped alias). DeepSeek is free-text
+   * and would otherwise accept them.
+   */
+  rejectPreferredModels?: ReadonlySet<string>;
+}
+
 /**
  * Compute the patch that moves `task` onto `nextHarness`.
  *
@@ -37,6 +46,7 @@ export function harnessSwitchPatch(
   task: Pick<Task, "agentModeId" | "model" | "thinkingLevel" | "domainPreset">,
   nextHarness: AgentId,
   preferredModel?: string,
+  options?: HarnessSwitchOptions,
 ): HarnessSwitchPatch {
   const clearDomainPreset =
     task.domainPreset !== undefined && nextHarness !== "envoy-harness";
@@ -68,7 +78,15 @@ export function harnessSwitchPatch(
 
   const preferred =
     preferredModel !== undefined && preferredModel !== "" ? preferredModel : undefined;
-  if (preferred !== undefined && resolveModelChoice(nextHarness, preferred).ok) {
+  const preferredBlocked =
+    preferred !== undefined &&
+    nextHarness !== "envoy-harness" &&
+    options?.rejectPreferredModels?.has(preferred) === true;
+  if (
+    preferred !== undefined &&
+    !preferredBlocked &&
+    resolveModelChoice(nextHarness, preferred).ok
+  ) {
     model = preferred;
     clearModel = false;
   }

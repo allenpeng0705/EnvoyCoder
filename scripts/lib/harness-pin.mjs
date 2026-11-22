@@ -5,13 +5,13 @@
  * ## Why a pin, when the harness is only a peer
  *
  * The packaged desktop app **stages a built harness at package time** (`stage-desktop-bundle.mjs`), so
- * an installed EnvoyDev carries the agent runtime it was built with. `docs/upgrading.md` §3.5 is the
- * contract: the commit is the *only* handle on that runtime, because all ten of the harness's packages
- * are version `0.0.0` — a version number identifies nothing. Cloning the default branch HEAD at
- * package time means two builds of the same tag can ship two different agent runtimes with nothing in
- * the artifact to say so. `scripts/envoy-harness.pin` is that missing handle: one line, the full
- * commit. `ENVOY_HARNESS_COMMIT` is the deliberate override (a release candidate, a bisect, the local
- * verification in §3.5); the pin is the default.
+ * an installed EnvoyDev carries the agent runtime it was built with. The commit is the *only*
+ * reliable handle on that runtime: harness package versions move together (or stay placeholder)
+ * and do not identify a unique revision. Cloning the default branch HEAD at package time means two
+ * builds of the same product tag can ship two different agent runtimes with nothing in the artifact
+ * to say so. `scripts/envoy-harness.pin` is that missing handle: one line, the full commit.
+ * `ENVOY_HARNESS_COMMIT` is the deliberate override (a release candidate, a bisect); the pin is the
+ * default.
  *
  * ## Why the fetch names the commit, and what happens when it cannot be reached
  *
@@ -73,7 +73,7 @@ export function readHarnessCommit(env = process.env) {
     if (!FULL_COMMIT.test(override)) {
       throw new Error(
         `ENVOY_HARNESS_COMMIT is not a full 40-character commit: ${JSON.stringify(override)}.\n` +
-          "  The harness's packages are all version 0.0.0, so only a commit identifies a revision.",
+          "  Only a full commit identifies a harness revision (package versions are not unique).",
       );
     }
     return { commit: override, from: "ENVOY_HARNESS_COMMIT", source: "override" };
@@ -84,14 +84,14 @@ export function readHarnessCommit(env = process.env) {
   } catch {
     throw new Error(
       `the Envoy Harness pin is missing: ${path.relative(repoRoot, HARNESS_PIN_FILE)}\n` +
-        "  Recreate it with the commit to ship (docs/upgrading.md §3.5), or set ENVOY_HARNESS_COMMIT.",
+        "  Recreate it with the commit to ship (docs/upgrading.md §3), or set ENVOY_HARNESS_COMMIT.",
     );
   }
   if (!FULL_COMMIT.test(pinned)) {
     throw new Error(
       `${path.relative(repoRoot, HARNESS_PIN_FILE)} does not name a full 40-character commit: ` +
         `${JSON.stringify(pinned)}.\n` +
-        "  Fix the pin (docs/upgrading.md §3.5), or set ENVOY_HARNESS_COMMIT to override it.",
+        "  Fix the pin (docs/upgrading.md §3), or set ENVOY_HARNESS_COMMIT to override it.",
     );
   }
   return { commit: pinned, from: path.relative(repoRoot, HARNESS_PIN_FILE), source: "pin" };
@@ -134,7 +134,7 @@ export function checkoutHarnessCommit({ dest, url, commit }) {
     throw new Error(
       `Envoy Harness ${commit} is not a commit in ${url}.\n` +
         `  git: ${firstLine(checkout.stderr)}\n` +
-        "  Fix the pin deliberately (docs/upgrading.md §3.5) — this build refuses to fall back to a " +
+        "  Fix the pin deliberately (docs/upgrading.md §3) — this build refuses to fall back to a " +
         "branch tip.",
     );
   }

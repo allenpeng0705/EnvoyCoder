@@ -47,6 +47,8 @@ import {
   type ProviderProbe,
 } from "@envoydev/agent-catalog";
 
+import { resolveEnvoyHarnessRuntime } from "./harness-runtime.js";
+
 /**
  * A catalogue entry plus what this machine can actually do with it.
  *
@@ -107,11 +109,17 @@ export function summarize(
   // `sessionFacts` for the precedence rules, including why a session that says nothing about models
   // does not overwrite a catalogue list.
   const facts = sessionFacts(id, observed);
+  // Pin + package version for Envoy Harness — matches ACP agentInfo.version; commit is the
+  // unique handle (versions alone are not).
+  const runtime = id === "envoy-harness" ? resolveEnvoyHarnessRuntime() : undefined;
   return {
     id,
     label: definition.label,
     tier: definition.tier,
     summary: definition.summary,
+    ...(runtime !== undefined
+      ? { runtimeVersion: runtime.version, runtimeCommit: runtime.commit }
+      : {}),
     // The agent's own modes, so a composer can render its picker from the wire rather than from a
     // hardcoded list. Empty means "the agent declares none here", which for `deepseek-harness` is the
     // answer rather than a gap: its ACP surface has no `session/set_mode`, so it has nothing to offer.

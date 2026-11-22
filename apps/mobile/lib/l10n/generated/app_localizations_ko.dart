@@ -1439,6 +1439,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get composerModelHint => '제공자/모델';
 
   @override
+  String get composerModelCustom => 'Custom…';
+
+  @override
   String get composerThinkingSheet => '사고';
 
   @override

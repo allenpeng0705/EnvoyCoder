@@ -6,7 +6,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { coderPaths } from "@envoydev/host-bridge";
 
@@ -17,11 +17,22 @@ import {
   getEnvoyLlmPublic,
   setEnvoyLlm,
 } from "../src/daemon/envoy-llm.js";
+import { invalidateEnvoyLlmModelCache } from "../src/daemon/envoy-llm-models.js";
 import { CoderStore } from "../src/daemon/store.js";
 
 const cleanups: (() => void)[] = [];
+beforeEach(() => {
+  // Do not hit real provider /models from unit tests (setEnvoyLlm → getEnvoyLlmPublic merges live).
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify({ data: [] }), { status: 200 })),
+  );
+  invalidateEnvoyLlmModelCache();
+});
 afterEach(() => {
   for (const cleanup of cleanups.splice(0).reverse()) cleanup();
+  vi.unstubAllGlobals();
+  invalidateEnvoyLlmModelCache();
 });
 
 function tempDir(prefix: string): string {
@@ -100,6 +111,38 @@ describe("Envoy Harness LLM settings", () => {
     // Envoy LLM file still saved for when the user runs envoy-harness.
     const pub = await getEnvoyLlmPublic(paths);
     expect(pub.model).toBe("MiniMax-M3");
+  });
+
+  it("scrubs matching leaks off DeepSeek app/project/task defaults right after save", async () => {
+    const home = tempDir("envoydev-llm-scrub-on-save-");
+    const paths = coderPaths(home);
+    const store = await CoderStore.open({ paths });
+    const { project } = await store.addProject({ path: join(home, "repo") });
+
+    // Plant leaks that match the id we are about to save — without waiting for reopen.
+    await store.updateSettings({
+      defaults: { harness: "deepseek-harness", model: "openai/MiniMax-M3" },
+    });
+    await store.updateProject(project.id, {
+      defaults: { harness: "deepseek-harness", model: "openai/MiniMax-M3" },
+    });
+    const task = await store.createTask({
+      projectId: project.id,
+      title: "leaked-task",
+      harness: "deepseek-harness",
+      model: "openai/MiniMax-M3",
+    });
+
+    await setEnvoyLlm(paths, store, {
+      provider: "openai",
+      model: "MiniMax-M3",
+      apiKey: "sk-scrub-now",
+    });
+
+    expect(store.settings().defaults.model).toBeUndefined();
+    expect(store.findProject(project.id)?.defaults).toEqual({ harness: "deepseek-harness" });
+    expect(store.findTask(task!.id)?.model).toBeUndefined();
+    expect(store.findTask(task!.id)?.harness).toBe("deepseek-harness");
   });
 
   it("injects the matching API key env and --base-url when launching envoy-harness", async () => {
@@ -203,7 +246,7 @@ describe("Envoy Harness LLM settings", () => {
     expect(envoyLlmLaunchEnv(paths, "anthropic")).toEqual({ ANTHROPIC_API_KEY: "sk-anthropic" });
   });
 
-  it("treats MiniMax-M3, Minimax M3 and a saved OpenAI mis-file as MiniMax", async () => {
+  it("treats MiniMax-M3 / M3.1-Flash forms as MiniMax", async () => {
     const home = tempDir("envoydev-llm-minimax-");
     const paths = coderPaths(home);
     const store = await CoderStore.open({ paths });
@@ -215,8 +258,18 @@ describe("Envoy Harness LLM settings", () => {
     });
     expect(typed.provider).toBe("minimax");
     expect(typed.model).toBe("MiniMax-M3");
-    expect(typed.options.map((option) => option.id)).toEqual(["minimax/MiniMax-M3"]);
+    expect(typed.options.map((option) => option.id)).toContain("minimax/MiniMax-M3");
+    expect(typed.options.map((option) => option.id)).toContain("minimax/MiniMax-M3.1-Flash");
     expect(store.settings().defaults.model).toBe("minimax/MiniMax-M3");
     expect(envoyLlmLaunchEnv(paths, "minimax")).toEqual({ MINIMAX_API_KEY: "sk-mini" });
+
+    const flash = await setEnvoyLlm(paths, store, {
+      provider: "openai",
+      model: "MiniMax-M3.1-Flash",
+      apiKey: "sk-mini",
+    });
+    expect(flash.provider).toBe("minimax");
+    expect(flash.model).toBe("MiniMax-M3.1-Flash");
+    expect(store.settings().defaults.model).toBe("minimax/MiniMax-M3.1-Flash");
   });
 });

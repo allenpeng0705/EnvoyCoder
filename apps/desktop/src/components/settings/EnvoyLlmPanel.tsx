@@ -34,6 +34,10 @@ export function EnvoyLlmPanel(props: { agents: AgentActions }): JSX.Element {
   const [clearKey, setClearKey] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | undefined>(undefined);
+  const [suggestions, setSuggestions] = useState<
+    readonly { id: string; provider: string; model: string; label: string }[]
+  >([]);
+  const listId = "envoy-llm-model-suggestions";
 
   useEffect(() => {
     let cancelled = false;
@@ -48,6 +52,7 @@ export function EnvoyLlmPanel(props: { agents: AgentActions }): JSX.Element {
       setApiKeySet(result.apiKeySet);
       setApiKey("");
       setClearKey(false);
+      setSuggestions(result.options);
     });
     return () => {
       cancelled = true;
@@ -75,6 +80,7 @@ export function EnvoyLlmPanel(props: { agents: AgentActions }): JSX.Element {
     setApiKeySet(result.apiKeySet);
     setApiKey("");
     setClearKey(false);
+    setSuggestions(result.options);
     setNotice(t("settings.agents.envoyLlm.saved"));
   };
 
@@ -100,9 +106,15 @@ export function EnvoyLlmPanel(props: { agents: AgentActions }): JSX.Element {
           type="text"
           className="input"
           value={model}
+          list={listId}
           placeholder={t("settings.agents.envoyLlm.model.placeholder")}
           onChange={(event) => setModel(event.target.value)}
         />
+        <datalist id={listId}>
+          {suggestions.map((option) => (
+            <option key={option.id} value={modelField(option.provider, option.model)} />
+          ))}
+        </datalist>
         <span className="setting__detail">{t("settings.agents.envoyLlm.model.detail")}</span>
       </label>
 

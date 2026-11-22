@@ -1492,6 +1492,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get composerModelHint => 'fornitore/modello';
 
   @override
+  String get composerModelCustom => 'Custom…';
+
+  @override
   String get composerThinkingSheet => 'Ragionamento';
 
   @override

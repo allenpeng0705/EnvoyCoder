@@ -3,13 +3,12 @@ import { describe, expect, it } from "vitest";
 import { setPolicyCallParams } from "../src/daemon/acp/session-policy.js";
 
 describe("setPolicyCallParams", () => {
-  it("sends a domain preset alone, then autoRun when both are set", () => {
+  it("co-sends domain preset and autoRun in one call", () => {
     expect(setPolicyCallParams("s1", { preset: "mobile" })).toEqual([
       { sessionId: "s1", preset: "mobile" },
     ]);
     expect(setPolicyCallParams("s1", { preset: "webdev", autoRun: "off" })).toEqual([
-      { sessionId: "s1", preset: "webdev" },
-      { sessionId: "s1", autoRun: "off" },
+      { sessionId: "s1", preset: "webdev", autoRun: "off" },
     ]);
   });
 

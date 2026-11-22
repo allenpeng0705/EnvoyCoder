@@ -48,7 +48,7 @@ import {
 } from "@envoydev/protocol";
 import type { CoderPaths } from "@envoydev/host-bridge";
 import { projectIdFor, resolveTaskDefaults, taskIdFor } from "@envoydev/task-model";
-import { envoyLlmStoredModelId } from "./envoy-llm.js";
+import { envoyLlmStoredModelId, isEnvoyLlmModelLeak } from "./envoy-llm.js";
 import { StateFiles, type FileNotes } from "./state-file.js";
 
 /** What a mutation reports, so a listener can refetch exactly one list. */
@@ -817,18 +817,16 @@ export class CoderStore {
   /**
    * Clear Envoy Harness LLM model ids that were stored on other agents before
    * harness-aware defaults (DeepSeek was accepting any `provider/model` shape).
+   *
+   * Covers app settings, project defaults, and tasks. Safe to call after
+   * `setEnvoyLlm` as well as on store open.
    */
-  private async scrubLeakedEnvoyModel(): Promise<void> {
+  async scrubLeakedEnvoyModel(): Promise<void> {
     const envoyModel = envoyLlmStoredModelId(this.paths);
     if (envoyModel === undefined) return;
-    // Include the pre-normalize OpenAI-shaped id: MiniMax was often saved as
-    // `openai/MiniMax-M3` while the LLM file normalizes to `minimax/MiniMax-M3`.
-    const slash = envoyModel.indexOf("/");
-    const leaf = slash > 0 ? envoyModel.slice(slash + 1) : envoyModel;
-    const aliases = new Set<string>([envoyModel, `openai/${leaf}`]);
 
     const isLeaked = (model: string | undefined): boolean =>
-      model !== undefined && model !== "" && aliases.has(model);
+      isEnvoyLlmModelLeak(model, envoyModel);
 
     let settingsDirty = false;
     const appHarness = this.settingsState.defaults.harness ?? "envoy-harness";
@@ -841,6 +839,22 @@ export class CoderStore {
       settingsDirty = true;
     }
 
+    const touchedProjects: string[] = [];
+    this.projectsState = this.projectsState.map((project) => {
+      const defaults = project.defaults;
+      if (defaults === undefined || !isLeaked(defaults.model)) return project;
+      // Keep the model only when this project is pinned to Envoy Harness — that is the
+      // agent the Envoy LLM id belongs to. No harness pin, or any other agent, drops it.
+      if (defaults.harness === "envoy-harness") return project;
+      const { model: _drop, ...restDefaults } = defaults;
+      touchedProjects.push(project.id);
+      if (Object.keys(restDefaults).length === 0) {
+        const { defaults: _gone, ...rest } = project;
+        return rest;
+      }
+      return { ...project, defaults: restDefaults };
+    });
+
     const touched: string[] = [];
     this.tasksState = this.tasksState.map((task) => {
       if (task.harness === "envoy-harness") return task;
@@ -851,6 +865,7 @@ export class CoderStore {
     });
 
     if (settingsDirty) await this.persistSettings();
+    if (touchedProjects.length > 0) await this.persistProjects(touchedProjects);
     if (touched.length > 0) await this.persistTasks(touched);
   }
 

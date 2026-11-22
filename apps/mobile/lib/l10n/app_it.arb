@@ -398,6 +398,7 @@
   "composerModelSheet": "Modello",
   "composerModelTooltip": "Quale modello usa l'agente per questa attività",
   "composerModelHint": "fornitore/modello",
+  "composerModelCustom": "Custom…",
   "composerThinkingSheet": "Ragionamento",
   "composerThinkingTooltip": "Quanto l'agente ragiona prima di rispondere",
   "taskUntitled": "Attività senza titolo",

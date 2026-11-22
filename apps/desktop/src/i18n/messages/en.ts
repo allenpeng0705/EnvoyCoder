@@ -384,12 +384,13 @@ export const en = {
   "task.composer.workingPeek.aria": "What the agent is working on",
   "task.posture.aria": "Autonomy posture for this task",
   "task.composer.work.label": "Work",
-  "task.composer.hint.work": "Agent does the work. Plan only looks and proposes.",
+  "task.composer.hint.work":
+    "Agent does the work. Plan only looks and proposes — phone or browser tools stay available if Tools is on.",
   "task.composer.work.agent": "Agent",
   "task.composer.work.plan": "Plan",
   "task.composer.domain.label": "Tools",
   "task.composer.hint.domain":
-    "Unlock phone & simulator tools, or browser tools, for Envoy Harness on this task",
+    "Unlock phone & simulator tools, or browser tools, for Envoy Harness. Works with Plan: those tools stay available while proposing.",
   "task.composer.domain.off": "Off",
   "task.composer.domain.mobile": "Phone & simulator",
   "task.composer.domain.webdev": "Browser",
@@ -431,6 +432,8 @@ export const en = {
   "task.composer.model.agentDefault": "The agent's own default",
   "task.composer.model.placeholder": "provider/model",
   "task.composer.model.placeholderBare": "model id",
+  "task.composer.model.custom": "Custom…",
+  "task.composer.model.backToList": "Back to list",
   // Why the control is off. Three facts, three sentences — folding them together is how a user
   // concludes an agent has no models when it has some we cannot reach.
   "task.composer.model.none": "{agent} does not take a model.",
@@ -1050,8 +1053,8 @@ export const en = {
     "Envoy Harness uses this. Other agents keep their own sign-in. The key stays on this computer.",
   "settings.agents.envoyLlm.provider": "Provider",
   "settings.agents.envoyLlm.model": "Model",
-  "settings.agents.envoyLlm.model.placeholder": "MiniMax-M3",
-  "settings.agents.envoyLlm.model.detail": "The model id from your provider, for example MiniMax-M3.",
+  "settings.agents.envoyLlm.model.placeholder": "MiniMax-M3.1-Flash",
+  "settings.agents.envoyLlm.model.detail": "The model id from your provider, for example MiniMax-M3.1-Flash.",
   "settings.agents.envoyLlm.baseUrl": "Base URL",
   "settings.agents.envoyLlm.baseUrl.placeholder": "Optional — LiteLLM or a proxy",
   "settings.agents.envoyLlm.baseUrl.detail":
@@ -1295,6 +1298,8 @@ export const en = {
   "settings.agent.fact.obtained.npx": "Fetched from npm on the first run ({package})",
   "settings.agent.fact.obtained.path": "Installed at {path}",
   "settings.agent.fact.runs": "Runs as",
+  "settings.agent.fact.runtime": "Runtime",
+  "settings.agent.fact.runtime.value": "{version} · pin {commit}",
   "settings.agent.fact.asksBefore": "Asks before acting",
   "settings.agent.fact.canBeStopped": "Can be stopped",
   "settings.agent.fact.yes": "Yes",

@@ -2010,6 +2010,10 @@
   "@composerModelHint": {
     "description": "composermodelhint — Reused from desktop task.composer.model.placeholder"
   },
+  "composerModelCustom": "Custom…",
+  "@composerModelCustom": {
+    "description": "composermodelcustom — Type a model id not in the curated/live list"
+  },
   "composerThinkingSheet": "Thinking",
   "@composerThinkingSheet": {
     "description": "composerthinkingsheet — Reused from desktop task.composer.thinking.label"
@@ -2082,7 +2086,7 @@
   "@composerDomainSheet": {
     "description": "Bottom sheet title for Mobile / Web tool loop"
   },
-  "composerDomainTooltip": "Unlock phone & simulator tools, or browser tools, for Envoy Harness",
+  "composerDomainTooltip": "Unlock phone & simulator tools, or browser tools, for Envoy Harness. Works with Plan.",
   "@composerDomainTooltip": {
     "description": "Tooltip for domain tools chip"
   },
