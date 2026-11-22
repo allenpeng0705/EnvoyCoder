@@ -207,6 +207,10 @@ export interface TaskPaneProps {
     id: "fast_mode" | "plan_mode",
     value: boolean,
   ) => WriteFailure | Promise<WriteFailure>;
+  /** Envoy Harness Mobile / Web tools. `""` is Off. */
+  onChooseDomainPreset?: (
+    preset: "" | "mobile" | "webdev",
+  ) => WriteFailure | Promise<WriteFailure>;
   /** Move this task to another folder. Applies to the next run — the agent keeps the one it started in. */
   onChangeFolder?: (path: string) => void | Promise<void>;
   /**
@@ -1513,6 +1517,14 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
               harness={task.harness}
               fastMode={task.fastMode}
               planMode={task.planMode === true || task.agentModeId === "plan"}
+              domainPreset={task.domainPreset}
+              onChooseDomainPreset={
+                props.onChooseDomainPreset === undefined
+                  ? undefined
+                  : (preset) => {
+                      void props.onChooseDomainPreset?.(preset);
+                    }
+              }
               onToggleFeature={(id, value) => {
                 void props.onToggleFeature?.(id, value);
               }}

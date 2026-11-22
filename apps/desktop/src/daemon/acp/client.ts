@@ -56,6 +56,7 @@ import {
 } from "./protocol.js";
 import { sessionPromptAttempts } from "./prompt-attempts.js";
 import { HarnessDialect } from "./harness-dialect.js";
+import { setPolicyCallParams } from "./session-policy.js";
 
 // The shapes themselves live in `./protocol.ts` — see its header for why the seam is there — and are
 // re-exported so that the module a caller has always reached for stays this one.
@@ -596,16 +597,10 @@ export class AcpClient {
 
   private async setPolicy(policy: AcpSessionPolicy): Promise<void> {
     const sessionId = this.requireSession();
-    await this.request(
-      "session/set_policy",
-      {
-        sessionId,
-        ...(policy.sandbox !== undefined ? { sandbox: policy.sandbox } : {}),
-        ...(policy.approval !== undefined ? { approval: policy.approval } : {}),
-        ...(policy.autoRun !== undefined ? { autoRun: policy.autoRun } : {}),
-      },
-      this.options.handshakeTimeoutMs ?? 30_000,
-    );
+    const timeout = this.options.handshakeTimeoutMs ?? 30_000;
+    for (const params of setPolicyCallParams(sessionId, policy)) {
+      await this.request("session/set_policy", params, timeout);
+    }
   }
 
   /**

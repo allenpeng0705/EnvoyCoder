@@ -2664,6 +2664,36 @@ abstract class AppLocalizations {
   /// **'Autonomy'**
   String get composerAutonomySheet;
 
+  /// Envoy Harness domain tools chip — Off
+  ///
+  /// In en, this message translates to:
+  /// **'Tools off'**
+  String get composerDomainOff;
+
+  /// Envoy Harness domain tools chip — Mobile
+  ///
+  /// In en, this message translates to:
+  /// **'Phone & simulator'**
+  String get composerDomainMobile;
+
+  /// Envoy Harness domain tools chip — Web
+  ///
+  /// In en, this message translates to:
+  /// **'Browser'**
+  String get composerDomainWebdev;
+
+  /// Bottom sheet title for Mobile / Web tool loop
+  ///
+  /// In en, this message translates to:
+  /// **'Tools'**
+  String get composerDomainSheet;
+
+  /// Tooltip for domain tools chip
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock phone & simulator tools, or browser tools, for Envoy Harness'**
+  String get composerDomainTooltip;
+
   /// composerautonomytooltip — Autonomy chip hint
   ///
   /// In en, this message translates to:

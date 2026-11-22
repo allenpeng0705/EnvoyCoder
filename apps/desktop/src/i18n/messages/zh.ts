@@ -326,6 +326,15 @@ export const zh: Catalogue = {
   "task.composer.hint.work": "智能体干活。计划只查看并提出方案。",
   "task.composer.work.agent": "智能体",
   "task.composer.work.plan": "计划",
+  "task.composer.domain.label": "工具",
+  "task.composer.hint.domain": "为该任务的 Envoy Harness 解锁手机/模拟器工具或浏览器工具",
+  "task.composer.domain.off": "关闭",
+  "task.composer.domain.mobile": "手机与模拟器",
+  "task.composer.domain.webdev": "浏览器",
+  "task.composer.domain.doctor.webdev":
+    "Browser tools need Playwright and Chromium on this machine (`npx playwright install chromium`).",
+  "task.composer.domain.doctor.mobile":
+    "Phone & simulator tools need Xcode simctl and/or Android adb on PATH.",
   "task.planReview.implement": "按计划实现",
   "task.planReview.revise": "继续规划",
   "approval.question.planReview": "按此计划实现吗？",

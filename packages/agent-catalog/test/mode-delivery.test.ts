@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest"
 
 import {
   collaborationModeToSet,
+  envoyDomainPresetPolicy,
   envoyPermissionPolicy,
+  isEnvoyDomainPresetId,
   mapRetiredEnvoyMode,
   modeLaunchEnv,
   permissionModes,
@@ -72,5 +74,16 @@ describe("permission levels", () => {
     })
     expect(envoyPermissionPolicy("envoy-harness", "plan")).toBeUndefined()
     expect(envoyPermissionPolicy("deepseek-harness", "read-only")).toBeUndefined()
+  })
+
+  it("names Mobile / Web presets only for envoy-harness", () => {
+    expect(isEnvoyDomainPresetId("mobile")).toBe(true)
+    expect(isEnvoyDomainPresetId("webdev")).toBe(true)
+    expect(isEnvoyDomainPresetId("safe")).toBe(false)
+    expect(envoyDomainPresetPolicy("envoy-harness", "mobile")).toEqual({ preset: "mobile" })
+    expect(envoyDomainPresetPolicy("envoy-harness", "webdev")).toEqual({ preset: "webdev" })
+    expect(envoyDomainPresetPolicy("envoy-harness", undefined)).toBeUndefined()
+    expect(envoyDomainPresetPolicy("envoy-harness", "safe")).toBeUndefined()
+    expect(envoyDomainPresetPolicy("deepseek-harness", "mobile")).toBeUndefined()
   })
 })

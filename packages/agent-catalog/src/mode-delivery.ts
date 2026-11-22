@@ -142,3 +142,29 @@ export function envoyPermissionPolicy(
   }
   return { sandbox: modeId, autoRun: "safe-only" }
 }
+
+/** Domain tool loops Envoy Harness unlocks via a named `session/set_policy` preset. */
+export const ENVOY_DOMAIN_PRESET_IDS = ["mobile", "webdev"] as const
+
+export type EnvoyDomainPresetId = (typeof ENVOY_DOMAIN_PRESET_IDS)[number]
+
+export function isEnvoyDomainPresetId(id: string): id is EnvoyDomainPresetId {
+  return (ENVOY_DOMAIN_PRESET_IDS as readonly string[]).includes(id)
+}
+
+/**
+ * Named `session/set_policy { preset }` for Mobile / Web tool loops.
+ *
+ * Only `envoy-harness` accepts these. Full access already unlocks `device_*` / `browser_*` via
+ * `danger-full-access`, so callers skip the domain preset in that case (a preset would also reset
+ * the sandbox to `workspace-write`).
+ */
+export function envoyDomainPresetPolicy(
+  harness: HarnessId,
+  domain: string | undefined,
+): { preset: EnvoyDomainPresetId } | undefined {
+  if (harness !== "envoy-harness" || domain === undefined || !isEnvoyDomainPresetId(domain)) {
+    return undefined
+  }
+  return { preset: domain }
+}

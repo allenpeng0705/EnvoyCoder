@@ -1542,6 +1542,22 @@ class AppLocalizationsDe extends AppLocalizations {
   String get composerAutonomySheet => 'Autonomie';
 
   @override
+  String get composerDomainOff => 'Werkzeuge aus';
+
+  @override
+  String get composerDomainMobile => 'Telefon & Simulator';
+
+  @override
+  String get composerDomainWebdev => 'Browser';
+
+  @override
+  String get composerDomainSheet => 'Werkzeuge';
+
+  @override
+  String get composerDomainTooltip =>
+      'Telefon-/Simulator- oder Browser-Tools für Envoy Harness freischalten';
+
+  @override
   String get composerAutonomyTooltip =>
       'Wie oft dieser Agent fragt — Nur lesen, Standard oder Voller Zugriff';
 

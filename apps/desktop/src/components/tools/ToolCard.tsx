@@ -16,8 +16,11 @@ import {
   type ToolBucket,
 } from "../../state/tool-buckets.js";
 import type { ToolEntry } from "../../state/transcript.js";
+import { imagesFromToolOutput, textFromToolOutput } from "./tool-output.js";
 
 function summarize(value: unknown, limit = 400): string {
+  const fromTool = textFromToolOutput(value, limit);
+  if (fromTool !== undefined) return fromTool;
   let text: string;
   if (typeof value === "string") text = value;
   else {
@@ -242,17 +245,22 @@ export function ToolCard(props: {
     return miniDiffLines(oldText, newText);
   }, [bucket, entry.input]);
   const otherHeadline = bucket === "other" ? otherToolHeadline(entry.input) : undefined;
+  const toolImages = imagesFromToolOutput(entry.output);
   const excerpt =
     bucket === "searched"
       ? excerptFromOutput(entry.output)
       : bucket === "ran"
         ? excerptFromOutput(entry.output, 320)
-        : undefined;
+        : toolImages.length > 0
+          ? textFromToolOutput(entry.output, 240)
+          : undefined;
 
   const detailBlocks: string[] = [];
   if (excerpt) detailBlocks.push(excerpt);
   if (bucket === "other" && entry.input !== undefined) detailBlocks.push(summarize(entry.input));
-  if (bucket === "other" && entry.output !== undefined) detailBlocks.push(summarize(entry.output));
+  if (bucket === "other" && entry.output !== undefined && toolImages.length === 0) {
+    detailBlocks.push(summarize(entry.output));
+  }
   if (bucket === "edited" && !editSummary && !path && entry.input !== undefined) {
     detailBlocks.push(summarize(entry.input));
   }
@@ -333,6 +341,18 @@ export function ToolCard(props: {
             </span>
           ))}
         </pre>
+      ) : null}
+      {toolImages.length > 0 ? (
+        <div className="row__tool-images" data-testid="tool-card-images">
+          {toolImages.map((image, index) => (
+            <img
+              key={`${image.mimeType}-${index}`}
+              className="row__tool-image"
+              alt=""
+              src={`data:${image.mimeType};base64,${image.data}`}
+            />
+          ))}
+        </div>
       ) : null}
       {detailBlocks.length > 0 ? (
         <details ref={detailsRef} className="row__tool-details">

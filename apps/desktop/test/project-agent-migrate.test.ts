@@ -40,6 +40,45 @@ describe("harnessSwitchPatch", () => {
     expect(patch.harness).toBe("deepseek-harness");
   });
 
+  it("clears a Mobile / Web domain preset when leaving envoy-harness", () => {
+    const patch = harnessSwitchPatch(
+      {
+        agentModeId: undefined,
+        model: undefined,
+        thinkingLevel: undefined,
+        domainPreset: "mobile",
+      },
+      "deepseek-harness",
+    );
+    expect(patch.clearDomainPreset).toBe(true);
+    const kept = harnessSwitchPatch(
+      {
+        agentModeId: undefined,
+        model: undefined,
+        thinkingLevel: undefined,
+        domainPreset: "webdev",
+      },
+      "envoy-harness",
+    );
+    expect(kept.clearDomainPreset).toBe(false);
+    const applied = applyHarnessSwitch(
+      {
+        id: "t",
+        projectId: "p",
+        cwd: "/tmp",
+        title: "x",
+        harness: "envoy-harness",
+        domainPreset: "mobile",
+        status: "idle",
+        createdAt: "a",
+        updatedAt: "a",
+      },
+      patch,
+      "b",
+    );
+    expect(applied.domainPreset).toBeUndefined();
+  });
+
   it("does not carry Envoy LLM MiniMax onto DeepSeek", () => {
     const patch = harnessSwitchPatch(
       { agentModeId: undefined, model: "openai/MiniMax-M3", thinkingLevel: undefined },

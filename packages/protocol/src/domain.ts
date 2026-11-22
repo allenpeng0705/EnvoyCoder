@@ -526,6 +526,12 @@ export interface Task {
    */
   planMode?: boolean;
   /**
+   * Envoy Harness domain tool loop: `mobile` (simulators / `device_*`) or `webdev` (Playwright /
+   * `browser_*`). Sent as `session/set_policy { preset }`. Absent means Off — ordinary sandbox
+   * only. Cleared when the task leaves `envoy-harness`.
+   */
+  domainPreset?: "mobile" | "webdev";
+  /**
    * Legacy: formerly skipped the pre-send plan chooser. Auto plan-first no longer asks, so this
    * flag is unused; kept optional so older task files still load.
    */
@@ -1749,6 +1755,8 @@ export const RPC_METHODS = [
   "coder.tailRun",
   "coder.listHarnesses",
   "coder.probeHarness",
+  /** Host-tool readiness for Envoy Harness Mobile / Web loops (simctl/adb / Playwright). */
+  "coder.domainDoctor",
   /**
    * The agents a **user** declared, each with what a probe found on this machine.
    *

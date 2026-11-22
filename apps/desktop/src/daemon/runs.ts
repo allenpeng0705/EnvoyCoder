@@ -71,6 +71,7 @@ import {
 // block was already being edited.
 import {
   askingControl,
+  envoyDomainPresetPolicy,
   envoyPermissionPolicy,
   featureSessionConfigs,
   harnessDefinition,
@@ -550,12 +551,28 @@ export class RunManager {
      * lacks the method: the setting is left alone, and Safety names that the switch does not reach it.
      * Inventing `safe-only` here would either break agents that reject `session/set_policy`, or pretend
      * EnvoyDev enforced a gate it never sent.
+     *
+     * **Domain preset (Mobile / Web):** when the task stores `domainPreset` and Full access is *not*
+     * the permission level, send `{ preset }` so envoy-harness unlocks `device_*` / `browser_*` and
+     * expands writable roots. Full access already unlocks those tools via `danger-full-access`; a
+     * named preset would also reset the sandbox to `workspace-write`, so it is skipped then.
+     * Settings Asking Off still travels as `autoRun: "off"` beside the preset (AcpClient follows up).
      */
-    const sessionPolicy =
+    const domainPolicy =
+      shipped && agentModeId !== "danger-full-access"
+        ? envoyDomainPresetPolicy(shipped, task.domainPreset)
+        : undefined;
+    const basePolicy: AcpSessionPolicy | undefined =
       permissionPolicy ??
       (shipped
         ? resolveApprovalPolicy(shipped, this.settings().requireApprovalForDestructive)
         : undefined);
+    const sessionPolicy: AcpSessionPolicy | undefined = domainPolicy
+      ? {
+          preset: domainPolicy.preset,
+          ...(basePolicy?.autoRun !== undefined ? { autoRun: basePolicy.autoRun } : {}),
+        }
+      : basePolicy;
     const launch =
       shipped && this.deps.resolveLaunch
         ? this.deps.resolveLaunch({

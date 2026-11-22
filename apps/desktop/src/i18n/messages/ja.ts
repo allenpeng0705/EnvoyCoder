@@ -328,6 +328,15 @@ export const ja: Catalogue = {
   "task.composer.hint.work": "エージェントが作業します。プランは調べて提案するだけです。",
   "task.composer.work.agent": "エージェント",
   "task.composer.work.plan": "プラン",
+  "task.composer.domain.label": "ツール",
+  "task.composer.hint.domain": "このタスクの Envoy Harness で電話・シミュレーターまたはブラウザツールを有効にする",
+  "task.composer.domain.off": "オフ",
+  "task.composer.domain.mobile": "電話とシミュレーター",
+  "task.composer.domain.webdev": "ブラウザ",
+  "task.composer.domain.doctor.webdev":
+    "Browser tools need Playwright and Chromium on this machine (`npx playwright install chromium`).",
+  "task.composer.domain.doctor.mobile":
+    "Phone & simulator tools need Xcode simctl and/or Android adb on PATH.",
   "task.planReview.implement": "計画どおり実装",
   "task.planReview.revise": "計画を続ける",
   "approval.question.planReview": "この計画で実装しますか？",

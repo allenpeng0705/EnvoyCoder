@@ -182,17 +182,32 @@ export interface AcpAgentInfo {
 export type AcpAutoRunPolicy = "always-confirm" | "safe-only" | "off";
 
 /**
+ * Named permission presets `session/set_policy` accepts on envoy-harness.
+ *
+ * `mobile` / `webdev` unlock `device_*` / `browser_*` and expand writable roots
+ * (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts` `parseSetPolicyParams`).
+ * `safe` / `ask-all` / `approve-all` are the harness's general presets; EnvoyDev's composer
+ * does not offer them yet — they exist so a value from the peer is not stripped.
+ */
+export type AcpPermissionPreset = "safe" | "ask-all" | "approve-all" | "mobile" | "webdev";
+
+/**
  * What `session/set_policy` may carry.
  *
  * `autoRun` alone is the settings switch ("ask before a command or a change"). `sandbox` and
  * `autoRun` together are a permission level the user picked — Read only and Workspace change ask
  * only then (`safe-only`); Full access does not ask (`off`). `approval` is not sent: the harness
  * setter that receives it replaces the handler Allow is answered on.
+ *
+ * `preset` is the named unlock for Mobile / Web tool loops. On envoy-harness a preset in the
+ * same request wins and applies its own sandbox / autoRun / roots; a follow-up `autoRun`-only
+ * update is how Settings "Ask before risky steps" Off still lands after a domain preset.
  */
 export interface AcpSessionPolicy {
   sandbox?: "read-only" | "workspace-write" | "danger-full-access";
   approval?: "unless-trusted" | "on-request" | "granular" | "never";
   autoRun?: AcpAutoRunPolicy;
+  preset?: AcpPermissionPreset;
 }
 
 /** A JSON-RPC failure, with the protocol's own code preserved. */

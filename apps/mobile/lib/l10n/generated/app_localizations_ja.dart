@@ -1484,6 +1484,22 @@ class AppLocalizationsJa extends AppLocalizations {
   String get composerAutonomySheet => '自律性';
 
   @override
+  String get composerDomainOff => 'ツールオフ';
+
+  @override
+  String get composerDomainMobile => '電話とシミュレーター';
+
+  @override
+  String get composerDomainWebdev => 'ブラウザ';
+
+  @override
+  String get composerDomainSheet => 'ツール';
+
+  @override
+  String get composerDomainTooltip =>
+      'Envoy Harness の電話・シミュレーターまたはブラウザツールを有効にする';
+
+  @override
   String get composerAutonomyTooltip =>
       'このエージェントが確認する頻度 — 読み取り専用、デフォルト、またはフルアクセス';
 

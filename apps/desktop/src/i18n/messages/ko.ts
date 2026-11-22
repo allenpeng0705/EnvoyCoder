@@ -328,6 +328,15 @@ export const ko: Catalogue = {
   "task.composer.hint.work": "에이전트가 작업합니다. 계획은 살펴보고 제안만 합니다.",
   "task.composer.work.agent": "에이전트",
   "task.composer.work.plan": "계획",
+  "task.composer.domain.label": "도구",
+  "task.composer.hint.domain": "이 작업의 Envoy Harness용 폰·시뮬레이터 또는 브라우저 도구 잠금 해제",
+  "task.composer.domain.off": "끔",
+  "task.composer.domain.mobile": "폰 및 시뮬레이터",
+  "task.composer.domain.webdev": "브라우저",
+  "task.composer.domain.doctor.webdev":
+    "Browser tools need Playwright and Chromium on this machine (`npx playwright install chromium`).",
+  "task.composer.domain.doctor.mobile":
+    "Phone & simulator tools need Xcode simctl and/or Android adb on PATH.",
   "task.planReview.implement": "계획대로 구현",
   "task.planReview.revise": "계속 계획",
   "approval.question.planReview": "이 계획대로 구현할까요?",

@@ -23,6 +23,8 @@ export interface HarnessSwitchPatch {
   clearModel: boolean;
   thinkingLevel?: string;
   clearThinkingLevel: boolean;
+  /** Drop Mobile / Web domain preset when leaving envoy-harness. */
+  clearDomainPreset: boolean;
 }
 
 /**
@@ -32,10 +34,12 @@ export interface HarnessSwitchPatch {
  * filters). Applied after the previous agent's model is cleared, when the new harness can take it.
  */
 export function harnessSwitchPatch(
-  task: Pick<Task, "agentModeId" | "model" | "thinkingLevel">,
+  task: Pick<Task, "agentModeId" | "model" | "thinkingLevel" | "domainPreset">,
   nextHarness: AgentId,
   preferredModel?: string,
 ): HarnessSwitchPatch {
+  const clearDomainPreset =
+    task.domainPreset !== undefined && nextHarness !== "envoy-harness";
   if (!isHarnessId(nextHarness)) {
     // No catalogue entry to ask. A mode, model or thinking level chosen for a different agent
     // would make the next run refuse, so they are dropped.
@@ -44,6 +48,7 @@ export function harnessSwitchPatch(
       clearAgentMode: task.agentModeId !== undefined,
       clearModel: task.model !== undefined && task.model !== "",
       clearThinkingLevel: task.thinkingLevel !== undefined,
+      clearDomainPreset: task.domainPreset !== undefined,
     };
   }
   const next = harnessDefinition(nextHarness);
@@ -83,6 +88,7 @@ export function harnessSwitchPatch(
     clearModel,
     ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
     clearThinkingLevel,
+    clearDomainPreset,
   };
 }
 
@@ -96,6 +102,7 @@ export function applyHarnessSwitch(task: Task, patch: HarnessSwitchPatch, update
     thinkingLevel: patch.clearThinkingLevel
       ? undefined
       : (patch.thinkingLevel !== undefined ? patch.thinkingLevel : task.thinkingLevel),
+    domainPreset: patch.clearDomainPreset ? undefined : task.domainPreset,
     updatedAt,
   };
 }

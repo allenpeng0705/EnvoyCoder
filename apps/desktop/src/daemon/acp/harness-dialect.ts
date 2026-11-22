@@ -96,6 +96,22 @@ function chunk(kind: "agent_message_chunk" | "agent_thought_chunk", text: string
   return { sessionUpdate: kind, content: { type: "text", text } };
 }
 
+/** Vision images on a harness `tool_result` activity (screenshots). */
+function toolResultImages(
+  raw: unknown,
+): Array<{ mimeType: string; data: string }> {
+  if (!Array.isArray(raw)) return [];
+  const out: Array<{ mimeType: string; data: string }> = [];
+  for (const entry of raw) {
+    if (entry === null || typeof entry !== "object") continue;
+    const rec = entry as { mimeType?: unknown; data?: unknown };
+    if (typeof rec.mimeType !== "string" || !rec.mimeType.startsWith("image/")) continue;
+    if (typeof rec.data !== "string" || rec.data.length === 0) continue;
+    out.push({ mimeType: rec.mimeType, data: rec.data });
+  }
+  return out;
+}
+
 /**
  * Remove closed and trailing unclosed thinking blocks — the fallback path's counterpart to the
  * streaming splitter, mirroring the harness's own `stripThinking` (`strip-thinking.ts:19-25`).
@@ -241,12 +257,21 @@ export class HarnessDialect {
       const toolCallId = this.runningToolId ?? `harness-tool-${(this.toolCount += 1)}`;
       this.runningToolId = undefined;
       const preview = typeof activity.resultPreview === "string" ? activity.resultPreview : "";
+      // Vision tool results (device_screenshot / browser_screenshot) carry base64 images on the
+      // activity; the text preview alone used to drop them so the transcript never showed the PNG.
+      const images = toolResultImages(activity.images);
+      const content =
+        images.length > 0
+          ? { ...(preview !== "" ? { text: preview } : {}), images }
+          : preview !== ""
+            ? preview
+            : undefined;
       return [
         {
           sessionUpdate: "tool_call_update",
           toolCallId,
           status: activity.isError === true ? "failed" : "completed",
-          ...(preview !== "" ? { content: preview } : {}),
+          ...(content !== undefined ? { content } : {}),
         },
       ];
     }

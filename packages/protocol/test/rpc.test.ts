@@ -214,6 +214,12 @@ describe("run events", () => {
       kind: "run.commands",
       commands: [{ name: "compact", description: "Summarize the conversation", argumentHint: "[focus]" }],
     },
+    "run.plan": {
+      ...base,
+      kind: "run.plan",
+      planId: "plan-1",
+      entries: [{ id: "1", content: "Explore", status: "pending" }],
+    },
     "run.status": { ...base, kind: "run.status", status: "needs-attention", note: "waiting" },
     "run.handoff": {
       ...base,

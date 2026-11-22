@@ -697,6 +697,7 @@ export const TaskSchema = z
     thinkingLevel: z.string().min(1).optional(),
     fastMode: z.boolean().optional(),
     planMode: z.boolean().optional(),
+    domainPreset: z.enum(["mobile", "webdev"]).optional(),
     skipPlanGate: z.boolean().optional(),
     extraArgs: z.string().optional(),
     status: TaskStatusSchema,
@@ -3063,6 +3064,11 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
         fastMode: z.boolean().optional(),
         /** Codex Plan for the next run. Absent leaves the stored value alone. */
         planMode: z.boolean().optional(),
+        /**
+         * Envoy Harness Mobile / Web tool loop for the next run.
+         * `""` clears (Off). Absent leaves the stored value alone.
+         */
+        domainPreset: z.union([z.enum(["mobile", "webdev"]), z.literal("")]).optional(),
         /** Legacy unused flag; accepted so older clients do not fail `.strict()`. */
         skipPlanGate: z.boolean().optional(),
         extraArgs: z.string().optional(),
@@ -3345,6 +3351,24 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
          */
         availability: HarnessAvailabilitySchema,
         detail: z.string(),
+      })
+      .strict(),
+  },
+  /**
+   * Host-tool readiness for Envoy Harness Mobile / Web loops (simctl/adb / Playwright).
+   * Does not install anything — only reports a missing prerequisite so the window can hint.
+   */
+  "coder.domainDoctor": {
+    params: z.object({ domain: z.enum(["mobile", "webdev"]) }).strict(),
+    result: z
+      .object({
+        ok: z.boolean(),
+        messageKey: z
+          .enum([
+            "task.composer.domain.doctor.mobile",
+            "task.composer.domain.doctor.webdev",
+          ])
+          .optional(),
       })
       .strict(),
   },

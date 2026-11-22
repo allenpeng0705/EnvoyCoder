@@ -1482,6 +1482,21 @@ class AppLocalizationsKo extends AppLocalizations {
   String get composerAutonomySheet => '자율성';
 
   @override
+  String get composerDomainOff => '도구 끔';
+
+  @override
+  String get composerDomainMobile => '폰 및 시뮬레이터';
+
+  @override
+  String get composerDomainWebdev => '브라우저';
+
+  @override
+  String get composerDomainSheet => '도구';
+
+  @override
+  String get composerDomainTooltip => 'Envoy Harness용 폰·시뮬레이터 또는 브라우저 도구 잠금 해제';
+
+  @override
   String get composerAutonomyTooltip => '이 에이전트가 묻는 빈도 — 읽기 전용, 기본 또는 전체 액세스';
 
   @override

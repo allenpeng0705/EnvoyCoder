@@ -1242,6 +1242,17 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
                   ),
                 )
               }
+              onChooseDomainPreset={async (preset) =>
+                toPane(
+                  active.id,
+                  asFailure(
+                    await props.actions.updateTask({
+                      id: active.id,
+                      domainPreset: preset,
+                    }),
+                  ),
+                )
+              }
               // A refusal here is worth showing: "that is not a folder on this machine" is the one
               // thing the user has to fix before the next run can start.
               onChangeFolder={async (path) => {

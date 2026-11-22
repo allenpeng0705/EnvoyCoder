@@ -188,6 +188,13 @@ export interface ComposerControlsProps {
   fastMode?: boolean;
   /** Remembered Plan. Absent is off. */
   planMode?: boolean;
+  /**
+   * Envoy Harness Mobile / Web tool loop. Absent / undefined is Off.
+   * Only drawn when `harness === "envoy-harness"`.
+   */
+  domainPreset?: "mobile" | "webdev";
+  /** Persist Off (`""`) / Mobile / Web for this task. */
+  onChooseDomainPreset?: (preset: "" | "mobile" | "webdev") => void;
   onToggleFeature?: (id: AgentFeatureId, value: boolean) => void;
   /** Settings → Ask before risky steps (composer autonomy chip). */
   requireApproval?: boolean;
@@ -582,6 +589,37 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
                         : t("task.composer.autonomy.default")}
                   </option>
                 ))}
+              </select>
+              <span className="composer__chip-caret" aria-hidden>
+                ▾
+              </span>
+            </span>
+          ) : null}
+          {props.harness === "envoy-harness" ? (
+            <span
+              className="composer__chip has-hint"
+              data-hint={
+                props.domainPreset === "mobile"
+                  ? `${t("task.composer.hint.domain")} ${t("task.composer.domain.doctor.mobile")}`
+                  : props.domainPreset === "webdev"
+                    ? `${t("task.composer.hint.domain")} ${t("task.composer.domain.doctor.webdev")}`
+                    : t("task.composer.hint.domain")
+              }
+              data-testid="composer-domain-chip"
+            >
+              <select
+                className="composer__chip-field"
+                aria-label={t("task.composer.domain.label")}
+                value={props.domainPreset ?? ""}
+                disabled={props.onChooseDomainPreset === undefined}
+                onChange={(event) => {
+                  const next = event.target.value as "" | "mobile" | "webdev";
+                  props.onChooseDomainPreset?.(next);
+                }}
+              >
+                <option value="">{t("task.composer.domain.off")}</option>
+                <option value="mobile">{t("task.composer.domain.mobile")}</option>
+                <option value="webdev">{t("task.composer.domain.webdev")}</option>
               </select>
               <span className="composer__chip-caret" aria-hidden>
                 ▾

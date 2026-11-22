@@ -136,6 +136,10 @@ export interface UpdateTaskInput {
   clearThinkingLevel?: boolean;
   fastMode?: boolean;
   planMode?: boolean;
+  /** Envoy Harness Mobile / Web loop. */
+  domainPreset?: "mobile" | "webdev";
+  /** Drop stored domainPreset (harness switch / composer Off). */
+  clearDomainPreset?: boolean;
   skipPlanGate?: boolean;
   extraArgs?: string;
 }
@@ -561,6 +565,11 @@ export class CoderStore {
           : {}),
       ...(input.fastMode !== undefined ? { fastMode: input.fastMode } : {}),
       ...(input.planMode !== undefined ? { planMode: input.planMode } : {}),
+      ...(input.domainPreset !== undefined
+        ? { domainPreset: input.domainPreset }
+        : input.clearDomainPreset === true
+          ? { domainPreset: undefined }
+          : {}),
       ...(input.skipPlanGate !== undefined ? { skipPlanGate: input.skipPlanGate } : {}),
       ...(input.extraArgs !== undefined ? { extraArgs: input.extraArgs } : {}),
       updatedAt: this.now().toISOString(),

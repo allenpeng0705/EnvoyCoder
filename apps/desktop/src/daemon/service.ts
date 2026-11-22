@@ -93,6 +93,7 @@ import {
 } from "./envoy-decision.js";
 import { getEnvoyLlmPublic, setEnvoyLlm, envoyHarnessModels } from "./envoy-llm.js";
 import { harnessSwitchPatch } from "./task-harness-switch.js";
+import { domainDoctorHint } from "./domain-doctor.js";
 import { createFixHandlers } from "./fixes.js";
 import { createGitHandlers, measureProjectVcs, type GitDeps } from "./git.js";
 import { gitFailed, invalidBranch, runGit } from "./git-runner.js";
@@ -665,6 +666,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         thinkingLevel?: string;
         fastMode?: boolean;
         planMode?: boolean;
+        domainPreset?: "mobile" | "webdev" | "";
         skipPlanGate?: boolean;
         extraArgs?: string;
       };
@@ -712,6 +714,12 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
       let clearThinkingLevel = input.thinkingLevel === "";
       if (thinkingLevel === "") thinkingLevel = undefined;
 
+      let domainPreset: "mobile" | "webdev" | undefined =
+        input.domainPreset === "" || input.domainPreset === undefined
+          ? undefined
+          : input.domainPreset;
+      let clearDomainPreset = input.domainPreset === "";
+
       if (input.harness !== undefined) {
         await ensureRunnableAgent(deps.store, input.harness);
         const current = deps.store.findTask(input.id);
@@ -725,6 +733,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
             agentModeId: agentModeId ?? current?.agentModeId,
             model: model ?? current?.model,
             thinkingLevel: thinkingLevel ?? current?.thinkingLevel,
+            domainPreset: domainPreset ?? current?.domainPreset,
           },
           input.harness,
           preferredModel,
@@ -750,10 +759,15 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
           thinkingLevel = undefined;
           clearThinkingLevel = true;
         }
+        if (switched.clearDomainPreset && input.domainPreset === undefined) {
+          domainPreset = undefined;
+          clearDomainPreset = true;
+        }
       }
 
+      const { domainPreset: _wireDomain, ...updateRest } = input;
       const task = await deps.store.updateTask({
-        ...input,
+        ...updateRest,
         ...(cwd !== undefined ? { cwd } : {}),
         // Spread *after* `...input` on purpose: an empty `model` on the wire means "clear", so the
         // empty string must not survive into the patch and become a stored model called nothing.
@@ -765,6 +779,9 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
         // and a stored empty string would be a level called nothing.
         thinkingLevel,
         ...(clearThinkingLevel ? { clearThinkingLevel: true } : {}),
+        // `""` on the wire is Off — never store an empty domainPreset.
+        ...(domainPreset !== undefined ? { domainPreset } : {}),
+        ...(clearDomainPreset ? { clearDomainPreset: true } : {}),
       });
       if (!task) throw notFound("task", input.id);
       return { task };
@@ -996,6 +1013,16 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
             ? `Ready to run${result.binaryPath ? ` (${result.binaryPath})` : ""}.`
             : (result.reason ?? `${label} is not available on this machine.`),
       };
+    },
+
+    "coder.domainDoctor": async (params) => {
+      const { domain } = parseRpcParams("coder.domainDoctor", params) as {
+        domain: "mobile" | "webdev";
+      };
+      const hint = domainDoctorHint(domain);
+      return hint === undefined
+        ? { ok: true as const }
+        : { ok: false as const, messageKey: hint.messageKey };
     },
 
     /**

@@ -2066,6 +2066,26 @@
   "@composerAutonomySheet": {
     "description": "Autonomy preset picker sheet title"
   },
+  "composerDomainOff": "Tools off",
+  "@composerDomainOff": {
+    "description": "Envoy Harness domain tools chip — Off"
+  },
+  "composerDomainMobile": "Phone & simulator",
+  "@composerDomainMobile": {
+    "description": "Envoy Harness domain tools chip — Mobile"
+  },
+  "composerDomainWebdev": "Browser",
+  "@composerDomainWebdev": {
+    "description": "Envoy Harness domain tools chip — Web"
+  },
+  "composerDomainSheet": "Tools",
+  "@composerDomainSheet": {
+    "description": "Bottom sheet title for Mobile / Web tool loop"
+  },
+  "composerDomainTooltip": "Unlock phone & simulator tools, or browser tools, for Envoy Harness",
+  "@composerDomainTooltip": {
+    "description": "Tooltip for domain tools chip"
+  },
   "composerAutonomyTooltip": "How often this agent asks — Read only, Default, or Full access",
   "@composerAutonomyTooltip": {
     "description": "composerautonomytooltip — Autonomy chip hint"

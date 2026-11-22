@@ -387,6 +387,16 @@ export const en = {
   "task.composer.hint.work": "Agent does the work. Plan only looks and proposes.",
   "task.composer.work.agent": "Agent",
   "task.composer.work.plan": "Plan",
+  "task.composer.domain.label": "Tools",
+  "task.composer.hint.domain":
+    "Unlock phone & simulator tools, or browser tools, for Envoy Harness on this task",
+  "task.composer.domain.off": "Off",
+  "task.composer.domain.mobile": "Phone & simulator",
+  "task.composer.domain.webdev": "Browser",
+  "task.composer.domain.doctor.webdev":
+    "Browser tools need Playwright and Chromium on this machine (`npx playwright install chromium`).",
+  "task.composer.domain.doctor.mobile":
+    "Phone & simulator tools need Xcode simctl and/or Android adb on PATH.",
   // Plan-doc approval after auto plan-first (exit_plan_mode).
   "task.planReview.implement": "Implement plan",
   "task.planReview.revise": "Keep planning",

@@ -1468,6 +1468,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get composerAutonomySheet => '自主性';
 
   @override
+  String get composerDomainOff => '工具关闭';
+
+  @override
+  String get composerDomainMobile => '手机与模拟器';
+
+  @override
+  String get composerDomainWebdev => '浏览器';
+
+  @override
+  String get composerDomainSheet => '工具';
+
+  @override
+  String get composerDomainTooltip => '为 Envoy Harness 解锁手机/模拟器或浏览器工具';
+
+  @override
   String get composerAutonomyTooltip => '此智能体询问的频率 — 只读、默认或完全访问';
 
   @override

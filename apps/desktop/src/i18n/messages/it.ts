@@ -328,6 +328,15 @@ export const it: Catalogue = {
   "task.composer.hint.work": "L'agente fa il lavoro. Piano guarda soltanto e propone.",
   "task.composer.work.agent": "Agente",
   "task.composer.work.plan": "Piano",
+  "task.composer.domain.label": "Strumenti",
+  "task.composer.hint.domain": "Sblocca strumenti telefono/simulatore o browser per Envoy Harness in questa attività",
+  "task.composer.domain.off": "Disattivato",
+  "task.composer.domain.mobile": "Telefono e simulatore",
+  "task.composer.domain.webdev": "Browser",
+  "task.composer.domain.doctor.webdev":
+    "Browser tools need Playwright and Chromium on this machine (`npx playwright install chromium`).",
+  "task.composer.domain.doctor.mobile":
+    "Phone & simulator tools need Xcode simctl and/or Android adb on PATH.",
   "task.planReview.implement": "Implementa il piano",
   "task.planReview.revise": "Continua a pianificare",
   "approval.question.planReview": "Implementare questo piano?",

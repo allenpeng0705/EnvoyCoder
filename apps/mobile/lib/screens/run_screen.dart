@@ -93,6 +93,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   String? _runHarnessId;
   ComposerSelection _selection = const ComposerSelection();
   bool _planMode = false;
+  String? _domainPreset;
   List<_SlashCommand> _commands = const [];
   StreamSubscription<Map<String, dynamic>>? _eventSub;
 
@@ -133,6 +134,8 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
               thinkingLevel: raw['thinkingLevel'] as String?,
             );
             _planMode = raw['planMode'] == true || raw['agentModeId'] == 'plan';
+            final domain = raw['domainPreset'];
+            _domainPreset = domain == 'mobile' || domain == 'webdev' ? domain as String : null;
             final cwd = raw['cwd'];
             if (cwd is String && cwd.isNotEmpty) _cwd = cwd;
             break;
@@ -550,6 +553,21 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     }
   }
 
+  Future<void> _setDomainPreset(String? value) async {
+    final taskId = _taskId;
+    if (taskId == null) return;
+    final previous = _domainPreset;
+    setState(() => _domainPreset = value);
+    try {
+      await widget.client.call('coder.updateTask', {
+        'id': taskId,
+        'domainPreset': value ?? '',
+      });
+    } catch (_) {
+      if (mounted) setState(() => _domainPreset = previous);
+    }
+  }
+
   TranscriptApproval _displayApproval(TranscriptApproval approval, AppLocalizations l10n) {
     if (!isPlanReviewAsk(approval.question, approval.detail)) return approval;
     final remapped = TranscriptApproval(
@@ -600,7 +618,12 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   }
 
   Future<void> _persistSelection(ComposerSelection next) async {
-    setState(() => _selection = next);
+    final leftEnvoy =
+        _selection.harnessId == 'envoy-harness' && next.harnessId != 'envoy-harness';
+    setState(() {
+      _selection = next;
+      if (leftEnvoy) _domainPreset = null;
+    });
     final taskId = _taskId;
     if (taskId == null) return;
     try {
@@ -610,6 +633,9 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
         if (next.model != null) 'model': next.model,
         if (next.agentModeId != null) 'agentModeId': next.agentModeId,
         if (next.thinkingLevel != null) 'thinkingLevel': next.thinkingLevel ?? '',
+        // Daemon clears domainPreset on harness switch; send Off when leaving Envoy so the
+        // phone state matches even if the switch patch path is skipped.
+        if (leftEnvoy) 'domainPreset': '',
       });
     } catch (_) {
       if (!mounted) return;
@@ -1124,6 +1150,9 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                         onChanged: (next) => unawaited(_persistSelection(next)),
                         planMode: _planMode,
                         onTogglePlan: (value) => unawaited(_setPlanMode(value)),
+                        domainPreset: _domainPreset,
+                        onChooseDomainPreset: (value) =>
+                            unawaited(_setDomainPreset(value)),
                         requireApproval: _requireApproval,
                         onChooseAutonomyPreset: (preset) =>
                             unawaited(_applyAutonomyPreset(preset)),

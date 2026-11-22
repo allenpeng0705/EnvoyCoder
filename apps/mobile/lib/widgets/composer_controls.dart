@@ -79,6 +79,8 @@ class ComposerControls extends StatelessWidget {
     this.enabled = true,
     this.planMode = false,
     this.onTogglePlan,
+    this.domainPreset,
+    this.onChooseDomainPreset,
     this.requireApproval,
     this.onChooseAutonomyPreset,
   });
@@ -90,6 +92,9 @@ class ComposerControls extends StatelessWidget {
   /// Plan-first toggle (Envoy / Codex) — desktop Work/Plan parity.
   final bool planMode;
   final ValueChanged<bool>? onTogglePlan;
+  /// Envoy Harness Mobile / Web tool loop (`mobile` | `webdev`). Null is Off.
+  final String? domainPreset;
+  final ValueChanged<String?>? onChooseDomainPreset;
   /// Settings → Ask before risky steps (autonomy chip).
   final bool? requireApproval;
   /// Apply Read only / Default / Full access (Settings + optional mode).
@@ -161,6 +166,16 @@ class ComposerControls extends StatelessWidget {
           colors: colors,
           onTap: () => onTogglePlan!(!planMode),
         ),
+      if (onChooseDomainPreset != null && current != null && current.id == 'envoy-harness')
+        _ChipButton(
+          icon: Icons.build_outlined,
+          label: _domainLabel(l10n, domainPreset),
+          semanticsLabel: _domainLabel(l10n, domainPreset),
+          tooltip: l10n.composerDomainTooltip,
+          enabled: enabled,
+          colors: colors,
+          onTap: () => _pickDomain(context),
+        ),
       if (requireApproval != null)
         _ChipButton(
           icon: Icons.shield_outlined,
@@ -221,6 +236,47 @@ class ComposerControls extends StatelessWidget {
       if (o.value == level) return o.label;
     }
     return level;
+  }
+
+  String _domainLabel(AppLocalizations l10n, String? domain) {
+    if (domain == 'mobile') return l10n.composerDomainMobile;
+    if (domain == 'webdev') return l10n.composerDomainWebdev;
+    return l10n.composerDomainOff;
+  }
+
+  Future<void> _pickDomain(BuildContext context) async {
+    final l10n = context.l10n;
+    if (onChooseDomainPreset == null) return;
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            ListTile(title: Text(l10n.composerDomainSheet)),
+            ListTile(
+              title: Text(l10n.composerDomainOff),
+              trailing: domainPreset == null || domainPreset!.isEmpty
+                  ? const Icon(Icons.check)
+                  : null,
+              onTap: () => Navigator.pop(context, ''),
+            ),
+            ListTile(
+              title: Text(l10n.composerDomainMobile),
+              trailing: domainPreset == 'mobile' ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.pop(context, 'mobile'),
+            ),
+            ListTile(
+              title: Text(l10n.composerDomainWebdev),
+              trailing: domainPreset == 'webdev' ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.pop(context, 'webdev'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (chosen == null || !context.mounted) return;
+    onChooseDomainPreset!(chosen.isEmpty ? null : chosen);
   }
 
   String _autonomyLabel(

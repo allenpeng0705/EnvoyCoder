@@ -1656,6 +1656,8 @@ export class CoderStore {
       thinkingLevel?: string;
       fastMode?: boolean;
       planMode?: boolean;
+      /** Envoy Harness Mobile / Web. `""` clears (Off). */
+      domainPreset?: "" | "mobile" | "webdev";
       skipPlanGate?: boolean;
     },
   ): Promise<{ ok: true; task: Task } | Refusal> {
@@ -1663,6 +1665,30 @@ export class CoderStore {
       ok: true,
       task: (result as { task: Task }).task,
     }));
+  }
+
+  /** Host-tool readiness for Envoy Harness Mobile / Web loops. */
+  async domainDoctor(
+    domain: "mobile" | "webdev",
+  ): Promise<
+    | {
+        ok: true;
+        missing: boolean;
+        messageKey?: "task.composer.domain.doctor.mobile" | "task.composer.domain.doctor.webdev";
+      }
+    | Refusal
+  > {
+    return this.mutate("coder.domainDoctor", { domain }, (result) => {
+      const body = result as {
+        ok: boolean;
+        messageKey?: "task.composer.domain.doctor.mobile" | "task.composer.domain.doctor.webdev";
+      };
+      return {
+        ok: true as const,
+        missing: body.ok !== true,
+        ...(body.messageKey !== undefined ? { messageKey: body.messageKey } : {}),
+      };
+    });
   }
 
   async archiveTask(

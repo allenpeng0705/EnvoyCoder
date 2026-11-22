@@ -251,6 +251,17 @@ function pnpm(args, cwd) {
  * setting (and we must not rewrite its `.npmrc`), so we copy `dist/`, install
  * the npm-registry production deps into the staged tree, and vendor the one
  * workspace dependency (`@envoymesh/envoy-process`) beside them.
+ *
+ * `skills/` is copied next to `dist/` because `bundledSkillRoot()` resolves
+ * `../../skills` from `dist/skills/fs-provider.js` — the mobile / webdev
+ * playbooks shipped in the package (added to `files` in harness 13fd969+).
+ * Without that directory the ACP agent starts but never sees the bundled
+ * skills.
+ *
+ * `optionalDependencies` (playwright, node-pty, peer TUI packages) are
+ * deliberately not installed: they are large or host-specific, and the
+ * harness treats them as optional at runtime. Browser tools degrade until
+ * the user has Playwright available on the machine.
  */
 function packHarnessForInstaller(source, dest) {
   const pkgRoot = path.join(source, "packages", "envoy-harness");
@@ -268,6 +279,20 @@ function packHarnessForInstaller(source, dest) {
   cpSync(path.join(pkgRoot, "dist"), path.join(dest, "dist"), { recursive: true });
 
   const pkg = JSON.parse(readFileSync(path.join(pkgRoot, "package.json"), "utf8"));
+
+  // Bundled skills (not compiled into dist/) — required for package:envoy skill roots.
+  const skillsSrc = path.join(pkgRoot, "skills");
+  const shipsSkills = Array.isArray(pkg.files) && pkg.files.includes("skills");
+  if (shipsSkills && !existsSync(skillsSrc)) {
+    fail(
+      "Envoy Harness package.json lists skills/, but packages/envoy-harness/skills is missing. " +
+        "Mobile/webdev playbooks would be absent from the installer.",
+    );
+  }
+  if (existsSync(skillsSrc)) {
+    cpSync(skillsSrc, path.join(dest, "skills"), { recursive: true });
+  }
+
   const registryDeps = {};
   for (const [name, range] of Object.entries(pkg.dependencies ?? {})) {
     if (typeof range !== "string") continue;
