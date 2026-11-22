@@ -146,11 +146,14 @@ export function ProjectList(props: ProjectListProps): JSX.Element {
           const key = collapseKey(group.project.id);
           const isCollapsed = props.collapsed.includes(key);
           const projectJobs = (props.jobs ?? []).filter((job) => job.projectId === group.project.id);
+          const runningCount = group.rows.filter((row) => row.task.status === "running").length;
+          const working = runningCount > 0;
           return (
             <section
               key={group.project.id}
-              className="project"
+              className={working ? "project project--working" : "project"}
               data-testid={`project-${group.project.label}`}
+              {...(working ? { "data-working": "true" } : {})}
             >
               <div className="project__header-row">
                 <button
@@ -174,6 +177,13 @@ export function ProjectList(props: ProjectListProps): JSX.Element {
                     {projectMark(group.project.label)}
                   </span>
                   <span className="project__label">{group.project.label}</span>
+                  {working ? (
+                    <span
+                      className="dot dot--running project__working"
+                      aria-label={t("status.running")}
+                      title={t("status.running")}
+                    />
+                  ) : null}
                   {group.counts.needsAttention > 0 ? (
                     <span className="badge badge--warn" title={t("sidebar.project.attention")}>
                       {group.counts.needsAttention}

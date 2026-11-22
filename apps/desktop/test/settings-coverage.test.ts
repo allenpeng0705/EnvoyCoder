@@ -142,11 +142,11 @@ const READERS: Readonly<Record<string, readonly ReadSite[]>> = {
   ],
   sendWhileRunning: [
     {
-      file: "apps/desktop/src/components/TaskPane.tsx",
-      needle: "props.sendWhileRunning",
+      file: "apps/mobile/lib/screens/run_screen.dart",
+      needle: "_sendWhileRunning",
       because:
-        "the composer reads the stored default when Send fires while a turn is live, and Shift-click / " +
-        "Alt+Enter flips it for one press",
+        "mobile owns the queue/steer preference; the desktop window always queues and only steers " +
+        "via a one-shot Shift-click / Alt+Enter (polish §2)",
     },
   ],
   approvalsReviewer: [

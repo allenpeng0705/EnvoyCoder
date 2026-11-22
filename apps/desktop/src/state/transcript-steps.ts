@@ -16,7 +16,7 @@ export type StepsSegment = {
   kind: "steps";
   id: string;
   entries: readonly TranscriptEntry[];
-  /** True while this segment is the live Working… turn (summary hint; Steps stay closed until opened). */
+  /** True while this segment is the live Working… turn (summary + accent; Steps stay closed until opened). */
   live: boolean;
   counts: ToolCounts;
   thoughtCount: number;

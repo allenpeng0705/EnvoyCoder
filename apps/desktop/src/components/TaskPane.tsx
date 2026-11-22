@@ -5,8 +5,8 @@
  *
  *   1. **The header states where the work is.** Host only appears when the task is not on this
  *      machine — saying "This machine" on every local task is noise. Cwd and branch stay visible.
- *   2. **Send while running follows Settings.** `sendWhileRunning` chooses queue (default) or steer;
- *      Shift-click Send / Alt+Enter flips for one press. Stop stays cancel-only.
+ *   2. **Send while running always queues.** Shift-click Send / Alt+Enter steers for one press
+ *      (polish §2). Stop stays cancel-only. Mobile keeps its own queue/steer preference.
  *   3. **Approvals take over the composer**, not a modal. Transcript keeps history; the pending
  *      decision owns the composer chrome so it cannot scroll away (`docs/envoydev-ui-polish.md` §1).
  *   4. **Event folding lives in `state/transcript.ts`.** This file turns rows into elements and, at
@@ -110,6 +110,7 @@ import {
   type AutonomyPresetId,
 } from "../composer/autonomy-presets.js";
 import { diffStatFromChanges, type DiffStat } from "../composer/diff-stat.js";
+import { liveToolsHeadline } from "../composer/live-tool-headline.js";
 import { resolveSendWhileRunning } from "../composer/send-while-running.js";
 import {
   dictationSupported,
@@ -233,12 +234,6 @@ export interface TaskPaneProps {
    * (Read only / Default / Full access) without inventing a second policy.
    */
   requireApproval?: boolean;
-  /**
-   * Settings → Send while a turn is live. Absent means queue.
-   *
-   * Read here (not only in Settings) so the composer's primary action matches what was stored.
-   */
-  sendWhileRunning?: "queue" | "steer";
   /** Settings → Guardian reviews non-destructive permission cards. */
   approvalsReviewer?: "user" | "guardian";
   /** Apply a Codex-inspired autonomy preset (Settings Asking + optional mode). */
@@ -811,8 +806,8 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     const images = turn.images.length > 0 ? turn.images : undefined;
 
     if (running) {
-      // Follow-ups never re-open auto plan-first. Mode comes from Settings; Shift/Alt flips once.
-      const mode = resolveSendWhileRunning(props.sendWhileRunning, flip);
+      // Follow-ups never re-open auto plan-first. Desktop queues; Shift/Alt steers once.
+      const mode = resolveSendWhileRunning(flip);
       const delivered = mode === "steer" ? "steered" : "queued";
       const previousText = text;
       const previousAttachments = attachments;
@@ -1276,52 +1271,53 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                   (item): item is Extract<typeof item, { kind: "steps" }> =>
                     item.kind === "steps" && item.live,
                 );
-                const peekSource = liveSteps[liveSteps.length - 1]?.entries ?? [];
+                const liveSegment = liveSteps[liveSteps.length - 1];
+                const peekSource = liveSegment?.entries ?? [];
                 const stream = stepsLiveStreamText(peekSource);
-                const { summary, tail } = workingPeekParts(stream);
+                // One-line peek: summary only. The muted stream dump competed with
+                // the queue line and repeated what expanded Steps already holds.
+                const { summary } = workingPeekParts(stream);
+                const toolHeadline = liveToolsHeadline(peekSource, t);
+                const toolFallback =
+                  liveSegment !== undefined && stepsHasTools(liveSegment)
+                    ? toolGroupSummary(t, liveSegment.counts)
+                    : undefined;
                 return (
                   <>
-                    {summary || tail ? (
-                      <div
-                        className="composer__working-peek"
-                        role="status"
-                        data-testid="composer-working-peek"
-                        aria-label={t("task.composer.workingPeek.aria")}
+                    <div
+                      className="composer__working-peek"
+                      role="status"
+                      data-testid="composer-working-peek"
+                      aria-label={t("task.composer.workingPeek.aria")}
+                    >
+                      <p
+                        className="composer__working-peek-summary"
+                        data-testid="composer-working-peek-summary"
                       >
-                        <p
-                          className="composer__working-peek-summary"
-                          data-testid="composer-working-peek-summary"
-                        >
-                          {summary ?? t("task.steps.working")}
-                        </p>
-                        {peekSource.some((entry) => {
-                          const names =
-                            entry.kind === "tool"
-                              ? [entry.name]
-                              : entry.kind === "tools"
-                                ? entry.tools.map((tool) => tool.name)
-                                : [];
-                          return names.some((name) =>
-                            /helper|spawn|child|subagent/i.test(name),
-                          );
-                        }) ? (
-                          <span className="composer__helper-chip" data-testid="composer-helper-chip">
-                            {t("task.composer.helper")}
-                          </span>
-                        ) : null}
-                        {tail ? (
-                          <p className="composer__working-peek-text">{tail}</p>
-                        ) : null}
-                      </div>
-                    ) : null}
+                        {/* Same priority as collapsed Steps: live tools beat a stale thought line. */}
+                        {toolHeadline ?? summary ?? toolFallback ?? t("task.steps.working")}
+                      </p>
+                      {peekSource.some((entry) => {
+                        const names =
+                          entry.kind === "tool"
+                            ? [entry.name]
+                            : entry.kind === "tools"
+                              ? entry.tools.map((tool) => tool.name)
+                              : [];
+                        return names.some((name) =>
+                          /helper|spawn|child|subagent/i.test(name),
+                        );
+                      }) ? (
+                        <span className="composer__helper-chip" data-testid="composer-helper-chip">
+                          {t("task.composer.helper")}
+                        </span>
+                      ) : null}
+                    </div>
                     <p
                       className="composer__queue-status"
-                      role="status"
                       data-testid="composer-queue-status"
                     >
-                      {resolveSendWhileRunning(props.sendWhileRunning, false) === "steer"
-                        ? t("task.composer.steerStatus")
-                        : t("task.composer.queueStatus")}
+                      {t("task.composer.queueStatus")}
                     </p>
                   </>
                 );
@@ -1428,8 +1424,8 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                 type="button"
                 className={
                   dictating
-                    ? "button button--icon composer__voice composer__voice--live has-hint"
-                    : "button button--icon composer__voice has-hint"
+                    ? "button button--ghost button--icon composer__voice composer__voice--live has-hint"
+                    : "button button--ghost button--icon composer__voice has-hint"
                 }
                 data-testid="composer-voice"
                 disabled={approvalOpen || takeoverActive}
@@ -1568,8 +1564,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                 <span className="composer__diff-pill-del">−{diffStat.deletions}</span>
               </button>
             ) : null}
-            {/* Send while running follows Settings `sendWhileRunning` (default queue). Shift-click or
-                Alt+Enter flips for one press; Stop in the header stays cancel-only. */}
+            {/* Send while running always queues; Shift-click / Alt+Enter steers once. */}
             {canSend(text, attachments) ? (
               <button
                 type="button"
@@ -1580,9 +1575,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                   approvalOpen
                     ? t("task.composer.submit.blocked")
                     : running
-                      ? resolveSendWhileRunning(props.sendWhileRunning, false) === "steer"
-                        ? t("task.composer.send.steer")
-                        : t("task.composer.send.queued")
+                      ? t("task.composer.send.queued")
                       : canResume
                         ? t("task.composer.resume")
                         : t("task.composer.start")
@@ -1622,17 +1615,31 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
 
 /* ────────────────────────────── rows ────────────────────────────── */
 
-function stepsSummaryLabel(
-  t: ReturnType<typeof useT>,
-  segment: StepsSegment,
-): string {
-  if (segment.live) return t("task.steps.working");
-  const hasTools =
+function stepsHasTools(segment: StepsSegment): boolean {
+  return (
     segment.counts.edited +
       segment.counts.ran +
       segment.counts.searched +
       segment.counts.other >
-    0;
+    0
+  );
+}
+
+function stepsSummaryLabel(
+  t: ReturnType<typeof useT>,
+  segment: StepsSegment,
+): string {
+  const hasTools = stepsHasTools(segment);
+  // Collapsed live Steps still need a useful headline — generic "Working…" alone
+  // hides whether the agent is editing, running a command, or only thinking.
+  if (segment.live) {
+    const toolHeadline = liveToolsHeadline(segment.entries, t);
+    if (toolHeadline !== undefined) return toolHeadline;
+    if (hasTools) {
+      return `${t("status.running")} · ${toolGroupSummary(t, segment.counts)}`;
+    }
+    return t("task.steps.working");
+  }
   if (hasTools) return toolGroupSummary(t, segment.counts);
   if (segment.thoughtCount > 0) return t("task.thought.summary");
   return t("task.steps.summary");
@@ -1748,47 +1755,43 @@ function StepsRow(props: {
   const { segment } = props;
   const entries = coalesceStepsEntries(segment.entries);
   const live = segment.live;
-  // Live → open by default and stay open (peek while Working). Settled → closed so the
-  // hero answer stays the focus. User expand sticks after settle until the live edge flips.
-  const [userOpen, setUserOpen] = useState<boolean | undefined>(undefined);
+  // Uncontrolled <details>, closed by default (live or settled) so the transcript
+  // stays short. Live still reads as working via the summary (tool activity when
+  // known), accent border, running dot, chevron, and composer peek. Expanding is
+  // opt-in; settling folds again so a stuck-open panel does not stay in the way.
+  const detailsRef = useRef<HTMLDetailsElement | null>(null);
   const wasLiveRef = useRef(live);
   const streamRef = useRef<HTMLDivElement | null>(null);
   const streamText = live ? stepsLiveStreamText(entries) : "";
 
-  useEffect(() => {
-    if (wasLiveRef.current !== live) setUserOpen(undefined);
+  useLayoutEffect(() => {
+    if (wasLiveRef.current && !live) {
+      const node = detailsRef.current;
+      if (node) node.open = false;
+    }
     wasLiveRef.current = live;
   }, [live]);
 
   useLayoutEffect(() => {
     if (!live || !streamText) return;
+    const details = detailsRef.current;
     const el = streamRef.current;
-    if (!el) return;
+    if (!details?.open || !el) return;
     el.scrollTop = el.scrollHeight;
   }, [live, streamText]);
-
-  const open = live ? userOpen !== false : userOpen === true;
 
   return (
     <li
       className={`row row--steps${live ? " row--steps-live" : ""}`}
       data-testid="transcript-steps"
     >
-      <details
-        open={open}
-        onToggle={(event) => {
-          const next = (event.currentTarget as HTMLDetailsElement).open;
-          // While live, keep Working… open if the user collapses via summary — same as ToolsGroup.
-          if (live && !next) {
-            event.currentTarget.open = true;
-            return;
-          }
-          setUserOpen(next);
-        }}
-      >
+      <details ref={detailsRef}>
         <summary className="row__steps-summary">
-          <span className={`dot dot--${live ? "live" : "quiet"}`} aria-hidden />
-          {stepsSummaryLabel(t, segment)}
+          <span className={`dot dot--${live ? "running" : "quiet"}`} aria-hidden />
+          <span className="row__steps-summary-label">{stepsSummaryLabel(t, segment)}</span>
+          <span className="row__steps-chevron" aria-hidden>
+            ▸
+          </span>
         </summary>
         {live && streamText ? (
           <div

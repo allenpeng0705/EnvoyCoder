@@ -4493,6 +4493,12 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
              * or follow the OS. Absent from older clients; refused here if unknown rather than stored.
              */
             theme: z.enum(["light", "dark", "system"]).optional(),
+            /**
+             * Queue vs steer while a turn is live. Mobile (and other thin clients) own this
+             * preference; the desktop window always queues and only steers via a one-shot
+             * modifier. Listed here so a mobile Settings save is not refused by `.strict()`.
+             */
+            sendWhileRunning: z.enum(["queue", "steer"]).optional(),
           })
           .strict(),
       })

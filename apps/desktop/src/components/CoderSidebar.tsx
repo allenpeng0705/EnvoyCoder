@@ -664,7 +664,11 @@ function TaskRow(input: {
   };
 
   return (
-    <div className={`task-row${input.active ? " task-row--active" : ""}`}>
+    <div
+      className={`task-row${input.active ? " task-row--active" : ""}${
+        task.status === "running" ? " task-row--running" : ""
+      }`}
+    >
       {renaming ? (
         <input
           ref={renameField}

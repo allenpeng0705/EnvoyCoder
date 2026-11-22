@@ -248,6 +248,16 @@ describe("CoderSidebar", () => {
     expect(screen.queryByText("needs-attention")).toBeNull();
   });
 
+  it("marks a project as working when a task under it is running", () => {
+    renderSidebar();
+    const group = screen.getByTestId("project-envoymesh");
+    expect(group.className).toMatch(/project--working/);
+    expect(group.getAttribute("data-working")).toBe("true");
+    // Header + the running task row both carry a live "Working" dot.
+    expect(within(group).getAllByLabelText("Working").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByTestId("project-payments-api").className).not.toMatch(/project--working/);
+  });
+
   it("tells a new user what to do when there are no projects", () => {
     renderSidebar({ projects: [], tasks: [] });
     expect(screen.getByText("No projects yet")).toBeTruthy();

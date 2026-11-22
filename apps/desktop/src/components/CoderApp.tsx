@@ -1133,7 +1133,6 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               }
               explorerOpen={explorerOpen}
               onEnsureExplorer={() => setExplorerOpen(true)}
-              sendWhileRunning={state.settings.sendWhileRunning}
               approvalsReviewer={state.settings.approvalsReviewer}
               trackPills={state.tasks
                 .filter(

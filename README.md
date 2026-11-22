@@ -29,7 +29,7 @@ EnvoyDev is built on **[EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh)**
 - **Projects on the left, tasks in the middle.** A project is the folder you work in. A task is one unit of work in it — with its own branch, agent, and model. Drag the rail and explorer to resize; widths are remembered.
 - **See what the agent is doing.** A live transcript with messages, tool calls, file changes, and approval cards.
 - **Approve before risky steps.** A permission dock shows scope and risk before each tool runs.
-- **Cancel, queue, or steer.** Queue waits for the turn. Steer interrupts it. The transcript records which one happened.
+- **Cancel, queue, or steer.** Send while a turn is live queues by default; Shift-click or Alt+Enter steers once. The transcript records which one happened.
 - **Git where the work is.** Branch, fetch, pull, stash, merge — and hand a conflicted merge to an agent when you want help resolving it.
 - **Keep the daemon reachable.** App-managed by default; optionally run it as an OS service so the phone can reach a machine with no window open.
 - **Pair once, stay paired.** Codes and links last until you revoke them under This machine (or Forget on the thin client) — no calendar expiry after a restart.

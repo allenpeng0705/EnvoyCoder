@@ -5,14 +5,9 @@ import { diffStatFromChanges } from "../src/composer/diff-stat.js";
 import { guardianMayAutoAllow } from "../src/daemon/guardian.js";
 
 describe("resolveSendWhileRunning", () => {
-  it("defaults to queue", () => {
-    expect(resolveSendWhileRunning(undefined, false)).toBe("queue");
-  });
-
-  it("honours steer and flips with Shift", () => {
-    expect(resolveSendWhileRunning("steer", false)).toBe("steer");
-    expect(resolveSendWhileRunning("queue", true)).toBe("steer");
-    expect(resolveSendWhileRunning("steer", true)).toBe("queue");
+  it("queues by default and steers only when flipped", () => {
+    expect(resolveSendWhileRunning(false)).toBe("queue");
+    expect(resolveSendWhileRunning(true)).toBe("steer");
   });
 });
 

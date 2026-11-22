@@ -243,14 +243,14 @@ describe("the transcript", () => {
     const outer = steps.querySelector("details");
     expect(outer?.open).toBe(false);
     expect(within(screen.getByTestId("transcript")).getByText("The parser is wrong.")).toBeTruthy();
-    fireEvent.click(within(steps).getByText("Thought", { selector: ".row__steps-summary" }));
+    fireEvent.click(within(steps).getByText("Thought", { selector: ".row__steps-summary-label" }));
     expect(outer?.open).toBe(true);
     // Nested Thought disclosure stays closed until asked.
     fireEvent.click(within(steps).getAllByText("Thought")[1]!);
     expect(within(steps).getByText(/perhaps the parser is wrong/)).toBeTruthy();
   });
 
-  it("streams Working… as muted markdown while live Steps are open", () => {
+  it("streams Working… as muted markdown when the user expands live Steps", () => {
     renderPane(
       [
         event({
@@ -262,6 +262,8 @@ describe("the transcript", () => {
       { runLive: true },
     );
     const steps = screen.getByTestId("transcript-steps");
+    expect(steps.querySelector("details")?.open).toBe(false);
+    fireEvent.click(within(steps).getByText(/Working/, { selector: ".row__steps-summary-label" }));
     expect(steps.querySelector("details")?.open).toBe(true);
     const stream = screen.getByTestId("transcript-steps-live-stream");
     expect(stream.querySelector(".row__steps-live-stream-md")).toBeTruthy();
@@ -269,7 +271,7 @@ describe("the transcript", () => {
     expect(within(stream).getByText(/check the parser/)).toBeTruthy();
   });
 
-  it("opens live Steps by default and pins a Working peek above the composer", () => {
+  it("keeps live Steps collapsed and pins a Working peek above the composer", () => {
     renderPane(
       [
         event({
@@ -281,13 +283,40 @@ describe("the transcript", () => {
       { runLive: true },
     );
     const steps = screen.getByTestId("transcript-steps");
-    expect(steps.querySelector("details")?.open).toBe(true);
+    expect(steps.querySelector("details")?.open).toBe(false);
+    expect(within(steps).getByText(/Working/, { selector: ".row__steps-summary-label" })).toBeTruthy();
+    expect(steps.className).toMatch(/row--steps-live/);
     const peek = screen.getByTestId("composer-working-peek");
     expect(within(peek).getByTestId("composer-working-peek-summary").textContent).toMatch(
       /thinking about the parser/,
     );
-    // Short streams put the line in the status header only — no duplicate muted body.
+    // Peek is summary-only — no muted stream dump above the composer.
     expect(within(peek).queryByText(/thinking about the parser/, { selector: "p.composer__working-peek-text" })).toBeNull();
+  });
+
+  it("prefers a live tool headline over a stale thought in Steps and the peek", () => {
+    renderPane(
+      [
+        event({
+          kind: "run.thought",
+          text: "thinking about the parser",
+          messageId: "th1",
+        }),
+        event({
+          kind: "run.tool",
+          callId: "t-edit",
+          name: "apply_patch",
+          status: "running",
+          input: { path: "/repo/src/parser.ts" },
+        }),
+      ],
+      { runLive: true },
+    );
+    const steps = screen.getByTestId("transcript-steps");
+    expect(within(steps).getByText(/Editing src\/parser\.ts/, { selector: ".row__steps-summary-label" })).toBeTruthy();
+    expect(screen.getByTestId("composer-working-peek-summary").textContent).toMatch(
+      /Editing src\/parser\.ts/,
+    );
   });
 
   it("collapses Steps when the run settles", () => {
@@ -619,11 +648,29 @@ describe("the composer", () => {
     // Nothing in the field yet: no primary action is drawn at all (see the leg below), so this one types first.
     fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "and then this" } });
     const send = screen.getByRole("button", { name: "Send" });
-    expect(send.getAttribute("data-hint")).toBe("Will send when the agent finishes this reply");
+    expect(send.getAttribute("data-hint") ?? "").toMatch(/Will send when the agent finishes this reply/);
+    expect(send.getAttribute("data-hint") ?? "").toMatch(/Shift-click|Alt\+Enter/);
     // And the picker is gone: one fewer control on the row, and no unexplained vocabulary on it.
     expect(screen.queryByLabelText("How to deliver the message")).toBeNull();
     expect(screen.queryByText("Queue")).toBeNull();
     expect(screen.queryByText("Steer")).toBeNull();
+  });
+
+  it("steers once when Send is Shift-clicked while a turn is live", () => {
+    const pane = renderPane([], { runLive: true });
+    fireEvent.change(screen.getByLabelText("Message the agent"), {
+      target: { value: "change course" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }), { shiftKey: true });
+    expect(pane.onSend).toHaveBeenCalledWith("change course", "steer");
+  });
+
+  it("steers once when Alt+Enter is pressed while a turn is live", () => {
+    const pane = renderPane([], { runLive: true });
+    const field = screen.getByLabelText("Message the agent");
+    fireEvent.change(field, { target: { value: "change course from keyboard" } });
+    fireEvent.keyDown(field, { key: "Enter", altKey: true });
+    expect(pane.onSend).toHaveBeenCalledWith("change course from keyboard", "steer");
   });
 
   it("shows one queue status line while running, without repeating it in the placeholder", () => {

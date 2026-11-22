@@ -100,6 +100,15 @@ describe("the method table", () => {
       parseRpcParams("coder.updateSettings", { settings: { theme: "system" } }),
     ).toEqual({ settings: { theme: "system" } });
   });
+
+  it("accepts sendWhileRunning on coder.updateSettings — mobile Settings patches it", () => {
+    expect(
+      parseRpcParams("coder.updateSettings", { settings: { sendWhileRunning: "steer" } }),
+    ).toEqual({ settings: { sendWhileRunning: "steer" } });
+    expect(
+      parseRpcParams("coder.updateSettings", { settings: { sendWhileRunning: "queue" } }),
+    ).toEqual({ settings: { sendWhileRunning: "queue" } });
+  });
 });
 
 describe("errors on the wire", () => {

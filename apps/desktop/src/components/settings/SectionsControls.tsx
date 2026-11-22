@@ -223,29 +223,8 @@ export function TasksSection(props: SettingsSectionProps): JSX.Element {
         )}
       </SettingRow>
 
-      <SettingRow
-        title={t("settings.sendWhileRunning.title")}
-        detail={t("settings.sendWhileRunning.detail")}
-        developerNote="settings.sendWhileRunning"
-      >
-        {(write) => (
-          <select
-            className="select"
-            value={settings.sendWhileRunning ?? "queue"}
-            aria-label={t("settings.sendWhileRunning.title")}
-            onChange={(event) =>
-              write(
-                props.onUpdate({
-                  sendWhileRunning: event.target.value as "queue" | "steer",
-                }),
-              )
-            }
-          >
-            <option value="queue">{t("settings.sendWhileRunning.queue")}</option>
-            <option value="steer">{t("settings.sendWhileRunning.steer")}</option>
-          </select>
-        )}
-      </SettingRow>
+      {/* sendWhileRunning stays in the stored schema for mobile / other clients.
+          Desktop always queues (Shift-click / Alt+Enter steers once) — polish §2. */}
 
       <AgentProfilesRow
         profiles={settings.agentProfiles ?? []}

@@ -11,6 +11,7 @@ import { useLayoutEffect, useMemo, useRef, type ReactElement } from "react";
 
 import { useT } from "../../i18n/context.js";
 import {
+  commandFromToolInput,
   pathFromToolInput,
   toolBucket,
   type ToolBucket,
@@ -31,18 +32,6 @@ function summarize(value: unknown, limit = 400): string {
     }
   }
   return text.length > limit ? `${text.slice(0, limit)}\n…` : text;
-}
-
-function commandFromInput(input: unknown): string | undefined {
-  if (input === null || typeof input !== "object") {
-    return typeof input === "string" ? input : undefined;
-  }
-  const record = input as Record<string, unknown>;
-  for (const key of ["command", "cmd", "script", "code"]) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim() !== "") return value.trim();
-  }
-  return undefined;
 }
 
 function excerptFromOutput(output: unknown, limit = 240): string | undefined {
@@ -237,7 +226,7 @@ export function ToolCard(props: {
 
   const bucket = toolBucket(entry.name);
   const path = pathFromToolInput(entry.input);
-  const command = bucket === "ran" ? commandFromInput(entry.input) : undefined;
+  const command = bucket === "ran" ? commandFromToolInput(entry.input) : undefined;
   const editSummary = bucket === "edited" ? editDiffSummary(entry.input) : undefined;
   const preview = useMemo(() => {
     if (bucket !== "edited") return [];

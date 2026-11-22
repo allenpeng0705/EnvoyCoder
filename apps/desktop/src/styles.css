@@ -1114,8 +1114,17 @@ button.project__agent:hover {
   background: var(--dot-quiet);
 }
 
-.dot--running {
+.dot--running,
+.dot--live {
   background: var(--live);
+}
+
+/* One pulse in the rail: the project-header Working dot. Task-row / Steps /
+   tool dots stay solid so a single run does not light up the whole UI. */
+.project__working {
+  margin-inline-start: 2px;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--live) 50%, transparent);
+  animation: dot-running-pulse 1.6s ease-in-out infinite;
 }
 
 .dot--queued {
@@ -2363,11 +2372,12 @@ button.explorer__change:hover {
 
 .composer__working-peek {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0 0 var(--space-2);
-  padding: var(--space-1) var(--space-1);
-  max-height: 5.5rem;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin: 0 0 var(--space-1);
+  padding: 0 var(--space-1);
   overflow: hidden;
 }
 
@@ -2654,26 +2664,31 @@ button.row__tool-path--link:focus-visible {
 }
 
 /**
- * **The row above the field: a toolbar, not a form.**
+ * **Agent chips in the button row under the field: a toolbar, not a form.**
  *
- * The owner: *"can the others fields use the same style with paseo. The current style on the top of inputting
- * field are too ugly and nosing."* The row used to be three labelled form controls — a `Folder  packages/api`
- * pill with a path in it, a `Mode  [select]`, a `Model  [select]`, a `Thinking  [select]` — each with a border and
- * a fill, which is a settings form sitting on top of a message box.
+ * Used to sit *above* the textarea as labelled form controls; now they share the
+ * attach / voice / send row. Still 28px chips (`--control-tight`), muted glyph +
+ * value, caret only where something opens — no per-control border.
  *
- * The reference product's composer row is a **toolbar**: 28px chips, a muted glyph, the value beside it, a caret
- * only where the control opens something, no label (the accessible name and the tooltip carry it), a faint fill
- * on hover and nothing at all the rest of the time. That is what this is, and it is why the row no longer draws
- * a single box: a border per control is what made it read as furniture.
- *
- * The folder is not here at all — it is the pane header's own control, as a glyph and the project's name.
+ * The folder is not here — it is the pane header's own control.
  */
+/* Chips sit in the button row under the field. Column so an optional probe note
+   can wrap *under* the 28px chip line without shifting attach / voice / send. */
 .composer__controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.composer__chips {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 2px;
-  padding: var(--space-2) var(--space-1) 0;
+  min-height: var(--control-tight);
 }
 
 .composer__chip {
@@ -2681,12 +2696,13 @@ button.row__tool-path--link:focus-visible {
   align-items: center;
   gap: 4px;
   min-width: 0;
-  height: 28px;
+  height: var(--control-tight);
   padding: 0 var(--space-2);
   border-radius: var(--radius-full);
   color: var(--text-muted);
   font-size: var(--font-size-sm);
   white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .composer__chip:hover {
@@ -2695,7 +2711,7 @@ button.row__tool-path--link:focus-visible {
 
 /* Fast and Plan are icon-only. On, the glyph takes Paseo's highlight: yellow for Fast, blue for Plan. */
 .composer__feature {
-  width: 28px;
+  width: var(--control-tight);
   justify-content: center;
   padding: 0;
   border: 0;
@@ -2758,7 +2774,7 @@ button.row__tool-path--link:focus-visible {
 .composer__chip-note,
 .composer__control-note {
   margin: 0;
-  padding: var(--space-1) var(--space-2) 0;
+  padding: var(--space-1) 0 0;
   color: var(--foreground-muted);
   font-size: var(--font-size-sm);
 }
@@ -2788,25 +2804,27 @@ button.row__tool-path--link:focus-visible {
   font-size: var(--font-size-sm);
 }
 
+/* Top-align so every 28px control shares one axis; a wrapped probe note hangs
+   below the chips without dragging attach / voice / send off the chip line. */
 .composer__toolbar {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-2) var(--space-1);
 }
 
-/* The action side of the button row: the queue/steer picker while a turn is running, the keyboard hint, and the
-   button. `margin-left: auto` is what puts the chips' column on the left and this on the right — the whole layout
-   of Paseo's `buttonRow`. */
+/* The action side of the button row: send (and optional diff pill). `margin-left: auto` puts chips
+   on the left and this on the right — the layout of Paseo's `buttonRow`. */
 /* The send action: a round glyph button, sized like the chips beside it. `button--icon` drops the horizontal
    padding a worded button needs, and the fixed box is what keeps the row's height steady whether or not the button
    is drawn at all. */
 .composer__send {
-  width: 28px;
-  height: 28px;
+  width: var(--control-tight);
+  height: var(--control-tight);
   padding: 0;
   justify-content: center;
   border-radius: var(--radius-full);
+  flex: none;
 }
 
 .composer__toolbar-actions {
@@ -2814,6 +2832,8 @@ button.row__tool-path--link:focus-visible {
   align-items: center;
   gap: var(--space-2);
   margin-left: auto;
+  min-height: var(--control-tight);
+  flex: none;
 }
 
 .composer__tracks {
@@ -2864,7 +2884,9 @@ button.row__tool-path--link:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
+  height: var(--control-tight);
+  padding: 0 8px;
+  box-sizing: border-box;
   border: 1px solid var(--border);
   border-radius: var(--radius-full);
   background: transparent;
@@ -2907,6 +2929,7 @@ button.row__tool-path--link:focus-visible {
 }
 
 .composer__voice {
+  flex: none;
   color: var(--text-muted);
 }
 
@@ -2945,7 +2968,6 @@ button.row__tool-path--link:focus-visible {
 .composer__attach {
   position: relative;
   flex: none;
-  align-self: center;
 }
 
 .composer__attach-trigger {
@@ -3269,10 +3291,25 @@ button.row__tool-path--link:focus-visible {
   }
 }
 
+@keyframes dot-running-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--live) 55%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--live) 0%, transparent);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .confirm-dialog-backdrop,
   .confirm-dialog {
     animation: none;
+  }
+
+  .project__working {
+    animation: none;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--live) 40%, transparent);
   }
 }
 
@@ -5041,6 +5078,26 @@ button.row__tool-path--link:focus-visible {
 
 .row--steps > details > summary.row__steps-summary::-webkit-details-marker {
   display: none;
+}
+
+.row__steps-summary-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row__steps-chevron {
+  margin-left: auto;
+  flex: none;
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1;
+  transition: transform var(--motion-pop, 120ms) var(--motion-ease, ease);
+}
+
+.row--steps > details[open] > summary .row__steps-chevron {
+  transform: rotate(90deg);
 }
 
 /* Live Working… body: multi-line thought / interim text, pinned to the latest line. */
