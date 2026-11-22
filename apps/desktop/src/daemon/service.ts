@@ -915,8 +915,7 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
     "coder.listHarnesses": async (params) => {
       parseRpcParams("coder.listHarnesses", params);
       return {
-        harnesses: await Promise.all(
-          ALL_HARNESSES.map(async (id) => {
+        harnesses: ALL_HARNESSES.map((id) => {
           /**
            * **The probe follows the delivery**, and that is the whole point of the field.
            *
@@ -968,11 +967,10 @@ export function createCoderHandlers(deps: CoderServiceDeps): Partial<Record<RpcM
               ? { package: fetchablePackage(id) ?? "", covers: fetchableCovers(id) ?? "connector" }
               : undefined,
           );
-          // Envoy Harness: curated ∪ live ∪ Settings model for the configured provider.
+          // Envoy Harness: curated ∪ cached-live ∪ Settings model (no network await here).
           if (id !== "envoy-harness") return row;
-          return { ...row, models: await envoyHarnessModels(deps.paths) };
+          return { ...row, models: envoyHarnessModels(deps.paths) };
         }),
-        ),
       };
     },
 

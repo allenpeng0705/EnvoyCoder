@@ -70,6 +70,40 @@ if (existsSync(daemon)) {
   }
 }
 
+/**
+ * Envoy Harness must be an installed-style tree the shell can exec: launcher,
+ * CLI entry, and the skills/ playbooks (resolved at runtime as ../../skills
+ * from dist/skills/*.js — copying only dist/ once shipped a mute catalog).
+ */
+const harness = path.join(resources, "envoy-harness");
+if (existsSync(harness)) {
+  if (!existsSync(path.join(harness, "bin", "envoy-harness.mjs"))) {
+    failures.push("envoy-harness: no bin/envoy-harness.mjs — the shell has nothing to spawn");
+  }
+  if (!existsSync(path.join(harness, "dist", "cli", "index.js"))) {
+    failures.push("envoy-harness: no dist/cli/index.js — the launcher import would fail");
+  }
+  const skills = path.join(harness, "skills");
+  if (!existsSync(skills)) {
+    failures.push(
+      "envoy-harness: no skills/ — package:envoy mobile/webdev playbooks would be missing from the installer",
+    );
+  } else {
+    const skillDirs = readdirSync(skills).filter((name) => {
+      try {
+        return statSync(path.join(skills, name)).isDirectory();
+      } catch {
+        return false;
+      }
+    });
+    if (skillDirs.length === 0) {
+      failures.push("envoy-harness: skills/ is empty — no playbook directories staged");
+    } else {
+      console.log(`  ok   envoy-harness/skills (${skillDirs.length} playbook${skillDirs.length === 1 ? "" : "s"})`);
+    }
+  }
+}
+
 if (failures.length > 0) {
   console.error("bundle resources: the app would ship without something it embeds:");
   for (const failure of failures) console.error(`  - ${failure}`);

@@ -4,7 +4,9 @@
 # when the first window opens and stops it when the last window closes.
 # Envoy Harness is cloned from its repo (scripts/envoy-harness.pin) and built
 # into the same package. If the clone fails, the stager falls back to
-# ..\envoy-harness when that sibling checkout exists (or set ENVOY_HARNESS_DIR).
+# ..\envoy-harness when that sibling checkout exists at the pin (or set
+# ENVOY_HARNESS_DIR / ENVOY_HARNESS_ALLOW_UNPINNED=1). After staging,
+# check-bundle-resources.mjs must pass (daemon + harness skills) before build.
 #
 # Run this on Windows, from the EnvoyCoder checkout:
 #   .\scripts\build-exe.ps1
@@ -364,6 +366,8 @@ Assert-BuildHost
 Write-Host "[1/3] Staging the daemon, Node, and the pinned Envoy Harness..."
 node (Join-Path $Root "scripts\stage-desktop-bundle.mjs")
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+node (Join-Path $Root "scripts\check-bundle-resources.mjs")
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "[2/3] Building the app and the EXE..."
 $Tauri = Join-Path $Root "node_modules\.bin\tauri.cmd"
@@ -386,14 +390,14 @@ try {
 # closing quote and the parser reports "missing terminator" at a later line.
 Write-Host "[3/3] Publishing the EXE to $OutDirName/..."
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
-$found = Get-ChildItem -Path (Join-Path $Root "apps\desktop\src-tauri\target") -Recurse -Filter "*-setup.exe" -ErrorAction SilentlyContinue
-if (-not $found) {
+$found = @(Get-ChildItem -Path (Join-Path $Root "apps\desktop\src-tauri\target") -Recurse -Filter "*-setup.exe" -ErrorAction SilentlyContinue)
+if ($found.Count -eq 0) {
   Write-Die "The build finished, but no setup EXE was found under apps\desktop\src-tauri\target."
 }
+# Prefer the newest setup EXE when prior target trees left more than one.
+$newest = $found | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
 $arch = Get-DesktopArch
 $versioned = "envoydev-desktop-$Version-windows-$arch-setup.exe"
-foreach ($file in $found) {
-  Copy-Item -Force $file.FullName (Join-Path $Out $versioned)
-  Write-Host "  $versioned"
-}
+Copy-Item -Force $newest.FullName (Join-Path $Out $versioned)
+Write-Host "  $versioned (from $($newest.FullName.Substring($Root.Length).TrimStart('\')))"
 Write-Host "Done. The EXE is in $(Join-Path $Out $versioned)"

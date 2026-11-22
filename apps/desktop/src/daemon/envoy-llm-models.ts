@@ -39,6 +39,22 @@ export interface FetchEnvoyLiveModelsInput {
 }
 
 /**
+ * Bare model ids already in the process cache — no network. Used by `listHarnesses` so the
+ * harness sidebar cannot block on a slow provider `/models` call.
+ */
+export function peekCachedEnvoyLiveModelIds(input: {
+  provider: string;
+  baseUrl?: string;
+}): readonly string[] {
+  const key = normalizeEnvoyProvider(input.provider);
+  const baseUrl = input.baseUrl ?? defaultEnvoyProviderBaseUrl(key);
+  if (baseUrl === undefined) return [];
+  const hit = cache.get(`${key}::${baseUrl}`);
+  if (hit === undefined || Date.now() - hit.at >= CACHE_TTL_MS) return [];
+  return hit.ids;
+}
+
+/**
  * Bare model ids the provider currently advertises. Empty when there is no key (except ollama),
  * on timeout, or on HTTP/parse failure.
  */

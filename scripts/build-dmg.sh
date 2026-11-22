@@ -5,7 +5,9 @@
 # when the first window opens and stops it when the last window closes.
 # Envoy Harness is cloned from its repo (scripts/envoy-harness.pin) and built
 # into the same package. If the clone fails, the stager falls back to
-# ../envoy-harness when that sibling checkout exists (or set ENVOY_HARNESS_DIR).
+# ../envoy-harness when that sibling checkout exists at the pin (or set
+# ENVOY_HARNESS_DIR / ENVOY_HARNESS_ALLOW_UNPINNED=1). After staging,
+# check-bundle-resources.mjs must pass (daemon + harness skills) before build.
 #
 # Run this on a Mac, from the EnvoyCoder checkout:
 #   bash scripts/build-dmg.sh
@@ -130,6 +132,7 @@ require_apple_signing_env
 
 echo "[1/4] Staging the daemon, Node, and the pinned Envoy Harness…"
 node "$ROOT/scripts/stage-desktop-bundle.mjs"
+node "$ROOT/scripts/check-bundle-resources.mjs"
 
 echo "[1.5/4] Signing nested Mach-O in staged resources…"
 bash "$ROOT/scripts/sign-macos-staged-resources.sh"
@@ -184,18 +187,25 @@ fi
 echo "[4/4] Publishing the DMG to ${OUT#$ROOT/}/…"
 mkdir -p "$OUT"
 shopt -s nullglob
-copied=0
 arch="$(desktop_arch)"
 versioned="envoydev-desktop-${VERSION}-macos-${arch}.dmg"
+# Prefer the newest DMG when prior target trees left more than one.
+best=""
+best_m=0
 for dmg in "$TAURI_TARGET"/*/release/bundle/dmg/*.dmg \
            "$TAURI_TARGET"/release/bundle/dmg/*.dmg; do
-  cp -f "$dmg" "$OUT/$versioned"
-  echo "  $versioned"
-  copied=$((copied + 1))
+  [ -f "$dmg" ] || continue
+  m="$(stat -f '%m' "$dmg" 2>/dev/null || echo 0)"
+  if [ "$m" -gt "$best_m" ]; then
+    best_m="$m"
+    best="$dmg"
+  fi
 done
-if [ "$copied" -eq 0 ]; then
+if [ -z "$best" ]; then
   echo "The build finished, but no DMG was found under apps/desktop/src-tauri/target." >&2
   exit 1
 fi
+cp -f "$best" "$OUT/$versioned"
+echo "  $versioned (from ${best#$ROOT/})"
 
 echo "Done. Signed (and notarized when Apple accepted the ticket) DMG is in $OUT/$versioned"

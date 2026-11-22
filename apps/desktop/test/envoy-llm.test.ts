@@ -12,12 +12,18 @@ import { coderPaths } from "@envoydev/host-bridge";
 
 import { launchForHarness } from "../src/daemon/launch.js";
 import {
+  envoyHarnessModels,
   envoyLlmBaseUrlArgs,
   envoyLlmLaunchEnv,
+  envoyRunModel,
   getEnvoyLlmPublic,
   setEnvoyLlm,
 } from "../src/daemon/envoy-llm.js";
-import { invalidateEnvoyLlmModelCache } from "../src/daemon/envoy-llm-models.js";
+import {
+  fetchEnvoyLiveModelIds,
+  invalidateEnvoyLlmModelCache,
+  peekCachedEnvoyLiveModelIds,
+} from "../src/daemon/envoy-llm-models.js";
 import { CoderStore } from "../src/daemon/store.js";
 
 const cleanups: (() => void)[] = [];
@@ -271,5 +277,80 @@ describe("Envoy Harness LLM settings", () => {
     expect(flash.provider).toBe("minimax");
     expect(flash.model).toBe("MiniMax-M3.1-Flash");
     expect(store.settings().defaults.model).toBe("minimax/MiniMax-M3.1-Flash");
+  });
+});
+
+describe("envoyRunModel", () => {
+  it("keeps a same-provider pick and treats dashscope as qwen", async () => {
+    const home = tempDir("envoydev-run-model-");
+    const paths = coderPaths(home);
+    const store = await CoderStore.open({ paths });
+    await setEnvoyLlm(paths, store, {
+      provider: "dashscope",
+      model: "qwen-plus",
+      apiKey: "sk-qwen",
+    });
+    expect(envoyRunModel(paths, "qwen/qwen3.7-flash")).toBe("qwen/qwen3.7-flash");
+    expect(envoyRunModel(paths, "openai/gpt-5.5")).toBe("qwen/qwen-plus");
+  });
+
+  it("accepts a bare custom id as the configured provider", async () => {
+    const home = tempDir("envoydev-run-bare-");
+    const paths = coderPaths(home);
+    const store = await CoderStore.open({ paths });
+    await setEnvoyLlm(paths, store, {
+      provider: "openai",
+      model: "gpt-6.2-sol",
+      apiKey: "sk-oai",
+    });
+    expect(envoyRunModel(paths, "gpt-5.5")).toBe("openai/gpt-5.5");
+    expect(envoyRunModel(paths, undefined)).toBe("openai/gpt-6.2-sol");
+  });
+});
+
+describe("envoyHarnessModels list path", () => {
+  it("does not await network — only curated plus cache", async () => {
+    const home = tempDir("envoydev-harness-models-");
+    const paths = coderPaths(home);
+    const store = await CoderStore.open({ paths });
+    await setEnvoyLlm(paths, store, {
+      provider: "openai",
+      model: "gpt-6.2-sol",
+      apiKey: "sk-oai",
+    });
+    // Warm cache as Settings would.
+    await fetchEnvoyLiveModelIds({
+      provider: "openai",
+      apiKey: "sk-oai",
+      baseUrl: "https://api.openai.com/v1",
+    });
+    expect(peekCachedEnvoyLiveModelIds({ provider: "openai" })).toEqual([]);
+    const listed = envoyHarnessModels(paths);
+    expect(listed.kind).toBe("listed");
+    expect(listed.options.map((option) => option.id)).toContain("openai/gpt-6.2-sol");
+    expect(listed.options.length).toBeGreaterThan(1);
+  });
+});
+
+describe("scrub on settings/project write", () => {
+  it("clears a leaked Envoy model from DeepSeek app and project defaults", async () => {
+    const home = tempDir("envoydev-scrub-write-");
+    const paths = coderPaths(home);
+    const store = await CoderStore.open({ paths });
+    await setEnvoyLlm(paths, store, {
+      provider: "openai",
+      model: "MiniMax-M3",
+      apiKey: "sk-mini",
+    });
+    await store.updateSettings({
+      defaults: { harness: "deepseek-harness", model: "openai/MiniMax-M3" },
+    });
+    expect(store.settings().defaults.model).toBeUndefined();
+
+    const { project } = await store.addProject({ path: join(home, "repo") });
+    await store.updateProject(project.id, {
+      defaults: { harness: "deepseek-harness", model: "openai/MiniMax-M3" },
+    });
+    expect(store.findProject(project.id)?.defaults).toEqual({ harness: "deepseek-harness" });
   });
 });

@@ -24,6 +24,7 @@ import {
   isEnvoyHarnessProvider,
   mergeEnvoyProviderModels,
   modelIdFor,
+  normalizeEnvoyProvider,
   resolveModelChoice,
 } from "@envoydev/agent-catalog";
 import {
@@ -40,6 +41,7 @@ import type { CoderStore } from "./store.js";
 import {
   fetchEnvoyLiveModelIds,
   invalidateEnvoyLlmModelCache,
+  peekCachedEnvoyLiveModelIds,
 } from "./envoy-llm-models.js";
 
 /** Non-secret half — safe to put under `stateDir`. */
@@ -307,10 +309,12 @@ export function envoyLlmBaseUrlArgs(
  * What the composer may offer for Envoy Harness.
  *
  * Until Settings saves a model, the control is off. After that: curated catalog for that provider,
- * plus live `/models` when a key is set, plus the saved id — never a closed allowlist (Custom
- * free-text still accepts any `provider/model` Envoy resolves).
+ * plus any *cached* live `/models` ids, plus the saved id. Network fetch is not done here —
+ * `listHarnesses` must stay fast; Settings `getEnvoyLlm` warms the cache.
+ *
+ * Custom free-text still accepts any `provider/model` Envoy resolves (not a closed allowlist).
  */
-export async function envoyHarnessModels(paths: CoderPaths): Promise<AgentModels> {
+export function envoyHarnessModels(paths: CoderPaths): AgentModels {
   const config = readEnvoyLlmConfigSync(paths);
   if (config === undefined) {
     return {
@@ -319,12 +323,20 @@ export async function envoyHarnessModels(paths: CoderPaths): Promise<AgentModels
       source: "Envoy Harness has no model of its own. Settings has not saved one.",
     };
   }
-  const apiKey = readApiKeySync(paths);
-  const live = await fetchEnvoyLiveModelIds({
+  const live = peekCachedEnvoyLiveModelIds({
     provider: config.provider,
     ...(config.baseUrl !== undefined ? { baseUrl: config.baseUrl } : {}),
-    ...(apiKey !== undefined ? { apiKey } : {}),
   });
+  // Warm the cache in the background after Settings has a key (or for ollama). Next listHarnesses
+  // sees live ids; this call does not await the network.
+  const apiKey = readApiKeySync(paths);
+  if (normalizeEnvoyProvider(config.provider) === "ollama" || apiKey !== undefined) {
+    void fetchEnvoyLiveModelIds({
+      provider: config.provider,
+      ...(config.baseUrl !== undefined ? { baseUrl: config.baseUrl } : {}),
+      ...(apiKey !== undefined ? { apiKey } : {}),
+    }).catch(() => undefined);
+  }
   const merged = mergeEnvoyProviderModels({
     provider: config.provider,
     curated: envoyProviderCatalogModels(config.provider),
@@ -341,8 +353,8 @@ export async function envoyHarnessModels(paths: CoderPaths): Promise<AgentModels
     kind: "listed",
     options,
     source:
-      "Curated Envoy provider catalog (packages/agent-catalog models.ts) merged with a live " +
-      "provider /models list when an API key is set, plus the model saved in Settings.",
+      "Curated Envoy provider catalog (packages/agent-catalog models.ts) merged with a cached " +
+      "live provider /models list (warmed by Settings) plus the model saved in Settings.",
   };
 }
 
@@ -351,16 +363,25 @@ export async function envoyHarnessModels(paths: CoderPaths): Promise<AgentModels
  *
  * An empty choice, or a choice for a different provider than the saved key, becomes the saved
  * model. A choice for the same provider is kept, so one key can later cover more than one model.
+ * Provider aliases (`zhipu`/`glm`, `dashscope`/`qwen`) count as the same provider. A bare id
+ * (no slash) is treated as belonging to the configured provider — Settings already allows that
+ * for OpenAI-default models.
  */
 export function envoyRunModel(paths: CoderPaths, requested: string | undefined): string | undefined {
   const config = readEnvoyLlmConfigSync(paths);
   if (config === undefined) return requested === "" ? undefined : requested;
-  const configured = modelIdFor(config.provider, config.model);
+  const provider = normalizeEnvoyProvider(config.provider);
+  const configured = modelIdFor(provider, config.model);
   if (requested === undefined || requested.trim() === "") return configured;
-  const resolved = resolveModelChoice("envoy-harness", requested);
-  if (!resolved.ok) return configured;
-  if (resolved.provider.toLowerCase() !== config.provider.toLowerCase()) return configured;
-  return modelIdFor(resolved.provider, resolved.model);
+  const trimmed = requested.trim();
+  const resolved = resolveModelChoice("envoy-harness", trimmed);
+  if (resolved.ok) {
+    if (normalizeEnvoyProvider(resolved.provider) !== provider) return configured;
+    return modelIdFor(provider, resolved.model);
+  }
+  // Bare id → same provider as Settings (e.g. typed `gpt-5.5` while configured as openai/…).
+  if (!trimmed.includes("/")) return modelIdFor(provider, trimmed);
+  return configured;
 }
 
 /** `provider/model` currently saved for Envoy Harness LLM, if any — used to scrub leaks onto other agents. */

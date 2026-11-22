@@ -470,7 +470,9 @@ export class CoderStore {
     };
     this.projectsState = this.projectsState.map((project) => (project.id === id ? next : project));
     await this.persistProjects([id]);
-    return next;
+    // Scrub after write: a DeepSeek-pinned project must not keep an Envoy LLM model id.
+    await this.scrubLeakedEnvoyModel();
+    return this.findProject(id) ?? next;
   }
 
   /**
@@ -708,6 +710,8 @@ export class CoderStore {
     };
     this.settingsState = CoderSettingsSchema.parse(next);
     await this.persistSettings();
+    // Drop Envoy LLM ids that just landed on a non-Envoy default agent (or were reintroduced).
+    await this.scrubLeakedEnvoyModel();
     return this.settingsState;
   }
 

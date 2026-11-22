@@ -91,8 +91,13 @@ comments**, or `codesign` embeds nothing and the packaged daemon dies with
 
 ```bash
 node scripts/check-installer-scripts.mjs   # parsers accept build-dmg / build-exe / build-linux
-node scripts/check-bundle-resources.mjs    # staged resources shape (no network)
+node scripts/check-bundle-resources.mjs    # staged resources shape (daemon + harness skills; no network)
 ```
+
+`build-dmg.sh`, `build-exe.ps1`, and `build-linux.sh` run the bundle-resources
+check right after staging so a missing `envoy-harness/skills/` fails before Tauri
+builds. Sibling harness fallback must match `scripts/envoy-harness.pin` unless
+`ENVOY_HARNESS_ALLOW_UNPINNED=1`.
 
 ## Mobile app
 

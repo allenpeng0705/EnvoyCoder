@@ -15,11 +15,16 @@
  *   ENVOY_HARNESS_REPO_URL   clone URL (default the public repo)
  *   ENVOY_HARNESS_COMMIT     build this commit instead of the tracked pin
  *   ENVOY_HARNESS_DIR        use this checkout instead of cloning. Not reset.
+ *   ENVOY_HARNESS_ALLOW_UNPINNED=1
+ *                            when the pin clone fails and the sibling fallback's
+ *                            HEAD is not the pin, continue anyway (default: fail —
+ *                            a release DMG/EXE must match scripts/envoy-harness.pin)
  *   ENVOYDEV_NODE_VERSION    Node runtime to download (default 22.19.0)
  *   FETCH_NODE_SIDECAR=1     download Node again even if one is already staged
  *
  * When the pin clone fails and `ENVOY_HARNESS_DIR` is unset, the stager tries the sibling
  * checkout `../envoy-harness` (same layout as a local family clone) before giving up.
+ * That fallback must be at the pin commit unless ENVOY_HARNESS_ALLOW_UNPINNED=1.
  *
  * The harness's pnpm overrides are `link:../EnvoyMesh/packages/…` relative to *its*
  * checkout. A pin clone under `build/cache/envoy-harness` would therefore look for
@@ -36,8 +41,10 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -280,16 +287,32 @@ function packHarnessForInstaller(source, dest) {
 
   const pkg = JSON.parse(readFileSync(path.join(pkgRoot, "package.json"), "utf8"));
 
-  // Bundled skills (not compiled into dist/) — required for package:envoy skill roots.
+  // Bundled skills (not compiled into dist/) — required for package:envoy skill roots
+  // (`bundledSkillRoot` resolves ../../skills from dist/skills/*.js).
   const skillsSrc = path.join(pkgRoot, "skills");
   const shipsSkills = Array.isArray(pkg.files) && pkg.files.includes("skills");
-  if (shipsSkills && !existsSync(skillsSrc)) {
-    fail(
-      "Envoy Harness package.json lists skills/, but packages/envoy-harness/skills is missing. " +
-        "Mobile/webdev playbooks would be absent from the installer.",
-    );
-  }
-  if (existsSync(skillsSrc)) {
+  if (shipsSkills) {
+    if (!existsSync(skillsSrc)) {
+      fail(
+        "Envoy Harness package.json lists skills/, but packages/envoy-harness/skills is missing. " +
+          "Mobile/webdev playbooks would be absent from the installer.",
+      );
+    }
+    const skillEntries = readdirSync(skillsSrc).filter((name) => {
+      try {
+        return statSync(path.join(skillsSrc, name)).isDirectory();
+      } catch {
+        return false;
+      }
+    });
+    if (skillEntries.length === 0) {
+      fail(
+        "Envoy Harness packages/envoy-harness/skills exists but has no skill directories. " +
+          "The installer would ship an empty package:envoy catalog.",
+      );
+    }
+    cpSync(skillsSrc, path.join(dest, "skills"), { recursive: true });
+  } else if (existsSync(skillsSrc)) {
     cpSync(skillsSrc, path.join(dest, "skills"), { recursive: true });
   }
 
@@ -528,9 +551,19 @@ function stageHarness() {
       );
       say(`  Clone error was: ${cloneError.split("\n")[0]}`);
       if (head && head !== pin.commit) {
+        const allow = process.env.ENVOY_HARNESS_ALLOW_UNPINNED?.trim() === "1";
+        if (!allow) {
+          fail(
+            `Sibling envoy-harness HEAD is ${head}, but scripts/envoy-harness.pin wants ${pin.commit}.\n` +
+              "  A release package must ship the pinned commit.\n" +
+              "  Check out the pin in ../envoy-harness, fix the clone (network / auth),\n" +
+              "  set ENVOY_HARNESS_DIR to an intentional checkout, or set\n" +
+              "  ENVOY_HARNESS_ALLOW_UNPINNED=1 for a local throwaway build.",
+          );
+        }
         say(
-          `  Warning: sibling HEAD is not the pin (${pin.commit}). ` +
-            "This build is not reproducible from scripts/envoy-harness.pin.",
+          `  Warning: sibling HEAD is not the pin (${pin.commit}); continuing because ` +
+            "ENVOY_HARNESS_ALLOW_UNPINNED=1.",
         );
       }
       source = sibling;
@@ -550,6 +583,22 @@ function stageHarness() {
   const dest = path.join(resources, "envoy-harness");
   say("Packing Envoy Harness for the installer…");
   packHarnessForInstaller(source, dest);
+  const stagedSkills = path.join(dest, "skills");
+  const stagedPkg = JSON.parse(readFileSync(path.join(source, "packages", "envoy-harness", "package.json"), "utf8"));
+  if (Array.isArray(stagedPkg.files) && stagedPkg.files.includes("skills")) {
+    if (!existsSync(stagedSkills) || readdirSync(stagedSkills).length === 0) {
+      fail(
+        "Envoy Harness was packed without skills/. The installer would miss package:envoy playbooks. " +
+          "Check packages/envoy-harness/skills in the harness checkout.",
+      );
+    }
+  }
+  if (!existsSync(path.join(dest, "bin", "envoy-harness.mjs"))) {
+    fail("Envoy Harness was packed without bin/envoy-harness.mjs.");
+  }
+  if (!existsSync(path.join(dest, "dist", "cli", "index.js"))) {
+    fail("Envoy Harness was packed without dist/cli/index.js.");
+  }
   say(`Envoy Harness staged at ${path.relative(root, dest)}.`);
 }
 

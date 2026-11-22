@@ -5,7 +5,9 @@
 # when the first window opens and stops it when the last window closes.
 # Envoy Harness is cloned from its repo (scripts/envoy-harness.pin) and built
 # into the same package. If the clone fails, the stager falls back to
-# ../envoy-harness when that sibling checkout exists (or set ENVOY_HARNESS_DIR).
+# ../envoy-harness when that sibling checkout exists at the pin (or set
+# ENVOY_HARNESS_DIR / ENVOY_HARNESS_ALLOW_UNPINNED=1). After staging,
+# check-bundle-resources.mjs must pass (daemon + harness skills) before build.
 #
 # Run this on Linux, from the EnvoyCoder checkout:
 #   bash scripts/build-linux.sh
@@ -45,6 +47,7 @@ fi
 
 echo "[1/3] Staging the daemon, Node, and the pinned Envoy Harness…"
 node "$ROOT/scripts/stage-desktop-bundle.mjs"
+node "$ROOT/scripts/check-bundle-resources.mjs"
 
 echo "[2/3] Building the app and the installer…"
 cd "$ROOT/apps/desktop"
@@ -57,22 +60,32 @@ fi
 echo "[3/3] Publishing the packages to ${OUT#$ROOT/}/…"
 mkdir -p "$OUT"
 shopt -s nullglob
-copied=0
 arch="$(desktop_arch)"
+# Prefer the newest artifact per kind when prior target trees left more than one.
+declare -A best_path best_m
 for artifact in \
   "$ROOT"/apps/desktop/src-tauri/target/*/release/bundle/deb/*.deb \
   "$ROOT"/apps/desktop/src-tauri/target/release/bundle/deb/*.deb \
   "$ROOT"/apps/desktop/src-tauri/target/*/release/bundle/appimage/*.AppImage \
   "$ROOT"/apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage; do
+  [ -f "$artifact" ] || continue
   base="$(basename "$artifact")"
   case "$base" in
     *.deb) kind=deb ;;
     *.AppImage) kind=AppImage ;;
     *) kind="${base##*.}" ;;
   esac
+  m="$(stat -c '%Y' "$artifact" 2>/dev/null || echo 0)"
+  if [ -z "${best_m[$kind]:-}" ] || [ "$m" -gt "${best_m[$kind]}" ]; then
+    best_m[$kind]="$m"
+    best_path[$kind]="$artifact"
+  fi
+done
+copied=0
+for kind in "${!best_path[@]}"; do
   versioned="envoydev-desktop-${VERSION}-linux-${arch}.${kind}"
-  cp -f "$artifact" "$OUT/$versioned"
-  echo "  $versioned"
+  cp -f "${best_path[$kind]}" "$OUT/$versioned"
+  echo "  $versioned (from ${best_path[$kind]#$ROOT/})"
   copied=$((copied + 1))
 done
 if [ "$copied" -eq 0 ]; then
