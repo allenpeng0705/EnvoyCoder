@@ -1281,6 +1281,22 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
               })()}
               requireApproval={state.settings.requireApprovalForDestructive === true}
               onChooseAutonomyPreset={async (preset: AutonomyPresetId) => {
+                const harnessId = active.harness;
+                const summary = state.harnesses.find((entry) => entry.id === harnessId);
+                const provider = state.providers.find((entry) => entry.id === harnessId);
+                const deliverable = agentCanStopAsking({
+                  harnessId,
+                  requireApproval: true,
+                  ...(provider?.catalogEntryId !== undefined
+                    ? { catalogEntryId: provider.catalogEntryId }
+                    : {}),
+                });
+                // Cursor and peers with no Asking wire must not flip the global Setting — that
+                // painted "Full access" while the agent kept asking.
+                if (preset === "full-access" && !deliverable) {
+                  toPane(active.id, localNotice("task.composer.autonomy.unavailable"));
+                  return;
+                }
                 const requireApproval = preset !== "full-access";
                 toPane(
                   active.id,
@@ -1290,9 +1306,6 @@ export function CoderApp(props: CoderAppProps): JSX.Element {
                     }),
                   ),
                 );
-                const harnessId = active.harness;
-                const summary = state.harnesses.find((entry) => entry.id === harnessId);
-                const provider = state.providers.find((entry) => entry.id === harnessId);
                 const modes = (summary?.modes ?? []).map((mode) => ({
                   id: mode.id,
                   ...(mode.unattended === true ? { unattended: true as const } : {}),

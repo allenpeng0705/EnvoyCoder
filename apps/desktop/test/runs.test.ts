@@ -468,7 +468,11 @@ describe("approvals", () => {
     if (requested?.kind !== "run.approval-requested") throw new Error("unreachable");
     // The options come from the agent, in the agent's words — the label the user reads is the one
     // the protocol carried, not one we invented for it.
-    expect(requested.options.map((option) => option.label)).toEqual(["Allow once", "Reject"]);
+    expect(requested.options.map((option) => option.label)).toEqual([
+      "Allow once",
+      "Always allow",
+      "Reject",
+    ]);
     // …and which one refuses is the protocol's own `kind`, not a guess from the label.
     expect(requested.options.find((option) => option.id === "reject-once")?.destructive).toBe(true);
     // Prefer the concrete command when present — the tool id alone is secondary.
@@ -499,6 +503,23 @@ describe("approvals", () => {
     expect(b.store.findTask(b.taskId)?.status).toBe("done");
   });
 
+  it("after Always allow, auto-allows later permissions in the same run", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "please approve-twice this" });
+    await b.until((events) => kinds(events, "run.approval-requested").length === 1, "the first approval card");
+    const requested = kinds(b.events, "run.approval-requested")[0];
+    if (requested?.kind !== "run.approval-requested") throw new Error("unreachable");
+    await b.manager.answerApproval(requested.runId, requested.requestId, "allow-always");
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+    // Second permission must not surface a card — sessionAutoAllow answered it.
+    expect(kinds(b.events, "run.approval-requested")).toHaveLength(1);
+    expect(
+      kinds(b.events, "run.output").filter(
+        (event) => event.kind === "run.output" && event.text.includes("permission: allow-always"),
+      ).length,
+    ).toBeGreaterThanOrEqual(2);
+  });
+
   it("does not ask again for a command this project already allowed", async () => {
     const b = await bench();
     await b.manager.start({ taskId: b.taskId, prompt: "please approve this" });
@@ -512,9 +533,13 @@ describe("approvals", () => {
     await b.manager.start({ taskId: b.taskId, prompt: "please approve this" });
     await b.until((events) => kinds(events, "run.ended").length === 1, "the second run to end");
     expect(kinds(b.events, "run.approval-requested")).toHaveLength(0);
+    // Auto-answer prefers Always allow when the agent offers both once and always.
     expect(
       kinds(b.events, "run.output").some(
-        (event) => event.kind === "run.output" && event.text.includes("permission: allow-once"),
+        (event) =>
+          event.kind === "run.output" &&
+          (event.text.includes("permission: allow-once") ||
+            event.text.includes("permission: allow-always")),
       ),
     ).toBe(true);
   });
@@ -673,6 +698,40 @@ describe("cancel and steer", () => {
     await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
     // Cancelling drops what was queued: the user asked for the work to stop.
     expect(kinds(b.events, "run.output").some((event) => event.kind === "run.output" && event.text.includes("and then"))).toBe(false);
+  });
+
+  it("after a cancel that rejects the prompt, still delivers the steered follow-up", async () => {
+    const b = await bench({ agentEnv: { FAKE_ACP_CANCEL_REJECTS: "1" } });
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "a slow task" });
+    await b.until((events) => kinds(events, "run.output").length === 1, "the first chunk");
+    expect(await b.manager.send(run.id, "change of plan", "steer")).toBe("steered");
+    await b.until(
+      (events) =>
+        kinds(events, "run.ended").length === 1 &&
+        kinds(events, "run.output").some(
+          (event) => event.kind === "run.output" && event.text.includes("change of plan"),
+        ),
+      "the steered follow-up to finish without a failed end",
+    );
+    const ended = kinds(b.events, "run.ended")[0];
+    expect(ended && ended.kind === "run.ended" ? ended.status : "").not.toBe("failed");
+  });
+
+  it("coerces steer to queue for agents whose cancel is unsafe (Cursor, Claude, …)", async () => {
+    for (const harness of ["cursor", "claudecode"] as const) {
+      const b = await bench({ harness });
+      const run = await b.manager.start({ taskId: b.taskId, prompt: "a slow task" });
+      await b.until((events) => kinds(events, "run.output").length === 1, "the first chunk");
+      expect(await b.manager.send(run.id, "wait for me", "steer")).toBe("queued");
+      const message = kinds(b.events, "run.message").find(
+        (event) => event.kind === "run.message" && event.text === "wait for me",
+      );
+      expect(message?.kind === "run.message" ? message.mode : "", harness).toBe("queue");
+      expect(message?.kind === "run.message" ? message.delivered : "", harness).toBe("queued");
+      expect(kinds(b.events, "run.ended"), harness).toHaveLength(0);
+      await b.manager.cancel(run.id);
+      await b.until((events) => kinds(events, "run.ended").length === 1, "cancel to end the run");
+    }
   });
 
   it("steers by interrupting the turn, and the message is what runs next", async () => {

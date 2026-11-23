@@ -78,7 +78,7 @@ export interface ProbeRecipe {
   /** The program(s) we drive, tried in order. The first that resolves wins. */
   binaries: readonly string[];
   /** How the daemon must speak to it. A non-ACP program that resolves is `unsupported`, not `ready`. */
-  transport: "acp" | "cli";
+  transport: "acp" | "cli" | "rpc-ui";
   /**
    * The **agent's own** program, when what `binaries` names is a bridge over it rather than the agent
    * itself. Used only to tell "the agent is not installed" from "the agent is installed and its adapter
@@ -256,7 +256,7 @@ export function probeRecipe(recipe: ProbeRecipe, options: ProbeHarnessOptions = 
     // The installed-but-not-drivable case, and it is not the `ready` chip: the daemon refuses every entry
     // whose transport is not ACP with `harnessUnsupported`, so a green chip here would promise a run that
     // cannot happen.
-    if (recipe.transport !== "acp") {
+    if (recipe.transport !== "acp" && recipe.transport !== "rpc-ui") {
       return {
         state: "unsupported",
         binaryPath: resolved,

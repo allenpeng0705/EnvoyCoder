@@ -589,9 +589,15 @@ export const zh: Catalogue = {
   "settings.extraArgs.detail": "添加到智能体每次任务的命令行。",
   "settings.extraArgs.placeholder": "--verbose",
   "settings.approvals.title": "执行有风险的步骤前先询问",
-  "settings.approvals.detail": "开启时，智能体在有风险的步骤前会询问。关闭表示本机不再询问——有策略的走策略，目录里标明无人值守模式的走该模式。",
+  "settings.approvals.detail": "开：有风险的步骤先问。关：本机不再询问。",
   "settings.approvals.reaches": "每次运行都会作为 {agent} 自己的策略交给它，因此询问发生在真正干活的地方。",
   "settings.approvals.reachesMode": "关闭时，{agent} 会以「{mode}」启动，从而不再停下询问。开启时保留你为任务选择的模式。",
+  "settings.approvals.reachesLaunch":
+    "关闭时，{agent} 会以强制允许启动，从而不再停下询问。开启时保留其通常的权限提示。进行中的运行会在本轮内自动放行；下一轮起使用强制允许。",
+  "settings.approvals.reachesSession":
+    "关闭时，EnvoyDev 会在本轮运行中自动放行 {agent} 的权限询问（允许一次 / 始终允许）。开启时保留其通常询问。{agent} 没有可单独设置的 YOLO 模式。",
+  "settings.approvals.reachesApproval":
+    "关闭时，{agent} 会以「{mode}」启动（`--approval-mode yolo`），从而不再停下询问。开启时保留其通常审批模式。进行中的运行会在本轮内自动放行；下一轮起使用 yolo。",
   "settings.approvals.unsupported": "EnvoyDev 无法为 {agent} 更改这一项：它没有办法接收这项设置，会按自己的方式询问。请选择一个 EnvoyDev 能把策略或无人值守模式交给它的智能体，或者直接回答 {agent} 自己的询问。",
   "settings.approvals.unknown": "EnvoyDev 还不知道 {agent} 接受什么，因此这一项保持关闭，而不是存下一个没人读取的选择。",
   "settings.transcripts.title": "任务结束后保留对话记录",
@@ -913,6 +919,7 @@ export const zh: Catalogue = {
   "task.composer.autonomy.confirmTitle": "启用完全访问？",
   "task.composer.autonomy.confirmBody": "完全访问会在本机关闭询问，并允许此智能体在无批准提示的情况下编辑文件和运行工具。这会提高意外编辑、数据丢失或异常行为的风险。你可以在设置中重新打开询问。",
   "task.composer.autonomy.confirm": "是，仍然继续",
+  "task.composer.autonomy.unavailable": "此智能体仍会自行请求权限。这里无法使用完全访问 — 请在提示上选始终允许，或改用 Envoy / Claude / Codex 以关闭本机询问。",
   "task.composer.autonomy.label": "自主程度",
   "task.composer.workingPeek.aria": "智能体正在做什么",
   "task.posture.aria": "此任务的自主姿态",

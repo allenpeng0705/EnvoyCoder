@@ -1,6 +1,7 @@
 /**
  * Safety → “Ask before risky steps”: the checkbox is enabled only when the catalogue
- * has a deliverable wire. Copilot/OMP listing an `unattended` mode must not enable it.
+ * has a deliverable wire. Copilot listing an `unattended` mode must not enable it;
+ * OMP’s `launch-approval` wire must.
  */
 
 /** @vitest-environment jsdom */
@@ -163,7 +164,7 @@ describe("Safety → Ask before risky steps", () => {
     ).toBeTruthy();
   });
 
-  it("disables the switch for OMP even when the summary lists an unattended mode", () => {
+  it("enables the switch for OMP via launch-approval, not via its unattended mode label alone", () => {
     const omp = harnessSummary("omp");
     expect(omp.modes.some((mode) => mode.unattended === true)).toBe(true);
     showSafety(
@@ -172,12 +173,8 @@ describe("Safety → Ask before risky steps", () => {
         harnesses: [omp],
       }),
     );
-    expect(approvalsCheckbox().disabled).toBe(true);
-    expect(
-      screen.getByText(
-        en["settings.approvals.unsupported"].replaceAll("{agent}", HARNESS_CATALOG.omp.label),
-      ),
-    ).toBeTruthy();
+    expect(approvalsCheckbox().disabled).toBe(false);
+    expect(screen.getByText(/--approval-mode yolo|Full access/i)).toBeTruthy();
   });
 
   it("enables the switch for a Gemini catalogue provider (YOLO)", () => {

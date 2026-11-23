@@ -31,6 +31,7 @@
  * | `policy-me` | announces its session's `autoRun` policy, so `session/set_policy` is observable |
  * | `approve` + `report-policy` | after the permission reply, also names `autoRun` (mid-turn `set_policy`) |
  * | `approve` + `report-mode` | after the permission reply, also names the collaboration mode (mid-turn `set_mode`) |
+ * | `approve-twice` | after the first permission reply, raises a second permission (session Always allow) |
  *
  * `FAKE_ACP_NO_SET_MODE=1` makes it refuse `session/set_mode` with `-32601`, the way
  * `deepseek-harness` does. That is how a test proves the honest failure mode: an agent that cannot be
@@ -315,6 +316,7 @@ function handlePrompt(id, params) {
         toolCall: { toolCallId },
         options: [
           { optionId: "allow-once", name: "Allow once", kind: "allow_once" },
+          { optionId: "allow-always", name: "Always allow", kind: "allow_always" },
           { optionId: "reject-once", name: "Reject", kind: "reject_once" },
         ],
       },
@@ -322,11 +324,13 @@ function handlePrompt(id, params) {
     // `report-policy` / `report-mode` ask the permission reply to also name autoRun or the
     // collaboration mode — so a mid-turn Settings Off (`set_policy` / `set_mode`) is observable
     // without a second prompt.
+    // `approve-twice` asks a second permission after the first answer (session Always allow).
     permissionWaiter = {
       promptId: id,
       toolCallId,
       reportPolicy: text.includes("report-policy"),
       reportMode: text.includes("report-mode"),
+      askAgain: text.includes("approve-twice"),
     };
     return;
   }
@@ -531,12 +535,13 @@ function handle(message) {
   if (method === undefined && id !== undefined && permissionWaiter) {
     const chosen = message.result?.outcome;
     const optionId = chosen?.outcome === "selected" ? chosen.optionId : "cancelled";
-    const { promptId, toolCallId, reportPolicy, reportMode } = permissionWaiter;
+    const { promptId, toolCallId, reportPolicy, reportMode, askAgain } = permissionWaiter;
     permissionWaiter = null;
+    const allowed = optionId === "allow-once" || optionId === "allow-always";
     update({
       sessionUpdate: "tool_call_update",
       toolCallId,
-      status: optionId === "allow-once" ? "completed" : "failed",
+      status: allowed ? "completed" : "failed",
       content: [{ type: "content", content: { type: "text", text: `answered ${optionId}` } }],
     });
     update({
@@ -563,6 +568,34 @@ function handle(message) {
           text: `mode: ${collaborationMode}`,
         },
       });
+    }
+    // Second permission in the same turn — different command so project memory alone is not enough.
+    if (askAgain && allowed) {
+      const toolCallId2 = "call-approve-2";
+      update({
+        sessionUpdate: "tool_call",
+        toolCallId: toolCallId2,
+        title: "shell",
+        kind: "other",
+        status: "in_progress",
+        rawInput: { command: "rm -rf dist" },
+      });
+      send({
+        jsonrpc: "2.0",
+        id: `perm2-${promptId}`,
+        method: "session/request_permission",
+        params: {
+          sessionId,
+          toolCall: { toolCallId: toolCallId2 },
+          options: [
+            { optionId: "allow-once", name: "Allow once", kind: "allow_once" },
+            { optionId: "allow-always", name: "Always allow", kind: "allow_always" },
+            { optionId: "reject-once", name: "Reject", kind: "reject_once" },
+          ],
+        },
+      });
+      permissionWaiter = { promptId, toolCallId: toolCallId2, reportPolicy: false, reportMode: false, askAgain: false };
+      return;
     }
     ok(promptId, { stopReason: promptStopReason() });
     return;
@@ -782,7 +815,13 @@ function handle(message) {
     case "session/cancel": {
       // A real agent answers the in-flight prompt with `cancelled`, and that is what the run loop
       // distinguishes a steer from a cancel by.
-      for (const [promptId] of pendingPrompts) ok(promptId, { stopReason: "cancelled" });
+      // `FAKE_ACP_CANCEL_REJECTS=1` mimics Cursor-class agents that reject the prompt instead —
+      // the daemon must still deliver a steered/queued follow-up, not end as failed.
+      const rejectPrompt = process.env.FAKE_ACP_CANCEL_REJECTS === "1";
+      for (const [promptId] of pendingPrompts) {
+        if (rejectPrompt) fail(promptId, -32000, "cancelled by client");
+        else ok(promptId, { stopReason: "cancelled" });
+      }
       pendingPrompts.clear();
       return;
     }

@@ -613,11 +613,16 @@ export const fr: Catalogue = {
   "settings.extraArgs.detail": "Ajoutés à la ligne de commande de l'agent à chaque tâche.",
   "settings.extraArgs.placeholder": "--verbose",
   "settings.approvals.title": "Demander avant les étapes risquées",
-  "settings.approvals.detail":
-    "Si activé, l'agent demande avant les étapes risquées. Désactivé signifie ne pas demander sur cette machine — via la politique de l'agent quand il en a une, ou son mode sans surveillance publié dans le catalogue.",
+  "settings.approvals.detail": "Activé : demander avant les étapes risquées. Désactivé : ne pas demander sur cette machine.",
   "settings.approvals.reaches": "Transmis à {agent} comme sa propre politique à chaque exécution, pour que la demande se fasse là où le travail se fait.",
   "settings.approvals.reachesMode":
     "Désactivé démarre {agent} en « {mode} » pour qu'il ne s'arrête pas pour demander. Activé conserve le mode que vous choisissez pour la tâche.",
+  "settings.approvals.reachesLaunch":
+    "Désactivé démarre {agent} avec autorisation forcée pour qu'il ne s'arrête pas pour demander. Activé conserve ses invites habituelles. Une exécution en cours est couverte jusqu'à la fin ; la suivante utilise l'autorisation forcée.",
+  "settings.approvals.reachesSession":
+    "Désactivé : EnvoyDev autorise automatiquement les invites de {agent} pour l'exécution (une fois / toujours). Activé conserve ses invites habituelles. {agent} n'a pas de mode YOLO distinct qu'EnvoyDev puisse régler.",
+  "settings.approvals.reachesApproval":
+    "Désactivé démarre {agent} en « {mode} » (`--approval-mode yolo`) pour qu'il ne s'arrête pas pour demander. Activé conserve son mode d'approbation habituel. Une exécution en cours est autorisée automatiquement jusqu'à la fin ; la suivante utilise yolo.",
   "settings.approvals.unsupported":
     "EnvoyDev ne peut pas changer ceci pour {agent} : il n'a aucun moyen de le recevoir et demande selon ses propres règles. Choisissez un agent auquel EnvoyDev peut transmettre une politique ou un mode sans surveillance, ou répondez aux demandes de {agent} lui-même.",
   "settings.approvals.unknown": "EnvoyDev ne sait pas encore ce que {agent} accepte ; ce réglage reste donc désactivé plutôt que d'enregistrer un choix que personne ne lit.",
@@ -952,6 +957,7 @@ export const fr: Catalogue = {
   "task.composer.autonomy.confirmBody":
     "L’accès complet désactive les demandes sur cette machine et laisse cet agent modifier des fichiers et exécuter des outils sans invite d’approbation. Cela augmente le risque de modifications indésirables, de perte de données ou de comportement inattendu. Vous pouvez réactiver les demandes dans Réglages.",
   "task.composer.autonomy.confirm": "Oui, continuer quand même",
+  "task.composer.autonomy.unavailable": "Cet agent continue de demander la permission lui-même. L’accès complet n’est pas disponible ici — utilisez Toujours autoriser sur ses invites, ou choisissez Envoy / Claude / Codex pour désactiver les demandes sur cette machine.",
   "task.composer.autonomy.label": "Autonomie",
   "task.composer.workingPeek.aria": "Sur quoi l’agent travaille",
   "task.posture.aria": "Posture d’autonomie pour cette tâche",

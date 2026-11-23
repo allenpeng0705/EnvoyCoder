@@ -42,13 +42,19 @@ export const AUTONOMY_PRESETS: readonly AutonomyPreset[] = [
 /**
  * Derive the active preset from Settings + whether the selected mode is unattended
  * and whether a read-only / plan mode is selected.
+ *
+ * `askingDeliverable` is false for agents like Cursor that cannot receive Asking Off /
+ * an unattended mode. A global `requireApproval: false` must not paint those as Full access.
  */
 export function activeAutonomyPreset(input: {
   requireApproval: boolean;
   modeUnattended: boolean;
   modeReadOnly: boolean;
+  /** False when this agent cannot receive Asking Off / YOLO. Default true. */
+  askingDeliverable?: boolean;
 }): AutonomyPresetId {
-  if (input.modeUnattended || !input.requireApproval) return "full-access";
+  if (input.modeUnattended) return "full-access";
+  if (!input.requireApproval && input.askingDeliverable !== false) return "full-access";
   if (input.modeReadOnly) return "read-only";
   return "default";
 }

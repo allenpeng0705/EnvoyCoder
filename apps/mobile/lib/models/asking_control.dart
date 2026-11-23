@@ -12,7 +12,16 @@ enum AskingControl {
   /// DeepSeek’s `DSH_PERMISSION_MODE`).
   unattendedMode,
 
-  /// No deliverable wire — Copilot/OMP list modes but cannot take them here.
+  /// Root CLI `--force` before the ACP subcommand (Cursor).
+  launchForce,
+
+  /// Host auto-answers ACP permission cards for the run (OpenCode).
+  sessionAuto,
+
+  /// Spawn with `--approval-mode yolo` (OMP).
+  launchApproval,
+
+  /// No deliverable wire — Copilot / Pi list nothing EnvoyDev can flip.
   none,
 }
 
@@ -25,11 +34,14 @@ AskingControl askingControl(String harnessId) {
     case 'claudecode':
     case 'codex':
       return AskingControl.unattendedMode;
-    case 'copilot':
-    case 'opencode':
     case 'cursor':
-    case 'pi':
+      return AskingControl.launchForce;
+    case 'opencode':
+      return AskingControl.sessionAuto;
     case 'omp':
+      return AskingControl.launchApproval;
+    case 'copilot':
+    case 'pi':
       return AskingControl.none;
     default:
       return AskingControl.none;
@@ -82,7 +94,11 @@ String? cataloguedUnattendedModeId(String? entryId) {
 
 /// End-user label for the unattended mode Settings Off would pick (shipped agents).
 String? modeLabelForAskingOff(String harnessId) {
-  final id = modeForAskingOff(harnessId);
+  final via = askingControl(harnessId);
+  final id = (via == AskingControl.unattendedMode ||
+          via == AskingControl.launchApproval)
+      ? unattendedModeId(harnessId)
+      : null;
   if (id == null) return null;
   switch (id) {
     case 'danger-full-access':
@@ -154,6 +170,14 @@ bool isShippedAskingAgent(String harnessId) {
       return false;
   }
 }
+
+/// Whether a live follow-up may steer (cancel mid-turn). Desktop twin:
+/// `@envoydev/agent-catalog` `canSteerFollowUp` — only Envoy / DeepSeek.
+bool canSteerFollowUp(String? harnessId) =>
+    harnessId == 'envoy-harness' || harnessId == 'deepseek-harness';
+
+/// Follow-ups must wait — cancel is unsafe or unverified for this agent.
+bool followUpMustQueue(String? harnessId) => !canSteerFollowUp(harnessId);
 
 /// Option id stop-asking should send — prefer explicit allow-* ids (desktop twin).
 String? stopAskingAllowId(Iterable<({String id, bool destructive})> options) {

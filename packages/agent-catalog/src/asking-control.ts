@@ -1,10 +1,14 @@
 /**
  * How Settings → “Ask before risky steps” reaches an agent.
  *
- * Two real wires, never invented:
+ * Five real wires, never invented:
  *   * `policy` — `session/set_policy` / `autoRun` (Envoy Harness).
  *   * `unattended-mode` — a catalogue mode marked `unattended` that this build can deliver
  *     (`session/set_mode`, or DeepSeek’s `DSH_PERMISSION_MODE` env).
+ *   * `launch-force` — root CLI `--force` before the ACP subcommand (Cursor).
+ *   * `session-auto` — host auto-answers `session/request_permission` for the run (OpenCode ACP:
+ *     allow once/always only; no YOLO mode / `set_policy`).
+ *   * `launch-approval` — OMP `--approval-mode yolo` at spawn (Paseo `resolveOmpLaunchMode`).
  *
  * Window-safe: no probe / spawn imports. Kept aligned with `HARNESS_CATALOG` by
  * `test/asking-control.test.ts`.
@@ -12,7 +16,13 @@
 
 import type { HarnessId } from "@envoydev/protocol"
 
-export type AskingControl = "policy" | "unattended-mode" | "none"
+export type AskingControl =
+  | "policy"
+  | "unattended-mode"
+  | "launch-force"
+  | "session-auto"
+  | "launch-approval"
+  | "none"
 
 /**
  * Which mechanism Settings Off uses for this shipped agent.
@@ -28,11 +38,14 @@ export function askingControl(harness: HarnessId): AskingControl {
     case "claudecode":
     case "codex":
       return "unattended-mode"
-    case "copilot":
-    case "opencode":
     case "cursor":
-    case "pi":
+      return "launch-force"
+    case "opencode":
+      return "session-auto"
     case "omp":
+      return "launch-approval"
+    case "copilot":
+    case "pi":
       return "none"
   }
 }
@@ -45,7 +58,8 @@ export function agentCanControlAsking(harness: HarnessId): boolean {
 /**
  * Mode id Settings Off selects for agents without `approvalPolicy`.
  *
- * Undefined for `policy` agents — they keep the chosen mode and only change `autoRun`.
+ * Undefined when Off does not flip a catalogue mode (policy / launch / session-auto wires).
+ * OMP Full access is delivered as `--approval-mode yolo`, not as this mode id on the run.
  */
 export function modeForAskingOff(harness: HarnessId): string | undefined {
   if (askingControl(harness) !== "unattended-mode") return undefined
@@ -53,10 +67,21 @@ export function modeForAskingOff(harness: HarnessId): string | undefined {
 }
 
 /**
- * Catalogue unattended mode id, when the agent publishes one.
+ * Argv tokens Settings Off adds at launch.
  *
- * **Metadata, not a delivery guarantee.** Copilot/OMP list modes here while `askingControl` is
- * `none` (no `agentMode` / env path this build can drive). Prefer `modeForAskingOff` for Settings.
+ * Cursor: `--force` before `acp`. OMP: `--approval-mode yolo` (with `rpc-ui` from buildArgs).
+ */
+export function askingOffLaunchArgs(harness: HarnessId): readonly string[] {
+  const via = askingControl(harness)
+  if (via === "launch-force" && harness === "cursor") return ["--force"]
+  if (via === "launch-approval" && harness === "omp") return ["--approval-mode", "yolo"]
+  return []
+}
+
+/**
+ * Catalogue unattended / Full mode id, when the agent publishes one.
+ *
+ * **Metadata for Copilot** while `askingControl` is `none`. Prefer `modeForAskingOff` for Settings.
  */
 export function unattendedModeId(harness: HarnessId): string | undefined {
   switch (harness) {
@@ -78,9 +103,13 @@ export function unattendedModeId(harness: HarnessId): string | undefined {
   }
 }
 
-/** End-user label for the unattended mode Settings Off would pick. */
+/** End-user label for the unattended / Full mode Settings Off would pick. */
 export function modeLabelForAskingOff(harness: HarnessId): string | undefined {
-  const id = modeForAskingOff(harness)
+  const via = askingControl(harness)
+  const id =
+    via === "unattended-mode" || via === "launch-approval"
+      ? unattendedModeId(harness)
+      : undefined
   if (id === undefined) return undefined
   switch (id) {
     case "danger-full-access":
@@ -95,5 +124,34 @@ export function modeLabelForAskingOff(harness: HarnessId): string | undefined {
       return "Full access"
     default:
       return id
+  }
+}
+
+/**
+ * Whether a live follow-up may **steer** (cancel the turn in flight).
+ *
+ * Only the two ACP surfaces we own end-to-end — Envoy Harness and DeepSeek’s ACP profile —
+ * have a cancel path we treat as safe for redirect.
+ */
+export function canSteerFollowUp(harnessId: string | undefined): boolean {
+  return harnessId === "envoy-harness" || harnessId === "deepseek-harness"
+}
+
+/** Inverse of {@link canSteerFollowUp} — follow-ups wait for the turn to finish. */
+export function followUpMustQueue(harnessId: string | undefined): boolean {
+  return !canSteerFollowUp(harnessId)
+}
+
+/** OMP approval argv for a catalogue mode id (Paseo `resolveOmpLaunchMode`). */
+export function ompApprovalLaunchArgs(modeId: string | undefined): readonly string[] {
+  switch (modeId ?? "full") {
+    case "full":
+      return ["--approval-mode", "yolo"]
+    case "write":
+      return ["--approval-mode", "write"]
+    case "ask":
+      return ["--approval-mode", "always-ask"]
+    default:
+      return ["--approval-mode", "always-ask"]
   }
 }

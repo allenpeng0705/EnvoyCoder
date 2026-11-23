@@ -480,6 +480,17 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   }
 
   Future<void> _applyAutonomyPreset(AutonomyPresetId preset) async {
+    final harness = harnessById(_harnesses, _selection.harnessId);
+    final deliverable = askingIsDeliverable(
+      harnessId: harness?.id ?? _selection.harnessId,
+    );
+    if (preset == AutonomyPresetId.fullAccess && !deliverable) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.composerAutonomyUnavailable)),
+      );
+      return;
+    }
     final requireApproval = preset != AutonomyPresetId.fullAccess;
     final previous = _requireApproval;
     setState(() => _requireApproval = requireApproval);
@@ -491,7 +502,6 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
       if (mounted) setState(() => _requireApproval = previous);
       return;
     }
-    final harness = harnessById(_harnesses, _selection.harnessId);
     final modes = [
       for (final mode in harness?.modes ?? const <AgentModeOption>[])
         (id: mode.id, unattended: mode.unattended),
@@ -520,10 +530,14 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
         if (mode.id == modeId && mode.unattended) modeUnattended = true;
       }
     }
+    final deliverable = askingIsDeliverable(
+      harnessId: harness?.id ?? _selection.harnessId,
+    );
     final preset = activeAutonomyPreset(
       requireApproval: _requireApproval,
       modeUnattended: modeUnattended,
       modeReadOnly: modeLooksReadOnly(modeId) || _planMode,
+      askingDeliverable: deliverable,
     );
     switch (preset) {
       case AutonomyPresetId.readOnly:
@@ -694,7 +708,12 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
     final previousAttachments = List<ComposerAttachment>.of(_attachments);
     // Echo into the transcript before the wire answers — otherwise the composer
     // clears and the bubble only appears if/when `run.message` arrives.
-    final mode = _live ? _sendWhileRunning : 'steer';
+    // Only Envoy / DeepSeek may steer; everyone else queues (desktop twin:
+    // `followUpMustQueue`). Settings “steer” cannot bypass — daemon also gates.
+    final harnessId = _runHarnessId ?? _selection.harnessId;
+    final mode = !_live
+        ? 'steer'
+        : (followUpMustQueue(harnessId) ? 'queue' : _sendWhileRunning);
     _transcript.echoUser(echoText, delivered: mode == 'steer' ? 'steered' : 'queued');
     _composer.clear();
     setState(() {

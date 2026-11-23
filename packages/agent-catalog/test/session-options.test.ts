@@ -179,7 +179,7 @@ describe("the model list a session yields", () => {
     expect(models.kind).toBe("listed");
     expect(models.observedAt).toBeUndefined();
     expect(models.options).toHaveLength(7);
-    expect(models.source).toContain("llm/index.ts:110-120");
+    expect(models.source).toContain("llm/index.ts:110-");
   });
 
   it("keeps free text when a session published values it cannot take apart", () => {

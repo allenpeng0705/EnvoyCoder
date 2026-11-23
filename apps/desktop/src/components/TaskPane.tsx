@@ -111,7 +111,12 @@ import {
 } from "../composer/autonomy-presets.js";
 import { diffStatFromChanges, type DiffStat } from "../composer/diff-stat.js";
 import { liveToolsHeadline } from "../composer/live-tool-headline.js";
-import { resolveSendWhileRunning } from "../composer/send-while-running.js";
+import {
+  followUpMustQueue,
+  resolveFollowUpMode,
+  resolveSendWhileRunning,
+} from "../composer/send-while-running.js";
+import { askingIsDeliverable } from "../composer/stop-asking.js";
 import {
   dictationSupported,
   startDictation,
@@ -806,8 +811,9 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
     const images = turn.images.length > 0 ? turn.images : undefined;
 
     if (running) {
-      // Follow-ups never re-open auto plan-first. Desktop queues; Shift/Alt steers once.
-      const mode = resolveSendWhileRunning(flip);
+      // Follow-ups never re-open auto plan-first. Desktop queues; Shift/Alt steers once
+      // when the agent can take cancel. Cursor always queues (cancel is unsafe mid-turn).
+      const mode = resolveFollowUpMode(task.harness, resolveSendWhileRunning(flip));
       const delivered = mode === "steer" ? "steered" : "queued";
       const previousText = text;
       const previousAttachments = attachments;
@@ -1015,6 +1021,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                         controls.mode.options.find((mode) => mode.id === selectedModeId)
                           ?.unattended === true,
                       modeReadOnly: modeLooksReadOnly(selectedModeId),
+                      askingDeliverable: askingIsDeliverable({ harnessId: task.harness }),
                     });
                     if (posture === "read-only") return t("task.composer.autonomy.readOnly");
                     if (posture === "full-access") return t("task.composer.autonomy.fullAccess");
@@ -1529,6 +1536,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                 controls.mode.options.find((mode) => mode.id === selectedModeId)?.unattended ===
                 true
               }
+              askingDeliverable={askingIsDeliverable({ harnessId: task.harness })}
               onChooseAutonomyPreset={props.onChooseAutonomyPreset}
               running={running}
               probeNote={probe.note}
@@ -1564,7 +1572,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                 <span className="composer__diff-pill-del">−{diffStat.deletions}</span>
               </button>
             ) : null}
-            {/* Send while running always queues; Shift-click / Alt+Enter steers once. */}
+            {/* Send while running queues; Shift/Alt steers only when cancel is safe for this agent. */}
             {canSend(text, attachments) ? (
               <button
                 type="button"
@@ -1575,7 +1583,9 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                   approvalOpen
                     ? t("task.composer.submit.blocked")
                     : running
-                      ? t("task.composer.send.queued")
+                      ? followUpMustQueue(task.harness)
+                        ? t("task.composer.queueStatus")
+                        : t("task.composer.send.queued")
                       : canResume
                         ? t("task.composer.resume")
                         : t("task.composer.start")

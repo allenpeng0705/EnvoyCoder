@@ -35,6 +35,7 @@ import {
   harnessAvailability,
   harnessDefinition,
   harnessRecipe,
+  isDrivable,
   isDrivableByAcpAdapter,
   probeProvider,
   providerCatalogueEnv,
@@ -188,20 +189,24 @@ describe("a provider launches through the same path as a catalogue entry", () =>
     // Two assertions, because they answer the same question from two sides.
     //
     // First, the deterministic one: the recipe the shared body reads carries the same `kind`/`transport`
-    // that `isDrivableByAcpAdapter` decides on, for all nine agents — so the gate the refactor moved to
-    // `launch.ts` cannot disagree with the gate `drivable.test.ts` pins.
+    // that `isDrivable` / `isDrivableByAcpAdapter` decide on — so the gate in `launch.ts` cannot disagree
+    // with `drivable.test.ts`.
     for (const harness of ALL_HARNESSES) {
       const recipe = harnessRecipe(harnessDefinition(harness));
-      const gated = recipe.kind === "child-process" && recipe.transport === "acp";
-      expect(gated, harness).toBe(isDrivableByAcpAdapter(harness));
+      const acp =
+        recipe.kind === "child-process" && recipe.transport === "acp";
+      const any =
+        recipe.kind === "child-process" &&
+        (recipe.transport === "acp" || recipe.transport === "rpc-ui");
+      expect(acp, harness).toBe(isDrivableByAcpAdapter(harness));
+      expect(any, harness).toBe(isDrivable(harness));
     }
 
-    // Then the observable one, over the real body and with **nothing to search**: a non-ACP agent is
-    // refused as unsupported whatever the search path says (the drivability check precedes availability,
-    // which is `launch.ts`'s own documented order), and a drivable one is never told that — it reaches
-    // "we could not look", or `ready` from the peer checkout when this machine has one built.
+    // Then the observable one, over the real body and with **nothing to search**: an undrivable agent is
+    // refused as unsupported whatever the search path says; a drivable one reaches "we could not look"
+    // or launches when the binary is present.
     for (const harness of ALL_HARNESSES) {
-      const drivable = isDrivableByAcpAdapter(harness);
+      const drivable = isDrivable(harness);
       let code: string | null = null;
       try {
         launchForHarness({ harness, cwd: "/tmp", paths: coderPaths("/tmp/envoydev-home"), searchDirs: [] });
@@ -209,8 +214,6 @@ describe("a provider launches through the same path as a catalogue entry", () =>
         code = coderErrorCode(error instanceof Error ? error.message : String(error));
       }
       if (drivable) {
-        // It either launched (the peer checkout is built on this machine) or refused because there was
-        // nothing to search — never because we cannot drive it.
         expect(code, harness).not.toBe(ENVOYDEV_ERRORS.harnessUnsupported);
       } else {
         expect(code, harness).toBe(ENVOYDEV_ERRORS.harnessUnsupported);
@@ -242,7 +245,7 @@ describe("a provider launches through the same path as a catalogue entry", () =>
     expect(launched.code).not.toBe(ENVOYDEV_ERRORS.agentUnknown);
   });
 
-  it("refuses a command-line provider with the same code a command-line catalogue entry gets", () => {
+  it("refuses a command-line provider as unsupported (shipped agents are ACP or rpc-ui)", () => {
     const providerError = refusalOf(() =>
       launchForProvider({
         provider: provider({ transport: "cli" }),
@@ -251,22 +254,12 @@ describe("a provider launches through the same path as a catalogue entry", () =>
         searchDirs: [],
       }),
     );
-    // `opencode` rather than `copilot`: since 2026-09-15 Copilot's own `--acp` server is measured and the entry is
-    // drivable, so it can no longer stand for "a shipped agent this build cannot speak to".
-    const harnessError = refusalOf(() =>
-      launchForHarness({
-        harness: "opencode",
-        cwd: "/tmp",
-        paths: coderPaths("/tmp/envoydev-home"),
-        searchDirs: [],
-      }),
-    );
     expect(providerError.code).toBe(ENVOYDEV_ERRORS.harnessUnsupported);
-    expect(harnessError.code).toBe(ENVOYDEV_ERRORS.harnessUnsupported);
-    // Both are keyed, so both are renderable in the user's language — and the keys differ on purpose,
-    // because the advice does: a shipped agent needs an adapter, a provider's dialect is theirs to fix.
     expect(providerError.ref?.key).toBe("error.providerUnsupported");
-    expect(harnessError.ref?.key).toBe("error.harnessUnsupported");
+    // Every shipped child-process entry is now ACP or rpc-ui — OpenCode no longer stands for undrivable.
+    for (const harness of ALL_HARNESSES) {
+      expect(isDrivable(harness), harness).toBe(true);
+    }
   });
 
   it("hands a provider the same PATH the probe searched, and the same refusals when it cannot look", () => {

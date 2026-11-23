@@ -448,7 +448,7 @@
   "@settingsApprovals": {
     "description": "settings.approvals — The approval switch."
   },
-  "settingsApprovalsDetail": "When on, the agent asks before risky steps. Off means don’t ask on this machine — via the agent’s policy when it has one, or its unattended mode when that is what the catalogue publishes.",
+  "settingsApprovalsDetail": "On: ask before risky steps. Off: don’t ask on this machine.",
   "@settingsApprovalsDetail": {
     "description": "settings.approvals.detail — Explains the approvals switch."
   },
@@ -464,6 +464,36 @@
   "settingsApprovalsReachesMode": "Off starts {agent} in “{mode}” so it does not stop to ask. On keeps the mode you pick for the task.",
   "@settingsApprovalsReachesMode": {
     "description": "settings.approvals.reachesMode — Unattended mode wire note.",
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      },
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsApprovalsReachesLaunch": "Off starts {agent} with force-allow so it does not stop to ask. On leaves its usual permission prompts. A run already in progress is covered until it ends; the next run uses force-allow.",
+  "@settingsApprovalsReachesLaunch": {
+    "description": "settings.approvals.reachesLaunch — Launch --force wire note.",
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsApprovalsReachesSession": "Off tells EnvoyDev to auto-allow {agent}'s permission prompts for the run (allow once / always). On leaves its usual prompts. {agent} has no separate YOLO mode EnvoyDev can set.",
+  "@settingsApprovalsReachesSession": {
+    "description": "settings.approvals.reachesSession — OpenCode session-auto wire note.",
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsApprovalsReachesApproval": "Off starts {agent} in “{mode}” so it does not stop to ask. On leaves its usual approval mode. A run already in progress is auto-allowed until it ends; the next run uses yolo.",
+  "@settingsApprovalsReachesApproval": {
+    "description": "settings.approvals.reachesApproval — OMP launch-approval wire note.",
     "placeholders": {
       "agent": {
         "type": "String"
@@ -2069,6 +2099,10 @@
   "composerAutonomySheet": "Autonomy",
   "@composerAutonomySheet": {
     "description": "Autonomy preset picker sheet title"
+  },
+  "composerAutonomyUnavailable": "This agent still asks for permission itself. Full access is not available here — use Always allow on its prompts, or pick Envoy / Claude / Codex for machine Asking Off.",
+  "@composerAutonomyUnavailable": {
+    "description": "Shown when Full access cannot reach this agent (e.g. Cursor)"
   },
   "composerDomainOff": "Tools off",
   "@composerDomainOff": {

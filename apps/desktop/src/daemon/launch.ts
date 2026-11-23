@@ -27,11 +27,10 @@
  *     understands are different questions, and the answers differ for a harness living in a peer
  *     checkout — there the command is Node and the script is the first argument. Assuming a bare binary
  *     name is how a machine with the harness cloned but not installed gets `spawn envoy-harness ENOENT`.
- *   * **Whether it can be driven at all.** Six catalogue entries describe programs that do not speak
- *     ACP (a one-shot `-p` CLI, an app-server, an HTTP server, a JSONL-RPC mode), so without this check
- *     we would spawn them and wait for a handshake that can never come — after the picker had already
- *     offered them as ready. A provider says which dialect it speaks, and a `"cli"` one is refused for
- *     exactly the same reason rather than for a new one.
+ *   * **Whether it can be driven at all.** Entries with `transport: "cli"` are startable but not
+ *     drivable here (no ACP / JSONL RPC adapter). ACP and `rpc-ui` agents pass; a `"cli"` provider is
+ *     refused for the same reason. Without this check we would spawn and wait for a handshake that
+ *     never comes after the picker offered the agent as ready.
  *   * **Catalogued agents reuse standalone auth** — no EnvoyDev-private home, no second API-key form.
  *     Ambient fill (`./ambient-agent-env.ts`) copies login-shell / DeepSeek-home keys a Dock-launched
  *     daemon would otherwise miss. Session isolation for those CLIs is the agent's own concern.
@@ -101,6 +100,11 @@ export interface LaunchInput {
   /** The user's own extra argv for this task. */
   extraArgs?: string;
   /**
+   * Continue a previous Pi-family JSONL session (`--session` via catalogue `resumeArgs`).
+   * ACP agents resume over the protocol; this field is ignored for them (`resumeArgs` is empty).
+   */
+  resumeSessionId?: string;
+  /**
    * The directories to search and to hand the agent. Defaults to the daemon's resolved list.
    *
    * Injected for the one test that has to prove probing and spawning agree without depending on what this
@@ -167,7 +171,7 @@ export interface ProviderLaunchInput {
  * broken".
  */
 export function launchForHarness(input: LaunchInput): AcpLaunch {
-  const { harness, cwd, model, extraArgs, delivery } = input;
+  const { harness, cwd, model, extraArgs, delivery, resumeSessionId } = input;
   const definition = harnessDefinition(harness);
   /**
    * **The fetched route is a different program, not a different branch of the same one.**
@@ -215,6 +219,7 @@ export function launchForHarness(input: LaunchInput): AcpLaunch {
                 cwd,
                 ...(model ? { model } : {}),
                 ...(extraArgs ? { extraArgs } : {}),
+                ...(resumeSessionId ? { resumeSessionId } : {}),
               }),
             ),
           })
@@ -224,6 +229,7 @@ export function launchForHarness(input: LaunchInput): AcpLaunch {
               cwd,
               ...(model ? { model } : {}),
               ...(extraArgs ? { extraArgs } : {}),
+              ...(resumeSessionId ? { resumeSessionId } : {}),
             });
             return { command: resolved.command, args: withBaseUrl(resolved.args) };
           },
@@ -407,10 +413,13 @@ function resolveLaunch(subject: LaunchSubject, location: LaunchLocation): AcpLau
    * reached. Widening the state to `unsupported` would have moved those agents into "missing" — telling a user
    * with `copilot` installed that it is not installed, which is the bug report this whole change answers.)
    */
-  if (!(subject.recipe.kind === "child-process" && subject.recipe.transport === "acp")) {
+  const transportOk =
+    subject.recipe.kind === "child-process" &&
+    (subject.recipe.transport === "acp" || subject.recipe.transport === "rpc-ui");
+  if (!transportOk) {
     throw coderError(
       ENVOYDEV_ERRORS.harnessUnsupported,
-      `${subject.label} speaks a protocol EnvoyDev cannot drive yet (this adapter drives ACP agents only). ` +
+      `${subject.label} speaks a protocol EnvoyDev cannot drive yet (this adapter drives ACP and Pi-family JSONL RPC agents). ` +
         subject.unsupportedAdvice,
       ref(subject.unsupported.key, subject.unsupported.values),
     );
@@ -538,6 +547,7 @@ export function launchForAgent(input: {
   searchDirs?: readonly string[];
   delivery?: "installed" | "npx";
   env?: NodeJS.ProcessEnv;
+  resumeSessionId?: string;
 }): AcpLaunch {
   if (isHarnessId(input.id)) {
     return launchForHarness({
@@ -550,6 +560,7 @@ export function launchForAgent(input: {
       ...(input.extraEnv !== undefined ? { extraEnv: input.extraEnv } : {}),
       ...(input.searchDirs !== undefined ? { searchDirs: input.searchDirs } : {}),
       ...(input.delivery !== undefined ? { delivery: input.delivery } : {}),
+      ...(input.resumeSessionId !== undefined ? { resumeSessionId: input.resumeSessionId } : {}),
     });
   }
   if (input.provider === undefined || input.provider.id !== input.id) {

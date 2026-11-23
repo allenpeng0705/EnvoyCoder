@@ -611,11 +611,16 @@ export const it: Catalogue = {
   "settings.extraArgs.detail": "Aggiunti alla riga di comando dell'agente a ogni attività.",
   "settings.extraArgs.placeholder": "--verbose",
   "settings.approvals.title": "Chiedi prima dei passi rischiosi",
-  "settings.approvals.detail":
-    "Se attivo, l'agente chiede prima dei passi rischiosi. Disattivo significa non chiedere su questo computer — tramite la politica dell'agente quando ce n'è una, o la modalità non sorvegliata pubblicata nel catalogo.",
+  "settings.approvals.detail": "Attivo: chiedi prima dei passi rischiosi. Disattivo: non chiedere su questo computer.",
   "settings.approvals.reaches": "Viene passato a {agent} come sua politica a ogni esecuzione, così la richiesta avviene dove avviene il lavoro.",
   "settings.approvals.reachesMode":
     "Disattivo avvia {agent} in “{mode}” così non si ferma a chiedere. Attivo mantiene la modalità che scegli per l'attività.",
+  "settings.approvals.reachesLaunch":
+    "Disattivo avvia {agent} con autorizzazione forzata così non si ferma a chiedere. Attivo lascia le sue richieste abituali. Un'esecuzione in corso è coperta fino alla fine; la successiva usa l'autorizzazione forzata.",
+  "settings.approvals.reachesSession":
+    "Disattivo: EnvoyDev autorizza automaticamente le richieste di {agent} per l'esecuzione (una volta / sempre). Attivo lascia le sue richieste abituali. {agent} non ha una modalità YOLO separata che EnvoyDev possa impostare.",
+  "settings.approvals.reachesApproval":
+    "Disattivo avvia {agent} in “{mode}” (`--approval-mode yolo`) così non si ferma a chiedere. Attivo lascia la sua modalità di approvazione abituale. Un'esecuzione in corso è autorizzata automaticamente fino alla fine; la successiva usa yolo.",
   "settings.approvals.unsupported":
     "EnvoyDev non può cambiarlo per {agent}: non ha modo di riceverlo e chiede secondo le proprie regole. Scegli un agente a cui EnvoyDev può passare una politica o una modalità non sorvegliata, oppure rispondi alle richieste di {agent} stesso.",
   "settings.approvals.unknown": "EnvoyDev non sa ancora cosa accetta {agent}, quindi questa opzione resta disattivata invece di salvare una scelta che nessuno legge.",
@@ -950,6 +955,7 @@ export const it: Catalogue = {
   "task.composer.autonomy.confirmBody":
     "L’accesso completo disattiva le richieste su questa macchina e lascia che questo agente modifichi file ed esegua strumenti senza richieste di approvazione. Ciò aumenta il rischio di modifiche indesiderate, perdita di dati o comportamento imprevisto. Puoi riattivare le richieste in Impostazioni.",
   "task.composer.autonomy.confirm": "Sì, continua comunque",
+  "task.composer.autonomy.unavailable": "Questo agente continua a chiedere il permesso da solo. L’accesso completo non è disponibile qui — usa Consenti sempre sulle richieste, oppure scegli Envoy / Claude / Codex per spegnere le richieste su questa macchina.",
   "task.composer.autonomy.label": "Autonomia",
   "task.composer.workingPeek.aria": "A cosa sta lavorando l’agente",
   "task.posture.aria": "Postura di autonomia per questa attività",

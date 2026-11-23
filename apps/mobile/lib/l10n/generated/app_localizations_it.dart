@@ -367,7 +367,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get settingsApprovalsDetail =>
-      'Se attivo, l\'agente chiede prima dei passi rischiosi. Disattivo significa non chiedere su questo computer — tramite la politica dell\'agente quando ce n\'è una, o la modalità non sorvegliata pubblicata nel catalogo.';
+      'Attivo: chiedi prima dei passi rischiosi. Disattivo: non chiedere su questo computer.';
 
   @override
   String settingsApprovalsReaches(String agent) {
@@ -377,6 +377,21 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String settingsApprovalsReachesMode(String agent, String mode) {
     return 'Disattivo avvia $agent in “$mode” così non si ferma a chiedere. Attivo mantiene la modalità che scegli per l\'attività.';
+  }
+
+  @override
+  String settingsApprovalsReachesLaunch(String agent) {
+    return 'Off starts $agent with force-allow so it does not stop to ask. On leaves its usual permission prompts. A run already in progress is covered until it ends; the next run uses force-allow.';
+  }
+
+  @override
+  String settingsApprovalsReachesSession(String agent) {
+    return 'Off tells EnvoyDev to auto-allow $agent\'s permission prompts for the run (allow once / always). On leaves its usual prompts. $agent has no separate YOLO mode EnvoyDev can set.';
+  }
+
+  @override
+  String settingsApprovalsReachesApproval(String agent, String mode) {
+    return 'Off starts $agent in “$mode” so it does not stop to ask. On leaves its usual approval mode. A run already in progress is auto-allowed until it ends; the next run uses yolo.';
   }
 
   @override
@@ -1538,6 +1553,10 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get composerAutonomySheet => 'Autonomia';
+
+  @override
+  String get composerAutonomyUnavailable =>
+      'Questo agente continua a chiedere il permesso da solo. L’accesso completo non è disponibile qui — usa Consenti sempre sulle richieste, oppure scegli Envoy / Claude / Codex per spegnere le richieste su questa macchina.';
 
   @override
   String get composerDomainOff => 'Strumenti disattivati';

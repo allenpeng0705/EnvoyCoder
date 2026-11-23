@@ -191,7 +191,7 @@ describe("probing and spawning use the same PATH", () => {
     const cwd = await tempDir("envoydev-refusal-cwd-");
     const home = await tempDir("envoydev-refusal-home-");
     const empty = await tempDir("envoydev-refusal-empty-");
-    const called = (harm: "claudecode" | "opencode", dirs: readonly string[]): Error => {
+    const calledHarness = (harm: "claudecode", dirs: readonly string[]): Error => {
       try {
         launchForHarness({ harness: harm, cwd, paths: coderPaths(home), searchDirs: dirs });
       } catch (error) {
@@ -200,21 +200,36 @@ describe("probing and spawning use the same PATH", () => {
       throw new Error(`${harm} was launched when it should have been refused`);
     };
 
-    // 1. Installed and undrivable: `opencode` is `transport: "cli"`, and the list holds an `opencode` binary.
-    //
-    // `copilot` was this leg's example until 2026-09-15, when its own `--acp` server was measured and it became
-    // drivable — the state this leg asserts is "installed, and we have no adapter", which has to be shown by an
-    // agent that really is undrivable.
+    // 1. Installed and undrivable: a hand-added provider with `transport: "cli"` (no ACP / rpc-ui).
+    // OpenCode / OMP / Pi used to fill this slot; they are now ACP or rpc-ui and launch when present.
     const undrivableDir = await tempDir("envoydev-refusal-undrivable-");
-    await bridgeIn(undrivableDir, "opencode");
-    const undrivable = called("opencode", [undrivableDir]);
+    await bridgeIn(undrivableDir, "my-cli-agent");
+    const cliProvider: AgentProviderConfig = {
+      id: "my-cli-agent",
+      label: "My CLI agent",
+      command: "my-cli-agent",
+      args: [],
+      env: [],
+      transport: "cli",
+    };
+    let undrivable: Error;
+    try {
+      launchForProvider({
+        provider: cliProvider,
+        cwd,
+        paths: coderPaths(home),
+        searchDirs: [undrivableDir],
+      });
+      throw new Error("cli provider was launched when it should have been refused");
+    } catch (error) {
+      undrivable = error instanceof Error ? error : new Error(String(error));
+    }
     expect(coderErrorCode(undrivable.message)).toBe(ENVOYDEV_ERRORS.harnessUnsupported);
-    expect(coderErrorRef(undrivable.message)?.key).toBe("error.harnessUnsupported");
-    // And not the sentence that tells them to install what they already have.
+    expect(coderErrorRef(undrivable.message)?.key).toBe("error.providerUnsupported");
     expect(coderErrorRef(undrivable.message)?.key).not.toBe("error.harnessMissing");
 
     // 2. Absent, over a search that ran: the agent's own CLI and its adapter are both missing.
-    const missing = called("claudecode", [empty]);
+    const missing = calledHarness("claudecode", [empty]);
     expect(coderErrorCode(missing.message)).toBe(ENVOYDEV_ERRORS.harnessMissing);
     expect(coderErrorRef(missing.message)?.key).toBe("error.harnessMissing");
     // The English detail — the half that reaches the log — names both install steps.
@@ -223,7 +238,7 @@ describe("probing and spawning use the same PATH", () => {
     // 3. Unverifiable: an **empty** list, which says "there was nothing to search with" rather than "we
     //    searched and found nothing". A **different** code, because "we could not look" must never be
     //    translated as "it is not installed" — the one claim requirement this state exists for.
-    const unverifiable = called("claudecode", []);
+    const unverifiable = calledHarness("claudecode", []);
     expect(coderErrorCode(unverifiable.message)).toBe(ENVOYDEV_ERRORS.harnessUnknown);
     expect(coderErrorRef(unverifiable.message)?.key).toBe("error.harnessUnknown");
     expect(coderErrorRef(unverifiable.message)?.key).not.toBe("error.harnessMissing");

@@ -368,7 +368,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get settingsApprovalsDetail =>
-      'Wenn an, fragt der Agent vor riskanten Schritten. Aus heißt auf diesem Rechner nicht fragen — über die Agentenrichtlinie, wenn es eine gibt, sonst über den unbeaufsichtigten Modus aus dem Katalog.';
+      'An: vor riskanten Schritten fragen. Aus: auf diesem Rechner nicht fragen.';
 
   @override
   String settingsApprovalsReaches(String agent) {
@@ -378,6 +378,21 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String settingsApprovalsReachesMode(String agent, String mode) {
     return 'Aus startet $agent in „$mode“, damit nicht nachgefragt wird. An behält den Modus, den du für die Aufgabe wählst.';
+  }
+
+  @override
+  String settingsApprovalsReachesLaunch(String agent) {
+    return 'Off starts $agent with force-allow so it does not stop to ask. On leaves its usual permission prompts. A run already in progress is covered until it ends; the next run uses force-allow.';
+  }
+
+  @override
+  String settingsApprovalsReachesSession(String agent) {
+    return 'Off tells EnvoyDev to auto-allow $agent\'s permission prompts for the run (allow once / always). On leaves its usual prompts. $agent has no separate YOLO mode EnvoyDev can set.';
+  }
+
+  @override
+  String settingsApprovalsReachesApproval(String agent, String mode) {
+    return 'Off starts $agent in “$mode” so it does not stop to ask. On leaves its usual approval mode. A run already in progress is auto-allowed until it ends; the next run uses yolo.';
   }
 
   @override
@@ -1543,6 +1558,10 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get composerAutonomySheet => 'Autonomie';
+
+  @override
+  String get composerAutonomyUnavailable =>
+      'Dieser Agent fragt weiterhin selbst nach Erlaubnis. Voller Zugriff ist hier nicht verfügbar — nutze „Immer erlauben“ auf den Abfragen oder wähle Envoy / Claude / Codex für Asking Off auf diesem Gerät.';
 
   @override
   String get composerDomainOff => 'Werkzeuge aus';

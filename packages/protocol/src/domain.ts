@@ -337,7 +337,7 @@ export interface AgentProviderConfig {
    */
   env: readonly string[];
   /** How the daemon must speak to this program. `"cli"` is startable but not yet drivable. */
-  transport: "acp" | "cli";
+  transport: "acp" | "cli" | "rpc-ui";
   /**
    * The **catalogue entry** this provider was added from, when it was — a reference, never a value.
    *
@@ -388,7 +388,7 @@ export const AgentProviderConfigSchema = z
           .regex(PROVIDER_ENV_NAME_PATTERN, "expected the name of an environment variable, not its value"),
       )
       .readonly(),
-    transport: z.enum(["acp", "cli"]),
+    transport: z.enum(["acp", "cli", "rpc-ui"]),
     /**
      * The catalogue entry this provider was added from. **A name, and the only thing about a value this
      * shape can carry** — see `AgentProviderConfig` for the resolution and for the daemon's check.

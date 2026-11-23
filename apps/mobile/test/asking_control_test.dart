@@ -16,13 +16,48 @@ void main() {
     expect(modeForAskingOff('deepseek-harness'), 'danger-full-access');
   });
 
-  test('Copilot/OMP catalogue modes are not Settings Off delivery', () {
+  test('Copilot catalogue modes are not Settings Off delivery', () {
     expect(unattendedModeId('copilot'), 'allow-all');
-    expect(unattendedModeId('omp'), 'full');
     expect(askingControl('copilot'), AskingControl.none);
-    expect(askingControl('omp'), AskingControl.none);
     expect(modeForAskingOff('copilot'), isNull);
     expect(agentCanControlAsking('copilot'), isFalse);
+  });
+
+  test('OpenCode Asking Off is session-auto', () {
+    expect(askingControl('opencode'), AskingControl.sessionAuto);
+    expect(agentCanControlAsking('opencode'), isTrue);
+    expect(modeForAskingOff('opencode'), isNull);
+  });
+
+  test('OMP Asking Off is launch-approval', () {
+    expect(unattendedModeId('omp'), 'full');
+    expect(askingControl('omp'), AskingControl.launchApproval);
+    expect(agentCanControlAsking('omp'), isTrue);
+    expect(modeForAskingOff('omp'), isNull);
+    expect(modeLabelForAskingOff('omp'), 'Full access');
+  });
+
+  test('Pi Asking Off stays none', () {
+    expect(askingControl('pi'), AskingControl.none);
+    expect(agentCanControlAsking('pi'), isFalse);
+  });
+
+  test('Cursor Asking Off is launch-force', () {
+    expect(askingControl('cursor'), AskingControl.launchForce);
+    expect(agentCanControlAsking('cursor'), isTrue);
+    expect(modeForAskingOff('cursor'), isNull);
+    expect(
+      canStopAskingApprovals(harnessId: 'cursor', requireApproval: true),
+      isTrue,
+    );
+  });
+
+  test('only Envoy / DeepSeek may steer live follow-ups', () {
+    expect(canSteerFollowUp('envoy-harness'), isTrue);
+    expect(canSteerFollowUp('deepseek-harness'), isTrue);
+    expect(followUpMustQueue('cursor'), isTrue);
+    expect(followUpMustQueue('claudecode'), isTrue);
+    expect(followUpMustQueue(null), isTrue);
   });
 
   test('custom providers have no wire unless catalogue YOLO', () {

@@ -213,7 +213,12 @@ export function providerCatalogueEnv(
  * reference the launch then ignored would store a provider whose row claims a recipe it does not run.
  */
 export function agreesWithEntry(
-  recipe: { command: string; args: readonly string[]; transport: "acp" | "cli"; env: readonly string[] },
+  recipe: {
+    command: string
+    args: readonly string[]
+    transport: "acp" | "cli" | "rpc-ui"
+    env: readonly string[]
+  },
   entry: AcpAgentEntry,
 ): boolean {
   const [command, ...args] = entry.command;

@@ -717,7 +717,7 @@ abstract class AppLocalizations {
   /// settings.approvals.detail — Explains the approvals switch.
   ///
   /// In en, this message translates to:
-  /// **'When on, the agent asks before risky steps. Off means don’t ask on this machine — via the agent’s policy when it has one, or its unattended mode when that is what the catalogue publishes.'**
+  /// **'On: ask before risky steps. Off: don’t ask on this machine.'**
   String get settingsApprovalsDetail;
 
   /// settings.approvals.reaches — Policy wire note.
@@ -731,6 +731,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Off starts {agent} in “{mode}” so it does not stop to ask. On keeps the mode you pick for the task.'**
   String settingsApprovalsReachesMode(String agent, String mode);
+
+  /// settings.approvals.reachesLaunch — Launch --force wire note.
+  ///
+  /// In en, this message translates to:
+  /// **'Off starts {agent} with force-allow so it does not stop to ask. On leaves its usual permission prompts. A run already in progress is covered until it ends; the next run uses force-allow.'**
+  String settingsApprovalsReachesLaunch(String agent);
+
+  /// settings.approvals.reachesSession — OpenCode session-auto wire note.
+  ///
+  /// In en, this message translates to:
+  /// **'Off tells EnvoyDev to auto-allow {agent}\'s permission prompts for the run (allow once / always). On leaves its usual prompts. {agent} has no separate YOLO mode EnvoyDev can set.'**
+  String settingsApprovalsReachesSession(String agent);
+
+  /// settings.approvals.reachesApproval — OMP launch-approval wire note.
+  ///
+  /// In en, this message translates to:
+  /// **'Off starts {agent} in “{mode}” so it does not stop to ask. On leaves its usual approval mode. A run already in progress is auto-allowed until it ends; the next run uses yolo.'**
+  String settingsApprovalsReachesApproval(String agent, String mode);
 
   /// settings.approvals.unsupported — No deliverable wire.
   ///
@@ -2669,6 +2687,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Autonomy'**
   String get composerAutonomySheet;
+
+  /// Shown when Full access cannot reach this agent (e.g. Cursor)
+  ///
+  /// In en, this message translates to:
+  /// **'This agent still asks for permission itself. Full access is not available here — use Always allow on its prompts, or pick Envoy / Claude / Codex for machine Asking Off.'**
+  String get composerAutonomyUnavailable;
 
   /// Envoy Harness domain tools chip — Off
   ///

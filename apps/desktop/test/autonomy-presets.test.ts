@@ -36,6 +36,15 @@ describe("autonomy presets", () => {
         modeReadOnly: false,
       }),
     ).toBe("full-access");
+    // Cursor-class agents: global Asking Off must not claim Full access.
+    expect(
+      activeAutonomyPreset({
+        requireApproval: false,
+        modeUnattended: false,
+        modeReadOnly: false,
+        askingDeliverable: false,
+      }),
+    ).toBe("default");
   });
 
   it("recognises plan / read-only style modes", () => {

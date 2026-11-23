@@ -1,6 +1,6 @@
 /**
  * Whether the permission card offers “don't ask again” — any deliverable asking wire
- * (policy or unattended-mode), plus catalogue YOLO providers.
+ * (policy, unattended-mode, launch-force, session-auto, launch-approval), plus catalogue YOLO.
  */
 
 import { describe, expect, it } from "vitest";
@@ -47,6 +47,27 @@ describe("canStopAskingApprovals", () => {
     ).toBe(true);
   });
 
+  it("is true for launch / session asking wires (Cursor, OpenCode, OMP)", () => {
+    expect(
+      canStopAskingApprovals({
+        harnessId: "cursor",
+        requireApproval: true,
+      }),
+    ).toBe(true);
+    expect(
+      canStopAskingApprovals({
+        harnessId: "opencode",
+        requireApproval: true,
+      }),
+    ).toBe(true);
+    expect(
+      canStopAskingApprovals({
+        harnessId: "omp",
+        requireApproval: true,
+      }),
+    ).toBe(true);
+  });
+
   it("is true for catalogue YOLO providers (Gemini / Qwen)", () => {
     expect(
       canStopAskingApprovals({
@@ -73,7 +94,7 @@ describe("canStopAskingApprovals", () => {
     ).toBe(false);
   });
 
-  it("is false for shipped agents with askingControl none (Copilot, OMP, …)", () => {
+  it("is false for shipped agents with askingControl none (Copilot, Pi)", () => {
     expect(
       canStopAskingApprovals({
         harnessId: "copilot",
@@ -82,7 +103,7 @@ describe("canStopAskingApprovals", () => {
     ).toBe(false);
     expect(
       canStopAskingApprovals({
-        harnessId: "omp",
+        harnessId: "pi",
         requireApproval: true,
       }),
     ).toBe(false);

@@ -1914,7 +1914,7 @@ export interface AgentProviderSummary {
    * `AgentProviderEnvStateSchema`, where the two agreement rules on it live.
    */
   env: readonly AgentProviderEnvState[];
-  transport: "acp" | "cli";
+  transport: "acp" | "cli" | "rpc-ui";
   availability: HarnessAvailability;
   /**
    * One English sentence about this row — the probe's own reason when it is not ready.
@@ -1960,7 +1960,7 @@ export const AgentProviderSummarySchema = z
     command: z.string().min(1),
     args: z.array(z.string()).readonly(),
     env: z.array(AgentProviderEnvStateSchema).readonly(),
-    transport: z.enum(["acp", "cli"]),
+    transport: z.enum(["acp", "cli", "rpc-ui"]),
     availability: HarnessAvailabilitySchema,
     detail: z.string(),
     auth: HarnessAuthSchema.optional(),
@@ -2036,7 +2036,7 @@ export const CatalogEntrySchema = z
     /** The argv after it, verbatim. */
     args: z.array(z.string()).readonly(),
     /** How the daemon must speak to it. The entry states it; nothing infers it. */
-    transport: z.enum(["acp", "cli"]),
+    transport: z.enum(["acp", "cli", "rpc-ui"]),
     /**
      * Every environment variable the recipe sets, **name and constant together** — see the doc above for
      * why the value is part of the row and what `CatalogEnvConstantSchema` refuses. Never a credential: a
@@ -3513,7 +3513,7 @@ export const RPC_SPECS: Readonly<Record<RpcMethod, RpcMethodSpec>> = Object.free
          * stored. `test/providers.test.ts` asserts the negative with a real key.
          */
         catalogEntryId: z.string().min(1).optional(),
-        transport: z.enum(["acp", "cli"]),
+        transport: z.enum(["acp", "cli", "rpc-ui"]),
         authMethodId: z.string().min(1).optional(),
         modeParam: z.enum(["mode", "modeId"]).optional(),
       })

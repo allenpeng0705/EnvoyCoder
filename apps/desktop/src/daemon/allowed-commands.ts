@@ -58,8 +58,12 @@ export function allowChoiceId(
   options: readonly { optionId?: string; kind?: string }[] | undefined,
 ): string | undefined {
   if (options === undefined || options.length === 0) return "allow";
-  const hit = options.find((option) => option.kind === "allow_once" || option.kind === "allow_always");
-  return typeof hit?.optionId === "string" && hit.optionId !== "" ? hit.optionId : undefined;
+  // Prefer Always allow when auto-answering (session memory / Guardian) so Cursor
+  // gets the durable option when both once and always are offered.
+  const always = options.find((option) => option.kind === "allow_always");
+  if (typeof always?.optionId === "string" && always.optionId !== "") return always.optionId;
+  const once = options.find((option) => option.kind === "allow_once");
+  return typeof once?.optionId === "string" && once.optionId !== "" ? once.optionId : undefined;
 }
 
 export function choiceAllows(
@@ -69,6 +73,16 @@ export function choiceAllows(
   if (options === undefined || options.length === 0) return optionId === "allow";
   const hit = options.find((option) => option.optionId === optionId);
   return hit?.kind === "allow_once" || hit?.kind === "allow_always";
+}
+
+/** ACP "Always allow" — host should stop asking for the rest of this run. */
+export function choiceIsAllowAlways(
+  options: readonly { optionId?: string; kind?: string }[] | undefined,
+  optionId: string,
+): boolean {
+  if (options === undefined || options.length === 0) return false;
+  const hit = options.find((option) => option.optionId === optionId);
+  return hit?.kind === "allow_always";
 }
 
 export async function isCommandAllowed(stateDir: string, cwd: string, key: string): Promise<boolean> {

@@ -1,16 +1,35 @@
 /// Codex-inspired autonomy presets — Read only / Default / Full access.
 library;
 
+import 'asking_control.dart';
+
 enum AutonomyPresetId { readOnly, default_, fullAccess }
 
 AutonomyPresetId activeAutonomyPreset({
   required bool requireApproval,
   required bool modeUnattended,
   required bool modeReadOnly,
+  /// False for agents (e.g. Cursor) that cannot receive Asking Off / YOLO.
+  bool askingDeliverable = true,
 }) {
-  if (modeUnattended || !requireApproval) return AutonomyPresetId.fullAccess;
+  if (modeUnattended) return AutonomyPresetId.fullAccess;
+  if (!requireApproval && askingDeliverable) return AutonomyPresetId.fullAccess;
   if (modeReadOnly) return AutonomyPresetId.readOnly;
   return AutonomyPresetId.default_;
+}
+
+/// Whether Full access / Asking Off can reach this agent.
+///
+/// Matches desktop `askingIsDeliverable`: shipped wire or catalogue YOLO — not a
+/// catalogue `unattended` mode we cannot deliver (Copilot / OMP).
+bool askingIsDeliverable({
+  required String? harnessId,
+  String? catalogEntryId,
+}) {
+  if (harnessId == null || harnessId.isEmpty) return false;
+  if (agentCanControlAsking(harnessId)) return true;
+  if (isShippedAskingAgent(harnessId)) return false;
+  return cataloguedUnattendedModeId(catalogEntryId ?? harnessId) != null;
 }
 
 bool modeLooksReadOnly(String? modeId) {

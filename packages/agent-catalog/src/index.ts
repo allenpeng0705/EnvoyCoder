@@ -114,17 +114,16 @@ export type AgentLaunch =
        * between a supported agent and a wish.
        *
        * `"acp"` means the program implements the Agent Client Protocol over stdio, which is what our
-       * adapter drives (`initialize` / `session/new` / `session/prompt` / `session/request_permission`).
-       * `"cli"` means it is a one-shot command line whose output we would have to parse ourselves: we
-       * can *start* it — argv, environment, prompt — but nothing in this product yet understands what
-       * it prints back.
+       * ACP adapter drives (`initialize` / `session/new` / `session/prompt` / `session/request_permission`).
+       * `"rpc-ui"` means Pi-family JSONL RPC over stdio (`--mode rpc-ui` / `--mode rpc`), driven by
+       * the daemon’s JSONL client (OMP, Pi).
+       * `"cli"` means a one-shot command line whose output we would have to parse ourselves: we can
+       * *start* it — argv, environment, prompt — but nothing in this product understands what it prints.
        *
        * Recorded per entry because the two facts are genuinely different: **being installed is not
-       * being drivable.** Before this field existed, the picker offered six agents whose programs do
-       * not speak ACP, and `RunManager` — which builds an `AcpLaunch` for every harness — handed them
-       * an ACP handshake they could not answer.
+       * being drivable.**
        */
-      transport: "acp" | "cli";
+      transport: "acp" | "cli" | "rpc-ui";
       /**
        * The ACP `authenticate` method this agent needs before it will open a session, when it needs one.
        *
@@ -250,10 +249,9 @@ export interface AgentCapabilities {
    *     offering a control that would be silently ignored — which is why `modes` is empty there and
    *     this is `false`.
    *
-   * The third-party entries are `false` too, for two different reasons recorded where they apply: the
-   * ones `isDrivableByAcpAdapter` refuses (`opencode`, `pi`, `omp`) could not have a mode applied even if
-   * one were chosen, and `copilot` — drivable since its own `--acp` server was measured on 2026-09-15 —
-   * has a mode *field* nobody has read yet, because its `session/new` refuses until the user signs in.
+   * Third-party entries vary: OpenCode claims `agentMode` with `modeParam: modeId` (ACP docs). OMP/Pi
+   * keep this `false` — OMP Asking Off is `--approval-mode` at spawn, not `session/set_mode`. Copilot
+   * has a mode field nobody has read yet (`session/new` refuses until sign-in).
    */
   agentMode: boolean;
   /**
@@ -808,43 +806,43 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       { id: "build", label: "Build" },
       { id: "plan", label: "Plan", description: "Read-only." },
     ],
-    summary: "The open-source OpenCode agent.",
+    summary: "The open-source OpenCode agent, driven over ACP.",
     launch: {
       kind: "child-process",
       binaries: ["opencode"],
-      buildArgs: ({ prompt, model, extraArgs }) => [
-        "run",
-        ...(model ? ["--model", modelIdOf(model)] : []),
-        prompt,
-        ...splitArgs(extraArgs),
-      ],
-      stream: "text",
-      transport: "cli",
+      // Documented ACP server: https://opencode.ai/docs/cli/acp/ — `opencode acp` on stdio.
+      // Prompt and model travel over the protocol, not argv.
+      buildArgs: ({ extraArgs }) => ["acp", ...splitArgs(extraArgs)],
+      stream: "jsonl",
+      transport: "acp",
+      // Docs: config option `mode` lists visible primary agents; set_mode also sets the agent.
+      modeParam: "modeId",
+      authMethodId: "opencode-login",
+      resumeArgs: () => [],
     },
     capabilities: {
+      // Advertised on initialize per OpenCode ACP docs (loadSession, resume, close, …).
       resume: true,
       cancel: true,
+      // session/request_permission with allow once / always / reject — no set_policy.
       approvals: true,
-      structuredTools: false,
+      structuredTools: true,
       streaming: true,
-      images: false,
-      agentMode: false,
-      // Same claim, same reason: no ACP policy method for this entry to be handed one through.
+      images: true,
+      agentMode: true,
       approvalPolicy: false,
       worktrees: "external",
     },
-    install: { hint: "see the project's install instructions", url: "https://github.com/anomalyco/opencode" },
+    install: {
+      hint: "install OpenCode so `opencode` is on PATH, then `opencode auth login`",
+      url: "https://opencode.ai/docs/cli/acp/",
+    },
     evidence:
-      "unverified — `opencode run` with an optional `--model` is assumed; Paseo's CLI reference shows " +
-      "provider-qualified models (`paseo run --provider claude/opus-4.6`), which is where our " +
-      "`provider/model` string convention comes from (paseo README, CLI section). **A LEAD, not this " +
-      "entry's command, and not a claim:** OpenCode's own documentation has an 'ACP Support' page whose " +
-      "entire configuration is `command: \"opencode\", args: [\"acp\"]` — 'starts OpenCode as an " +
-      "ACP-compatible subprocess that communicates with your editor over JSON-RPC via stdio' — so the " +
-      "command above is very probably not the one to use and this entry is very probably an ACP agent. " +
-      "NOT verified here: `opencode` is not installed on the machine this was written on, so nothing " +
-      "was driven and nothing changed. The entry is still `transport: \"cli\"` and still refused by " +
-      "`isDrivableByAcpAdapter`, which is what a user meets.",
+      "Catalogue switched from `opencode run` to `opencode acp` per OpenCode ACP docs " +
+      "(https://opencode.ai/docs/cli/acp/): NDJSON ACP v1, auth method `opencode-login`, " +
+      "sessionCapabilities resume/list/close/fork/delete, permission options once/always/reject, " +
+      "config options model/effort/mode. Asking Off is host session-auto (no YOLO / set_policy). " +
+      "UNVERIFIED against a live binary on this machine — handshake not re-measured here.",
   },
 
   cursor: {
@@ -865,9 +863,16 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       // binary has the `acp` subcommand. (`cursor-agent --help` lists it under a `agent [prompt...]`
       // usage; `cursor-agent acp` is what was driven here.)
       binaries: ["cursor-agent"],
-      // The subcommand, and nothing else. The prompt goes over the protocol, the model is a session
-      // config option (`./models.ts`), and a resume is `session/resume`.
-      buildArgs: ({ extraArgs }) => ["acp", ...splitArgs(extraArgs)],
+      // The subcommand, and nothing else for a normal run. Asking Off prepends `--force` via
+      // `askingOffLaunchArgs` (see `./asking-control.ts`): root CLI options must sit *before*
+      // `acp`, or the ACP path never sees `force` (confirmed: `cursor-agent --help` documents
+      // `-f, --force`; placing it after `acp` is a no-op on that path).
+      buildArgs: ({ extraArgs }) => {
+        const parts = splitArgs(extraArgs);
+        const force = parts.includes("--force") || parts.includes("-f");
+        const rest = parts.filter((part) => part !== "--force" && part !== "-f");
+        return [...(force ? ["--force"] : []), "acp", ...rest];
+      },
       stream: "jsonl",
       transport: "acp",
       // **Needed on a fresh installation, and declared because the client may not guess one.** On its
@@ -931,25 +936,13 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
   },
 
   /**
-   * **OMP (Oh My Pi)** — a Pi-compatible fork, and the one agent here whose *capabilities* we
-   * deliberately understate.
+   * **OMP (Oh My Pi)** — Pi-family JSONL RPC (`--mode rpc-ui`), driven by `JsonlRpcAgentClient`.
    *
-   * What is verified (`paseo/packages/server/src/server/agent/providers/omp/**`, `pi/runtime.ts:119-140`,
-   * `docs/custom-providers.md` §"OMP profiles and Pi-compatible forks"): it is launched as
-   * `<binary> --mode rpc [--model M] [--session S]`, it speaks JSON-RPC over stdio with an initial
-   * `ready` frame (20 s) and a 60 s control-plane deadline, its approvals arrive as `rpc-ui`
-   * permission requests, and its sessions are JSONL under `~/.omp/agent/sessions`.
-   *
-   * What is *not* true yet: our adapter cannot speak that protocol. We spawn a process, pass the prompt
-   * in argv and read a stream; `--mode rpc` needs the prompt written to stdin as JSON-RPC and its
-   * frames mapped. So the capabilities below stay false — not because OMP lacks them (it has cancel,
-   * approvals, structured tools and subagents), but because **we cannot deliver them through the
-   * transport we have**, and a UI that offered an approval dialog for a channel we never read would be
-   * lying to the user.
-   *
-   * "Done" for this entry is one thing: a pi-family RPC transport (`--mode rpc`, write the prompt,
-   * map `ready`/tool/permission frames). That it also fixes `pi` below is the reason it is worth
-   * building rather than special-casing OMP.
+   * Approvals arrive as `extension_ui_request`; Asking Off is `--approval-mode yolo` at spawn
+   * (`askingControl: launch-approval`). Catalogue modes `full` / `write` / `ask` map to approval
+   * argv at launch (not `session/set_mode` — `agentMode` stays false). Resume uses `--session`
+   * from `get_state.sessionFile`. Sign-in / ACP session-probe stay ACP-only and refuse rpc-ui
+   * honestly. UNVERIFIED against a live `omp` binary on this machine.
    */
   omp: {
     id: "omp",
@@ -964,37 +957,38 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
     launch: {
       kind: "child-process",
       binaries: ["omp"],
-      // The prompt is *not* here: in rpc mode it goes over stdin. Until the transport exists this
-      // argv is what a user would run by hand to see the agent, which is why it is still worth having.
-      buildArgs: ({ extraArgs }) => ["--mode", "rpc", ...splitArgs(extraArgs)],
+      // Prompt goes over JSONL stdin after ready. Asking Off adds `--approval-mode yolo` via
+      // `askingOffLaunchArgs` / `ompApprovalLaunchArgs` (Paseo `resolveOmpLaunchMode`).
+      buildArgs: ({ model, extraArgs }) => [
+        "--mode",
+        "rpc-ui",
+        ...(model ? ["--model", modelIdOf(model)] : []),
+        ...splitArgs(extraArgs),
+      ],
       stream: "jsonl",
-      transport: "cli",
-      // `resumeArgs` takes the session id itself (see `AgentLaunch`), which is the JSONL file path
-      // OMP/Pi write under their session directory.
+      transport: "rpc-ui",
       resumeArgs: (sessionId) => ["--session", sessionId],
     },
     capabilities: {
-      resume: false,
-      cancel: false,
-      approvals: false,
-      structuredTools: false,
+      resume: true,
+      cancel: true,
+      approvals: true,
+      structuredTools: true,
       streaming: true,
-      images: false,
+      images: true,
+      // Mode travels as `--approval-mode` at spawn, not `session/set_mode`.
       agentMode: false,
-      // Same claim, same reason: no ACP policy method for this entry to be handed one through.
       approvalPolicy: false,
       worktrees: "external",
     },
     install: {
-      hint: "install the OMP (Oh My Pi) CLI so `omp` is on PATH (Paseo ships it as a built-in provider, disabled by default — see their docs/custom-providers.md)",
+      hint: "install the OMP (Oh My Pi) CLI so `omp` is on PATH",
     },
     evidence:
-      "unverified on this machine (no `omp` binary here). Launch/argv, the `ready` handshake, the 60 s " +
-      "control-plane deadline, `rpc-ui` approvals and the `~/.omp/agent/sessions` layout are read from " +
-      "Paseo v0.8.0: server/agent/providers/omp/{runtime,provider-config,rpc-ui-permission-mapper}.ts " +
-      "and providers/pi/runtime.ts:119-140 (`argv.push(\"--mode\", protocolMode)`), plus their " +
-      "docs/custom-providers.md. Capabilities are deliberately conservative: our adapter has no rpc " +
-      "transport, so what OMP *has* and what we can *deliver* are different lists today.",
+      "Driven over Pi-family JSONL RPC (`--mode rpc-ui`). Asking Off = `--approval-mode yolo` " +
+      "(Paseo resolveOmpLaunchMode). ready / negotiate / prompt / extension_ui_request / get_state " +
+      "in `apps/desktop/src/daemon/rpc/`. Modes full|write|ask → `--approval-mode` at spawn. " +
+      "UNVERIFIED against a live `omp` binary on this machine.",
   },
 
   pi: {
@@ -1002,35 +996,38 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
     label: "Pi",
     tier: "catalogued",
     modes: [],
-    summary: "The Pi coding agent.",
+    summary: "The Pi coding agent, driven over JSONL RPC.",
     launch: {
       kind: "child-process",
       binaries: ["pi"],
-      buildArgs: ({ prompt, extraArgs }) => [prompt, ...splitArgs(extraArgs)],
-      stream: "text",
-      transport: "cli",
+      // Honest RPC launch — prompt over stdin after ready. No Full access / Asking Off wire.
+      buildArgs: ({ model, extraArgs }) => [
+        "--mode",
+        "rpc",
+        ...(model ? ["--model", modelIdOf(model)] : []),
+        ...splitArgs(extraArgs),
+      ],
+      stream: "jsonl",
+      transport: "rpc-ui",
+      resumeArgs: (sessionId) => ["--session", sessionId],
     },
     capabilities: {
-      resume: false,
+      resume: true,
       cancel: true,
-      approvals: false,
-      structuredTools: false,
+      // extension_ui when present; Asking Off stays `none` — Full access for this family is on OMP.
+      approvals: true,
+      structuredTools: true,
       streaming: true,
-      images: false,
+      images: true,
       agentMode: false,
-      // Same claim, same reason: no ACP policy method for this entry to be handed one through.
       approvalPolicy: false,
       worktrees: "external",
     },
     install: { hint: "see pi.dev", url: "https://pi.dev" },
     evidence:
-      "unverified on this machine, and **known to be wrong about the protocol**: Paseo drives Pi as " +
-      "`<binary> --mode rpc [--model M] [--session S]` with JSON-RPC over stdio " +
-      "(providers/pi/runtime.ts:119-140) and `rpc-ui` approvals, while this entry launches it in " +
-      "one-shot text mode and therefore claims no cancel, no approvals and no structured tools. Those " +
-      "claims understate the agent rather than overstate it, which is the safe direction — but the fix " +
-      "is the same pi-family RPC transport the `omp` entry above needs. Until then, treat this entry as " +
-      "\"starts Pi and reads its output\", nothing more.",
+      "Catalogue launch is `--mode rpc` (Paseo providers/pi/runtime.ts). Same JSONL transport as OMP; " +
+      "ready-only handshake (no OMP negotiate). askingControl stays none. Sign-in / ACP session-probe " +
+      "refuse rpc-ui. UNVERIFIED against a live `pi` binary here.",
   },
 };
 
@@ -1043,20 +1040,23 @@ export function harnessDefinition(id: HarnessId): HarnessDefinition {
 }
 
 /**
- * Can the adapter we actually have drive this agent?
+ * Can the ACP adapter drive this agent?
  *
- * **Being installed is not being drivable**, and conflating the two is how a picker offers six agents
- * that cannot start. `RunManager` builds an `AcpLaunch` for every harness and hands the process to the
- * ACP client, so an entry whose program does not speak Agent Client Protocol is not "available but
- * unverified" — it is a process that will never answer `initialize`.
- *
- * This is the honest gate for that: the two harnesses whose argv *is* ACP are drivable today, and each
- * other entry names what it would need instead (an app-server client, an HTTP bridge, a JSONL-RPC
- * reader, or a vendor ACP subcommand that this machine's build may not even ship).
+ * ACP-only. Prefer {@link isDrivable} when offering start / Settings for any shipped agent —
+ * OMP and Pi speak JSONL RPC, not ACP.
  */
 export function isDrivableByAcpAdapter(id: HarnessId): boolean {
   const launch = HARNESS_CATALOG[id].launch;
   return launch.kind === "child-process" && launch.transport === "acp";
+}
+
+/**
+ * Can this product start a run for the agent (ACP or Pi-family JSONL RPC)?
+ */
+export function isDrivable(id: HarnessId): boolean {
+  const launch = HARNESS_CATALOG[id].launch;
+  if (launch.kind !== "child-process") return false;
+  return launch.transport === "acp" || launch.transport === "rpc-ui";
 }
 
 /**
@@ -1065,7 +1065,7 @@ export function isDrivableByAcpAdapter(id: HarnessId): boolean {
  * `in-process` is a third answer rather than a missing one: a harness mounted as a library inside the
  * daemon is neither an ACP peer nor a command line, and pretending either would misreport it.
  */
-export function harnessTransport(id: HarnessId): "acp" | "cli" | "in-process" {
+export function harnessTransport(id: HarnessId): "acp" | "cli" | "rpc-ui" | "in-process" {
   const launch = HARNESS_CATALOG[id].launch;
   return launch.kind === "child-process" ? launch.transport : "in-process";
 }
@@ -1403,9 +1403,25 @@ export function resolveHarnessCommand(
     if (!peer) throw new Error(`${id} was probed as a checkout entry but has none declared.`);
     // Node runs the entry, and the entry supplies its own mode — so the argv is the *checkout's*,
     // not the installed CLI's.
-    return { command: process.execPath, args: [probe.binaryPath, ...peer.args(input)] };
+    return {
+      command: process.execPath,
+      args: [probe.binaryPath, ...peer.args(input), ...resumeArgv(definition, input.resumeSessionId)],
+    };
   }
-  return { command: probe.binaryPath, args: definition.launch.buildArgs(input) };
+  return {
+    command: probe.binaryPath,
+    args: [...definition.launch.buildArgs(input), ...resumeArgv(definition, input.resumeSessionId)],
+  };
+}
+
+/** Catalogue `resumeArgs` when a Pi-family session id is being continued at spawn. */
+function resumeArgv(
+  definition: ReturnType<typeof harnessDefinition>,
+  resumeSessionId: string | undefined,
+): string[] {
+  if (!resumeSessionId || definition.launch.kind !== "child-process") return []
+  const build = definition.launch.resumeArgs
+  return build ? [...build(resumeSessionId)] : []
 }
 
 /** The argv to run a task, plus the spawn options that make it killable as a tree. */

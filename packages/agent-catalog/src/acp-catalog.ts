@@ -116,7 +116,7 @@ export interface AcpAgentEntry {
    * only when vendor docs or schema tests name both the parameter and the fixed mode ids. `authMethodId`
    * is still never invented here.
    */
-  transport: "acp" | "cli";
+  transport: "acp" | "cli" | "rpc-ui";
   /**
    * Which JSON-RPC field `session/set_mode` reads — only when `sessionModes` is also set from evidence.
    * See `docs/catalog-mode-audit.md`.
@@ -865,7 +865,7 @@ export interface CataloguedProviderInput {
   readonly command: string;
   readonly args: readonly string[];
   readonly env: readonly string[];
-  readonly transport: "acp" | "cli";
+  readonly transport: "acp" | "cli" | "rpc-ui";
   /**
    * The entry's own id, as `coder.addProvider`'s `catalogEntryId`.
    *

@@ -384,6 +384,8 @@ export const en = {
   "task.composer.autonomy.confirmBody":
     "Full access turns off asking on this machine and lets this agent edit files and run tools without approval prompts. That raises the risk of unwanted edits, data loss, or unexpected behavior. You can turn asking back on in Settings.",
   "task.composer.autonomy.confirm": "Yes, continue anyway",
+  "task.composer.autonomy.unavailable":
+    "This agent still asks for permission itself. Full access is not available here — use Always allow on its prompts, or pick Envoy / Claude / Codex for machine Asking Off.",
   "task.composer.autonomy.label": "Autonomy",
   "task.composer.workingPeek.aria": "What the agent is working on",
   "task.posture.aria": "Autonomy posture for this task",
@@ -942,11 +944,17 @@ export const en = {
   "settings.extraArgs.placeholder": "--verbose",
   "settings.approvals.title": "Ask before risky steps",
   "settings.approvals.detail":
-    "When on, the agent asks before risky steps. Off means don’t ask on this machine — via the agent’s policy when it has one, or its unattended mode when that is what the catalogue publishes.",
+    "On: ask before risky steps. Off: don’t ask on this machine.",
   "settings.approvals.reaches":
     "Handed to {agent} as its own policy for every run, so the asking happens where the work does.",
   "settings.approvals.reachesMode":
     "Off starts {agent} in “{mode}” so it does not stop to ask. On keeps the mode you pick for the task.",
+  "settings.approvals.reachesLaunch":
+    "Off starts {agent} with force-allow so it does not stop to ask. On leaves its usual permission prompts. A run already in progress is covered until it ends; the next run uses force-allow.",
+  "settings.approvals.reachesSession":
+    "Off tells EnvoyDev to auto-allow {agent}'s permission prompts for the run (allow once / always). On leaves its usual prompts. {agent} has no separate YOLO mode EnvoyDev can set.",
+  "settings.approvals.reachesApproval":
+    "Off starts {agent} in “{mode}” (`--approval-mode yolo`) so it does not stop to ask. On leaves its usual approval mode. A run already in progress is auto-allowed until it ends; the next run uses yolo.",
   "settings.approvals.unsupported":
     "EnvoyDev cannot change this for {agent}: it has no way to be told, and asks on its own terms. Pick an agent EnvoyDev can hand a policy or unattended mode to, or answer {agent}'s own prompts.",
   "settings.approvals.unknown":

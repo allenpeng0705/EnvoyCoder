@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveSendWhileRunning } from "../src/composer/send-while-running.js";
+import {
+  followUpMustQueue,
+  resolveFollowUpMode,
+  resolveSendWhileRunning,
+} from "../src/composer/send-while-running.js";
 import { diffStatFromChanges } from "../src/composer/diff-stat.js";
 import { guardianMayAutoAllow } from "../src/daemon/guardian.js";
 
@@ -8,6 +12,19 @@ describe("resolveSendWhileRunning", () => {
   it("queues by default and steers only when flipped", () => {
     expect(resolveSendWhileRunning(false)).toBe("queue");
     expect(resolveSendWhileRunning(true)).toBe("steer");
+  });
+
+  it("only Envoy / DeepSeek may steer — everyone else queues", () => {
+    expect(followUpMustQueue("cursor")).toBe(true);
+    expect(followUpMustQueue("claudecode")).toBe(true);
+    expect(followUpMustQueue("codex")).toBe(true);
+    expect(followUpMustQueue("copilot")).toBe(true);
+    expect(followUpMustQueue("my-custom")).toBe(true);
+    expect(followUpMustQueue("envoy-harness")).toBe(false);
+    expect(followUpMustQueue("deepseek-harness")).toBe(false);
+    expect(resolveFollowUpMode("cursor", "steer")).toBe("queue");
+    expect(resolveFollowUpMode("claudecode", "steer")).toBe("queue");
+    expect(resolveFollowUpMode("envoy-harness", "steer")).toBe("steer");
   });
 });
 

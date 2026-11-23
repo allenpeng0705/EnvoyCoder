@@ -348,7 +348,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsApprovalsDetail =>
-      'オンのとき、エージェントはリスクのある操作の前に確認します。オフはこのマシンでは確認しないという意味で、ポリシーがあるエージェントにはポリシーで、カタログに無人モードがある場合はそのモードで伝えます。';
+      'オン：リスクのある操作の前に確認。オフ：このマシンでは確認しない。';
 
   @override
   String settingsApprovalsReaches(String agent) {
@@ -358,6 +358,21 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String settingsApprovalsReachesMode(String agent, String mode) {
     return 'オフにすると $agent は「$mode」で始まり、確認のために止まりません。オンではタスクで選んだモードを保ちます。';
+  }
+
+  @override
+  String settingsApprovalsReachesLaunch(String agent) {
+    return 'Off starts $agent with force-allow so it does not stop to ask. On leaves its usual permission prompts. A run already in progress is covered until it ends; the next run uses force-allow.';
+  }
+
+  @override
+  String settingsApprovalsReachesSession(String agent) {
+    return 'Off tells EnvoyDev to auto-allow $agent\'s permission prompts for the run (allow once / always). On leaves its usual prompts. $agent has no separate YOLO mode EnvoyDev can set.';
+  }
+
+  @override
+  String settingsApprovalsReachesApproval(String agent, String mode) {
+    return 'Off starts $agent in “$mode” so it does not stop to ask. On leaves its usual approval mode. A run already in progress is auto-allowed until it ends; the next run uses yolo.';
   }
 
   @override
@@ -1485,6 +1500,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get composerAutonomySheet => '自律性';
+
+  @override
+  String get composerAutonomyUnavailable =>
+      'このエージェントは引き続き自分で許可を求めます。ここではフルアクセスを使えません — プロンプトで常に許可するか、マシンの確認オフには Envoy / Claude / Codex を選んでください。';
 
   @override
   String get composerDomainOff => 'ツールオフ';

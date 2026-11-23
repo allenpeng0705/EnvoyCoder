@@ -610,11 +610,16 @@ export const de: Catalogue = {
   "settings.extraArgs.detail": "Wird bei jeder Aufgabe an die Kommandozeile gehängt.",
   "settings.extraArgs.placeholder": "--verbose",
   "settings.approvals.title": "Vor riskanten Schritten fragen",
-  "settings.approvals.detail":
-    "Wenn an, fragt der Agent vor riskanten Schritten. Aus heißt auf diesem Rechner nicht fragen — über die Agentenrichtlinie, wenn es eine gibt, sonst über den unbeaufsichtigten Modus aus dem Katalog.",
+  "settings.approvals.detail": "An: vor riskanten Schritten fragen. Aus: auf diesem Rechner nicht fragen.",
   "settings.approvals.reaches": "Wird {agent} bei jedem Lauf als eigene Richtlinie übergeben, damit das Nachfragen dort geschieht, wo die Arbeit geschieht.",
   "settings.approvals.reachesMode":
     "Aus startet {agent} in „{mode}“, damit nicht nachgefragt wird. An behält den Modus, den du für die Aufgabe wählst.",
+  "settings.approvals.reachesLaunch":
+    "Aus startet {agent} mit erzwungenem Zulassen, damit nicht nachgefragt wird. An belässt die üblichen Freigabeaufforderungen. Ein laufender Lauf wird bis zum Ende abgedeckt; der nächste Lauf nutzt erzwungenes Zulassen.",
+  "settings.approvals.reachesSession":
+    "Aus lässt EnvoyDev die Freigabeaufforderungen von {agent} für den Lauf automatisch zulassen (einmal / immer). An belässt die üblichen Aufforderungen. {agent} hat keinen eigenen YOLO-Modus, den EnvoyDev setzen kann.",
+  "settings.approvals.reachesApproval":
+    "Aus startet {agent} in „{mode}“ (`--approval-mode yolo`), damit nicht nachgefragt wird. An belässt den üblichen Freigabemodus. Ein laufender Lauf wird bis zum Ende automatisch freigegeben; der nächste Lauf nutzt yolo.",
   "settings.approvals.unsupported":
     "EnvoyDev kann das für {agent} nicht ändern: Dieser Agent kann nichts entgegennehmen und fragt nach eigenen Regeln. Wähle einen Agenten, dem EnvoyDev eine Richtlinie oder einen unbeaufsichtigten Modus übergeben kann, oder beantworte die Rückfragen von {agent} selbst.",
   "settings.approvals.unknown": "EnvoyDev weiß noch nicht, was {agent} akzeptiert; deshalb bleibt das aus, statt eine Wahl zu speichern, die niemand liest.",
@@ -949,6 +954,7 @@ export const de: Catalogue = {
   "task.composer.autonomy.confirmBody":
     "Voller Zugriff schaltet das Fragen auf diesem Rechner aus und lässt diesen Agenten Dateien bearbeiten und Tools ohne Freigabeaufforderungen ausführen. Das erhöht das Risiko unerwünschter Änderungen, Datenverlusts oder unerwarteten Verhaltens. Du kannst das Fragen in den Einstellungen wieder einschalten.",
   "task.composer.autonomy.confirm": "Ja, trotzdem fortfahren",
+  "task.composer.autonomy.unavailable": "Dieser Agent fragt weiterhin selbst nach Erlaubnis. Voller Zugriff ist hier nicht verfügbar — nutze „Immer erlauben“ auf den Abfragen oder wähle Envoy / Claude / Codex für Asking Off auf diesem Gerät.",
   "task.composer.autonomy.label": "Autonomie",
   "task.composer.workingPeek.aria": "Woran der Agent arbeitet",
   "task.posture.aria": "Autonomie-Haltung für diese Aufgabe",

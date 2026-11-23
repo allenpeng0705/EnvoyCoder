@@ -71,15 +71,18 @@ import {
 // block was already being edited.
 import {
   askingControl,
+  askingOffLaunchArgs,
   envoyDomainPresetPolicy,
   envoyPermissionPolicy,
   featureSessionConfigs,
   harnessDefinition,
+  harnessTransport,
   isPermissionModeId,
   mapRetiredEnvoyMode,
   modeForAskingOff,
   modeLaunchEnv,
   observeSessionOptions,
+  ompApprovalLaunchArgs,
   collaborationModeToSet,
 } from "@envoydev/agent-catalog";
 import { cataloguedUnattendedModeId } from "@envoydev/agent-catalog/catalog";
@@ -88,13 +91,18 @@ import type { PlatformId } from "@envoydev/platform";
 import type { CoderPaths } from "@envoydev/host-bridge";
 
 import { AcpClient, type AcpLaunch, type AcpPermissionRequest, type AcpSessionPolicy, type AcpUpdate, type AcpUserQuestion, type AcpUserQuestionChoice } from "./acp/client.js";
+import { JsonlRpcAgentClient } from "./rpc/client.js";
 import { launchForAgent } from "./launch.js";
 import { envoyRunModel } from "./envoy-llm.js";
 import { slashCommandsFromAcp } from "../composer/slash-commands.js";
 import { stripPlanFirstFraming } from "../composer/plan-gate.js";
+import { followUpMustQueue } from "@envoydev/agent-catalog/asking";
 import { parseAcpPlanUpdate } from "./acp-plan.js";
 import { splitAskPrompt } from "./ask-prompt.js";
 import { keyed, ref } from "./messages.js";
+
+/** ACP or Pi-family JSONL client — the surface `drive` / cancel / stop share. */
+type RunAgentClient = AcpClient | JsonlRpcAgentClient;
 // The values a run asks for, checked against the catalogue before anything is spawned — and the
 // refusals a user reads when this build cannot deliver one. They live in their own module because they
 // are one subject (see its head), and this file is about the run loop rather than about the rules.
@@ -111,6 +119,7 @@ import {
   allowChoiceId,
   approvalSubject,
   choiceAllows,
+  choiceIsAllowAlways,
   isCommandAllowed,
   permissionMemoryKey,
   rememberCommand,
@@ -140,6 +149,8 @@ export interface RunManagerDeps {
     model?: string;
     /** Extra environment for this launch — a DeepSeek permission level. */
     extraEnv?: Record<string, string>;
+    /** Pi-family JSONL `--session` resume id. */
+    resumeSessionId?: string;
   }) => AcpLaunch;
   /** Which platform's argv and spawn rules to use, so the Windows branch is testable. */
   platform?: PlatformId;
@@ -225,7 +236,7 @@ interface LiveRun {
    * path because that is where the answer already is — one assignment per event, no timer.
    */
   lastEventAt?: string;
-  client: AcpClient | undefined;
+  client: RunAgentClient | undefined;
   launch: AcpLaunch;
   /**
    * The model this run was started on, taken apart for the agent's own protocol, and the thinking
@@ -266,6 +277,11 @@ interface LiveRun {
      */
     allowOptionIds: readonly string[];
   } | undefined;
+  /**
+   * Serialize permission + ask_user cards — one `approval` slot. OMP/Pi also serialize in the
+   * RPC client; ACP agents can raise both without that, so the host chain is the backstop.
+   */
+  approvalChain: Promise<void>;
   /**
    * Wave 4 session stop-asking — auto-allow further permission cards on this live run only.
    * Does not flip Settings; cleared when the run ends.
@@ -487,14 +503,32 @@ export class RunManager {
     const requestedMode = input.agentModeId ?? task.agentModeId;
     if (!shipped) await ensureRunnableAgent(this.deps.store, runHarness);
     const provider = shipped ? undefined : findRunnableProvider(this.deps.store, runHarness);
-    let agentModeId = shipped
-      ? resolveAgentMode(shipped, requestedMode)
-      : resolveCataloguedProviderMode(provider, requestedMode);
+    // OMP approval levels travel as `--approval-mode` at spawn, not `session/set_mode` — resolve
+    // against the catalogue modes without claiming `capabilities.agentMode`.
+    let agentModeId: string | undefined;
+    if (shipped === "omp") {
+      const modes = harnessDefinition("omp").modes.map((mode) => mode.id);
+      if (requestedMode !== undefined && !modes.includes(requestedMode)) {
+        throw coderError(
+          ENVOYDEV_ERRORS.badRequest,
+          `OMP does not offer a mode called "${requestedMode}", so the run was not started. Pick one of its modes and try again.`,
+          ref("error.agentModeUnknown", { harness: "OMP (Oh My Pi)", mode: requestedMode }),
+        );
+      }
+      agentModeId = requestedMode;
+    } else {
+      agentModeId = shipped
+        ? resolveAgentMode(shipped, requestedMode)
+        : resolveCataloguedProviderMode(provider, requestedMode);
+    }
     // Settings Off for agents without `session/set_policy`: force their published unattended mode
     // (Claude `bypassPermissions`, Codex `agent-full-access`, DeepSeek Full access via env). Envoy
-    // Harness stays on the chosen sandbox and only changes `autoRun` below.
+    // Harness stays on the chosen sandbox and only changes `autoRun` below. OMP Asking Off selects
+    // Full access → `--approval-mode yolo` via `askingOffLaunchArgs` below.
     if (this.settings().requireApprovalForDestructive === false) {
-      if (shipped) {
+      if (shipped === "omp") {
+        agentModeId = "full";
+      } else if (shipped) {
         const unattended = modeForAskingOff(shipped);
         if (unattended !== undefined) agentModeId = unattended;
       } else {
@@ -575,14 +609,32 @@ export class RunManager {
           ...(basePolicy?.autoRun !== undefined ? { autoRun: basePolicy.autoRun } : {}),
         }
       : basePolicy;
+    // Asking Off launch argv: Cursor `--force`, OMP `--approval-mode yolo`.
+    // OMP with Settings On still maps a catalogue mode id (full/write/ask) to approval argv.
+    const askingLaunch =
+      shipped && this.settings().requireApprovalForDestructive === false
+        ? askingOffLaunchArgs(shipped)
+        : shipped === "omp" && agentModeId
+          ? ompApprovalLaunchArgs(agentModeId)
+          : [];
+    const launchExtraArgs = [...askingLaunch, ...(task.extraArgs ? [task.extraArgs] : [])]
+      .join(" ")
+      .trim();
+    // RPC resume must be in spawn argv (`--session`); resolve before launch. ACP resumes over the protocol.
+    const previousRunId = task.runId;
+    const resumeSessionId =
+      shipped && harnessTransport(shipped) === "rpc-ui"
+        ? await this.sessionToResume(task.id, input.resume === true, previousRunId)
+        : undefined;
     const launch =
       shipped && this.deps.resolveLaunch
         ? this.deps.resolveLaunch({
             harness: shipped,
             cwd: task.cwd,
-            ...(task.extraArgs ? { extraArgs: task.extraArgs } : {}),
+            ...(launchExtraArgs ? { extraArgs: launchExtraArgs } : {}),
             ...(model ? { model } : {}),
             ...(permissionEnv ? { extraEnv: permissionEnv } : {}),
+            ...(resumeSessionId ? { resumeSessionId } : {}),
           })
         : // **The same function the probe and sign-in call** (`launchForAgent`): a shipped id goes to
           // `launchForHarness`, an added provider to `launchForProvider`.
@@ -592,14 +644,14 @@ export class RunManager {
             cwd: task.cwd,
             paths: this.deps.paths,
             ...(this.deps.platform ? { platform: this.deps.platform } : {}),
-            ...(task.extraArgs ? { extraArgs: task.extraArgs } : {}),
+            ...(launchExtraArgs ? { extraArgs: launchExtraArgs } : {}),
             ...(shipped && model ? { model } : {}),
             ...(shipped && this.deps.deliveryOf ? { delivery: this.deps.deliveryOf(shipped) } : {}),
             ...(permissionEnv ? { extraEnv: permissionEnv } : {}),
+            ...(resumeSessionId ? { resumeSessionId } : {}),
           });
 
     const runId = randomUUID();
-    const previousRunId = task.runId;
     const file = transcriptFile(this.deps.paths.transcriptsDir, runId);
     const run: AgentRun = {
       id: runId,
@@ -643,6 +695,15 @@ export class RunManager {
       queued: [],
       intent: "none",
       approval: undefined,
+      approvalChain: Promise.resolve(),
+      // Host auto-allow: Cursor `--force` / OpenCode session-auto / OMP yolo defense-in-depth.
+      ...(shipped &&
+      this.settings().requireApprovalForDestructive === false &&
+      (askingControl(shipped) === "launch-force" ||
+        askingControl(shipped) === "session-auto" ||
+        askingControl(shipped) === "launch-approval")
+        ? { sessionAutoAllow: true }
+        : {}),
       stderr: [],
       settled: false,
       touchedFiles: new Map(),
@@ -729,6 +790,7 @@ export class RunManager {
       queued: [],
       intent: "none",
       approval: undefined,
+      approvalChain: Promise.resolve(),
       stderr: [],
       settled: true,
       touchedFiles: new Map(),
@@ -796,32 +858,41 @@ export class RunManager {
     const startClient = this.deps.startClient ?? AcpClient.start;
     try {
       const resumeSessionId = await this.sessionToResume(live.run.taskId, resume, previousRunId);
-      const client = await startClient({
+      const harnessId = live.run.harness;
+      const useRpc =
+        isHarnessId(harnessId) && harnessTransport(harnessId) === "rpc-ui";
+      const sharedCallbacks = {
         launch: live.launch,
-        onUpdate: (update) => this.onUpdate(live, update),
-        onPermissionRequest: (request) => this.onPermissionRequest(live, request),
-        onUserQuestion: (request) => this.onUserQuestion(live, request),
-        onStderr: (line) => {
-          // Kept, bounded, and never printed: it is what explains a failure the protocol reported as
-          // one sentence, and a chatty agent must not become a memory leak in a long-lived daemon.
+        onUpdate: (update: AcpUpdate) => this.onUpdate(live, update),
+        onPermissionRequest: (request: AcpPermissionRequest) =>
+          this.onPermissionRequest(live, request),
+        onStderr: (line: string) => {
           live.stderr = [...live.stderr.slice(-20), line];
         },
         ...(resumeSessionId ? { resumeSessionId } : {}),
-        // Passed only when the catalogue says this agent accepts one, which is why the client needs no
-        // per-agent knowledge of its own: it sets what it is given and reports what comes back.
         ...(agentModeId ? { agentModeId } : {}),
-        // The other half of the same division. Some agents take a model in argv (already in `launch`)
-        // and some through the session's own configuration, and *which* is a catalogue fact the client
-        // must not know — so the daemon hands it a config id and a value, in the order they must be
-        // applied, or nothing at all.
         ...(live.sessionConfigs.length > 0 ? { sessionConfigs: live.sessionConfigs } : {}),
-        // And the posture, on the same division: which method carries it and which values it accepts is
-        // the catalogue's and the agent's business, and `RunManager` hands over a resolved value or
-        // nothing. Absent is the normal case — every agent but `envoy-harness` — and it means "leave
-        // this agent's own approval policy alone".
         ...(live.sessionPolicy ? { sessionPolicy: live.sessionPolicy } : {}),
-      });
+      };
+      const client: RunAgentClient = useRpc
+        ? await JsonlRpcAgentClient.start({
+            ...sharedCallbacks,
+            // OMP negotiates protocol v2 when advertised; Pi waits for ready only.
+            negotiateOmp: harnessId === "omp",
+          })
+        : await startClient({
+            ...sharedCallbacks,
+            onUserQuestion: (request) => this.onUserQuestion(live, request),
+          });
       live.client = client;
+
+      // Stop landed while connect/handshake was in flight — never start the first turn.
+      // Read through a helper so TS does not narrow `live.intent` for the loop below: cancel can
+      // still arrive between turns after this check (same reason `takeIntent` exists).
+      if (isCancelIntent(live)) {
+        await this.finish(live, "cancelled", null);
+        return;
+      }
 
       if (client.sessionId) this.lastSession.set(live.run.taskId, client.sessionId);
       // **Only for a session we opened.** A resume is answered with less — both native harnesses reply
@@ -830,13 +901,18 @@ export class RunManager {
       // agent offers nothing". The condition is `resumeSessionId`, which is also exactly when
       // `AcpClient` called `session/new` rather than `session/resume`.
       if (resumeSessionId === undefined) await this.recordSessionOptions(live, client);
+      const catalogResume =
+        isHarnessId(live.run.harness) && harnessDefinition(live.run.harness).capabilities.resume;
+      // RPC synthetic `rpc-…` ids are not `--session`-safe; catalogue resume alone would lie.
+      const sessionResumable =
+        catalogResume &&
+        (client instanceof JsonlRpcAgentClient ? client.sessionResumable : true);
       await this.record(live, {
         kind: "run.session",
         sessionId: client.sessionId ?? "unknown",
         // A capability we record from the protocol the agent speaks, never a guess about this
         // particular run: an agent with no `session/resume` says so here.
-        resumable:
-          isHarnessId(live.run.harness) && harnessDefinition(live.run.harness).capabilities.resume,
+        resumable: sessionResumable,
         resumed: resumeSessionId !== undefined,
       });
 
@@ -844,56 +920,109 @@ export class RunManager {
       let images = firstImages;
       /** Same-session re-prompts after harness `max_iterations` (Codex-style keep-going). */
       let hostContinues = 0;
+      /** Consecutive `session/prompt` throws — caps recovery so a dead process cannot burn the queue. */
+      let promptFailures = 0;
       for (;;) {
-        live.turn = client.prompt(prompt, images);
-        const result = await live.turn;
-        live.turn = undefined;
-
-        // The intent recorded *while* the turn was in flight, taken and reset in one step. A steer
-        // also cancels — the difference between "stop" and "redirect" is which intent was set at the
-        // same moment, and reading it through a method keeps that value from being narrowed away by
-        // the compiler at the assignment site.
-        const intent = takeIntent(live);
-        const next = live.queued.shift();
-        if (intent === "cancel") {
+        // Stop between turns (including before the first) — do not prompt again.
+        if (isCancelIntent(live)) {
           await this.finish(live, "cancelled", null);
           return;
         }
-        if (next) {
-          prompt = next.text;
-          images = next.images;
-          continue;
+        try {
+          live.turn = client.prompt(prompt, images);
+          const result = await live.turn;
+          live.turn = undefined;
+          promptFailures = 0;
+
+          // The intent recorded *while* the turn was in flight, taken and reset in one step. A steer
+          // also cancels — the difference between "stop" and "redirect" is which intent was set at the
+          // same moment, and reading it through a method keeps that value from being narrowed away by
+          // the compiler at the assignment site.
+          const intent = takeIntent(live);
+          const next = live.queued.shift();
+          if (intent === "cancel") {
+            await this.finish(live, "cancelled", null);
+            return;
+          }
+          if (next) {
+            prompt = next.text;
+            images = next.images;
+            continue;
+          }
+          // Harness spent its internal phases — keep the ACP session and ask it to finish, instead of
+          // ending the run and hoping the user narrows the prompt (Codex/Claude keep going).
+          if (
+            result.stopReason === "max_iterations" &&
+            hostContinues < MAX_HOST_CONTINUES
+          ) {
+            hostContinues++;
+            await this.record(live, {
+              kind: "run.status",
+              status: "running",
+              note: `Continuing after iteration budget (${hostContinues}/${MAX_HOST_CONTINUES})…`,
+            });
+            await this.compactBeforeContinue(live, client);
+            prompt = HOST_CONTINUE_PROMPT;
+            images = undefined;
+            continue;
+          }
+          if (result.stopReason === "max_iterations") {
+            await this.record(live, {
+              kind: "run.status",
+              status: "failed",
+              note: "The agent used its full iteration budget without finishing.",
+            });
+          }
+          await this.finish(live, statusForStopReason(result.stopReason), null);
+          return;
+        } catch (error) {
+          // Some agents reject the in-flight prompt when cancel lands, instead of resolving
+          // `stopReason: cancelled`. Treat Stop as cancelled; after a steer (or a single transport
+          // blip with a queued follow-up), try one recovery delivery — never walk the whole queue
+          // against a dead process.
+          live.turn = undefined;
+          const intent = takeIntent(live);
+          const next = live.queued.shift();
+          if (intent === "cancel") {
+            await this.finish(live, "cancelled", null);
+            return;
+          }
+          promptFailures += 1;
+          if (next !== undefined && promptFailures <= 1) {
+            prompt = next.text;
+            images = next.images;
+            continue;
+          }
+          if (next !== undefined) live.queued.unshift(next);
+          const dropped = live.queued.length;
+          live.queued = [];
+          const message = describeFailure(error, live);
+          const note =
+            dropped > 0
+              ? `${message} ${dropped} queued follow-up${dropped === 1 ? " was" : "s were"} not sent.`
+              : message;
+          await this.record(live, { kind: "run.status", status: "failed", note });
+          await this.finish(live, "failed", null);
+          return;
         }
-        // Harness spent its internal phases — keep the ACP session and ask it to finish, instead of
-        // ending the run and hoping the user narrows the prompt (Codex/Claude keep going).
-        if (
-          result.stopReason === "max_iterations" &&
-          hostContinues < MAX_HOST_CONTINUES
-        ) {
-          hostContinues++;
-          await this.record(live, {
-            kind: "run.status",
-            status: "running",
-            note: `Continuing after iteration budget (${hostContinues}/${MAX_HOST_CONTINUES})…`,
-          });
-          await this.compactBeforeContinue(live, client);
-          prompt = HOST_CONTINUE_PROMPT;
-          images = undefined;
-          continue;
-        }
-        if (result.stopReason === "max_iterations") {
-          await this.record(live, {
-            kind: "run.status",
-            status: "failed",
-            note: "The agent used its full iteration budget without finishing.",
-          });
-        }
-        await this.finish(live, statusForStopReason(result.stopReason), null);
-        return;
       }
     } catch (error) {
+      // Stop during connect beats a handshake error — the user asked for cancelled, not failed.
+      if (isCancelIntent(live)) {
+        live.queued = [];
+        await this.finish(live, "cancelled", null);
+        return;
+      }
+      // Handshake / client start failed — same honesty as a mid-turn prompt failure: say how many
+      // follow-ups never left the queue (send is allowed while connect is still in flight).
+      const dropped = live.queued.length;
+      live.queued = [];
       const message = describeFailure(error, live);
-      await this.record(live, { kind: "run.status", status: "failed", note: message });
+      const note =
+        dropped > 0
+          ? `${message} ${dropped} queued follow-up${dropped === 1 ? " was" : "s were"} not sent.`
+          : message;
+      await this.record(live, { kind: "run.status", status: "failed", note });
       await this.finish(live, "failed", null);
     } finally {
       await live.client?.stop().catch(() => undefined);
@@ -926,7 +1055,7 @@ export class RunManager {
    * a different statement from "we have not looked yet" — the distinction the thinking pill's two
    * disabled states rest on.
    */
-  private async recordSessionOptions(live: LiveRun, client: AcpClient): Promise<void> {
+  private async recordSessionOptions(live: LiveRun, client: RunAgentClient): Promise<void> {
     // The catalogue's observation mapper only knows the nine. A provider's session still ran;
     // its model list stays unknown until a probe written for that id exists.
     if (!isHarnessId(live.run.harness)) return;
@@ -1047,6 +1176,13 @@ export class RunManager {
    * (`docs/envoydev-ui.md` §4).
    */
   private onPermissionRequest(live: LiveRun, request: AcpPermissionRequest): Promise<string | null> {
+    return this.enqueueApproval(live, () => this.handlePermissionRequest(live, request));
+  }
+
+  private handlePermissionRequest(
+    live: LiveRun,
+    request: AcpPermissionRequest,
+  ): Promise<string | null> {
     const requestId = request.toolCall?.toolCallId ?? randomUUID();
     const key = permissionMemoryKey({
       toolName:
@@ -1086,6 +1222,16 @@ export class RunManager {
     });
   }
 
+  /** One card at a time — a second permission/question waits until the first settle clears the slot. */
+  private enqueueApproval<T>(live: LiveRun, work: () => Promise<T>): Promise<T> {
+    const run = live.approvalChain.then(work, work);
+    live.approvalChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   private askPermission(
     live: LiveRun,
     request: AcpPermissionRequest,
@@ -1123,6 +1269,13 @@ export class RunManager {
         live.approval = undefined;
         const optionId = typeof choice === "string" ? choice : choice?.optionIds?.[0];
         void (async () => {
+          // Cursor/ACP "Always allow" is only as durable as the agent makes it. Mirror it
+          // on the host for the rest of this run so the next tool does not pop another card
+          // — including requests we cannot key for project memory.
+          if (optionId !== undefined && choiceIsAllowAlways(request.options, optionId)) {
+            live.sessionAutoAllow = true;
+          }
+          // Project memory: exact command/path for Allow once or Always (existing contract).
           if (optionId !== undefined && key !== undefined && choiceAllows(request.options, optionId)) {
             await rememberCommand(this.deps.paths.stateDir, live.launch.cwd, key);
           }
@@ -1174,6 +1327,13 @@ export class RunManager {
    * set the human confirmed, not one click that also means "allow".
    */
   private onUserQuestion(live: LiveRun, request: AcpUserQuestion): Promise<AcpUserQuestionChoice | null> {
+    return this.enqueueApproval(live, () => this.handleUserQuestion(live, request));
+  }
+
+  private handleUserQuestion(
+    live: LiveRun,
+    request: AcpUserQuestion,
+  ): Promise<AcpUserQuestionChoice | null> {
     const requestId =
       typeof request.questionId === "string" && request.questionId !== "" ? request.questionId : randomUUID();
     const labels = request.options ?? [];
@@ -1317,7 +1477,19 @@ export class RunManager {
         ref("error.runFinished"),
       );
     }
-    if (live.approval && mode === "steer") {
+    // Stop already requested — do not append a ghost user line that cancel will drop.
+    if (live.intent === "cancel" || live.run.status === "cancelled") {
+      throw coderError(
+        ENVOYDEV_ERRORS.harnessFailed,
+        "That run is stopping, so there is nothing to send to it. Start a new task instead.",
+        ref("error.runFinished"),
+      );
+    }
+    // Only Envoy / DeepSeek may steer — other agents' cancel often rejects `session/prompt`
+    // and the UI shows “Stopped before it finished.” Daemon gate so mobile Settings cannot bypass.
+    const effective: RunMode =
+      mode === "steer" && followUpMustQueue(live.run.harness) ? "queue" : mode;
+    if (live.approval && effective === "steer") {
       throw coderError(
         ENVOYDEV_ERRORS.harnessFailed,
         "The agent is waiting for an answer before it can go on. Answer that first — interrupting now would race the prompt it is blocked on.",
@@ -1327,13 +1499,13 @@ export class RunManager {
 
     live.queued.push({
       text,
-      mode,
+      mode: effective,
       ...(images !== undefined && images.length > 0 ? { images } : {}),
     });
-    const delivered = mode === "steer" ? "steered" : "queued";
-    await this.record(live, { kind: "run.message", text, mode, delivered });
+    const delivered = effective === "steer" ? "steered" : "queued";
+    await this.record(live, { kind: "run.message", text, mode: effective, delivered });
 
-    if (mode === "steer") {
+    if (effective === "steer") {
       // Interrupt the turn in flight. The reply arrives as `cancelled`, and the loop above then sends
       // this message as the next prompt — which is what "join the turn" means when the protocol has
       // one prompt in flight at a time.
@@ -1478,6 +1650,12 @@ export class RunManager {
       } catch {
         // Next Envoy Harness run still starts with autoRun off from Settings.
       }
+      return;
+    }
+    if (via === "launch-force" || via === "session-auto" || via === "launch-approval") {
+      // Cannot change OpenCode policy / OMP approval-mode / Cursor --force mid-process.
+      // Host auto-allow covers the rest of this run; the next spawn carries the launch wire.
+      live.sessionAutoAllow = true;
       return;
     }
     if (via !== "unattended-mode") return;
@@ -1674,6 +1852,11 @@ function takeIntent(live: { intent: "none" | "cancel" | "steer" }): "none" | "ca
   const intent = live.intent;
   live.intent = "none";
   return intent;
+}
+
+/** Peek without resetting — and without letting TS narrow `live.intent` across awaits. */
+function isCancelIntent(live: { intent: "none" | "cancel" | "steer" }): boolean {
+  return live.intent === "cancel";
 }
 
 /** ACP's stop reason → the status the rail shows. */

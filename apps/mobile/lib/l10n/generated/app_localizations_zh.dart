@@ -344,7 +344,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsApprovalsDetail =>
-      '开启时，智能体在有风险的步骤前会询问。关闭表示本机不再询问——有策略的走策略，目录里标明无人值守模式的走该模式。';
+      '开：有风险的步骤先问。关：本机不再询问。';
 
   @override
   String settingsApprovalsReaches(String agent) {
@@ -354,6 +354,21 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String settingsApprovalsReachesMode(String agent, String mode) {
     return '关闭时，$agent 会以「$mode」启动，从而不再停下询问。开启时保留你为任务选择的模式。';
+  }
+
+  @override
+  String settingsApprovalsReachesLaunch(String agent) {
+    return '关闭时，$agent 会以强制允许启动，从而不再停下询问。开启时保留其通常的权限提示。进行中的运行会在本轮内自动放行；下一轮起使用强制允许。';
+  }
+
+  @override
+  String settingsApprovalsReachesSession(String agent) {
+    return '关闭时，EnvoyDev 会在本轮运行中自动放行 $agent 的权限询问（允许一次 / 始终允许）。开启时保留其通常询问。$agent 没有可单独设置的 YOLO 模式。';
+  }
+
+  @override
+  String settingsApprovalsReachesApproval(String agent, String mode) {
+    return '关闭时，$agent 会以「$mode」启动，从而不再停下询问。开启时保留其通常审批模式。进行中的运行会在本轮内自动放行；下一轮起使用 yolo。';
   }
 
   @override
@@ -1469,6 +1484,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get composerAutonomySheet => '自主性';
+
+  @override
+  String get composerAutonomyUnavailable =>
+      '此智能体仍会自行请求权限。这里无法使用完全访问 — 请在提示上选始终允许，或改用 Envoy / Claude / Codex 以关闭本机询问。';
 
   @override
   String get composerDomainOff => '工具关闭';

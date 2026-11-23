@@ -527,6 +527,15 @@ class _ApprovalsTile extends StatelessWidget {
       note = l10n.settingsApprovalsReaches(agent);
     } else if (via == AskingControl.unattendedMode && modeLabel != null) {
       note = l10n.settingsApprovalsReachesMode(agent, modeLabel);
+    } else if (via == AskingControl.launchForce) {
+      note = l10n.settingsApprovalsReachesLaunch(agent);
+    } else if (via == AskingControl.sessionAuto) {
+      note = l10n.settingsApprovalsReachesSession(agent);
+    } else if (via == AskingControl.launchApproval) {
+      note = l10n.settingsApprovalsReachesApproval(
+        agent,
+        modeLabel ?? 'Full access',
+      );
     } else if (id == null ||
         id.isEmpty ||
         (!isShippedAskingAgent(id) && summary == null)) {

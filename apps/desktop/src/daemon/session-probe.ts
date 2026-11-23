@@ -93,7 +93,13 @@ import {
   type ProbeOutcome,
   coderErrorMessage,
 } from "@envoydev/protocol";
-import { harnessAcpFacts, harnessDefinition, observeSessionOptions, probeHarness } from "@envoydev/agent-catalog";
+import {
+  harnessAcpFacts,
+  harnessDefinition,
+  harnessTransport,
+  observeSessionOptions,
+  probeHarness,
+} from "@envoydev/agent-catalog";
 import { currentSearchPath, type PlatformId } from "@envoydev/platform";
 import type { CoderPaths } from "@envoydev/host-bridge";
 
@@ -327,6 +333,12 @@ export class SessionProbe {
     const label = harnessDefinition(harness).label;
     let client: ProbedAgent | undefined;
     try {
+      // Session options come from ACP `session/new`. OMP/Pi speak JSONL RPC — no ACP option list yet.
+      if (harnessTransport(harness) === "rpc-ui") {
+        throw new Error(
+          `${label} runs over JSONL RPC. EnvoyDev starts runs for it, but does not probe session options over ACP.`,
+        );
+      }
       const cwd = await agentScratchDir(this.deps.paths, harness);
       const launch = this.deps.resolveLaunch
         ? this.deps.resolveLaunch({ harness, cwd })

@@ -137,7 +137,7 @@ export function createProviderHandlers(
         command: string;
         args?: readonly string[];
         env?: readonly string[];
-        transport: "acp" | "cli";
+        transport: "acp" | "cli" | "rpc-ui";
         catalogEntryId?: string;
         authMethodId?: string;
         modeParam?: "mode" | "modeId";

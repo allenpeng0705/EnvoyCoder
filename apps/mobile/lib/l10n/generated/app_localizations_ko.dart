@@ -348,7 +348,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsApprovalsDetail =>
-      '켜면 에이전트가 위험한 단계 전에 묻습니다. 끄면 이 기기에서는 묻지 않습니다 — 정책이 있으면 정책으로, 카탈로그에 무인 모드가 있으면 그 모드로 전달합니다.';
+      '켜기: 위험한 단계 전에 묻기. 끄기: 이 기기에서는 묻지 않음.';
 
   @override
   String settingsApprovalsReaches(String agent) {
@@ -358,6 +358,21 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String settingsApprovalsReachesMode(String agent, String mode) {
     return '끄면 $agent가 “$mode”로 시작하여 묻기 위해 멈추지 않습니다. 켜면 작업에서 고른 모드를 유지합니다.';
+  }
+
+  @override
+  String settingsApprovalsReachesLaunch(String agent) {
+    return 'Off starts $agent with force-allow so it does not stop to ask. On leaves its usual permission prompts. A run already in progress is covered until it ends; the next run uses force-allow.';
+  }
+
+  @override
+  String settingsApprovalsReachesSession(String agent) {
+    return 'Off tells EnvoyDev to auto-allow $agent\'s permission prompts for the run (allow once / always). On leaves its usual prompts. $agent has no separate YOLO mode EnvoyDev can set.';
+  }
+
+  @override
+  String settingsApprovalsReachesApproval(String agent, String mode) {
+    return 'Off starts $agent in “$mode” so it does not stop to ask. On leaves its usual approval mode. A run already in progress is auto-allowed until it ends; the next run uses yolo.';
   }
 
   @override
@@ -1483,6 +1498,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get composerAutonomySheet => '자율성';
+
+  @override
+  String get composerAutonomyUnavailable =>
+      '이 에이전트는 계속 스스로 권한을 요청합니다. 여기서는 전체 접근을 쓸 수 없습니다 — 프롬프트에서 항상 허용을 쓰거나, 기기 질문 끄기는 Envoy / Claude / Codex를 선택하세요.';
 
   @override
   String get composerDomainOff => '도구 끔';

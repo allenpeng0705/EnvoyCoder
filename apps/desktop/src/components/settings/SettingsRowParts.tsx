@@ -166,9 +166,9 @@ export function ApprovalRow(props: {
     provider?.label ??
     (isHarnessId(props.harness) ? harnessLabel(props.harness) : props.harness);
   const shipped = isHarnessId(props.harness) ? props.harness : undefined;
-  // Shipped agents: only when the catalogue has a deliverable wire (policy or unattended mode).
-  // Do not enable from `modes[].unattended` alone — Copilot/OMP list those but cannot take them
-  // (`askingControl === "none"`). Catalogue providers with documented YOLO (Gemini, Qwen) follow
+  // Shipped agents: only when the catalogue has a deliverable wire (policy, unattended-mode,
+  // launch-force, session-auto, launch-approval). Do not enable from `modes[].unattended` alone —
+  // Copilot lists allow-all but `askingControl === "none"`. Catalogue YOLO (Gemini, Qwen) follows
   // the same Settings Off → unattended mode path as Claude/Codex.
   const catalogEntryId = provider?.catalogEntryId ?? (shipped === undefined ? props.harness : undefined);
   const catalogYolo =
@@ -193,9 +193,17 @@ export function ApprovalRow(props: {
       ? t("settings.approvals.reaches", { agent })
       : via === "unattended-mode" && modeLabel !== undefined
         ? t("settings.approvals.reachesMode", { agent, mode: modeLabel })
-        : summary === undefined && provider === undefined && shipped === undefined
-          ? t("settings.approvals.unknown", { agent })
-          : t("settings.approvals.unsupported", { agent });
+        : via === "launch-force"
+          ? t("settings.approvals.reachesLaunch", { agent })
+          : via === "session-auto"
+            ? t("settings.approvals.reachesSession", { agent })
+            : via === "launch-approval" && modeLabel !== undefined
+              ? t("settings.approvals.reachesApproval", { agent, mode: modeLabel })
+              : via === "launch-approval"
+                ? t("settings.approvals.reachesApproval", { agent, mode: "Full access" })
+                : summary === undefined && provider === undefined && shipped === undefined
+                  ? t("settings.approvals.unknown", { agent })
+                  : t("settings.approvals.unsupported", { agent });
 
   return (
     <SettingRow

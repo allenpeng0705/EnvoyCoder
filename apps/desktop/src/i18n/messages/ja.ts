@@ -601,11 +601,16 @@ export const ja: Catalogue = {
   "settings.extraArgs.detail": "毎回のタスクでエージェントのコマンドラインに追加します。",
   "settings.extraArgs.placeholder": "--verbose",
   "settings.approvals.title": "リスクのある操作の前に確認する",
-  "settings.approvals.detail":
-    "オンのとき、エージェントはリスクのある操作の前に確認します。オフはこのマシンでは確認しないという意味で、ポリシーがあるエージェントにはポリシーで、カタログに無人モードがある場合はそのモードで伝えます。",
+  "settings.approvals.detail": "オン：リスクのある操作の前に確認。オフ：このマシンでは確認しない。",
   "settings.approvals.reaches": "実行のたびに {agent} 自身のポリシーとして渡されるので、確認は実際に作業が行われる場所で行われます。",
   "settings.approvals.reachesMode":
     "オフにすると {agent} は「{mode}」で始まり、確認のために止まりません。オンではタスクで選んだモードを保ちます。",
+  "settings.approvals.reachesLaunch":
+    "オフにすると {agent} は強制許可で始まり、確認のために止まりません。オンでは通常の許可プロンプトのままです。進行中の実行は終わるまで対象になり、次の実行から強制許可を使います。",
+  "settings.approvals.reachesSession":
+    "オフにすると、EnvoyDev は実行中の {agent} の許可プロンプトを自動許可します（一度 / 常に）。オンでは通常のプロンプトのままです。{agent} には EnvoyDev が設定できる別の YOLO モードがありません。",
+  "settings.approvals.reachesApproval":
+    "オフにすると {agent} は「{mode}」（`--approval-mode yolo`）で始まり、確認のために止まりません。オンでは通常の承認モードのままです。進行中の実行は終わるまで自動許可され、次の実行から yolo を使います。",
   "settings.approvals.unsupported":
     "EnvoyDev は {agent} に対してこれを変更できません。このエージェントには設定を渡す方法がなく、独自の基準で確認します。EnvoyDev がポリシーまたは無人モードを渡せるエージェントを選ぶか、{agent} 自身の確認に答えてください。",
   "settings.approvals.unknown": "EnvoyDev は {agent} が何を受け付けるかまだ把握していないため、誰も読まない選択を保存せず、この項目はオフのままにします。",
@@ -936,6 +941,7 @@ export const ja: Catalogue = {
   "task.composer.autonomy.confirmBody":
     "フルアクセスはこのマシンでの確認をオフにし、このエージェントが承認プロンプトなしでファイル編集やツール実行ができるようにします。意図しない編集、データ損失、予期しない動作のリスクが上がります。設定で確認を再度オンにできます。",
   "task.composer.autonomy.confirm": "はい、それでも続行",
+  "task.composer.autonomy.unavailable": "このエージェントは引き続き自分で許可を求めます。ここではフルアクセスを使えません — プロンプトで常に許可するか、マシンの確認オフには Envoy / Claude / Codex を選んでください。",
   "task.composer.autonomy.label": "自律性",
   "task.composer.workingPeek.aria": "エージェントが取り組んでいること",
   "task.posture.aria": "このタスクの自律姿勢",

@@ -48,7 +48,7 @@ import {
   coderErrorMessage,
   parseRpcParams,
 } from "@envoydev/protocol";
-import { harnessAcpFacts, harnessDefinition } from "@envoydev/agent-catalog";
+import { harnessAcpFacts, harnessDefinition, harnessTransport } from "@envoydev/agent-catalog";
 import type { PlatformId } from "@envoydev/platform";
 import type { CoderPaths } from "@envoydev/host-bridge";
 
@@ -158,6 +158,12 @@ export class SessionSignIn {
     let client: ProbedAgent | undefined;
     const budget = this.deps.timeoutMs ?? SIGN_IN_TIMEOUT_MS;
     try {
+      // ACP authenticate only. OMP/Pi runs use JSONL RPC — sign-in is that agent's own CLI.
+      if (shipped && harnessTransport(shipped) === "rpc-ui") {
+        throw new Error(
+          `${label} runs over JSONL RPC. Sign in with its own CLI; EnvoyDev does not run an ACP authenticate step for it.`,
+        );
+      }
       const attempt = (async (): Promise<SignInAnswer> => {
         const cwd = await agentScratchDir(this.deps.paths, id);
         const launch =

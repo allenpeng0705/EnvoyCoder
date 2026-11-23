@@ -262,7 +262,7 @@ export interface AddProviderInput {
   args: readonly string[];
   /** Environment variable **names**. A value cannot be expressed — that is the schema, not a rule here. */
   env: readonly string[];
-  transport: "acp" | "cli";
+  transport: "acp" | "cli" | "rpc-ui";
   /**
    * The catalogue entry this provider **is**, when a catalogue row was added rather than the manual form
    * filled in. A reference, never a value: the daemon resolves the entry's own constants, and refuses

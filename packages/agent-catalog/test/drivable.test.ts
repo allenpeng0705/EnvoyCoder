@@ -26,57 +26,48 @@ import {
   HARNESS_CATALOG,
   harnessAcpFacts,
   harnessTransport,
+  isDrivable,
   isDrivableByAcpAdapter,
 } from "../src/index.js";
 
 describe("which agents this product can actually run", () => {
-  it("drives the six whose protocol our adapter speaks — and no others", () => {
-    const drivable = ALL_HARNESSES.filter((id) => isDrivableByAcpAdapter(id));
-    // `copilot` is the sixth, since 2026-09-15: Copilot 1.0.83 starts an ACP server with `--acp` and was driven
-    // against the real binary (its entry carries the measurement). The list is exact on purpose — an entry that
-    // claims a transport we cannot drive would be offered as ready and fail at the first run.
-    expect(drivable.sort()).toEqual([
+  it("drives ACP agents via the ACP adapter — and no others on that adapter", () => {
+    const acp = ALL_HARNESSES.filter((id) => isDrivableByAcpAdapter(id));
+    // OpenCode joined when catalogue switched to `opencode acp` (docs). Exact list — an entry that
+    // claims ACP we cannot drive would be offered as ready and fail at the first run.
+    expect(acp.sort()).toEqual([
       "claudecode",
       "codex",
       "copilot",
       "cursor",
       "deepseek-harness",
       "envoy-harness",
+      "opencode",
     ]);
 
-    for (const id of drivable) {
+    for (const id of acp) {
       expect(harnessTransport(id)).toBe("acp");
-      // The rule is about the argv we actually spawn, not about the vendor: all six launch programs
-      // that implement ACP over stdio.
+      expect(isDrivable(id)).toBe(true);
       const launch = HARNESS_CATALOG[id].launch;
       expect(launch.kind).toBe("child-process");
     }
   });
 
+  it("drives OMP and Pi over JSONL RPC (rpc-ui), not ACP", () => {
+    expect(isDrivableByAcpAdapter("omp")).toBe(false);
+    expect(isDrivableByAcpAdapter("pi")).toBe(false);
+    expect(isDrivable("omp")).toBe(true);
+    expect(isDrivable("pi")).toBe(true);
+    expect(harnessTransport("omp")).toBe("rpc-ui");
+    expect(harnessTransport("pi")).toBe("rpc-ui");
+  });
+
   it("records a transport for every entry, so nothing is silently undrivable", () => {
     for (const id of ALL_HARNESSES) {
       const transport = harnessTransport(id);
-      expect(["acp", "cli", "in-process"]).toContain(transport);
+      expect(["acp", "cli", "rpc-ui", "in-process"]).toContain(transport);
       expect(isDrivableByAcpAdapter(id)).toBe(transport === "acp");
-    }
-  });
-
-  it("keeps the three agents with no ACP surface listed but not drivable — an honest gap, not a hidden one", () => {
-    // These stay in the catalogue because the recipes (argv, env, install link) are real work and will be
-    // needed by the adapters that make them runnable: a JSONL-RPC reader for pi/omp, and whatever
-    // copilot and opencode grow. What they must not be is *offered* as ready, which is what
-    // `isDrivableByAcpAdapter` prevents.
-    //
-    // `claudecode`, `codex` and `cursor` used to be in this list. They left it when their commands were
-    // replaced with ones that were driven against the real binaries — the Cursor CLI's own `acp`
-    // subcommand, and the Agent Client Protocol project's bridges for the other two — and the test above
-    // is what makes that change visible rather than a comment somebody has to trust.
-    // `copilot` left this list on 2026-09-15, when `copilot --acp` was driven against the real binary and
-    // answered an ACP `initialize` — see the entry's `evidence`. What replaced it is not a hope: the command was
-    // measured, and `session/new`'s refusal (`Authentication required`) is recorded there.
-    for (const id of ["opencode", "omp", "pi"] as const) {
-      expect(isDrivableByAcpAdapter(id), id).toBe(false);
-      expect(harnessTransport(id), id).toBe("cli");
+      expect(isDrivable(id)).toBe(transport === "acp" || transport === "rpc-ui");
     }
   });
 
@@ -95,6 +86,7 @@ describe("which agents this product can actually run", () => {
       "cursor",
       "deepseek-harness",
       "envoy-harness",
+      "opencode",
     ]);
     // DeepSeek's permission levels travel as `DSH_PERMISSION_MODE`, not `session/set_mode`. Every
     // other claiming entry still has to name the field, or `setMode` would guess and the peer
@@ -122,8 +114,9 @@ describe("which agents this product can actually run", () => {
     // `copilot` joined `cursor` on 2026-09-15: its `initialize` advertises `copilot-login`, and `session/new`
     // answers `-32000 Authentication required` until the user has run `copilot login`. Asserted as an exact set,
     // because adding one wrongly is worse than adding none — see the comment above.
-    expect(needingAuth.sort()).toEqual(["copilot", "cursor"]);
+    expect(needingAuth.sort()).toEqual(["copilot", "cursor", "opencode"]);
     expect(harnessAcpFacts("cursor").authMethodId).toBe("cursor_login");
+    expect(harnessAcpFacts("opencode").authMethodId).toBe("opencode-login");
   });
 });
 

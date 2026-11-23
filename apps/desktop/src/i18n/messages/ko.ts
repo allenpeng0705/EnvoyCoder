@@ -601,11 +601,16 @@ export const ko: Catalogue = {
   "settings.extraArgs.detail": "모든 작업에서 에이전트 명령줄에 덧붙입니다.",
   "settings.extraArgs.placeholder": "--verbose",
   "settings.approvals.title": "위험한 단계 전에 확인",
-  "settings.approvals.detail":
-    "켜면 에이전트가 위험한 단계 전에 묻습니다. 끄면 이 기기에서는 묻지 않습니다 — 정책이 있으면 정책으로, 카탈로그에 무인 모드가 있으면 그 모드로 전달합니다.",
+  "settings.approvals.detail": "켜기: 위험한 단계 전에 묻기. 끄기: 이 기기에서는 묻지 않음.",
   "settings.approvals.reaches": "실행할 때마다 {agent}의 자체 정책으로 전달되므로, 확인은 실제 작업이 일어나는 곳에서 이루어집니다.",
   "settings.approvals.reachesMode":
     "끄면 {agent}가 “{mode}”로 시작하여 묻기 위해 멈추지 않습니다. 켜면 작업에서 고른 모드를 유지합니다.",
+  "settings.approvals.reachesLaunch":
+    "끄면 {agent}가 강제 허용으로 시작하여 묻기 위해 멈추지 않습니다. 켜면 평소 권한 프롬프트를 유지합니다. 진행 중인 실행은 끝날 때까지 적용되고, 다음 실행부터 강제 허용을 씁니다.",
+  "settings.approvals.reachesSession":
+    "끄면 EnvoyDev가 실행 중 {agent}의 권한 프롬프트를 자동 허용합니다(한 번 / 항상). 켜면 평소 프롬프트를 유지합니다. {agent}에는 EnvoyDev가 설정할 별도 YOLO 모드가 없습니다.",
+  "settings.approvals.reachesApproval":
+    "끄면 {agent}가 “{mode}”(`--approval-mode yolo`)로 시작하여 묻기 위해 멈추지 않습니다. 켜면 평소 승인 모드를 유지합니다. 진행 중인 실행은 끝날 까지 자동 허용되고, 다음 실행부터 yolo를 씁니다.",
   "settings.approvals.unsupported":
     "EnvoyDev는 {agent}에 대해 이 항목을 바꿀 수 없습니다. 이 에이전트는 설정을 받을 방법이 없고 자체 기준으로 확인합니다. EnvoyDev가 정책이나 무인 모드를 전달할 수 있는 에이전트를 고르거나, {agent} 자체의 확인에 답하세요.",
   "settings.approvals.unknown": "EnvoyDev는 {agent}가 무엇을 받아들이는지 아직 알지 못하므로, 아무도 읽지 않는 선택을 저장하는 대신 이 항목을 꺼 둡니다.",
@@ -936,6 +941,7 @@ export const ko: Catalogue = {
   "task.composer.autonomy.confirmBody":
     "전체 액세스는 이 기기에서 묻기를 끄고, 이 에이전트가 승인 프롬프트 없이 파일을 편집하고 도구를 실행하게 합니다. 원치 않는 편집, 데이터 손실, 예상치 못한 동작의 위험이 커집니다. 설정에서 묻기를 다시 켤 수 있습니다.",
   "task.composer.autonomy.confirm": "예, 그래도 계속",
+  "task.composer.autonomy.unavailable": "이 에이전트는 계속 스스로 권한을 요청합니다. 여기서는 전체 접근을 쓸 수 없습니다 — 프롬프트에서 항상 허용을 쓰거나, 기기 질문 끄기는 Envoy / Claude / Codex를 선택하세요.",
   "task.composer.autonomy.label": "자율성",
   "task.composer.workingPeek.aria": "에이전트가 하는 일",
   "task.posture.aria": "이 작업의 자율 자세",

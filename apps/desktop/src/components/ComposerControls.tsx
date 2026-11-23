@@ -201,6 +201,11 @@ export interface ComposerControlsProps {
   /** True when the selected mode is catalogue-marked unattended (Full / YOLO). */
   modeUnattended?: boolean;
   /**
+   * False for agents (e.g. Cursor) that cannot receive Asking Off / an unattended mode.
+   * Hides Full access so the chip cannot promise a policy the agent will not honour.
+   */
+  askingDeliverable?: boolean;
+  /**
    * Apply an autonomy preset (Settings Asking + optional mode id).
    * Full access is confirmed in-chip before this fires.
    */
@@ -313,12 +318,20 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
     if (pressed !== undefined) return pressed;
     return id === "fast_mode" ? props.fastMode === true : props.planMode === true;
   };
+  const askingDeliverable = props.askingDeliverable !== false;
   const autonomyPreset = activeAutonomyPreset({
     requireApproval: props.requireApproval === true,
     modeUnattended: props.modeUnattended === true,
     modeReadOnly: modeLooksReadOnly(props.selectedModeId),
+    askingDeliverable,
   });
+  const autonomyChoices = AUTONOMY_PRESETS.filter(
+    (preset) => preset.id !== "full-access" || askingDeliverable || props.modeUnattended === true,
+  );
   const chooseAutonomy = (preset: AutonomyPresetId): void => {
+    if (preset === "full-access" && !askingDeliverable && props.modeUnattended !== true) {
+      return;
+    }
     if (preset === "full-access" && autonomyPreset !== "full-access") {
       setConfirmFullAccess(true);
       return;
@@ -581,7 +594,7 @@ export function ComposerControls(props: ComposerControlsProps): JSX.Element {
                 disabled={props.onChooseAutonomyPreset === undefined}
                 onChange={(event) => chooseAutonomy(event.target.value as AutonomyPresetId)}
               >
-                {AUTONOMY_PRESETS.map((preset) => (
+                {autonomyChoices.map((preset) => (
                   <option key={preset.id} value={preset.id} title={preset.description}>
                     {preset.id === "read-only"
                       ? t("task.composer.autonomy.readOnly")

@@ -8,6 +8,7 @@ import {
   allowChoiceId,
   approvalSubject,
   choiceAllows,
+  choiceIsAllowAlways,
   isCommandAllowed,
   permissionMemoryKey,
   rememberCommand,
@@ -61,5 +62,16 @@ describe("a command the person already allowed", () => {
     expect(choiceAllows(options, "reject-once")).toBe(false)
     expect(allowChoiceId(undefined)).toBe("allow")
     expect(choiceAllows(undefined, "deny")).toBe(false)
+  })
+
+  it("prefers Always allow when both once and always are offered", () => {
+    const options = [
+      { optionId: "allow-once", kind: "allow_once" },
+      { optionId: "allow-always", kind: "allow_always" },
+      { optionId: "reject-once", kind: "reject_once" },
+    ]
+    expect(allowChoiceId(options)).toBe("allow-always")
+    expect(choiceIsAllowAlways(options, "allow-always")).toBe(true)
+    expect(choiceIsAllowAlways(options, "allow-once")).toBe(false)
   })
 })

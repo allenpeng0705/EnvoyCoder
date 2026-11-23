@@ -86,14 +86,13 @@ describe("capabilities mean something", () => {
     expect(args).toEqual(["--profile", "acp"]);
   });
 
-  it("marks text-only agents as unstructured, so the UI does not promise a diff panel", () => {
-    // `copilot` left this sample on 2026-09-15, when it stopped being a text-only agent: `--acp` makes it a JSONL
-    // ACP server, and `structuredTools` is `true` for it now. The rule itself is unchanged — every agent that
-    // still prints text has to say so, or the UI offers a diff panel nothing produces.
-    for (const id of ["opencode", "pi"] as const) {
-      const launch = HARNESS_CATALOG[id].launch;
-      expect(launch.kind === "child-process" && launch.stream, id).toBe("text");
-      expect(HARNESS_CATALOG[id].capabilities.structuredTools, id).toBe(false);
+  it("marks every child-process agent with a structured stream when it claims structured tools", () => {
+    for (const id of ALL_HARNESSES) {
+      const entry = HARNESS_CATALOG[id];
+      if (entry.launch.kind !== "child-process") continue;
+      if (entry.capabilities.structuredTools) {
+        expect(entry.launch.stream, id).toBe("jsonl");
+      }
     }
   });
 });
@@ -272,17 +271,19 @@ describe("probing", () => {
     expect(probe.reason).not.toMatch(/not installed\(looked for claude\)/);
   });
 
-  it("reports `unsupported` for an installed agent whose protocol this build cannot speak", () => {
-    // The catalogue's own doctrine — **being installed is not being drivable** — as a state rather than as a
-    // green chip contradicted by `launchForHarness`. `opencode` is `transport: "cli"`.
-    //
-    // (`copilot` was this leg's example until 2026-09-15, when it became drivable: its own `--acp` server answers
-    // ACP, so an installed `copilot` now reports `ready`. The state this leg asserts has to be shown by an agent
-    // that really is undrivable, not by one that merely used to be.)
-    const probe = probeHarness("opencode", { platform: "linux", find: () => "/usr/local/bin/opencode" });
-    expect(probe).toMatchObject({ state: "unsupported", binaryPath: "/usr/local/bin/opencode" });
-    // Nothing to install: the gap is ours, so no install command may be offered.
-    expect(probe.fix).toBeUndefined();
+  it("reports `ready` for installed OpenCode / OMP / Pi (ACP or rpc-ui)", () => {
+    // OpenCode left the unsupported list when catalogue switched to `opencode acp`; OMP/Pi when
+    // `rpc-ui` became a first-class transport. Being installed is still not enough for a bare `cli`
+    // recipe — but every shipped child-process entry is now ACP or rpc-ui.
+    expect(
+      probeHarness("opencode", { platform: "linux", find: () => "/usr/local/bin/opencode" }),
+    ).toMatchObject({ state: "ready", binaryPath: "/usr/local/bin/opencode" });
+    expect(
+      probeHarness("omp", { platform: "linux", find: () => "/usr/local/bin/omp" }),
+    ).toMatchObject({ state: "ready", binaryPath: "/usr/local/bin/omp" });
+    expect(
+      probeHarness("pi", { platform: "linux", find: () => "/usr/local/bin/pi" }),
+    ).toMatchObject({ state: "ready", binaryPath: "/usr/local/bin/pi" });
   });
 
   it("reports `unknown`, not `not-installed`, when there was no search path to look on", () => {

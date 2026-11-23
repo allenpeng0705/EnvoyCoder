@@ -362,7 +362,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsApprovalsDetail =>
-      'When on, the agent asks before risky steps. Off means don’t ask on this machine — via the agent’s policy when it has one, or its unattended mode when that is what the catalogue publishes.';
+      'On: ask before risky steps. Off: don’t ask on this machine.';
 
   @override
   String settingsApprovalsReaches(String agent) {
@@ -372,6 +372,21 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String settingsApprovalsReachesMode(String agent, String mode) {
     return 'Off starts $agent in “$mode” so it does not stop to ask. On keeps the mode you pick for the task.';
+  }
+
+  @override
+  String settingsApprovalsReachesLaunch(String agent) {
+    return 'Off starts $agent with force-allow so it does not stop to ask. On leaves its usual permission prompts. A run already in progress is covered until it ends; the next run uses force-allow.';
+  }
+
+  @override
+  String settingsApprovalsReachesSession(String agent) {
+    return 'Off tells EnvoyDev to auto-allow $agent\'s permission prompts for the run (allow once / always). On leaves its usual prompts. $agent has no separate YOLO mode EnvoyDev can set.';
+  }
+
+  @override
+  String settingsApprovalsReachesApproval(String agent, String mode) {
+    return 'Off starts $agent in “$mode” so it does not stop to ask. On leaves its usual approval mode. A run already in progress is auto-allowed until it ends; the next run uses yolo.';
   }
 
   @override
@@ -1522,6 +1537,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get composerAutonomySheet => 'Autonomy';
+
+  @override
+  String get composerAutonomyUnavailable =>
+      'This agent still asks for permission itself. Full access is not available here — use Always allow on its prompts, or pick Envoy / Claude / Codex for machine Asking Off.';
 
   @override
   String get composerDomainOff => 'Tools off';

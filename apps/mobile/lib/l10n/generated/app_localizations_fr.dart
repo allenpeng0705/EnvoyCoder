@@ -370,7 +370,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get settingsApprovalsDetail =>
-      'Si activé, l\'agent demande avant les étapes risquées. Désactivé signifie ne pas demander sur cette machine — via la politique de l\'agent quand il en a une, ou son mode sans surveillance publié dans le catalogue.';
+      'Activé : demander avant les étapes risquées. Désactivé : ne pas demander sur cette machine.';
 
   @override
   String settingsApprovalsReaches(String agent) {
@@ -380,6 +380,21 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String settingsApprovalsReachesMode(String agent, String mode) {
     return 'Désactivé démarre $agent en « $mode » pour qu\'il ne s\'arrête pas pour demander. Activé conserve le mode que vous choisissez pour la tâche.';
+  }
+
+  @override
+  String settingsApprovalsReachesLaunch(String agent) {
+    return 'Off starts $agent with force-allow so it does not stop to ask. On leaves its usual permission prompts. A run already in progress is covered until it ends; the next run uses force-allow.';
+  }
+
+  @override
+  String settingsApprovalsReachesSession(String agent) {
+    return 'Off tells EnvoyDev to auto-allow $agent\'s permission prompts for the run (allow once / always). On leaves its usual prompts. $agent has no separate YOLO mode EnvoyDev can set.';
+  }
+
+  @override
+  String settingsApprovalsReachesApproval(String agent, String mode) {
+    return 'Off starts $agent in “$mode” so it does not stop to ask. On leaves its usual approval mode. A run already in progress is auto-allowed until it ends; the next run uses yolo.';
   }
 
   @override
@@ -1544,6 +1559,10 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get composerAutonomySheet => 'Autonomie';
+
+  @override
+  String get composerAutonomyUnavailable =>
+      'Cet agent continue de demander la permission lui-même. L’accès complet n’est pas disponible ici — utilisez Toujours autoriser sur ses invites, ou choisissez Envoy / Claude / Codex pour désactiver les demandes sur cette machine.';
 
   @override
   String get composerDomainOff => 'Outils désactivés';

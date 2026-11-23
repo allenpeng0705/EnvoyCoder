@@ -27,6 +27,21 @@ void main() {
       ),
       AutonomyPresetId.fullAccess,
     );
+    expect(
+      activeAutonomyPreset(
+        requireApproval: false,
+        modeUnattended: false,
+        modeReadOnly: false,
+        askingDeliverable: false,
+      ),
+      AutonomyPresetId.default_,
+    );
+  });
+
+  test('askingIsDeliverable follows asking-control wires', () {
+    expect(askingIsDeliverable(harnessId: 'cursor'), isTrue);
+    expect(askingIsDeliverable(harnessId: 'envoy-harness'), isTrue);
+    expect(askingIsDeliverable(harnessId: 'copilot'), isFalse);
   });
 
   test('modeIdForPreset prefers plan for read-only and unattended for full access', () {

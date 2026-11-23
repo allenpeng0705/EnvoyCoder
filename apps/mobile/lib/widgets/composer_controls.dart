@@ -291,10 +291,12 @@ class ComposerControls extends StatelessWidget {
         if (o.id == modeId && o.unattended) modeUnattended = true;
       }
     }
+    final deliverable = askingIsDeliverable(harnessId: current?.id);
     final preset = activeAutonomyPreset(
       requireApproval: requireApproval,
       modeUnattended: modeUnattended,
       modeReadOnly: modeLooksReadOnly(modeId),
+      askingDeliverable: deliverable,
     );
     switch (preset) {
       case AutonomyPresetId.readOnly:
@@ -316,10 +318,12 @@ class ComposerControls extends StatelessWidget {
         if (o.id == modeId && o.unattended) modeUnattended = true;
       }
     }
+    final deliverable = askingIsDeliverable(harnessId: current?.id);
     final currentPreset = activeAutonomyPreset(
       requireApproval: requireApproval!,
       modeUnattended: modeUnattended,
       modeReadOnly: modeLooksReadOnly(modeId),
+      askingDeliverable: deliverable,
     );
     final chosen = await showModalBottomSheet<AutonomyPresetId>(
       context: context,
@@ -342,13 +346,14 @@ class ComposerControls extends StatelessWidget {
                   : null,
               onTap: () => Navigator.pop(context, AutonomyPresetId.default_),
             ),
-            ListTile(
-              title: Text(l10n.composerAutonomyFullAccess),
-              trailing: currentPreset == AutonomyPresetId.fullAccess
-                  ? const Icon(Icons.check)
-                  : null,
-              onTap: () => Navigator.pop(context, AutonomyPresetId.fullAccess),
-            ),
+            if (deliverable)
+              ListTile(
+                title: Text(l10n.composerAutonomyFullAccess),
+                trailing: currentPreset == AutonomyPresetId.fullAccess
+                    ? const Icon(Icons.check)
+                    : null,
+                onTap: () => Navigator.pop(context, AutonomyPresetId.fullAccess),
+              ),
           ],
         ),
       ),
