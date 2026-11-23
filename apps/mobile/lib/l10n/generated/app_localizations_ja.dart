@@ -347,8 +347,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsApprovals => 'リスクのある操作の前に確認する';
 
   @override
-  String get settingsApprovalsDetail =>
-      'オン：リスクのある操作の前に確認。オフ：このマシンでは確認しない。';
+  String get settingsApprovalsDetail => 'オン：リスクのある操作の前に確認。オフ：このマシンでは確認しない。';
 
   @override
   String settingsApprovalsReaches(String agent) {
@@ -362,17 +361,17 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String settingsApprovalsReachesLaunch(String agent) {
-    return 'Off starts $agent with force-allow so it does not stop to ask. On leaves its usual permission prompts. A run already in progress is covered until it ends; the next run uses force-allow.';
+    return 'オフにすると $agent は強制許可で始まり、確認のために止まりません。オンでは通常の許可プロンプトのままです。進行中の実行は終わるまで対象になり、次の実行から強制許可を使います。';
   }
 
   @override
   String settingsApprovalsReachesSession(String agent) {
-    return 'Off tells EnvoyDev to auto-allow $agent\'s permission prompts for the run (allow once / always). On leaves its usual prompts. $agent has no separate YOLO mode EnvoyDev can set.';
+    return 'オフにすると、EnvoyDev は実行中の $agent の許可プロンプトを自動許可します（一度 / 常に）。オンでは通常のプロンプトのままです。$agent には EnvoyDev が設定できる別の YOLO モードがありません。';
   }
 
   @override
   String settingsApprovalsReachesApproval(String agent, String mode) {
-    return 'Off starts $agent in “$mode” so it does not stop to ask. On leaves its usual approval mode. A run already in progress is auto-allowed until it ends; the next run uses yolo.';
+    return 'オフにすると $agent は「$mode」（`--approval-mode yolo`）で始まり、確認のために止まりません。オンでは通常の承認モードのままです。進行中の実行は終わるまで自動許可され、次の実行から yolo を使います。';
   }
 
   @override
@@ -996,10 +995,41 @@ class AppLocalizationsJa extends AppLocalizations {
   String get runNoteStopped => '停止しました。';
 
   @override
-  String get runNoteStoppedBefore => '終わる前に停止しました。';
+  String get runNoteStoppedBefore => '終わる前に停止しました。詳細は記録されていません。';
 
   @override
   String get runNoteEnded => '終了しました。';
+
+  @override
+  String get runStopRefusal => 'エージェントはこのリクエストの続行を拒否しました。';
+
+  @override
+  String get runStopMaxIterations => 'エージェントは反復回数の上限に達しても完了しませんでした。';
+
+  @override
+  String get runStopUnknown => 'エージェントがエラーで停止しました。';
+
+  @override
+  String get runAuthWaiting => 'エージェントにサインインしています…すでにログイン済みでも、約1分かかることがあります。';
+
+  @override
+  String get runIdleWaiting => '次のメッセージを待っています…セッションを開いたままにして、次の返信を速くします。';
+
+  @override
+  String get runRetriableLeakRetrying => 'エージェントの接続が返信の途中で切れました。再試行しています…';
+
+  @override
+  String get runRetriableLeakFailed =>
+      'エージェントの接続が返信の途中で切れました。もう一度送信して再試行してください。';
+
+  @override
+  String get runRetriableLeakFailedQueued =>
+      'エージェントの接続が返信の途中で切れました。キューに入った後続 1 件は送られていません。もう一度送信して再試行してください。';
+
+  @override
+  String runRetriableLeakFailedQueuedMany(int count) {
+    return 'エージェントの接続が返信の途中で切れました。キューに入った後続 $count 件は送られていません。もう一度送信して再試行してください。';
+  }
 
   @override
   String get attachAdd => '画像を追加';

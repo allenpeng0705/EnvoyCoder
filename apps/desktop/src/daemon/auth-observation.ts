@@ -66,6 +66,11 @@ export function signInMethod(
  *     agent telling us, in its own protocol's vocabulary, that it wants one: `cursor-agent acp` answers
  *     `-32000 Authentication required … methodId 'cursor_login'`. The method named is `signInMethod`'s
  *     answer, so it may legitimately be absent.
+ *   * a session did not open because **we timed out waiting** (`did not answer…`) → `unknown`, even when
+ *     methods are advertised. Measured 2026-11-23: Cursor already logged in still hangs on `session/new`
+ *     until this process has run `authenticate` (~90 s); a short probe never sends that step, so a hang is
+ *     not "user must log in." Labelling it `needs-signin` put a Sign in button on phones that changed nothing
+ *     useful while runs already authenticate themselves.
  *   * anything else → `unknown`, with the reason. An agent that would not open a session and named no way to
  *     authenticate has not told us a login would help, and saying `needs-signin` there would send a user to
  *     perform a step that changes nothing. Matching the words "authentication" or "login" inside a refusal
@@ -77,10 +82,28 @@ export function authStateOf(input: {
   opened: boolean;
   /** The `authenticate` methods the agent advertised in `initialize`, verbatim. */
   authMethods: readonly string[];
+  /**
+   * True when the failure was our deadline / "did not answer", not the agent's auth refusal.
+   * See the hang-vs-refusal note above.
+   */
+  handshakeTimedOut?: boolean;
 }): HarnessAuthState {
   if (input.opened) return "ready";
   if (input.authMethods.length === 0) return "unknown";
+  if (input.handshakeTimedOut === true) return "unknown";
   return "needs-signin";
+}
+
+/**
+ * Probe silence shaped like our own deadline, not an agent `-32000` refusal.
+ *
+ * A timeout on **`authenticate`** still means the agent wants a sign-in (keep `needs-signin`). A timeout
+ * on **`session/new` / the outer probe ceiling** while methods are advertised is Cursor's hang-without-
+ * authenticate case — not a Settings login prompt.
+ */
+export function isHandshakeTimeoutReason(reason: string): boolean {
+  if (/authenticate/i.test(reason)) return false;
+  return /did not answer/i.test(reason);
 }
 
 /**
@@ -109,7 +132,12 @@ export function observeAuth(input: {
   terminal?: string | undefined;
   reason: string;
 }): AgentAuthObservation {
-  const state = authStateOf({ opened: input.opened, authMethods: input.authMethods });
+  const handshakeTimedOut = isHandshakeTimeoutReason(input.reason);
+  const state = authStateOf({
+    opened: input.opened,
+    authMethods: input.authMethods,
+    ...(handshakeTimedOut ? { handshakeTimedOut: true } : {}),
+  });
   if (state === "ready") {
     return {
       harness: input.harness,
@@ -119,13 +147,17 @@ export function observeAuth(input: {
     };
   }
   if (state === "unknown") {
+    const detail = handshakeTimedOut
+      ? `A quick probe timed out opening a session (${input.reason}). For agents like Cursor, a new run ` +
+        `still runs a sign-in step on its process (often about a minute even when already logged in); ` +
+        `follow-ups in the same idle session do not. That is not the same as needing a fresh login in Settings.`
+      : `A session did not open and this agent advertises no sign-in method, so nothing here says a login ` +
+        `would help: ${input.reason}`;
     return {
       harness: input.harness,
       observedAt: input.observedAt,
       state,
-      detail:
-        `A session did not open and this agent advertises no sign-in method, so nothing here says a login ` +
-        `would help: ${input.reason}`,
+      detail,
     };
   }
   const methodId = signInMethod(input.declared, input.authMethods);

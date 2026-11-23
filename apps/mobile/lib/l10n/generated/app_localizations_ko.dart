@@ -347,8 +347,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsApprovals => '위험한 단계 전에 확인';
 
   @override
-  String get settingsApprovalsDetail =>
-      '켜기: 위험한 단계 전에 묻기. 끄기: 이 기기에서는 묻지 않음.';
+  String get settingsApprovalsDetail => '켜기: 위험한 단계 전에 묻기. 끄기: 이 기기에서는 묻지 않음.';
 
   @override
   String settingsApprovalsReaches(String agent) {
@@ -362,17 +361,17 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String settingsApprovalsReachesLaunch(String agent) {
-    return 'Off starts $agent with force-allow so it does not stop to ask. On leaves its usual permission prompts. A run already in progress is covered until it ends; the next run uses force-allow.';
+    return '끄면 $agent가 강제 허용으로 시작하여 묻기 위해 멈추지 않습니다. 켜면 평소 권한 프롬프트를 유지합니다. 진행 중인 실행은 끝날 때까지 적용되고, 다음 실행부터 강제 허용을 씁니다.';
   }
 
   @override
   String settingsApprovalsReachesSession(String agent) {
-    return 'Off tells EnvoyDev to auto-allow $agent\'s permission prompts for the run (allow once / always). On leaves its usual prompts. $agent has no separate YOLO mode EnvoyDev can set.';
+    return '끄면 EnvoyDev가 실행 중 $agent의 권한 프롬프트를 자동 허용합니다(한 번 / 항상). 켜면 평소 프롬프트를 유지합니다. $agent에는 EnvoyDev가 설정할 별도 YOLO 모드가 없습니다.';
   }
 
   @override
   String settingsApprovalsReachesApproval(String agent, String mode) {
-    return 'Off starts $agent in “$mode” so it does not stop to ask. On leaves its usual approval mode. A run already in progress is auto-allowed until it ends; the next run uses yolo.';
+    return '끄면 $agent가 “$mode”(`--approval-mode yolo`)로 시작하여 묻기 위해 멈추지 않습니다. 켜면 평소 승인 모드를 유지합니다. 진행 중인 실행은 끝날 까지 자동 허용되고, 다음 실행부터 yolo를 씁니다.';
   }
 
   @override
@@ -995,10 +994,40 @@ class AppLocalizationsKo extends AppLocalizations {
   String get runNoteStopped => '중지했습니다.';
 
   @override
-  String get runNoteStoppedBefore => '끝나기 전에 중지했습니다.';
+  String get runNoteStoppedBefore => '끝나기 전에 중지했습니다. 더 자세한 내용은 기록되지 않았습니다.';
 
   @override
   String get runNoteEnded => '종료했습니다.';
+
+  @override
+  String get runStopRefusal => '에이전트가 이 요청의 계속 진행을 거절했습니다.';
+
+  @override
+  String get runStopMaxIterations => '에이전트가 반복 한도를 모두 썼지만 끝내지 못했습니다.';
+
+  @override
+  String get runStopUnknown => '에이전트가 오류로 중지했습니다.';
+
+  @override
+  String get runAuthWaiting => '에이전트에 로그인하는 중… 이미 로그인한 상태여도 약 1분 정도 걸릴 수 있습니다.';
+
+  @override
+  String get runIdleWaiting => '다음 메시지를 기다리는 중… 다음 답변이 빠르도록 세션을 열어 둡니다.';
+
+  @override
+  String get runRetriableLeakRetrying => '에이전트 연결이 답변 중간에 끊겼습니다. 다시 시도하는 중…';
+
+  @override
+  String get runRetriableLeakFailed => '에이전트 연결이 답변 중간에 끊겼습니다. 다시 보내 재시도하세요.';
+
+  @override
+  String get runRetriableLeakFailedQueued =>
+      '에이전트 연결이 답변 중간에 끊겼습니다. 대기 중이던 후속 메시지 1개가 보내지지 않았습니다. 다시 보내 재시도하세요.';
+
+  @override
+  String runRetriableLeakFailedQueuedMany(int count) {
+    return '에이전트 연결이 답변 중간에 끊겼습니다. 대기 중이던 후속 메시지 $count개가 보내지지 않았습니다. 다시 보내 재시도하세요.';
+  }
 
   @override
   String get attachAdd => '이미지 추가';

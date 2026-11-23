@@ -1366,13 +1366,54 @@
   "@runNoteStopped": {
     "description": "run.noteStopped — The run was cancelled."
   },
-  "runNoteStoppedBefore": "Stopped before it finished.",
+  "runNoteStoppedBefore": "Stopped before it finished. No further detail was recorded.",
   "@runNoteStoppedBefore": {
-    "description": "run.noteStoppedBefore — The run failed."
+    "description": "run.end.failed — The run failed with no prior status note."
   },
   "runNoteEnded": "Ended.",
   "@runNoteEnded": {
     "description": "run.noteEnded — The run ended without a known status."
+  },
+  "runStopRefusal": "The agent declined to continue with this request.",
+  "@runStopRefusal": {
+    "description": "run.stop.refusal"
+  },
+  "runStopMaxIterations": "The agent used its full iteration budget without finishing.",
+  "@runStopMaxIterations": {
+    "description": "run.stop.maxIterations"
+  },
+  "runStopUnknown": "The agent stopped with an error.",
+  "@runStopUnknown": {
+    "description": "run.stop.unknown"
+  },
+  "runAuthWaiting": "Signing in to the agent… This can take about a minute, even when you are already logged in.",
+  "@runAuthWaiting": {
+    "description": "run.auth.waiting"
+  },
+  "runIdleWaiting": "Waiting for your next message… Session stays open so the next reply is fast.",
+  "@runIdleWaiting": {
+    "description": "run.idle.waiting"
+  },
+  "runRetriableLeakRetrying": "The agent’s connection dropped mid-reply. Retrying…",
+  "@runRetriableLeakRetrying": {
+    "description": "run.retriableLeak.retrying"
+  },
+  "runRetriableLeakFailed": "The agent’s connection dropped mid-reply. Send again to retry.",
+  "@runRetriableLeakFailed": {
+    "description": "run.retriableLeak.failed"
+  },
+  "runRetriableLeakFailedQueued": "The agent’s connection dropped mid-reply. 1 queued follow-up was not sent. Send again to retry.",
+  "@runRetriableLeakFailedQueued": {
+    "description": "run.retriableLeak.failed.queued"
+  },
+  "runRetriableLeakFailedQueuedMany": "The agent’s connection dropped mid-reply. {count} queued follow-ups were not sent. Send again to retry.",
+  "@runRetriableLeakFailedQueuedMany": {
+    "description": "run.retriableLeak.failed.queued.many",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "attachAdd": "Add image",
   "attachTooltip": "Attach",

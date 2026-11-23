@@ -406,8 +406,19 @@ export const it: Catalogue = {
   /* ── lines the transcript folds out of run events ── */
   "run.end.done": "Completato.",
   "run.end.cancelled": "Fermato.",
-  "run.end.failed": "Fermato prima di finire.",
+  "run.end.failed": "Fermato prima di finire. Nessun altro dettaglio registrato.",
   "run.end.other": "Concluso.",
+  "run.stop.refusal": "L’agente ha rifiutato di continuare con questa richiesta.",
+  "run.stop.maxIterations": "L’agente ha esaurito il budget di iterazioni senza finire.",
+  "run.stop.unknown": "L’agente si è interrotto con un errore.",
+  "run.auth.waiting":
+    "Accesso all’agente… Può richiedere circa un minuto, anche se sei già connesso.",
+  "run.idle.waiting":
+    "In attesa del prossimo messaggio… La sessione resta aperta così la risposta successiva è veloce.",
+  "run.retriableLeak.retrying": "La connessione dell’agente si è interrotta a metà risposta. Nuovo tentativo…",
+  "run.retriableLeak.failed": "La connessione dell’agente si è interrotta a metà risposta. Invia di nuovo per riprovare.",
+  "run.retriableLeak.failed.queued": "La connessione dell’agente si è interrotta a metà risposta. 1 seguito in coda non è stato inviato. Invia di nuovo per riprovare.",
+  "run.retriableLeak.failed.queued.many": "La connessione dell’agente si è interrotta a metà risposta. {count} seguiti in coda non sono stati inviati. Invia di nuovo per riprovare.",
   "run.diff.one": "1 file modificato.",
   "run.diff.many": "{count} file modificati.",
   "run.handoff": "Passato a {role}.",
@@ -1103,6 +1114,10 @@ export const it: Catalogue = {
   "signIn.refused": "{agent} ha rifiutato il passo di accesso: {reason}",
   "signIn.notCompleted":
     "{agent} ha accettato il passo di accesso ma non è ancora stata aperta alcuna sessione, quindi l'accesso non è concluso: {reason} Se l'agente ha aperto un browser o un terminale, concludi lì e riprova.",
+  "signIn.terminalRequired":
+    "{agent} accede solo da un terminale. Sulla macchina che esegue EnvoyDev, esegui: {command} — poi riprova. ({reason})",
+  "signIn.notAnswered":
+    "{agent} non ha risposto al passo di accesso in tempo ({reason}). Se si è aperto un browser, completa lì l'accesso e riprova — oppure esegui prima il comando di accesso dell'agente.",
   "signIn.noMethod":
     "{agent} non aprirà una sessione qui e non ha indicato un metodo di accesso che EnvoyDev possa inviare. Offre: {methods}. Accedi con il comando dell'agente stesso, poi riprova.",
   "signIn.unavailable": "{agent} non è stato avviato, quindi non è stato eseguito alcun accesso: {reason}",

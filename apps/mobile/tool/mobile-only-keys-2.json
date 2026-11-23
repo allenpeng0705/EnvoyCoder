@@ -123,5 +123,13 @@
   "teamJobTemplate",
   "teamJobOpenRun",
   "teamJobStepPhase",
-  "teamJobRecentHeading"
+  "teamJobRecentHeading",
+  "runVoiceUnavailable",
+  "composerModelCustom",
+  "composerAutonomyUnavailable",
+  "composerDomainOff",
+  "composerDomainMobile",
+  "composerDomainWebdev",
+  "composerDomainSheet",
+  "composerDomainTooltip"
 ]

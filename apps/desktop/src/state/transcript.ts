@@ -31,7 +31,7 @@
 
 import type { PlanEntry, RunEvent, TaskStatus } from "@envoydev/protocol";
 
-import { localNotice, type Notice } from "../i18n/notice.js";
+import { localNotice, noticeOf, type Notice } from "../i18n/notice.js";
 import { countToolBuckets, type ToolCounts } from "./tool-buckets.js";
 
 export type ToolEntry = {
@@ -160,6 +160,8 @@ export function buildTranscript(events: readonly RunEvent[]): Transcript {
   let lastSeq = 0;
   let hasGap = false;
   let pendingApprovalId: string | undefined;
+  /** True after a `run.status` failed note in this run — suppresses the generic end line. */
+  let failedReasonShown = false;
   /**
    * The fallback bucket for chunks that carry no `messageId`.
    *
@@ -335,12 +337,24 @@ export function buildTranscript(events: readonly RunEvent[]): Transcript {
         if (event.note) {
           // The agent's own words (or the daemon's failure summary), carried as-is: nothing here can
           // translate a sentence an agent wrote, and inventing one would be worse than showing it.
+          const notice = noticeOf(event.note) ?? { message: event.note };
+          // Failed runs: the reason is the headline (error). Auth wait / idle keep-alive / leak
+          // retry: warn so a phone or window does not look hung. Else quiet.
+          const tone =
+            event.status === "failed"
+              ? "error"
+              : notice.key === "run.retriableLeak.retrying" ||
+                  notice.key === "run.auth.waiting" ||
+                  notice.key === "run.idle.waiting"
+                ? "warn"
+                : "quiet";
           entries.push({
             kind: "note",
             id: `s${event.seq}`,
-            notice: { message: event.note },
-            tone: "quiet",
+            notice,
+            tone,
           });
+          if (event.status === "failed") failedReasonShown = true;
         }
         if (event.status !== "needs-attention" && pendingApprovalId !== undefined) {
           // A status that is no longer "waiting on a human" means whatever was open is closed —
@@ -352,12 +366,17 @@ export function buildTranscript(events: readonly RunEvent[]): Transcript {
 
       case "run.ended": {
         breakAnonymousRun();
-        entries.push({
-          kind: "note",
-          id: `e${event.seq}`,
-          notice: endNote(event.status),
-          tone: event.status === "failed" ? "error" : event.status === "cancelled" ? "warn" : "quiet",
-        });
+        // When the daemon already said *why* (run.status failed + note), skip the generic
+        // "Stopped before it finished." — that line is what left users with no useful info.
+        if (!(event.status === "failed" && failedReasonShown)) {
+          entries.push({
+            kind: "note",
+            id: `e${event.seq}`,
+            notice: endNote(event.status),
+            tone: event.status === "failed" ? "error" : event.status === "cancelled" ? "warn" : "quiet",
+          });
+        }
+        failedReasonShown = false;
         pendingApprovalId = undefined;
         break;
       }

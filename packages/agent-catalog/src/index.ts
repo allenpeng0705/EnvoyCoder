@@ -794,7 +794,9 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       "until the user has run `copilot login`, so the modes, the model list and the `allow_all` config option " +
       "advertised by the server have NOT been read here — the modes below are Paseo's ids for this server, not " +
       "this machine's observation of them, and the capability flag that depends on a session " +
-      "(`thinking`) is `false` for that reason rather than because the server lacks it. UNVERIFIED: " +
+      "(`thinking`) is `false` for that reason rather than because the server lacks it. " +
+      "`authenticate {copilot-login}` is likewise doomed (`-32000`); the client skips ACP authenticate when " +
+      "`_meta[\"terminal-auth\"]` is present and surfaces the terminal command instead. UNVERIFIED: " +
       "`capabilities.cancel`, `approvals`, and every mode change.",
   },
 
@@ -930,9 +932,20 @@ export const HARNESS_CATALOG: Record<HarnessId, HarnessDefinition> = {
       "already been through it the step is invisible either way. It is therefore declared and sent " +
       "idempotently (a fresh installation is the case that needs it) rather than driven by a refusal, and " +
       "the deterministic proof that the client sends it lives in the scripted-agent case in " +
-      "`apps/desktop/test/acp-agent-support.test.ts`. **A TURN WAS NOT COMPLETED HERE**: a session, its " +
-      "options and a mode change were, and the session was then closed deliberately. UNVERIFIED: " +
-      "`capabilities.cancel`, `structuredTools` and `approvals`.",
+      "`apps/desktop/test/acp-agent-support.test.ts`. **Re-measured 2026-11-23 (already `agent status` " +
+      "logged in, no browser):** `session/new` with no prior `authenticate` hung with no answer for " +
+      "35+ s (not `-32000`); `authenticate {cursor_login}` answered `{}` after ~90 s; then " +
+      "`session/new` succeeded promptly. So open-first is wrong for this binary/state — runs always " +
+      "authenticate first with a 180 s handshake budget, emit `run.auth.waiting`, and Stop during " +
+      "authenticate kills the process (no session yet for `session/cancel`). A short Settings probe " +
+      "still does not authenticate; a hang there is `unknown`, not `needs-signin`. **Keep-alive " +
+      "between turns (2026-11-24):** after a clean `end_turn` (not `max_tokens`) with an empty queue, " +
+      "RunManager keeps the ACP process idle (`run.idle.waiting`, 10 min) so the next `send` reuses " +
+      "the same session without another authenticate — Cursor does not advertise `session/resume`. " +
+      "Stop / `stopAll` wake the waiter; cancel after a queue-wake still finishes cancelled. **A TURN " +
+      "WAS NOT COMPLETED HERE**: a session, its options and a mode change were, and the session was " +
+      "then closed deliberately. UNVERIFIED: `capabilities.cancel`, `structuredTools` and " +
+      "`approvals`.",
   },
 
   /**

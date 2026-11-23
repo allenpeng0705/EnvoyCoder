@@ -69,8 +69,15 @@ async function bench(
     agentEnv?: Record<string, string>;
     /** Skip the model default for agents that require one (refusal tests). */
     noModel?: boolean;
-    /** The memory bounds, so a test can cross one in a couple of events instead of a couple of thousand. */
+    /** The memory bounds, so a test can cross them in a couple of events instead of a couple of thousand. */
     limits?: RunManagerDeps["limits"];
+    /**
+     * Catalogue-style auth method on the launch — triggers idle keep-alive after `end_turn`
+     * (Cursor / OpenCode / Copilot). Pair with `FAKE_ACP_REQUIRE_AUTH` when the fixture must authenticate.
+     */
+    authMethodId?: string;
+    /** Short idle budget for keep-alive tests; production default is 10 minutes. */
+    idleKeepAliveMs?: number;
     onLaunch?: (input: { extraEnv?: Record<string, string> }) => void;
   } = {},
 ): Promise<Bench> {
@@ -104,6 +111,7 @@ async function bench(
     // `AcpClient.setMode` refuses to send a mode for an agent whose field name nobody wrote down, which
     // is what keeps a mode from being applied to a field the agent ignores (see `AcpLaunch.modeParam`).
     modeParam: "mode",
+    ...(options.authMethodId !== undefined ? { authMethodId: options.authMethodId } : {}),
     ...(options.agentEnv ? { env: options.agentEnv } : {}),
   };
 
@@ -111,6 +119,7 @@ async function bench(
     paths,
     store,
     ...(options.limits ? { limits: options.limits } : {}),
+    ...(options.idleKeepAliveMs !== undefined ? { idleKeepAliveMs: options.idleKeepAliveMs } : {}),
     onEvent: (event) => events.push(event),
     resolveLaunch: (input) => {
       options.onLaunch?.(input);
@@ -155,6 +164,47 @@ const said = (events: readonly RunEvent[], needle: string): boolean =>
   );
 
 /* ────────────────────────────── the tests ────────────────────────────── */
+
+describe("Cursor ACP retriable stream leak", () => {
+  it("retries when the turn had only the leak, and finishes with the recovered answer", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "please leak-stream this" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end after retry");
+
+    const ended = kinds(b.events, "run.ended")[0];
+    expect(ended && ended.kind === "run.ended" ? ended.status : "").toBe("done");
+    expect(said(b.events, "WritableIterable")).toBe(false);
+    expect(said(b.events, "RetriableError")).toBe(false);
+    expect(said(b.events, "recovered answer")).toBe(true);
+    expect(
+      kinds(b.events, "run.status").some(
+        (event) =>
+          event.kind === "run.status" &&
+          typeof event.note === "string" &&
+          event.note.includes("Retrying"),
+      ),
+    ).toBe(true);
+  });
+
+  it("strips a trailing leak after a real answer without retrying (no duplicate reply)", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "please leak-trail this" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const ended = kinds(b.events, "run.ended")[0];
+    expect(ended && ended.kind === "run.ended" ? ended.status : "").toBe("done");
+    expect(said(b.events, "PONG")).toBe(true);
+    expect(said(b.events, "WritableIterable")).toBe(false);
+    expect(
+      kinds(b.events, "run.status").some(
+        (event) =>
+          event.kind === "run.status" &&
+          typeof event.note === "string" &&
+          event.note.includes("Retrying"),
+      ),
+    ).toBe(false);
+  });
+});
 
 describe("one run, end to end", () => {
   it("streams what the agent says into normalized events, in order", async () => {
@@ -274,6 +324,19 @@ describe("one run, end to end", () => {
     expect(notes.some((event) => event.note?.includes("full iteration budget without finishing"))).toBe(
       true,
     );
+  });
+
+  it("records a refusal status note so the transcript is not only the generic end line", async () => {
+    const b = await bench({ agentEnv: { FAKE_ACP_STOP_REASON: "refusal" } });
+    await b.manager.start({ taskId: b.taskId, prompt: "hello" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const ended = kinds(b.events, "run.ended")[0] as Extract<RunEvent, { kind: "run.ended" }>;
+    expect(ended.status).toBe("failed");
+    const failed = (kinds(b.events, "run.status") as Extract<RunEvent, { kind: "run.status" }>[]).find(
+      (event) => event.status === "failed",
+    );
+    expect(failed?.note).toContain("declined to continue");
   });
 
   it("emits run.diff for paths write tools named, before run.ended", async () => {
@@ -658,6 +721,166 @@ describe("approvals", () => {
       "the queued follow-up to be answered",
     );
     await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+  });
+});
+
+describe("auth-tax idle keep-alive", () => {
+  const authKeepAlive = {
+    authMethodId: "cursor_login",
+    agentEnv: { FAKE_ACP_REQUIRE_AUTH: "cursor_login" },
+  } as const;
+
+  it("cancels during authenticate without waiting out the handshake", async () => {
+    const b = await bench({
+      authMethodId: "cursor_login",
+      agentEnv: {
+        FAKE_ACP_REQUIRE_AUTH: "cursor_login",
+        FAKE_ACP_SLOW_AUTH_MS: "5000",
+      },
+    });
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "never reach a turn" });
+    await b.until(
+      (events) =>
+        kinds(events, "run.status").some(
+          (event) =>
+            event.kind === "run.status" &&
+            typeof event.note === "string" &&
+            event.note.includes("Signing in to the agent"),
+        ),
+      "auth waiting note",
+    );
+    const started = Date.now();
+    expect(await b.manager.cancel(run.id)).toBe(true);
+    await b.until((events) => kinds(events, "run.ended").length === 1, "cancel during authenticate");
+    expect(Date.now() - started).toBeLessThan(3_000);
+    const ended = kinds(b.events, "run.ended")[0];
+    expect(ended && ended.kind === "run.ended" ? ended.status : "").toBe("cancelled");
+    expect(said(b.events, "never reach a turn")).toBe(false);
+  });
+
+  it("reuses the same session for a follow-up after end_turn (no second spawn)", async () => {
+    let launches = 0;
+    const b = await bench({
+      ...authKeepAlive,
+      idleKeepAliveMs: 30_000,
+      onLaunch: () => {
+        launches += 1;
+      },
+    });
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "hello" });
+    await b.until(
+      (events) =>
+        kinds(events, "run.status").some(
+          (event) =>
+            event.kind === "run.status" &&
+            typeof event.note === "string" &&
+            (event.note.includes("Waiting for your next message") ||
+              event.note.includes("run.idle.waiting")),
+        ),
+      "idle keep-alive note",
+    );
+    expect(kinds(b.events, "run.ended")).toHaveLength(0);
+    expect(launches).toBe(1);
+    expect(b.manager.isLive(run.id)).toBe(true);
+
+    expect(await b.manager.send(run.id, "second turn please", "queue")).toBe("queued");
+    await b.until(
+      (events) =>
+        kinds(events, "run.output").some(
+          (event) => event.kind === "run.output" && event.text.includes("second turn please"),
+        ),
+      "second prompt answered on the same session",
+    );
+    expect(launches).toBe(1);
+    expect(kinds(b.events, "run.ended")).toHaveLength(0);
+
+    await b.manager.cancel(run.id);
+    await b.until((events) => kinds(events, "run.ended").length === 1, "cancel after keep-alive");
+  });
+
+  it("cancels promptly while idle waiting", async () => {
+    const b = await bench({ ...authKeepAlive, idleKeepAliveMs: 60_000 });
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "hello" });
+    await b.until(
+      (events) =>
+        kinds(events, "run.status").some(
+          (event) =>
+            event.kind === "run.status" &&
+            typeof event.note === "string" &&
+            event.note.includes("Waiting for your next message"),
+        ),
+      "idle note before cancel",
+    );
+    expect(await b.manager.cancel(run.id)).toBe(true);
+    await b.until((events) => kinds(events, "run.ended").length === 1, "cancelled while idle");
+    const ended = kinds(b.events, "run.ended")[0];
+    expect(ended && ended.kind === "run.ended" ? ended.status : "").toBe("cancelled");
+  });
+
+  it("send-then-cancel during idle finishes cancelled, not done", async () => {
+    const b = await bench({ ...authKeepAlive, idleKeepAliveMs: 60_000 });
+    const run = await b.manager.start({ taskId: b.taskId, prompt: "hello" });
+    await b.until(
+      (events) =>
+        kinds(events, "run.status").some(
+          (event) =>
+            event.kind === "run.status" &&
+            typeof event.note === "string" &&
+            event.note.includes("Waiting for your next message"),
+        ),
+      "idle before send-then-cancel",
+    );
+    // Wake the idle waiter, then Stop. Even if the follow-up already started, the end must be
+    // cancelled — never the idle-timeout path's "done" after a cleared queue.
+    expect(await b.manager.send(run.id, "almost", "queue")).toBe("queued");
+    expect(await b.manager.cancel(run.id)).toBe(true);
+    await b.until((events) => kinds(events, "run.ended").length === 1, "cancelled after queue wake");
+    const ended = kinds(b.events, "run.ended")[0];
+    expect(ended && ended.kind === "run.ended" ? ended.status : "").toBe("cancelled");
+  });
+
+  it("ends as done when the idle timeout elapses with no follow-up", async () => {
+    const b = await bench({ ...authKeepAlive, idleKeepAliveMs: 80 });
+    await b.manager.start({ taskId: b.taskId, prompt: "hello" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "idle timeout end");
+    const ended = kinds(b.events, "run.ended")[0];
+    expect(ended && ended.kind === "run.ended" ? ended.status : "").toBe("done");
+  });
+
+  it("stopAll wakes idle keep-alive instead of leaving a 10-minute hang", async () => {
+    const b = await bench({ ...authKeepAlive, idleKeepAliveMs: 60_000 });
+    await b.manager.start({ taskId: b.taskId, prompt: "hello" });
+    await b.until(
+      (events) =>
+        kinds(events, "run.status").some(
+          (event) =>
+            event.kind === "run.status" &&
+            typeof event.note === "string" &&
+            event.note.includes("Waiting for your next message"),
+        ),
+      "idle before stopAll",
+    );
+    const started = Date.now();
+    await b.manager.stopAll();
+    expect(Date.now() - started).toBeLessThan(5_000);
+    await b.until((events) => kinds(events, "run.ended").length === 1, "ended after stopAll");
+    const ended = kinds(b.events, "run.ended")[0];
+    // Cancel intent from stopAll — not a silent "done" after the idle timer.
+    expect(ended && ended.kind === "run.ended" ? ended.status : "").toBe("cancelled");
+  });
+
+  it("does not idle-wait when the launch has no authMethodId", async () => {
+    const b = await bench({ idleKeepAliveMs: 60_000 });
+    await b.manager.start({ taskId: b.taskId, prompt: "hello" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "immediate end without auth tax");
+    expect(
+      kinds(b.events, "run.status").some(
+        (event) =>
+          event.kind === "run.status" &&
+          typeof event.note === "string" &&
+          event.note.includes("Waiting for your next message"),
+      ),
+    ).toBe(false);
   });
 });
 

@@ -404,8 +404,17 @@ export const zh: Catalogue = {
   /* ── lines the transcript folds out of run events ── */
   "run.end.done": "已完成。",
   "run.end.cancelled": "已停止。",
-  "run.end.failed": "在完成前停止。",
+  "run.end.failed": "在完成前停止。未记录更多详情。",
   "run.end.other": "已结束。",
+  "run.stop.refusal": "智能体拒绝继续处理此请求。",
+  "run.stop.maxIterations": "智能体已用尽迭代次数仍未完成。",
+  "run.stop.unknown": "智能体因错误停止。",
+  "run.auth.waiting": "正在登录智能体…即使您已经登录，这也可能需要大约一分钟。",
+  "run.idle.waiting": "正在等待您的下一条消息…会话保持打开，以便下一次回复更快。",
+  "run.retriableLeak.retrying": "智能体连接在回复中断开。正在重试…",
+  "run.retriableLeak.failed": "智能体连接在回复中断开。请再发送一次以重试。",
+  "run.retriableLeak.failed.queued": "智能体连接在回复中断开。有 1 条排队的后续消息未发送。请再发送一次以重试。",
+  "run.retriableLeak.failed.queued.many": "智能体连接在回复中断开。有 {count} 条排队的后续消息未发送。请再发送一次以重试。",
   "run.diff.one": "1 个文件已更改。",
   "run.diff.many": "{count} 个文件已更改。",
   "run.handoff": "已交接给 {role}。",
@@ -1060,6 +1069,10 @@ export const zh: Catalogue = {
   "signIn.refused": "{agent} 拒绝了登录步骤：{reason}",
   "signIn.notCompleted":
     "{agent} 接受了登录步骤，但还没有打开会话，因此登录尚未完成：{reason} 如果该智能体打开了浏览器或终端，请在那里完成后重试。",
+  "signIn.terminalRequired":
+    "{agent} 只能通过终端登录。请在运行 EnvoyDev 的机器上执行：{command} — 然后重试。（{reason}）",
+  "signIn.notAnswered":
+    "{agent} 未在时限内回答登录步骤（{reason}）。如果打开了浏览器，请在那里完成登录后再试 — 或先运行该智能体自己的登录命令。",
   "signIn.noMethod":
     "{agent} 在这里不会打开会话，也没有给出 EnvoyDev 可以发送的登录方式。它提供的是：{methods}。请先用该智能体自己的命令登录，然后再试一次。",
   "signIn.unavailable": "{agent} 无法启动，因此没有进行任何登录：{reason}",

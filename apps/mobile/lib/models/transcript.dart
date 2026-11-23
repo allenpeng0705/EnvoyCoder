@@ -28,6 +28,7 @@
 ///      transcript that silently skips the sentence explaining a change is worse than saying so.
 library;
 
+import '../l10n/daemon_text.dart';
 import 'tool_buckets.dart';
 
 /// One row of a transcript. `kind` is a string rather than an enum so a new server-side kind does not
@@ -178,6 +179,7 @@ class Transcript {
   /// finished would throw away the new run's first events.
   void beginRun() {
     lastSeq = 0;
+    _failedReasonShown = false;
     _byMessage.clear();
     _byCall.clear();
     _byRequest.clear();
@@ -222,6 +224,9 @@ class Transcript {
   /// The bucket for fragments that carry no `messageId`, cleared by any other row.
   String _anonymousKey = '';
   int _anonymousCount = 0;
+
+  /// True after a `run.status` failed note in this run — suppresses the generic end line.
+  bool _failedReasonShown = false;
 
   /// The approval the run is waiting on, if any. Derived from the rows, so the composer and the card
   /// cannot disagree about whether a question is open.
@@ -331,29 +336,53 @@ class Transcript {
         // the case where the run was cancelled while the question was on screen.
         if (event['status'] != 'needs-attention') _closeOpenApprovals();
         final note = event['note'] as String?;
+        final status = event['status'] as String?;
         if (note != null && note.isNotEmpty) {
-          entries.add(TranscriptEntry(kind: 'note', id: 's${seq ?? entries.length}', text: note));
+          // Failed runs: the reason is the headline (error). Auth wait / idle keep-alive / leak
+          // retry: warn so the phone does not look hung (same as desktop). Else quiet.
+          final key = parseDaemonMessage(note).key;
+          final tone = status == 'failed'
+              ? 'error'
+              : (key == 'run.retriableLeak.retrying' ||
+                      key == 'run.auth.waiting' ||
+                      key == 'run.idle.waiting')
+                  ? 'warn'
+                  : 'quiet';
+          entries.add(
+            TranscriptEntry(
+              kind: 'note',
+              id: 's${seq ?? entries.length}',
+              text: note,
+              tone: tone,
+            ),
+          );
+          if (status == 'failed') _failedReasonShown = true;
         }
         return;
 
       case 'run.ended':
         _breakAnonymous();
         _closeOpenApprovals();
-        entries.add(
-          TranscriptEntry(
-            kind: 'note',
-            id: 'e${seq ?? entries.length}',
-            // The sentence is chosen at render time from the status, so it speaks the user's
-            // language and no English lives in the model.
-            noteKind: 'ended',
-            noteStatus: event['status'] as String?,
-            tone: event['status'] == 'failed'
-                ? 'error'
-                : event['status'] == 'cancelled'
-                    ? 'warn'
-                    : 'quiet',
-          ),
-        );
+        final endedStatus = event['status'] as String?;
+        // When the daemon already said *why*, skip the generic “Stopped before it finished.”
+        if (!(endedStatus == 'failed' && _failedReasonShown)) {
+          entries.add(
+            TranscriptEntry(
+              kind: 'note',
+              id: 'e${seq ?? entries.length}',
+              // The sentence is chosen at render time from the status, so it speaks the user's
+              // language and no English lives in the model.
+              noteKind: 'ended',
+              noteStatus: endedStatus,
+              tone: endedStatus == 'failed'
+                  ? 'error'
+                  : endedStatus == 'cancelled'
+                      ? 'warn'
+                      : 'quiet',
+            ),
+          );
+        }
+        _failedReasonShown = false;
         return;
 
       case 'run.diff':

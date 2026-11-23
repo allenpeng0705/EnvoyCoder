@@ -384,17 +384,17 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String settingsApprovalsReachesLaunch(String agent) {
-    return 'Off starts $agent with force-allow so it does not stop to ask. On leaves its usual permission prompts. A run already in progress is covered until it ends; the next run uses force-allow.';
+    return 'Désactivé démarre $agent avec autorisation forcée pour qu\'il ne s\'arrête pas pour demander. Activé conserve ses invites habituelles. Une exécution en cours est couverte jusqu\'à la fin ; la suivante utilise l\'autorisation forcée.';
   }
 
   @override
   String settingsApprovalsReachesSession(String agent) {
-    return 'Off tells EnvoyDev to auto-allow $agent\'s permission prompts for the run (allow once / always). On leaves its usual prompts. $agent has no separate YOLO mode EnvoyDev can set.';
+    return 'Désactivé : EnvoyDev autorise automatiquement les invites de $agent pour l\'exécution (une fois / toujours). Activé conserve ses invites habituelles. $agent n\'a pas de mode YOLO distinct qu\'EnvoyDev puisse régler.';
   }
 
   @override
   String settingsApprovalsReachesApproval(String agent, String mode) {
-    return 'Off starts $agent in “$mode” so it does not stop to ask. On leaves its usual approval mode. A run already in progress is auto-allowed until it ends; the next run uses yolo.';
+    return 'Désactivé démarre $agent en « $mode » (`--approval-mode yolo`) pour qu\'il ne s\'arrête pas pour demander. Activé conserve son mode d\'approbation habituel. Une exécution en cours est autorisée automatiquement jusqu\'à la fin ; la suivante utilise yolo.';
   }
 
   @override
@@ -1039,10 +1039,46 @@ class AppLocalizationsFr extends AppLocalizations {
   String get runNoteStopped => 'Arrêté.';
 
   @override
-  String get runNoteStoppedBefore => 'Arrêté avant la fin.';
+  String get runNoteStoppedBefore =>
+      'Arrêté avant la fin. Aucun autre détail n’a été enregistré.';
 
   @override
   String get runNoteEnded => 'Fini.';
+
+  @override
+  String get runStopRefusal => 'L’agent a refusé de poursuivre cette demande.';
+
+  @override
+  String get runStopMaxIterations =>
+      'L’agent a épuisé son budget d’itérations sans terminer.';
+
+  @override
+  String get runStopUnknown => 'L’agent s’est arrêté avec une erreur.';
+
+  @override
+  String get runAuthWaiting =>
+      'Connexion à l’agent… Cela peut prendre environ une minute, même si vous êtes déjà connecté.';
+
+  @override
+  String get runIdleWaiting =>
+      'En attente de votre prochain message… La session reste ouverte pour que la prochaine réponse soit rapide.';
+
+  @override
+  String get runRetriableLeakRetrying =>
+      'La connexion de l’agent s’est interrompue au milieu de la réponse. Nouvel essai…';
+
+  @override
+  String get runRetriableLeakFailed =>
+      'La connexion de l’agent s’est interrompue au milieu de la réponse. Renvoyez pour réessayer.';
+
+  @override
+  String get runRetriableLeakFailedQueued =>
+      'La connexion de l’agent s’est interrompue au milieu de la réponse. 1 suite en file n’a pas été envoyée. Renvoyez pour réessayer.';
+
+  @override
+  String runRetriableLeakFailedQueuedMany(int count) {
+    return 'La connexion de l’agent s’est interrompue au milieu de la réponse. $count suites en file n’ont pas été envoyées. Renvoyez pour réessayer.';
+  }
 
   @override
   String get attachAdd => 'Ajouter une image';

@@ -280,6 +280,39 @@ describe("approvals", () => {
   });
 });
 
+describe("failed-run reasons reach the reader", () => {
+  it("shows a failed status note as error and skips the generic end line", () => {
+    // The daemon already said why; repeating “Stopped before it finished.” left users with no
+    // useful info (and the real reason used to render as a quiet footnote).
+    const transcript = buildTranscript([
+      at(1, {
+        kind: "run.status",
+        status: "failed",
+        note: "The agent’s connection dropped mid-reply. Send again to retry.",
+      }),
+      at(2, { kind: "run.ended", exitCode: null, status: "failed" }),
+    ]);
+    expect(transcript.entries).toHaveLength(1);
+    expect(transcript.entries[0]).toMatchObject({
+      kind: "note",
+      tone: "error",
+      notice: { message: "The agent’s connection dropped mid-reply. Send again to retry." },
+    });
+  });
+
+  it("keeps the generic failed end line when no reason was recorded", () => {
+    const transcript = buildTranscript([
+      at(1, { kind: "run.ended", exitCode: null, status: "failed" }),
+    ]);
+    expect(transcript.entries).toHaveLength(1);
+    expect(transcript.entries[0]).toMatchObject({
+      kind: "note",
+      tone: "error",
+      notice: { key: "run.end.failed" },
+    });
+  });
+});
+
 describe("honesty about what arrived", () => {
   it("says so when a sequence number is missing", () => {
     const transcript = buildTranscript([

@@ -406,8 +406,19 @@ export const ja: Catalogue = {
   /* ── lines the transcript folds out of run events ── */
   "run.end.done": "完了しました。",
   "run.end.cancelled": "停止しました。",
-  "run.end.failed": "終わる前に停止しました。",
+  "run.end.failed": "終わる前に停止しました。詳細は記録されていません。",
   "run.end.other": "終了しました。",
+  "run.stop.refusal": "エージェントはこのリクエストの続行を拒否しました。",
+  "run.stop.maxIterations": "エージェントは反復回数の上限に達しても完了しませんでした。",
+  "run.stop.unknown": "エージェントがエラーで停止しました。",
+  "run.auth.waiting":
+    "エージェントにサインインしています…すでにログイン済みでも、約1分かかることがあります。",
+  "run.idle.waiting":
+    "次のメッセージを待っています…セッションを開いたままにして、次の返信を速くします。",
+  "run.retriableLeak.retrying": "エージェントの接続が返信の途中で切れました。再試行しています…",
+  "run.retriableLeak.failed": "エージェントの接続が返信の途中で切れました。もう一度送信して再試行してください。",
+  "run.retriableLeak.failed.queued": "エージェントの接続が返信の途中で切れました。キューに入った後続 1 件は送られていません。もう一度送信して再試行してください。",
+  "run.retriableLeak.failed.queued.many": "エージェントの接続が返信の途中で切れました。キューに入った後続 {count} 件は送られていません。もう一度送信して再試行してください。",
   "run.diff.one": "1 個のファイルを変更しました。",
   "run.diff.many": "{count} 個のファイルを変更しました。",
   "run.handoff": "{role} に引き継ぎました。",
@@ -1082,6 +1093,10 @@ export const ja: Catalogue = {
   "signIn.refused": "{agent} はサインインの手順を拒否しました: {reason}",
   "signIn.notCompleted":
     "{agent} はサインインの手順を受け入れましたが、まだセッションが開いていないため、サインインは完了していません: {reason} エージェントがブラウザーやターミナルを開いた場合は、そこで完了してからもう一度お試しください。",
+  "signIn.terminalRequired":
+    "{agent} はターミナルからのみサインインします。EnvoyDev を動かしているマシンで次を実行してください: {command} — その後もう一度お試しください。（{reason}）",
+  "signIn.notAnswered":
+    "{agent} は制限時間内にサインイン手順に応答しませんでした（{reason}）。ブラウザーが開いた場合はそこでログインを完了してから再試行するか、先にエージェント自身のログインコマンドを実行してください。",
   "signIn.noMethod":
     "{agent} はここでセッションを開かず、EnvoyDev が送信できるサインイン方法も示していません。提供している方法: {methods}。エージェント自身のコマンドでサインインしてから、もう一度お試しください。",
   "signIn.unavailable": "{agent} を起動できなかったため、サインインは行われていません: {reason}",

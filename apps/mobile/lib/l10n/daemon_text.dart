@@ -195,6 +195,17 @@ const Map<String, DaemonRefRenderer> daemonRefRenderers = {
   'error.job.exhausted': DaemonRefRenderer('errorJobExhausted', _jobExhausted),
   'error.job.pathMissing': DaemonRefRenderer('errorJobPathMissing', _jobPathMissing),
   'error.job.failed': DaemonRefRenderer('errorJobFailed', _jobFailed),
+  // Run-stop / Cursor ACP leak notes — same catalogue as the desktop transcript fold.
+  'run.stop.refusal': DaemonRefRenderer('runStopRefusal', _runStopRefusal),
+  'run.stop.maxIterations': DaemonRefRenderer('runStopMaxIterations', _runStopMaxIterations),
+  'run.stop.unknown': DaemonRefRenderer('runStopUnknown', _runStopUnknown),
+  'run.auth.waiting': DaemonRefRenderer('runAuthWaiting', _runAuthWaiting),
+  'run.idle.waiting': DaemonRefRenderer('runIdleWaiting', _runIdleWaiting),
+  'run.retriableLeak.retrying': DaemonRefRenderer('runRetriableLeakRetrying', _runRetriableLeakRetrying),
+  'run.retriableLeak.failed': DaemonRefRenderer('runRetriableLeakFailed', _runRetriableLeakFailed),
+  'run.retriableLeak.failed.queued': DaemonRefRenderer('runRetriableLeakFailedQueued', _runRetriableLeakFailedQueued),
+  'run.retriableLeak.failed.queued.many':
+      DaemonRefRenderer('runRetriableLeakFailedQueuedMany', _runRetriableLeakFailedQueuedMany),
 };
 
 // One tear-off per sentence rather than a lookup by name: Dart has no reflection, so the compiler is
@@ -304,3 +315,28 @@ String _jobExhausted(AppLocalizations l10n, Map<String, Object> _) => l10n.error
 String _jobPathMissing(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobPathMissing;
 
 String _jobFailed(AppLocalizations l10n, Map<String, Object> _) => l10n.errorJobFailed;
+
+String _runStopRefusal(AppLocalizations l10n, Map<String, Object> _) => l10n.runStopRefusal;
+
+String _runStopMaxIterations(AppLocalizations l10n, Map<String, Object> _) => l10n.runStopMaxIterations;
+
+String _runStopUnknown(AppLocalizations l10n, Map<String, Object> _) => l10n.runStopUnknown;
+
+String _runAuthWaiting(AppLocalizations l10n, Map<String, Object> _) => l10n.runAuthWaiting;
+
+String _runIdleWaiting(AppLocalizations l10n, Map<String, Object> _) => l10n.runIdleWaiting;
+
+String _runRetriableLeakRetrying(AppLocalizations l10n, Map<String, Object> _) =>
+    l10n.runRetriableLeakRetrying;
+
+String _runRetriableLeakFailed(AppLocalizations l10n, Map<String, Object> _) =>
+    l10n.runRetriableLeakFailed;
+
+String _runRetriableLeakFailedQueued(AppLocalizations l10n, Map<String, Object> _) =>
+    l10n.runRetriableLeakFailedQueued;
+
+String _runRetriableLeakFailedQueuedMany(AppLocalizations l10n, Map<String, Object> values) {
+  final count = values['count'];
+  final n = count is num ? count.toInt() : int.tryParse('$count') ?? 0;
+  return l10n.runRetriableLeakFailedQueuedMany(n);
+}

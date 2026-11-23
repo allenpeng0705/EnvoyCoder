@@ -268,6 +268,53 @@ void main() {
       expect(transcript.entries.single.text, 'once');
     });
 
+    test('shows a failed status note as error and skips the generic end line', () {
+      // Same contract as desktop: the reason is the headline; “Stopped before it finished.”
+      // must not bury it.
+      final transcript = folded([
+        at(1, {
+          'kind': 'run.status',
+          'status': 'failed',
+          'note': 'The agent connection dropped mid-reply. Send again to retry.',
+        }),
+        at(2, {'kind': 'run.ended', 'exitCode': null, 'status': 'failed'}),
+      ]);
+
+      expect(transcript.entries, hasLength(1));
+      expect(transcript.entries.single.kind, 'note');
+      expect(transcript.entries.single.tone, 'error');
+      expect(transcript.entries.single.noteKind, isNull);
+      expect(
+        transcript.entries.single.text,
+        'The agent connection dropped mid-reply. Send again to retry.',
+      );
+    });
+
+    test('marks a retriable-leak retry note as warn', () {
+      final transcript = folded([
+        at(1, {
+          'kind': 'run.status',
+          'status': 'running',
+          'note':
+              'The agent’s connection dropped mid-reply. Retrying… [envoydev.key] {"key":"run.retriableLeak.retrying"}',
+        }),
+      ]);
+
+      expect(transcript.entries, hasLength(1));
+      expect(transcript.entries.single.tone, 'warn');
+    });
+
+    test('keeps the generic failed end line when no reason was recorded', () {
+      final transcript = folded([
+        at(1, {'kind': 'run.ended', 'exitCode': null, 'status': 'failed'}),
+      ]);
+
+      expect(transcript.entries, hasLength(1));
+      expect(transcript.entries.single.noteKind, 'ended');
+      expect(transcript.entries.single.noteStatus, 'failed');
+      expect(transcript.entries.single.tone, 'error');
+    });
+
     test('reports a gap rather than skipping it in silence', () {
       final transcript = folded([
         at(1, {'kind': 'run.output', 'text': 'one', 'messageId': 'm1'}),

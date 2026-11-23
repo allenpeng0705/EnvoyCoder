@@ -72,6 +72,18 @@ export type {
 } from "./protocol.js";
 export { AcpRequestError } from "./protocol.js";
 
+/** Default handshake budget when no auth step is involved (`initialize`, plain `session/new`). */
+export const ACP_HANDSHAKE_TIMEOUT_MS = 30_000;
+
+/**
+ * Budget for `authenticate` (and for handshakes on launches that declare `authMethodId`).
+ *
+ * Measured 2026-11-23: `cursor-agent acp` + `cursor_login` answered `{}` after ~90 s on a machine
+ * that was already logged in (`agent status`), with no browser. 30 s is too short; 3 min matches
+ * Sign in's outer ceiling.
+ */
+export const ACP_AUTH_HANDSHAKE_TIMEOUT_MS = 180_000;
+
 export interface AcpClientOptions {
   launch: AcpLaunch;
   /** Streaming updates, in arrival order. */
@@ -96,8 +108,27 @@ export interface AcpClientOptions {
   onStderr?: (line: string) => void;
   /** How long a single request may take. `session/prompt` is a whole turn, so it needs a lot. */
   requestTimeoutMs?: number;
-  /** Per-request budget for the handshake, which should be quick or is broken. */
+  /**
+   * Per-request budget for handshake calls (`initialize`, `session/new`, `authenticate`, …).
+   *
+   * Default is short. When the launch declares an `authMethodId`, prefer
+   * {@link ACP_AUTH_HANDSHAKE_TIMEOUT_MS}: Cursor's `authenticate` was measured at ~90 s even when
+   * `agent status` already said logged in (no browser) — a 30 s budget is what produced
+   * "did not answer authenticate within 30s."
+   */
   handshakeTimeoutMs?: number;
+  /**
+   * Called as soon as the process exists, **before** initialize/authenticate finish.
+   *
+   * RunManager uses this so Stop during a long Cursor `authenticate` can `stop()` the client
+   * (there is no session yet for `session/cancel`).
+   */
+  onClient?: (client: AcpClient) => void;
+  /**
+   * Fired immediately before a non-terminal `authenticate` (Cursor ~90 s even when already logged in).
+   * RunManager records a `run.status` note so a phone UI is not silent for that whole wait.
+   */
+  onAuthenticating?: () => void | Promise<void>;
   /**
    * The agent's own mode to set once the session exists (`session/set_mode`).
    *
@@ -288,6 +319,8 @@ export class AcpClient {
     }) as ChildProcessWithoutNullStreams;
 
     const client = new AcpClient(child, options);
+    // Register before any await so Stop during authenticate can tear the process down.
+    options.onClient?.(client);
     try {
       const info = await client.initialize();
       client.agentInfoValue = info;
@@ -296,10 +329,15 @@ export class AcpClient {
       // authenticate lives. Returning rather than throwing is deliberate: the client is started, the caller
       // owns it, and the `catch` below would have stopped the very process the caller is about to use.
       if (options.initializeOnly === true) return client;
-      // **After `initialize`, before anything that touches a session** — the only order that works: the
-      // agent advertises its methods in the first call and refuses `session/new` until one has been used.
-      if (options.launch.authMethodId !== undefined) {
-        await client.signIn(options.launch.authMethodId);
+      // **Authenticate before the session when the catalogue names a method** — unless that method is
+      // terminal-only (Copilot): `authenticate` then answers `-32000` and changes nothing; the user must
+      // run the advertised terminal command. Re-measured 2026-11-23 for Cursor: `session/new` hangs
+      // without a prior `authenticate` even when `agent status` is logged in; `authenticate` itself
+      // took ~90 s (no browser); then `session/new` succeeded. Use {@link ACP_AUTH_HANDSHAKE_TIMEOUT_MS}.
+      const methodId = options.launch.authMethodId;
+      if (methodId !== undefined && client.authTerminalCommand(methodId) === undefined) {
+        await options.onAuthenticating?.();
+        await client.signIn(methodId);
       }
       if (options.resumeSessionId) await client.resume(options.resumeSessionId);
       else await client.openSession();
@@ -458,7 +496,12 @@ export class AcpClient {
    * it, so there is nothing to fall back to.
    */
   async signIn(methodId: string): Promise<void> {
-    await this.request("authenticate", { methodId }, this.options.handshakeTimeoutMs ?? 30_000);
+    // Auth steps are slower than initialize/session/new — see ACP_AUTH_HANDSHAKE_TIMEOUT_MS.
+    await this.request(
+      "authenticate",
+      { methodId },
+      this.options.handshakeTimeoutMs ?? ACP_AUTH_HANDSHAKE_TIMEOUT_MS,
+    );
   }
 
   /**
@@ -683,9 +726,17 @@ export class AcpClient {
    * deadlock against the very call being cancelled.
    */
   cancel(): void {
+    if (this.stopped) return;
     const sessionId = this.sessionIdValue;
-    if (!sessionId || this.stopped) return;
-    this.notify("session/cancel", { sessionId });
+    if (sessionId) {
+      // In-turn cancel: notification only — the prompt promise resolves with cancelled.
+      this.notify("session/cancel", { sessionId });
+      return;
+    }
+    // Pre-session (e.g. Cursor authenticate ~90 s): there is nothing to `session/cancel`. Reject
+    // pending handshakes immediately, then tear the process down — otherwise Stop waits for kill.
+    this.failAll(new Error("The agent was stopped."));
+    void this.stop();
   }
 
   /**

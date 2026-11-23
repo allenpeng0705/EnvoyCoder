@@ -549,8 +549,23 @@ export const en = {
   /* ── lines the transcript folds out of run events ── */
   "run.end.done": "Finished.",
   "run.end.cancelled": "Stopped.",
-  "run.end.failed": "Stopped before it finished.",
+  "run.end.failed": "Stopped before it finished. No further detail was recorded.",
   "run.end.other": "Ended.",
+  "run.stop.refusal": "The agent declined to continue with this request.",
+  "run.stop.maxIterations": "The agent used its full iteration budget without finishing.",
+  "run.stop.unknown": "The agent stopped with an error.",
+  // Cursor ACP `authenticate` before the first turn — often ~90 s even when already logged in (phone UX).
+  "run.auth.waiting":
+    "Signing in to the agent… This can take about a minute, even when you are already logged in.",
+  // Auth-tax keep-alive: run stays live after end_turn so the next message skips authenticate.
+  "run.idle.waiting":
+    "Waiting for your next message… Session stays open so the next reply is fast.",
+  "run.retriableLeak.retrying": "The agent’s connection dropped mid-reply. Retrying…",
+  "run.retriableLeak.failed": "The agent’s connection dropped mid-reply. Send again to retry.",
+  "run.retriableLeak.failed.queued":
+    "The agent’s connection dropped mid-reply. 1 queued follow-up was not sent. Send again to retry.",
+  "run.retriableLeak.failed.queued.many":
+    "The agent’s connection dropped mid-reply. {count} queued follow-ups were not sent. Send again to retry.",
   "run.diff.one": "1 file changed.",
   "run.diff.many": "{count} files changed.",
   "run.tools.edited.one": "edited 1 file",
@@ -1843,10 +1858,15 @@ export const en = {
   // The agent's own refusal, quoted as a value: an `env_var` method says which variable is unset, and that
   // is more use to a user than anything we could write.
   "signIn.refused": "{agent} refused the sign-in step: {reason}",
-  // Two situations in one sentence on purpose — a browser step nobody has finished, and an agent that never
-  // answered. In both, nothing was signed in, and "not yet, try again" is the honest thing to say.
+  // Browser / terminal step returned, but a session still will not open — finish there and try again.
   "signIn.notCompleted":
     "{agent} accepted the sign-in step but no session opened yet, so the sign-in has not finished: {reason} If the agent opened a browser or a terminal, finish there and try again.",
+  // Copilot-style `_meta["terminal-auth"]`: ACP `authenticate` is doomed; the command is the only path.
+  "signIn.terminalRequired":
+    "{agent} signs in only from a terminal. On the machine that runs EnvoyDev, run: {command} — then try again. ({reason})",
+  // Silence / timeout on `authenticate` itself — not the same as "accepted".
+  "signIn.notAnswered":
+    "{agent} did not answer the sign-in step in time ({reason}). If a browser opened, finish login there and try again — or run the agent’s own login command first.",
   // `{methods}` is the **agent's own** list of ids, never the caller's string: what a client sent in that
   // field is not echoed back, for the same reason a refused `env` entry is not (it is often the credential).
   "signIn.noMethod":

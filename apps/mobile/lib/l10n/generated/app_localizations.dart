@@ -1872,10 +1872,10 @@ abstract class AppLocalizations {
   /// **'Stopped.'**
   String get runNoteStopped;
 
-  /// run.noteStoppedBefore — The run failed.
+  /// run.end.failed — The run failed with no prior status note.
   ///
   /// In en, this message translates to:
-  /// **'Stopped before it finished.'**
+  /// **'Stopped before it finished. No further detail was recorded.'**
   String get runNoteStoppedBefore;
 
   /// run.noteEnded — The run ended without a known status.
@@ -1883,6 +1883,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Ended.'**
   String get runNoteEnded;
+
+  /// run.stop.refusal
+  ///
+  /// In en, this message translates to:
+  /// **'The agent declined to continue with this request.'**
+  String get runStopRefusal;
+
+  /// run.stop.maxIterations
+  ///
+  /// In en, this message translates to:
+  /// **'The agent used its full iteration budget without finishing.'**
+  String get runStopMaxIterations;
+
+  /// run.stop.unknown
+  ///
+  /// In en, this message translates to:
+  /// **'The agent stopped with an error.'**
+  String get runStopUnknown;
+
+  /// run.auth.waiting
+  ///
+  /// In en, this message translates to:
+  /// **'Signing in to the agent… This can take about a minute, even when you are already logged in.'**
+  String get runAuthWaiting;
+
+  /// run.idle.waiting
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for your next message… Session stays open so the next reply is fast.'**
+  String get runIdleWaiting;
+
+  /// run.retriableLeak.retrying
+  ///
+  /// In en, this message translates to:
+  /// **'The agent’s connection dropped mid-reply. Retrying…'**
+  String get runRetriableLeakRetrying;
+
+  /// run.retriableLeak.failed
+  ///
+  /// In en, this message translates to:
+  /// **'The agent’s connection dropped mid-reply. Send again to retry.'**
+  String get runRetriableLeakFailed;
+
+  /// run.retriableLeak.failed.queued
+  ///
+  /// In en, this message translates to:
+  /// **'The agent’s connection dropped mid-reply. 1 queued follow-up was not sent. Send again to retry.'**
+  String get runRetriableLeakFailedQueued;
+
+  /// run.retriableLeak.failed.queued.many
+  ///
+  /// In en, this message translates to:
+  /// **'The agent’s connection dropped mid-reply. {count} queued follow-ups were not sent. Send again to retry.'**
+  String runRetriableLeakFailedQueuedMany(int count);
 
   /// attach.add — Attach menu item.
   ///

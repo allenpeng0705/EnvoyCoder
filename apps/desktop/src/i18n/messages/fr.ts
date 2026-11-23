@@ -406,8 +406,19 @@ export const fr: Catalogue = {
   /* ── lines the transcript folds out of run events ── */
   "run.end.done": "Terminé.",
   "run.end.cancelled": "Arrêté.",
-  "run.end.failed": "Arrêté avant la fin.",
+  "run.end.failed": "Arrêté avant la fin. Aucun autre détail n’a été enregistré.",
   "run.end.other": "Fini.",
+  "run.stop.refusal": "L’agent a refusé de poursuivre cette demande.",
+  "run.stop.maxIterations": "L’agent a épuisé son budget d’itérations sans terminer.",
+  "run.stop.unknown": "L’agent s’est arrêté avec une erreur.",
+  "run.auth.waiting":
+    "Connexion à l’agent… Cela peut prendre environ une minute, même si vous êtes déjà connecté.",
+  "run.idle.waiting":
+    "En attente de votre prochain message… La session reste ouverte pour que la prochaine réponse soit rapide.",
+  "run.retriableLeak.retrying": "La connexion de l’agent s’est interrompue au milieu de la réponse. Nouvel essai…",
+  "run.retriableLeak.failed": "La connexion de l’agent s’est interrompue au milieu de la réponse. Renvoyez pour réessayer.",
+  "run.retriableLeak.failed.queued": "La connexion de l’agent s’est interrompue au milieu de la réponse. 1 suite en file n’a pas été envoyée. Renvoyez pour réessayer.",
+  "run.retriableLeak.failed.queued.many": "La connexion de l’agent s’est interrompue au milieu de la réponse. {count} suites en file n’ont pas été envoyées. Renvoyez pour réessayer.",
   "run.diff.one": "1 fichier modifié.",
   "run.diff.many": "{count} fichiers modifiés.",
   "run.handoff": "Passé à {role}.",
@@ -1105,6 +1116,10 @@ export const fr: Catalogue = {
   "signIn.refused": "{agent} a refusé l'étape de connexion : {reason}",
   "signIn.notCompleted":
     "{agent} a accepté l'étape de connexion, mais aucune session ne s'est encore ouverte : la connexion n'est donc pas terminée : {reason} Si l'agent a ouvert un navigateur ou un terminal, terminez-y l'opération puis réessayez.",
+  "signIn.terminalRequired":
+    "{agent} ne se connecte que depuis un terminal. Sur la machine qui exécute EnvoyDev, lancez : {command} — puis réessayez. ({reason})",
+  "signIn.notAnswered":
+    "{agent} n'a pas répondu à l'étape de connexion à temps ({reason}). Si un navigateur s'est ouvert, terminez-y la connexion puis réessayez — ou exécutez d'abord la commande de connexion de l'agent.",
   "signIn.noMethod":
     "{agent} n'ouvrira pas de session ici et n'a indiqué aucune méthode de connexion qu'EnvoyDev puisse envoyer. Il propose : {methods}. Connectez-vous avec la propre commande de l'agent, puis réessayez.",
   "signIn.unavailable":

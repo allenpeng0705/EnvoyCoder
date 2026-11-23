@@ -406,8 +406,19 @@ export const ko: Catalogue = {
   /* ── lines the transcript folds out of run events ── */
   "run.end.done": "완료했습니다.",
   "run.end.cancelled": "중지했습니다.",
-  "run.end.failed": "끝나기 전에 중지했습니다.",
+  "run.end.failed": "끝나기 전에 중지했습니다. 더 자세한 내용은 기록되지 않았습니다.",
   "run.end.other": "종료했습니다.",
+  "run.stop.refusal": "에이전트가 이 요청의 계속 진행을 거절했습니다.",
+  "run.stop.maxIterations": "에이전트가 반복 한도를 모두 썼지만 끝내지 못했습니다.",
+  "run.stop.unknown": "에이전트가 오류로 중지했습니다.",
+  "run.auth.waiting":
+    "에이전트에 로그인하는 중… 이미 로그인한 상태여도 약 1분 정도 걸릴 수 있습니다.",
+  "run.idle.waiting":
+    "다음 메시지를 기다리는 중… 다음 답변이 빠르도록 세션을 열어 둡니다.",
+  "run.retriableLeak.retrying": "에이전트 연결이 답변 중간에 끊겼습니다. 다시 시도하는 중…",
+  "run.retriableLeak.failed": "에이전트 연결이 답변 중간에 끊겼습니다. 다시 보내 재시도하세요.",
+  "run.retriableLeak.failed.queued": "에이전트 연결이 답변 중간에 끊겼습니다. 대기 중이던 후속 메시지 1개가 보내지지 않았습니다. 다시 보내 재시도하세요.",
+  "run.retriableLeak.failed.queued.many": "에이전트 연결이 답변 중간에 끊겼습니다. 대기 중이던 후속 메시지 {count}개가 보내지지 않았습니다. 다시 보내 재시도하세요.",
   "run.diff.one": "파일 1개를 변경했습니다.",
   "run.diff.many": "파일 {count}개를 변경했습니다.",
   "run.handoff": "{role}(으)로 넘겼습니다.",
@@ -1082,6 +1093,10 @@ export const ko: Catalogue = {
   "signIn.refused": "{agent}이(가) 로그인 단계를 거부했습니다: {reason}",
   "signIn.notCompleted":
     "{agent}이(가) 로그인 단계를 받아들였지만 아직 세션이 열리지 않았으므로 로그인이 끝나지 않았습니다: {reason} 에이전트가 브라우저나 터미널을 열었다면 거기서 마친 뒤 다시 시도하세요.",
+  "signIn.terminalRequired":
+    "{agent}은(는) 터미널에서만 로그인합니다. EnvoyDev가 실행 중인 기기에서 다음을 실행한 뒤 다시 시도하세요: {command} ({reason})",
+  "signIn.notAnswered":
+    "{agent}이(가) 제한 시간 안에 로그인 단계에 응답하지 않았습니다({reason}). 브라우저가 열렸다면 거기서 로그인을 마친 뒤 다시 시도하거나, 먼저 에이전트 자체 로그인 명령을 실행하세요.",
   "signIn.noMethod":
     "{agent}은(는) 여기서 세션을 열지 않고 EnvoyDev가 보낼 수 있는 로그인 방법도 밝히지 않았습니다. 제공하는 방법: {methods}. 에이전트 자체 명령으로 로그인한 뒤 다시 시도하세요.",
   "signIn.unavailable": "{agent}을(를) 시작할 수 없어 아무것도 로그인되지 않았습니다: {reason}",

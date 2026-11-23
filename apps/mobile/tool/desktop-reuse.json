@@ -14,6 +14,8 @@
   "settingsApprovalsDetail": "settings.approvals.detail",
   "settingsApprovalsReaches": "settings.approvals.reaches",
   "settingsApprovalsReachesMode": "settings.approvals.reachesMode",
+  "settingsApprovalsReachesLaunch": "settings.approvals.reachesLaunch",
+  "settingsApprovalsReachesSession": "settings.approvals.reachesSession",
   "settingsApprovalsUnsupported": "settings.approvals.unsupported",
   "settingsApprovalsUnknown": "settings.approvals.unknown",
   "runComposerQueueStatus": "task.composer.queueStatus",
@@ -242,5 +244,14 @@
   "workAttentionAnswerPlaceholder": "work.attention.answer.placeholder",
   "workAttentionAnswerSend": "work.attention.answer.send",
   "errorJobWriterLock": "error.job.writerLock",
-  "errorJobNoCandidate": "error.job.noCandidate"
+  "errorJobNoCandidate": "error.job.noCandidate",
+  "runStopRefusal": "run.stop.refusal",
+  "runStopMaxIterations": "run.stop.maxIterations",
+  "runStopUnknown": "run.stop.unknown",
+  "runAuthWaiting": "run.auth.waiting",
+  "runIdleWaiting": "run.idle.waiting",
+  "runRetriableLeakRetrying": "run.retriableLeak.retrying",
+  "runRetriableLeakFailed": "run.retriableLeak.failed",
+  "runRetriableLeakFailedQueued": "run.retriableLeak.failed.queued",
+  "runRetriableLeakFailedQueuedMany": "run.retriableLeak.failed.queued.many"
 }

@@ -5280,6 +5280,16 @@ button.row__tool-path--link:focus-visible {
   opacity: 0.75;
 }
 
+/* Failed-run reasons and cancel lines: full weight, status ink — not the quiet footnote look
+   that used to bury the real cause under a generic “Stopped before it finished.” */
+.row--note-error .row__meta {
+  color: var(--status-danger);
+}
+
+.row--note-warn .row__meta {
+  color: var(--warn, #c09664);
+}
+
 /* The pairing panel — the QR and the link — on Settings → Pairing */
 .settings__pairing {
   display: flex;

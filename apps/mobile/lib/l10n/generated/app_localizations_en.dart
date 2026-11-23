@@ -1022,10 +1022,47 @@ class AppLocalizationsEn extends AppLocalizations {
   String get runNoteStopped => 'Stopped.';
 
   @override
-  String get runNoteStoppedBefore => 'Stopped before it finished.';
+  String get runNoteStoppedBefore =>
+      'Stopped before it finished. No further detail was recorded.';
 
   @override
   String get runNoteEnded => 'Ended.';
+
+  @override
+  String get runStopRefusal =>
+      'The agent declined to continue with this request.';
+
+  @override
+  String get runStopMaxIterations =>
+      'The agent used its full iteration budget without finishing.';
+
+  @override
+  String get runStopUnknown => 'The agent stopped with an error.';
+
+  @override
+  String get runAuthWaiting =>
+      'Signing in to the agent… This can take about a minute, even when you are already logged in.';
+
+  @override
+  String get runIdleWaiting =>
+      'Waiting for your next message… Session stays open so the next reply is fast.';
+
+  @override
+  String get runRetriableLeakRetrying =>
+      'The agent’s connection dropped mid-reply. Retrying…';
+
+  @override
+  String get runRetriableLeakFailed =>
+      'The agent’s connection dropped mid-reply. Send again to retry.';
+
+  @override
+  String get runRetriableLeakFailedQueued =>
+      'The agent’s connection dropped mid-reply. 1 queued follow-up was not sent. Send again to retry.';
+
+  @override
+  String runRetriableLeakFailedQueuedMany(int count) {
+    return 'The agent’s connection dropped mid-reply. $count queued follow-ups were not sent. Send again to retry.';
+  }
 
   @override
   String get attachAdd => 'Add image';

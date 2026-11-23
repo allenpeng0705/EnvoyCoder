@@ -331,9 +331,15 @@ export class JsonlRpcAgentClient {
       }
       case "extension_ui_request": {
         const event = message as unknown as ExtensionUiRequest
+        // Keep the chain moving after a failure so a later card is not stuck behind a dead promise.
+        // handleExtensionUi already answers OMP with cancelled on throw; log so the hang is visible.
         this.uiChain = this.uiChain
           .then(() => this.handleExtensionUi(event))
-          .catch(() => undefined)
+          .catch((error) => {
+            this.options.onStderr?.(
+              `extension_ui handler failed: ${error instanceof Error ? error.message : String(error)}`,
+            )
+          })
         return
       }
       default:

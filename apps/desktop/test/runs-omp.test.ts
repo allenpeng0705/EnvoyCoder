@@ -250,6 +250,24 @@ describe("RunManager + fake OMP (multi-turn)", () => {
     expect(session && session.kind === "run.session" ? session.resumable : true).toBe(false)
     expect(session && session.kind === "run.session" ? session.sessionId : "").toMatch(/^rpc-/)
   })
+
+  it("does not resume a synthetic rpc- session id on the next run", async () => {
+    const b = await ompBench({ FAKE_OMP_NO_SESSION_FILE: "1" })
+    await b.manager.start({ taskId: b.taskId, prompt: "first" })
+    await b.until((events) => kinds(events, "run.ended").length === 1, "first run end")
+    const firstId =
+      kinds(b.events, "run.session")[0]?.kind === "run.session"
+        ? kinds(b.events, "run.session")[0].sessionId
+        : ""
+    expect(firstId).toMatch(/^rpc-/)
+
+    b.events.length = 0
+    await b.manager.start({ taskId: b.taskId, prompt: "second", resume: true })
+    await b.until((events) => kinds(events, "run.ended").length === 1, "second run end")
+    const second = kinds(b.events, "run.session")[0]
+    expect(second && second.kind === "run.session" ? second.resumed : true).toBe(false)
+    expect(second && second.kind === "run.session" ? second.sessionId : "").not.toBe(firstId)
+  })
 })
 
 function said(events: readonly RunEvent[], needle: string): boolean {

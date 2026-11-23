@@ -615,6 +615,24 @@ describe("what a probe learns about authentication, on the way to asking about o
     expect(b.recordedAuth("deepseek-harness")?.detail).toContain("not writable");
   }, 20_000);
 
+  it("does not label a session hang/timeout as needs-signin (Cursor already-logged-in probe)", async () => {
+    const b = await bench();
+    // Measured 2026-11-23: Cursor hangs on session/new without authenticate even when logged in.
+    // The probe never authenticates; a timeout is not "user must log in in Settings".
+    b.script(async () =>
+      scriptedAgent(DSH_OPTIONS, {
+        authMethods: ["cursor_login"],
+        refuseSession: "The agent did not answer session/new within 20s.",
+      }).agent,
+    );
+
+    const answer = await b.probe.probe("cursor");
+
+    expect(answer.auth.state).toBe("unknown");
+    expect(answer.auth.methodId).toBeUndefined();
+    expect(b.recordedAuth("cursor")?.detail).toMatch(/probe timed out|did not answer/i);
+  }, 20_000);
+
   it("does not authenticate on the way to asking, because that would change what it measures", async () => {
     const b = await bench();
     let signIns = 0;

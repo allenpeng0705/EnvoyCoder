@@ -86,6 +86,14 @@
  * `FAKE_ACP_STOP_REASON_TIMES=<n>` limits how many prompts use that reason before falling back to
  * `end_turn` (unset = forever).
  *
+ * Prompt containing `leak-stream` models Cursor ACP’s RetriableError leak with **no** usable
+ * answer: first prompt streams only the error chunk and returns `end_turn`; the next prompt of
+ * the same session answers cleanly (so the host’s retry can succeed).
+ *
+ * Prompt containing `leak-trail` models the common case: a real answer, then a trailing
+ * `\n\nError: RetriableError: WritableIterable is closed` — the host must strip the trailer and
+ * finish as done without retrying (a retry would duplicate the answer).
+ *
  * The protocol shapes are the ones the real agent emits, taken from
  * `../deepseek-harness/packages/acp/acp/src/updates.ts`. The mode ids and the refusal sentence are
  * `envoy-harness`'s own (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:352-375`),
@@ -118,6 +126,11 @@ const MODE_PARAM = process.env.FAKE_ACP_MODE_PARAM === "modeId" ? "modeId" : "mo
 const REQUIRED_AUTH = process.env.FAKE_ACP_REQUIRE_AUTH;
 /** Whether this process has been authenticated. Only meaningful when `REQUIRED_AUTH` is set. */
 let authenticated = false;
+/**
+ * Delay before answering `authenticate` (ms). Cancel-during-auth tests use this so Stop can land
+ * while the handshake is still open — Cursor's real authenticate often takes ~90 s.
+ */
+const SLOW_AUTH_MS = Number(process.env.FAKE_ACP_SLOW_AUTH_MS || "0");
 /**
  * The session's own configuration, keyed by the agent's `configId`.
  *
@@ -278,6 +291,8 @@ const update = (payload) => notify("session/update", { sessionId, update: payloa
 
 /** The next prompt to answer, so an out-of-band permission response can unblock a turn. */
 let permissionWaiter = null;
+/** How many `leak-stream` prompts have been answered (first leaks; later are clean). */
+let leakStreamCount = 0;
 
 function handlePrompt(id, params) {
   const text = (params?.prompt ?? [])
@@ -524,6 +539,42 @@ function handlePrompt(id, params) {
     return;
   }
 
+  if (text.includes("leak-trail")) {
+    update({
+      sessionUpdate: "agent_message_chunk",
+      messageId: "m-trail",
+      content: { type: "text", text: "PONG" },
+    });
+    update({
+      sessionUpdate: "agent_message_chunk",
+      messageId: "m-trail",
+      content: { type: "text", text: "\n\nError: RetriableError: WritableIterable is closed" },
+    });
+    ok(id, { stopReason: "end_turn" });
+    return;
+  }
+
+  if (text.includes("leak-stream")) {
+    leakStreamCount += 1;
+    if (leakStreamCount === 1) {
+      // No usable answer — only the Cursor ACP leak. Host should retry.
+      update({
+        sessionUpdate: "agent_message_chunk",
+        messageId: "m-leak",
+        content: { type: "text", text: "Error: RetriableError: WritableIterable is closed" },
+      });
+      ok(id, { stopReason: "end_turn" });
+      return;
+    }
+    update({
+      sessionUpdate: "agent_message_chunk",
+      messageId: "m-leak-ok",
+      content: { type: "text", text: "recovered answer" },
+    });
+    ok(id, { stopReason: "end_turn" });
+    return;
+  }
+
   update({ sessionUpdate: "agent_message_chunk", messageId: "m-0", content: { type: "text", text: `echo: ${text}` } });
   ok(id, { stopReason: promptStopReason() });
 }
@@ -629,8 +680,15 @@ function handle(message) {
         fail(id, -32602, `unknown auth method: ${String(params?.methodId)}`);
         return;
       }
-      authenticated = true;
-      ok(id, {});
+      const finishAuth = () => {
+        authenticated = true;
+        ok(id, {});
+      };
+      if (SLOW_AUTH_MS > 0) {
+        setTimeout(finishAuth, SLOW_AUTH_MS);
+        return;
+      }
+      finishAuth();
       return;
     }
     case "session/new":

@@ -10,5 +10,6 @@
   "settingsSendWhileRunningQueue": "settings.sendWhileRunning.queue",
   "settingsSendWhileRunningSteer": "settings.sendWhileRunning.steer",
   "settingsGuardianDetail": "settings.guardian.detail",
-  "settingsGuardianGuardian": "settings.guardian.guardian"
+  "settingsGuardianGuardian": "settings.guardian.guardian",
+  "settingsApprovalsReachesApproval": "settings.approvals.reachesApproval"
 }

@@ -343,8 +343,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsApprovals => '执行有风险的步骤前先询问';
 
   @override
-  String get settingsApprovalsDetail =>
-      '开：有风险的步骤先问。关：本机不再询问。';
+  String get settingsApprovalsDetail => '开：有风险的步骤先问。关：本机不再询问。';
 
   @override
   String settingsApprovalsReaches(String agent) {
@@ -985,10 +984,40 @@ class AppLocalizationsZh extends AppLocalizations {
   String get runNoteStopped => '已停止。';
 
   @override
-  String get runNoteStoppedBefore => '在完成前停止。';
+  String get runNoteStoppedBefore => '在完成前停止。未记录更多详情。';
 
   @override
   String get runNoteEnded => '已结束。';
+
+  @override
+  String get runStopRefusal => '智能体拒绝继续处理此请求。';
+
+  @override
+  String get runStopMaxIterations => '智能体已用尽迭代次数仍未完成。';
+
+  @override
+  String get runStopUnknown => '智能体因错误停止。';
+
+  @override
+  String get runAuthWaiting => '正在登录智能体…即使您已经登录，这也可能需要大约一分钟。';
+
+  @override
+  String get runIdleWaiting => '正在等待您的下一条消息…会话保持打开，以便下一次回复更快。';
+
+  @override
+  String get runRetriableLeakRetrying => '智能体连接在回复中断开。正在重试…';
+
+  @override
+  String get runRetriableLeakFailed => '智能体连接在回复中断开。请再发送一次以重试。';
+
+  @override
+  String get runRetriableLeakFailedQueued =>
+      '智能体连接在回复中断开。有 1 条排队的后续消息未发送。请再发送一次以重试。';
+
+  @override
+  String runRetriableLeakFailedQueuedMany(int count) {
+    return '智能体连接在回复中断开。有 $count 条排队的后续消息未发送。请再发送一次以重试。';
+  }
 
   @override
   String get attachAdd => '添加图片';

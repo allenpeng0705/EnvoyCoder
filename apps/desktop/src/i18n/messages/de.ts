@@ -406,8 +406,19 @@ export const de: Catalogue = {
   /* ── lines the transcript folds out of run events ── */
   "run.end.done": "Fertig.",
   "run.end.cancelled": "Gestoppt.",
-  "run.end.failed": "Gestoppt, bevor es fertig war.",
+  "run.end.failed": "Gestoppt, bevor es fertig war. Keine weiteren Details erfasst.",
   "run.end.other": "Beendet.",
+  "run.stop.refusal": "Der Agent hat abgelehnt, mit dieser Anfrage fortzufahren.",
+  "run.stop.maxIterations": "Der Agent hat sein Iterationsbudget ausgeschöpft, ohne fertig zu werden.",
+  "run.stop.unknown": "Der Agent wurde mit einem Fehler gestoppt.",
+  "run.auth.waiting":
+    "Anmeldung beim Agenten… Das kann etwa eine Minute dauern, auch wenn du bereits angemeldet bist.",
+  "run.idle.waiting":
+    "Warte auf deine nächste Nachricht… Die Sitzung bleibt offen, damit die nächste Antwort schnell kommt.",
+  "run.retriableLeak.retrying": "Die Verbindung des Agenten ist mitten in der Antwort abgebrochen. Erneuter Versuch…",
+  "run.retriableLeak.failed": "Die Verbindung des Agenten ist mitten in der Antwort abgebrochen. Nochmal senden, um es erneut zu versuchen.",
+  "run.retriableLeak.failed.queued": "Die Verbindung des Agenten ist mitten in der Antwort abgebrochen. 1 wartende Folge wurde nicht gesendet. Nochmal senden, um es erneut zu versuchen.",
+  "run.retriableLeak.failed.queued.many": "Die Verbindung des Agenten ist mitten in der Antwort abgebrochen. {count} wartende Folgen wurden nicht gesendet. Nochmal senden, um es erneut zu versuchen.",
   "run.diff.one": "1 Datei geändert.",
   "run.diff.many": "{count} Dateien geändert.",
   "run.handoff": "Übergeben an {role}.",
@@ -1102,6 +1113,10 @@ export const de: Catalogue = {
   "signIn.refused": "{agent} hat den Anmeldeschritt abgelehnt: {reason}",
   "signIn.notCompleted":
     "{agent} hat den Anmeldeschritt akzeptiert, aber es wurde noch keine Sitzung geöffnet — die Anmeldung ist also nicht abgeschlossen: {reason} Wenn der Agent einen Browser oder ein Terminal geöffnet hat, schließe es dort ab und versuche es erneut.",
+  "signIn.terminalRequired":
+    "{agent} meldet sich nur über ein Terminal an. Führe auf dem Rechner, auf dem EnvoyDev läuft, aus: {command} — und versuche es dann erneut. ({reason})",
+  "signIn.notAnswered":
+    "{agent} hat den Anmeldeschritt nicht rechtzeitig beantwortet ({reason}). Wenn ein Browser geöffnet wurde, schließe die Anmeldung dort ab und versuche es erneut — oder führe zuerst den eigenen Anmeldebefehl des Agenten aus.",
   "signIn.noMethod":
     "{agent} öffnet hier keine Sitzung und hat keine Anmeldemethode genannt, die EnvoyDev senden darf. Angeboten wird: {methods}. Melde dich mit dem eigenen Befehl des Agenten an und frage dann erneut.",
   "signIn.unavailable":

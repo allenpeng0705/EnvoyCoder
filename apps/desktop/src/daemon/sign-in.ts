@@ -16,13 +16,13 @@
  *   3. **If there is no method**, ask whether a session opens anyway. An agent may need no sign-in at all (a
  *      user pressing the button on an agent that already works), and the honest answer then is success with
  *      the reason, not a refusal about a step nobody needed. If it does not open, the outcome is `no-method`.
- *   4. **Send the step**, and tell a refusal from silence: an `AcpRequestError` **is the agent answering**
- *      (its own sentence names what is wrong — an `env_var` method says which variable is unset), while a
- *      timeout or a dead pipe is our failure to get an answer. Those are `refused` and `not-completed`.
- *   5. **Prove it by opening a session.** This is the whole discipline of the feature: a browser-login method
- *      returns `{}` immediately and the session still refuses until the human has finished in the browser, so
- *      *the step returning is not success*. `signed-in` means a session opened; anything else is reported as
- *      what it is (`not-completed`), with the agent's own reason attached.
+ *   4. **Send the step when a method is named** (before opening a session). Cursor's `session/new` hangs
+ *      without a prior `authenticate` on this process even when the CLI is already logged in — so "try
+ *      open first" becomes "did not answer session/new within 30s." Tell a refusal (`AcpRequestError`)
+ *      from silence (`not-answered`).
+ *   5. **Prove it by opening a session.** A browser-login method may return `{}` while the session still
+ *      refuses until the human finishes in the browser, so *the step returning is not success*.
+ *      `signed-in` means a session opened.
  *
  * ## What is stored, and where the session state lives
  *
@@ -34,10 +34,12 @@
  *
  * ## Bounds, because a button press may not hang a window
  *
- * The agent's own per-request budgets are `AcpClient`'s (a handshake call gets `handshakeTimeoutMs`), and
- * `SIGN_IN_TIMEOUT_MS` is the outer ceiling on the whole attempt, including the teardown. A sign-in still
- * running after a minute is either a wedged binary or a step waiting for a human who has walked away — and
- * both are reported as `not-completed`, which is the state that does not claim anything happened.
+ * The agent's own per-request budgets are `AcpClient`'s (a handshake call gets `handshakeTimeoutMs`). For
+ * this flow that budget is **the same as the outer ceiling**: Cursor's `cursor_login` holds
+ * `authenticate` open while a browser OAuth finishes, and a 30 s handshake was cutting humans off mid-login
+ * with "did not answer authenticate within 30s." A sign-in still running after three minutes is either a
+ * wedged binary or a human who walked away — both are reported as `not-completed` / `not-answered`, which
+ * do not claim anything happened.
  */
 
 import type { AgentId, HarnessAuth, HarnessId, RpcMethod, SignInOutcome } from "@envoydev/protocol";
@@ -52,7 +54,12 @@ import { harnessAcpFacts, harnessDefinition, harnessTransport } from "@envoydev/
 import type { PlatformId } from "@envoydev/platform";
 import type { CoderPaths } from "@envoydev/host-bridge";
 
-import { AcpClient, AcpRequestError, type AcpLaunch } from "./acp/client.js";
+import {
+  AcpClient,
+  AcpRequestError,
+  ACP_AUTH_HANDSHAKE_TIMEOUT_MS,
+  type AcpLaunch,
+} from "./acp/client.js";
 import {
   OwnedClients,
   agentScratchDir,
@@ -71,14 +78,11 @@ import type { CoderStore } from "./store.js";
 /**
  * How long the **whole** attempt may take, including the teardown.
  *
- * The outer ceiling only: every call inside has `AcpClient`'s own, shorter budget, which is the failure with
- * the better sentence ("the agent did not answer authenticate within 30s"). This exists so that "a sign-in
- * answers within a minute" is a property of this module rather than a hope about three timeouts composing —
- * and so that a browser step waiting on a human who has walked away does not hold a request open forever.
- * Measured against the real case while writing this: `cursor-agent acp`'s `authenticate` answered in about
- * 13 s, so a minute is roughly four times the slowest real step observed.
+ * Outer ceiling is longer than {@link ACP_AUTH_HANDSHAKE_TIMEOUT_MS}: Cursor's already-logged-in
+ * `authenticate` was measured at ~90 s with no browser, then `session/new` still needs a slice of the
+ * budget. Handshake calls themselves still use `ACP_AUTH_HANDSHAKE_TIMEOUT_MS` via `handshakeTimeoutMs`.
  */
-export const SIGN_IN_TIMEOUT_MS = 60_000;
+export const SIGN_IN_TIMEOUT_MS = ACP_AUTH_HANDSHAKE_TIMEOUT_MS + 60_000;
 
 /** What one attempt came back as — the wire's result, built once so the handler adds nothing. */
 export interface SignInAnswer {
@@ -244,8 +248,7 @@ export class SessionSignIn {
     const methodId = this.methodFor(options.methodId, declared, advertised);
 
     if (methodId === undefined) {
-      // No step we may send. The first question is still worth asking: an agent that needs no authentication
-      // opens a session, and a user pressing "Sign in" there has a working agent rather than a failure.
+      // No step we may send. Ask whether a session opens anyway — agents that need no auth.
       const opened = await this.tryOpen(client);
       if (opened.ok) {
         return this.finish(harness, "signed-in", {
@@ -263,7 +266,7 @@ export class SessionSignIn {
       return this.finish(harness, "no-method", {
         opened: false,
         authMethods: advertised,
-          ...(terminal !== undefined ? { terminal } : {}),
+        ...(terminal !== undefined ? { terminal } : {}),
         reason: opened.reason,
         // The agent's own ids travel as a value, never the caller's string: a method id a client supplied is
         // not quoted back, for the same reason `coder.addProvider` never echoes a refused `env` entry — what
@@ -281,6 +284,39 @@ export class SessionSignIn {
       });
     }
 
+    // **Terminal-only methods (Copilot):** `authenticate` answers `-32000` and changes nothing; the user
+    // must run the advertised command. Skip the doomed protocol step and report the instruction.
+    if (terminal !== undefined) {
+      const opened = await this.tryOpen(client);
+      if (opened.ok) {
+        return this.finish(harness, "signed-in", {
+          opened: true,
+          authMethods: advertised,
+          terminal,
+          reason: "",
+          detail: keyed(
+            "signIn.already",
+            `${label} opened a session without needing a sign-in, so there was nothing to do.`,
+            { agent: label },
+          ),
+        });
+      }
+      return this.finish(harness, "not-completed", {
+        opened: false,
+        authMethods: advertised,
+        terminal,
+        reason: opened.reason,
+        detail: keyed(
+          "signIn.terminalRequired",
+          `${label} signs in only from a terminal. On the machine that runs EnvoyDev, run: ${terminal} — then try again. (${opened.reason})`,
+          { agent: label, command: terminal, reason: opened.reason },
+        ),
+      });
+    }
+
+    // **Authenticate first when a method is named.** Cursor's `session/new` hangs (no refusal) until
+    // `authenticate` has run on this process — even when `agent status` already says logged in
+    // (re-measured 2026-11-23; authenticate itself took ~90 s with no browser).
     try {
       await client.signIn(methodId);
     } catch (error) {
@@ -290,19 +326,21 @@ export class SessionSignIn {
       // was never answered, and calling that a refusal would attribute our timeout to somebody else's
       // program.
       const refused = error instanceof AcpRequestError;
+      // Timeout / dead pipe ≠ "accepted but session pending" — different catalogue keys so a translated
+      // window does not claim the agent accepted a step that never answered.
       return this.finish(harness, refused ? "refused" : "not-completed", {
         // A refusal means the session did not open *by construction*: the step is what stood in the way, and
         // the process stops here (the `finally` above). Recording `needs-signin` is therefore an observation
         // rather than an assumption — the method the agent wants is the one it just named.
         opened: false,
         authMethods: advertised,
-          ...(terminal !== undefined ? { terminal } : {}),
+        ...(terminal !== undefined ? { terminal } : {}),
         reason,
         detail: keyed(
-          refused ? "signIn.refused" : "signIn.notCompleted",
+          refused ? "signIn.refused" : "signIn.notAnswered",
           refused
             ? `${label} refused the sign-in step: ${reason}`
-            : `${label} did not answer the sign-in step, so nothing was signed in: ${reason}`,
+            : `${label} did not answer the sign-in step in time (${reason}). If a browser opened, finish login there and try again — or run the agent’s own login command first.`,
           { agent: label, reason },
         ),
       });
@@ -313,7 +351,7 @@ export class SessionSignIn {
       return this.finish(harness, "signed-in", {
         opened: true,
         authMethods: advertised,
-          ...(terminal !== undefined ? { terminal } : {}),
+        ...(terminal !== undefined ? { terminal } : {}),
         reason: "",
         detail: keyed(
           "signIn.signedIn",
@@ -328,7 +366,7 @@ export class SessionSignIn {
     return this.finish(harness, "not-completed", {
       opened: false,
       authMethods: advertised,
-          ...(terminal !== undefined ? { terminal } : {}),
+      ...(terminal !== undefined ? { terminal } : {}),
       reason: opened.reason,
       detail: keyed(
         "signIn.notCompleted",
@@ -374,7 +412,14 @@ export class SessionSignIn {
   private async finish(
     harness: AgentId,
     outcome: SignInOutcome,
-    input: { opened: boolean; authMethods: readonly string[]; reason: string; detail: string },
+    input: {
+      opened: boolean;
+      authMethods: readonly string[];
+      reason: string;
+      detail: string;
+      /** Present when the agent advertises `_meta["terminal-auth"]` — see `HarnessAuth.terminal`. */
+      terminal?: string;
+    },
   ): Promise<SignInAnswer> {
     const auth = await this.record(harness, input);
     return { harness, outcome, detail: input.detail, auth };
@@ -423,7 +468,9 @@ export class SessionSignIn {
     const startClient = this.deps.startClient ?? AcpClient.start;
     const pending = startClient({
       launch,
-      handshakeTimeoutMs: this.deps.handshakeTimeoutMs ?? 30_000,
+      // Handshake (including authenticate) matches runs: {@link ACP_AUTH_HANDSHAKE_TIMEOUT_MS}.
+      // The outer `SIGN_IN_TIMEOUT_MS` still covers authenticate + openSession afterwards.
+      handshakeTimeoutMs: this.deps.handshakeTimeoutMs ?? ACP_AUTH_HANDSHAKE_TIMEOUT_MS,
       // The sign-in sends no prompt. Set anyway, so a future change that did cannot inherit the half-hour
       // turn budget `AcpClient` defaults to.
       requestTimeoutMs: this.deps.timeoutMs ?? SIGN_IN_TIMEOUT_MS,

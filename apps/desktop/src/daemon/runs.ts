@@ -48,6 +48,13 @@
  * A second `startRun` on a task that is already running is **refused**, not queued: two agents
  * editing one working tree is the failure a control plane exists to prevent. The refusal names the
  * way to send a message to the run that is already going.
+ *
+ * ## Idle keep-alive (auth-tax agents)
+ *
+ * Cursor (and other launches with `authMethodId`) pay ~1 minute of `authenticate` per ACP process.
+ * After a successful `end_turn` with an empty queue we therefore **keep the process idle** for
+ * {@link IDLE_KEEPALIVE_MS} so the next `send` reuses the same session — Stop or the idle timeout
+ * tear it down. Agents without `authMethodId` still finish on the first empty-queue turn.
  */
 
 import { appendFile, mkdir } from "node:fs/promises";
@@ -90,7 +97,16 @@ import type { PlatformId } from "@envoydev/platform";
 
 import type { CoderPaths } from "@envoydev/host-bridge";
 
-import { AcpClient, type AcpLaunch, type AcpPermissionRequest, type AcpSessionPolicy, type AcpUpdate, type AcpUserQuestion, type AcpUserQuestionChoice } from "./acp/client.js";
+import {
+  AcpClient,
+  ACP_AUTH_HANDSHAKE_TIMEOUT_MS,
+  type AcpLaunch,
+  type AcpPermissionRequest,
+  type AcpSessionPolicy,
+  type AcpUpdate,
+  type AcpUserQuestion,
+  type AcpUserQuestionChoice,
+} from "./acp/client.js";
 import { JsonlRpcAgentClient } from "./rpc/client.js";
 import { launchForAgent } from "./launch.js";
 import { envoyRunModel } from "./envoy-llm.js";
@@ -98,8 +114,14 @@ import { slashCommandsFromAcp } from "../composer/slash-commands.js";
 import { stripPlanFirstFraming } from "../composer/plan-gate.js";
 import { followUpMustQueue } from "@envoydev/agent-catalog/asking";
 import { parseAcpPlanUpdate } from "./acp-plan.js";
+import {
+  isAcpRetriableLeakError,
+  RETRIABLE_LEAK_RETRY_DELAY_MS,
+  stripAcpRetriableLeak,
+} from "./acp/retriable-leak.js";
 import { splitAskPrompt } from "./ask-prompt.js";
 import { keyed, ref } from "./messages.js";
+import { describeFailure as describeRunFailure } from "./describe-failure.js";
 
 /** ACP or Pi-family JSONL client — the surface `drive` / cancel / stop share. */
 type RunAgentClient = AcpClient | JsonlRpcAgentClient;
@@ -170,6 +192,11 @@ export interface RunManagerDeps {
    * Defaults are the constants above this interface; production never passes this.
    */
   limits?: { events?: number; transcriptBytes?: number };
+  /**
+   * How long an auth-tax agent stays idle after `end_turn` waiting for the next `send`.
+   * Tests pass a short value; production uses {@link IDLE_KEEPALIVE_MS}.
+   */
+  idleKeepAliveMs?: number;
 }
 
 /**
@@ -210,6 +237,13 @@ const TRANSCRIPT_LIMIT_BYTES = 8 * 1024 * 1024;
  */
 const MAX_HOST_CONTINUES = 2;
 
+/**
+ * Cursor ACP can end a turn with `end_turn` after streaming an internal RetriableError as
+ * assistant text. Two same-session re-prompts with a short pause usually recover; more burns
+ * the session without helping.
+ */
+const MAX_RETRIABLE_LEAK_RETRIES = 2;
+
 /** Fixed steer when the host continues a budget-exhausted turn. */
 const HOST_CONTINUE_PROMPT =
   "Continue from where you left off — do not restart exploration. Finish open " +
@@ -218,6 +252,12 @@ const HOST_CONTINUE_PROMPT =
 
 /** Compact before a host continue when context fill is at least this fraction. */
 const HOST_CONTINUE_COMPACT_RATIO = 0.85;
+
+/**
+ * After a successful turn on an `authMethodId` launch, keep the ACP process up this long so the
+ * next chat message does not pay another authenticate (~90 s for Cursor). Stop ends sooner.
+ */
+export const IDLE_KEEPALIVE_MS = 10 * 60 * 1000;
 
 /** An event before the daemon stamps it with its run, task, time and sequence. */
 type RunEventInput = DistributiveOmit<RunEvent, "runId" | "taskId" | "at" | "seq">;
@@ -265,6 +305,11 @@ interface LiveRun {
   turn: Promise<{ stopReason: string }> | undefined;
   /** Messages the user sent, oldest first. */
   queued: { text: string; mode: RunMode; images?: PromptImage[] }[];
+  /**
+   * Wakes an idle keep-alive waiter when `send` enqueues or `cancel` stops the run.
+   * One-shot: cleared when the wait resolves.
+   */
+  queueWake?: (() => void) | undefined;
   /** Why the turn in flight was interrupted — the difference between `cancel` and `steer`. */
   intent: "none" | "cancel" | "steer";
   /** The approval or question the run is blocked on, if any. A string is one permission choice. */
@@ -287,6 +332,15 @@ interface LiveRun {
    * Does not flip Settings; cleared when the run ends.
    */
   sessionAutoAllow?: boolean;
+  /**
+   * Cursor ACP streamed a RetriableError / WritableIterable leak as assistant text this turn.
+   * Cleared when we re-prompt or finish.
+   */
+  retriableLeakSeen?: boolean;
+  /** Assistant characters kept this turn after stripping leaks — >0 means a real reply arrived. */
+  assistantKeptCharsThisTurn?: number;
+  /** How many same-prompt recoveries we already spent on Cursor ACP stream leaks. */
+  retriableLeakRetries?: number;
   stderr: string[];
   settled: boolean;
   /**
@@ -874,6 +928,11 @@ export class RunManager {
         ...(live.sessionConfigs.length > 0 ? { sessionConfigs: live.sessionConfigs } : {}),
         ...(live.sessionPolicy ? { sessionPolicy: live.sessionPolicy } : {}),
       };
+      // Stop before spawn — do not pay Cursor's authenticate after the user already asked to leave.
+      if (isCancelIntent(live)) {
+        await this.finish(live, "cancelled", null);
+        return;
+      }
       const client: RunAgentClient = useRpc
         ? await JsonlRpcAgentClient.start({
             ...sharedCallbacks,
@@ -883,6 +942,29 @@ export class RunManager {
         : await startClient({
             ...sharedCallbacks,
             onUserQuestion: (request) => this.onUserQuestion(live, request),
+            // Cursor's authenticate alone was measured at ~90 s when already logged in; the default
+            // 30 s handshake is what users read as "did not answer authenticate / session/new".
+            ...(live.launch.authMethodId !== undefined
+              ? { handshakeTimeoutMs: ACP_AUTH_HANDSHAKE_TIMEOUT_MS }
+              : {}),
+            // So Stop during authenticate can tear down before `start` returns.
+            onClient: (started) => {
+              live.client = started;
+              // Cancel landed in the sync gap before this callback, or while we were constructing.
+              if (isCancelIntent(live)) started.cancel();
+            },
+            // Only when a real `authenticate` runs (not Copilot terminal-auth). Phone otherwise looks hung.
+            onAuthenticating: async () => {
+              if (isCancelIntent(live)) return;
+              await this.record(live, {
+                kind: "run.status",
+                status: "running",
+                note: keyed(
+                  "run.auth.waiting",
+                  "Signing in to the agent… This can take about a minute, even when you are already logged in.",
+                ),
+              });
+            },
           });
       live.client = client;
 
@@ -894,7 +976,6 @@ export class RunManager {
         return;
       }
 
-      if (client.sessionId) this.lastSession.set(live.run.taskId, client.sessionId);
       // **Only for a session we opened.** A resume is answered with less — both native harnesses reply
       // to `session/resume` with little more than the session id — so recording it would replace a full
       // option list with an empty one, which on screen is the difference between a picker and "this
@@ -907,6 +988,10 @@ export class RunManager {
       const sessionResumable =
         catalogResume &&
         (client instanceof JsonlRpcAgentClient ? client.sessionResumable : true);
+      // Only remember ids we can actually rejoin — a synthetic fallback must not poison Resume.
+      if (client.sessionId !== undefined) {
+        this.rememberSession(live.run.taskId, client.sessionId, sessionResumable);
+      }
       await this.record(live, {
         kind: "run.session",
         sessionId: client.sessionId ?? "unknown",
@@ -929,6 +1014,10 @@ export class RunManager {
           return;
         }
         try {
+          // Clear per-attempt flags. Do *not* reset retriableLeakRetries here — a same-prompt
+          // recovery `continue`s into this block, and wiping the counter would retry forever.
+          live.retriableLeakSeen = false;
+          live.assistantKeptCharsThisTurn = 0;
           live.turn = client.prompt(prompt, images);
           const result = await live.turn;
           live.turn = undefined;
@@ -944,6 +1033,50 @@ export class RunManager {
             await this.finish(live, "cancelled", null);
             return;
           }
+          // Cursor ACP: RetriableError / WritableIterable leaked as assistant text + end_turn.
+          //   * Real answer already kept → strip only (retry would duplicate the reply).
+          //   * No usable answer → same-session re-prompt with a short pause.
+          // Read through helpers so TS does not narrow flags set asynchronously in onUpdate.
+          if (
+            sawRetriableLeak(live) &&
+            (result.stopReason === "end_turn" || result.stopReason === "max_tokens")
+          ) {
+            const hadAnswer = assistantKeptThisTurn(live) > 0;
+            if (hadAnswer) {
+              live.retriableLeakSeen = false;
+            } else if ((live.retriableLeakRetries ?? 0) < MAX_RETRIABLE_LEAK_RETRIES) {
+              live.retriableLeakSeen = false;
+              live.retriableLeakRetries = (live.retriableLeakRetries ?? 0) + 1;
+              if (next !== undefined) live.queued.unshift(next);
+              await this.record(live, {
+                kind: "run.status",
+                status: "running",
+                note: keyed(
+                  "run.retriableLeak.retrying",
+                  "The agent’s connection dropped mid-reply. Retrying…",
+                ),
+              });
+              if ((await sleepUnlessCancelled(live, RETRIABLE_LEAK_RETRY_DELAY_MS)) === "cancel") {
+                await this.finish(live, "cancelled", null);
+                return;
+              }
+              // Retry the same user prompt — do not advance to the queued follow-up yet.
+              continue;
+            } else {
+              if (next !== undefined) live.queued.unshift(next);
+              const dropped = live.queued.length;
+              live.queued = [];
+              await this.record(live, {
+                kind: "run.status",
+                status: "failed",
+                note: retriableLeakFailedNote(dropped),
+              });
+              await this.finish(live, "failed", null);
+              return;
+            }
+          }
+          // A successful (or strip-only) turn restores the per-turn retry budget for the next prompt.
+          live.retriableLeakRetries = 0;
           if (next) {
             prompt = next.text;
             images = next.images;
@@ -970,8 +1103,59 @@ export class RunManager {
             await this.record(live, {
               kind: "run.status",
               status: "failed",
-              note: "The agent used its full iteration budget without finishing.",
+              note: keyed(
+                "run.stop.maxIterations",
+                "The agent used its full iteration budget without finishing.",
+              ),
             });
+            await this.finish(live, "failed", null);
+            return;
+          }
+          if (result.stopReason === "refusal") {
+            // Without this note the transcript only shows the generic end line — no reason.
+            await this.record(live, {
+              kind: "run.status",
+              status: "failed",
+              note: keyed(
+                "run.stop.refusal",
+                "The agent declined to continue with this request.",
+              ),
+            });
+            await this.finish(live, "failed", null);
+            return;
+          }
+          // Auth-tax agents (Cursor): keep the process after a clean `end_turn` so the next chat
+          // message does not pay another authenticate. `max_tokens` still ends — the turn was cut
+          // short, and "waiting for your next message" would mislabel an incomplete answer.
+          // Stop or idle timeout still tear down.
+          if (result.stopReason === "end_turn" && live.launch.authMethodId !== undefined) {
+            await this.record(live, {
+              kind: "run.status",
+              status: "running",
+              note: keyed(
+                "run.idle.waiting",
+                "Waiting for your next message… Session stays open so the next reply is fast.",
+              ),
+            });
+            const waited = await waitForQueueOrIdle(
+              live,
+              this.deps.idleKeepAliveMs ?? IDLE_KEEPALIVE_MS,
+            );
+            // Re-check cancel after the wait: send may have woken us, then Stop cleared the queue.
+            if (waited === "cancel" || isCancelIntent(live)) {
+              await this.finish(live, "cancelled", null);
+              return;
+            }
+            if (waited === "queue") {
+              const followUp = live.queued.shift();
+              if (followUp !== undefined) {
+                prompt = followUp.text;
+                images = followUp.images;
+                continue;
+              }
+            }
+            await this.finish(live, "done", null);
+            return;
           }
           await this.finish(live, statusForStopReason(result.stopReason), null);
           return;
@@ -987,8 +1171,30 @@ export class RunManager {
             await this.finish(live, "cancelled", null);
             return;
           }
+          // Cursor ACP sometimes throws the same RetriableError instead of leaking it as text.
+          if (
+            isAcpRetriableLeakError(error) &&
+            (live.retriableLeakRetries ?? 0) < MAX_RETRIABLE_LEAK_RETRIES
+          ) {
+            live.retriableLeakRetries = (live.retriableLeakRetries ?? 0) + 1;
+            if (next !== undefined) live.queued.unshift(next);
+            await this.record(live, {
+              kind: "run.status",
+              status: "running",
+              note: keyed(
+                "run.retriableLeak.retrying",
+                "The agent’s connection dropped mid-reply. Retrying…",
+              ),
+            });
+            if ((await sleepUnlessCancelled(live, RETRIABLE_LEAK_RETRY_DELAY_MS)) === "cancel") {
+              await this.finish(live, "cancelled", null);
+              return;
+            }
+            continue;
+          }
           promptFailures += 1;
           if (next !== undefined && promptFailures <= 1) {
+            live.retriableLeakRetries = 0;
             prompt = next.text;
             images = next.images;
             continue;
@@ -996,11 +1202,11 @@ export class RunManager {
           if (next !== undefined) live.queued.unshift(next);
           const dropped = live.queued.length;
           live.queued = [];
-          const message = describeFailure(error, live);
-          const note =
-            dropped > 0
-              ? `${message} ${dropped} queued follow-up${dropped === 1 ? " was" : "s were"} not sent.`
-              : message;
+          const note = isAcpRetriableLeakError(error)
+            ? retriableLeakFailedNote(dropped)
+            : dropped > 0
+              ? `${describeFailure(error, live)} ${dropped} queued follow-up${dropped === 1 ? " was" : "s were"} not sent.`
+              : describeFailure(error, live);
           await this.record(live, { kind: "run.status", status: "failed", note });
           await this.finish(live, "failed", null);
           return;
@@ -1079,12 +1285,17 @@ export class RunManager {
     const kind = typeof update.sessionUpdate === "string" ? update.sessionUpdate : "";
     switch (kind) {
       case "agent_message_chunk": {
-        const text = textOf(update.content);
-        if (text === "") return;
+        const raw = textOf(update.content);
+        if (raw === "") return;
+        // Cursor ACP can append RetriableError / WritableIterable as if it were the answer.
+        const { kept, leaked } = stripAcpRetriableLeak(raw);
+        if (leaked) live.retriableLeakSeen = true;
+        if (kept === "") return;
+        live.assistantKeptCharsThisTurn = (live.assistantKeptCharsThisTurn ?? 0) + kept.length;
         void this.record(live, {
           kind: "run.output",
           stream: "assistant",
-          text,
+          text: kept,
           ...(typeof update.messageId === "string" ? { messageId: update.messageId } : {}),
         });
         return;
@@ -1502,15 +1713,18 @@ export class RunManager {
       mode: effective,
       ...(images !== undefined && images.length > 0 ? { images } : {}),
     });
+    // Wake an idle keep-alive waiter so the next turn starts without waiting for the timeout.
+    wakeQueue(live);
     const delivered = effective === "steer" ? "steered" : "queued";
     await this.record(live, { kind: "run.message", text, mode: effective, delivered });
 
     if (effective === "steer") {
       // Interrupt the turn in flight. The reply arrives as `cancelled`, and the loop above then sends
       // this message as the next prompt — which is what "join the turn" means when the protocol has
-      // one prompt in flight at a time.
+      // one prompt in flight at a time. While idle keep-alive (no turn), only enqueue + wake — do not
+      // `session/cancel` with nothing in flight.
       live.intent = "steer";
-      live.client?.cancel();
+      if (live.turn !== undefined) live.client?.cancel();
     }
     return delivered;
   }
@@ -1531,6 +1745,8 @@ export class RunManager {
     live.queued = [];
     live.intent = "cancel";
     live.client?.cancel();
+    // Idle keep-alive must not wait out the full timeout after Stop.
+    wakeQueue(live);
     await this.setStatus(live, "cancelled");
     return true;
   }
@@ -1683,6 +1899,12 @@ export class RunManager {
     for (const live of running) {
       live.approval?.settle(null);
       live.queued = [];
+      // Same as `cancel`: auth-tax idle keep-alive sits in `waitForQueueOrIdle` — without a wake
+      // the idle timer holds the event loop for up to 10 minutes and then `finish`es as "done".
+      live.intent = "cancel";
+      wakeQueue(live);
+      // Eager status so listTasks does not keep saying "running" through shutdown.
+      await this.setStatus(live, "cancelled").catch(() => undefined);
       await live.client?.stop().catch(() => undefined);
     }
     const settled = Promise.allSettled(running.map((live) => live.done));
@@ -1834,6 +2056,18 @@ export class RunManager {
     }
   }
 
+  /**
+   * Remember a session id for Resume only when it is actually rejoinable. Synthetic RPC
+   * fallbacks (`rpc-…`) must not sit in `lastSession` or the next resume passes a dead `--session`.
+   */
+  private rememberSession(taskId: string, sessionId: string, resumable: boolean): void {
+    if (!resumable) {
+      this.lastSession.delete(taskId);
+      return;
+    }
+    this.lastSession.set(taskId, sessionId);
+  }
+
   private now(): string {
     return (this.deps.now?.() ?? new Date()).toISOString();
   }
@@ -1857,6 +2091,109 @@ function takeIntent(live: { intent: "none" | "cancel" | "steer" }): "none" | "ca
 /** Peek without resetting — and without letting TS narrow `live.intent` across awaits. */
 function isCancelIntent(live: { intent: "none" | "cancel" | "steer" }): boolean {
   return live.intent === "cancel";
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Backoff that still honors Stop — do not make the user wait out the full delay. */
+async function sleepUnlessCancelled(
+  live: { intent: "none" | "cancel" | "steer" },
+  ms: number,
+): Promise<"ok" | "cancel"> {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    if (isCancelIntent(live)) return "cancel";
+    await sleep(Math.min(50, deadline - Date.now()));
+  }
+  return isCancelIntent(live) ? "cancel" : "ok";
+}
+
+/** Resolve an idle keep-alive waiter, if any. */
+function wakeQueue(live: { queueWake?: (() => void) | undefined }): void {
+  const wake = live.queueWake;
+  live.queueWake = undefined;
+  wake?.();
+}
+
+/**
+ * After a clean turn on an auth-tax agent: wait for the next `send`, Stop, or idle timeout.
+ *
+ * `send` / `cancel` call {@link wakeQueue}; without that, Stop would block until the timeout.
+ */
+async function waitForQueueOrIdle(
+  live: {
+    intent: "none" | "cancel" | "steer";
+    queued: unknown[];
+    queueWake?: (() => void) | undefined;
+  },
+  ms: number,
+): Promise<"queue" | "cancel" | "timeout"> {
+  if (isCancelIntent(live)) return "cancel";
+  if (live.queued.length > 0) return "queue";
+
+  return await new Promise<"queue" | "cancel" | "timeout">((resolve) => {
+    let settled = false;
+    const finish = (result: "queue" | "cancel" | "timeout") => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (live.queueWake === onWake) live.queueWake = undefined;
+      // Prefer real work over a timer that fired in the same tick as send/Stop.
+      if (result === "timeout") {
+        if (isCancelIntent(live)) {
+          resolve("cancel");
+          return;
+        }
+        if (live.queued.length > 0) {
+          resolve("queue");
+          return;
+        }
+      }
+      resolve(result);
+    };
+    const onWake = () => {
+      if (isCancelIntent(live)) finish("cancel");
+      else if (live.queued.length > 0) finish("queue");
+      // Spurious wake with neither cancel nor queue — treat as cancel so we do not sit forever.
+      else finish("cancel");
+    };
+    live.queueWake = onWake;
+    const timer = setTimeout(() => finish("timeout"), ms);
+    // Race: enqueue/cancel between the empty check and registration.
+    if (isCancelIntent(live)) finish("cancel");
+    else if (live.queued.length > 0) finish("queue");
+  });
+}
+
+function sawRetriableLeak(live: { retriableLeakSeen?: boolean }): boolean {
+  return live.retriableLeakSeen === true;
+}
+
+function assistantKeptThisTurn(live: { assistantKeptCharsThisTurn?: number }): number {
+  return live.assistantKeptCharsThisTurn ?? 0;
+}
+
+function retriableLeakFailedNote(dropped: number): string {
+  if (dropped <= 0) {
+    return keyed(
+      "run.retriableLeak.failed",
+      "The agent’s connection dropped mid-reply. Send again to retry.",
+    );
+  }
+  if (dropped === 1) {
+    return keyed(
+      "run.retriableLeak.failed.queued",
+      "The agent’s connection dropped mid-reply. 1 queued follow-up was not sent. Send again to retry.",
+      { count: 1 },
+    );
+  }
+  return keyed(
+    "run.retriableLeak.failed.queued.many",
+    "The agent’s connection dropped mid-reply. {count} queued follow-ups were not sent. Send again to retry.",
+    { count: dropped },
+  );
 }
 
 /** ACP's stop reason → the status the rail shows. */
@@ -1888,15 +2225,6 @@ function textOf(content: unknown): string {
   return block.type === "text" && typeof block.text === "string" ? block.text : "";
 }
 
-/**
- * Turn a start-up failure into something a user can act on.
- *
- * The agent's own last stderr lines are the difference between "the agent failed" and "the agent
- * needs an API key", and the harness reports that second case as a JSON-RPC error whose text is
- * already good. So the rule is: keep the agent's words, and add our own only when it gave none.
- */
 function describeFailure(error: unknown, live: LiveRun): string {
-  const message = error instanceof Error ? error.message : String(error);
-  const tail = live.stderr.slice(-2).join(" · ");
-  return tail !== "" && !message.includes(tail) ? `${message} (${tail})` : message;
+  return describeRunFailure(error, live.stderr.slice(-2).join(" · "));
 }

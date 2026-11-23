@@ -280,7 +280,7 @@
   "runNoteContext": "上下文已用 {percent}%。",
   "runNoteFinished": "已完成。",
   "runNoteStopped": "已停止。",
-  "runNoteStoppedBefore": "在完成前停止。",
+  "runNoteStoppedBefore": "在完成前停止。未记录更多详情。",
   "runNoteEnded": "已结束。",
   "attachAdd": "添加图片",
   "attachTooltip": "附件",
@@ -570,5 +570,14 @@
   "settingsGuardianGuardian": "Guardian",
   "runVoiceStart": "开始听写",
   "runVoiceStop": "停止听写",
-  "runVoiceUnavailable": "无法使用听写。请检查系统设置中 EnvoyDev 的麦克风与语音识别权限。"
+  "runVoiceUnavailable": "无法使用听写。请检查系统设置中 EnvoyDev 的麦克风与语音识别权限。",
+  "runStopRefusal": "智能体拒绝继续处理此请求。",
+  "runStopMaxIterations": "智能体已用尽迭代次数仍未完成。",
+  "runStopUnknown": "智能体因错误停止。",
+  "runAuthWaiting": "正在登录智能体…即使您已经登录，这也可能需要大约一分钟。",
+  "runIdleWaiting": "正在等待您的下一条消息…会话保持打开，以便下一次回复更快。",
+  "runRetriableLeakRetrying": "智能体连接在回复中断开。正在重试…",
+  "runRetriableLeakFailed": "智能体连接在回复中断开。请再发送一次以重试。",
+  "runRetriableLeakFailedQueued": "智能体连接在回复中断开。有 1 条排队的后续消息未发送。请再发送一次以重试。",
+  "runRetriableLeakFailedQueuedMany": "智能体连接在回复中断开。有 {count} 条排队的后续消息未发送。请再发送一次以重试。"
 }

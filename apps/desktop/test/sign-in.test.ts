@@ -332,10 +332,31 @@ describe("what pressing Sign in can come back as", () => {
 
     // **Not `refused`.** A timeout is our failure to get an answer, not the agent declining — attributing our
     // own silence to somebody else's program is the mistake this branch exists to prevent. And not success
-    // either: nothing was signed in.
+    // either: nothing was signed in. Keyed separately from "accepted but session pending".
     expect(answer.outcome).toBe("not-completed");
+    expect(parseMessageRef(answer.detail).ref?.key).toBe("signIn.notAnswered");
     expect(answer.detail).toContain("did not answer");
-    expect(SIGN_IN_TIMEOUT_MS).toBeGreaterThan(30_000);
+    // Outer ceiling covers authenticate (~90–180 s) plus opening a session afterwards.
+    expect(SIGN_IN_TIMEOUT_MS).toBeGreaterThanOrEqual(240_000);
+  }, 20_000);
+
+  it("skips doomed ACP authenticate when the agent only offers terminal-auth (Copilot)", async () => {
+    const b = await bench();
+    const command = "/usr/local/bin/copilot login";
+    b.script({
+      authMethods: ["copilot-login"],
+      authTerminal: command,
+      sessionFails: new AcpRequestError("Authentication required", -32000),
+    });
+
+    const answer = await b.signIn.signIn("copilot");
+
+    // Sending authenticate would only get another -32000; the row must carry the terminal instruction.
+    expect(b.signedInWith()).toEqual([]);
+    expect(answer.outcome).toBe("not-completed");
+    expect(parseMessageRef(answer.detail).ref?.key).toBe("signIn.terminalRequired");
+    expect(answer.auth.state).toBe("needs-signin");
+    expect(answer.auth.terminal).toBe(command);
   }, 20_000);
 
   it("stops the agent it started, exactly once, whatever happened", async () => {
