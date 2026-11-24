@@ -5,8 +5,11 @@
 # Envoy Harness is cloned from its repo (scripts/envoy-harness.pin) and built
 # into the same package. If the clone fails, the stager falls back to
 # ..\envoy-harness when that sibling checkout exists at the pin (or set
-# ENVOY_HARNESS_DIR / ENVOY_HARNESS_ALLOW_UNPINNED=1). After staging,
-# check-bundle-resources.mjs must pass (daemon + harness skills) before build.
+# ENVOY_HARNESS_DIR / ENVOY_HARNESS_ALLOW_UNPINNED=1). The pin must include
+# packages/agent-catalog (@envoymesh/agent-catalog); the stager links it into
+# node_modules so EnvoyCoder tsc -b works without a sibling checkout. After
+# staging, check-bundle-resources.mjs must pass (daemon + harness skills)
+# before build.
 #
 # Run this on Windows, from the EnvoyCoder checkout:
 #   .\scripts\build-exe.ps1

@@ -30,6 +30,11 @@
  * checkout. A pin clone under `build/cache/envoy-harness` would therefore look for
  * `build/cache/EnvoyMesh`. Before `pnpm install`, the stager points that path at the
  * family sibling `../EnvoyMesh` (symlink / junction) when needed.
+ *
+ * EnvoyCoder's `@envoydev/agent-catalog` also imports `@envoymesh/agent-catalog` via
+ * `file:../../../envoy-harness/packages/agent-catalog` (sibling path). A pin-only
+ * Windows/CI machine has no sibling — after the harness build, the stager points
+ * `node_modules/@envoymesh/agent-catalog` at the pin's built package so `tsc -b` works.
  */
 
 import { execFileSync, spawnSync } from "node:child_process";
@@ -399,6 +404,113 @@ function siblingHarnessDir() {
   return path.resolve(root, "..", "envoy-harness");
 }
 
+/**
+ * True when a package dir has a runtime/types entry TypeScript can load.
+ * Same shape as peers:check — prefer exports/main over hard-coded dist paths.
+ */
+function packageEntryExists(packageDir) {
+  try {
+    const manifest = JSON.parse(readFileSync(path.join(packageDir, "package.json"), "utf8"));
+    const dot = manifest.exports?.["."] ?? manifest.exports;
+    const candidates = [
+      typeof dot === "object" ? dot.types ?? dot.import ?? dot.default : undefined,
+      typeof dot === "object" ? dot.import ?? dot.default : dot,
+      manifest.types,
+      manifest.main,
+      "./dist/index.d.ts",
+      "./dist/index.js",
+    ].filter((value) => typeof value === "string");
+    for (const candidate of candidates) {
+      if (existsSync(path.resolve(packageDir, candidate))) return true;
+    }
+  } catch {
+    // Missing or unreadable package.json.
+  }
+  return false;
+}
+
+/**
+ * Replace `linkPath` with a directory symlink/junction to `targetAbs`.
+ * Mirrors ensureHarnessMeshLink's Windows junction fallback.
+ */
+function forceLinkDir(linkPath, targetAbs) {
+  mkdirSync(path.dirname(linkPath), { recursive: true });
+  try {
+    const st = lstatSync(linkPath);
+    if (st.isSymbolicLink() || st.isDirectory()) {
+      rmSync(linkPath, { recursive: true, force: true });
+    } else {
+      fail(
+        `Cannot link ${linkPath}: exists and is not a directory or symlink.\n` +
+          "  Remove it, then re-run the installer script.",
+      );
+    }
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+  const relativeTarget = path.relative(path.dirname(linkPath), targetAbs);
+  try {
+    symlinkSync(relativeTarget, linkPath, "dir");
+  } catch (error) {
+    if (process.platform === "win32") {
+      try {
+        symlinkSync(targetAbs, linkPath, "junction");
+      } catch (junctionError) {
+        fail(
+          `Could not link ${linkPath} → ${targetAbs}.\n` +
+            `  symlink: ${error instanceof Error ? error.message : String(error)}\n` +
+            `  junction: ${junctionError instanceof Error ? junctionError.message : String(junctionError)}`,
+        );
+      }
+    } else {
+      fail(
+        `Could not link ${linkPath} → ${targetAbs}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+}
+
+/**
+ * `@envoydev/agent-catalog` imports `@envoymesh/agent-catalog` (FH-P2-A) from the
+ * harness peer. Packaging often builds the pin under `build/cache/` without a
+ * `../envoy-harness` sibling, so `file:../../../envoy-harness/...` would leave
+ * `tsc -b` with TS2307. Point `node_modules/@envoymesh/agent-catalog` at the
+ * harness tree we just built (cache, sibling, or ENVOY_HARNESS_DIR).
+ *
+ * @param {string} harnessSource absolute harness checkout that was built
+ */
+function ensureEnvoyAgentCatalogLink(harnessSource) {
+  const catalogDir = path.join(harnessSource, "packages", "agent-catalog");
+  if (!existsSync(path.join(catalogDir, "package.json"))) {
+    fail(
+      `Envoy Harness at ${harnessSource} has no packages/agent-catalog.\n` +
+        "  EnvoyCoder needs @envoymesh/agent-catalog (FH-P2-A) for tsc -b.\n" +
+        "  Update scripts/envoy-harness.pin to a commit that includes that package,\n" +
+        "  or set ENVOY_HARNESS_DIR to a checkout that has it built.",
+    );
+  }
+  if (!packageEntryExists(catalogDir)) {
+    fail(
+      `@envoymesh/agent-catalog is present but not built at ${catalogDir}.\n` +
+        "  From that harness checkout: pnpm install && pnpm run build\n" +
+        "  (build-workspace.mjs includes @envoymesh/agent-catalog at level 1.)",
+    );
+  }
+  const nmCatalog = path.join(root, "node_modules", "@envoymesh", "agent-catalog");
+  // Sibling `npm install` already linked a built catalog — leave it.
+  if (packageEntryExists(nmCatalog)) {
+    say(`@envoymesh/agent-catalog ready (node_modules).`);
+    return;
+  }
+  forceLinkDir(nmCatalog, catalogDir);
+  say(
+    `Linked node_modules/@envoymesh/agent-catalog → ${path.relative(root, catalogDir)} ` +
+      "(EnvoyCoder tsc / FH-P2-A).",
+  );
+}
+
 /** Best-effort HEAD of a local checkout, for the build log when falling back. */
 function localHarnessHead(dir) {
   try {
@@ -580,6 +692,10 @@ function stageHarness() {
   pnpm(["install"], source);
   pnpm(["run", "build"], source);
 
+  // Pin clones live under build/cache/, not ../envoy-harness — wire the catalog
+  // package EnvoyCoder's tsc imports before stageDaemon → ensureWorkspaceBuilt.
+  ensureEnvoyAgentCatalogLink(source);
+
   const dest = path.join(resources, "envoy-harness");
   say("Packing Envoy Harness for the installer…");
   packHarnessForInstaller(source, dest);
@@ -726,6 +842,16 @@ function ensureWorkspaceBuilt() {
         "    npx tsc -b packages/protocol packages/identity packages/vault packages/network packages/api packages/node-core packages/harness packages/host-connect packages/reuse-host\n" +
         "  Then back here: npm install && npx tsc -b\n" +
         "  (A plain `npx tsc -b` in EnvoyMesh also typechecks apps/node and apps/social — not required for EnvoyDev.)",
+    );
+  }
+  const agentCatalogNm = path.join(root, "node_modules", "@envoymesh", "agent-catalog");
+  if (!packageEntryExists(agentCatalogNm) && !packageEntryExists(path.resolve(agentCatalogNm))) {
+    fail(
+      "Cannot find @envoymesh/agent-catalog (needed by packages/agent-catalog for tsc -b).\n" +
+        "  Packaging should have linked it from the built harness pin — re-run stage after\n" +
+        "  updating scripts/envoy-harness.pin, or for local dev:\n" +
+        `    cd ${siblingHarnessDir()} && pnpm install && pnpm run build\n` +
+        "    cd this repo && npm install",
     );
   }
   const tscJs = path.join(root, "node_modules", "typescript", "bin", "tsc");

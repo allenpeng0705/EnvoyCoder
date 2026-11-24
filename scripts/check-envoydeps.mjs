@@ -138,6 +138,26 @@ function declaredMeshDeps() {
   return found;
 }
 
+/**
+ * `@envoymesh/*` deps that live in the **harness** sibling (not EnvoyMesh) —
+ * today `@envoymesh/agent-catalog` via `packages/agent-catalog/package.json`.
+ * Mesh peers:check above would look under ../EnvoyMesh and falsely fail.
+ */
+function declaredHarnessPeerDeps() {
+  const found = new Map();
+  const manifest = "packages/agent-catalog/package.json";
+  const file = path.join(root, manifest);
+  if (!existsSync(file)) return found;
+  const parsed = JSON.parse(readFileSync(file, "utf8"));
+  for (const [name, spec] of Object.entries(parsed.dependencies ?? {})) {
+    if (!name.startsWith("@envoymesh/")) continue;
+    const range = String(spec);
+    if (!range.includes("envoy-harness")) continue;
+    found.set(name, { spec: range, manifest });
+  }
+  return found;
+}
+
 const problems = [];
 /** The linked packages we found, kept for the one build-state question asked after the loop. */
 const packages = [];
@@ -190,32 +210,40 @@ if (!existsSync(meshSibling)) {
 // ── 1b. is their build current? (one question, asked once) ─────────────────────────────
 const stale = staleProjects(packages.map((entry) => `packages/${entry.name.replace("@envoymesh/", "")}`));
 
-// ── 2. our own copy of the harness (D4: never EnvoyMesh's link) ────────────────────────
+// ── 2. harness peer packages (D4: never EnvoyMesh's link) ─────────────────────────────
 //
-// **A warning until something depends on it.** The built-in agent is a roadmap item, and no package
-// imports the harness yet — so failing here would block every other check on a prerequisite the tree
-// does not use. The moment a manifest declares the dependency, the same condition becomes an error:
-// at that point "the harness is missing" is not advice, it is a broken build.
-const harnessRequired = [...declaredMeshDeps().keys()].some((name) => name === "@envoymesh/envoy-harness");
+// `@envoymesh/agent-catalog` (FH-P2-A) is required by packages/agent-catalog and lives in
+// ../envoy-harness — not in EnvoyMesh. Packaging can link node_modules from the pin cache;
+// day-to-day `tsc` / peers:check expect the sibling (or a working node_modules link).
+const harnessPeerDeps = declaredHarnessPeerDeps();
 const harnessLocal = path.join(root, "vendor", "envoy-harness");
 const harnessLinked = path.join(root, "node_modules", "@envoymesh", "envoy-harness");
 const harnessPresent =
   existsSync(harnessLocal) || existsSync(harnessLinked) || existsSync(harnessSibling);
-if (!harnessPresent && harnessRequired) {
-  problems.push(
-    `The Envoy Harness — EnvoyDev's built-in agent — is not present.\n` +
-      `    EnvoyMesh does not distribute it (design D4): each product clones or copies it.\n` +
-      `    fix:          git clone <envoy-harness> ${harnessLocal}\n` +
-      `                  then point this repo's package.json at it (file:./vendor/envoy-harness),\n` +
-      `                  or clone it to ${harnessSibling} and link that.\n` +
-      `    note:         the built-in agent is one of EnvoyDev's two native harnesses; without it\n` +
-      `                  the app still starts and offers the external agents.`,
-  );
+const harnessRequired = harnessPeerDeps.size > 0;
+for (const [name, info] of harnessPeerDeps) {
+  const leaf = name.replace("@envoymesh/", "");
+  const inSibling = path.join(harnessSibling, "packages", leaf);
+  const inNm = path.join(root, "node_modules", "@envoymesh", leaf);
+  const present =
+    (existsSync(inSibling) && resolveEntryPoint(inSibling) !== null) ||
+    (existsSync(inNm) && resolveEntryPoint(inNm) !== null);
+  if (!present) {
+    problems.push(
+      `${name} (required by ${info.manifest}) is missing or unbuilt.\n` +
+        `    expected at:  ${inSibling}\n` +
+        `                  or ${inNm} (packaging links the pin cache here)\n` +
+        `    fix:          git clone <envoy-harness> ${harnessSibling} &&\n` +
+        `                  (cd ${harnessSibling} && pnpm install && pnpm run build) &&\n` +
+        `                  (cd ${root} && npm install)\n` +
+        `    pin:          scripts/envoy-harness.pin must name a commit that includes packages/${leaf}.`,
+    );
+  }
 }
 const harnessWarning =
   !harnessPresent && !harnessRequired
-    ? "the Envoy Harness is not present yet (roadmap item; `@envoymesh/envoy-harness` is not a " +
-      `dependency of anything). Clone it to ${harnessSibling} when the built-in agent lands.`
+    ? "the Envoy Harness checkout is not present yet. Clone it to " +
+      `${harnessSibling} when you need the built-in agent or @envoymesh/agent-catalog.`
     : null;
 
 /** Which of the three acceptable locations the harness was found in — reported, so "which copy?" has an answer. */
@@ -293,13 +321,12 @@ if (stale && stale.length > 0) {
   );
 }
 if (harnessWarning) console.log(`note: ${harnessWarning}`);
-if (harnessWhere) {
+if (harnessWhere || harnessPeerDeps.size > 0) {
   console.log(
-    `harness: found in ${harnessWhere}` +
+    `harness: ${harnessWhere ? `found in ${harnessWhere}` : "peer packages checked via node_modules / sibling"}` +
       (harnessRequired
-        ? " (required by a manifest)."
-        : " — nothing declares it yet (roadmap item: the built-in agent), and it is never taken\n" +
-          "  through EnvoyMesh's link (design D4)."),
+        ? ` (${harnessPeerDeps.size} @envoymesh package(s) from the harness peer, D4).`
+        : " — nothing declares a harness peer package yet (D4: never through EnvoyMesh's link)."),
   );
   if (harnessState) {
     console.log(

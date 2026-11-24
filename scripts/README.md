@@ -30,9 +30,12 @@ Tauri bundle for that platform.
 
 By default the stager clones the commit in `scripts/envoy-harness.pin`. That pin
 is the **only** reproducible handle on the runtime (package versions alone are
-not unique — see `docs/upgrading.md` §1 / §3). If that clone fails (offline,
-private repo, bad network) and `ENVOY_HARNESS_DIR` is unset, it automatically
-tries the sibling folder `../envoy-harness` when that tree looks like a harness
+not unique — see `docs/upgrading.md` §1 / §3) and must include
+`packages/agent-catalog` (`@envoymesh/agent-catalog`). After building the pin
+the stager links that package into `node_modules` so EnvoyCoder `tsc -b` works
+without a `../envoy-harness` sibling. If that clone fails (offline, private
+repo, bad network) and `ENVOY_HARNESS_DIR` is unset, it automatically tries the
+sibling folder `../envoy-harness` when that tree looks like a harness
 checkout. Prefer an explicit path when you mean to skip the network.
 
 The harness’s `pnpm` overrides are `link:../EnvoyMesh/packages/…`. A pin clone
