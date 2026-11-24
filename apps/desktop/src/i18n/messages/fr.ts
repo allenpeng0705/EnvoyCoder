@@ -220,6 +220,9 @@ export const fr: Catalogue = {
   "task.plan.progress": "Plan · {done} sur {total}",
   "task.plan.priority.high": "Élevée",
   "task.composer.queueStatus": "Envoi quand l’agent aura fini cette réponse",
+  "task.composer.session.working": "En cours…",
+  "task.composer.session.ready": "Prêt — envoyez quand vous voulez ; la session reste ouverte",
+  "task.composer.session.ready.aria": "Réponse terminée ; session ouverte pour une suite rapide",
   "task.tool.bucket.read": "Lecture",
   "task.tool.bucket.edit": "Modification",
   "task.tool.bucket.shell": "Shell",
@@ -398,7 +401,7 @@ export const fr: Catalogue = {
   "status.queued": "En attente de démarrage",
   "status.running": "En cours",
   "status.needsAttention": "Attend votre réponse",
-  "status.idle": "Inactif",
+  "status.idle": "Prêt",
   "status.done": "Terminé",
   "status.failed": "Arrêté sur une erreur",
   "status.cancelled": "Arrêté",
@@ -414,7 +417,7 @@ export const fr: Catalogue = {
   "run.auth.waiting":
     "Connexion à l’agent… Cela peut prendre environ une minute, même si vous êtes déjà connecté.",
   "run.idle.waiting":
-    "En attente de votre prochain message… La session reste ouverte pour que la prochaine réponse soit rapide.",
+    "Réponse terminée. Envoyez un autre message quand vous voulez — la session reste ouverte pour que la prochaine réponse soit rapide.",
   "run.retriableLeak.retrying": "La connexion de l’agent s’est interrompue au milieu de la réponse. Nouvel essai…",
   "run.retriableLeak.afterTools":
     "La connexion de l’agent s’est interrompue après l’exécution des outils. Envoyez une suite pour continuer — les outils n’ont pas été relancés.",

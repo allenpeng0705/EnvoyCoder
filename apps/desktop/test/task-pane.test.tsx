@@ -152,9 +152,8 @@ describe("the pane's header", () => {
     expect(screen.getByText("payments-api")).toBeTruthy();
     expect(screen.getByText("DeepSeek")).toBeTruthy();
     expect(screen.getByText("deepseek-official/deepseek-v4-flash")).toBeTruthy();
-    // Status is a coloured dot, not a worded chip — same vocabulary as the rail.
-    expect(screen.queryByText("Needs your answer")).toBeNull();
-    expect(screen.getByLabelText("Needs your answer")).toBeTruthy();
+    // Dot + short status word (same vocabulary as the rail), not a chip.
+    expect(screen.getByTestId("pane-status-label").textContent).toBe("Needs your answer");
   });
 
   it("names a remote host when the task is not on this machine", () => {
@@ -280,17 +279,17 @@ describe("the transcript", () => {
           messageId: "th1",
         }),
       ],
-      { runLive: true },
+      { runLive: true, task: { ...task, status: "running" } },
     );
     const steps = screen.getByTestId("transcript-steps");
     expect(steps.querySelector("details")?.open).toBe(false);
     expect(within(steps).getByText(/Working/, { selector: ".row__steps-summary-label" })).toBeTruthy();
     expect(steps.className).toMatch(/row--steps-live/);
-    const peek = screen.getByTestId("composer-working-peek");
+    const peek = screen.getByTestId("composer-session-status-working");
     expect(within(peek).getByTestId("composer-working-peek-summary").textContent).toMatch(
       /thinking about the parser/,
     );
-    // Peek is summary-only — no muted stream dump above the composer.
+    // Peek is phase + detail — no muted stream dump above the composer.
     expect(within(peek).queryByText(/thinking about the parser/, { selector: "p.composer__working-peek-text" })).toBeNull();
   });
 
@@ -310,7 +309,7 @@ describe("the transcript", () => {
           input: { path: "/repo/src/parser.ts" },
         }),
       ],
-      { runLive: true },
+      { runLive: true, task: { ...task, status: "running" } },
     );
     const steps = screen.getByTestId("transcript-steps");
     expect(within(steps).getByText(/Editing src\/parser\.ts/, { selector: ".row__steps-summary-label" })).toBeTruthy();
@@ -338,7 +337,7 @@ describe("the transcript", () => {
     );
     const steps = screen.getByTestId("transcript-steps");
     expect(steps.querySelector("details")?.open).toBe(false);
-    expect(screen.queryByTestId("composer-working-peek")).toBeNull();
+    expect(screen.queryByTestId("composer-session-status-working")).toBeNull();
   });
 
   it("says when the history is incomplete rather than rendering a plausible lie", () => {
@@ -644,7 +643,7 @@ describe("the composer", () => {
   });
 
   it("says on the button what pressing it will do, instead of offering the words Queue and Steer", () => {
-    renderPane([], { runLive: true });
+    renderPane([], { runLive: true, task: { ...task, status: "running" } });
     // Nothing in the field yet: no primary action is drawn at all (see the leg below), so this one types first.
     fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "and then this" } });
     const send = screen.getByRole("button", { name: "Send" });
@@ -657,7 +656,7 @@ describe("the composer", () => {
   });
 
   it("steers once when Send is Shift-clicked while a turn is live", () => {
-    const pane = renderPane([], { runLive: true });
+    const pane = renderPane([], { runLive: true, task: { ...task, status: "running" } });
     fireEvent.change(screen.getByLabelText("Message the agent"), {
       target: { value: "change course" },
     });
@@ -666,7 +665,7 @@ describe("the composer", () => {
   });
 
   it("steers once when Alt+Enter is pressed while a turn is live", () => {
-    const pane = renderPane([], { runLive: true });
+    const pane = renderPane([], { runLive: true, task: { ...task, status: "running" } });
     const field = screen.getByLabelText("Message the agent");
     fireEvent.change(field, { target: { value: "change course from keyboard" } });
     fireEvent.keyDown(field, { key: "Enter", altKey: true });
@@ -674,12 +673,35 @@ describe("the composer", () => {
   });
 
   it("shows one queue status line while running, without repeating it in the placeholder", () => {
-    renderPane([], { runLive: true });
+    renderPane([], { runLive: true, task: { ...task, status: "running" } });
     expect(screen.getByTestId("composer-queue-status").textContent).toBe(
       "Will send when the agent finishes this reply",
     );
     const field = screen.getByLabelText("Message the agent") as HTMLTextAreaElement;
     expect(field.placeholder).toBe("Add a follow-up");
+  });
+
+  it("shows Ready (not Working/queue) while Cursor idle keep-alive holds the session open", () => {
+    renderPane([], { runLive: true, task: { ...task, status: "idle" } });
+    expect(screen.getByTestId("pane-status-label").textContent).toBe("Ready");
+    expect(screen.getByTestId("composer-session-status-ready").textContent).toMatch(/Ready/);
+    expect(screen.queryByTestId("composer-session-status-working")).toBeNull();
+    expect(screen.queryByTestId("composer-queue-status")).toBeNull();
+    // Session still open — follow-up copy, not the first-message "Describe the task".
+    const field = screen.getByLabelText("Message the agent") as HTMLTextAreaElement;
+    expect(field.placeholder).toBe("Add a follow-up");
+  });
+
+  it("drops Ready and shows queue chrome after a follow-up is sent during idle keep-alive", () => {
+    const pane = renderPane([], { runLive: true, task: { ...task, status: "idle" } });
+    fireEvent.change(screen.getByLabelText("Message the agent"), {
+      target: { value: "next question" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(pane.onSend).toHaveBeenCalledWith("next question", "queue");
+    expect(screen.queryByTestId("composer-session-status-ready")).toBeNull();
+    expect(screen.getByTestId("composer-session-status-working")).toBeTruthy();
+    expect(screen.getByTestId("composer-queue-status")).toBeTruthy();
   });
 
   it("keeps the composer when a file tab is open so approvals stay reachable", async () => {
@@ -1250,7 +1272,11 @@ describe("the model control", () => {
     const picker = screen.getByLabelText("Model") as HTMLSelectElement;
     expect(picker.tagName).toBe("SELECT");
     expect(picker.disabled).toBe(false);
-    expect([...picker.options].map((option) => option.textContent)).toEqual(["MiniMax-M3"]);
+    // Envoy Harness always offers Custom… so a provider/model outside the list can still be set.
+    expect([...picker.options].map((option) => option.textContent)).toEqual([
+      "MiniMax-M3",
+      "Custom…",
+    ]);
     expect(picker.value).toBe("minimax/MiniMax-M3");
     // Header and composer agree: with one configured model and nothing stored, both name it.
     expect(screen.getByTitle("minimax/MiniMax-M3").textContent).toBe("minimax/MiniMax-M3");
@@ -1347,8 +1373,9 @@ describe("the model control", () => {
       harnesses: [harnessFor("envoy-harness")],
       runLive: false,
     });
+    // Id must be one `harnessModels("envoy-harness")` actually lists — a retired id never reaches onStart.
     fireEvent.change(screen.getByLabelText("Model"), {
-      target: { value: "anthropic/claude-sonnet-4-6" },
+      target: { value: "anthropic/claude-sonnet-5-5" },
     });
     fireEvent.change(screen.getByLabelText("Message the agent"), { target: { value: "use sonnet" } });
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
@@ -1360,7 +1387,7 @@ describe("the model control", () => {
     expect(onStart).toHaveBeenCalledWith(
       "use sonnet",
       "workspace-write",
-      "anthropic/claude-sonnet-4-6",
+      "anthropic/claude-sonnet-5-5",
       undefined,
     );
   });

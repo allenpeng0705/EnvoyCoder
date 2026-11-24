@@ -896,6 +896,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Will send when the agent finishes this reply';
 
   @override
+  String get taskComposerSessionWorking => 'Working…';
+
+  @override
+  String get taskComposerSessionReady =>
+      'Ready — send when you want; session stays open';
+
+  @override
   String get runPlanReviewImplement => 'Implement plan';
 
   @override
@@ -1045,7 +1052,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get runIdleWaiting =>
-      'Waiting for your next message… Session stays open so the next reply is fast.';
+      'Reply finished. Send another message whenever you’re ready — the session stays open so the next reply is fast.';
 
   @override
   String get runRetriableLeakRetrying =>
@@ -1647,7 +1654,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get statusWorking => 'Working';
 
   @override
-  String get statusIdle => 'Idle';
+  String get statusIdle => 'Ready';
 
   @override
   String get statusStopped => 'Stopped';

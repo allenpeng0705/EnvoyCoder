@@ -863,6 +863,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get runComposerQueueStatus => '智能体完成本次回复后发送';
 
   @override
+  String get taskComposerSessionWorking => '进行中…';
+
+  @override
+  String get taskComposerSessionReady => '就绪 — 可随时发送；会话保持打开';
+
+  @override
   String get runPlanReviewImplement => '按计划实现';
 
   @override
@@ -1002,7 +1008,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get runAuthWaiting => '正在登录智能体…即使您已经登录，这也可能需要大约一分钟。';
 
   @override
-  String get runIdleWaiting => '正在等待您的下一条消息…会话保持打开，以便下一次回复更快。';
+  String get runIdleWaiting => '回复已完成。准备好后可再发送消息 — 会话保持打开，以便下一次回复更快。';
 
   @override
   String get runRetriableLeakRetrying => '智能体连接在回复中断开。正在重试…';
@@ -1584,7 +1590,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get statusWorking => '运行中';
 
   @override
-  String get statusIdle => '空闲';
+  String get statusIdle => '就绪';
 
   @override
   String get statusStopped => '已停止';

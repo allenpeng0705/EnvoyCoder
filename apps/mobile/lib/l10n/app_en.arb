@@ -1194,6 +1194,14 @@
     "description": "task.transcript.loading — Empty list while a live run has no events yet."
   },
   "runComposerQueueStatus": "Will send when the agent finishes this reply",
+  "taskComposerSessionWorking": "Working…",
+  "@taskComposerSessionWorking": {
+    "description": "task.composer.session.working"
+  },
+  "taskComposerSessionReady": "Ready — send when you want; session stays open",
+  "@taskComposerSessionReady": {
+    "description": "task.composer.session.ready"
+  },
   "@runComposerQueueStatus": {
     "description": "task.composer.queueStatus — Quiet status while send queues."
   },
@@ -1390,7 +1398,7 @@
   "@runAuthWaiting": {
     "description": "run.auth.waiting"
   },
-  "runIdleWaiting": "Waiting for your next message… Session stays open so the next reply is fast.",
+  "runIdleWaiting": "Reply finished. Send another message whenever you’re ready — the session stays open so the next reply is fast.",
   "@runIdleWaiting": {
     "description": "run.idle.waiting"
   },
@@ -2230,7 +2238,7 @@
   "@statusWorking": {
     "description": "statusworking — Reused from desktop status.running"
   },
-  "statusIdle": "Idle",
+  "statusIdle": "Ready",
   "@statusIdle": {
     "description": "statusidle — Reused from desktop status.idle"
   },

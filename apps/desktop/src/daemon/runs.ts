@@ -1196,12 +1196,16 @@ export class RunManager {
           // short, and "waiting for your next message" would mislabel an incomplete answer.
           // Stop or idle timeout still tear down.
           if (result.stopReason === "end_turn" && live.launch.authMethodId !== undefined) {
+            // `idle` (not `running`): the turn is over. Composer must not show "Will send when the
+            // agent finishes this reply" / a Working peek over a finished turn — that made Cursor
+            // keep-alive look stuck. Session stays live for sendToRun until timeout or Stop.
+            await this.setStatus(live, "idle");
             await this.record(live, {
               kind: "run.status",
-              status: "running",
+              status: "idle",
               note: keyed(
                 "run.idle.waiting",
-                "Waiting for your next message… Session stays open so the next reply is fast.",
+                "Reply finished. Send another message whenever you’re ready — the session stays open so the next reply is fast.",
               ),
             });
             const waited = await waitForQueueOrIdle(
@@ -1216,6 +1220,7 @@ export class RunManager {
             if (waited === "queue") {
               const followUp = live.queued.shift();
               if (followUp !== undefined) {
+                await this.setStatus(live, "running");
                 prompt = followUp.text;
                 images = followUp.images;
                 continue;

@@ -854,8 +854,10 @@ describe("auth-tax idle keep-alive", () => {
         kinds(events, "run.status").some(
           (event) =>
             event.kind === "run.status" &&
+            event.status === "idle" &&
             typeof event.note === "string" &&
-            (event.note.includes("Waiting for your next message") ||
+            (event.note.includes("Reply finished") ||
+              event.note.includes("Waiting for your next message") ||
               event.note.includes("run.idle.waiting")),
         ),
       "idle keep-alive note",
@@ -888,7 +890,8 @@ describe("auth-tax idle keep-alive", () => {
           (event) =>
             event.kind === "run.status" &&
             typeof event.note === "string" &&
-            event.note.includes("Waiting for your next message"),
+            (event.note.includes("Reply finished") ||
+              event.note.includes("Waiting for your next message")),
         ),
       "idle note before cancel",
     );
@@ -907,7 +910,8 @@ describe("auth-tax idle keep-alive", () => {
           (event) =>
             event.kind === "run.status" &&
             typeof event.note === "string" &&
-            event.note.includes("Waiting for your next message"),
+            (event.note.includes("Reply finished") ||
+              event.note.includes("Waiting for your next message")),
         ),
       "idle before send-then-cancel",
     );
@@ -937,7 +941,8 @@ describe("auth-tax idle keep-alive", () => {
           (event) =>
             event.kind === "run.status" &&
             typeof event.note === "string" &&
-            event.note.includes("Waiting for your next message"),
+            (event.note.includes("Reply finished") ||
+              event.note.includes("Waiting for your next message")),
         ),
       "idle before stopAll",
     );
@@ -959,7 +964,8 @@ describe("auth-tax idle keep-alive", () => {
         (event) =>
           event.kind === "run.status" &&
           typeof event.note === "string" &&
-          event.note.includes("Waiting for your next message"),
+          (event.note.includes("Reply finished") ||
+            event.note.includes("Waiting for your next message")),
       ),
     ).toBe(false);
   });

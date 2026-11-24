@@ -872,6 +872,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get runComposerQueueStatus => 'エージェントがこの返答を終えたら送信します';
 
   @override
+  String get taskComposerSessionWorking => '作業中…';
+
+  @override
+  String get taskComposerSessionReady => '準備完了 — いつでも送信できます；セッションは開いたままです';
+
+  @override
   String get runPlanReviewImplement => '計画どおり実装';
 
   @override
@@ -1013,7 +1019,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get runAuthWaiting => 'エージェントにサインインしています…すでにログイン済みでも、約1分かかることがあります。';
 
   @override
-  String get runIdleWaiting => '次のメッセージを待っています…セッションを開いたままにして、次の返信を速くします。';
+  String get runIdleWaiting =>
+      '返信が終わりました。準備ができたら次のメッセージを送ってください — セッションを開いたままにして、次の返信を速くします。';
 
   @override
   String get runRetriableLeakRetrying => 'エージェントの接続が返信の途中で切れました。再試行しています…';
@@ -1603,7 +1610,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get statusWorking => '実行中';
 
   @override
-  String get statusIdle => '待機';
+  String get statusIdle => '準備完了';
 
   @override
   String get statusStopped => '停止';

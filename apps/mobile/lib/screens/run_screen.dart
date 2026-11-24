@@ -68,6 +68,8 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
   String? _attachNotice;
 
   bool _live = false;
+  /// Cursor keep-alive between turns — session live, but Working / queue chrome must hide.
+  bool _sessionIdle = false;
   bool _loading = true;
   bool _cancelling = false;
   bool _archiving = false;
@@ -342,8 +344,20 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
           : const [];
     }
     _transcript.apply(event);
+    if (event['kind'] == 'run.status' && event['status'] == 'idle') {
+      _sessionIdle = true;
+    } else if (event['kind'] == 'run.status' &&
+        (event['status'] == 'running' || event['status'] == 'needs-attention')) {
+      _sessionIdle = false;
+    } else if (event['kind'] == 'run.tool' ||
+        event['kind'] == 'run.output' ||
+        event['kind'] == 'run.thought' ||
+        event['kind'] == 'run.message') {
+      _sessionIdle = false;
+    }
     if (event['kind'] == 'run.ended') {
       _live = false;
+      _sessionIdle = false;
       _stopTicker();
     }
   }
@@ -1178,7 +1192,7 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                       ),
                       const SizedBox(height: 8),
                     ],
-                    if (_live && !approvalOpen) ...[
+                    if (_live && !_sessionIdle && !approvalOpen) ...[
                       Builder(
                         builder: (context) {
                           final items = segmentTranscriptSteps(
@@ -1198,20 +1212,21 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                           final parts = workingPeekParts(stream);
                           final summary = parts.summary;
                           final peek = parts.tail;
-                          if ((summary == null || summary.isEmpty) &&
-                              peek.isEmpty) {
-                            return const SizedBox.shrink();
-                          }
+                          final detail = (summary != null && summary.isNotEmpty)
+                              ? summary
+                              : null;
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 8),
                             child: Column(
-                              key: const ValueKey('composer-working-peek'),
+                              key: const ValueKey(
+                                'composer-session-status-working',
+                              ),
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  (summary != null && summary.isNotEmpty)
-                                      ? summary
-                                      : l10n.runStepsWorking,
+                                  detail == null
+                                      ? l10n.taskComposerSessionWorking
+                                      : '${l10n.taskComposerSessionWorking} $detail',
                                   key: const ValueKey(
                                     'composer-working-peek-summary',
                                   ),
@@ -1235,19 +1250,39 @@ class _RunScreenState extends State<RunScreen> with SingleTickerProviderStateMix
                                     ),
                                   ),
                                 ],
+                                const SizedBox(height: 4),
+                                Text(
+                                  l10n.runComposerQueueStatus,
+                                  style: TextStyle(
+                                    color: colors.foregroundMuted,
+                                    fontSize: 11,
+                                  ),
+                                ),
                               ],
                             ),
                           );
                         },
                       ),
+                    ],
+                    if (_live && _sessionIdle && !approvalOpen)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          l10n.runComposerQueueStatus,
-                          style: TextStyle(color: colors.foregroundMuted, fontSize: 11),
+                        child: Semantics(
+                          liveRegion: true,
+                          label: l10n.taskComposerSessionReady,
+                          child: Text(
+                            l10n.taskComposerSessionReady,
+                            key: const ValueKey(
+                              'composer-session-status-ready',
+                            ),
+                            style: TextStyle(
+                              color: colors.foregroundMuted,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                       ),
-                    ],
                     if (!takeover && !approvalOpen && _commandMatches.isNotEmpty)
                       ..._commandMatches.map(
                         (command) => ListTile(

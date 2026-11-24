@@ -871,6 +871,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get runComposerQueueStatus => '에이전트가 이 답변을 마치면 보냅니다';
 
   @override
+  String get taskComposerSessionWorking => '작업 중…';
+
+  @override
+  String get taskComposerSessionReady => '준비됨 — 원할 때 보내세요; 세션은 열려 있습니다';
+
+  @override
   String get runPlanReviewImplement => '계획대로 구현';
 
   @override
@@ -1012,7 +1018,8 @@ class AppLocalizationsKo extends AppLocalizations {
   String get runAuthWaiting => '에이전트에 로그인하는 중… 이미 로그인한 상태여도 약 1분 정도 걸릴 수 있습니다.';
 
   @override
-  String get runIdleWaiting => '다음 메시지를 기다리는 중… 다음 답변이 빠르도록 세션을 열어 둡니다.';
+  String get runIdleWaiting =>
+      '답변이 끝났습니다. 준비되면 다음 메시지를 보내세요 — 다음 답변이 빠르도록 세션을 열어 둡니다.';
 
   @override
   String get runRetriableLeakRetrying => '에이전트 연결이 답변 중간에 끊겼습니다. 다시 시도하는 중…';
@@ -1598,7 +1605,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get statusWorking => '실행 중';
 
   @override
-  String get statusIdle => '대기';
+  String get statusIdle => '준비됨';
 
   @override
   String get statusStopped => '중지됨';

@@ -220,6 +220,9 @@ export const ko: Catalogue = {
   "task.plan.progress": "계획 · {done}/{total}",
   "task.plan.priority.high": "높음",
   "task.composer.queueStatus": "에이전트가 이 답변을 마치면 보냅니다",
+  "task.composer.session.working": "작업 중…",
+  "task.composer.session.ready": "준비됨 — 원할 때 보내세요; 세션은 열려 있습니다",
+  "task.composer.session.ready.aria": "답변이 끝났습니다; 빠른 후속을 위해 세션이 열려 있습니다",
   "task.tool.bucket.read": "읽기",
   "task.tool.bucket.edit": "편집",
   "task.tool.bucket.shell": "셸",
@@ -398,7 +401,7 @@ export const ko: Catalogue = {
   "status.queued": "시작 대기",
   "status.running": "실행 중",
   "status.needsAttention": "당신의 답변 필요",
-  "status.idle": "대기",
+  "status.idle": "준비됨",
   "status.done": "완료",
   "status.failed": "오류로 중지",
   "status.cancelled": "중지됨",
@@ -414,7 +417,7 @@ export const ko: Catalogue = {
   "run.auth.waiting":
     "에이전트에 로그인하는 중… 이미 로그인한 상태여도 약 1분 정도 걸릴 수 있습니다.",
   "run.idle.waiting":
-    "다음 메시지를 기다리는 중… 다음 답변이 빠르도록 세션을 열어 둡니다.",
+    "답변이 끝났습니다. 준비되면 다음 메시지를 보내세요 — 다음 답변이 빠르도록 세션을 열어 둡니다.",
   "run.retriableLeak.retrying": "에이전트 연결이 답변 중간에 끊겼습니다. 다시 시도하는 중…",
   "run.retriableLeak.afterTools":
     "도구 실행 후 에이전트 연결이 끊겼습니다. 이어서 보내 계속하세요 — 도구는 다시 실행하지 않았습니다.",

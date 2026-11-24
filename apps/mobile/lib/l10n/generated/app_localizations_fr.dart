@@ -911,6 +911,13 @@ class AppLocalizationsFr extends AppLocalizations {
       'Envoi quand l’agent aura fini cette réponse';
 
   @override
+  String get taskComposerSessionWorking => 'En cours…';
+
+  @override
+  String get taskComposerSessionReady =>
+      'Prêt — envoyez quand vous voulez ; la session reste ouverte';
+
+  @override
   String get runPlanReviewImplement => 'Mettre en œuvre le plan';
 
   @override
@@ -1061,7 +1068,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get runIdleWaiting =>
-      'En attente de votre prochain message… La session reste ouverte pour que la prochaine réponse soit rapide.';
+      'Réponse terminée. Envoyez un autre message quand vous voulez — la session reste ouverte pour que la prochaine réponse soit rapide.';
 
   @override
   String get runRetriableLeakRetrying =>
@@ -1669,7 +1676,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get statusWorking => 'En cours';
 
   @override
-  String get statusIdle => 'Inactif';
+  String get statusIdle => 'Prêt';
 
   @override
   String get statusStopped => 'Arrêté';

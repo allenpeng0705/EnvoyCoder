@@ -220,6 +220,9 @@ export const ja: Catalogue = {
   "task.plan.progress": "プラン · {done} / {total}",
   "task.plan.priority.high": "高",
   "task.composer.queueStatus": "エージェントがこの返答を終えたら送信します",
+  "task.composer.session.working": "作業中…",
+  "task.composer.session.ready": "準備完了 — いつでも送信できます；セッションは開いたままです",
+  "task.composer.session.ready.aria": "返信が終わりました；セッションを開いたままにして素早く続けられます",
   "task.tool.bucket.read": "読み取り",
   "task.tool.bucket.edit": "編集",
   "task.tool.bucket.shell": "シェル",
@@ -398,7 +401,7 @@ export const ja: Catalogue = {
   "status.queued": "開始待ち",
   "status.running": "実行中",
   "status.needsAttention": "あなたの回答待ち",
-  "status.idle": "待機",
+  "status.idle": "準備完了",
   "status.done": "完了",
   "status.failed": "エラーで停止",
   "status.cancelled": "停止",
@@ -414,7 +417,7 @@ export const ja: Catalogue = {
   "run.auth.waiting":
     "エージェントにサインインしています…すでにログイン済みでも、約1分かかることがあります。",
   "run.idle.waiting":
-    "次のメッセージを待っています…セッションを開いたままにして、次の返信を速くします。",
+    "返信が終わりました。準備ができたら次のメッセージを送ってください — セッションを開いたままにして、次の返信を速くします。",
   "run.retriableLeak.retrying": "エージェントの接続が返信の途中で切れました。再試行しています…",
   "run.retriableLeak.afterTools":
     "ツール実行後にエージェントの接続が切れました。続きはフォローアップを送ってください — ツールは再実行していません。",

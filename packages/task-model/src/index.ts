@@ -356,7 +356,7 @@ export function statusLabel(status: TaskStatus): string {
     case "needs-attention":
       return "Needs your answer";
     case "idle":
-      return "Idle";
+      return "Ready";
     case "done":
       return "Finished";
     case "failed":

@@ -1989,12 +1989,14 @@ button.explorer__change:hover {
 }
 
 /* The measure, on both states: a transcript that runs the full width of a 27-inch display is the
-   other half of "hard to read". */
+   other half of "hard to read". Start-aligned (not centered) so the composer card stays under the
+   chat column when the pane widens — margin-inline:auto floated both mid-pane and fought the
+   left-led header. */
 .transcript__list,
 .transcript__empty,
 .approval {
   max-width: var(--content-max-width);
-  margin-inline: auto;
+  margin-inline: 0;
 }
 
 .transcript__empty {
@@ -2003,7 +2005,7 @@ button.explorer__change:hover {
 }
 
 .transcript__loading {
-  margin: var(--space-4) auto;
+  margin: var(--space-4) 0;
   max-width: var(--content-max-width);
   color: var(--foreground-muted);
   font-size: var(--font-size-sm);
@@ -2075,7 +2077,7 @@ button.explorer__change:hover {
 
 .plan-card {
   max-width: var(--content-max-width);
-  margin-inline: auto;
+  margin-inline: 0;
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border);
   border-left: 3px solid var(--status-dot-running);
@@ -2353,7 +2355,8 @@ button.explorer__change:hover {
   display: flex;
   flex-direction: column;
   max-width: var(--content-max-width);
-  margin-inline: auto;
+  margin-inline: 0;
+  width: 100%;
   padding: var(--space-2) var(--space-2) var(--space-1);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
@@ -2363,44 +2366,62 @@ button.explorer__change:hover {
     box-shadow var(--motion-pop) var(--motion-ease);
 }
 
-.composer__queue-status {
-  margin: 0 0 var(--space-2);
-  padding: 0 var(--space-1);
+.pane__status-label {
   font-size: var(--font-size-sm);
+  font-weight: 600;
   color: var(--foreground-muted);
+  line-height: 1.3;
 }
 
-.composer__working-peek {
+.composer__session-status {
   display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1) var(--space-2);
-  margin: 0 0 var(--space-1);
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-2);
   padding: 0 var(--space-1);
   overflow: hidden;
 }
 
-.composer__working-peek-summary {
+.composer__session-status-lead {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
   margin: 0;
   font-size: var(--font-size-sm);
-  font-weight: 600;
   line-height: 1.35;
+  overflow: hidden;
+}
+
+.composer__session-status-phase {
+  font-weight: 600;
   color: var(--foreground);
+  white-space: nowrap;
+}
+
+.composer__session-status--working .composer__session-status-phase {
+  color: var(--foreground);
+}
+
+.composer__session-status--ready .composer__session-status-phase {
+  color: var(--foreground-muted);
+  font-weight: 600;
+}
+
+.composer__session-status-detail {
+  min-width: 0;
+  color: var(--foreground-muted);
+  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.composer__working-peek-text {
+.composer__queue-status {
   margin: 0;
-  max-height: 3.2rem;
-  overflow: hidden;
   font-size: var(--font-size-sm);
-  line-height: 1.4;
   color: var(--foreground-muted);
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 .pane__posture {

@@ -220,6 +220,9 @@ export const de: Catalogue = {
   "task.plan.progress": "Plan · {done} von {total}",
   "task.plan.priority.high": "Hoch",
   "task.composer.queueStatus": "Wird gesendet, wenn der Agent diese Antwort beendet",
+  "task.composer.session.working": "Arbeitet…",
+  "task.composer.session.ready": "Bereit — senden, wenn du willst; Sitzung bleibt offen",
+  "task.composer.session.ready.aria": "Antwort fertig; Sitzung offen für eine schnelle Folge",
   "task.tool.bucket.read": "Lesen",
   "task.tool.bucket.edit": "Bearbeiten",
   "task.tool.bucket.shell": "Shell",
@@ -414,7 +417,7 @@ export const de: Catalogue = {
   "run.auth.waiting":
     "Anmeldung beim Agenten… Das kann etwa eine Minute dauern, auch wenn du bereits angemeldet bist.",
   "run.idle.waiting":
-    "Warte auf deine nächste Nachricht… Die Sitzung bleibt offen, damit die nächste Antwort schnell kommt.",
+    "Antwort fertig. Sende eine weitere Nachricht, wenn du bereit bist — die Sitzung bleibt offen, damit die nächste Antwort schnell kommt.",
   "run.retriableLeak.retrying": "Die Verbindung des Agenten ist mitten in der Antwort abgebrochen. Erneuter Versuch…",
   "run.retriableLeak.afterTools":
     "Die Verbindung des Agenten ist nach ausgeführten Tools abgebrochen. Sende eine Folge, um fortzufahren — Tools wurden nicht erneut ausgeführt.",

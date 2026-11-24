@@ -1668,6 +1668,18 @@ abstract class AppLocalizations {
   /// **'Will send when the agent finishes this reply'**
   String get runComposerQueueStatus;
 
+  /// task.composer.session.working
+  ///
+  /// In en, this message translates to:
+  /// **'Working…'**
+  String get taskComposerSessionWorking;
+
+  /// task.composer.session.ready
+  ///
+  /// In en, this message translates to:
+  /// **'Ready — send when you want; session stays open'**
+  String get taskComposerSessionReady;
+
   /// task.planReview.implement
   ///
   /// In en, this message translates to:
@@ -1911,7 +1923,7 @@ abstract class AppLocalizations {
   /// run.idle.waiting
   ///
   /// In en, this message translates to:
-  /// **'Waiting for your next message… Session stays open so the next reply is fast.'**
+  /// **'Reply finished. Send another message whenever you’re ready — the session stays open so the next reply is fast.'**
   String get runIdleWaiting;
 
   /// run.retriableLeak.retrying
@@ -2871,7 +2883,7 @@ abstract class AppLocalizations {
   /// statusidle — Reused from desktop status.idle
   ///
   /// In en, this message translates to:
-  /// **'Idle'**
+  /// **'Ready'**
   String get statusIdle;
 
   /// statusstopped — Reused from desktop status.cancelled

@@ -343,7 +343,8 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
   const t = useT();
   const { setExplorerWidth } = usePanelWidths();
   const { task, project, events } = props;
-  const running = props.runLive;
+  /** Session still attached (incl. Cursor idle keep-alive) — follow-ups use onSend, not startRun. */
+  const sessionLive = props.runLive;
   // File tabs live in WorkArea; the composer stays mounted so approvals and send
   // remain reachable while a file is open (chat workflow UX).
   const [openRequest, setOpenRequest] = useState<FileOpenRequest | undefined>(undefined);
@@ -383,6 +384,15 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
       afterCount: number;
     }[]
   >([]);
+  /**
+   * A model turn is in flight, or a follow-up was just queued while Cursor idle keep-alive still
+   * reports `idle` (status flips to `running` a beat later). Idle alone must not show Working /
+   * “Will send when the agent finishes” over a finished reply.
+   */
+  const turnBusy =
+    sessionLive &&
+    (task.status === "running" || (task.status === "idle" && localEchoes.length > 0));
+  const running = sessionLive;
   /** A mode the user has just chosen, before the task's saved copy comes back. */
   const [pickedMode, setPickedMode] = useState<string | undefined>(undefined);
   /** A model the user has just chosen, for the same reason and with the same lifetime. */
@@ -923,14 +933,19 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
         <div className="pane__title-group">
           <h1 className="pane__title">{task.title || t("task.untitled")}</h1>
           <div className="pane__meta">
-            {/* Status as a colour only — same dots as the rail. Agent and model are link-style text,
-                not chips: their lengths change with every task, and pills make a short name and a long
-                id look like two different controls. */}
+            {/* Dot + short word (Working / Ready / Needs you) so state is scannable without Steps.
+                Agent and model stay link-style text, not chips. */}
             <span
               className={`dot ${dotClassFor(task.status)}`}
-              aria-label={t(statusKey(task.status))}
-              title={t(statusKey(task.status))}
+              aria-hidden
             />
+            <span
+              className="pane__status-label"
+              data-testid="pane-status-label"
+              title={t(statusKey(task.status))}
+            >
+              {t(statusKey(task.status))}
+            </span>
             {props.onChangeHarness !== undefined && props.harnesses !== undefined ? (
               <AgentPicker
                 current={task.harness}
@@ -1270,7 +1285,8 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
             </div>
           ) : null}
           {/* Field stays mounted under takeover so a draft survives the pause (polish §1). */}
-          {running && !approvalOpen && !takeoverActive
+          {/* One session strip: Working (turn in flight) or Ready (Cursor keep-alive). Not a second dock. */}
+          {turnBusy && !approvalOpen && !takeoverActive
             ? (() => {
                 const liveSteps = segmentTranscriptSteps(displayEntries, {
                   runLive: true,
@@ -1281,55 +1297,75 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                 const liveSegment = liveSteps[liveSteps.length - 1];
                 const peekSource = liveSegment?.entries ?? [];
                 const stream = stepsLiveStreamText(peekSource);
-                // One-line peek: summary only. The muted stream dump competed with
-                // the queue line and repeated what expanded Steps already holds.
                 const { summary } = workingPeekParts(stream);
                 const toolHeadline = liveToolsHeadline(peekSource, t);
                 const toolFallback =
                   liveSegment !== undefined && stepsHasTools(liveSegment)
                     ? toolGroupSummary(t, liveSegment.counts)
                     : undefined;
+                const detail =
+                  toolHeadline ?? summary ?? toolFallback ?? undefined;
                 return (
-                  <>
-                    <div
-                      className="composer__working-peek"
-                      role="status"
-                      data-testid="composer-working-peek"
-                      aria-label={t("task.composer.workingPeek.aria")}
+                  <div
+                    className="composer__session-status composer__session-status--working"
+                    role="status"
+                    data-testid="composer-session-status-working"
+                    aria-label={t("task.composer.workingPeek.aria")}
+                  >
+                    <p
+                      className="composer__session-status-lead"
+                      data-testid="composer-working-peek-summary"
                     >
-                      <p
-                        className="composer__working-peek-summary"
-                        data-testid="composer-working-peek-summary"
-                      >
-                        {/* Same priority as collapsed Steps: live tools beat a stale thought line. */}
-                        {toolHeadline ?? summary ?? toolFallback ?? t("task.steps.working")}
-                      </p>
-                      {peekSource.some((entry) => {
-                        const names =
-                          entry.kind === "tool"
-                            ? [entry.name]
-                            : entry.kind === "tools"
-                              ? entry.tools.map((tool) => tool.name)
-                              : [];
-                        return names.some((name) =>
-                          /helper|spawn|child|subagent/i.test(name),
-                        );
-                      }) ? (
-                        <span className="composer__helper-chip" data-testid="composer-helper-chip">
-                          {t("task.composer.helper")}
-                        </span>
+                      <span className="composer__session-status-phase">
+                        {t("task.composer.session.working")}
+                      </span>
+                      {detail !== undefined ? (
+                        <span className="composer__session-status-detail">{detail}</span>
                       ) : null}
-                    </div>
+                    </p>
+                    {peekSource.some((entry) => {
+                      const names =
+                        entry.kind === "tool"
+                          ? [entry.name]
+                          : entry.kind === "tools"
+                            ? entry.tools.map((tool) => tool.name)
+                            : [];
+                      return names.some((name) =>
+                        /helper|spawn|child|subagent/i.test(name),
+                      );
+                    }) ? (
+                      <span className="composer__helper-chip" data-testid="composer-helper-chip">
+                        {t("task.composer.helper")}
+                      </span>
+                    ) : null}
                     <p
                       className="composer__queue-status"
                       data-testid="composer-queue-status"
                     >
                       {t("task.composer.queueStatus")}
                     </p>
-                  </>
+                  </div>
                 );
               })()
             : null}
+          {sessionLive &&
+          task.status === "idle" &&
+          !turnBusy &&
+          !approvalOpen &&
+          !takeoverActive ? (
+            <div
+              className="composer__session-status composer__session-status--ready"
+              role="status"
+              data-testid="composer-session-status-ready"
+              aria-label={t("task.composer.session.ready.aria")}
+            >
+              <p className="composer__session-status-lead">
+                <span className="composer__session-status-phase">
+                  {t("task.composer.session.ready")}
+                </span>
+              </p>
+            </div>
+          ) : null}
           {!takeoverActive && commandMatches.length > 0 ? (
             <SlashCommandList
               commands={commandMatches}
@@ -1405,7 +1441,7 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
             placeholder={
               approvalOpen
                 ? t("task.composer.placeholder.approval")
-                : running
+                : sessionLive
                   ? t("task.composer.placeholder.running")
                   : t("task.composer.placeholder.idle")
             }
@@ -1582,13 +1618,15 @@ export function TaskPane(props: TaskPaneProps): JSX.Element {
                 data-hint={
                   approvalOpen
                     ? t("task.composer.submit.blocked")
-                    : running
+                    : turnBusy
                       ? followUpMustQueue(task.harness)
                         ? t("task.composer.queueStatus")
                         : t("task.composer.send.queued")
-                      : canResume
-                        ? t("task.composer.resume")
-                        : t("task.composer.start")
+                      : sessionLive && task.status === "idle"
+                        ? t("task.composer.send")
+                        : canResume
+                          ? t("task.composer.resume")
+                          : t("task.composer.start")
                 }
               >
                 <svg

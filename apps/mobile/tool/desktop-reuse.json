@@ -19,6 +19,8 @@
   "settingsApprovalsUnsupported": "settings.approvals.unsupported",
   "settingsApprovalsUnknown": "settings.approvals.unknown",
   "runComposerQueueStatus": "task.composer.queueStatus",
+  "taskComposerSessionWorking": "task.composer.session.working",
+  "taskComposerSessionReady": "task.composer.session.ready",
   "runYouSteered": "task.delivered.steered",
   "runYouQueued": "task.delivered.queued",
   "settingsTranscripts": "settings.transcripts.title",

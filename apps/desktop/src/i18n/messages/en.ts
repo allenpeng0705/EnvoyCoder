@@ -214,6 +214,9 @@ export const en = {
     "The agent works in {cwd}. Describe what you want below — tool calls, approvals, and diffs appear here.",
   "task.transcript.loading": "Loading…",
   "task.composer.queueStatus": "Will send when the agent finishes this reply",
+  "task.composer.session.working": "Working…",
+  "task.composer.session.ready": "Ready — send when you want; session stays open",
+  "task.composer.session.ready.aria": "Reply finished; session open for a fast follow-up",
   "task.approval.takeover.aria": "The agent needs your answer",
   "task.approval.pendingInComposer": "Answer in the composer below",
   "task.tool.bucket.read": "Read",
@@ -541,7 +544,7 @@ export const en = {
   "status.queued": "Waiting to start",
   "status.running": "Working",
   "status.needsAttention": "Needs your answer",
-  "status.idle": "Idle",
+  "status.idle": "Ready",
   "status.done": "Finished",
   "status.failed": "Stopped with an error",
   "status.cancelled": "Stopped",
@@ -559,7 +562,7 @@ export const en = {
     "Signing in to the agent… This can take about a minute, even when you are already logged in.",
   // Auth-tax keep-alive: run stays live after end_turn so the next message skips authenticate.
   "run.idle.waiting":
-    "Waiting for your next message… Session stays open so the next reply is fast.",
+    "Reply finished. Send another message whenever you’re ready — the session stays open so the next reply is fast.",
   "run.retriableLeak.retrying": "The agent’s connection dropped mid-reply. Retrying…",
   "run.retriableLeak.afterTools":
     "The agent’s connection dropped after tools ran. Send a follow-up to continue — tools were not re-run.",
