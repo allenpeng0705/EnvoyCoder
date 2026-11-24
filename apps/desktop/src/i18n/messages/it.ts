@@ -416,9 +416,18 @@ export const it: Catalogue = {
   "run.idle.waiting":
     "In attesa del prossimo messaggio… La sessione resta aperta così la risposta successiva è veloce.",
   "run.retriableLeak.retrying": "La connessione dell’agente si è interrotta a metà risposta. Nuovo tentativo…",
+  "run.retriableLeak.afterTools":
+    "La connessione dell’agente si è interrotta dopo l’esecuzione degli strumenti. Invia un seguito per continuare — gli strumenti non sono stati rieseguiti.",
   "run.retriableLeak.failed": "La connessione dell’agente si è interrotta a metà risposta. Invia di nuovo per riprovare.",
   "run.retriableLeak.failed.queued": "La connessione dell’agente si è interrotta a metà risposta. 1 seguito in coda non è stato inviato. Invia di nuovo per riprovare.",
   "run.retriableLeak.failed.queued.many": "La connessione dell’agente si è interrotta a metà risposta. {count} seguiti in coda non sono stati inviati. Invia di nuovo per riprovare.",
+  "run.toolRunner.retrying": "Uno strumento è fallito per un attimo. Nuovo tentativo…",
+  "run.toolRunner.failed":
+    "Uno strumento ha avuto un’interruzione temporanea. Invia di nuovo per riprovare — o cambia agente per evitare il tool runner di Cursor.",
+  "run.toolRunner.failed.queued":
+    "Uno strumento ha avuto un’interruzione temporanea. 1 seguito in coda non è stato inviato. Invia di nuovo — o cambia agente.",
+  "run.toolRunner.failed.queued.many":
+    "Uno strumento ha avuto un’interruzione temporanea. {count} seguiti in coda non sono stati inviati. Invia di nuovo — o cambia agente.",
   "run.diff.one": "1 file modificato.",
   "run.diff.many": "{count} file modificati.",
   "run.handoff": "Passato a {role}.",
@@ -435,6 +444,8 @@ export const it: Catalogue = {
   "run.tools.summary.two": "{a} e {b}",
   "run.tools.summary.many": "{head} e {last}",
   "run.tools.summary.comma": ", ",
+  "run.tools.output.none":
+    "Questo agente non ha condiviso alcun output. I risultati di shell e lettura possono restare solo nell’agente.",
   "run.context": "Contesto pieno al {percent}%.",
 
   /* ── the status line, and the one place the mesh is always visible ── */

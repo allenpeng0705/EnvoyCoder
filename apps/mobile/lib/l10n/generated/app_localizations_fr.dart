@@ -1068,6 +1068,27 @@ class AppLocalizationsFr extends AppLocalizations {
       'La connexion de l’agent s’est interrompue au milieu de la réponse. Nouvel essai…';
 
   @override
+  String get runRetriableLeakAfterTools =>
+      'La connexion de l’agent s’est interrompue après l’exécution des outils. Envoyez une suite pour continuer — les outils n’ont pas été relancés.';
+
+  @override
+  String get runToolRunnerRetrying =>
+      'Un outil a brièvement échoué. Nouvel essai…';
+
+  @override
+  String get runToolRunnerFailed =>
+      'Un outil a subi une panne temporaire. Renvoyez pour réessayer — ou changez d’agent pour éviter l’exécuteur d’outils de Cursor.';
+
+  @override
+  String get runToolRunnerFailedQueued =>
+      'Un outil a subi une panne temporaire. 1 suite en file n’a pas été envoyée. Renvoyez — ou changez d’agent.';
+
+  @override
+  String runToolRunnerFailedQueuedMany(int count) {
+    return 'Un outil a subi une panne temporaire. $count suites en file n’ont pas été envoyées. Renvoyez — ou changez d’agent.';
+  }
+
+  @override
   String get runRetriableLeakFailed =>
       'La connexion de l’agent s’est interrompue au milieu de la réponse. Renvoyez pour réessayer.';
 

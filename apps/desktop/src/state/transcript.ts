@@ -344,6 +344,8 @@ export function buildTranscript(events: readonly RunEvent[]): Transcript {
             event.status === "failed"
               ? "error"
               : notice.key === "run.retriableLeak.retrying" ||
+                  notice.key === "run.retriableLeak.afterTools" ||
+                  notice.key === "run.toolRunner.retrying" ||
                   notice.key === "run.auth.waiting" ||
                   notice.key === "run.idle.waiting"
                 ? "warn"

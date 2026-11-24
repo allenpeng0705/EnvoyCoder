@@ -204,6 +204,87 @@ describe("Cursor ACP retriable stream leak", () => {
       ),
     ).toBe(false);
   });
+
+  it("does not same-prompt retry when tools already settled then a leak-only chunk arrives", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "please leak-after-tools this" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const ended = kinds(b.events, "run.ended")[0];
+    expect(ended && ended.kind === "run.ended" ? ended.status : "").toBe("done");
+    expect(said(b.events, "SHOULD_NOT_RETRY")).toBe(false);
+    expect(said(b.events, "Service temporarily unavailable")).toBe(false);
+    expect(
+      kinds(b.events, "run.status").some(
+        (event) =>
+          event.kind === "run.status" &&
+          typeof event.note === "string" &&
+          event.note.includes("tools were not re-run"),
+      ),
+    ).toBe(true);
+    expect(
+      kinds(b.events, "run.status").some(
+        (event) =>
+          event.kind === "run.status" &&
+          typeof event.note === "string" &&
+          event.note.includes("Retrying"),
+      ),
+    ).toBe(false);
+    expect(
+      kinds(b.events, "run.tool").some(
+        (event) => event.kind === "run.tool" && event.status === "completed",
+      ),
+    ).toBe(true);
+  });
+
+  it("joins ACP content arrays into one assistant fragment", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "please content-array this" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    expect(said(b.events, "hello from array")).toBe(true);
+  });
+
+  it("records Cursor rawOutput stdout when content is empty", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "please tool-raw-stdout this" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end");
+
+    const tools = kinds(b.events, "run.tool").filter(
+      (event) => event.kind === "run.tool" && event.status === "completed",
+    );
+    expect(
+      tools.some(
+        (event) =>
+          event.kind === "run.tool" &&
+          JSON.stringify(event.output ?? "").includes("hi from rawOutput"),
+      ),
+    ).toBe(true);
+    expect(said(b.events, "saw raw stdout")).toBe(true);
+  });
+
+  it("retries when a tool completes with Service temporarily unavailable and no answer", async () => {
+    const b = await bench();
+    await b.manager.start({ taskId: b.taskId, prompt: "please tool-blip this" });
+    await b.until((events) => kinds(events, "run.ended").length === 1, "the run to end after tool retry");
+
+    const ended = kinds(b.events, "run.ended")[0];
+    expect(ended && ended.kind === "run.ended" ? ended.status : "").toBe("done");
+    expect(
+      kinds(b.events, "run.tool").some(
+        (event) => event.kind === "run.tool" && event.status === "failed",
+      ),
+    ).toBe(true);
+    expect(
+      kinds(b.events, "run.status").some(
+        (event) =>
+          event.kind === "run.status" &&
+          typeof event.note === "string" &&
+          event.note.includes("briefly failed"),
+      ),
+    ).toBe(true);
+    expect(said(b.events, "tool recovered")).toBe(true);
+  });
 });
 
 describe("one run, end to end", () => {

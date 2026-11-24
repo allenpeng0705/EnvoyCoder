@@ -1920,6 +1920,36 @@ abstract class AppLocalizations {
   /// **'The agent’s connection dropped mid-reply. Retrying…'**
   String get runRetriableLeakRetrying;
 
+  /// run.retriableLeak.afterTools
+  ///
+  /// In en, this message translates to:
+  /// **'The agent’s connection dropped after tools ran. Send a follow-up to continue — tools were not re-run.'**
+  String get runRetriableLeakAfterTools;
+
+  /// run.toolRunner.retrying
+  ///
+  /// In en, this message translates to:
+  /// **'A tool briefly failed. Retrying…'**
+  String get runToolRunnerRetrying;
+
+  /// run.toolRunner.failed
+  ///
+  /// In en, this message translates to:
+  /// **'A tool hit a temporary outage. Send again to retry — or switch agent to avoid Cursor’s tool runner.'**
+  String get runToolRunnerFailed;
+
+  /// run.toolRunner.failed.queued
+  ///
+  /// In en, this message translates to:
+  /// **'A tool hit a temporary outage. 1 queued follow-up was not sent. Send again to retry — or switch agent.'**
+  String get runToolRunnerFailedQueued;
+
+  /// run.toolRunner.failed.queued.many
+  ///
+  /// In en, this message translates to:
+  /// **'A tool hit a temporary outage. {count} queued follow-ups were not sent. Send again to retry — or switch agent.'**
+  String runToolRunnerFailedQueuedMany(int count);
+
   /// run.retriableLeak.failed
   ///
   /// In en, this message translates to:

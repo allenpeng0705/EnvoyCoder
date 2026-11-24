@@ -412,9 +412,17 @@ export const zh: Catalogue = {
   "run.auth.waiting": "正在登录智能体…即使您已经登录，这也可能需要大约一分钟。",
   "run.idle.waiting": "正在等待您的下一条消息…会话保持打开，以便下一次回复更快。",
   "run.retriableLeak.retrying": "智能体连接在回复中断开。正在重试…",
+  "run.retriableLeak.afterTools":
+    "智能体连接在工具运行后断开。请发送后续消息以继续 — 不会重新运行工具。",
   "run.retriableLeak.failed": "智能体连接在回复中断开。请再发送一次以重试。",
   "run.retriableLeak.failed.queued": "智能体连接在回复中断开。有 1 条排队的后续消息未发送。请再发送一次以重试。",
   "run.retriableLeak.failed.queued.many": "智能体连接在回复中断开。有 {count} 条排队的后续消息未发送。请再发送一次以重试。",
+  "run.toolRunner.retrying": "工具短暂失败。正在重试…",
+  "run.toolRunner.failed": "工具遇到临时中断。请再发送一次以重试 — 或切换智能体以避免 Cursor 的工具运行器。",
+  "run.toolRunner.failed.queued":
+    "工具遇到临时中断。有 1 条排队的后续消息未发送。请再发送一次以重试 — 或切换智能体。",
+  "run.toolRunner.failed.queued.many":
+    "工具遇到临时中断。有 {count} 条排队的后续消息未发送。请再发送一次以重试 — 或切换智能体。",
   "run.diff.one": "1 个文件已更改。",
   "run.diff.many": "{count} 个文件已更改。",
   "run.handoff": "已交接给 {role}。",
@@ -431,6 +439,7 @@ export const zh: Catalogue = {
   "run.tools.summary.two": "{a}和{b}",
   "run.tools.summary.many": "{head}，以及{last}",
   "run.tools.summary.comma": "，",
+  "run.tools.output.none": "此智能体未共享输出。Shell 和读取结果可能只留在智能体内部。",
   "run.context": "上下文已用 {percent}%。",
 
   /* ── the status line, and the one place the mesh is always visible ── */

@@ -202,10 +202,16 @@ const Map<String, DaemonRefRenderer> daemonRefRenderers = {
   'run.auth.waiting': DaemonRefRenderer('runAuthWaiting', _runAuthWaiting),
   'run.idle.waiting': DaemonRefRenderer('runIdleWaiting', _runIdleWaiting),
   'run.retriableLeak.retrying': DaemonRefRenderer('runRetriableLeakRetrying', _runRetriableLeakRetrying),
+  'run.retriableLeak.afterTools': DaemonRefRenderer('runRetriableLeakAfterTools', _runRetriableLeakAfterTools),
   'run.retriableLeak.failed': DaemonRefRenderer('runRetriableLeakFailed', _runRetriableLeakFailed),
   'run.retriableLeak.failed.queued': DaemonRefRenderer('runRetriableLeakFailedQueued', _runRetriableLeakFailedQueued),
   'run.retriableLeak.failed.queued.many':
       DaemonRefRenderer('runRetriableLeakFailedQueuedMany', _runRetriableLeakFailedQueuedMany),
+  'run.toolRunner.retrying': DaemonRefRenderer('runToolRunnerRetrying', _runToolRunnerRetrying),
+  'run.toolRunner.failed': DaemonRefRenderer('runToolRunnerFailed', _runToolRunnerFailed),
+  'run.toolRunner.failed.queued': DaemonRefRenderer('runToolRunnerFailedQueued', _runToolRunnerFailedQueued),
+  'run.toolRunner.failed.queued.many':
+      DaemonRefRenderer('runToolRunnerFailedQueuedMany', _runToolRunnerFailedQueuedMany),
 };
 
 // One tear-off per sentence rather than a lookup by name: Dart has no reflection, so the compiler is
@@ -329,6 +335,9 @@ String _runIdleWaiting(AppLocalizations l10n, Map<String, Object> _) => l10n.run
 String _runRetriableLeakRetrying(AppLocalizations l10n, Map<String, Object> _) =>
     l10n.runRetriableLeakRetrying;
 
+String _runRetriableLeakAfterTools(AppLocalizations l10n, Map<String, Object> _) =>
+    l10n.runRetriableLeakAfterTools;
+
 String _runRetriableLeakFailed(AppLocalizations l10n, Map<String, Object> _) =>
     l10n.runRetriableLeakFailed;
 
@@ -339,4 +348,18 @@ String _runRetriableLeakFailedQueuedMany(AppLocalizations l10n, Map<String, Obje
   final count = values['count'];
   final n = count is num ? count.toInt() : int.tryParse('$count') ?? 0;
   return l10n.runRetriableLeakFailedQueuedMany(n);
+}
+
+String _runToolRunnerRetrying(AppLocalizations l10n, Map<String, Object> _) =>
+    l10n.runToolRunnerRetrying;
+
+String _runToolRunnerFailed(AppLocalizations l10n, Map<String, Object> _) => l10n.runToolRunnerFailed;
+
+String _runToolRunnerFailedQueued(AppLocalizations l10n, Map<String, Object> _) =>
+    l10n.runToolRunnerFailedQueued;
+
+String _runToolRunnerFailedQueuedMany(AppLocalizations l10n, Map<String, Object> values) {
+  final count = values['count'];
+  final n = count is num ? count.toInt() : int.tryParse('$count') ?? 0;
+  return l10n.runToolRunnerFailedQueuedMany(n);
 }

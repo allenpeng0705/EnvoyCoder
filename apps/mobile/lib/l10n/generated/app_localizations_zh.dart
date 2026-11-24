@@ -1008,6 +1008,26 @@ class AppLocalizationsZh extends AppLocalizations {
   String get runRetriableLeakRetrying => '智能体连接在回复中断开。正在重试…';
 
   @override
+  String get runRetriableLeakAfterTools =>
+      '智能体连接在工具运行后断开。请发送后续消息以继续 — 不会重新运行工具。';
+
+  @override
+  String get runToolRunnerRetrying => '工具短暂失败。正在重试…';
+
+  @override
+  String get runToolRunnerFailed =>
+      '工具遇到临时中断。请再发送一次以重试 — 或切换智能体以避免 Cursor 的工具运行器。';
+
+  @override
+  String get runToolRunnerFailedQueued =>
+      '工具遇到临时中断。有 1 条排队的后续消息未发送。请再发送一次以重试 — 或切换智能体。';
+
+  @override
+  String runToolRunnerFailedQueuedMany(int count) {
+    return '工具遇到临时中断。有 $count 条排队的后续消息未发送。请再发送一次以重试 — 或切换智能体。';
+  }
+
+  @override
   String get runRetriableLeakFailed => '智能体连接在回复中断开。请再发送一次以重试。';
 
   @override

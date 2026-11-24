@@ -14,6 +14,7 @@
  * `test/asking-control.test.ts`.
  */
 
+import { familyAskingControl } from "@envoymesh/agent-catalog"
 import type { HarnessId } from "@envoydev/protocol"
 
 export type AskingControl =
@@ -30,7 +31,16 @@ export type AskingControl =
  * `policy` wins when both exist (Envoy Harness also lists Full access as unattended): Off only
  * flips `autoRun`, and leaves the sandbox the user picked.
  */
+/** Family contract slice (FH-P2-A) — shared featured ids only. */
+function familyAskingOverride(harness: HarnessId): AskingControl | undefined {
+  const family = familyAskingControl(harness)
+  if (family === "catalog-acp") return undefined
+  return family as AskingControl
+}
+
 export function askingControl(harness: HarnessId): AskingControl {
+  const override = familyAskingOverride(harness)
+  if (override !== undefined) return override
   switch (harness) {
     case "envoy-harness":
       return "policy"

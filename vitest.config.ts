@@ -43,6 +43,10 @@ export default defineConfig({
       { find: "@envoydev/work-model", replacement: `${here}packages/work-model/src/index.ts` },
       { find: "@envoydev/agent-catalog", replacement: `${here}packages/agent-catalog/src/index.ts` },
       {
+        find: "@envoymesh/agent-catalog",
+        replacement: `${here}../envoy-harness/packages/agent-catalog/src/index.ts`,
+      },
+      {
         find: "@envoydev/window-pairing-token",
         replacement: `${here}../EnvoyMesh/packages/api/dist/pairing-token.js`,
       },

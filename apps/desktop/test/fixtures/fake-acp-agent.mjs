@@ -94,6 +94,20 @@
  * `\n\nError: RetriableError: WritableIterable is closed` — the host must strip the trailer and
  * finish as done without retrying (a retry would duplicate the answer).
  *
+ * Prompt containing `leak-after-tools` models tools completing, then a leak-only assistant chunk
+ * with no usable text — the host must **not** same-prompt retry (would re-run Shell). A second
+ * prompt in the same session answers `SHOULD_NOT_RETRY` so a mistaken retry is visible.
+ *
+ * Prompt containing `content-array` streams an assistant chunk whose `content` is an **array** of
+ * text blocks (ACP dialect) — the host must join them into one transcript fragment.
+ *
+ * Prompt containing `tool-blip` models a Shell tool that “completes” with
+ * `Service temporarily unavailable` and no assistant answer — the host must mark the tool failed
+ * and same-session re-prompt; the second prompt succeeds with real stdout.
+ *
+ * Prompt containing `tool-raw-stdout` models Cursor’s dialect: `content` empty, stdout on
+ * `rawOutput: { stdout, stderr, exitCode }` — the host must surface that as tool output.
+ *
  * The protocol shapes are the ones the real agent emits, taken from
  * `../deepseek-harness/packages/acp/acp/src/updates.ts`. The mode ids and the refusal sentence are
  * `envoy-harness`'s own (`../envoy-harness/packages/envoy-harness/src/protocol/acp-params.ts:352-375`),
@@ -293,6 +307,8 @@ const update = (payload) => notify("session/update", { sessionId, update: payloa
 let permissionWaiter = null;
 /** How many `leak-stream` prompts have been answered (first leaks; later are clean). */
 let leakStreamCount = 0;
+let leakAfterToolsCount = 0;
+let toolBlipCount = 0;
 
 function handlePrompt(id, params) {
   const text = (params?.prompt ?? [])
@@ -347,6 +363,130 @@ function handlePrompt(id, params) {
       reportMode: text.includes("report-mode"),
       askAgain: text.includes("approve-twice"),
     };
+    return;
+  }
+
+  // Before the generic `tool` substring match — these prompts also contain "tool".
+  if (text.includes("tool-raw-stdout")) {
+    update({
+      sessionUpdate: "tool_call",
+      toolCallId: "call-raw",
+      title: "shell",
+      kind: "other",
+      status: "in_progress",
+      rawInput: { command: "echo hi" },
+    });
+    update({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "call-raw",
+      status: "completed",
+      content: [],
+      rawOutput: { stdout: "hi from rawOutput\n", stderr: "", exitCode: 0 },
+    });
+    update({
+      sessionUpdate: "agent_message_chunk",
+      messageId: "m-raw",
+      content: { type: "text", text: "saw raw stdout" },
+    });
+    ok(id, { stopReason: "end_turn" });
+    return;
+  }
+
+  if (text.includes("tool-blip")) {
+    toolBlipCount += 1;
+    if (toolBlipCount === 1) {
+      update({
+        sessionUpdate: "tool_call",
+        toolCallId: "call-blip",
+        title: "shell",
+        kind: "other",
+        status: "in_progress",
+        rawInput: { command: "ls" },
+      });
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "call-blip",
+        status: "completed",
+        content: [
+          {
+            type: "content",
+            content: { type: "text", text: "Service temporarily unavailable" },
+          },
+        ],
+      });
+      ok(id, { stopReason: "end_turn" });
+      return;
+    }
+    update({
+      sessionUpdate: "tool_call",
+      toolCallId: "call-blip-ok",
+      title: "shell",
+      kind: "other",
+      status: "in_progress",
+      rawInput: { command: "ls" },
+    });
+    update({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "call-blip-ok",
+      status: "completed",
+      content: [
+        { type: "content", content: { type: "text", text: "file-a\nfile-b" } },
+      ],
+    });
+    update({
+      sessionUpdate: "agent_message_chunk",
+      messageId: "m-blip-ok",
+      content: { type: "text", text: "tool recovered" },
+    });
+    ok(id, { stopReason: "end_turn" });
+    return;
+  }
+
+  if (text.includes("leak-after-tools")) {
+    leakAfterToolsCount += 1;
+    if (leakAfterToolsCount === 1) {
+      update({
+        sessionUpdate: "tool_call",
+        toolCallId: "call-leak",
+        title: "shell",
+        kind: "other",
+        status: "in_progress",
+        rawInput: { command: "ls" },
+      });
+      update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "call-leak",
+        status: "completed",
+        content: [{ type: "content", content: { type: "text", text: "ok" } }],
+      });
+      update({
+        sessionUpdate: "agent_message_chunk",
+        messageId: "m-leak-tools",
+        content: { type: "text", text: "Service temporarily unavailable" },
+      });
+      ok(id, { stopReason: "end_turn" });
+      return;
+    }
+    // Visible if the host wrongly same-prompt retries after tools settled.
+    update({
+      sessionUpdate: "agent_message_chunk",
+      messageId: "m-leak-tools-bad",
+      content: { type: "text", text: "SHOULD_NOT_RETRY" },
+    });
+    ok(id, { stopReason: "end_turn" });
+    return;
+  }
+
+  if (text.includes("content-array")) {
+    update({
+      sessionUpdate: "agent_message_chunk",
+      messageId: "m-arr",
+      content: [
+        { type: "text", text: "hello " },
+        { type: "text", text: "from array" },
+      ],
+    });
+    ok(id, { stopReason: promptStopReason() });
     return;
   }
 

@@ -344,6 +344,8 @@ class Transcript {
           final tone = status == 'failed'
               ? 'error'
               : (key == 'run.retriableLeak.retrying' ||
+                      key == 'run.retriableLeak.afterTools' ||
+                      key == 'run.toolRunner.retrying' ||
                       key == 'run.auth.waiting' ||
                       key == 'run.idle.waiting')
                   ? 'warn'

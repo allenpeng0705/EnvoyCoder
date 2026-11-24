@@ -1063,6 +1063,27 @@ class AppLocalizationsIt extends AppLocalizations {
       'La connessione dell’agente si è interrotta a metà risposta. Nuovo tentativo…';
 
   @override
+  String get runRetriableLeakAfterTools =>
+      'La connessione dell’agente si è interrotta dopo l’esecuzione degli strumenti. Invia un seguito per continuare — gli strumenti non sono stati rieseguiti.';
+
+  @override
+  String get runToolRunnerRetrying =>
+      'Uno strumento è fallito per un attimo. Nuovo tentativo…';
+
+  @override
+  String get runToolRunnerFailed =>
+      'Uno strumento ha avuto un’interruzione temporanea. Invia di nuovo per riprovare — o cambia agente per evitare il tool runner di Cursor.';
+
+  @override
+  String get runToolRunnerFailedQueued =>
+      'Uno strumento ha avuto un’interruzione temporanea. 1 seguito in coda non è stato inviato. Invia di nuovo — o cambia agente.';
+
+  @override
+  String runToolRunnerFailedQueuedMany(int count) {
+    return 'Uno strumento ha avuto un’interruzione temporanea. $count seguiti in coda non sono stati inviati. Invia di nuovo — o cambia agente.';
+  }
+
+  @override
   String get runRetriableLeakFailed =>
       'La connessione dell’agente si è interrotta a metà risposta. Invia di nuovo per riprovare.';
 

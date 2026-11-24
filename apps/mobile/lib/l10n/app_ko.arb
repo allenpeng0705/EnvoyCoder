@@ -577,6 +577,11 @@
   "runAuthWaiting": "에이전트에 로그인하는 중… 이미 로그인한 상태여도 약 1분 정도 걸릴 수 있습니다.",
   "runIdleWaiting": "다음 메시지를 기다리는 중… 다음 답변이 빠르도록 세션을 열어 둡니다.",
   "runRetriableLeakRetrying": "에이전트 연결이 답변 중간에 끊겼습니다. 다시 시도하는 중…",
+  "runRetriableLeakAfterTools": "도구 실행 후 에이전트 연결이 끊겼습니다. 이어서 보내 계속하세요 — 도구는 다시 실행하지 않았습니다.",
+  "runToolRunnerRetrying": "도구가 잠시 실패했습니다. 다시 시도하는 중…",
+  "runToolRunnerFailed": "도구가 일시적으로 중단되었습니다. 다시 보내 재시도하거나, Cursor 도구 실행기를 피하려면 에이전트를 바꾸세요.",
+  "runToolRunnerFailedQueued": "도구가 일시적으로 중단되었습니다. 대기 중이던 후속 메시지 1개가 보내지지 않았습니다. 다시 보내거나 에이전트를 바꾸세요.",
+  "runToolRunnerFailedQueuedMany": "도구가 일시적으로 중단되었습니다. 대기 중이던 후속 메시지 {count}개가 보내지지 않았습니다. 다시 보내거나 에이전트를 바꾸세요.",
   "runRetriableLeakFailed": "에이전트 연결이 답변 중간에 끊겼습니다. 다시 보내 재시도하세요.",
   "runRetriableLeakFailedQueued": "에이전트 연결이 답변 중간에 끊겼습니다. 대기 중이던 후속 메시지 1개가 보내지지 않았습니다. 다시 보내 재시도하세요.",
   "runRetriableLeakFailedQueuedMany": "에이전트 연결이 답변 중간에 끊겼습니다. 대기 중이던 후속 메시지 {count}개가 보내지지 않았습니다. 다시 보내 재시도하세요."

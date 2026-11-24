@@ -1052,6 +1052,26 @@ class AppLocalizationsEn extends AppLocalizations {
       'The agent’s connection dropped mid-reply. Retrying…';
 
   @override
+  String get runRetriableLeakAfterTools =>
+      'The agent’s connection dropped after tools ran. Send a follow-up to continue — tools were not re-run.';
+
+  @override
+  String get runToolRunnerRetrying => 'A tool briefly failed. Retrying…';
+
+  @override
+  String get runToolRunnerFailed =>
+      'A tool hit a temporary outage. Send again to retry — or switch agent to avoid Cursor’s tool runner.';
+
+  @override
+  String get runToolRunnerFailedQueued =>
+      'A tool hit a temporary outage. 1 queued follow-up was not sent. Send again to retry — or switch agent.';
+
+  @override
+  String runToolRunnerFailedQueuedMany(int count) {
+    return 'A tool hit a temporary outage. $count queued follow-ups were not sent. Send again to retry — or switch agent.';
+  }
+
+  @override
   String get runRetriableLeakFailed =>
       'The agent’s connection dropped mid-reply. Send again to retry.';
 

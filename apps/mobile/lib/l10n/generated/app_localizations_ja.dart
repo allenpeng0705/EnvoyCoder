@@ -1019,6 +1019,26 @@ class AppLocalizationsJa extends AppLocalizations {
   String get runRetriableLeakRetrying => 'エージェントの接続が返信の途中で切れました。再試行しています…';
 
   @override
+  String get runRetriableLeakAfterTools =>
+      'ツール実行後にエージェントの接続が切れました。続きはフォローアップを送ってください — ツールは再実行していません。';
+
+  @override
+  String get runToolRunnerRetrying => 'ツールが一時的に失敗しました。再試行しています…';
+
+  @override
+  String get runToolRunnerFailed =>
+      'ツールが一時的に利用できませんでした。もう一度送信して再試行するか、エージェントを切り替えて Cursor のツール実行を避けてください。';
+
+  @override
+  String get runToolRunnerFailedQueued =>
+      'ツールが一時的に利用できませんでした。キューに入った後続 1 件は送られていません。もう一度送信するか、エージェントを切り替えてください。';
+
+  @override
+  String runToolRunnerFailedQueuedMany(int count) {
+    return 'ツールが一時的に利用できませんでした。キューに入った後続 $count 件は送られていません。もう一度送信するか、エージェントを切り替えてください。';
+  }
+
+  @override
   String get runRetriableLeakFailed =>
       'エージェントの接続が返信の途中で切れました。もう一度送信して再試行してください。';
 

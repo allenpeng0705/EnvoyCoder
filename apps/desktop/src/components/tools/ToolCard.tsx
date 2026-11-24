@@ -17,7 +17,7 @@ import {
   type ToolBucket,
 } from "../../state/tool-buckets.js";
 import type { ToolEntry } from "../../state/transcript.js";
-import { imagesFromToolOutput, textFromToolOutput } from "./tool-output.js";
+import { flattenToolOutputText, imagesFromToolOutput, textFromToolOutput } from "./tool-output.js";
 
 function summarize(value: unknown, limit = 400): string {
   const fromTool = textFromToolOutput(value, limit);
@@ -260,6 +260,17 @@ export function ToolCard(props: {
   }
   if (bucket === "searched" && entry.output !== undefined && !excerpt) {
     detailBlocks.push(summarize(entry.output));
+  }
+  // Cursor ACP completes Shell/Read with no `content` on the wire (verified in local transcripts).
+  // Say so instead of a silent empty card that looks like EnvoyDev dropped stdout.
+  const flattened =
+    entry.output !== undefined ? flattenToolOutputText(entry.output).trim() : "";
+  if (
+    (bucket === "ran" || bucket === "searched") &&
+    entry.status !== "running" &&
+    (entry.output === undefined || flattened === "")
+  ) {
+    detailBlocks.push(t("run.tools.output.none"));
   }
 
   const tone =

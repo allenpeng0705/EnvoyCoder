@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@envoydev/platform": "0.1.0",
-    "@envoydev/protocol": "0.1.0"
+    "@envoydev/protocol": "0.1.0",
+    "@envoymesh/agent-catalog": "file:../../../envoy-harness/packages/agent-catalog"
   }
 }

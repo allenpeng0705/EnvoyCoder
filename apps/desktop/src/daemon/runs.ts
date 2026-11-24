@@ -116,8 +116,10 @@ import { followUpMustQueue } from "@envoydev/agent-catalog/asking";
 import { parseAcpPlanUpdate } from "./acp-plan.js";
 import {
   isAcpRetriableLeakError,
+  isAcpToolRunnerFailure,
   RETRIABLE_LEAK_RETRY_DELAY_MS,
   stripAcpRetriableLeak,
+  toolPayloadFromAcpUpdate,
 } from "./acp/retriable-leak.js";
 import { splitAskPrompt } from "./ask-prompt.js";
 import { keyed, ref } from "./messages.js";
@@ -339,8 +341,23 @@ interface LiveRun {
   retriableLeakSeen?: boolean;
   /** Assistant characters kept this turn after stripping leaks — >0 means a real reply arrived. */
   assistantKeptCharsThisTurn?: number;
-  /** How many same-prompt recoveries we already spent on Cursor ACP stream leaks. */
+  /**
+   * A tool_call_update reached a **successful** terminal status this turn. When set with a leak
+   * and no assistant text, we do **not** same-prompt retry (would re-run Shell). Tool-runner
+   * blips do not set this — retrying is exactly what we want then.
+   */
+  toolsSettledThisTurn?: boolean;
+  /**
+   * A tool result this turn was a Cursor tool-runner blip (e.g. Service temporarily unavailable).
+   * With no assistant answer, same-session re-prompt so Shell/Read can run again.
+   */
+  toolRunnerBlipThisTurn?: boolean;
+  /** How many same-prompt recoveries we already spent on Cursor ACP stream leaks / tool blips. */
   retriableLeakRetries?: number;
+  /** `sessionUpdate` kinds we already logged for this run (once each on stderr). */
+  ignoredSessionUpdates?: Set<string>;
+  /** Logged once when a terminal tool update arrived with no content (Cursor omits Shell/Read). */
+  loggedEmptyToolContent?: boolean;
   stderr: string[];
   settled: boolean;
   /**
@@ -1018,6 +1035,8 @@ export class RunManager {
           // recovery `continue`s into this block, and wiping the counter would retry forever.
           live.retriableLeakSeen = false;
           live.assistantKeptCharsThisTurn = 0;
+          live.toolsSettledThisTurn = false;
+          live.toolRunnerBlipThisTurn = false;
           live.turn = client.prompt(prompt, images);
           const result = await live.turn;
           live.turn = undefined;
@@ -1033,17 +1052,29 @@ export class RunManager {
             await this.finish(live, "cancelled", null);
             return;
           }
-          // Cursor ACP: RetriableError / WritableIterable leaked as assistant text + end_turn.
+          // Cursor ACP: RetriableError / WritableIterable / Service temporarily unavailable leaked
+          // as assistant text + end_turn.
           //   * Real answer already kept → strip only (retry would duplicate the reply).
-          //   * No usable answer → same-session re-prompt with a short pause.
+          //   * Tools already settled, no answer → strip only + note (retry would re-run Shell).
+          //   * No answer and no tools → same-session re-prompt with a short pause.
           // Read through helpers so TS does not narrow flags set asynchronously in onUpdate.
-          if (
-            sawRetriableLeak(live) &&
-            (result.stopReason === "end_turn" || result.stopReason === "max_tokens")
-          ) {
+          const stopForRecovery =
+            result.stopReason === "end_turn" || result.stopReason === "max_tokens";
+          if (sawRetriableLeak(live) && stopForRecovery) {
             const hadAnswer = assistantKeptThisTurn(live) > 0;
+            const toolsSettled = toolsSettledThisTurn(live);
             if (hadAnswer) {
               live.retriableLeakSeen = false;
+            } else if (toolsSettled) {
+              live.retriableLeakSeen = false;
+              await this.record(live, {
+                kind: "run.status",
+                status: "running",
+                note: keyed(
+                  "run.retriableLeak.afterTools",
+                  "The agent’s connection dropped after tools ran. Send a follow-up to continue — tools were not re-run.",
+                ),
+              });
             } else if ((live.retriableLeakRetries ?? 0) < MAX_RETRIABLE_LEAK_RETRIES) {
               live.retriableLeakSeen = false;
               live.retriableLeakRetries = (live.retriableLeakRetries ?? 0) + 1;
@@ -1074,6 +1105,42 @@ export class RunManager {
               await this.finish(live, "failed", null);
               return;
             }
+          }
+          // Tool-runner blip (unavailable Shell/Read) with no usable answer — re-prompt so tools
+          // can run again. Skip when a real tool already settled this turn (same as afterTools).
+          if (
+            toolRunnerBlipThisTurn(live) &&
+            !toolsSettledThisTurn(live) &&
+            assistantKeptThisTurn(live) === 0 &&
+            stopForRecovery
+          ) {
+            if ((live.retriableLeakRetries ?? 0) < MAX_RETRIABLE_LEAK_RETRIES) {
+              live.retriableLeakRetries = (live.retriableLeakRetries ?? 0) + 1;
+              if (next !== undefined) live.queued.unshift(next);
+              await this.record(live, {
+                kind: "run.status",
+                status: "running",
+                note: keyed(
+                  "run.toolRunner.retrying",
+                  "A tool briefly failed. Retrying…",
+                ),
+              });
+              if ((await sleepUnlessCancelled(live, RETRIABLE_LEAK_RETRY_DELAY_MS)) === "cancel") {
+                await this.finish(live, "cancelled", null);
+                return;
+              }
+              continue;
+            }
+            if (next !== undefined) live.queued.unshift(next);
+            const dropped = live.queued.length;
+            live.queued = [];
+            await this.record(live, {
+              kind: "run.status",
+              status: "failed",
+              note: toolRunnerFailedNote(dropped),
+            });
+            await this.finish(live, "failed", null);
+            return;
           }
           // A successful (or strip-only) turn restores the per-turn retry budget for the next prompt.
           live.retriableLeakRetries = 0;
@@ -1172,25 +1239,43 @@ export class RunManager {
             return;
           }
           // Cursor ACP sometimes throws the same RetriableError instead of leaking it as text.
-          if (
-            isAcpRetriableLeakError(error) &&
-            (live.retriableLeakRetries ?? 0) < MAX_RETRIABLE_LEAK_RETRIES
-          ) {
-            live.retriableLeakRetries = (live.retriableLeakRetries ?? 0) + 1;
-            if (next !== undefined) live.queued.unshift(next);
-            await this.record(live, {
-              kind: "run.status",
-              status: "running",
-              note: keyed(
-                "run.retriableLeak.retrying",
-                "The agent’s connection dropped mid-reply. Retrying…",
-              ),
-            });
-            if ((await sleepUnlessCancelled(live, RETRIABLE_LEAK_RETRY_DELAY_MS)) === "cancel") {
-              await this.finish(live, "cancelled", null);
+          if (isAcpRetriableLeakError(error)) {
+            if (toolsSettledThisTurn(live)) {
+              // Tools already ran — do not same-prompt retry (would re-run Shell).
+              await this.record(live, {
+                kind: "run.status",
+                status: "running",
+                note: keyed(
+                  "run.retriableLeak.afterTools",
+                  "The agent’s connection dropped after tools ran. Send a follow-up to continue — tools were not re-run.",
+                ),
+              });
+              live.retriableLeakRetries = 0;
+              if (next !== undefined) {
+                prompt = next.text;
+                images = next.images;
+                continue;
+              }
+              await this.finish(live, "done", null);
               return;
             }
-            continue;
+            if ((live.retriableLeakRetries ?? 0) < MAX_RETRIABLE_LEAK_RETRIES) {
+              live.retriableLeakRetries = (live.retriableLeakRetries ?? 0) + 1;
+              if (next !== undefined) live.queued.unshift(next);
+              await this.record(live, {
+                kind: "run.status",
+                status: "running",
+                note: keyed(
+                  "run.retriableLeak.retrying",
+                  "The agent’s connection dropped mid-reply. Retrying…",
+                ),
+              });
+              if ((await sleepUnlessCancelled(live, RETRIABLE_LEAK_RETRY_DELAY_MS)) === "cancel") {
+                await this.finish(live, "cancelled", null);
+                return;
+              }
+              continue;
+            }
           }
           promptFailures += 1;
           if (next !== undefined && promptFailures <= 1) {
@@ -1331,12 +1416,44 @@ export class RunManager {
         const name = this.toolName(live, callId) ?? "";
         const input = this.toolInput(live, callId);
         this.noteTouchedFile(live, name, undefined, input);
+        // Cursor puts Shell/Read results on `rawOutput` ({stdout,stderr,exitCode}) and leaves
+        // `content` empty — valid ACP. Prefer non-empty content; else take rawOutput.
+        const payload = toolPayloadFromAcpUpdate(update);
+        const statusRaw = typeof update.status === "string" ? update.status : undefined;
+        const runnerBlip = isAcpToolRunnerFailure(payload);
+        // in_progress / pending must stay "running" — treating them as completed made empty
+        // shells look finished before a later rawOutput/content frame.
+        if ((statusRaw === "in_progress" || statusRaw === "pending") && !runnerBlip) {
+          void this.record(live, {
+            kind: "run.tool",
+            callId,
+            name: "",
+            status: "running",
+            ...(payload !== undefined ? { output: payload } : {}),
+          });
+          return;
+        }
+        const failed = statusRaw === "failed" || runnerBlip;
+        const terminal: "failed" | "completed" = failed ? "failed" : "completed";
+        if (runnerBlip) {
+          // Fake "completed" with unavailable text is not a settle — retry may re-run Shell.
+          live.toolRunnerBlipThisTurn = true;
+        } else {
+          // Real terminal settle blocks leak-only retry.
+          live.toolsSettledThisTurn = true;
+        }
+        if (payload === undefined && !live.loggedEmptyToolContent) {
+          live.loggedEmptyToolContent = true;
+          process.stderr.write(
+            "acp tool_call_update completed without content or rawOutput\n",
+          );
+        }
         void this.record(live, {
           kind: "run.tool",
           callId,
           name: "",
-          status: update.status === "failed" ? "failed" : "completed",
-          ...(update.content !== undefined ? { output: update.content } : {}),
+          status: terminal,
+          ...(payload !== undefined ? { output: payload } : {}),
         });
         return;
       }
@@ -1371,10 +1488,19 @@ export class RunManager {
         });
         return;
       }
-      default:
+      default: {
         // A kind this build does not render is dropped rather than guessed at. Showing a user raw
-        // JSON for an unknown payload is worse than showing nothing.
+        // JSON for an unknown payload is worse than showing nothing. Log once per kind per run so
+        // Cursor dialect drift is visible in the daemon log without flooding it.
+        const label = kind === "" ? "(missing)" : kind;
+        const seen = live.ignoredSessionUpdates ?? new Set<string>();
+        live.ignoredSessionUpdates = seen;
+        if (!seen.has(label)) {
+          seen.add(label);
+          process.stderr.write(`acp sessionUpdate ignored: ${label}\n`);
+        }
         return;
+      }
     }
   }
 
@@ -2213,16 +2339,47 @@ function statusForStopReason(stopReason: string): TaskStatus {
 }
 
 /**
- * The text of an ACP content block, or `""`.
+ * The text of an ACP content value, or `""`.
  *
- * Only text is rendered. An image or audio block becomes nothing rather than `[object Object]`,
- * because a transcript that shows a user a stringified object is worse than one with a gap in it.
+ * Accepts a string, a single `{ type: "text", text }`, or an **array** of those (joined). Image and
+ * audio blocks are ignored — a stringified object in the transcript is worse than a gap.
  */
 function textOf(content: unknown): string {
   if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content.map((part) => textOf(part)).join("");
+  }
   if (typeof content !== "object" || content === null) return "";
   const block = content as { type?: unknown; text?: unknown };
   return block.type === "text" && typeof block.text === "string" ? block.text : "";
+}
+
+function toolsSettledThisTurn(live: { toolsSettledThisTurn?: boolean }): boolean {
+  return live.toolsSettledThisTurn === true;
+}
+
+function toolRunnerBlipThisTurn(live: { toolRunnerBlipThisTurn?: boolean }): boolean {
+  return live.toolRunnerBlipThisTurn === true;
+}
+
+function toolRunnerFailedNote(dropped: number): string {
+  if (dropped <= 0) {
+    return keyed(
+      "run.toolRunner.failed",
+      "A tool hit a temporary outage. Send again to retry — or switch agent to avoid Cursor’s tool runner.",
+    );
+  }
+  if (dropped === 1) {
+    return keyed(
+      "run.toolRunner.failed.queued",
+      "A tool hit a temporary outage. 1 queued follow-up was not sent. Send again to retry — or switch agent.",
+    );
+  }
+  return keyed(
+    "run.toolRunner.failed.queued.many",
+    "A tool hit a temporary outage. {count} queued follow-ups were not sent. Send again to retry — or switch agent.",
+    { count: dropped },
+  );
 }
 
 function describeFailure(error: unknown, live: LiveRun): string {

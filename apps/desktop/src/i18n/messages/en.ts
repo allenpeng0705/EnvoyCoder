@@ -561,11 +561,20 @@ export const en = {
   "run.idle.waiting":
     "Waiting for your next message… Session stays open so the next reply is fast.",
   "run.retriableLeak.retrying": "The agent’s connection dropped mid-reply. Retrying…",
+  "run.retriableLeak.afterTools":
+    "The agent’s connection dropped after tools ran. Send a follow-up to continue — tools were not re-run.",
   "run.retriableLeak.failed": "The agent’s connection dropped mid-reply. Send again to retry.",
   "run.retriableLeak.failed.queued":
     "The agent’s connection dropped mid-reply. 1 queued follow-up was not sent. Send again to retry.",
   "run.retriableLeak.failed.queued.many":
     "The agent’s connection dropped mid-reply. {count} queued follow-ups were not sent. Send again to retry.",
+  "run.toolRunner.retrying": "A tool briefly failed. Retrying…",
+  "run.toolRunner.failed":
+    "A tool hit a temporary outage. Send again to retry — or switch agent to avoid Cursor’s tool runner.",
+  "run.toolRunner.failed.queued":
+    "A tool hit a temporary outage. 1 queued follow-up was not sent. Send again to retry — or switch agent.",
+  "run.toolRunner.failed.queued.many":
+    "A tool hit a temporary outage. {count} queued follow-ups were not sent. Send again to retry — or switch agent.",
   "run.diff.one": "1 file changed.",
   "run.diff.many": "{count} files changed.",
   "run.tools.edited.one": "edited 1 file",
@@ -580,6 +589,9 @@ export const en = {
   "run.tools.summary.two": "{a} and {b}",
   "run.tools.summary.many": "{head}, and {last}",
   "run.tools.summary.comma": ", ",
+  // Cursor ACP completes Shell/Read with no content on the wire — not EnvoyDev swallowing stdout.
+  "run.tools.output.none":
+    "No output was shared by this agent. Shell and read results may stay inside the agent.",
   "run.context": "Context {percent}% full.",
 
   /* ── the status line, and the one place the mesh is always visible ──

@@ -577,6 +577,11 @@
   "runAuthWaiting": "Anmeldung beim Agenten… Das kann etwa eine Minute dauern, auch wenn du bereits angemeldet bist.",
   "runIdleWaiting": "Warte auf deine nächste Nachricht… Die Sitzung bleibt offen, damit die nächste Antwort schnell kommt.",
   "runRetriableLeakRetrying": "Die Verbindung des Agenten ist mitten in der Antwort abgebrochen. Erneuter Versuch…",
+  "runRetriableLeakAfterTools": "Die Verbindung des Agenten ist nach ausgeführten Tools abgebrochen. Sende eine Folge, um fortzufahren — Tools wurden nicht erneut ausgeführt.",
+  "runToolRunnerRetrying": "Ein Tool ist kurz fehlgeschlagen. Erneuter Versuch…",
+  "runToolRunnerFailed": "Ein Tool hatte einen vorübergehenden Ausfall. Nochmal senden zum erneuten Versuch — oder Agent wechseln, um Cursors Tool-Runner zu vermeiden.",
+  "runToolRunnerFailedQueued": "Ein Tool hatte einen vorübergehenden Ausfall. 1 wartende Folge wurde nicht gesendet. Nochmal senden — oder Agent wechseln.",
+  "runToolRunnerFailedQueuedMany": "Ein Tool hatte einen vorübergehenden Ausfall. {count} wartende Folgen wurden nicht gesendet. Nochmal senden — oder Agent wechseln.",
   "runRetriableLeakFailed": "Die Verbindung des Agenten ist mitten in der Antwort abgebrochen. Nochmal senden, um es erneut zu versuchen.",
   "runRetriableLeakFailedQueued": "Die Verbindung des Agenten ist mitten in der Antwort abgebrochen. 1 wartende Folge wurde nicht gesendet. Nochmal senden, um es erneut zu versuchen.",
   "runRetriableLeakFailedQueuedMany": "Die Verbindung des Agenten ist mitten in der Antwort abgebrochen. {count} wartende Folgen wurden nicht gesendet. Nochmal senden, um es erneut zu versuchen."

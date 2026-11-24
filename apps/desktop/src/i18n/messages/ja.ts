@@ -416,9 +416,18 @@ export const ja: Catalogue = {
   "run.idle.waiting":
     "次のメッセージを待っています…セッションを開いたままにして、次の返信を速くします。",
   "run.retriableLeak.retrying": "エージェントの接続が返信の途中で切れました。再試行しています…",
+  "run.retriableLeak.afterTools":
+    "ツール実行後にエージェントの接続が切れました。続きはフォローアップを送ってください — ツールは再実行していません。",
   "run.retriableLeak.failed": "エージェントの接続が返信の途中で切れました。もう一度送信して再試行してください。",
   "run.retriableLeak.failed.queued": "エージェントの接続が返信の途中で切れました。キューに入った後続 1 件は送られていません。もう一度送信して再試行してください。",
   "run.retriableLeak.failed.queued.many": "エージェントの接続が返信の途中で切れました。キューに入った後続 {count} 件は送られていません。もう一度送信して再試行してください。",
+  "run.toolRunner.retrying": "ツールが一時的に失敗しました。再試行しています…",
+  "run.toolRunner.failed":
+    "ツールが一時的に利用できませんでした。もう一度送信して再試行するか、エージェントを切り替えて Cursor のツール実行を避けてください。",
+  "run.toolRunner.failed.queued":
+    "ツールが一時的に利用できませんでした。キューに入った後続 1 件は送られていません。もう一度送信するか、エージェントを切り替えてください。",
+  "run.toolRunner.failed.queued.many":
+    "ツールが一時的に利用できませんでした。キューに入った後続 {count} 件は送られていません。もう一度送信するか、エージェントを切り替えてください。",
   "run.diff.one": "1 個のファイルを変更しました。",
   "run.diff.many": "{count} 個のファイルを変更しました。",
   "run.handoff": "{role} に引き継ぎました。",
@@ -435,6 +444,8 @@ export const ja: Catalogue = {
   "run.tools.summary.two": "{a}と{b}",
   "run.tools.summary.many": "{head}、および{last}",
   "run.tools.summary.comma": "、",
+  "run.tools.output.none":
+    "このエージェントは出力を共有しませんでした。シェルと読み取りの結果はエージェント内にだけ残ることがあります。",
   "run.context": "コンテキストが {percent}% 埋まっています。",
 
   /* ── the status line, and the one place the mesh is always visible ── */

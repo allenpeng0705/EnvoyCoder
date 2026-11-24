@@ -1018,6 +1018,26 @@ class AppLocalizationsKo extends AppLocalizations {
   String get runRetriableLeakRetrying => '에이전트 연결이 답변 중간에 끊겼습니다. 다시 시도하는 중…';
 
   @override
+  String get runRetriableLeakAfterTools =>
+      '도구 실행 후 에이전트 연결이 끊겼습니다. 이어서 보내 계속하세요 — 도구는 다시 실행하지 않았습니다.';
+
+  @override
+  String get runToolRunnerRetrying => '도구가 잠시 실패했습니다. 다시 시도하는 중…';
+
+  @override
+  String get runToolRunnerFailed =>
+      '도구가 일시적으로 중단되었습니다. 다시 보내 재시도하거나, Cursor 도구 실행기를 피하려면 에이전트를 바꾸세요.';
+
+  @override
+  String get runToolRunnerFailedQueued =>
+      '도구가 일시적으로 중단되었습니다. 대기 중이던 후속 메시지 1개가 보내지지 않았습니다. 다시 보내거나 에이전트를 바꾸세요.';
+
+  @override
+  String runToolRunnerFailedQueuedMany(int count) {
+    return '도구가 일시적으로 중단되었습니다. 대기 중이던 후속 메시지 $count개가 보내지지 않았습니다. 다시 보내거나 에이전트를 바꾸세요.';
+  }
+
+  @override
   String get runRetriableLeakFailed => '에이전트 연결이 답변 중간에 끊겼습니다. 다시 보내 재시도하세요.';
 
   @override

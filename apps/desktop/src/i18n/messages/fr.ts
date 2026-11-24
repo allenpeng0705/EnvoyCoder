@@ -416,9 +416,18 @@ export const fr: Catalogue = {
   "run.idle.waiting":
     "En attente de votre prochain message… La session reste ouverte pour que la prochaine réponse soit rapide.",
   "run.retriableLeak.retrying": "La connexion de l’agent s’est interrompue au milieu de la réponse. Nouvel essai…",
+  "run.retriableLeak.afterTools":
+    "La connexion de l’agent s’est interrompue après l’exécution des outils. Envoyez une suite pour continuer — les outils n’ont pas été relancés.",
   "run.retriableLeak.failed": "La connexion de l’agent s’est interrompue au milieu de la réponse. Renvoyez pour réessayer.",
   "run.retriableLeak.failed.queued": "La connexion de l’agent s’est interrompue au milieu de la réponse. 1 suite en file n’a pas été envoyée. Renvoyez pour réessayer.",
   "run.retriableLeak.failed.queued.many": "La connexion de l’agent s’est interrompue au milieu de la réponse. {count} suites en file n’ont pas été envoyées. Renvoyez pour réessayer.",
+  "run.toolRunner.retrying": "Un outil a brièvement échoué. Nouvel essai…",
+  "run.toolRunner.failed":
+    "Un outil a subi une panne temporaire. Renvoyez pour réessayer — ou changez d’agent pour éviter l’exécuteur d’outils de Cursor.",
+  "run.toolRunner.failed.queued":
+    "Un outil a subi une panne temporaire. 1 suite en file n’a pas été envoyée. Renvoyez — ou changez d’agent.",
+  "run.toolRunner.failed.queued.many":
+    "Un outil a subi une panne temporaire. {count} suites en file n’ont pas été envoyées. Renvoyez — ou changez d’agent.",
   "run.diff.one": "1 fichier modifié.",
   "run.diff.many": "{count} fichiers modifiés.",
   "run.handoff": "Passé à {role}.",
@@ -435,6 +444,8 @@ export const fr: Catalogue = {
   "run.tools.summary.two": "{a} et {b}",
   "run.tools.summary.many": "{head} et {last}",
   "run.tools.summary.comma": ", ",
+  "run.tools.output.none":
+    "Cet agent n’a partagé aucune sortie. Les résultats shell et lecture peuvent rester dans l’agent.",
   "run.context": "Contexte rempli à {percent} %.",
 
   /* ── the status line, and the one place the mesh is always visible ── */

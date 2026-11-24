@@ -577,6 +577,11 @@
   "runAuthWaiting": "Connexion à l’agent… Cela peut prendre environ une minute, même si vous êtes déjà connecté.",
   "runIdleWaiting": "En attente de votre prochain message… La session reste ouverte pour que la prochaine réponse soit rapide.",
   "runRetriableLeakRetrying": "La connexion de l’agent s’est interrompue au milieu de la réponse. Nouvel essai…",
+  "runRetriableLeakAfterTools": "La connexion de l’agent s’est interrompue après l’exécution des outils. Envoyez une suite pour continuer — les outils n’ont pas été relancés.",
+  "runToolRunnerRetrying": "Un outil a brièvement échoué. Nouvel essai…",
+  "runToolRunnerFailed": "Un outil a subi une panne temporaire. Renvoyez pour réessayer — ou changez d’agent pour éviter l’exécuteur d’outils de Cursor.",
+  "runToolRunnerFailedQueued": "Un outil a subi une panne temporaire. 1 suite en file n’a pas été envoyée. Renvoyez — ou changez d’agent.",
+  "runToolRunnerFailedQueuedMany": "Un outil a subi une panne temporaire. {count} suites en file n’ont pas été envoyées. Renvoyez — ou changez d’agent.",
   "runRetriableLeakFailed": "La connexion de l’agent s’est interrompue au milieu de la réponse. Renvoyez pour réessayer.",
   "runRetriableLeakFailedQueued": "La connexion de l’agent s’est interrompue au milieu de la réponse. 1 suite en file n’a pas été envoyée. Renvoyez pour réessayer.",
   "runRetriableLeakFailedQueuedMany": "La connexion de l’agent s’est interrompue au milieu de la réponse. {count} suites en file n’ont pas été envoyées. Renvoyez pour réessayer."

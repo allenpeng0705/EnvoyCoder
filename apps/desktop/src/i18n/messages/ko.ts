@@ -416,9 +416,18 @@ export const ko: Catalogue = {
   "run.idle.waiting":
     "다음 메시지를 기다리는 중… 다음 답변이 빠르도록 세션을 열어 둡니다.",
   "run.retriableLeak.retrying": "에이전트 연결이 답변 중간에 끊겼습니다. 다시 시도하는 중…",
+  "run.retriableLeak.afterTools":
+    "도구 실행 후 에이전트 연결이 끊겼습니다. 이어서 보내 계속하세요 — 도구는 다시 실행하지 않았습니다.",
   "run.retriableLeak.failed": "에이전트 연결이 답변 중간에 끊겼습니다. 다시 보내 재시도하세요.",
   "run.retriableLeak.failed.queued": "에이전트 연결이 답변 중간에 끊겼습니다. 대기 중이던 후속 메시지 1개가 보내지지 않았습니다. 다시 보내 재시도하세요.",
   "run.retriableLeak.failed.queued.many": "에이전트 연결이 답변 중간에 끊겼습니다. 대기 중이던 후속 메시지 {count}개가 보내지지 않았습니다. 다시 보내 재시도하세요.",
+  "run.toolRunner.retrying": "도구가 잠시 실패했습니다. 다시 시도하는 중…",
+  "run.toolRunner.failed":
+    "도구가 일시적으로 중단되었습니다. 다시 보내 재시도하거나, Cursor 도구 실행기를 피하려면 에이전트를 바꾸세요.",
+  "run.toolRunner.failed.queued":
+    "도구가 일시적으로 중단되었습니다. 대기 중이던 후속 메시지 1개가 보내지지 않았습니다. 다시 보내거나 에이전트를 바꾸세요.",
+  "run.toolRunner.failed.queued.many":
+    "도구가 일시적으로 중단되었습니다. 대기 중이던 후속 메시지 {count}개가 보내지지 않았습니다. 다시 보내거나 에이전트를 바꾸세요.",
   "run.diff.one": "파일 1개를 변경했습니다.",
   "run.diff.many": "파일 {count}개를 변경했습니다.",
   "run.handoff": "{role}(으)로 넘겼습니다.",
@@ -435,6 +444,8 @@ export const ko: Catalogue = {
   "run.tools.summary.two": "{a} 및 {b}",
   "run.tools.summary.many": "{head} 및 {last}",
   "run.tools.summary.comma": ", ",
+  "run.tools.output.none":
+    "이 에이전트가 출력을 공유하지 않았습니다. 셸·읽기 결과는 에이전트 안에만 남을 수 있습니다.",
   "run.context": "컨텍스트가 {percent}% 찼습니다.",
 
   /* ── the status line, and the one place the mesh is always visible ── */

@@ -577,6 +577,11 @@
   "runAuthWaiting": "正在登录智能体…即使您已经登录，这也可能需要大约一分钟。",
   "runIdleWaiting": "正在等待您的下一条消息…会话保持打开，以便下一次回复更快。",
   "runRetriableLeakRetrying": "智能体连接在回复中断开。正在重试…",
+  "runRetriableLeakAfterTools": "智能体连接在工具运行后断开。请发送后续消息以继续 — 不会重新运行工具。",
+  "runToolRunnerRetrying": "工具短暂失败。正在重试…",
+  "runToolRunnerFailed": "工具遇到临时中断。请再发送一次以重试 — 或切换智能体以避免 Cursor 的工具运行器。",
+  "runToolRunnerFailedQueued": "工具遇到临时中断。有 1 条排队的后续消息未发送。请再发送一次以重试 — 或切换智能体。",
+  "runToolRunnerFailedQueuedMany": "工具遇到临时中断。有 {count} 条排队的后续消息未发送。请再发送一次以重试 — 或切换智能体。",
   "runRetriableLeakFailed": "智能体连接在回复中断开。请再发送一次以重试。",
   "runRetriableLeakFailedQueued": "智能体连接在回复中断开。有 1 条排队的后续消息未发送。请再发送一次以重试。",
   "runRetriableLeakFailedQueuedMany": "智能体连接在回复中断开。有 {count} 条排队的后续消息未发送。请再发送一次以重试。"

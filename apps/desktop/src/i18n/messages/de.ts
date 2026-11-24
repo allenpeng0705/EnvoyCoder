@@ -416,9 +416,18 @@ export const de: Catalogue = {
   "run.idle.waiting":
     "Warte auf deine nächste Nachricht… Die Sitzung bleibt offen, damit die nächste Antwort schnell kommt.",
   "run.retriableLeak.retrying": "Die Verbindung des Agenten ist mitten in der Antwort abgebrochen. Erneuter Versuch…",
+  "run.retriableLeak.afterTools":
+    "Die Verbindung des Agenten ist nach ausgeführten Tools abgebrochen. Sende eine Folge, um fortzufahren — Tools wurden nicht erneut ausgeführt.",
   "run.retriableLeak.failed": "Die Verbindung des Agenten ist mitten in der Antwort abgebrochen. Nochmal senden, um es erneut zu versuchen.",
   "run.retriableLeak.failed.queued": "Die Verbindung des Agenten ist mitten in der Antwort abgebrochen. 1 wartende Folge wurde nicht gesendet. Nochmal senden, um es erneut zu versuchen.",
   "run.retriableLeak.failed.queued.many": "Die Verbindung des Agenten ist mitten in der Antwort abgebrochen. {count} wartende Folgen wurden nicht gesendet. Nochmal senden, um es erneut zu versuchen.",
+  "run.toolRunner.retrying": "Ein Tool ist kurz fehlgeschlagen. Erneuter Versuch…",
+  "run.toolRunner.failed":
+    "Ein Tool hatte einen vorübergehenden Ausfall. Nochmal senden zum erneuten Versuch — oder Agent wechseln, um Cursors Tool-Runner zu vermeiden.",
+  "run.toolRunner.failed.queued":
+    "Ein Tool hatte einen vorübergehenden Ausfall. 1 wartende Folge wurde nicht gesendet. Nochmal senden — oder Agent wechseln.",
+  "run.toolRunner.failed.queued.many":
+    "Ein Tool hatte einen vorübergehenden Ausfall. {count} wartende Folgen wurden nicht gesendet. Nochmal senden — oder Agent wechseln.",
   "run.diff.one": "1 Datei geändert.",
   "run.diff.many": "{count} Dateien geändert.",
   "run.handoff": "Übergeben an {role}.",
@@ -435,6 +444,8 @@ export const de: Catalogue = {
   "run.tools.summary.two": "{a} und {b}",
   "run.tools.summary.many": "{head} und {last}",
   "run.tools.summary.comma": ", ",
+  "run.tools.output.none":
+    "Dieser Agent hat keine Ausgabe geteilt. Shell- und Leseergebnisse bleiben möglicherweise nur im Agenten.",
   "run.context": "Kontext zu {percent} % voll.",
 
   /* ── the status line, and the one place the mesh is always visible ── */

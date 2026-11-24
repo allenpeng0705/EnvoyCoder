@@ -1070,6 +1070,27 @@ class AppLocalizationsDe extends AppLocalizations {
       'Die Verbindung des Agenten ist mitten in der Antwort abgebrochen. Erneuter Versuch…';
 
   @override
+  String get runRetriableLeakAfterTools =>
+      'Die Verbindung des Agenten ist nach ausgeführten Tools abgebrochen. Sende eine Folge, um fortzufahren — Tools wurden nicht erneut ausgeführt.';
+
+  @override
+  String get runToolRunnerRetrying =>
+      'Ein Tool ist kurz fehlgeschlagen. Erneuter Versuch…';
+
+  @override
+  String get runToolRunnerFailed =>
+      'Ein Tool hatte einen vorübergehenden Ausfall. Nochmal senden zum erneuten Versuch — oder Agent wechseln, um Cursors Tool-Runner zu vermeiden.';
+
+  @override
+  String get runToolRunnerFailedQueued =>
+      'Ein Tool hatte einen vorübergehenden Ausfall. 1 wartende Folge wurde nicht gesendet. Nochmal senden — oder Agent wechseln.';
+
+  @override
+  String runToolRunnerFailedQueuedMany(int count) {
+    return 'Ein Tool hatte einen vorübergehenden Ausfall. $count wartende Folgen wurden nicht gesendet. Nochmal senden — oder Agent wechseln.';
+  }
+
+  @override
   String get runRetriableLeakFailed =>
       'Die Verbindung des Agenten ist mitten in der Antwort abgebrochen. Nochmal senden, um es erneut zu versuchen.';
 

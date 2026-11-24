@@ -251,6 +251,11 @@
   "runAuthWaiting": "run.auth.waiting",
   "runIdleWaiting": "run.idle.waiting",
   "runRetriableLeakRetrying": "run.retriableLeak.retrying",
+  "runRetriableLeakAfterTools": "run.retriableLeak.afterTools",
+  "runToolRunnerRetrying": "run.toolRunner.retrying",
+  "runToolRunnerFailed": "run.toolRunner.failed",
+  "runToolRunnerFailedQueued": "run.toolRunner.failed.queued",
+  "runToolRunnerFailedQueuedMany": "run.toolRunner.failed.queued.many",
   "runRetriableLeakFailed": "run.retriableLeak.failed",
   "runRetriableLeakFailedQueued": "run.retriableLeak.failed.queued",
   "runRetriableLeakFailedQueuedMany": "run.retriableLeak.failed.queued.many"
