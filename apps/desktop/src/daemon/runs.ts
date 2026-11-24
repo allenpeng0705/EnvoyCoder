@@ -1418,7 +1418,10 @@ export class RunManager {
         this.noteTouchedFile(live, name, undefined, input);
         // Cursor puts Shell/Read results on `rawOutput` ({stdout,stderr,exitCode}) and leaves
         // `content` empty — valid ACP. Prefer non-empty content; else take rawOutput.
-        const payload = toolPayloadFromAcpUpdate(update);
+        const payload = toolPayloadFromAcpUpdate({
+          content: update.content,
+          rawOutput: update.rawOutput,
+        });
         const statusRaw = typeof update.status === "string" ? update.status : undefined;
         const runnerBlip = isAcpToolRunnerFailure(payload);
         // in_progress / pending must stay "running" — treating them as completed made empty
